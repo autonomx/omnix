@@ -44,7 +44,7 @@ from app.apps.rpg.rules.combat.runtime_core import (
     living_party_ids,
     participant,
 )
-from app.apps.rpg.rules.combat.runtime_turns import advance_combat_turn
+from app.apps.rpg.rules.combat.runtime_turns import next_turn
 from app.apps.rpg.rules.combat.stakes import (
     BATTERED,
     BATTERED_PENALTY,
@@ -247,9 +247,7 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
 
 
 def _advance(combat: dict[str, Any]) -> None:
-    holder = {"combat_state": combat}
-    advance_combat_turn(holder)  # the turn order, the round, and start-of-turn conditions, on the section alone
-    combat.update(_sections.combat_state_of(holder))
+    combat.update(next_turn(combat))  # the turn order, the round, and start-of-turn conditions, on the section alone
 
 
 def _behaves(simulation: Mapping[str, Any], combat: dict[str, Any], actor_id: str) -> dict[str, Any] | None:

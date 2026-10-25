@@ -145,116 +145,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "party_state",
-      "lines": [
-        131
-      ],
-      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 3,
-      "fingerprint": "simulation_state",
-      "lines": [
-        43,
-        115,
-        133
-      ],
-      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 3,
-      "fingerprint": "state",
-      "lines": [
-        109,
-        114,
-        132
-      ],
-      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 9,
-      "fingerprint": "combat_state",
-      "lines": [
-        48,
-        49,
-        50,
-        87,
-        89,
-        92,
-        99,
-        100,
-        109
-      ],
-      "path": "src/app/apps/rpg/rules/combat/runtime_turns.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        61
-      ],
-      "path": "src/app/apps/rpg/rules/combat/runtime_turns.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 3,
-      "fingerprint": "combat_state",
-      "lines": [
-        107,
-        132,
-        133
-      ],
-      "path": "src/app/apps/rpg/rules/combat/stakes.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "simulation_state",
-      "lines": [
-        104,
-        140
-      ],
-      "path": "src/app/apps/rpg/rules/combat/stakes.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
       "fingerprint": "simulation_state",
       "lines": [
         12
       ],
       "path": "src/app/apps/rpg/rules/items/world_items.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 5,
-      "fingerprint": "player_state",
-      "lines": [
-        17,
-        19,
-        22,
-        24,
-        61
-      ],
-      "path": "src/app/apps/rpg/rules/player/player_progression_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 6,
-      "fingerprint": "state",
-      "lines": [
-        80,
-        82,
-        86,
-        89,
-        91,
-        92
-      ],
-      "path": "src/app/apps/rpg/rules/survival.py",
       "rule": "AL019"
     },
     {

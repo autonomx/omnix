@@ -70,24 +70,24 @@ def _bounded_events(events: Iterable[Any]) -> List[Dict[str, Any]]:
 
 
 def normalize_survival_state(value: Any, *, enabled_default: bool = True) -> Dict[str, Any]:
-    """Return a bounded, JSON-serializable survival state.
+    """Return a bounded, JSON-serializable survival normalized.
 
-    Unknown keys are intentionally dropped so the persisted state cannot grow
+    Unknown keys are intentionally dropped so the persisted normalized cannot grow
     without bounds or smuggle LLM-generated effects into the runtime contract.
     """
     raw = _safe_dict(value)
-    state = deepcopy(DEFAULT_SURVIVAL_STATE)
-    state["enabled"] = _safe_bool(raw.get("enabled"), enabled_default)
+    normalized = deepcopy(DEFAULT_SURVIVAL_STATE)  # a fresh copy: the value given is only read
+    normalized["enabled"] = _safe_bool(raw.get("enabled"), enabled_default)
     for key in _NEED_KEYS:
-        state[key] = _clamp_need(raw.get(key, state[key]))
+        normalized[key] = _clamp_need(raw.get(key, normalized[key]))
     for key in ("last_food_turn", "last_water_turn", "last_rest_turn"):
         turn_value = raw.get(key)
         if turn_value is None or turn_value == "":
-            state[key] = None
+            normalized[key] = None
         else:
             try:
-                state[key] = int(turn_value)
+                normalized[key] = int(turn_value)
             except (TypeError, ValueError):
-                state[key] = None
-    state["events"] = _bounded_events(raw.get("events", []))
-    return state
+                normalized[key] = None
+    normalized["events"] = _bounded_events(raw.get("events", []))
+    return normalized

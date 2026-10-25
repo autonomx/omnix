@@ -39,12 +39,6 @@ def get_combat_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return safe_dict(_sections.combat_state_of(simulation_state))
 
 
-def player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = safe_dict(_sections.player_state_of(simulation_state))
-    simulation_state["player_state"] = state
-    return state
-
-
 def current_actor_id(combat_state: Dict[str, Any]) -> str:
     order = safe_list(combat_state.get("initiative_order"))
     if not order:
@@ -96,42 +90,6 @@ def combat_seed(combat_state: Dict[str, Any], *parts: Any) -> str:
             *[safe_str(part) for part in parts],
         ]
     )
-
-
-def sync_participant_hp_to_actor_state(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    hp: int,
-    status: str,
-) -> None:
-    if actor_id == "player":
-        state = player_state(simulation_state)
-        state["hp"] = max(0, int(hp))
-        pool = safe_dict(safe_dict(state.get("resources")).get("hp"))
-        if pool:
-            pool["current"] = max(0, int(hp))
-        if status:
-            state["combat_status"] = status
-        simulation_state["player_state"] = state
-        return
-
-    if not actor_id.startswith("npc:"):
-        return
-
-    state = player_state(simulation_state)
-    party_state = safe_dict(_sections.party_state_of(state))
-    companions = safe_list(party_state.get("companions"))
-    for companion in companions:
-        companion = safe_dict(companion)
-        if safe_str(companion.get("npc_id")) == actor_id:
-            companion["hp"] = max(0, int(hp))
-            if status:
-                companion["combat_status"] = status
-            break
-    party_state["companions"] = companions
-    state["party_state"] = party_state
-    simulation_state["player_state"] = state
 
 
 def build_initiative_order(
