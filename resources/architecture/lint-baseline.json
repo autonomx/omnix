@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "e1bb165d497293987cc80de3d959d472e998f620dd39581683a044466d9e5106",
+  "policy_digest": "a807173c5547665a46ce9cb17982c17374f5e80fc9a25e28673473f1a9eb3131",
   "rules": [
     "AL001",
     "AL002",
@@ -55,38 +55,6 @@
       ],
       "path": "src/app/persistence/",
       "rule": "AL015"
-    },
-    {
-      "count": 2,
-      "fingerprint": "runtime",
-      "lines": [
-        504,
-        505
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation",
-      "lines": [
-        513
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 5,
-      "fingerprint": "state",
-      "lines": [
-        483,
-        486,
-        491,
-        496,
-        510
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
-      "rule": "AL019"
     },
     {
       "count": 5,
@@ -295,44 +263,6 @@
       "rule": "AL019"
     },
     {
-      "count": 1,
-      "fingerprint": "quest_state",
-      "lines": [
-        158
-      ],
-      "path": "src/app/apps/rpg/session/published_opening_progress.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "session",
-      "lines": [
-        160,
-        161
-      ],
-      "path": "src/app/apps/rpg/session/published_opening_progress.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation",
-      "lines": [
-        159
-      ],
-      "path": "src/app/apps/rpg/session/published_opening_progress.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "state",
-      "lines": [
-        131,
-        149
-      ],
-      "path": "src/app/apps/rpg/session/published_opening_progress.py",
-      "rule": "AL019"
-    },
-    {
       "count": 4,
       "fingerprint": "session",
       "lines": [
@@ -418,39 +348,6 @@
         348
       ],
       "path": "src/app/apps/rpg/world/causal_runtime.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 6,
-      "fingerprint": "simulation_state",
-      "lines": [
-        121,
-        131,
-        168,
-        218,
-        259,
-        301
-      ],
-      "path": "src/app/apps/rpg/world/causal_runtime_projection.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session",
-      "lines": [
-        168
-      ],
-      "path": "src/app/apps/rpg/world/environment.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "state",
-      "lines": [
-        166,
-        167
-      ],
-      "path": "src/app/apps/rpg/world/environment.py",
       "rule": "AL019"
     },
     {

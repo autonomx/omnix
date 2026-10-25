@@ -463,8 +463,8 @@ def _hydrate_session(
     )
     hydrated["campaign_bible_projection"] = projection
 
-    state = _mapping(hydrated.get("state"))
-    state_bible = _mapping(state.get("campaign_bible"))
+    sheet = _mapping(hydrated.get("state"))
+    state_bible = _mapping(sheet.get("campaign_bible"))
     documents = _rows(bible.get("documents"))
     state_bible.update(
         {
@@ -481,38 +481,38 @@ def _hydrate_session(
             },
         }
     )
-    state["campaign_bible"] = state_bible
+    sheet["campaign_bible"] = state_bible
 
     entities = _mapping(bible.get("entities"))
-    state["npc_dossiers"] = {
+    sheet["npc_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
         if isinstance(row, Mapping) and _text(row.get("kind")) == "npc"
     }
-    state["location_dossiers"] = {
+    sheet["location_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
         if isinstance(row, Mapping) and _text(row.get("kind")) == "location"
     }
-    state["faction_dossiers"] = {
+    sheet["faction_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
         if isinstance(row, Mapping) and _text(row.get("kind")) == "faction"
     }
-    hydrated["state"] = state
+    hydrated["state"] = sheet
 
-    runtime = _mapping(_sections.runtime_state_of(hydrated))
-    runtime["campaign_bible_revision"] = revision
-    runtime["campaign_bible_content_hash"] = content_hash
-    hydrated["runtime_state"] = runtime
+    hydrated_runtime = _mapping(_sections.runtime_state_of(hydrated))
+    hydrated_runtime["campaign_bible_revision"] = revision
+    hydrated_runtime["campaign_bible_content_hash"] = content_hash
+    hydrated["runtime_state"] = hydrated_runtime
     mechanics_catalog = deepcopy(_mapping(bible.get("mechanics_catalog")))
     if mechanics_catalog:
-        state = _mapping(hydrated.get("state"))
-        state["campaign_mechanics"] = mechanics_catalog
-        hydrated["state"] = state
-        simulation = _mapping(_sections.simulation_state_of(hydrated))
-        simulation["campaign_mechanics"] = mechanics_catalog
-        hydrated["simulation_state"] = simulation
+        sheet = _mapping(hydrated.get("state"))
+        sheet["campaign_mechanics"] = mechanics_catalog
+        hydrated["state"] = sheet
+        hydrated_simulation = _mapping(_sections.simulation_state_of(hydrated))
+        hydrated_simulation["campaign_mechanics"] = mechanics_catalog
+        hydrated["simulation_state"] = hydrated_simulation
     manifest = _mapping(hydrated.get("manifest"))
     manifest["campaign_bible_revision"] = revision
     manifest["campaign_bible_content_hash"] = content_hash

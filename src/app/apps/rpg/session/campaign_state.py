@@ -21,7 +21,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 from app.apps.rpg.foundation.state import access as _sections
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -249,6 +249,16 @@ def _to_v8_one_gear_record(document: dict[str, Any]) -> dict[str, Any]:
     return gather_gear(document)
 
 
+def _to_v9_given_once(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 9 (RQ-1.5): what every load used to add when it was missing, added once: the environment's seed state
+    (``upgrades/environment_seed.py``) and a published opening's quest and first actions
+    (``upgrades/opening_progress.py``). A current document loads as stored."""
+    from app.apps.rpg.session.upgrades.environment_seed import ensure_session_environment_seed_state
+    from app.apps.rpg.session.upgrades.opening_progress import ensure_published_opening_progress
+
+    return ensure_published_opening_progress(ensure_session_environment_seed_state(document))
+
+
 # (target version, upcaster), in order. Version 5 marks the interaction
 # timeline, which the normalization below keeps for every version.
 UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = (
@@ -256,12 +266,13 @@ UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = 
     (6, _to_v6_sections),
     (7, _to_v7_starter_world),
     (8, _to_v8_one_gear_record),
+    (9, _to_v9_given_once),
 )
 
 
 def _normalize(document: dict[str, Any]) -> dict[str, Any]:
     """What every load guarantees whatever the version: ids, state sections, the interaction timeline."""
-    from app.apps.rpg.session.legacy_interaction_migration import migrate_legacy_interactions
+    from app.apps.rpg.session.upgrades.interaction_timeline import migrate_legacy_interactions
 
     manifest = _safe_dict(document.get("manifest"))
     if not manifest.get("id"):

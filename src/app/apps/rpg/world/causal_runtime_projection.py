@@ -91,7 +91,7 @@ def _pressure_rows(runtime: Mapping[str, Any], cells: Mapping[str, Mapping[str, 
 
 
 def _project_economy(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     regions: tuple[Mapping[str, Any], ...],
     pressures: tuple[Mapping[str, Any], ...],
     *,
@@ -109,7 +109,7 @@ def _project_economy(
         8000,
         15000,
     )
-    economy = _dict(_sections.economy_state_of(simulation_state))
+    economy = _dict(_sections.economy_state_of(working))
     economy.update(
         {
             "causal_price_multiplier_bps": multiplier_bps,
@@ -119,8 +119,8 @@ def _project_economy(
             "causal_projection_source": "deterministic_causal_runtime",
         }
     )
-    simulation_state["economy_state"] = economy
-    merchant_root = _dict(simulation_state.get("merchant_state"))
+    working["economy_state"] = economy
+    merchant_root = _dict(working.get("merchant_state"))
     merchant_root["causal_price_multiplier_bps"] = multiplier_bps
     merchants = _dict(merchant_root.get("merchants"))
     for merchant_id, raw in merchants.items():
@@ -129,7 +129,7 @@ def _project_economy(
         merchants[str(merchant_id)] = merchant
     if merchants:
         merchant_root["merchants"] = merchants
-    simulation_state["merchant_state"] = merchant_root
+    working["merchant_state"] = merchant_root
     return {
         "price_multiplier_bps": multiplier_bps,
         "trade_access": round(trade, 2),
@@ -138,7 +138,7 @@ def _project_economy(
 
 
 def _project_travel(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     regions: tuple[Mapping[str, Any], ...],
     pressures: tuple[Mapping[str, Any], ...],
     *,
@@ -157,7 +157,7 @@ def _project_travel(
         8000,
         16000,
     )
-    travel = _dict(_sections.travel_state_of(simulation_state))
+    travel = _dict(_sections.travel_state_of(working))
     travel.update(
         {
             "causal_cost_multiplier_bps": multiplier_bps,
@@ -166,12 +166,12 @@ def _project_travel(
             "causal_projection_source": "deterministic_causal_runtime",
         }
     )
-    simulation_state["travel_state"] = travel
+    working["travel_state"] = travel
     return {"cost_multiplier_bps": multiplier_bps, "safety_index": safety}
 
 
 def _project_factions(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     runtime: Mapping[str, Any],
     cells: Mapping[str, Mapping[str, Any]],
     pressures: tuple[Mapping[str, Any], ...],
@@ -180,7 +180,7 @@ def _project_factions(
 ) -> dict[str, Any]:
     projection_plan = _dict(runtime.get("projection_plan"))
     claims = _list(_dict(projection_plan.get("political_claim_graph")).get("claims"))
-    faction_state = _dict(simulation_state.get("faction_reputation"))
+    faction_state = _dict(working.get("faction_reputation"))
     affected: set[str] = set()
     for pressure in pressures:
         for group_id in _list(pressure.get("affected_group_ids")):
@@ -216,12 +216,12 @@ def _project_factions(
         )
         faction_state[group_id] = row
         projected.append(group_id)
-    simulation_state["faction_reputation"] = faction_state
+    working["faction_reputation"] = faction_state
     return {"faction_ids": sorted(projected), "affected_faction_ids": sorted(affected)}
 
 
 def _project_npcs(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     runtime: Mapping[str, Any],
     pressures: tuple[Mapping[str, Any], ...],
     *,
@@ -236,7 +236,7 @@ def _project_npcs(
     leading = active[0] if active else {}
     pressure_id = str(leading.get("pressure_id") or "")
     status = str(leading.get("status") or "resolved")
-    npc_presence = _dict(simulation_state.get("npc_presence"))
+    npc_presence = _dict(working.get("npc_presence"))
     for actor_id in actor_ids:
         row = _dict(npc_presence.get(actor_id))
         if pressure_id:
@@ -257,17 +257,20 @@ def _project_npcs(
             }
         row["causal_projection_tick"] = tick
         npc_presence[actor_id] = row
-    simulation_state["npc_presence"] = npc_presence
+    working["npc_presence"] = npc_presence
     return {"actor_ids": actor_ids, "leading_pressure_id": pressure_id}
 
 
 def project_causal_runtime_to_subsystems(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     runtime: Mapping[str, Any],
     *,
     tick: int,
 ) -> dict[str, Any]:
-    """Project authoritative causal cells without mutating their source values."""
+    """Project authoritative causal cells onto the economy, travel, factions and people, without mutating the cells.
+
+    ``working`` is the causal tick's working copy of the simulation (``session/causal_turn_runtime.causal_tick``, its one
+    caller): what is projected there becomes the turn's ``WorldTicked`` change, which the reducer applies."""
 
     cells = _cells(runtime)
     regions = _region_summary(cells)
@@ -287,19 +290,19 @@ def project_causal_runtime_to_subsystems(
         ],
     }
     receipt["economy"] = _project_economy(
-        simulation_state, regions, pressures, tick=tick
+        working, regions, pressures, tick=tick
     )
     receipt["travel"] = _project_travel(
-        simulation_state, regions, pressures, tick=tick
+        working, regions, pressures, tick=tick
     )
     receipt["factions"] = _project_factions(
-        simulation_state, runtime, cells, pressures, tick=tick
+        working, runtime, cells, pressures, tick=tick
     )
     receipt["npcs"] = _project_npcs(
-        simulation_state, runtime, pressures, tick=tick
+        working, runtime, pressures, tick=tick
     )
     receipt["projection_hash"] = _hash(receipt)
-    simulation_state["causal_runtime_projection"] = copy.deepcopy(receipt)
+    working["causal_runtime_projection"] = copy.deepcopy(receipt)
     return receipt
 
 

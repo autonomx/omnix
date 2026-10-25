@@ -61,7 +61,7 @@ def test_every_campaign_shape_upcasts_validates_and_round_trips(shape: str) -> N
     assert v5["manifest"]["schema_version"] == 5
     v6 = upcast_campaign_document(deepcopy(v5))
 
-    assert v6["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION == 8
+    assert v6["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION == 9
     CampaignState.model_validate(v6)
     CampaignStateView(v6).validate()  # every section reads
     expected = _facts(v5)

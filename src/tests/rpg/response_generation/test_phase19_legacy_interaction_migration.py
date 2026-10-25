@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
-from app.apps.rpg.session.legacy_interaction_migration import (
+from app.apps.rpg.session.upgrades.interaction_timeline import (
     LEGACY_INTERACTION_MIGRATION_VERSION,
 )
 from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION

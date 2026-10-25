@@ -16,12 +16,8 @@ from app.apps.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
-from app.apps.rpg.world.environment import ensure_session_environment_seed_state
 from app.apps.rpg.session.list_summaries import list_session_summaries_from_disk
 from app.apps.rpg.session.migrations import migrate_session_payload
-from app.apps.rpg.session.published_opening_progress import (
-    ensure_published_opening_progress,
-)
 from app.apps.rpg.session.survival_persistence import normalize_session_survival_for_persistence
 from app.apps.rpg.rules.validation.integrity import (
     assert_session_integrity,
@@ -67,7 +63,6 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
         rng_seed = rng_seed_from_session_id(session_id)
         simulation_state["rng_seed"] = rng_seed
     session["simulation_state"] = simulation_state
-    session = ensure_session_environment_seed_state(session)
     session = normalize_session_survival_for_persistence(session, owned=owned)
     session = ensure_session_map_state(session)
     # Living-world: ensure ambient runtime state exists and is bounded
@@ -75,7 +70,7 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
     runtime_state = ensure_ambient_runtime_state(runtime_state)
     runtime_state = normalize_ambient_state(runtime_state)
     session["runtime_state"] = runtime_state
-    return ensure_published_opening_progress(session)
+    return session
 
 
 def save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
