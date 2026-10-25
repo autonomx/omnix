@@ -12,15 +12,16 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import PressuresMoved, QuestOffered, QuestStatusChanged, StateChange
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
 from app.apps.rpg.rules.quest.progress import victories
-from app.apps.rpg.world.causal_runtime import pull_levers
 
+# The causal runtime's pull: (the runtime, each pressure's pull) -> (the runtime as it leaves it, its event or None).
+Pull = Callable[[Mapping[str, Any], Mapping[str, float]], tuple[dict[str, Any], Any]]
 PRESSURE_QUEST_SEVERITY = 60.0
 PRESSURE_QUEST_REWARD = "10 silver"
 PRESSURE_QUEST_EVERY = 24 * 60  # the world's troubles raise a new side quest at most once a day (on its clock)
@@ -48,9 +49,12 @@ def _amount(lever: Mapping[str, Any]) -> float:
     return float(lever.get("amount") or 0) * (1 if _s(lever.get("effect")) == "raise" else -1)
 
 
-def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange]) -> tuple[list[StateChange], list[str]]:
+def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange], *, pull: Pull
+                ) -> tuple[list[StateChange], list[str]]:
     """The pressures this turn's deeds moved, and how to say it: creatures felled push back the pressure of the region
-    they fell in (a wolf killed in one march does not make another's roads safe), a quest completed its own."""
+    they fell in (a wolf killed in one march does not make another's roads safe), a quest completed its own.
+    ``pull(runtime, pulls)`` moves them in the causal runtime (``world.causal_runtime.pull_levers``, the turn's to
+    give: the rules read the world's state, they do not run it)."""
     runtime = _runtime(simulation)
     pressures = _pressures(runtime)
     if not pressures:
@@ -70,7 +74,7 @@ def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange]) -
             if times:
                 key = _s(pressure["pressure_id"])
                 pulls[key] = pulls.get(key, 0.0) + _amount(lever) * times
-    moved, event = pull_levers(runtime, pulls, cause="hero")
+    moved, event = pull(runtime, pulls)
     if event is None:
         return [], []
     names = {_s(row["pressure_id"]): _s(row.get("name")) or _s(row["pressure_id"]) for row in pressures}

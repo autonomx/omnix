@@ -18,6 +18,7 @@ mechanic (§4.3) returns `StateChange` values; the narrator only phrases the out
 | [economy.md](economy.md) | RQ-5.5 Sinks, sources, prices that move | stretch |
 | [encounters.md](encounters.md) | RQ-5.6 Creature behaviour, negotiation, stealth | stretch |
 | [rewind.md](rewind.md) | RQ-5.7 Undo and save points | yes |
+| [world-forge-campaigns.md](world-forge-campaigns.md) | RQ-2.8 A World Forge campaign plays from a world | yes |
 
 ## Note template
 

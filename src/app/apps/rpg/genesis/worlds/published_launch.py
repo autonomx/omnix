@@ -1,6 +1,7 @@
 """Fast deterministic campaign launch from certified world releases."""
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 
@@ -445,13 +446,15 @@ def launch_published_scenario(
     new_game: Mapping[str, Any] | None = None,
     lead_seed_id: str = "",
     prepare: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    session_id: str = "",
     database: Any | None = None,
 ) -> dict[str, Any]:
     """Create a playable campaign without invoking World Forge or any model provider.
 
     ``new_game`` is the rest of a new game's request (the hero's class, stats and chosen gear), kept under what the
     world decides; ``lead_seed_id`` is the opening's story seed the player chose to start with; ``prepare`` adds
-    the caller's own records to the campaign (the creation wizard's genesis) before its one save.
+    the caller's own records to the campaign (the creation wizard's genesis) before its one save; ``session_id``
+    is the campaign's id when the caller already gave the player one (the wizard's, while its world was made).
     """
 
     revision, release, scenario = load_published_resources(
@@ -525,9 +528,13 @@ def launch_published_scenario(
     )
     # Built, not saved: the campaign is saved once, opened in its world (and with the creation's progress).
     session = sessions.build_new_game(request)
-    session_id = str(_record(session.get("manifest")).get("session_id") or "")
-    if not session_id:
+    built_id = str(_record(session.get("manifest")).get("session_id") or "")
+    if not built_id:
         raise RuntimeError("published_scenario_session_creation_failed")
+    if session_id and session_id != built_id:
+        # The new game was built under a fresh id; the campaign keeps the one the player was given.
+        session = json.loads(json.dumps(session).replace(json.dumps(built_id)[1:-1], json.dumps(session_id)[1:-1]))
+    session_id = session_id or built_id
     session = _with_completed_creation(session, session_id)
 
     binding = resolve_campaign_binding(

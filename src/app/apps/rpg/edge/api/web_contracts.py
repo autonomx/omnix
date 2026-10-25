@@ -1157,3 +1157,18 @@ class RpgWorldShareResponse(TypedDict, total=False):
     pull_request_url: Required[str]
     bundle_sha256: Required[str]
     bundle_bytes: Required[int]
+
+
+class RpgSavePoint(TypedDict, total=False):
+    """A named moment of a campaign to return to (rewind.md)."""
+
+    name: Required[str]
+    revision: Required[int]
+    created_at: Required[str]
+
+
+class RpgSavePointsResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    save_points: Required[list[RpgSavePoint]]
+    save_point: NotRequired[RpgSavePoint]

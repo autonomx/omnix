@@ -1,80 +1,11 @@
+"""World Forge's quality audit (still the library's publication gate): provider provenance, fact authority."""
 from __future__ import annotations
 
-from dataclasses import replace
-from pathlib import Path
-
 from app.apps.rpg.genesis.forge.canon_audit import CanonAuditReport
-from app.apps.rpg.genesis.forge.compiler import compile_campaign_genesis
-from app.apps.rpg.genesis.forge.contract import CampaignGenesisContract
-from app.apps.rpg.genesis.forge.world_forge_default import (
-    ReferenceSafeWorldForgeGenerator,
-)
-from app.apps.rpg.genesis.forge.world_forge_deterministic import (
-    DeterministicWorldForgeGenerator,
-)
 from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
-from app.apps.rpg.genesis.forge.world_forge_pipeline import run_campaign_world_forge
 from app.apps.rpg.genesis.forge.world_forge_quality import (
     apply_world_forge_quality_audit,
 )
-
-
-ROOT = Path(__file__).resolve().parents[4]
-
-
-def _contract(
-    *,
-    template: str = "classic_fantasy",
-    depth: str = "quick",
-) -> CampaignGenesisContract:
-    return CampaignGenesisContract.model_validate(
-        {
-            "campaign_template": template,
-            "genre": "fantasy",
-            "tone": "grounded adventure",
-            "world_options": {
-                "starting_location": (
-                    "vanta_gate"
-                    if "summoned" in template
-                    else "rusty_flagon_tavern"
-                ),
-                "difficulty": "normal",
-                "world_activity": "living_world",
-                "economy_pressure": "normal",
-                "combat_lethality": "normal",
-                "seed": 38,
-            },
-            "world_forge": {
-                "depth": depth,
-                "background_expansion": False,
-                "require_consistency_audit": True,
-                "require_opening_dossiers": True,
-            },
-        }
-    )
-
-
-def _run(contract: CampaignGenesisContract, generator=None):
-    return run_campaign_world_forge(
-        contract,
-        campaign_id=f"campaign:phase38:{contract.campaign_template}",
-        compiled_genesis=compile_campaign_genesis(contract),
-        generator=generator or ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator()),
-    )
-
-
-class _BrokenNpcGenerator:
-    def __init__(self) -> None:
-        self.base = DeterministicWorldForgeGenerator()
-
-    def generate(self, node, **kwargs):
-        topic = self.base.generate(node, **kwargs)
-        if node.category != "npcs" or not topic.entities:
-            return topic
-        rows = [dict(row) for row in topic.entities]
-        rows[0]["backstory"] = ""
-        rows[0]["dossier_status"] = "complete"
-        return replace(topic, entities=tuple(rows))
 
 
 def test_live_topic_requires_provider_provenance() -> None:

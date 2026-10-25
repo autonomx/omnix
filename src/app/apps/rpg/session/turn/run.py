@@ -86,13 +86,15 @@ def turn_consequences(document: dict[str, Any],
     """What the turn led to: the quests of steps it moved on (rules/quest/progress.py), the pressures its deeds pushed
     on, and the side quests a high pressure raises (rules/pressures.py)."""
     from app.apps.rpg.rules.pressures import lever_pulls, pressure_offers
+    from app.apps.rpg.world.causal_runtime import pull_levers
     from app.apps.rpg.rules.quest.arrival import quest_rewards
     from app.apps.rpg.rules.quest.progress import quest_progress
 
     changes: list[StateChange] = []
     lines: list[str] = []
     for step in (lambda simulation: quest_progress(simulation, applied, lambda quest: quest_rewards(simulation, quest)),
-                 lambda simulation: lever_pulls(simulation, [*applied, *changes]),
+                 lambda simulation: lever_pulls(simulation, [*applied, *changes],
+                                                pull=lambda runtime, pulls: pull_levers(runtime, pulls, cause="hero")),
                  pressure_offers):
         made, said = step(_d(document.get("simulation_state")))
         if made:

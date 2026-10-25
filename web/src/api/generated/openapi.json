@@ -49849,6 +49849,30 @@
         "title": "RpgRewindRequestBody",
         "type": "object"
       },
+      "RpgSavePoint": {
+        "description": "A named moment of a campaign to return to (rewind.md).",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "revision",
+          "created_at"
+        ],
+        "title": "RpgSavePoint",
+        "type": "object"
+      },
       "RpgSavePointRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -49863,6 +49887,35 @@
           "name"
         ],
         "title": "RpgSavePointRequestBody",
+        "type": "object"
+      },
+      "RpgSavePointsResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "save_point": {
+            "$ref": "#/components/schemas/RpgSavePoint"
+          },
+          "save_points": {
+            "items": {
+              "$ref": "#/components/schemas/RpgSavePoint"
+            },
+            "title": "Save Points",
+            "type": "array"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "save_points"
+        ],
+        "title": "RpgSavePointsResponse",
         "type": "object"
       },
       "RpgScenarioLifecycleResponse": {
@@ -89938,13 +89991,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSavePointsResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg List Save Points Api Rpg Sessions  Session Id  Save Points Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -89991,13 +90045,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSavePointsResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Create Save Point Api Rpg Sessions  Session Id  Save Points Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -90044,13 +90099,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSavePointsResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Delete Save Point Api Rpg Sessions  Session Id  Save Points  Name  Delete",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {

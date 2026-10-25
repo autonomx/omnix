@@ -7086,12 +7086,34 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RpgSavePoint
+         * @description A named moment of a campaign to return to (rewind.md).
+         */
+        RpgSavePoint: {
+            /** Created At */
+            created_at: string;
+            /** Name */
+            name: string;
+            /** Revision */
+            revision: number;
+        };
         /** RpgSavePointRequestBody */
         RpgSavePointRequestBody: {
             /** Name */
             name: string;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgSavePointsResponse */
+        RpgSavePointsResponse: {
+            /** Ok */
+            ok: boolean;
+            save_point?: components["schemas"]["RpgSavePoint"];
+            /** Save Points */
+            save_points: components["schemas"]["RpgSavePoint"][];
+            /** Session Id */
+            session_id: string;
         };
         /** RpgScenarioLifecycleResponse */
         RpgScenarioLifecycleResponse: {
@@ -12445,15 +12467,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSavePointsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12482,15 +12502,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSavePointsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12516,15 +12534,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSavePointsResponse"];
                 };
             };
             /** @description Validation Error */

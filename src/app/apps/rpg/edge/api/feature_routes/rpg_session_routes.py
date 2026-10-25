@@ -41,6 +41,7 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgLaunchResponse,
     RpgLoadoutActionResponse,
     RpgPresetListResponse,
+    RpgSavePointsResponse,
     RpgSessionListResponse,
     RpgSessionMutationResponse,
     RpgTurnDraftResponse,
@@ -552,16 +553,19 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             action={"turn_kind": "structured_action", "type": "rewind", "save_point": name},
         )
 
-    @router.get("/api/rpg/sessions/{session_id}/save-points", tags=["rpg-session"])
+    @router.get("/api/rpg/sessions/{session_id}/save-points", tags=["rpg-session"],
+                responses=documented(RpgSavePointsResponse))
     def rpg_list_save_points(session_id: str) -> dict[str, Any]:
         return {"ok": True, "session_id": session_id, "save_points": _save_points(session_id)}
 
-    @router.post("/api/rpg/sessions/{session_id}/save-points", tags=["rpg-session"])
+    @router.post("/api/rpg/sessions/{session_id}/save-points", tags=["rpg-session"],
+                 responses=documented(RpgSavePointsResponse))
     def rpg_create_save_point(session_id: str, request_body: RpgSavePointRequestBody) -> dict[str, Any]:
         """Name this moment a save point: the campaign's current state, pinned (no turn, no change to the game)."""
         return _create_save_point(session_id, request_body.name.strip())
 
-    @router.delete("/api/rpg/sessions/{session_id}/save-points/{name}", tags=["rpg-session"])
+    @router.delete("/api/rpg/sessions/{session_id}/save-points/{name}", tags=["rpg-session"],
+                   responses=documented(RpgSavePointsResponse))
     def rpg_delete_save_point(session_id: str, name: str) -> dict[str, Any]:
         from app.persistence.unit_of_work import unit_of_work
         from app.runtime.tenant_context import current_tenant

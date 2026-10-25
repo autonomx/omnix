@@ -3,8 +3,14 @@ from __future__ import annotations
 
 from app.apps.rpg.foundation.state import reduce
 from app.apps.rpg.foundation.state.changes import CombatAdvanced, QuestStatusChanged
-from app.apps.rpg.rules.pressures import lever_pulls, pressure_offers
-from app.apps.rpg.world.causal_runtime import advance_causal_runtime, bootstrap_causal_runtime, replay_causal_events
+from app.apps.rpg.rules import pressures
+from app.apps.rpg.rules.pressures import pressure_offers
+from app.apps.rpg.world.causal_runtime import (
+    advance_causal_runtime, bootstrap_causal_runtime, pull_levers, replay_causal_events)
+
+
+def lever_pulls(simulation, applied):
+    return pressures.lever_pulls(simulation, applied, pull=lambda runtime, pulls: pull_levers(runtime, pulls, cause="hero"))
 
 ROADS = {"pressure_id": "pressure:roads:march", "name": "Danger on the roads", "summary": "Wolves prey on travellers.",
          "severity": 70.0, "trend": "volatile", "escalation_threshold": 90.0, "resolution_threshold": 15.0,
