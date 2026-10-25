@@ -174,11 +174,10 @@
     },
     {
       "blocks": [
-        "action||You wait a while in Starfall Village; time passes. Around you: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen.",
-        "choice||Offered choice: You wait a while in Starfall Village; time passes. Around you: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
+        "result||You wait a while in Starfall Village; time passes. Around you: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
       ],
       "step": "wait",
-      "told": "You wait a while in Starfall Village; time passes. Around you: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. You wait a while in Starfall Village; time passes. Around you: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen.",
+      "told": "",
       "visible": "You wait a while in Starfall Village; time passes. Around you: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
     },
     {

@@ -303,18 +303,11 @@
       "narrative": {
         "blocks": [
           {
-            "kind": "action",
-            "purpose": "resolved_action",
-            "sequence": 1,
+            "kind": "result",
+            "purpose": "consequence",
+            "sequence": 0,
             "speaker_id": null,
-            "text": "You take in your surroundings."
-          },
-          {
-            "kind": "choice",
-            "purpose": "offered_choice",
-            "sequence": 2,
-            "speaker_id": null,
-            "text": "Offered choice: You take in your surroundings."
+            "text": "You wait a while in Northern Road; time passes. Around you: Captain Aldric (patrolling the road)."
           }
         ],
         "validation": {
@@ -330,9 +323,9 @@
           "world",
           "narrative"
         ],
-        "llm_purpose": "canonical_dialogue_generation",
+        "llm_purpose": "turn_pipeline",
         "narration_status": "not_requested",
-        "source": "narrative_engine_resolved_turn_v1"
+        "source": "rpg_turn_pipeline_v1"
       },
       "session_summary": {
         "interaction_seq": 5,
@@ -356,9 +349,9 @@
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],
-        "narration": "You take in your surroundings.",
+        "narration": "You wait a while in Northern Road; time passes. Around you: Captain Aldric (patrolling the road).",
         "npc": {},
-        "plain_text": "You take in your surroundings."
+        "plain_text": "You wait a while in Northern Road; time passes. Around you: Captain Aldric (patrolling the road)."
       }
     }
   ]

@@ -15,7 +15,7 @@ Each turn class is played ``--runs`` times (default 20) in Aurelia, from the sam
 
 Per turn it records, from the request's start:
 
-- ``outcome_known_ms``: the end of the turn's ``resolve`` stage, when the deterministic outcome is known on the
+- ``outcome_known_ms``: the end of the turn's ``planned_turn`` stage, when the deterministic outcome is known on the
   server (the tactical route resolves and commits in one step, so it is the whole request);
 - ``outcome_visible_ms``: when the play screen can show the outcome. Today that is the turn's response (the outcome
   arrives with the narration), so it equals ``complete_ms``;
@@ -83,7 +83,7 @@ class Clock:
 
 
 def instrument(clock: Clock) -> None:
-    """Note when the resolve stage ends and when the narrative writer first publishes a draft."""
+    """Note when the planned-turn stage ends (the outcome is known) and when the narrative writer first publishes a draft."""
     from contextlib import contextmanager
 
     from app.apps.rpg.narration import narrative_provider
@@ -95,7 +95,7 @@ def instrument(clock: Clock) -> None:
     def span(name: str, *, fields: dict[str, Any] | None = None):
         with original_span(name, fields=fields) as stage:
             yield stage
-        if name == "turn.stage.resolve":
+        if name == "turn.stage.planned_turn":
             clock.resolve_done = time.perf_counter()
 
     original_publish = narrative_provider.publish_narration_draft

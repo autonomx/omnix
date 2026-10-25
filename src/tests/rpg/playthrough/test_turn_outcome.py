@@ -137,3 +137,24 @@ def test_each_turn_offers_what_to_do_next_and_a_question_its_answers(launch) -> 
     asked = play.turn("I attack")["outcome"]["presentation"]  # "Who or what do you want to attack?"
     assert [(row["label"], row["command"]) for row in asked["choices"]] == [
         ("Bran", "I attack Bran."), ("Mira", "I attack Mira.")], asked
+
+
+# F3 over the latency harness's turn mix (RQ-6.1): the turns the game decides make no model call, no turn makes more
+# than two, and at least four in five make at most one.
+F3_MIX = (("look around", None), ("Liora, where am I?", None), ("check my inventory", 0), ("wait", 0),
+          ("Check my quests", 0), ("attack the echo wolf", None), ("I flee from the Echo Wolf.", None),
+          ("go to Starfall Village", None), ("buy a healing potion", None))
+
+
+def test_the_turn_mix_keeps_its_model_call_budget(launch) -> None:
+    from app.apps.rpg.narration.presentation.turn_outcome import TurnOutcome
+
+    play = launch("aurelia")
+    totals: dict[str, int] = {}
+    for command, budget in F3_MIX:
+        outcome = TurnOutcome.model_validate(play.turn(command)["outcome"])
+        totals[command] = outcome.model_calls.total
+        if budget is not None:
+            assert outcome.model_calls.total <= budget, (command, outcome.model_calls)
+    assert max(totals.values()) <= 2, totals
+    assert sum(total <= 1 for total in totals.values()) >= 0.8 * len(totals), totals

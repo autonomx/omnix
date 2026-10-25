@@ -108,8 +108,9 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
     if mechanic in {"look", "wait", "clarify"}:
         changes = resolve(planned, session)
         document, _ = reduce(dict(session), changes)  # what is seen, from where the hero then stands
+        # Waiting is the game's own line, with no model call (F3: deterministic turns make none); looking is told.
         return Resolution(changes, outcome_lines(planned, document), minutes=planned.ticks * MINUTES_PER_TICK,
-                          needs=None if mechanic == "clarify" else "wait", told=mechanic != "clarify")
+                          needs=None if mechanic == "clarify" else "wait", told=mechanic == "look")
     if mechanic == "travel":
         travel = resolve_travel(planned, session)
         changes, lines = (travel.changes, travel.lines) if travel.refused else met_on_the_road(session, travel)

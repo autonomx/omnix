@@ -3035,7 +3035,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:a8bbe6fe256b88565acd171b98d8571ed70b22d795749a8fff2314993aebd5d8",
+      "document_hash": "sha256:548d39d4970526d2f124280bdb46fa20c12c591279a0fae4ba58db25a0495875",
       "facts": {
         "combat": {
           "active": false,
@@ -3119,9 +3119,7 @@
         },
         "turn_count": 20
       },
-      "model_calls": [
-        "narration"
-      ],
+      "model_calls": [],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
@@ -3148,7 +3146,7 @@
           "world",
           "narrative"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "rpg_turn_pipeline_v1",
         "state": {
           "changed": true,
           "changed_domains": [
