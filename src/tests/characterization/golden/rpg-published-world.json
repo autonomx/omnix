@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:08ef7842c635cb4856c0972295f97d03730cf25216e3d9dfce7f1b3ab48a3c73",
+      "document_hash": "sha256:a7b701c985b5249a8be41d2fa759cb6134ab9b457734d2f7fe0bbe431418b387",
       "facts": {
         "combat": {
           "active": false,
@@ -229,7 +229,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:aadc4ba1b71d67f79c6325536f0a35caa5cc65a7a71300f54abcb7c55f63327c",
+      "document_hash": "sha256:721c60e6ff9a3064cb1cc7c26e2e549939328e4b8143e6c124ad2f4113d88729",
       "facts": {
         "combat": {
           "active": false,
@@ -379,7 +379,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:54eae7f76da6fafca888f1f5a23d2fa8514245f276e66513f06a3f68baf15737",
+      "document_hash": "sha256:431f856091a9eac35d37478e4bfb6a022b9b3ed50bae923f845c02f44c22d00e",
       "facts": {
         "combat": {
           "active": false,
@@ -525,7 +525,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:03893b50acb46a171bc497c3b619a7d09c68b73f5f914e569646d71fbeec6840",
+      "document_hash": "sha256:1effd0c40a16866dff3466b314dd949a792415fc53077ef614d070746d51c8c8",
       "facts": {
         "combat": {
           "active": false,
@@ -675,7 +675,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:16d721c4b4b56844742107f1eabd97a8d9578ce73e48f7dc872c0ac492c28984",
+      "document_hash": "sha256:55721f65ce35a4e2e529860eb95aabfdb8dc578603b4509204d8b4e7f5c4c7da",
       "facts": {
         "combat": {
           "active": false,
@@ -843,7 +843,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:adaf5f8ea6cc645720f34246c584ed48244f0b30130dc482da2d3fbb966f2efd",
+      "document_hash": "sha256:17ca429eb06afbd03b347cc6cdaced67c15901176b71cae10838ec39a3018e98",
       "facts": {
         "combat": {
           "active": false,
@@ -1027,7 +1027,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e16a69bf405eadb4dbb93cd38d50a6913b2870d75351fa8a73c778cbd6c9e051",
+      "document_hash": "sha256:7a4e4f10b5e3b6c912d2eed6ac04671b4106d5791612048ba50b8542c7864055",
       "facts": {
         "combat": {
           "active": false,
@@ -1173,7 +1173,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:695710861cf46ce8d6c6b057001db9ec8b601dd02aa03bf562b7f5260bfda9a4",
+      "document_hash": "sha256:291bb58fb0f650537e30a57375aaae67764c779ca23772b6957b40aa454bf0d9",
       "facts": {
         "combat": {
           "active": false,
@@ -1323,7 +1323,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:acab6f9cdc1cc9f34b3ad08757baaa88bcf0677e610fab1283c6d4383dabcb65",
+      "document_hash": "sha256:f4cae347cad9791a2eb911b3f7dea6cdc166133806d44c72364467ede6790fe1",
       "facts": {
         "combat": {
           "active": false,
@@ -1472,7 +1472,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:4154a0f05a8cb9d8be77ebb5a1650c1e02ca93e6a9ca78163b6e5fd29629f518",
+      "document_hash": "sha256:db31a148ca4923db7c16b4b4c269b1baa662c799f3699be70fca3b15eae5f479",
       "facts": {
         "combat": {
           "active": false,
@@ -1626,7 +1626,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:ea2ffe86fc813a995fadf056ddc6a2e458ce6fb6a4a9ecb798d884488d8368ec",
+      "document_hash": "sha256:bf4e36c918108119bb168363c8fc11fca22d174cd3586e03c2d84f26007b85ff",
       "facts": {
         "combat": {
           "active": false,
@@ -1771,7 +1771,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:fe71b40557158b5389c73458f459091080685853a1ef528ef777cac1a9257b53",
+      "document_hash": "sha256:6911babdaa0a6e2792ce8b3646cab5302e019816e4def7d0ac2b10bb50da99e2",
       "facts": {
         "combat": {
           "active": false,
@@ -1932,7 +1932,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f9011e1599c11e20bc0d0956bea3f7db3ece122ad1cd0600f872f6bdef919288",
+      "document_hash": "sha256:9faeed1730f93d5982da339c64290cb9bfccb0b058f433c3a65d27d200250e40",
       "facts": {
         "combat": {
           "active": false,
@@ -2109,7 +2109,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3a9e2c5fcfd584cb192a02806fc308f9f27d8cba20a820f542e04c9c2f54868b",
+      "document_hash": "sha256:ea537acb917e272f822a546d5a6a1fefe9bbb0d0c898fe87ed9c55e835b12a05",
       "facts": {
         "combat": {
           "active": false,
@@ -2276,7 +2276,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:a404ec9da5ddbf46ace2a75f5fdc297d76181868daf27df3f610bea0c90869fa",
+      "document_hash": "sha256:bf070f47e2f7f382d0be08adf0a91ddd035f6431a1d1902204582019b6667f92",
       "facts": {
         "combat": {
           "active": false,
@@ -2442,7 +2442,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:1d9ce4177e344a6aa326a320a998d2b3bc05a0eb9a6bc61710efdbfa5338700d",
+      "document_hash": "sha256:4350e3d96d80f3ba5f6f655a0eaf60e4e970e2c9fc50a3f024bd734f2a82d8b7",
       "facts": {
         "combat": {
           "active": false,
@@ -2583,7 +2583,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:97a82385205e88e1da0baec0f7acbe632621c3350ec9ee668499bc83e024ce9e",
+      "document_hash": "sha256:0a7c73ec13112bc8dcb82bf836e253a277c4bf3fef91347978444614f13f9447",
       "facts": {
         "combat": {
           "active": false,
@@ -2730,7 +2730,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:7a4dd80e0cb6a0444974578610e041cae8f174ab9678f93625772ffaf73a8b9a",
+      "document_hash": "sha256:ded30008516d6f14aa801af4067da61755412ca5d5a6f9e0639b055a40d19b2c",
       "facts": {
         "combat": {
           "active": false,
@@ -2879,7 +2879,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:43c04c1474d88590771eb2af0d9ad00109787a0a448aa79ecc42e516116f63a8",
+      "document_hash": "sha256:cdddbba086dbeec24df58291d4f52af0dc305b784cee49b20f6dfed287403d88",
       "facts": {
         "combat": {
           "active": false,
@@ -3038,7 +3038,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b6f82f16087218e6d8ce99f0f2b7ce14bf709056fb47098dd5eb39e90faed643",
+      "document_hash": "sha256:01ee0aba59a67560dd675e272c2c726d3c1869899b1d15d6d61a9ac1fe1cc0f1",
       "facts": {
         "combat": {
           "active": false,
@@ -3199,7 +3199,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:8ecacebec2a89eaccf4922b86a48fa87d34dee0cd2b9d5f54e5e13641bb99b51",
+      "document_hash": "sha256:bc1647d484cd56611020ae63d4c6404fd77505ccdcbb7e7f2f33c2fc8c793dc2",
       "facts": {
         "combat": {
           "active": true,
@@ -3391,7 +3391,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0a4ca3c4101e812666ed2583e80f8697d83c90f3732954aac842e3d269c89ef9",
+      "document_hash": "sha256:0650f2eabac3fca505c05d55cc536b2b5eb102fa53731fbbfc0464e0e49c7d21",
       "facts": {
         "combat": {
           "active": true,
@@ -3538,7 +3538,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:062c3b40022130e566cf8ca9113a1e9106128c5fb0e48184be06e02336624b85",
+      "document_hash": "sha256:08d7a4a72514b50936f428d8a122325380291c572a5c8504c4925e985d97d6ca",
       "facts": {
         "combat": {
           "active": true,
@@ -3670,7 +3670,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:faadb99d59f91e035bac4024cd9476f9a0e62e27f90542619ecf4e90431809c1",
+      "document_hash": "sha256:769925abfa8e4e3b73fe724c4885e1cce57823a53ba623a3d8c89bc1d79f0f2e",
       "facts": {
         "combat": {
           "active": true,
@@ -3830,7 +3830,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:12866c5d5fddefc767f2b6d5398377a49e927c257bb0c121dbd6ca8e5b8172ab",
+      "document_hash": "sha256:453b56e739599d5252080e999615b913e3118503ef322c5209c3ab27c3f741ec",
       "facts": {
         "combat": {
           "active": true,
@@ -3991,7 +3991,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:bd5719cc2992f9294a0f8dcfe41fd47e8eff59fc31d4cf622e8f4baa13f4b115",
+      "document_hash": "sha256:c82544cbef7b44f90db96d8e595a294fb2c68eb9c4f714767c6757b0176fee6d",
       "facts": {
         "combat": {
           "active": false,
@@ -4142,7 +4142,7 @@
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:f50cdcdc3b0ad1e407148cfd9c43c3877062fce49687bc7c417dc2540c273753",
+      "document_hash": "sha256:b96905218cd50a12a0825f372b67f018d31bcbb45493057693291aa4528abbf4",
       "facts": {
         "combat": {
           "active": false,
@@ -4292,7 +4292,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:0f9dae93fe4dfbc08328915adf373063afc35fe56ebde020eb333cf582c30075",
+      "document_hash": "sha256:6e5ac6878d5d11a58db24ad74c5bca4b636754fa60f6f782018047a9f14daeb9",
       "facts": {
         "combat": {
           "active": false,
@@ -4436,7 +4436,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:6878a8f2075a44aeb7e05c6b49f4aace087c6fafb9957217213db3e2432e3355",
+      "document_hash": "sha256:49e6113dac3a401e3a50fdb6ea066f3f2b263980b980fe11605f756adbec9bb3",
       "facts": {
         "combat": {
           "active": false,
@@ -4625,7 +4625,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:42a436eae2fab6b3e343dd0aaa2e2c1731a67c1ec3ae30b85b970a1c373dd32a",
+      "document_hash": "sha256:95c1420cbd5a003a4fc267fa18ca667e319816edf66b7414e67ea6f6dba76c0a",
       "facts": {
         "combat": {
           "active": false,
@@ -4795,7 +4795,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e60c825d360529cdce873334a964f9a0d2a225be969a92a12cfdc5a490b1526f",
+      "document_hash": "sha256:ae5c752ed88dcdcfadbfff304a121626d8078ff70d8452946727f715e6c1a031",
       "facts": {
         "combat": {
           "active": false,

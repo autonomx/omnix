@@ -47,7 +47,8 @@ def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int,
         runtime_state=_d(document.get("runtime_state")),
         turn_index=turn_index,
         player_input=request.text,
-        turn_contract={"player_input": request.text, "turn_index": turn_index, "summary": summary},
+        # The game's own lines are the day's record (the journal reads a resolved result's summary).
+        turn_contract={"player_input": request.text, "turn_index": turn_index, "resolved_result": {"summary": summary}},
         turn_result={"player_action": request.text},
         calendar_snapshot=_d(_d(state.get("world")).get("environment") or state.get("environment_snapshot")),
         player_context={
