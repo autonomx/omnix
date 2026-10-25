@@ -74,19 +74,39 @@ def _people(document: Mapping[str, Any], environment: Mapping[str, Any]) -> tupl
     return changes, seen
 
 
+MAX_PRESSURE_TICKS = 12  # the pressures move once for each hour the clock crosses, at most half a day's at once
+SURFACED_PER_TURN = 2  # how many of the world's turns of fortune reach the hero in one turn (living world, RQ-4.4)
+_WORD = {"pressure_escalated": "grows worse", "pressure_contained": "is held in check",
+         "pressure_resolved": "is at an end", "pressure_reactivated": "stirs again"}
+
+
+def _word(event_ids: list[str], runtime: Mapping[str, Any], region: str) -> list[str]:
+    """What reaches the hero of the world's pressures turning (escalated, contained, resolved, stirring again): word of
+    it, the hero's region first, at most ``SURFACED_PER_TURN``."""
+    plan = {_d(row).get("pressure_id"): _d(row) for row in _d(runtime.get("pressure_plan")).get("pressures") or ()}
+    heard = []
+    for event_id in event_ids:
+        for pressure_id, row in plan.items():
+            kind = event_id.rsplit(":", 1)[-1]
+            if f":{pressure_id}:" in event_id and kind in _WORD:
+                local = _d(row.get("next_tick_delta")).get("target_id") == region
+                heard.append((not local, f"Word comes: {row.get('name') or pressure_id} {_WORD[kind]}."))
+    return [line for _, line in sorted(heard, key=lambda item: item[0])][:SURFACED_PER_TURN]
+
+
 def world_tick(
     document: Mapping[str, Any],
     *,
     needs: str | None,
     minutes: int,
     turn_key: str,
-    turn: int,
 ) -> tuple[list[StateChange], dict[str, Any], list[str]]:
     """The world's changes for this turn, the causal runtime's receipt ({} for a world without one), and what the
-    hero sees of it (people coming and going).
+    hero sees of it (people coming and going, and word of the world's pressures turning).
 
     ``needs`` is the turn's survival profile: the hero's needs rise by it once per turn, as the profiles are tuned;
-    ``None`` presses on no one (time away, a trade).
+    ``None`` presses on no one (time away, a trade). The world's pressures move by its time, not its turns: once for
+    each hour the clock crosses (a blow in a fight, none; a night's sleep, eight), at most ``MAX_PRESSURE_TICKS``.
     """
     changes: list[StateChange] = []
     if needs:
@@ -99,18 +119,32 @@ def world_tick(
         sections["environment"] = advance_environment_time(_environment(document), elapsed_minutes=minutes)
         people, seen = _people(document, sections["environment"])
         changes.extend(people)
-    ticking = {**dict(document), "simulation_state": {**_d(document.get("simulation_state")), **sections}}
-    receipt = causal_tick(ticking, turn_key=turn_key, turn=turn) or {}
+    before = clock_minute(document)
+    after = int(_d(sections.get("environment")).get("absolute_minutes") or before)
+    receipt: dict[str, Any] = {}
     runtime: dict[str, Any] = {}
-    if receipt.get("applied"):
+    events: list[str] = []
+    for hour in range(min(MAX_PRESSURE_TICKS, max(0, after // 60 - before // 60))):
+        ticking = {**dict(document), "runtime_state": {**_d(document.get("runtime_state")), **runtime},
+                   "simulation_state": {**_d(document.get("simulation_state")), **sections}}
+        receipt = causal_tick(ticking, turn_key=turn_key if hour == 0 else f"{turn_key}:{hour}", turn=0) or {}
+        if not receipt.get("applied"):
+            break
         sections.update(receipt.pop("simulation"))
-        runtime = receipt.pop("runtime")
+        runtime.update(receipt.pop("runtime"))
+        events += [str(event) for event in receipt.get("event_ids") or ()]
+    if events:
+        simulation = _d(document.get("simulation_state"))
+        place = _d(_d(_d(simulation.get("world_model")).get("locations")).get(routines.hero_location(simulation)))
+        seen = [*seen, *_word(events, _d(sections.get("causal_world_runtime")), str(place.get("region_id") or ""))]
     receipt.pop("simulation", None)
     receipt.pop("runtime", None)
+    if receipt:
+        receipt["event_ids"] = events
     if sections or runtime:
         changes.append(WorldTicked(simulation=sections, runtime=runtime, summary={
-            "minutes": minutes, "tick": receipt.get("tick"), "event_ids": list(receipt.get("event_ids") or ())}))
+            "minutes": minutes, "tick": receipt.get("tick"), "event_ids": events}))
     return changes, receipt, seen
 
 
-__all__ = ["MINUTES_PER_TICK", "clock_minute", "world_tick"]
+__all__ = ["MAX_PRESSURE_TICKS", "MINUTES_PER_TICK", "clock_minute", "world_tick"]

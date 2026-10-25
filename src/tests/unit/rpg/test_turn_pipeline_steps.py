@@ -65,17 +65,17 @@ def test_a_hero_with_no_place_is_placed_where_the_world_begins() -> None:
 
 
 def test_needs_rise_once_a_turn_and_stop_at_their_ceiling() -> None:
-    changes, receipt, _ = world_tick(_campaign(), needs="wait", minutes=0, turn_key="turn:6", turn=4)
+    changes, receipt, _ = world_tick(_campaign(), needs="wait", minutes=0, turn_key="turn:6")
     [needs] = changes
     assert (needs.hunger, needs.thirst, needs.fatigue) == (1, 1, 1) and receipt == {}  # thirst stops at 100
-    assert world_tick(_campaign(survival={"enabled": False}), needs="wait", minutes=0, turn_key="t", turn=1)[0] == []
-    assert world_tick(_campaign(), needs=None, minutes=0, turn_key="t", turn=1)[0] == []  # time away
+    assert world_tick(_campaign(survival={"enabled": False}), needs="wait", minutes=0, turn_key="t")[0] == []
+    assert world_tick(_campaign(), needs=None, minutes=0, turn_key="t")[0] == []  # time away
 
 
 def test_the_one_clock_moves_by_the_turns_minutes_and_the_play_screen_shows_it() -> None:
     campaign = _campaign()
     campaign["state"]["world"] = {"environment": {"absolute_minutes": 9 * 60 + 50, "active_events": []}}
-    changes, _, _ = world_tick(campaign, needs="wait", minutes=30, turn_key="turn:6", turn=4)
+    changes, _, _ = world_tick(campaign, needs="wait", minutes=30, turn_key="turn:6")
     document, _ = reduce(campaign, changes)
     assert document["simulation_state"]["environment"]["absolute_minutes"] == 10 * 60 + 20
     assert document["state"]["world"]["environment"]["absolute_minutes"] == 10 * 60 + 20
@@ -136,3 +136,29 @@ def test_a_question_back_is_a_counted_turn_in_which_no_time_passes() -> None:
     canonical = result["canonical_narrative_response"]
     assert [block["text"] for block in canonical["blocks"]] == ["Who are you speaking to?"]
     assert result["session"]["simulation_state"]["tick"] == 5
+
+
+def test_word_of_a_pressure_turning_reaches_the_hero() -> None:
+    """RQ-4.4: the world's turns of fortune are told, the hero's region first, at most two a turn."""
+    from app.apps.rpg.world.causal_runtime import bootstrap_causal_runtime
+
+    def pressure(pressure_id: str, region: str, severity: float) -> dict:
+        return {"pressure_id": pressure_id, "name": f"Danger in {region}", "severity": severity, "trend": "escalating",
+                "escalation_threshold": 75.0, "resolution_threshold": 15.0,
+                "next_tick_delta": {"target_id": region, "dimension": "trade_access", "operation": "decrease", "value": 1.0},
+                "levers": []}
+
+    runtime = bootstrap_causal_runtime({
+        "present_day_state": {"state": {"region:a": {"trade_access": 30}, "region:b": {"trade_access": 30},
+                                        "region:c": {"trade_access": 30}}},
+        "pressure_plan": {"pressures": [pressure("pressure:b", "region:b", 74), pressure("pressure:a", "region:a", 74),
+                                        pressure("pressure:c", "region:c", 74)]}})
+    campaign = {"manifest": {}, "state": {"turn_count": 3}, "runtime_state": {}, "simulation_state": {
+        "causal_world_runtime": runtime, "world_model": {"locations": {"loc:here": {"region_id": "region:a"}}},
+        "player_state": {"location_id": "loc:here"}}}
+    _, _, seen = world_tick(campaign, needs=None, minutes=10, turn_key="turn:4")
+    assert seen == []  # 09:00 to 09:10: no hour crossed, so the pressures did not move
+    changes, receipt, seen = world_tick(campaign, needs=None, minutes=3 * 60, turn_key="turn:4")
+    assert seen == ["Word comes: Danger in region:a grows worse.", "Word comes: Danger in region:b grows worse."]
+    [ticked] = [change for change in changes if change.type == "world_ticked"]
+    assert ticked.simulation["causal_world_runtime"]["last_tick"] == 3  # three hours: three moves

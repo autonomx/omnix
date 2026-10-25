@@ -165,12 +165,12 @@
     },
     {
       "blocks": [
-        "action||You rest through the night in the room you paid for (a night's lodging, 8 hours).",
-        "choice||Offered choice: You rest through the night in the room you paid for (a night's lodging, 8 hours)."
+        "action||You rest through the night in the room you paid for (a night's lodging, 8 hours). Word comes: Danger on the roads of Starfall March grows worse. Word comes: Danger on the roads of Starfall March stirs again.",
+        "choice||Offered choice: You rest through the night in the room you paid for (a night's lodging, 8 hours). Word comes: Danger on the roads of Starfall March grows worse. Word comes: Danger on the roads of Starfall March stirs again."
       ],
       "step": "I go to my room and sleep for the night.",
-      "told": "You rest through the night in the room you paid for (a night's lodging, 8 hours). You rest through the night in the room you paid for (a night's lodging, 8 hours).",
-      "visible": "You rest through the night in the room you paid for (a night's lodging, 8 hours)."
+      "told": "You rest through the night in the room you paid for (a night's lodging, 8 hours). Word comes: Danger on the roads of Starfall March grows worse. Word comes: Danger on the roads of Starfall March stirs again. You rest through the night in the room you paid for (a night's lodging, 8 hours). Word comes: Danger on the roads of Starfall March grows worse. Word comes: Danger on the roads of Starfall March stirs again.",
+      "visible": "You rest through the night in the room you paid for (a night's lodging, 8 hours). Word comes: Danger on the roads of Starfall March grows worse. Word comes: Danger on the roads of Starfall March stirs again."
     },
     {
       "blocks": [

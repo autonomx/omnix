@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:682f1ecb7ae48d9709dc71dba6346cd2356206e82b242db1f6a81c8b6b7b6b53",
+      "document_hash": "sha256:e1e9d4cb935a0e8dfc1cc6ec84fc439a069202555d7c2a2e8171cd8aa95bdeb0",
       "facts": {
         "combat": {
           "active": false,
@@ -174,9 +174,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -185,19 +182,11 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/faction_reputation",
-        "simulation_state/merchant_state",
-        "simulation_state/npc_presence",
         "simulation_state/player_state",
         "simulation_state/quest_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -240,7 +229,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:4fa2c6aca68084a14e5a31c8716ea59e8a276c40aa99b448f0444cf155c3fa4b",
+      "document_hash": "sha256:31098a757920cd822d23c87b36ccfd698208e629f2af77cab4434f0c521d61c9",
       "facts": {
         "combat": {
           "active": false,
@@ -325,9 +314,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/dialogue_focus",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -337,16 +323,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/dialogue",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -399,7 +379,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c7283b697fa4ee43fbc8d57519a45415789926a81cc8236a85ba29230b82fbe8",
+      "document_hash": "sha256:7425f63fd3db31210405930c8cb7fd93cf20b358c01e5be268207aa6392e2412",
       "facts": {
         "combat": {
           "active": false,
@@ -486,9 +466,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -497,16 +474,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -554,7 +525,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:80440ca3f6590c97d38046361e0f8a16e3d66511c0623c41cb5d9b37a09ed86a",
+      "document_hash": "sha256:0afd241690f00dbd0e6bc8ff7b7e4369781c768080543977aa23b8e4fcbc51a4",
       "facts": {
         "combat": {
           "active": false,
@@ -641,9 +612,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -652,16 +620,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/quest_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/quests",
         "state/turn_count",
@@ -713,7 +675,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3e0860393061fac1476a984b40638ff2f4919f8e82fd1820a24d8c097a37a3f5",
+      "document_hash": "sha256:e2903cc66822aec1bcfc05aa1d4e313f83f3d3be87565071079f8f0ecf348f6e",
       "facts": {
         "combat": {
           "active": false,
@@ -815,7 +777,9 @@
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
         "simulation_state/environment",
+        "simulation_state/faction_reputation",
         "simulation_state/merchant_state",
+        "simulation_state/npc_presence",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
@@ -879,7 +843,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:8f8ad950b5303da3301b2dbd8cb2b0f17c1a866a25a5a22014776bdb9f4b926d",
+      "document_hash": "sha256:283fe0bebcea4ad68110c5adf4983b992f20d9dc7fa462c653f97e6575d60074",
       "facts": {
         "combat": {
           "active": false,
@@ -1062,7 +1026,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ab12702fb790698dfbfb9fda82758c99b82d61b2352dac49a1266eb7b721b4c8",
+      "document_hash": "sha256:79b4c7d0e3f478495c1cedd9827df89e97c86e5c9917c47d1103f9ea46dc64fd",
       "facts": {
         "combat": {
           "active": false,
@@ -1153,9 +1117,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -1164,15 +1125,9 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/map_state",
         "state/player",
@@ -1217,7 +1172,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1d25022d5c56e7b8da8b695294710d977b7cf07d5df6c261b7fd80f653f38578",
+      "document_hash": "sha256:dde90e5223c14bf94f4f1019f3e4386cd313ac68f5ce73237bd33194afafd72c",
       "facts": {
         "combat": {
           "active": false,
@@ -1308,9 +1263,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/dialogue_focus",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -1320,16 +1272,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/dialogue",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -1376,7 +1322,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f1b540764ef3fc2c0d2779596dcb3a98a91b320cc4cc9132c4fa798d5b0ab7de",
+      "document_hash": "sha256:2baafaaa4f1059abff208a01c8c4d9e56f6c9447e179b879872de29587c73992",
       "facts": {
         "combat": {
           "active": false,
@@ -1467,9 +1413,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/dialogue_focus",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -1479,16 +1422,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/dialogue",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -1534,7 +1471,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:3f4bb44c3ba34ce34c5ff1656e15a11ae47d0b437e28622752620251821e09ff",
+      "document_hash": "sha256:fd55e188b371aaa32d89b87c35180d4b7398d685fdc0c9df0fabb9978941e3e9",
       "facts": {
         "combat": {
           "active": false,
@@ -1626,9 +1563,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -1637,16 +1571,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/tick",
         "simulation_state/trade",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -1697,7 +1625,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:96c5f488d97d8297e6b2abcef5ab93d2a49b179a1cf356f901517df406118cd1",
+      "document_hash": "sha256:c7f8dee906e0c113df296289d826a2535db1fe486c815d5ca27ff0d8289e7d1f",
       "facts": {
         "combat": {
           "active": false,
@@ -1787,9 +1715,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -1798,16 +1723,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/tick",
         "simulation_state/trade",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -1851,7 +1770,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:ea72ebca170160b20fc9bcfa9c0c9f55b45170f1586c9acdcb6ed570d4ac7291",
+      "document_hash": "sha256:461307c980a47007e54dc5954b26a7f167e8d589c958af64b0d05eb78cf6f632",
       "facts": {
         "combat": {
           "active": false,
@@ -2012,7 +1931,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:7fd5c308b873909a96d0f50fba8b0161fffc3ef169707d5401a1d2d83243a3cf",
+      "document_hash": "sha256:e54d6beb515d9ade8e143539995f3934ccd9bfb2c8fd9f042a0f6ec580db28a6",
       "facts": {
         "combat": {
           "active": false,
@@ -2102,9 +2021,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -2114,17 +2030,13 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
-        "simulation_state/economy_state",
         "simulation_state/environment",
         "simulation_state/location_id",
         "simulation_state/location_name",
         "simulation_state/location_state",
-        "simulation_state/merchant_state",
         "simulation_state/npc_index",
         "simulation_state/player_state",
         "simulation_state/present_npc_state",
@@ -2135,7 +2047,6 @@
         "simulation_state/tick",
         "simulation_state/travel_state",
         "simulation_state/visited_locations",
-        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -2196,7 +2107,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:24707174fe41180d123c936303a39221a0025c4553e6f96ab84ee6e4543296d4",
+      "document_hash": "sha256:5e6900dbd845691e2a42ab27a59b37c43927fa86f1ad9740c537027f89e1cea0",
       "facts": {
         "combat": {
           "active": false,
@@ -2363,7 +2274,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:bb3010501c1bbdbaa9d782be2313e0928bbfbd827e2372b1ce1f8db5a2018974",
+      "document_hash": "sha256:e7d7b78563810d07ac39fd6211e10edd3fa770750e4b0838cbe9a6967c4a7c0b",
       "facts": {
         "combat": {
           "active": false,
@@ -2454,9 +2365,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -2466,17 +2374,13 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
-        "simulation_state/economy_state",
         "simulation_state/environment",
         "simulation_state/location_id",
         "simulation_state/location_name",
         "simulation_state/location_state",
-        "simulation_state/merchant_state",
         "simulation_state/npc_index",
         "simulation_state/player_state",
         "simulation_state/present_npc_state",
@@ -2485,7 +2389,6 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -2536,7 +2439,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:6bb3e590c3bd3e6201418868b776ac9389412b5d7ff770f85d07ca3486cfafc6",
+      "document_hash": "sha256:9bdebd52ebe49b06486288a1f1976ae8198d96cd33fe482d4009df052d268a65",
       "facts": {
         "combat": {
           "active": false,
@@ -2677,7 +2580,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:fea80c5308ea18da8704c089255ce3449cf8b407abab9201af0025f2698b1479",
+      "document_hash": "sha256:c6e69b79900555f8f06cf7f0cd722eb2201f894ef882c4c4c44094fca9262a35",
       "facts": {
         "combat": {
           "active": false,
@@ -2768,9 +2671,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -2779,17 +2679,11 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/trade",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -2833,7 +2727,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:9f6d29eff474b3943983aa042e529021b045e0d78cb733959d1893afdf71adac",
+      "document_hash": "sha256:a8d4582f537588260ac518fa82f1d4349112dbaa8b6fa57276f04a330a58d690",
       "facts": {
         "combat": {
           "active": false,
@@ -2924,9 +2818,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -2936,16 +2827,10 @@
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/active_services",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/tick",
         "simulation_state/trade",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -2991,7 +2876,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:79209962da240eb7c59427dadad753a7f3414640778886225145f3cd3edef666",
+      "document_hash": "sha256:1f5bcac3de471264e36810863c3ce955fb8025a0344147cd59fd55ac61dd1ad2",
       "facts": {
         "combat": {
           "active": false,
@@ -3150,7 +3035,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3539184edc84c7a4c44fdd63330003d9d77b2df31db9502a7fed60596b4bcc2a",
+      "document_hash": "sha256:a8bbe6fe256b88565acd171b98d8571ed70b22d795749a8fff2314993aebd5d8",
       "facts": {
         "combat": {
           "active": false,
@@ -3241,9 +3126,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -3252,15 +3134,9 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -3312,7 +3188,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:2d2664103955a199152c50805d80eaee3a75e7dfa369d225a8b8efcbc71f2e95",
+      "document_hash": "sha256:556da8b8e089223dd32f84a1ce33b136b5ee9362c12e5dc1808c7fa45feaa559",
       "facts": {
         "combat": {
           "active": true,
@@ -3407,9 +3283,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -3418,17 +3291,11 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -3470,7 +3337,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:7bd2d83e96292d032c5013ac1a247790f125f5ceb7d72c6b6f74af7ea5f3e153",
+      "document_hash": "sha256:6b80b14767548d78309dd19f5fead9c213b10585f018bf13e63f026893f6a33a",
       "facts": {
         "combat": {
           "active": true,
@@ -3603,7 +3470,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:03afb993a25c055362d9ca7792e61bfd6dc155d63f50da8451d85c97a87609ec",
+      "document_hash": "sha256:a8b6ee8d2c517b6bd5d9aad99f1643f8e2e05a523c73f88d5ac558b76dc27959",
       "facts": {
         "combat": {
           "active": true,
@@ -3698,9 +3565,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -3709,16 +3573,10 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count",
         "state/world"
@@ -3771,7 +3629,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:57ebb77dbb5af3b1cbadabd587e2586364dbd58f55f3c13857d73159fb708822",
+      "document_hash": "sha256:9cbabf33876f831b10c5fc7affd7200a776f4396f3065b81df1065379d03ea51",
       "facts": {
         "combat": {
           "active": true,
@@ -3866,9 +3724,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -3877,17 +3732,11 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -3943,7 +3792,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f5a7efd89024d484413a82692d0c4bdcb56ed8db46f4c40011418cb3de1d02c2",
+      "document_hash": "sha256:1bde2ab86eec923dc4c8ae6e90c0b9bc25b378f75492e96ca0d2d8cc59327aca",
       "facts": {
         "combat": {
           "active": true,
@@ -4038,9 +3887,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -4049,17 +3895,11 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -4118,7 +3958,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d31050163a032594afac3d3754945b90405cc5f06134c39e827ac92c5c76e9ec",
+      "document_hash": "sha256:d5dab7ff631d1df60a0dcb829459bd07e78ef9e1a421907c466dda69419b05fd",
       "facts": {
         "combat": {
           "active": true,
@@ -4212,9 +4052,6 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -4223,17 +4060,11 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -4277,7 +4108,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:d3c6ba780284b9b44143de0a0145447d7de83f22a86a9c59c55948ef431d4f72",
+      "document_hash": "sha256:6f8b101b3b1e95929361a331567fab14fa5fc1263741cddb7d6cbe229f4c3967",
       "facts": {
         "combat": {
           "active": true,
@@ -4408,7 +4239,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:ebd4c7898ec19722f22306984c7342961c69ac21aaaeaff53faa73278a93e08d",
+      "document_hash": "sha256:9c739a85032f5808a7e0b41e1e859bf6cd3fccce70d6885ad9b4f753318d2a77",
       "facts": {
         "combat": {
           "active": true,
@@ -4535,7 +4366,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:b2a2510b53ae9245acd79920124197a805c9b00ad272e155d76683d3cc2a1573",
+      "document_hash": "sha256:489cb980343f6ba140475417c21a52f4eb1486b568b87c1d2c03511ad902db2f",
       "facts": {
         "combat": {
           "active": true,
@@ -4662,7 +4493,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:f75fc819729ddda1cf5b4f3deb6b4a1aa5c76c7bf9fd1740e7bd71d00dfeabbc",
+      "document_hash": "sha256:c78e0fee153d30d668625431699b4219ed9273000c64b75e5008fc9543fbc369",
       "facts": {
         "combat": {
           "active": true,
@@ -4789,7 +4620,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:40c2b1d48a5a260ca7ac7c16fa1e99b12a103866e09a05bb87269ca63fe1e58e",
+      "document_hash": "sha256:00d6b2f4f441b290c54bbff1f9a175431a8c93ad5cc0adab2218b22aba1a915c",
       "facts": {
         "combat": {
           "active": true,

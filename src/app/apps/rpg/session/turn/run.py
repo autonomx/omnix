@@ -111,7 +111,7 @@ def run_planned_turn(
     seen: list[str] = []
     if resolution.minutes:  # the world moves on only when time passed
         tick_changes, causal, seen = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
-                                                turn_key=turn_id, turn=turn_index)
+                                                turn_key=turn_id)
         document, _ = reduce(document, tick_changes)
     applied = [*resolution.changes, *tick_changes]
     quested: list[StateChange] = []
@@ -218,7 +218,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
     seen: list[str] = []
     if ticks:
         tick_changes, causal, seen = world_tick(document, needs=None, minutes=ticks * MINUTES_PER_TICK,
-                                                turn_key=turn_id, turn=tick)
+                                                turn_key=turn_id)
         document, _ = reduce(document, tick_changes)
         changes.extend(tick_changes)
         document, quested, quest_lines = turn_consequences(document, tick_changes)  # a deadline may run out away

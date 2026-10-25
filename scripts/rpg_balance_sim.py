@@ -107,6 +107,21 @@ def _lodging(session: Mapping[str, Any], place_id: str) -> tuple[str, int]:
     return "", 0
 
 
+def _spoils_to_sell(session: Mapping[str, Any]) -> tuple[str, str] | None:
+    """A spoil of a fight the hero carries (not food), and someone here who buys its kind; else ``None``."""
+    world = _world(session)
+    carried = [_d(item) for item in _l(_d(_player(session).get("inventory_state")).get("items"))
+               if _s(_d(item).get("source")) == "loot" and _s(_d(item).get("category") or _d(item).get("type")) != "food"]
+    for provider_id, provider in sorted(_d(world.get("providers")).items()):
+        kinds = set(_l(_d(_d(provider).get("buys")).get("item_types")))
+        if _s(_d(provider).get("location_id")) != _here(session) or not kinds:
+            continue
+        for item in carried:
+            if _s(item.get("category") or item.get("type")) in kinds:
+                return _s(item.get("name")), _s(_d(provider).get("provider_name"))
+    return None
+
+
 def _copper(price: Mapping[str, Any]) -> int:
     return int(price.get("gold") or 0) * 100 + int(price.get("silver") or 0) * 10 + int(price.get("copper") or 0)
 
@@ -144,6 +159,9 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
         step = _path_to(session, {place for place in _d(_world(session).get("locations")) if not _lodging(session, place)[0]})
         if step:
             return f"go to {_name(session, step)}"
+    spoils = _spoils_to_sell(session)
+    if spoils:  # what the fights left them, sold to someone here who buys its kind (food is kept)
+        return f"I sell my {spoils[0]} to {spoils[1]}."
     if int(_player(session).get("level_choices_pending") or 0) > 0:  # a level's choice: strength, then dexterity
         return "raise my strength" if int(_player(session).get("level") or 1) % 2 else "raise my dexterity"
     quests = [_d(quest) for quest in _l(_d(simulation.get("quest_state")).get("quests"))]
@@ -217,8 +235,7 @@ def _turn(session: dict[str, Any], text: str) -> tuple[dict[str, Any], bool]:
         document, _ = reduce(session, resolution.changes)
         if resolution.minutes:
             ticked, _, _ = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
-                                      turn_key=f"sim:{_d(document.get('state')).get('turn_count')}",
-                                      turn=int(_d(document.get("state")).get("turn_count") or 0))
+                                      turn_key=f"sim:{_d(document.get('state')).get('turn_count')}")
             document, _ = reduce(document, ticked)
         else:
             ticked = []

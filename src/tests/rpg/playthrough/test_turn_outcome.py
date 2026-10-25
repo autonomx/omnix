@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
+from app.apps.rpg.session.turn.world_tick import clock_minute
 from tests.rpg.playthrough.campaigns import POSTGRES
 
 pytestmark = POSTGRES
@@ -85,7 +86,8 @@ def test_the_outcome_is_reported_in_every_world(launch, world) -> None:
 @pytest.mark.parametrize("world", ["aurelia", "starter", "vesper"])
 def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> None:
     """RQ-1.4: look and wait are planned, resolved to changes, reduced and ticked on the pipeline; the changes the
-    turn reports are all it changed in the campaign's facts, and the world's causal clock ticks with them."""
+    turn reports are all it changed in the campaign's facts, and the world's causal clock ticks with the hours they
+    cross (time.md)."""
     from app.apps.rpg.foundation.state import parse_changes, reduce
     from app.apps.rpg.narration.presentation.turn_outcome import TurnOutcome
 
@@ -104,7 +106,9 @@ def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> N
         [ticked] = [change for change in outcome.applied_changes if change.type == "world_ticked"]
         assert not ticked.simulation  # the outcome names what the tick replaced; the turn's patch carries it
         assert "environment" in ticked.summary["sections"]
-        assert ("causal_world_runtime" in ticked.summary["sections"]) == (world in {"aurelia", "starter"})  # pressures
+        hours = [clock_minute(row) // 60 for row in (before, after)]
+        crossed = hours[0] != hours[1]
+        assert ("causal_world_runtime" in ticked.summary["sections"]) == (crossed and world in {"aurelia", "starter"})
         assert replayed["runtime_state"]["player_journal"] == after["runtime_state"]["player_journal"]
 
     monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_OFF", "look")  # kept off, look takes the older path

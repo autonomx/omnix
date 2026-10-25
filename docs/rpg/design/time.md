@@ -38,3 +38,13 @@ hours with no need raised; a clarification takes no time.
 ## Out of scope
 
 Per-route travel times on the clock (RQ-2.1). Routines that move people by the hour are in `routines.md`.
+
+## As built (RQ-4.4, RQ-4.5: the world's time, and word of it)
+
+The world's pressures move by its time, not its turns (`session/turn/world_tick.py`): the causal runtime ticks once
+for each hour the clock crosses in a turn, at most 12 at once (`MAX_PRESSURE_TICKS`): a blow in a fight moves no
+pressure, a four-hour climb four steps, a night's sleep eight, and time away its hours, capped (before, every turn
+was one step, so a twenty-round fight moved each pressure as much as twenty journeys). When a pressure turns
+(escalates, is held in check, ends, or stirs again) word of it reaches the hero in the turn's lines ("Word comes:
+Danger on the roads of Starfall March grows worse."), their own region's first, at most two a turn; the recap of
+time away says it too. What the hero does to a pressure was RQ-5.4's levers (quests.md).
