@@ -234,13 +234,16 @@ class CountingProvider:
 LIVE_RPG_ROUTE = ("claude_cli", "haiku")
 
 
-def install_counting_provider(route: tuple[str, str] | None = LIVE_RPG_ROUTE) -> CountingProvider:
+def install_counting_provider(route: tuple[str, str] | None = LIVE_RPG_ROUTE, *, model: str = "",
+                              effort: str = "") -> CountingProvider:
     """RPG's model calls go to a real provider, and are counted.
 
     ``route`` pins RPG's route (``provider_access.rpg_llm_route``) to a provider and model, as the live install's
     settings do; a disposable database's settings name its own default instead. ``None`` keeps the database's
     settings route. The settings service is installed first (as gateway composition does): the provider's own
-    configuration is read from it.
+    configuration is read from it. ``model`` names another model of the route's provider. ``effort`` sets the
+    provider's effort level (the Claude CLI's ``--effort``) for this process, as its settings would; empty keeps the
+    configured one.
     """
     from app.apps.rpg.foundation import provider_access
     from app.persistence.database import default_database
@@ -248,21 +251,27 @@ def install_counting_provider(route: tuple[str, str] | None = LIVE_RPG_ROUTE) ->
     from app.settings.access import install_database_settings_service
 
     install_database_settings_service(default_database())
+    if route is not None and model:
+        route = (route[0], model)
     if route is not None:
         setattr(provider_access, "rpg_llm_route", lambda: route)
     inner = provider_access.routed_provider()
     if inner is None:
         raise SystemExit("RPG's route names no provider")
+    if effort:
+        inner.config.extra_params["effort"] = effort
     counting = CountingProvider(inner)
     setattr(provider_service, "get_provider", lambda *args, **kwargs: counting)
     return counting
 
 
-def provider_identity() -> dict[str, Any]:
+def provider_identity(provider: Any = None) -> dict[str, Any]:
     from app.apps.rpg.foundation.provider_access import rpg_llm_route
 
     route = rpg_llm_route()
-    return {"provider": route[0] if route else None, "model": route[1] if route else None}
+    identity = {"provider": route[0] if route else None, "model": route[1] if route else None}
+    effort = str(getattr(provider, "effort", "") or "") if provider is not None else ""
+    return {**identity, "effort": effort} if effort else identity
 
 
 # --- launching ---------------------------------------------------------------------------------------------------

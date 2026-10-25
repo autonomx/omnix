@@ -67,6 +67,9 @@ _GAINED = re.compile(r"\b(?:receive|receives|received|gain|gains|gained|earn|ear
 # A thing named in a sentence that tells of a gain or loss: "a Crown of Kings", "the Wayfarer Sigil".
 _NAMED = re.compile(r"(?:\b(?:a|an|the|your|his|her|their)\s+|,\s*)((?:[A-Z][\w'-]+)(?:\s+(?:of|the|[A-Z][\w'-]+))*)")
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
+# A fight's lines give health as "hits you for 2 (98 of 100 left)": the blow, what is left, and the most there is.
+_HEALTH_UNITS = frozenset({"health", "hit points", "hp"})
+_HEALTH_FORMS = (r"\bfor {n} \(", r"\b{n} of \d+ left\b", r"\bof {n} left\b")
 
 
 def _unsupported_material(text: str, evidence_text: str) -> list[str]:
@@ -74,8 +77,13 @@ def _unsupported_material(text: str, evidence_text: str) -> list[str]:
     said: list[str] = []
     for number, unit in _AMOUNT.findall(text):
         amount = number.replace(",", "")
-        if not re.search(rf"\b{re.escape(amount)}\s+{re.escape(unit.casefold().rstrip('s'))}", evidence_text):
-            said.append(f"{number} {unit}")
+        if re.search(rf"\b{re.escape(amount)}\s+{re.escape(unit.casefold().rstrip('s'))}", evidence_text):
+            continue
+        if unit.casefold() in _HEALTH_UNITS and any(
+            re.search(form.format(n=re.escape(amount)), evidence_text) for form in _HEALTH_FORMS
+        ):
+            continue
+        said.append(f"{number} {unit}")
     for level in _LEVEL.findall(text):
         if not re.search(rf"\blevel\s+{level}\b", evidence_text):
             said.append(f"level {level}")

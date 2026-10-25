@@ -168,8 +168,8 @@ def test_interaction_commit_stage_updates_session_override_without_false_durabil
     assert committed.session_override is session
 
 
-def test_session_load_replays_interactions_and_recovers_pending_narration(monkeypatch) -> None:
-    from app.apps.rpg.session import interaction_event_store, interaction_lifecycle, service
+def test_session_load_replays_interactions(monkeypatch) -> None:
+    from app.apps.rpg.session import interaction_event_store, service
 
     session = {"manifest": {"session_id": "campaign-load"}, "runtime_state": {}}
     calls: list[str] = []
@@ -181,21 +181,12 @@ def test_session_load_replays_interactions_and_recovers_pending_narration(monkey
         loaded["replayed"] = True
         return loaded
 
-    def recover(session_id, loaded):
-        calls.append(f"recover:{session_id}:{loaded['replayed']}")
-        return 1
-
     monkeypatch.setattr(interaction_event_store, "load_and_replay_interaction_events", replay)
-    monkeypatch.setattr(
-        interaction_lifecycle,
-        "recover_pending_interaction_narration",
-        recover,
-    )
 
     loaded = service.load_session("campaign-load")
 
     assert loaded["replayed"] is True
-    assert calls == ["replay:campaign-load", "recover:campaign-load:True"]
+    assert calls == ["replay:campaign-load"]  # a pending narration is no longer queued on load (version 10)
 
 
 def test_rpg_runtime_has_no_hook_installers_import_finders_or_fastapi_patchers() -> None:

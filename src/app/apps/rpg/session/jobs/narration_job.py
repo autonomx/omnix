@@ -63,13 +63,18 @@ class NarrationGenerationError(RuntimeError):
 
 
 def execute_rpg_narration_job(job_store: Any, job: JobRecord) -> JobRecord:
-    """Run one narration request and apply its outcome to the turn's interaction."""
-    from app.apps.rpg.session.interaction_lifecycle import apply_narration_result_to_interaction
+    """Run one narration request. A player turn's is retired: a turn is narrated by the narrative engine with its
+    commit or beside it (RQ-6.2), and a job left from a save before WP-5.6 completes without narrating or saving."""
     from app.apps.rpg.session.narration_jobs import publish_narration_failure, run_narration_request
 
     request = RpgNarrationJobInput.model_validate(job.input_payload or {})
     attempt = max(1, int(getattr(job, "_attempt_count", 0) or 1))
     job_store.mark_running(job.id)
+    if request.job_kind == "player_turn":
+        retired = job_store.complete_job(job.id, CompleteJobRequest(output_refs=[{
+            "type": "rpg_narration", "module": "rpg", "session_id": request.session_id, "turn_id": request.turn_id,
+            "status": "retired"}]))
+        return retired or job
     try:
         outcome = run_narration_request(
             request.session_id,
@@ -85,11 +90,6 @@ def execute_rpg_narration_job(job_store: Any, job: JobRecord) -> JobRecord:
         if final:
             error = str(exc) or type(exc).__name__
             publish_narration_failure(request.session_id, request.turn_id, error, attempt, MAX_ATTEMPTS)
-            apply_narration_result_to_interaction(
-                request.session_id,
-                {"status": "failed", "turn_id": request.turn_id,
-                 "interaction_id": request.interaction_id, "error": error},
-            )
         failed = job_store.fail_job(
             job.id,
             FailJobRequest(
@@ -100,10 +100,6 @@ def execute_rpg_narration_job(job_store: Any, job: JobRecord) -> JobRecord:
             ),
         )
         return failed or job
-    if request.job_kind == "player_turn":
-        outcome = apply_narration_result_to_interaction(
-            request.session_id, {**outcome, "interaction_id": request.interaction_id},
-        )
     completed = job_store.complete_job(
         job.id,
         CompleteJobRequest(

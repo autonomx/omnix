@@ -11,10 +11,13 @@ commands, and snapshots it. Then, for every item, it measures today's determinis
    ``--mode grammar`` reads the corpus scenes from the catalog instead, with no campaign at all.
 2. **Play** (``--mode play``, the default): the scene's snapshot is restored, the input is played through
    ``POST /api/rpg/sessions/{id}/turn`` with the scripted model (the intent router answers "{}", so the engine
-   decides), and the saved game is compared with the snapshot. A material change (place, purse, pack, equipment,
+   decides; ``--provider route`` sends the intent call to RPG's settings route, the Claude CLI here, and keeps
+   the narration deterministic), and the saved game is compared with the snapshot. A material change (place, purse, pack, equipment,
    party, quests, skills, hit points or a fight, an NPC's health, fatigue relieved) makes the turn stateful, and
    decides the family and target (a changed place is a move, a smaller purse a purchase, ...). Without one, the
-   static reading stands and the turn is not stateful. Time passing and needs drifting are not material.
+   reading the turn ran on stands (the grammar's, or the intent call's when the grammar left it to the model; a
+   question back is a clarification) and the turn is not stateful. Time passing and needs drifting are not
+   material.
 
 Metrics, each with its own denominator and Wilson 95% bounds: action family accuracy (all items), target entity
 accuracy (items with a gold target; the prediction is resolved to a catalog entity by id, alias id or name), and the
@@ -246,17 +249,38 @@ def observed_reading(found: list[dict[str, Any]], static: dict[str, Any], sessio
     return {"family": static.get("family"), "target_ref": static.get("target_ref")}
 
 
+def turn_reading(ran: dict[str, Any]) -> dict[str, Any]:
+    """The family and target of the reading a turn ran on; a question back is a clarification."""
+    if ran["mechanic"] == "clarify":
+        return {"family": "clarify", "target_ref": None}
+    return {"family": ran["family"], "target_ref": ran["target_ref"] or None}
+
+
 # --- the run ----------------------------------------------------------------------------------------------------
 
 class Worlds:
     """The three worlds on the database, each scene snapshotted, and a way back to a snapshot."""
 
-    def __init__(self, catalog: dict[str, Any], *, play: bool) -> None:
+    def __init__(self, catalog: dict[str, Any], *, play: bool, provider: str = "scripted", model: str = "",
+                 effort: str = "") -> None:
+        from app.apps.rpg.session.turn import run
         from tests.rehearsal.rpg import worlds as harness
 
         self.harness = harness
         self.catalog = {world: Catalog(data) for world, data in catalog["worlds"].items()}
-        self.model = harness.install_scripted_model()
+        if provider == "route":
+            self.model = harness.install_counting_provider(model=model, effort=effort)
+        else:
+            self.model = harness.install_scripted_model()
+        self.ran: list[dict[str, Any]] = []
+        planned_turn = run.run_planned_turn
+
+        def recorded(session: Any, *, request: Any, planned: Any, reading: Any, resolution: Any) -> Any:
+            # The reading the turn ran on: the grammar's, or the intent call's when the grammar left it to the model.
+            self.ran.append({"mechanic": planned.mechanic, "family": reading.family, "target_ref": reading.target_id})
+            return planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+        setattr(run, "run_planned_turn", recorded)
         self.client = harness.turn_client()
         self.sessions: dict[str, str] = {}
         self.snapshots: dict[tuple[str, str], dict[str, Any]] = {}
@@ -301,13 +325,15 @@ class Worlds:
             session_id = self.sessions[world]
             self.restore(session_id, snapshot)
             calls_before = len(self.model.calls)
+            self.ran.clear()
             status, elapsed = self.turn(session_id, item["input"])
             after = self.harness.load(session_id)
             found = changes(material_state(snapshot), material_state(after))
-            observed = observed_reading(found, static, after)
-            prediction = {"family": (observed or static)["family"], "target_ref": (observed or static)["target_ref"],
+            ran = turn_reading(self.ran[-1]) if self.ran else static
+            observed = observed_reading(found, ran, after)
+            prediction = {"family": (observed or ran)["family"], "target_ref": (observed or ran)["target_ref"],
                           "stateful": observed is not None}
-            record.update({"http": status, "turn_ms": round(elapsed, 1), "changes": found,
+            record.update({"http": status, "turn_ms": round(elapsed, 1), "changes": found, "ran": self.ran[-1:],
                            "model_calls": self.model.calls[calls_before:]})
         prediction["target_entity"] = self.catalog[world].resolve(prediction["target_ref"])
         record["prediction"] = prediction
@@ -395,6 +421,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--split", choices=("held_out", "dev", "all"), default="held_out")
     parser.add_argument("--mode", choices=("play", "grammar"), default="play")
+    parser.add_argument("--provider", choices=("scripted", "route"), default="scripted",
+                        help="who answers the intent call in play: no advice (scripted), or RPG's settings route")
+    parser.add_argument("--model", default="", help="the Claude CLI model for --provider route (default: haiku)")
+    parser.add_argument("--effort", default="", choices=("", "low", "medium", "high", "xhigh", "max"),
+                        help="the Claude CLI effort level for --provider route (default: as configured)")
     parser.add_argument("--limit", type=int, default=0, help="evaluate only the first N items (a smoke run)")
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)
@@ -408,11 +439,13 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     if args.mode == "grammar":
         return _report_grammar(args, catalog, items, started)
+    if args.provider == "route":
+        os.environ["OMNIX_RPG_NARRATIVE_WRITER_MODE"] = "deterministic"  # the intent call is measured, not the prose
     from tests.rehearsal.rpg import worlds as harness
 
     database = harness.require_disposable_database(args.allow_database)
     harness.bootstrap()
-    runner = Worlds(catalog, play=args.mode == "play")
+    runner = Worlds(catalog, play=args.mode == "play", provider=args.provider, model=args.model, effort=args.effort)
     for world in sorted({item["world"] for item in items}):
         runner.prepare(world)
     records: dict[str, dict[str, Any]] = {}
@@ -423,7 +456,8 @@ def main(argv: list[str] | None = None) -> int:
     stateful_turn_ms = [record["turn_ms"] for record in records.values() if "turn_ms" in record]
     report = {
         "schema_version": 1,
-        "measurement": "RPG intent understanding without a model (RQ-0.4 baseline)",
+        "measurement": ("RPG intent understanding with the intent call (RQ-3, M2)" if args.provider == "route"
+                        else "RPG intent understanding without a model (RQ-0.4 baseline)"),
         "measured_on": date.today().isoformat(),
         "revision": subprocess.run(["git", "rev-parse", "--short=10", "HEAD"], cwd=ROOT, capture_output=True,
                                    text=True).stdout.strip(),
@@ -433,7 +467,10 @@ def main(argv: list[str] | None = None) -> int:
         "items": len(items),
         "held_out_sha256": held_out_digest(),
         "labels": "model-labelled, pending the owner's spot check",
-        "model": "none: the scripted model answers the intent router with no advice; the engine decides",
+        "model": ({**harness.provider_identity(runner.model), "resolved_models": sorted(runner.model.resolved_models)}
+                  if args.provider == "route"
+                  else "none: the scripted model answers the intent router with no advice; the engine decides"),
+        "model_calls": sum(len(record.get("model_calls") or ()) for record in records.values()),
         "scenes": runner.scene_report,
         "metrics": metrics(items, records),
         # A scene the setup commands did not reach is played where the player stayed; its items are shown apart.

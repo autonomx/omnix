@@ -27,7 +27,6 @@ import json
 import os
 from pathlib import Path
 import random
-import re
 import sys
 import time
 from typing import Any
@@ -257,6 +256,9 @@ def main() -> None:
     parser.add_argument("--turns", type=int, default=500)
     parser.add_argument("--player", choices=("policy", "route"), default="policy")
     parser.add_argument("--provider", choices=("scripted", "route"), default="scripted")
+    parser.add_argument("--model", default="", help="the Claude CLI model for --provider route (default: haiku)")
+    parser.add_argument("--effort", default="", choices=("", "low", "medium", "high", "xhigh", "max"),
+                        help="the Claude CLI effort level for --provider route (default: as configured)")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--allow-database", default="")
     parser.add_argument("--output", type=Path, default=None)
@@ -264,7 +266,8 @@ def main() -> None:
     worlds.require_disposable_database(args.allow_database)
     os.environ.setdefault("OMNIX_RPG_TURNS_PER_HOUR", "0")
     worlds.bootstrap()
-    counter = worlds.install_counting_provider() if args.provider == "route" else None
+    counter = (worlds.install_counting_provider(model=args.model, effort=args.effort)
+               if args.provider == "route" else None)
     if counter is None:
         worlds.install_scripted_model()
     player = ModelPlayer(args.seed) if args.player == "route" else PolicyPlayer(args.seed)
@@ -273,7 +276,7 @@ def main() -> None:
         "measurement": "rpg-autoplay (RQ-9.1)",
         "date": date.today().isoformat(),
         "player": args.player,
-        "provider": worlds.provider_identity() if args.provider == "route" else {"provider": "scripted"},
+        "provider": worlds.provider_identity(counter) if args.provider == "route" else {"provider": "scripted"},
         "turns_per_world": args.turns,
         "player_model_calls": getattr(player, "calls", 0),
         "player_model_fallbacks": getattr(player, "failures", 0),

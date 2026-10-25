@@ -239,6 +239,8 @@ def _command_marks(result: dict[str, Any]) -> dict[str, Any]:
     answer = pipeline.get("action_result") if isinstance(pipeline.get("action_result"), dict) else {}
     if answer.get("kind") == "rewind":
         return {"turn_kind": "rewind", "restored_revision": int(answer.get("restored_revision") or 0)}
+    if answer.get("kind") == "hotbar":
+        return {"turn_kind": "arrangement"}  # the play screen's hotbar: no turn of the hero's to undo
     return {"turn_kind": str(pipeline["kind"])} if pipeline.get("kind") else {}
 
 

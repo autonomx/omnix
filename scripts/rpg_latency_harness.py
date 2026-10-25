@@ -28,7 +28,8 @@ Per turn it records, from the request's start:
 
 Providers: ``--provider route`` uses RPG's settings route (``rpg_llm_route``: Claude Haiku through the Claude CLI on
 this install; there is no Anthropic API key here, so the roadmap's API reference model is not measured);
-``--provider scripted`` answers every call with the role-keyed scripted model, which measures the harness and the
+``--model`` names another of the CLI's models and ``--effort`` its effort level (``low`` lets a model answer without
+first thinking at length); ``--provider scripted`` answers every call with the role-keyed scripted model, which measures the harness and the
 engine without a model.
 
 The report (``docs/measurements/rpg-latency-<date>.json``) gives p50 and p95 per class and the F1/F3 checks.
@@ -116,7 +117,7 @@ def _ms(mark: float | None, start: float) -> float | None:
 
 
 class Harness:
-    def __init__(self, provider: str, *, stream: bool = False) -> None:
+    def __init__(self, provider: str, *, stream: bool = False, model: str = "", effort: str = "") -> None:
         self.stream = stream  # the play screen's stream: the outcome at the commit, the narration after
         self.answered = 0.0
         from fastapi import FastAPI
@@ -132,7 +133,7 @@ class Harness:
             self.model = worlds.install_scripted_model()
             self.calls = lambda: [{"role": role, "ms": 0.0} for role in self.model.calls]
         else:
-            self.model = worlds.install_counting_provider()
+            self.model = worlds.install_counting_provider(model=model, effort=effort)
             self.calls = lambda: list(self.model.calls)
         app = FastAPI()
         include_router_registrar(app, register_rpg_session_routes)
@@ -289,6 +290,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provider", choices=("route", "scripted"), default="scripted")
     parser.add_argument("--runs", type=int, default=20)
     parser.add_argument("--stream", action="store_true", help="follow each turn on its stream, as the play screen does")
+    parser.add_argument("--model", default="", help="the Claude CLI model for --provider route (default: haiku)")
+    parser.add_argument("--effort", default="", choices=("", "low", "medium", "high", "xhigh", "max"),
+                        help="the Claude CLI effort level for --provider route (default: as configured)")
     parser.add_argument("--classes", nargs="+", choices=tuple(CLASSES), default=list(CLASSES))
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)
@@ -301,8 +305,8 @@ def main(argv: list[str] | None = None) -> int:
 
     database = worlds.require_disposable_database(args.allow_database)
     worlds.bootstrap()
-    harness = Harness(args.provider, stream=args.stream)
-    identity = worlds.provider_identity() if args.provider == "route" else {"provider": "scripted", "model": "scripted"}
+    harness = Harness(args.provider, stream=args.stream, model=args.model, effort=args.effort)
+    identity = worlds.provider_identity(harness.model) if args.provider == "route" else {"provider": "scripted", "model": "scripted"}
     started = time.perf_counter()
     scenes = harness.prepare()
     rows = {name: harness.run_class(name, args.runs) for name in args.classes}

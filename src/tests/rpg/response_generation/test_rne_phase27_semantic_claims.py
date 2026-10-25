@@ -330,3 +330,17 @@ def test_prose_that_fails_the_checks_is_revised_once_with_the_failed_checks() ->
     assert [check["code"] for check in feedback["failed_checks"]] == ["unsupported_claim_text"]
     assert "restate what its approved_evidence says" in feedback["instructions"][0]
     assert result.writer_result.raw_metadata["provider_revision_feedback"] == ["unsupported_claim_text"]
+
+
+def test_a_claim_is_in_its_beats_scope_whatever_the_writer_labels_it() -> None:
+    from app.apps.rpg.narration.narrative_engine.writer import parse_structured_blocks
+
+    payload = {"blocks": [{
+        "beat_id": "beat:answer", "block_id": "block:answer", "sequence": 1, "kind": "dialogue",
+        "purpose": "direct_answer", "speaker_id": "npc:bran", "text": "The east road is muddy but passable.",
+        "claims": [{"claim_id": "claim:road", "text": "The east road is muddy but passable.",
+                    "authority": "objective_canon", "evidence_refs": ["evidence:road"], "scope": "turn:28"}],
+    }]}
+    (block,) = parse_structured_blocks(payload, _plan())
+    assert [claim.scope for claim in block.claims] == ["speaker"]
+    assert _validate(block).passed is True

@@ -266,7 +266,7 @@ def calibration(records: list[dict[str, Any]], rejudge: Any = None) -> dict[str,
 # --- the run ----------------------------------------------------------------------------------------------------
 
 class Runner:
-    def __init__(self, provider: str, judge: bool) -> None:
+    def __init__(self, provider: str, judge: bool, *, model: str = "", effort: str = "") -> None:
         from tests.rehearsal.rpg import worlds
 
         self.worlds = worlds
@@ -275,7 +275,7 @@ class Runner:
             self.model = worlds.install_scripted_model()
             self.calls = lambda: [{"role": role} for role in self.model.calls]
         else:
-            self.model = worlds.install_counting_provider()
+            self.model = worlds.install_counting_provider(model=model, effort=effort)
             self.calls = lambda: list(self.model.calls)
         self.provider = provider
         self.judge = judge and provider == "route"
@@ -395,6 +395,9 @@ def write_calibration_template(records: list[dict[str, Any]], rng: random.Random
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--provider", choices=("route", "scripted"), default="scripted")
+    parser.add_argument("--model", default="", help="the Claude CLI model for --provider route (default: haiku)")
+    parser.add_argument("--effort", default="", choices=("", "low", "medium", "high", "xhigh", "max"),
+                        help="the Claude CLI effort level for --provider route (default: as configured)")
     parser.add_argument("--turns-per-world", type=int, default=300)
     parser.add_argument("--worlds", nargs="+", choices=WORLDS, default=list(WORLDS))
     parser.add_argument("--judge", action="store_true", help="grade each turn with the provider (route only)")
@@ -411,8 +414,8 @@ def main(argv: list[str] | None = None) -> int:
 
     database = worlds.require_disposable_database(args.allow_database)
     worlds.bootstrap()
-    runner = Runner(args.provider, args.judge)
-    identity = worlds.provider_identity() if args.provider == "route" else {"provider": "scripted", "model": "scripted"}
+    runner = Runner(args.provider, args.judge, model=args.model, effort=args.effort)
+    identity = worlds.provider_identity(runner.model) if args.provider == "route" else {"provider": "scripted", "model": "scripted"}
     rng = random.Random(SEED)
     started = time.perf_counter()
     records = [record for world in args.worlds for record in runner.play_world(world, args.turns_per_world, rng)]

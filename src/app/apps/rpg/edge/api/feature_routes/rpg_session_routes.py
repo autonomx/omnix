@@ -236,19 +236,23 @@ def _loadout_turn(session_id: str, request: Any) -> dict[str, Any]:
             action={"type": "loadout", "action": action, "item_name": request.item_name},
             title=f"{action.title()} {request.item_name}", kind="inventory")
     ability = str(request.ability_id or request.ability_name or "")
-    name = str(request.ability_name or ability)
     if action in {"use_ability", "hotbar"}:
-        ability = ability or str(request.hotbar_slot or "")
+        ability = ability or str(request.hotbar_slot if request.hotbar_slot is not None else "")
+        name = str(request.ability_name or ability)
         return _loadout_as_turn(
             session_id, command=f"I use {name or ability}.", prefix="ability",
             action={"type": "ability", "ability": ability, "target": str(request.target or "")},
             title=f"Use {name or ability}", kind="ability")
+    name = str(request.ability_name or ability)
     if action == "unlock_ability":
         return _loadout_as_turn(
             session_id, command=f"I learn {name}.", prefix="learn", action={"type": "learn", "ability": ability},
             title=f"Learn {name}", kind="ability_progression")
-    slot = str(request.hotbar_slot or "1")
+    slot = str(request.hotbar_slot if request.hotbar_slot is not None else "")
     cleared = action == "remove_hotbar"
+    if not cleared and not ability:
+        raise HTTPException(status_code=422, detail={"ok": False, "error": "ability_required",
+                                                     "message": "Name the ability to put on the hotbar."})
     return _loadout_as_turn(
         session_id, command=f"Hotbar slot {slot}: {'empty' if cleared else name}.", prefix="hotbar",
         action={"type": "hotbar", "slot": slot, "ability": "" if cleared else ability},

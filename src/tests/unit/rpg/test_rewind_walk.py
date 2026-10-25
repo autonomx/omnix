@@ -21,3 +21,12 @@ def test_undo_skips_the_worlds_ticks_and_follows_earlier_rewinds() -> None:
     rewound = [_turn(7, turn_kind="rewind", restored_revision=4, player_input="I undo my last turn."), *history]
     assert undo_target(rewound, 7) == 2  # again: before "look" (the tick at 4 skipped)
     assert undo_target([_turn(1, turn_kind="world_tick", player_input="")], 1) is None
+
+
+def test_undo_skips_a_hotbar_arrangement() -> None:
+    history = [  # newest first: an attack, then a hotbar slot set from the play screen
+        _turn(3, turn_kind="arrangement", player_input="Hotbar slot 3: Make Camp."),
+        _turn(2, turn_kind="player_text", player_input="attack the wolf"),
+        _turn(1, turn_kind="player_text", player_input="look"),
+    ]
+    assert undo_target(history, 3) == 1  # before the attack: the hotbar slot is no turn of the hero's

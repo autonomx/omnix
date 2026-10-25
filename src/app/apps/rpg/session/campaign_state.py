@@ -21,7 +21,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 from app.apps.rpg.foundation.state import access as _sections
 
-CURRENT_SCHEMA_VERSION = 9
+CURRENT_SCHEMA_VERSION = 10
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -252,13 +252,21 @@ def _to_v8_one_gear_record(document: dict[str, Any]) -> dict[str, Any]:
 def _to_v9_given_once(document: dict[str, Any]) -> dict[str, Any]:
     """Version 9 (RQ-1.5): what every load used to add when it was missing, added once: the environment's seed state
     (``upgrades/environment_seed.py``) and a published opening's quest and first actions
-    (``upgrades/opening_progress.py``), and the hero's simulation record filled from the sheet, which each turn's load
-    used to do (``upgrades/hero_record.py``). A current document loads as stored."""
+    (``upgrades/opening_progress.py``). A current document loads as stored."""
     from app.apps.rpg.session.upgrades.environment_seed import ensure_session_environment_seed_state
-    from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
     from app.apps.rpg.session.upgrades.opening_progress import ensure_published_opening_progress
 
-    return hydrate_hero(ensure_published_opening_progress(ensure_session_environment_seed_state(document)))
+    return ensure_published_opening_progress(ensure_session_environment_seed_state(document))
+
+
+def _to_v10_as_a_turn_reads_it(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 10 (RQ-1.5): what each turn's load used to do, done once: the hero's simulation record filled from the
+    sheet (``upgrades/hero_record.py``), and narrations still pending from before WP-5.6 retired, which every load used
+    to queue again (``upgrades/legacy_narration.py``)."""
+    from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
+    from app.apps.rpg.session.upgrades.legacy_narration import retire_pending_narration
+
+    return retire_pending_narration(hydrate_hero(document))
 
 
 # (target version, upcaster), in order. Version 5 marks the interaction
@@ -269,6 +277,7 @@ UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = 
     (7, _to_v7_starter_world),
     (8, _to_v8_one_gear_record),
     (9, _to_v9_given_once),
+    (10, _to_v10_as_a_turn_reads_it),
 )
 
 

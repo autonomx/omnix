@@ -100,6 +100,13 @@ def test_time_and_needs_drifting_are_not_material():
     assert intent.observed_reading([], {"family": "wait", "target_ref": None}, later) is None
 
 
+def test_the_turn_is_scored_on_the_reading_it_ran_on():
+    ran = {"mechanic": "talk", "family": "ask", "target_ref": "npc:liora"}
+    assert intent.turn_reading(ran) == {"family": "ask", "target_ref": "npc:liora"}
+    question = {"mechanic": "clarify", "family": "buy", "target_ref": "item:rope"}
+    assert intent.turn_reading(question) == {"family": "clarify", "target_ref": None}
+
+
 def test_metrics_have_their_own_denominators():
     items = [
         {"id": "a", "action_family": "buy", "target_entity": "x", "stateful": True},

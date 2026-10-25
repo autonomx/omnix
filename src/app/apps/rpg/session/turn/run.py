@@ -40,6 +40,9 @@ _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification",
            "hotbar": "loadout",
            "check": "check", "grow": "progression", "rewind": "meta", "act": "action"}
 SOURCE = "rpg_turn_pipeline_v1"
+# Turns in which the hero does nothing in the world: a question back, a rewind, a hotbar slot, a level's choice. What
+# a turn leads to (quests, pressures) and the foes on the grid do not follow them.
+_NOTHING_DONE_IN_THE_WORLD = frozenset({"clarify", "rewind", "hotbar", "grow"})
 
 
 def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int, summary: str) -> JournalWritten:
@@ -130,11 +133,11 @@ def run_planned_turn(
     applied = [*resolution.changes, *tick_changes]
     quested: list[StateChange] = []
     quest_lines: list[str] = []
-    if planned.mechanic not in {"clarify", "rewind"} and not resolution.refused:  # step 5: what the turn led to
+    if planned.mechanic not in _NOTHING_DONE_IN_THE_WORLD and not resolution.refused:  # step 5: what it led to
         document, quested, quest_lines = turn_consequences(document, applied)
     applied += quested
     maps_made: list[dict[str, Any]] = []
-    if planned.mechanic not in {"clarify", "rewind"} and not resolution.refused:  # the grid the hero stands on
+    if planned.mechanic not in _NOTHING_DONE_IN_THE_WORLD and not resolution.refused:  # the grid the hero stands on
         from app.apps.rpg.foundation.state.changes import LocationChanged
         from app.apps.rpg.session.turn.local_map import on_the_local_map
 
@@ -372,6 +375,10 @@ def _rewind_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> d
         else:
             target = undo_target(work.rpg.turn_history(context, ctx.session_id), revision)
         earlier = work.rpg.document_at_revision(context, ctx.session_id, target) if target is not None else None
+        if earlier is not None:
+            from app.apps.rpg.session.campaign_state import upcast_if_outdated
+
+            earlier = upcast_if_outdated(earlier)  # an earlier version's game, in the shape this one plays
         work.rollback()
     if target is None:
         return refused(f'There is no save point named "{name}".' if name else "There is no turn to undo.")
@@ -398,7 +405,7 @@ def _ability_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> 
                             second_target_id=_s(action.get("target")), reason="hotbar")
     resolution = resolve_turn(planned, session, _s(ctx.player_input))
     if resolution is None or resolution.refused:
-        detail = " ".join(resolution.lines) if resolution else "That ability does nothing in this fight."
+        detail = " ".join(resolution.lines) if resolution else "You do not know that ability."
         return {"ok": False, "error": "ability_refused", "status_code": 409, "detail": detail}
     resolution = replace(resolution, told=False, action_result={"kind": "ability", "ability": planned.target_id,
                                                                 "detail": " ".join(resolution.lines)})

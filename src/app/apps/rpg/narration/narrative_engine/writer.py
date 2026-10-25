@@ -114,7 +114,6 @@ def writer_payload(
                 "text",
                 "authority",
                 "evidence_refs",
-                "scope",
                 "subject_id",
                 "predicate",
                 "value",
@@ -207,8 +206,8 @@ def _claims(row: Mapping[str, Any], beat: NarrativeBeat) -> tuple[ClaimAssertion
                 text=_text(item.get("text")) or _text(row.get("text")),
                 authority=authority,
                 evidence_refs=evidence_refs,
-                scope=_text(item.get("scope"))
-                or str(beat.metadata.get("evidence_scope") or "player"),
+                # A claim is in its beat's scope: the writer's own label for it (a turn id, "world") is no grant.
+                scope=str(beat.metadata.get("evidence_scope") or "player"),
                 subject_id=_text(item.get("subject_id")) or beat.speaker_id,
                 predicate=_text(item.get("predicate")),
                 value=item.get("value"),

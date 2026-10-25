@@ -63,11 +63,11 @@ def world(monkeypatch, tmp_path):
     return {"sessions": sessions, "saves": saves, "events": events, "narrated": narrated, "jobs": jobs}
 
 
-def _enqueue(jobs):
+def _enqueue(jobs, kind="ambient_conversation"):
     return narration_job.enqueue_rpg_narration(
         SESSION_ID, "turn:4",
         {"turn_id": "turn:4", "tick": 4, "narration_context": {"player_input": "I listen"}},
-        interaction_id="interaction:4", tick=4, job_store=jobs,
+        interaction_id="interaction:4", tick=4, job_store=jobs, job_kind=kind,
     )
 
 
@@ -76,7 +76,20 @@ def _run(jobs, job_id):
     return narration_job.execute_rpg_narration_job(jobs, job)
 
 
-def test_a_queued_narration_job_narrates_the_turn_and_reports_its_interaction(world) -> None:
+def test_a_player_turns_narration_job_left_from_an_older_save_is_retired(world) -> None:
+    """A turn is narrated by the narrative engine (with its commit or beside it): a player-turn job completes
+    without narrating, and the campaign is not saved."""
+    queued = _enqueue(world["jobs"], kind="player_turn")
+    before = copy.deepcopy(world["sessions"][SESSION_ID])
+
+    finished = _run(world["jobs"], queued["job_id"])
+
+    assert finished.status == JobStatus.COMPLETED and finished.output_refs[0]["status"] == "retired"
+    assert world["narrated"] == [] and world["saves"] == []
+    assert world["sessions"][SESSION_ID] == before
+
+
+def test_an_ambient_narration_job_narrates_its_beat(world) -> None:
     queued = _enqueue(world["jobs"])
     assert queued["status"] == "queued"
 
@@ -85,11 +98,8 @@ def test_a_queued_narration_job_narrates_the_turn_and_reports_its_interaction(wo
     assert finished.status == JobStatus.COMPLETED
     runtime = world["sessions"][SESSION_ID]["runtime_state"]
     assert runtime["narration_artifacts_by_turn"]["turn:4"]["narration"] == "Rain drums on the tavern roof."
-    # The interaction's lifecycle is the one its commit recorded: the job reports the outcome, it does not save it.
-    assert runtime["interaction_lifecycles"]["interaction:4"]["status"] == "narration_pending"
-    assert finished.output_refs[0]["status"] == "completed"
     assert "narration_jobs" not in runtime, "the queue no longer lives in the session"
-    assert {"narration_complete", "narration_artifact"} <= {event.get("type") for event in world["events"]}
+    assert "narration_complete" in {event.get("type") for event in world["events"]}
 
 
 def test_a_duplicate_job_for_a_narrated_turn_completes_without_another_model_call(world) -> None:
@@ -103,7 +113,7 @@ def test_a_duplicate_job_for_a_narrated_turn_completes_without_another_model_cal
     assert world["narrated"] == ["I listen"]
 
 
-def test_generation_failures_retry_and_the_last_attempt_marks_the_narration_failed(world, monkeypatch) -> None:
+def test_generation_failures_retry_and_the_last_attempt_is_told(world, monkeypatch) -> None:
     monkeypatch.setattr(
         narration_jobs, "_generate_turn_narration_artifact",
         lambda *args, **kwargs: {"ok": False, "error": "provider_unavailable"},
@@ -113,14 +123,11 @@ def test_generation_failures_retry_and_the_last_attempt_marks_the_narration_fail
 
     job._attempt_count = 1
     retried = narration_job.execute_rpg_narration_job(world["jobs"], job)
-    lifecycle = world["sessions"][SESSION_ID]["runtime_state"]["interaction_lifecycles"]["interaction:4"]
-    assert retried.status != JobStatus.COMPLETED and lifecycle["status"] == "narration_pending"
+    assert retried.status != JobStatus.COMPLETED
 
     job = world["jobs"].get_job(queued["job_id"])
     job._attempt_count = narration_job.MAX_ATTEMPTS
     narration_job.execute_rpg_narration_job(world["jobs"], job)
-    lifecycle = world["sessions"][SESSION_ID]["runtime_state"]["interaction_lifecycles"]["interaction:4"]
-    assert lifecycle["status"] == "narration_pending"  # no save outside a turn's commit
     assert world["jobs"].get_job(queued["job_id"]).status == JobStatus.FAILED
     assert any(event.get("status") == "failed" for event in world["events"])
 

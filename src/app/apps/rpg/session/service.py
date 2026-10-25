@@ -145,29 +145,6 @@ def load_session(session_id: str) -> dict[str, Any]:
         from .interaction_event_store import load_and_replay_interaction_events
 
         session = load_and_replay_interaction_events(session_id, session)
-        from .interaction_lifecycle import recover_pending_interaction_narration
-
-        try:
-            recovered = recover_pending_interaction_narration(session_id, session)
-        except Exception as exc:
-            from app.apps.rpg.foundation.debug_logging import log_rpg_event
-
-            log_rpg_event(
-                "turn.stage.degraded",
-                category="performance",
-                level="warning",
-                session_id=session_id,
-                fields={
-                    "metric": "rpg_turn_stage_degraded",
-                    "stage": "interaction_narration_recovery",
-                    "degraded_stage_count": 1,
-                    "error_type": type(exc).__name__,
-                },
-                error=exc,
-            )
-        else:
-            if span is not None:
-                span["pending_narration_recovered"] = recovered
         if span is not None:
             manifest = _safe_dict(session.get("manifest"))
             runtime_state = _safe_dict(_sections.runtime_state_of(session))

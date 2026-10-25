@@ -21,9 +21,9 @@ def undo_target(history: list[Mapping[str, Any]], current_revision: int) -> int 
         command = dict(turn.get("command") or {})
         if command.get("turn_kind") == "rewind":
             cursor = int(command.get("restored_revision") or 0)  # the moment it returned to
-        elif command.get("turn_kind") in {"world_tick", "system"} or command.get("kind") == "system" or not str(
+        elif command.get("turn_kind") in {"world_tick", "system", "arrangement"} or command.get("kind") == "system" or not str(
                 command.get("player_input") or "").strip():
-            cursor = int(turn["expected_revision"])  # the world's ticks and the game's upgrades are not the hero's
+            cursor = int(turn["expected_revision"])  # the world's ticks, upgrades and hotbar slots are not the hero's
         else:
             return int(turn["expected_revision"])
     return None

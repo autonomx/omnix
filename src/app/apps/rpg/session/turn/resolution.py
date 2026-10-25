@@ -79,8 +79,9 @@ def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Map
     paid, _ = reduce(dict(session), spent)
     turn = fight(_d(_sections.simulation_state_of(paid)), action="ability", target_ref=planned.second_target_id,
                  turn_key=str(_counted(session).turn_count), ability=effect, ability_name=_s(ability.get("name")))
-    if turn is None:
-        return None  # aimed at something that cannot be fought
+    if turn is None:  # aimed at something that cannot be fought
+        return Resolution([_counted(session)], [f"There is nothing here to aim {_s(ability.get('name'))} at."],
+                          refused=True, told=False)
     if turn.refused:
         return Resolution([_counted(session)], turn.lines, refused=True, told=False)
     return Resolution(_timed(session, [*spent, *turn.changes], turn.minutes), turn.lines, minutes=turn.minutes,

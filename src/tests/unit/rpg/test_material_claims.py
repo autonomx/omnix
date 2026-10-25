@@ -15,3 +15,10 @@ def test_what_the_rules_did_not_do_is_caught() -> None:
     assert _unsupported_material("You receive 1000 gold and a Crown of Kings.", EVIDENCE) == ["1000 gold", "Crown of Kings"]
     assert _unsupported_material("You reach level 9.", EVIDENCE) == ["level 9"]
     assert _unsupported_material("You lose 30 health.", EVIDENCE) == ["30 health"]
+
+
+def test_a_fights_health_may_be_said_as_its_lines_give_it() -> None:
+    fight = "the echo wolf hits you for 2 (98 of 100 left)."
+    assert _unsupported_material("The bite leaves you at 98 of 100 health.", fight) == []
+    assert _unsupported_material("You lose 2 health and have 98 health left.", fight) == []
+    assert _unsupported_material("You are down to 50 health.", fight) == ["50 health"]
