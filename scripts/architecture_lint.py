@@ -241,8 +241,11 @@ _RPG_SECTION_KEYS = frozenset({"simulation_state", "runtime_state", "player_stat
 # Where a campaign's state may be written: the reducer (``foundation.state``), and the document's upgrade, which
 # reshapes an older version's document once, outside any turn, as a system turn with a pinned backup
 # (``session.campaign_state``'s upcasters and what they run, ``session.upgrades``; operator-notes.md "Upgrades").
+# And the save (AL018's owners), which keeps the stored record: the campaign's immutable seed, the revision an edit
+# outside a turn takes, the manifest.
 _RPG_STATE_OWNERS = ("app.apps.rpg.foundation.state", "app.apps.rpg.session.campaign_state",
-                     "app.apps.rpg.session.upgrades")
+                     "app.apps.rpg.session.upgrades", "app.apps.rpg.session.service",
+                     "app.apps.rpg.session.persistence", "app.apps.rpg.session.durable_store")
 
 
 def _root_name(node: ast.AST) -> str:

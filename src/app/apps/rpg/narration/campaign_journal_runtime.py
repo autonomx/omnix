@@ -570,14 +570,15 @@ def advance_campaign_journal_for_turn(
     calendar_snapshot: Dict[str, Any] | None = None,
     player_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """Advance the calendar and upsert one player-perspective entry per day.
-
-    This mutates runtime_state only. It does not mutate authoritative
-    simulation facts.
-    """
-    runtime_state = campaign_journal_runtime_state(runtime_state)
-    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
-    journal = _safe_dict(runtime_state.get("player_journal"))
+    """The calendar advanced and the day's player-perspective entry written, as a new calendar and journal
+    (``{"campaign_calendar": ..., "player_journal": ...}``): ``runtime_state`` is only read; the turn records what
+    comes back as its ``JournalWritten`` change, which the reducer applies."""
+    kept = campaign_journal_runtime_state({
+        key: deepcopy(runtime_state[key]) for key in ("campaign_calendar", "player_journal")
+        if isinstance(runtime_state, dict) and isinstance(runtime_state.get(key), dict)
+    })
+    calendar = kept["campaign_calendar"]
+    journal = kept["player_journal"]
     journal["format_version"] = PLAYER_JOURNAL_VERSION
 
     if minutes_per_turn is None:
@@ -669,8 +670,6 @@ def advance_campaign_journal_for_turn(
 
     max_entries = int(journal.get("max_entries") or 100)
     journal["entries"] = entries[-max_entries:]
-    runtime_state["campaign_calendar"] = calendar
-    runtime_state["player_journal"] = journal
-    return runtime_state
+    return {"campaign_calendar": calendar, "player_journal": journal}
 
 

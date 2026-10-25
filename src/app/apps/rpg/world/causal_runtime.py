@@ -68,7 +68,7 @@ def _projection_plan(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
 
 def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
     initial_state = build_mutable_world_state(planning_topics)
-    runtime: dict[str, Any] = {
+    built: dict[str, Any] = {
         # Additive lifecycle and projection fields remain compatible with v1 readers.
         "schema_version": "rpg_causal_world_runtime_v1",
         "revision": 1,
@@ -82,8 +82,8 @@ def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, An
         "events": [],
         "last_tick": 0,
     }
-    runtime["runtime_hash"] = _hash(runtime)
-    return runtime
+    built["runtime_hash"] = _hash(built)
+    return built
 
 
 def _event_dict(event: CausalWorldEvent) -> dict[str, Any]:
@@ -313,42 +313,44 @@ def replay_causal_events(
     return state
 
 
+# Installing and advancing the runtime write the simulation they are handed: on a turn that is the causal tick's working
+# copy (``session/causal_turn_runtime.causal_tick``), whose changes the tick hands the reducer as ``WorldTicked``.
 def initialize_causal_runtime(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     runtime_bootstrap: Mapping[str, Any],
 ) -> dict[str, Any]:
     installed = copy.deepcopy(dict(runtime_bootstrap))
-    simulation_state["causal_world_runtime"] = installed
+    working["causal_world_runtime"] = installed
     return installed
 
 
 def ensure_causal_runtime_installed(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
 ) -> dict[str, Any]:
-    runtime = simulation_state.get("causal_world_runtime")
+    runtime = working.get("causal_world_runtime")
     if isinstance(runtime, Mapping):
         return dict(runtime)
-    campaign_bible = simulation_state.get("campaign_bible")
+    campaign_bible = working.get("campaign_bible")
     if isinstance(campaign_bible, Mapping):
         manifest = campaign_bible.get("manifest")
         if isinstance(manifest, Mapping):
             bootstrap = manifest.get("causal_runtime_bootstrap")
             if isinstance(bootstrap, Mapping):
-                return initialize_causal_runtime(simulation_state, bootstrap)
+                return initialize_causal_runtime(working, bootstrap)
     raise ValueError("causal_world_runtime_not_installed")
 
 
 def advance_installed_causal_runtime(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     *,
     tick: int,
 ) -> tuple[dict[str, Any], tuple[CausalWorldEvent, ...]]:
-    runtime = ensure_causal_runtime_installed(simulation_state)
+    runtime = ensure_causal_runtime_installed(working)
     next_runtime, emitted = advance_causal_runtime(runtime, tick=tick)
-    simulation_state["causal_world_runtime"] = next_runtime
+    working["causal_world_runtime"] = next_runtime
     for event in emitted:
         add_world_event(
-            simulation_state,
+            working,
             {
                 "event_id": event.event_id,
                 "kind": event.event_type,
