@@ -7,8 +7,8 @@ from tests.rpg.playthrough.campaigns import POSTGRES, copper, in_worlds
 
 pytestmark = POSTGRES
 
-NO_WORLD_MODEL = ("RQ-2.0: a lore-only world (Vesper-9) launches with an empty world model: no one is present at "
-                  "its opening to ask")
+NO_WORLD_MODEL = ("RQ-2.0: no one in a lore-only world (Vesper-9) is written as one who would join the hero "
+                  "(a companion, guide, protector or ally)")
 COMPANION = {"aurelia": ("Liora Fen", "npc:liora-fen", "go to Starfall Village"),
              "starter": ("Mira", "npc:mira", "go outside"),
              "vesper": ("Ines Vale", "npc:ines-vale", "go to Tidebreak Docks")}

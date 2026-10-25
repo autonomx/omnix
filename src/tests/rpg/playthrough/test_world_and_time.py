@@ -23,7 +23,7 @@ JOURNEYS = {
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
+@pytest.mark.parametrize("world", in_worlds())
 def test_travel_across_three_places_and_back(launch, world) -> None:
     play = launch(world)
     for command, place in JOURNEYS[world]:

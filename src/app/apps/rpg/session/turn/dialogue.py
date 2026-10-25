@@ -43,6 +43,8 @@ class DialogueResolution:
 def _clean(raw: Any, speaker: str) -> str:
     line = _s(raw).strip().strip('"').strip()
     line = re.sub(rf"^\s*{re.escape(speaker)}\s*:\s*", "", line, flags=re.IGNORECASE).strip().strip('"')
+    if line[:1] in "{[<" or not re.search(r"[^\W\d_]", line):
+        return ""  # JSON, markup or no words at all is no line: the plan's own answers
     return line[:MAX_LINE]
 
 

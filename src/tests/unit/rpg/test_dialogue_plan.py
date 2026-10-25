@@ -118,6 +118,11 @@ def test_a_secret_or_a_silent_model_falls_back_to_the_plans_own_line(monkeypatch
     assert silent is not None and silent.line == ""
     assert silent.lines[-1] == "Orik Stonewake considers the question and says nothing useful."
     assert not any(isinstance(change, DialogueExchanged) for change in silent.changes)
+    for raw in ("{}", '{"line": "It floods."}', "<p>It floods.</p>", "...", "42"):  # no words said: no line
+        monkeypatch.setattr(turn_dialogue, "_write_line", lambda plan, exchanges, text, raw=raw: raw)
+        answered = turn_dialogue.resolve_dialogue(_session(), ORIK, "Tell me about the road")
+        assert answered is not None and answered.line == "The east road floods after rain.", raw
+        assert not answered.written_by_model
 
 
 def test_only_someone_present_answers() -> None:

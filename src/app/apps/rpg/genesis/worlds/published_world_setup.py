@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping
 
+from .lore_sections import lore_location_rows, lore_routes, lore_rows
 from .world_play_sections import ProviderEconomy, ShopOffer, authorship, parse_play_sections
 
 WORLD_MODEL_SCHEMA = "rpg_session_world_model_v1"
@@ -52,7 +53,7 @@ def _label_from_id(entity_id: str) -> str:
 
 
 def _regions(canon: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    return {_text(row.get("id")): row for row in _rows(canon.get("regions")) if _text(row.get("id"))}
+    return {_text(row.get("id")): row for row in lore_rows(canon, "regions") if _text(row.get("id"))}
 
 
 def published_locations(
@@ -62,7 +63,7 @@ def published_locations(
 ) -> list[dict[str, Any]]:
     """The world's places with their display name, region and a description (the region's, when they have none)."""
     regions = _regions(canon)
-    rows = _rows(_mapping(topology).get("locations"))
+    rows = lore_location_rows(canon, topology)  # a lore world's places by bare id are filled in from their entities
     known = {row.get("id") for row in rows}
     rows += [{"id": location_id} for location_id in manifest_location_ids
              if isinstance(location_id, str) and location_id not in known]
@@ -308,7 +309,7 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
     canon = _mapping(getattr(revision, "canon", None))
     locations = _locations(revision)
     start = _text(getattr(scenario, "starting_location_id", ""))
-    characters = _rows(canon.get("characters"))
+    characters = lore_rows(canon, "characters")
     start_region = next((_text(row.get("region_id")) for row in locations if _text(row.get("id")) == start), "")
     capital_id = _text(_regions(canon).get(start_region, {}).get("capital"))
     homes = _npc_homes(characters, locations, start_location_id=start, present_at_start=present_at_start,
@@ -342,6 +343,8 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         if origin in by_id and target in by_id:
             routes.append({"id": _text(route.get("id")), "from": origin, "to": target,
                            "travel_time": _text(route.get("travel_time"))})
+    if not routes:  # a world that names no roads: roads by its regions (lore_sections.py)
+        routes = lore_routes(locations, lore_rows(canon, "regions"))
     sections, _findings = parse_play_sections(canon)
     providers: dict[str, dict[str, Any]] = {}
     if sections.providers:
@@ -433,7 +436,8 @@ _THREAT_STATS: dict[str, dict[str, int]] = {
     "extreme": {"level": 8, "hp": 45, "defense": 15, "damage_min": 4, "damage_max": 10, "accuracy_bonus": 4, "xp_value": 250},
 }
 _THREAT_ALIASES = {"minor": "low", "moderate": "medium", "severe": "high", "boss": "extreme", "legendary": "extreme",
-                   "mythic": "extreme", "deadly": "extreme"}
+                   "mythic": "extreme", "deadly": "extreme", "situational": "low", "variable": "medium",
+                   "dangerous": "medium", "elite": "high"}
 
 
 # A creature's behaviour as its lore tells it, where the world names none (encounters.md): the first that fits.
@@ -472,7 +476,7 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
     canon = _mapping(getattr(revision, "canon", None))
     played = {entry.id: entry for entry in parse_play_sections(canon)[0].bestiary}
     creatures: dict[str, Any] = {}
-    for row in _rows(canon.get("bestiary")):
+    for row in lore_rows(canon, "bestiary"):
         creature_id = _text(row.get("id"))
         if not creature_id:
             continue

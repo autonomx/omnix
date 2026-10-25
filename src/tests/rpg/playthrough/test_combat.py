@@ -7,7 +7,7 @@ from tests.rpg.playthrough.campaigns import POSTGRES, in_worlds
 
 pytestmark = POSTGRES
 
-FOES = {"aurelia": ("Echo Wolf", "Hollow Archon"), "starter": ("Bandit", "Bandit"), "vesper": ("Kestrel drone", "Kestrel drone")}
+FOES = {"aurelia": ("Echo Wolf", "Hollow Archon"), "starter": ("Bandit", "Bandit"), "vesper": ("Nullborn", "Kestrel Cerberus Squad")}
 
 
 def _fight(play, foe: str, *, limit: int = 40) -> int:

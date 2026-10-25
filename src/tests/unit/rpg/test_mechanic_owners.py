@@ -39,6 +39,7 @@ MECHANIC_OWNERS = {
     "talk": "app.apps.rpg.rules.dialogue.plan", "fight": "app.apps.rpg.rules.combat.fight",
     "ability": "app.apps.rpg.rules.ability_use", "check": "app.apps.rpg.rules.checks",
     "grow": "app.apps.rpg.rules.player.progression", "rewind": "app.apps.rpg.session.turn.rewind",
+    "act": "app.apps.rpg.session.turn.resolution",  # a free action: no rule of the game decides it
 }
 # The world tick's own rules (step 6): people's days.
 TICK_OWNERS = ("app.apps.rpg.rules.routines",)

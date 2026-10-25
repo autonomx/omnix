@@ -15,7 +15,7 @@ from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
                            "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
-                           "ability", "check", "grow", "rewind"]
+                           "ability", "check", "grow", "rewind", "act"]
 
 
 # What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
@@ -33,6 +33,7 @@ class PlannedAction(BaseModel):
     reason: str = ""
     question: str = ""
     second_target_id: str = ""  # an ability's target (the foe it is aimed at)
+    options: tuple[str, ...] = ()  # a question's answers, as the commands they send (RQ-7.3)
 
 
 def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:

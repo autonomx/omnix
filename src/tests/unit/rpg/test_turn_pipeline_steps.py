@@ -6,7 +6,7 @@ import pytest
 from app.apps.rpg.foundation.state.changes import WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate
-from app.apps.rpg.session.turn import PlannedAction, TurnRequest, pipeline_enabled, plan_action, run_planned_turn
+from app.apps.rpg.session.turn import PlannedAction, TurnRequest, plan_action, run_planned_turn
 from app.apps.rpg.session.turn.resolution import resolve_turn
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.world_tick import world_tick
@@ -105,12 +105,6 @@ def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() ->
     assert document["simulation_state"]["npc_index"]["npc:wren"]["location_id"] == "loc:gate"  # in the scene: here
     assert result["resolved_result"]["outcome_lines"] == ["You wait a while in The Gate; time passes.", "Around you: Wren."]
     assert document["runtime_state"]["player_journal"]["entries"]
-
-
-def test_mechanics_can_be_kept_on_the_older_path(monkeypatch) -> None:
-    assert pipeline_enabled("look") and pipeline_enabled("rest") and not pipeline_enabled("buy")
-    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_OFF", "wait,rest")
-    assert not pipeline_enabled("wait") and not pipeline_enabled("rest") and pipeline_enabled("look")
 
 
 def test_an_unclear_command_is_planned_as_the_games_question_and_a_bare_attack_in_a_fight_strikes() -> None:

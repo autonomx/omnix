@@ -35,6 +35,7 @@ class Role(str, Enum):
 
 # Each registered RPG prompt template, by id prefix, names its call's role. Longest prefix wins.
 _TEMPLATE_ROLES: tuple[tuple[str, Role], ...] = (
+    ("rpg.turn_intent.", Role.INTENT),
     ("rpg.ai_semantic_action_intelligence.", Role.INTENT),
     ("rpg.ai_action_intelligence.", Role.INTENT),
     ("rpg.cognitive_intent_enrichment.", Role.INTENT),

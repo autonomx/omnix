@@ -41,6 +41,10 @@ NARRATION = {
 }
 # (marker in the prompt, call kind, scripted answer)
 SCRIPT = (
+    # The intent call (RQ-3.2): the grammar knows no one called "the bartender"; the model reads the bar's keeper.
+    ("Read what the player means", "turn_intent",
+     json.dumps({"readings": [{"family": "talk", "target_id": "npc:bran", "confidence": 0.9}]})),
+    ("Reply as the speaker in the PLAN", "dialogue_line", "The moment passes quietly in the room."),
     ("rpg_narration_candidates_v1", "narration_candidates", json.dumps(NARRATION)),
     ("materializes durable, player-safe RPG canon", "canon_dossier",
      json.dumps({"entities": [], "documents": [], "facts": [], "relationships": []})),
@@ -65,12 +69,6 @@ class _ScriptedModel:
                 break
         else:
             kind, answer = "unscripted", "{}"
-        if "decide which one present NPC" in text:
-            # The dialogue call names its addressee among the present NPCs: the bar's keeper.
-            present = json.loads(text.rsplit("CONTEXT: ", 1)[1]).get("present_npcs") or []
-            keeper = next(npc for npc in present if "innkeeper" in f"{npc.get('name')} {npc.get('role')}".lower())
-            kind = "turn_narration"
-            answer = json.dumps({"speaker_id": keeper["id"], "line": "The moment passes quietly in the room."})
         self.calls.append(kind)
         response = ChatResponse(content=answer, model="scripted")
         return iter([response]) if stream else response

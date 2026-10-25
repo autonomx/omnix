@@ -111,9 +111,6 @@ def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> N
         assert ("causal_world_runtime" in ticked.summary["sections"]) == (crossed and world in {"aurelia", "starter"})
         assert replayed["runtime_state"]["player_journal"] == after["runtime_state"]["player_journal"]
 
-    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_OFF", "look")  # kept off, look takes the older path
-    outcome = TurnOutcome.model_validate(play.turn("look around")["outcome"])
-    assert outcome.planned_action is None
 
 
 def test_the_campaign_reaches_the_browser_without_the_worlds_secrets(launch) -> None:

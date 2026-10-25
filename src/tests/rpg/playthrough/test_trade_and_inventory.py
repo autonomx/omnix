@@ -7,8 +7,8 @@ from tests.rpg.playthrough.campaigns import POSTGRES, in_worlds
 
 pytestmark = POSTGRES
 
-NO_WORLD_MODEL = ("RQ-2.0: a lore-only world (Vesper-9) launches with an empty world model: no places, people, "
-                  "offers or routes are derived from its topics")
+NO_SHOPS = ("RQ-2.0: a lore-only world (Vesper-9) writes no economy, and its people's roles infer no shop or inn "
+            "(only news and repairs)")
 
 # Where each world's shop is, what it sells, and what the hero carries to drop. Aurelia's roads choke its trade from
 # the start (trade access 30), so its prices carry the roads' fifth (economy.md); a shop buys back at its list price.
@@ -23,7 +23,7 @@ SHOP = {
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_SHOPS))
 def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
     play, shop = launch(world), SHOP[world]
     for step in shop["route"]:
@@ -45,7 +45,7 @@ def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
     assert play.purse() == purse - shop["price"] + shop["buys_back"]
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
+@pytest.mark.parametrize("world", in_worlds())
 def test_inventory_round_trip_drop_leave_return_pick_up(launch, world) -> None:
     play, shop = launch(world), SHOP[world]
     for step in shop["route"]:
@@ -86,7 +86,7 @@ INN = {
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_SHOPS))
 def test_lodging_and_needs_over_a_night(launch, world) -> None:
     play, inn = launch(world), INN[world]
     for step in inn["route"]:

@@ -67,7 +67,8 @@
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:2",
       "model_calls": [
-        "turn_narration"
+        "turn_intent",
+        "dialogue_line"
       ],
       "narrative": {
         "blocks": [
@@ -88,7 +89,11 @@
       "result": {
         "changed_domains": [
           "conversation",
-          "time"
+          "time",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
         "llm_purpose": "compact_dialogue_generation",
         "narration_status": "not_requested",
@@ -101,16 +106,20 @@
         "state_revision": 2,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 0,
+      "simulation_tick": 2,
       "state": {
         "changed": true,
         "changed_domains": [
           "conversation",
-          "time"
+          "time",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
         "revision": 2
       },
-      "turn_id": "turn:0",
+      "turn_id": "turn:2",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [
@@ -185,7 +194,7 @@
         "state_revision": 3,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 2,
+      "simulation_tick": 3,
       "state": {
         "changed": true,
         "changed_domains": [
@@ -198,7 +207,7 @@
         ],
         "revision": 3
       },
-      "turn_id": "turn:2",
+      "turn_id": "turn:3",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],
@@ -263,7 +272,7 @@
         "state_revision": 4,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 3,
+      "simulation_tick": 4,
       "state": {
         "changed": true,
         "changed_domains": [
@@ -277,7 +286,7 @@
         ],
         "revision": 4
       },
-      "turn_id": "turn:3",
+      "turn_id": "turn:4",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],
@@ -332,7 +341,7 @@
         "state_revision": 5,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 6,
+      "simulation_tick": 7,
       "state": {
         "changed": true,
         "changed_domains": [
@@ -343,7 +352,7 @@
         ],
         "revision": 5
       },
-      "turn_id": "turn:6",
+      "turn_id": "turn:7",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],

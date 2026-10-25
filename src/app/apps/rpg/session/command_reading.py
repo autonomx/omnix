@@ -74,6 +74,10 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
         item = _d(item)
         item_id = _s(item.get("item_id") or item.get("id"))
         add(item_id, "item", _names(item.get("name"), _label(item_id)), True)
+    for item in _l(_d(_d(state.get("world_items")).get("by_location")).get(location_id)):
+        item = _d(item)  # lying where the hero stands, to pick up
+        item_id = _s(item.get("item_id") or item.get("id"))
+        add(item_id, "item", _names(item.get("name"), _label(item_id)), True)
     for item in _l(world.get("items")):
         item = _d(item)
         add(_s(item.get("id")), "item", _names(item.get("name")), False)

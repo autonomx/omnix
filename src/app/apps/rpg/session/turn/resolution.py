@@ -90,8 +90,21 @@ def met_on_the_road(session: Mapping[str, Any], travel: Any) -> tuple[list[State
     return [*travel.changes, *met.changes], [*travel.lines, *met.lines]
 
 
+FREE_ACTION_MINUTES = 10
+
+
+def free_action(session: Mapping[str, Any]) -> Resolution:
+    """What no rule of the game decides (a song, a gesture, a look at the sky): the attempt is told and takes its few
+    minutes; the game keeps nothing of it (RQ-3.2)."""
+    return Resolution(_timed(session, [_counted(session)], FREE_ACTION_MINUTES),
+                      ["You do so. A few minutes pass; nothing comes of it that the world keeps."],
+                      minutes=FREE_ACTION_MINUTES, needs="standard_turn")
+
+
 def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) -> Resolution | None:
     mechanic = planned.mechanic
+    if mechanic == "act":
+        return free_action(session)
     if mechanic in {"look", "wait", "clarify"}:
         changes = resolve(planned, session)
         document, _ = reduce(dict(session), changes)  # what is seen, from where the hero then stands
@@ -188,4 +201,4 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
     return None
 
 
-__all__ = ["Resolution", "met_on_the_road", "resolve_turn"]
+__all__ = ["FREE_ACTION_MINUTES", "Resolution", "free_action", "met_on_the_road", "resolve_turn"]

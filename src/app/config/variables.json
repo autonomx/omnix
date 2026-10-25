@@ -1736,13 +1736,6 @@
     "type": "integer"
   },
   {
-    "default": null,
-    "description": "Controls rpg turn pipeline off for rpg.",
-    "feature": "rpg",
-    "name": "OMNIX_RPG_TURN_PIPELINE_OFF",
-    "type": "list"
-  },
-  {
     "default": "120",
     "description": "Controls rpg turn wait seconds for rpg.",
     "feature": "rpg",

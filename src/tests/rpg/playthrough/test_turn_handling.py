@@ -36,10 +36,11 @@ def test_a_refused_action_changes_nothing_but_the_turn(launch, world) -> None:
     assert body["ok"] is not False and body["visible_response"]["plain_text"]
 
 
-ASKED = {"aurelia": ("Liora Fen", "npc:liora-fen"), "starter": ("Bran", "npc:bran"), "vesper": ("someone", "")}
+ASKED = {"aurelia": ("Liora Fen", "npc:liora-fen"), "starter": ("Bran", "npc:bran"),
+         "vesper": ("Mara Vey", "ent:actors:mara-vey")}
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_ONE_PRESENT))
+@pytest.mark.parametrize("world", in_worlds())
 def test_a_question_to_someone_present_is_one_short_call(launch, world) -> None:
     play = launch(world)
     name, npc_id = ASKED[world]

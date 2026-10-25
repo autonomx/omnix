@@ -1,47 +1,40 @@
 """Steps 1-6 of a turn on the pipeline, and the stage that hands it to the commit (RQ-1.4, roadmap §4.1).
 
-``apply_planned_turn_stage`` runs first in the session's turn pipeline. For a reading the pipeline plans, it loads
-the turn-start campaign, has the mechanic's rule resolve the plan to changes (``resolution.py``), applies them
-with the reducer, lets the world tick for the time the turn took, records the turn in the journal, and leaves the
-result for the commit and narration stages. A ``world_tick`` turn (the player's return) runs here too. Everything
-else takes the older path, until its mechanic moves (RQ-2).
+``apply_planned_turn_stage`` runs first in the session's turn pipeline. It loads the turn-start campaign, plans
+the player's words (the grammar, else one intent call, ``intent.py``), has the mechanic's rule resolve the plan to
+changes (``resolution.py``), applies them with the reducer, lets the world tick for the time the turn took, records
+the turn in the journal, and leaves the result for the commit and narration stages. A ``world_tick`` turn (the
+player's return) and a ``structured_action`` (the play screen's buttons and grid) run here too (RQ-1.4, RQ-3.2).
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
-from app.config.env import env_list
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, PressuresMoved, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
-from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
+from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView
 from app.apps.rpg.rules.ability_use import known as known_abilities
 from app.apps.rpg.session.command_reading import read_command, reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
-from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, resolve_turn
+from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, free_action, resolve_turn
 from app.apps.rpg.session.turn.resolvers import outcome_lines
 from app.apps.rpg.session.turn.world_tick import world_tick
 
-# The mechanics to keep on the older path, for development and the operator (e.g. "trade,rest"); each mechanic is
-# on once its scenarios pass on the pipeline, and the setting goes when the older path does.
-OFF_SETTING = "OMNIX_RPG_TURN_PIPELINE_OFF"
+# Each mechanic as the turn's outcome names it: its action type and family.
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
                 "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
                 "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "check": "skill_check",
-                "grow": "level_choice", "rewind": "rewind"}
+                "grow": "level_choice", "rewind": "rewind", "act": "free_action"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
            "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat",
-           "check": "check", "grow": "progression", "rewind": "meta"}
+           "check": "check", "grow": "progression", "rewind": "meta", "act": "action"}
 SOURCE = "rpg_turn_pipeline_v1"
-
-
-def pipeline_enabled(mechanic: str) -> bool:
-    return mechanic in _ACTION_TYPE and mechanic not in set(env_list(OFF_SETTING))
 
 
 def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int, summary: str) -> JournalWritten:
@@ -74,11 +67,14 @@ def _reported(changes: list[StateChange]) -> list[dict[str, Any]]:
 def _offered(document: dict[str, Any], planned: PlannedAction | None) -> dict[str, Any]:
     """What the play screen offers after the turn (RQ-7.3): suggestions from the scene, and the answers to the
     game's question when it asked one."""
+    from app.apps.rpg.narration.presentation.outcome_facts import Suggestion
     from app.apps.rpg.session.turn.suggestions import choices, suggestions
 
     asked = planned is not None and planned.mechanic == "clarify"
-    return {"suggestions": [row.model_dump() for row in suggestions(document)],
-            "choices": [row.model_dump() for row in choices(document, planned.reason)] if asked else []}
+    answers = ([Suggestion(label=command, command=command).model_dump() for command in planned.options]
+               if asked and planned.options else
+               [row.model_dump() for row in choices(document, planned.reason)] if asked else [])
+    return {"suggestions": [row.model_dump() for row in suggestions(document)], "choices": answers}
 
 
 def turn_consequences(document: dict[str, Any],
@@ -444,7 +440,7 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_planned_turn_stage(ctx: Any) -> Any:
-    """The session pipeline's first stage: run the turn here when its mechanic has moved to the pipeline."""
+    """The session pipeline's first stage: every turn with words, a return or a structured action runs here."""
     if not ctx.resolved and _d(ctx.action).get("turn_kind") == "world_tick":
         session = _load(ctx)
         if session:
@@ -461,39 +457,68 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
         return ctx
     if ctx.resolved or ctx.action or not _s(ctx.player_input).strip():
         return ctx
-    # Read against no scene first: only a command that could be one the pipeline runs loads the campaign here.
-    unseen = parse_command(_s(ctx.player_input), SceneView(()))
-    glance = plan_action(unseen)
-    # A journey's destination and a carried or fallen thing are the scene's, which a reading against none cannot name.
-    by_family = {"move": "travel", "use_item": "use_item", "drop": "drop", "take": "take", "quest": "quest",
-                 "practice": "practice", "party": "party", "talk": "talk", "ask": "talk", "attack": "fight",
-                 "flee": "fight", "defend": "fight", "equip": "equip", "unequip": "unequip", "check": "check",
-                 "grow": "grow"}
-    possible = by_family.get(unseen.family) or (glance.mechanic if glance is not None else "")
-    if not possible and "," in " ".join(_s(ctx.player_input).split()[:3]):
-        possible = "order"  # someone named first ("Liora, keep watch") may be a companion given an order
-    if not possible and _s(ctx.player_input).casefold().split()[:1] in (["cast"], ["activate"], ["invoke"], ["unleash"]):
-        possible = "ability"  # the hero's abilities are their own names, which a reading against no scene lacks
-    if not possible or not pipeline_enabled(possible):
-        return ctx
     session = _load(ctx)
     if not session:
         return ctx
-    simulation = _d(session.get("simulation_state"))
-    reading = read_command(simulation, ctx.player_input, _d(session.get("runtime_state")),
-                           abilities=tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known_abilities(session)))
-    planned = plan_action(reading, fighting=_d(simulation.get("combat_state")).get("active") is True)
-    if planned is None or not pipeline_enabled(planned.mechanic):
-        return ctx
-    resolution = resolve_turn(planned, session, _s(ctx.player_input))
-    if resolution is None:
-        return ctx  # the mechanic's rule has nothing to say for this campaign: the older path answers
-    request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=_s(ctx.player_input))
+    text = _s(ctx.player_input)
+    planned, reading = plan_player_text(session, text)
+    resolution = resolve_turn(planned, session, text)
+    if resolution is None:  # the rule found nothing to do here: the attempt is told, and changes nothing
+        planned, resolution = PlannedAction(mechanic="act", ticks=1, reason=f"unresolved:{planned.mechanic}"), free_action(session)
+    request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=text)
     ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
     ctx.result.setdefault("trace_id", ctx.trace_id)
     ctx.resolved = True
     return ctx
 
 
-__all__ = ["OFF_SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn", "run_world_tick_turn",
+def plan_player_text(session: Mapping[str, Any], text: str) -> tuple[PlannedAction, IntentCandidate]:
+    """What a player's command will do (steps 2 and 3): the grammar's reading; else the intent call's (RQ-3.2); a
+    question when two readings stay close; in a fight, the fight's moves only; else a free action."""
+    from app.apps.rpg.session.command_reading import scene_view
+    from app.apps.rpg.session.turn.intent import read_with_model
+
+    simulation = _d(session.get("simulation_state"))
+    runtime = _d(session.get("runtime_state"))
+    abilities = tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known_abilities(session))
+    fighting = _d(simulation.get("combat_state")).get("active") is True
+    reading = read_command(simulation, text, runtime, abilities=abilities)
+    planned = plan_action(reading, fighting=fighting)
+    if planned is not None:
+        return planned, reading
+    scene = scene_view(simulation, runtime, abilities)
+    model = read_with_model(simulation, scene, text)
+    if model.unavailable:  # the storyteller is down: only what the grammar read runs (RQ-8.8), and it says what does
+        from app.apps.rpg.narration.presentation.visible_response import NOTHING_COMES_OF_IT
+
+        return PlannedAction(mechanic="clarify", ticks=0, reason="storyteller_unavailable",
+                             question=NOTHING_COMES_OF_IT), reading
+    if model.between:
+        options = tuple(command_for(candidate, scene) for candidate in model.between)
+        return PlannedAction(mechanic="clarify", ticks=0, reason="two_readings",
+                             question=f"Do you mean {options[0]!r} or {options[1]!r}?", options=options), reading
+    if model.reading is not None:
+        planned = plan_action(model.reading, fighting=fighting)
+        if planned is not None:
+            return planned, model.reading
+    if fighting:  # a fight goes on: strike, break away, or use something
+        return PlannedAction(mechanic="fight", ticks=0, reason="busy"), reading
+    return PlannedAction(mechanic="act", ticks=1, reason="free_action"), reading
+
+
+def command_for(reading: IntentCandidate, scene: SceneView) -> str:
+    """A reading as the command that says it, for a question's answers."""
+    names = {entity.entity_id: (entity.names[0] if entity.names else entity.entity_id) for entity in scene.entities}
+    name = names.get(reading.target_id or "", "")
+    if reading.family == "check":
+        return f"I try to {reading.reason.removeprefix('check:').replace('_', ' ')}" + (f" {name}" if name else "")
+    said = {"move": f"go to {name}", "talk": f"Talk to {name}", "attack": f"I attack {name}", "buy": f"I buy {name}",
+            "sell": f"I sell my {name}", "take": f"I take the {name}", "drop": f"I drop the {name}",
+            "use_item": f"I use the {name}", "equip": f"I equip the {name}", "unequip": f"I take off the {name}",
+            "quest": f"I accept the quest {name}", "practice": f"I practise {name}", "party": f"I invite {name} to join me",
+            "ability": f"I use {name}", "look": f"look at {name}" if name else "look around"}
+    return said.get(reading.family, reading.family.replace("_", " "))
+
+
+__all__ = ["apply_planned_turn_stage", "command_for", "plan_player_text", "run_planned_turn", "run_world_tick_turn",
            "turn_consequences"]

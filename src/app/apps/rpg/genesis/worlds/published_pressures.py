@@ -12,6 +12,7 @@ from typing import Any, Mapping
 
 from app.apps.rpg.world.causal_runtime import bootstrap_causal_runtime
 
+from .lore_sections import lore_rows
 from .world_play_sections import WorldPressure, parse_play_sections
 
 # The bestiary rates threat; the most dangerous creature sets how dangerous a region's roads start.
@@ -31,13 +32,13 @@ def _text(value: Any) -> str:
 
 def derived_pressures(canon: Mapping[str, Any]) -> tuple[WorldPressure, ...]:
     """Road danger in every region of a world whose bestiary is not empty; nothing for a world without creatures."""
-    creatures = [row for row in _rows(canon.get("bestiary")) if _text(row.get("id"))]
+    creatures = [row for row in lore_rows(canon, "bestiary") if _text(row.get("id"))]
     if not creatures:
         return ()
     severity = max(_THREAT_SEVERITY.get(_text(row.get("threat")).casefold(), 40.0) for row in creatures)
     names = ", ".join(_text(row.get("name")) or _text(row.get("id")) for row in creatures[:3])
     pressures = []
-    for region in _rows(canon.get("regions")):
+    for region in lore_rows(canon, "regions"):
         region_id, name = _text(region.get("id")), _text(region.get("name"))
         if not region_id:
             continue
