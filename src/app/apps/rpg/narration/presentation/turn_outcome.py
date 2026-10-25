@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.apps.rpg.foundation.state.changes import StateChange
 from app.apps.rpg.foundation.state.changes import parse_changes
 from app.apps.rpg.foundation.state.extract import CHANGE_SECTIONS, changes_between
+from app.apps.rpg.narration.presentation.outcome_facts import OutcomeFact, outcome_facts
 
 TURN_OUTCOME_FORMAT = "rpg_turn_outcome_v1"
 TurnKind = Literal["player_text", "structured_action", "world_tick", "system"]
@@ -52,6 +53,8 @@ class PresentationHints(_Frozen):
     changed_sections: tuple[str, ...] = ()
     location_name: str = ""
     refused: bool = False
+    # What changed, as the outcome card states it: coin, items, health, quest steps, offers, the dice (RQ-7.2).
+    facts: tuple[OutcomeFact, ...] = ()
 
 
 class ModelCalls(_Frozen):
@@ -153,6 +156,7 @@ def build_turn_outcome(
             changed_sections=tuple(dict.fromkeys(CHANGE_SECTIONS[change.type] for change in changes)),
             location_name=str(_mapping(after_doc.get("state")).get("current_location_name") or ""),
             refused=outcome in {"failure", "refused", "blocked"} or root.get("ok") is False,
+            facts=outcome_facts(changes, after_doc),
         ),
         timings=_timings(timings),
         model_calls=ModelCalls(total=sum(calls.values()), by_kind=calls),

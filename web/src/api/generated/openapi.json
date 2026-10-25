@@ -9746,6 +9746,11 @@
             "title": "Margin",
             "type": "integer"
           },
+          "minute": {
+            "default": 0,
+            "title": "Minute",
+            "type": "integer"
+          },
           "natural": {
             "maximum": 20,
             "minimum": 1,
@@ -9785,7 +9790,8 @@
           "total",
           "difficulty",
           "margin",
-          "skill"
+          "skill",
+          "minute"
         ],
         "title": "CheckResolved",
         "type": "object"
@@ -32497,6 +32503,49 @@
         "title": "OptionQuote",
         "type": "object"
       },
+      "OutcomeFact": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "coin",
+              "item",
+              "health",
+              "condition",
+              "experience",
+              "level",
+              "quest",
+              "offer",
+              "check",
+              "regard",
+              "fight"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tone": {
+            "default": "neutral",
+            "enum": [
+              "gain",
+              "loss",
+              "neutral"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "tone"
+        ],
+        "title": "OutcomeFact",
+        "type": "object"
+      },
       "OutcomeMeasurementsV1": {
         "additionalProperties": false,
         "properties": {
@@ -40356,6 +40405,14 @@
             "title": "Changed Sections",
             "type": "array"
           },
+          "facts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OutcomeFact"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
           "location_name": {
             "default": "",
             "title": "Location Name",
@@ -40370,9 +40427,46 @@
         "required": [
           "changed_sections",
           "location_name",
-          "refused"
+          "refused",
+          "facts"
         ],
         "title": "PresentationHints",
+        "type": "object"
+      },
+      "PressuresMoved": {
+        "additionalProperties": false,
+        "description": "What the hero did to the world's pressures (their levers, quests.md): each one's severity before and after, and\nthe causal runtime as the pull left it (one replayable event, ``cause``).",
+        "properties": {
+          "cause": {
+            "default": "",
+            "title": "Cause",
+            "type": "string"
+          },
+          "moves": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Moves",
+            "type": "array"
+          },
+          "runtime": {
+            "additionalProperties": true,
+            "title": "Runtime",
+            "type": "object"
+          },
+          "type": {
+            "const": "pressures_moved",
+            "default": "pressures_moved",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "cause"
+        ],
+        "title": "PressuresMoved",
         "type": "object"
       },
       "PriceSource": {
@@ -42366,12 +42460,17 @@
       },
       "QuestOffered": {
         "additionalProperties": false,
-        "description": "A quest put to the hero by someone; it names who offered it.",
+        "description": "A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest\na pressure raised, quests.md) comes with its row.",
         "properties": {
           "npc_id": {
             "minLength": 1,
             "title": "Npc Id",
             "type": "string"
+          },
+          "quest": {
+            "additionalProperties": true,
+            "title": "Quest",
+            "type": "object"
           },
           "quest_id": {
             "minLength": 1,
@@ -42421,6 +42520,36 @@
         "title": "QuestPlaceReached",
         "type": "object"
       },
+      "QuestProgressed": {
+        "additionalProperties": false,
+        "description": "A quest's running tallies (the creatures of a \"defeat\" step felled so far).",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "quest_id": {
+            "minLength": 1,
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "quest_progressed",
+            "default": "quest_progressed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id",
+          "type"
+        ],
+        "title": "QuestProgressed",
+        "type": "object"
+      },
       "QuestStatusChanged": {
         "additionalProperties": false,
         "properties": {
@@ -42452,6 +42581,58 @@
           "type"
         ],
         "title": "QuestStatusChanged",
+        "type": "object"
+      },
+      "QuestStepCompleted": {
+        "additionalProperties": false,
+        "description": "A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the\nbranch, when the stage had more than one), and what it asks next.",
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "next_objective": {
+            "default": "",
+            "title": "Next Objective",
+            "type": "string"
+          },
+          "quest_id": {
+            "minLength": 1,
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "stage": {
+            "minimum": 1,
+            "title": "Stage",
+            "type": "integer"
+          },
+          "step_id": {
+            "default": "",
+            "title": "Step Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "quest_step_completed",
+            "default": "quest_step_completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id",
+          "stage",
+          "type",
+          "step_id",
+          "next_objective"
+        ],
+        "title": "QuestStepCompleted",
         "type": "object"
       },
       "QuoteResponse": {
@@ -59694,8 +59875,14 @@
       },
       "StockTaken": {
         "additionalProperties": false,
-        "description": "What an offer has left after a sale.",
+        "description": "What an offer has left after a sale, and the campaign day of it (stock grows back from there).",
         "properties": {
+          "day": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Day",
+            "type": "integer"
+          },
           "offer_id": {
             "minLength": 1,
             "title": "Offer Id",
@@ -59716,7 +59903,8 @@
         "required": [
           "offer_id",
           "remaining",
-          "type"
+          "type",
+          "day"
         ],
         "title": "StockTaken",
         "type": "object"
@@ -66940,10 +67128,13 @@
                   "location_changed": "#/components/schemas/LocationChanged",
                   "needs_changed": "#/components/schemas/NeedsChanged",
                   "presence_changed": "#/components/schemas/PresenceChanged",
+                  "pressures_moved": "#/components/schemas/PressuresMoved",
                   "purse_changed": "#/components/schemas/PurseChanged",
                   "quest_offered": "#/components/schemas/QuestOffered",
                   "quest_place_reached": "#/components/schemas/QuestPlaceReached",
+                  "quest_progressed": "#/components/schemas/QuestProgressed",
                   "quest_status_changed": "#/components/schemas/QuestStatusChanged",
+                  "quest_step_completed": "#/components/schemas/QuestStepCompleted",
                   "regard_changed": "#/components/schemas/RegardChanged",
                   "resources_changed": "#/components/schemas/ResourcesChanged",
                   "rest_taken": "#/components/schemas/RestTaken",
@@ -67098,6 +67289,15 @@
                 },
                 {
                   "$ref": "#/components/schemas/RevisionRestored"
+                },
+                {
+                  "$ref": "#/components/schemas/QuestStepCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/QuestProgressed"
+                },
+                {
+                  "$ref": "#/components/schemas/PressuresMoved"
                 }
               ]
             },

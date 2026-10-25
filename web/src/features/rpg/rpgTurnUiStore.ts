@@ -464,6 +464,15 @@ function visibleEntriesFromPayload(
       });
     }
   }
+  const facts = payload.outcome?.presentation?.facts ?? [];
+  if (facts.length) {
+    // The outcome card (RQ-7.2): what the turn changed, as the game states it.
+    entries.push({
+      id: `${interactionId}:outcome`, sessionId, submissionId, interactionId, status: 'complete',
+      avatar: '✦', speaker: 'What changed', text: facts.map((fact) => fact.text).join(' · '), tone: 'narrator',
+      messageKind: 'outcome', facts: facts.map((fact) => ({ kind: fact.kind, text: fact.text, tone: fact.tone })),
+    });
+  }
   for (const [index, notice] of (payload.notices || []).entries()) {
     const text = notice.message?.trim();
     if (!text) continue;

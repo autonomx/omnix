@@ -64,4 +64,28 @@ describe('RpgStoryScene', () => {
     expect(screen.getByText('Durable message 12')).toBeInTheDocument();
     expect(screen.getByLabelText('Conversation').querySelectorAll('article')).toHaveLength(12);
   });
+
+  it("shows a turn's outcome card as one chip per fact, gains and losses apart", () => {
+    const storyMessages = [{
+      id: 'interaction:1:outcome', interactionId: 'interaction:1', avatar: '✦', speaker: 'What changed',
+      text: '-3 silver · +Healing Potion', tone: 'narrator' as const, messageKind: 'outcome',
+      facts: [{ kind: 'coin', text: '-3 silver', tone: 'loss' as const },
+              { kind: 'item', text: '+Healing Potion', tone: 'gain' as const }],
+    }];
+    renderWithProviders(
+      <RpgStoryScene
+        heroSummary={previewHeroSummary}
+        recentEvents={[]}
+        selectedSessionSummary={{ ...previewSessionSummary, id: 'live-card', source: 'live' }}
+        storyMessages={storyMessages}
+      >
+        <button type="button">Submit RPG turn</button>
+      </RpgStoryScene>
+    );
+
+    const card = screen.getByRole('list', { name: 'What changed' });
+    expect(card.querySelectorAll('li')).toHaveLength(2);
+    expect(screen.getByText('-3 silver')).toHaveClass('rpg-outcome-fact-loss');
+    expect(screen.getByText('+Healing Potion')).toHaveClass('rpg-outcome-fact-gain');
+  });
 });

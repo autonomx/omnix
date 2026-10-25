@@ -1,0 +1,28 @@
+/* The outcome card (RQ-7.2): what a turn changed, one chip per fact. */
+.rpg-outcome-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
+
+.rpg-outcome-fact {
+  background: color-mix(in srgb, var(--wash-neutral-1000) 5.5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
+  border-radius: 999px;
+  color: var(--fg-slate-830);
+  font-size: 0.75rem;
+  padding: 0.22rem 0.55rem;
+}
+
+.rpg-outcome-fact-gain {
+  border-color: color-mix(in srgb, var(--c-green-870) 45%, transparent);
+  color: var(--c-green-870);
+}
+
+.rpg-outcome-fact-loss {
+  border-color: color-mix(in srgb, var(--c-red-720) 45%, transparent);
+  color: var(--c-red-720);
+}

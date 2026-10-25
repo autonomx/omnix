@@ -2931,6 +2931,11 @@ export interface components {
              * @default 0
              */
             margin: number;
+            /**
+             * Minute
+             * @default 0
+             */
+            minute: number;
             /** Natural */
             natural: number;
             /**
@@ -4550,6 +4555,22 @@ export interface components {
              */
             type: "needs_changed";
         };
+        /** OutcomeFact */
+        OutcomeFact: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "coin" | "item" | "health" | "condition" | "experience" | "level" | "quest" | "offer" | "check" | "regard" | "fight";
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @default neutral
+             * @enum {string}
+             */
+            tone: "gain" | "loss" | "neutral";
+        };
         /** PackModelLicence */
         PackModelLicence: core["schemas"]["PackModelLicence"];
         /** PackModelStatus */
@@ -4619,6 +4640,11 @@ export interface components {
              */
             changed_sections: string[];
             /**
+             * Facts
+             * @default []
+             */
+            facts: components["schemas"]["OutcomeFact"][];
+            /**
              * Location Name
              * @default
              */
@@ -4628,6 +4654,31 @@ export interface components {
              * @default false
              */
             refused: boolean;
+        };
+        /**
+         * PressuresMoved
+         * @description What the hero did to the world's pressures (their levers, quests.md): each one's severity before and after, and
+         *     the causal runtime as the pull left it (one replayable event, ``cause``).
+         */
+        PressuresMoved: {
+            /**
+             * Cause
+             * @default
+             */
+            cause: string;
+            /** Moves */
+            moves?: {
+                [key: string]: unknown;
+            }[];
+            /** Runtime */
+            runtime?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pressures_moved";
         };
         /** PromptRenderRequest */
         PromptRenderRequest: core["schemas"]["PromptRenderRequest"];
@@ -4690,11 +4741,16 @@ export interface components {
         };
         /**
          * QuestOffered
-         * @description A quest put to the hero by someone; it names who offered it.
+         * @description A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest
+         *     a pressure raised, quests.md) comes with its row.
          */
         QuestOffered: {
             /** Npc Id */
             npc_id: string;
+            /** Quest */
+            quest?: {
+                [key: string]: unknown;
+            };
             /** Quest Id */
             quest_id: string;
             /**
@@ -4715,6 +4771,23 @@ export interface components {
              */
             type: "quest_place_reached";
         };
+        /**
+         * QuestProgressed
+         * @description A quest's running tallies (the creatures of a "defeat" step felled so far).
+         */
+        QuestProgressed: {
+            /** Counts */
+            counts?: {
+                [key: string]: number;
+            };
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_progressed";
+        };
         /** QuestStatusChanged */
         QuestStatusChanged: {
             /** Quest Id */
@@ -4729,6 +4802,34 @@ export interface components {
              * @enum {string}
              */
             type: "quest_status_changed";
+        };
+        /**
+         * QuestStepCompleted
+         * @description A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the
+         *     branch, when the stage had more than one), and what it asks next.
+         */
+        QuestStepCompleted: {
+            /** Branch */
+            branch?: number | null;
+            /**
+             * Next Objective
+             * @default
+             */
+            next_objective: string;
+            /** Quest Id */
+            quest_id: string;
+            /** Stage */
+            stage: number;
+            /**
+             * Step Id
+             * @default
+             */
+            step_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_step_completed";
         };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
@@ -9169,9 +9270,14 @@ export interface components {
         StateHashResponse: core["schemas"]["StateHashResponse"];
         /**
          * StockTaken
-         * @description What an offer has left after a sale.
+         * @description What an offer has left after a sale, and the campaign day of it (stock grows back from there).
          */
         StockTaken: {
+            /**
+             * Day
+             * @default 0
+             */
+            day: number;
             /** Offer Id */
             offer_id: string;
             /** Remaining */
@@ -9287,7 +9393,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;

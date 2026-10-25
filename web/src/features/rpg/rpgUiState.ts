@@ -138,6 +138,12 @@ export interface RpgCheckpointSummaryPreview {
   source: 'live' | 'preview';
 }
 
+export interface RpgOutcomeFactPreview {
+  kind: string;
+  text: string;
+  tone?: 'gain' | 'loss' | 'neutral';
+}
+
 export interface RpgStoryMessagePreview {
   id?: string;
   interactionId?: string;
@@ -147,6 +153,8 @@ export interface RpgStoryMessagePreview {
   speaker: string;
   text: string;
   tone: 'player' | 'npc' | 'narrator';
+  /** The outcome card's facts (RQ-7.2): what the turn changed. */
+  facts?: RpgOutcomeFactPreview[];
 }
 
 type RpgSession = Record<string, unknown>;

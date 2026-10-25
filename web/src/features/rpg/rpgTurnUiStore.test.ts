@@ -270,6 +270,35 @@ describe('rpgTurnUiStore', () => {
     expect(entries[2].messageKind).toBe('storyteller_unavailable');
   });
 
+  it("shows what the turn changed as the outcome card's facts", () => {
+    beginRpgTurnUiSubmission({ sessionId: 'session:card', submissionId: 'submit:card', command: 'buy a potion' });
+    completeRpgTurnUiSubmission({
+      sessionId: 'session:card',
+      submissionId: 'submit:card',
+      payload: {
+        ok: true,
+        contract_version: 'rpg_turn_response_v2',
+        interaction_id: 'interaction:10',
+        visible_response: { narration: 'Brindle hands you a potion.' },
+        outcome: {
+          presentation: {
+            facts: [
+              { kind: 'coin', text: '-3 silver', tone: 'loss' },
+              { kind: 'item', text: '+Healing Potion', tone: 'gain' },
+            ],
+          },
+        } as never,
+      },
+    });
+    const [, , card] = getRpgTurnUiEntries('session:card');
+    expect(card.messageKind).toBe('outcome');
+    expect(card.facts).toEqual([
+      { kind: 'coin', text: '-3 silver', tone: 'loss' },
+      { kind: 'item', text: '+Healing Potion', tone: 'gain' },
+    ]);
+    expect(card.text).toBe('-3 silver · +Healing Potion');
+  });
+
   it('does not request heavy query refreshes for explicit conversation-only turns', () => {
     expect(refreshPathsForChangedDomains('session:bran', ['conversation'])).toEqual([
       '/api/rpg/sessions/session%3Abran',

@@ -9,6 +9,7 @@ import {
 } from './rpgTurnDiagnostics';
 import { storyMessageIdentity, useRpgTurnUiMessages } from './rpgTurnUiStore';
 import './RpgVisualAssets.css';
+import './RpgOutcomeFacts.css';
 
 const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
 
@@ -102,7 +103,18 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
               </span>
               <div>
                 <strong>{message.speaker}</strong>
-                <p>{message.text}</p>
+                {message.messageKind === 'outcome' && message.facts?.length ? (
+                  <ul className="rpg-outcome-facts" aria-label="What changed">
+                    {message.facts.map((fact, factIndex) => (
+                      <li key={`${fact.kind}:${factIndex}`} className={`rpg-outcome-fact rpg-outcome-fact-${fact.tone ?? 'neutral'}`}
+                        data-kind={fact.kind}>
+                        {fact.text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{message.text}</p>
+                )}
               </div>
             </article>
           ))
