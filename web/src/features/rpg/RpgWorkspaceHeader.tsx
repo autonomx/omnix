@@ -15,6 +15,7 @@ import type { RpgSessionSummaryPreview } from './rpgUiTypes';
 import './RpgLoreOverlay.css';
 import './RpgPlayFocus.css';
 import './RpgWorldLibraryOverlay.css';
+import './RpgWorkspaceHeader.css';
 
 interface RpgWorkspaceHeaderProps {
   developerTools?: boolean;

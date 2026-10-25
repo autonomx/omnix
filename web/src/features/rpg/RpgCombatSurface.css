@@ -29,6 +29,14 @@
     padding: 0.72rem;
   }
 
+  /* The name, and which side they are on. */
+  .rpg-combatant-card > div {
+    align-items: baseline;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+
   .rpg-combatant-card small {
     color: var(--fg-slate-730);
   }
@@ -61,6 +69,19 @@
   }
 
   @media (max-width: 480px) {
+    .rpg-combat-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+/* RpgCombatSurface's own styles (RQ-7.5). */
+@layer features {
+  .rpg-combat-grid {
+    min-width: 0;
+  }
+
+  @media (max-width: 760px) {
     .rpg-combat-grid {
       grid-template-columns: 1fr;
     }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { rpgSessionClient } from './api/rpgSessionClient';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiTypes';
+import './RpgActionComposer.css';
 
 interface RpgActionComposerProps {
   commandRegistration: UseFormRegisterReturn<'command'>;

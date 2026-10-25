@@ -1,0 +1,29 @@
+/* RpgWorkspaceHeader's own styles (RQ-7.5). */
+@layer features {
+  .rpg-workspace-header-content,
+  .rpg-unified-header-controls {
+    align-items: center;
+    display: flex;
+    min-width: 0;
+  }
+
+  .rpg-workspace-header-content {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.65rem;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+
+  .rpg-unified-header-controls {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  .rpg-header-toggle {
+    flex: 0 0 auto;
+    min-height: 2.15rem;
+    padding: 0.5rem 0.68rem;
+    white-space: nowrap;
+  }
+}

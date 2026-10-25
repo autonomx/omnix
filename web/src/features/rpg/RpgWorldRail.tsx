@@ -6,6 +6,7 @@ import { RpgMapDialog } from './RpgMapDialog';
 import { RpgTacticalGrid } from './RpgTacticalGrid';
 import type { RpgCheckpointSummaryPreview, RpgJobCardPreview, RpgNpcRelationshipPreview, RpgSessionSummaryPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
 import './RpgVisualAssets.css';
+import './RpgWorldRail.css';
 
 const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
 

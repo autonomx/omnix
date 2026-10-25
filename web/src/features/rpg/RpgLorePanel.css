@@ -1,0 +1,95 @@
+/* RpgLorePanel's own styles (RQ-7.5). */
+@layer features {
+  .rpg-lore-generation {
+    display: grid;
+    gap: 8px;
+    margin: 20px 0 14px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--accent-indigo-430) 10%, transparent);
+  }
+
+  .rpg-lore-generation label {
+    font-weight: 800;
+  }
+
+  .rpg-lore-generation textarea {
+    box-sizing: border-box;
+    width: 100%;
+    resize: vertical;
+    padding: 10px 12px;
+    color: inherit;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 32%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
+    font: inherit;
+    line-height: 1.5;
+  }
+
+  .rpg-lore-generation > div {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .rpg-lore-generation small {
+    max-width: 620px;
+    opacity: 0.7;
+  }
+
+  .rpg-lore-materialization {
+    display: grid;
+    gap: 10px;
+    margin-top: 20px;
+    padding: 16px;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--accent-indigo-430) 10%, transparent);
+  }
+
+  .rpg-lore-materialization h4,
+  .rpg-lore-materialization p {
+    margin: 0;
+  }
+
+  .rpg-lore-materialization > div {
+    display: grid;
+    grid-template-columns: auto minmax(130px, 0.35fr) auto minmax(220px, 1fr);
+    gap: 8px;
+    align-items: center;
+  }
+
+  .rpg-lore-materialization label {
+    font-weight: 800;
+  }
+
+  .rpg-lore-materialization input,
+  .rpg-lore-materialization select,
+  .rpg-lore-materialization textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px 12px;
+    color: inherit;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 32%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
+    font: inherit;
+    line-height: 1.5;
+  }
+
+  .rpg-lore-materialization textarea {
+    resize: vertical;
+  }
+
+  .rpg-lore-materialization button {
+    justify-self: start;
+  }
+
+  @media (max-width: 760px) {
+    .rpg-lore-materialization > div {
+      grid-template-columns: 1fr;
+    }
+  }
+}

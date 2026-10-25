@@ -8,6 +8,7 @@ import type { RpgHotbarAbilityPreview } from './rpgUiTypes';
 import type { RpgLoadoutTabsProps } from './RpgLoadoutTabs';
 import { REQUIRED_DIMENSIONS, abilityDetail, firstNumber, firstString, formatAbilityCost, nextAssignableHotbarSlot, recordValue, titleCase } from './rpgAbilityOverview';
 import type { AbilityCoveragePreview, AbilityOverview, AbilityPreview, EffectPreview, SkillProgressionPreview } from './rpgAbilityOverview';
+import './RpgLoadoutPanels.css';
 
 interface LoadoutDetailAction {
   label: string;

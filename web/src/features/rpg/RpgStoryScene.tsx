@@ -10,6 +10,7 @@ import {
 import { storyMessageIdentity, useRpgTurnUiMessages } from './rpgTurnUiStore';
 import './RpgVisualAssets.css';
 import './RpgOutcomeFacts.css';
+import './RpgStoryScene.css';
 
 const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
 

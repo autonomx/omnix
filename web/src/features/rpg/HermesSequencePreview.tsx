@@ -1,3 +1,4 @@
+import './HermesSequencePreview.css';
 export type HermesSequencePreviewItem = {
   item_id?: string;
   statement?: string;

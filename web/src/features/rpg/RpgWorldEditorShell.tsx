@@ -348,7 +348,7 @@ export function RpgWorldEditorShell({
               <span className="rpg-world-topbar-divider" />
               <span className="rpg-world-profile-avatar" aria-hidden="true">{profileInitial}</span>
               <span className="rpg-world-profile-copy"><strong>Lorekeeper</strong><small>Game Master</small></span>
-              <span className={`rpg-world-state is-${worldState(currentWorld).toLowerCase().replace(/\s+/g, '-')}`}>{worldState(currentWorld)}</span>
+              <span className={`rpg-world-lifecycle is-${worldState(currentWorld).toLowerCase().replace(/\s+/g, '-')}`}>{worldState(currentWorld)}</span>
               <button className="rpg-world-play-button" type="button" onClick={onPlay}>Play</button>
             </div>
           </header>

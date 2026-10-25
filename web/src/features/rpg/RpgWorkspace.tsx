@@ -1,3 +1,5 @@
+// What the play screen's components build on loads before them; RpgWorkspace.css (below) after their own styles.
+import './RpgWorkspaceBase.css';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -25,7 +27,6 @@ import { RpgWorldRail } from './RpgWorldRail';
 import { buildRpgFight } from './rpgCombatState';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
-import './RpgResponsivePolish.css';
 import { ACTIVE_JOB_STATUSES, RPG_TURN_QUEUE_TIMEOUT_MS, RPG_TURN_RECOVERY_WINDOW_MS, buildSubmittedTurnStoryMessages, isRpgTurnJobType, readStoredDeveloperTools, readStoredRpgSessionId, timestampMs, writeStoredDeveloperTools, writeStoredRpgSessionId } from './rpgWorkspaceSupport';
 import type { PendingRpgTurnSubmission, RpgFormValues } from './rpgWorkspaceSupport';
 

@@ -1,0 +1,28 @@
+/* HermesSequencePreview's own styles (RQ-7.5). */
+@layer features {
+  .rpg-hermes-sequence-alert {
+    background: color-mix(in srgb, var(--c-red-640) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-red-720) 25%, transparent);
+    border-radius: 0.7rem;
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.65rem;
+  }
+
+  .rpg-hermes-sequence-alert strong {
+    color: var(--fg-red-890);
+  }
+
+  .rpg-hermes-sequence-alert span,
+  .rpg-hermes-sequence-issues {
+    color: var(--fg-red-810);
+    font-size: 0.82rem;
+  }
+
+  .rpg-hermes-sequence-issues {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+}
