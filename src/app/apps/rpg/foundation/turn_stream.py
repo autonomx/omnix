@@ -103,9 +103,4 @@ def has_stream(key: StreamKey | None) -> bool:
         return key is not None and key in _STREAMS
 
 
-def reset_for_tests() -> None:
-    with _CHANGED:
-        _STREAMS.clear()
-
-
-__all__ = ["TERMINAL", "events", "has_stream", "publish", "reset_for_tests", "stream_key"]
+__all__ = ["TERMINAL", "events", "has_stream", "publish", "stream_key"]

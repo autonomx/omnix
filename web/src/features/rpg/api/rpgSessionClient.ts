@@ -285,17 +285,10 @@ export const rpgSessionClient = {
   },
 
   async applyRpgLoadoutAction(sessionId: string, request: RpgLoadoutActionRequest): Promise<RpgLoadoutActionResponse> {
-    try {
-      return await unwrap(api.POST('/api/rpg/sessions/{session_id}/loadout-action', {
-        params: { path: { session_id: sessionId } },
-        body: request,
-      })) as RpgLoadoutActionResponse;
-    } catch (error) {
-      if (!isNotFound(error)) {
-        throw error;
-      }
-      return compatibility<RpgLoadoutActionResponse>({ action: 'loadout_action', session_id: sessionId, loadout: request });
-    }
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/loadout-action', {
+      params: { path: { session_id: sessionId } },
+      body: request,
+    })) as RpgLoadoutActionResponse;
   },
 
   /**

@@ -604,16 +604,6 @@
       "rule": "AL019"
     },
     {
-      "count": 2,
-      "fingerprint": "state",
-      "lines": [
-        35,
-        103
-      ],
-      "path": "src/app/apps/rpg/session/item_effect_session.py",
-      "rule": "AL019"
-    },
-    {
       "count": 1,
       "fingerprint": "state",
       "lines": [
@@ -623,7 +613,7 @@
       "rule": "AL019"
     },
     {
-      "count": 4,
+      "count": 1,
       "fingerprint": "state",
       "lines": [
         37,
@@ -636,15 +626,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        35
-      ],
-      "path": "src/app/apps/rpg/session/item_pickup_session.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 3,
       "fingerprint": "state",
       "lines": [
         47,
@@ -661,27 +642,6 @@
         34
       ],
       "path": "src/app/apps/rpg/session/item_report_session.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        40
-      ],
-      "path": "src/app/apps/rpg/session/item_scenarios.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 4,
-      "fingerprint": "state",
-      "lines": [
-        127,
-        134,
-        139,
-        143
-      ],
-      "path": "src/app/apps/rpg/session/item_signals.py",
       "rule": "AL019"
     },
     {

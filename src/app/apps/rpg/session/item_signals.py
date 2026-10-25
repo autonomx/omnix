@@ -1,15 +1,13 @@
 """Deterministic special item signal helpers for RPG sessions."""
 from __future__ import annotations
 
-from app.runtime.clock import utc_now
 
 from copy import deepcopy
 from typing import Any
 
-from app.apps.rpg.session.inventory_items import display_item_name, item_type
+from app.apps.rpg.session.inventory_items import item_type
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
-MECHANICS_SOURCE = "engine_item_signal_v1"
 SUPPORTED_SIGNAL_OPS = {"add_affordance", "add_scene_status", "set_world_flag", "restore_resource"}
 AFFORDANCE_BUCKETS = {"dialogue", "travel", "access", "evidence", "crafting", "combat", "social"}
 RESOURCES = {"hp", "mana", "stamina"}
@@ -24,19 +22,11 @@ def _norm(value: Any) -> str:
     return _text(value).casefold()
 
 
-def _utc_now() -> str:
-    return utc_now().isoformat().replace("+00:00", "Z")
-
-
 def _positive_int(value: Any, fallback: int = 1, *, limit: int = 250) -> int:
     try:
         return max(1, min(limit, int(value)))
     except Exception:
         return fallback
-
-
-def _item_id(item: dict[str, Any]) -> str:
-    return _text(item.get("item_id") or item.get("id") or item.get("instance_id") or display_item_name(item), "item")
 
 
 def _signal_id(signal: dict[str, Any], ordinal: int) -> str:
@@ -104,72 +94,3 @@ def normalize_item_signals(item: dict[str, Any]) -> dict[str, Any]:
     if not signals:
         return {"ok": False, "error": "no_supported_item_signals", "signals": [], "repairs": repairs}
     return {"ok": True, "signals": signals, "repairs": repairs}
-
-
-def _metric(player: dict[str, Any], key: str) -> dict[str, Any]:
-    resources = _safe_dict(player.get("resources"))
-    player["resources"] = resources
-    metric = _safe_dict(resources.get(key))
-    resources[key] = metric
-    metric.setdefault("current", 0)
-    metric.setdefault("max", metric.get("current", 0))
-    return metric
-
-
-def _apply_signal(state: dict[str, Any], item_name: str, signal: dict[str, Any]) -> dict[str, Any]:
-    op = signal.get("op")
-    if op == "add_affordance":
-        affordances = _safe_dict(state.get("narrative_affordances"))
-        bucket = str(signal.get("bucket") or "dialogue")
-        entries = _safe_list(affordances.get(bucket))
-        entry = {"tag": signal.get("tag"), "source": item_name, "dimension": signal.get("dimension"), "created_at": _utc_now()}
-        affordances[bucket] = [entry, *entries][:20]
-        state["narrative_affordances"] = affordances
-        return {"op": op, "bucket": bucket, "tag": signal.get("tag"), "dimension": signal.get("dimension")}
-    if op == "add_scene_status":
-        scene_state = _safe_dict(state.get("scene_state"))
-        statuses = _safe_list(scene_state.get("statuses"))
-        entry = {"status": signal.get("status"), "source": item_name, "dimension": signal.get("dimension"), "created_at": _utc_now()}
-        scene_state["statuses"] = [entry, *statuses][:20]
-        state["scene_state"] = scene_state
-        return {"op": op, "status": signal.get("status"), "dimension": signal.get("dimension")}
-    if op == "set_world_flag":
-        world_flags = _safe_dict(state.get("world_flags"))
-        world_flags[str(signal.get("flag"))] = signal.get("value", True)
-        state["world_flags"] = world_flags
-        return {"op": op, "flag": signal.get("flag"), "value": signal.get("value", True)}
-    if op == "restore_resource":
-        player = _safe_dict(state.get("player"))
-        state["player"] = player
-        resource = str(signal.get("resource"))
-        metric = _metric(player, resource)
-        current = int(metric.get("current") or 0)
-        maximum = int(metric.get("max") or current)
-        amount = int(signal.get("amount") or 1)
-        metric["current"] = max(0, min(maximum, current + amount))
-        return {"op": op, "resource": resource, "amount": amount, "current": metric["current"], "max": maximum}
-    return {"op": "ignored"}
-
-
-def apply_item_signal(state: dict[str, Any], item: dict[str, Any], signal_id: str | None = None) -> dict[str, Any]:
-    normalized = normalize_item_signals(item)
-    if not normalized.get("ok"):
-        return {"ok": False, "error": normalized.get("error"), "effects": [], "repairs": normalized.get("repairs", [])}
-
-    wanted = _norm(signal_id)
-    signals = [signal for signal in _safe_list(normalized.get("signals")) if not wanted or _norm(signal.get("signal_id")) == wanted]
-    if not signals:
-        return {"ok": False, "error": "item_signal_not_found", "signal_id": signal_id, "effects": [], "repairs": normalized.get("repairs", [])}
-
-    item_name = display_item_name(item)
-    effects = [_apply_signal(state, item_name, signal) for signal in signals]
-    trace = {
-        "event": "item_signal_applied",
-        "item_id": _item_id(item),
-        "item_name": item_name,
-        "signal_ids": [signal.get("signal_id") for signal in signals],
-        "effects": effects,
-        "repairs": normalized.get("repairs", []),
-        "mechanics_source": MECHANICS_SOURCE,
-    }
-    return {"ok": True, "effects": effects, "trace": trace, "repairs": normalized.get("repairs", [])}
