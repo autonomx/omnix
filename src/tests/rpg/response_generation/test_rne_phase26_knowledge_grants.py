@@ -106,7 +106,7 @@ def test_dialogue_and_narration_receive_distinct_preplanned_evidence_grants() ->
     assert set(reaction.evidence_refs).issubset(narrator_ids)
 
     payload = writer_payload(request, result.plan, result.retrieval.evidence)
-    direct_rows = payload["evidence_by_beat"][direct.beat_id]
+    direct_rows = next(row for row in payload["beats"] if row["beat_id"] == direct.beat_id)["approved_evidence"]
     assert "narrator:scar" not in {row["evidence_id"] for row in direct_rows}
 
 

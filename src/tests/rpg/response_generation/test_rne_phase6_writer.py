@@ -32,7 +32,8 @@ def test_writer_payload_contains_only_approved_evidence() -> None:
     plan = DeterministicBeatPlanner().plan(request, evidence)
     payload = writer_payload(request, plan, evidence)
     approved = {ref for beat in plan.beats for ref in beat.evidence_refs}
-    assert {row["evidence_id"] for row in payload["approved_evidence"]}.issubset(approved)
+    assert {row["evidence_id"] for beat in payload["beats"] for row in beat["approved_evidence"]}.issubset(approved)
+    assert "evidence_by_beat" not in payload and "approved_evidence" not in payload  # once, in its beat (RQ-6.5)
     assert payload["player_input"] == request.player_input
     assert payload["beats"][0]["sequence"] == 1
 

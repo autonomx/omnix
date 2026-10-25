@@ -38,8 +38,9 @@ still holds what happened: reading it fills each recent turn's narration from th
 
 ## Open
 
-- A crash between the commit and the narration's insert leaves the turn with no narration. Readers then show the
-  outcome. A durable narration job that finishes such turns is the next slice.
+- A crash between the commit and the narration's insert leaves the turn without the writer's prose. Its interaction
+  row was committed with the turn's own lines (what the rules did), so reading the campaign shows those. A durable
+  job that narrates such a turn later is optional.
 - The map surface still polls; it moves onto the stream with RQ-7.1.
 - Hermes waits for `narration.final` instead of narrating inline (RQ-1.6 note).
 - One process holds a stream. Several gateway replicas need the PostgreSQL event log for it, as the narration

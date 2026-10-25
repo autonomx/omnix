@@ -84,22 +84,26 @@ class NarrativeWriter(Protocol):
     ) -> WriterResult: ...
 
 
+_WRITER_EVIDENCE_FIELDS = ("evidence_id", "content", "authority", "visibility", "known_by", "entity_refs", "claim_refs")
+
+
+def _writer_evidence(record: EvidenceRecord) -> dict[str, Any]:
+    """An evidence record as the writer reads it: what it says, its authority and who may know it."""
+    row = record.as_dict()
+    return {key: row[key] for key in _WRITER_EVIDENCE_FIELDS if row.get(key) not in (None, "", [], ())}
+
+
 def writer_payload(
     request: TurnPresentationRequest,
     plan: NarrativePlan,
     evidence: Sequence[EvidenceRecord],
 ) -> dict[str, Any]:
     by_id = {record.evidence_id: record for record in evidence}
-    approved_ids = {ref for beat in plan.beats for ref in beat.evidence_refs}
-    selected_evidence = [record.as_dict() for record in evidence if record.evidence_id in approved_ids]
     beats = []
-    evidence_by_beat: dict[str, list[dict[str, Any]]] = {}
     for beat in plan.beats:
-        scoped = [
-            by_id[ref].as_dict()
-            for ref in beat.evidence_refs
-            if ref in by_id
-        ]
+        # Each beat carries its evidence once, as the writer needs it (RQ-6.5: the payload sent it three times, with
+        # the records' bookkeeping).
+        scoped = [_writer_evidence(by_id[ref]) for ref in beat.evidence_refs if ref in by_id]
         row = beat.as_dict()
         row["approved_evidence"] = scoped
         row["evidence_scope"] = str(beat.metadata.get("evidence_scope") or "player")
@@ -117,7 +121,6 @@ def writer_payload(
             ],
         }
         beats.append(row)
-        evidence_by_beat[beat.beat_id] = scoped
     dialogue_context = request.metadata.get("dialogue_quality_context")
     dialogue_contract = {}
     if isinstance(dialogue_context, Mapping):
@@ -154,8 +157,6 @@ def writer_payload(
             else dict(request.authoritative_outcome)
         ),
         "beats": beats,
-        "approved_evidence": selected_evidence,
-        "evidence_by_beat": evidence_by_beat,
         "forbidden_rules": [
             "Do not add speakers, facts, outcomes, state changes, or secrets outside approved beats and evidence.",
             "Use only each beat's approved_evidence for that beat; never move narrator-only or another speaker's private evidence into dialogue.",
