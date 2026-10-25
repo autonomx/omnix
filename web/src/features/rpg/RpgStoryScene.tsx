@@ -62,7 +62,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
       <div className="rpg-story-heading">
         <div>
           <p className="eyebrow">Story / scene</p>
-          <h3 id="rpg-story-scene-title">📍 {selectedSessionSummary.location}</h3>
+          <h1 id="rpg-story-scene-title">📍 {selectedSessionSummary.location}</h1>
           <div className="rpg-chip-row">
             <span>{selectedSessionSummary.title}</span>
             <span>{selectedSessionSummary.turnLabel}</span>
@@ -77,7 +77,8 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
         ) : null}
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
-      <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
+      {/* Focusable, so the story can be scrolled from the keyboard (RQ-7.6). */}
+      <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite" tabIndex={0}>
         {isPreview ? (
           <>
             <article>

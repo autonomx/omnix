@@ -875,7 +875,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           />
         )}
 
-        <main className="rpg-center-stage" aria-label="Story scene and actions">
+        {/* A section, not <main>: the app shell's canvas is the page's main region (RQ-7.6, axe). */}
+        <section className="rpg-center-stage" aria-label="Story scene and actions">
           <RpgStoryScene
             heroSummary={heroSummary}
             recentEvents={recentEvents}
@@ -947,7 +948,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             pendingMessage="Applying deterministic loadout action…"
             successPrefix="RPG loadout action applied"
           />
-        </main>
+        </section>
 
         {isWorldRailCollapsed ? null : (
           <RpgWorldRail

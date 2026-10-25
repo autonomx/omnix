@@ -615,7 +615,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(8rem, 13rem);
   }
 
-  .rpg-story-heading h3 {
+  .rpg-story-heading h1 {
     color: var(--fg-slate-970-2);
     font-size: 1.25rem;
     margin-top: 0.2rem;
