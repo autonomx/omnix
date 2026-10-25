@@ -35,6 +35,10 @@ def in_worlds(*worlds: str, **xfail: str) -> list[Any]:
     ]
 
 
+# The way from each world's opening to a place no one lives, where its creatures are met (encounters.md).
+WILD = {"aurelia": ("go to Starfall Village", "go to Skybridge Pass"), "starter": ("go to Northern Road",),
+        "vesper": ("go to Black Rain Station Interior",)}
+
 BUNDLES = Path(__file__).resolve().parents[4] / "resources/examples/rpg/world-bundles"
 AURELIA = BUNDLES / "aurelia-echoes-beyond-the-gate"
 VESPER = BUNDLES / "vesper-9-city-of-borrowed-minds"
@@ -171,6 +175,13 @@ class Playthrough:
         response = self.post_turn(command, submission_id=submission_id)
         assert response.status_code == 200, f"{command!r}: {response.status_code} {response.text[:500]}"
         return response.json()
+
+    def to_the_wild(self) -> None:
+        """Goes where the world's creatures are met (somewhere no one lives, encounters.md), past whatever bars the
+        way on arriving."""
+        for step in WILD[self.world]:
+            self.turn(step)
+        self.clear_the_road()
 
     def clear_the_road(self, *, limit: int = 12) -> int:
         """Breaks away from whatever barred the way on arriving (a dangerous road's creature, encounters.md), until

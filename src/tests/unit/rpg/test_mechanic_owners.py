@@ -67,7 +67,8 @@ def _document() -> dict:
 
 
 def _section(path: tuple[str, ...]) -> str:
-    if path[0] == "state" and path[:2] not in {("state", "ability_state"), ("state", "world_binding")}:
+    if path[0] == "state" and path[:2] not in {("state", "ability_state"), ("state", "world_binding"),
+                                               ("state", "current_map_instance_id")}:
         return "(sheet)"
     owner, length = "(no section)", 0
     for name, paths in SECTION_PATHS.items():
@@ -121,6 +122,7 @@ def _examples(doc: dict) -> list:
         (c.QuestOffered(quest_id="quest:pressure:roads:1", npc_id=npc, quest={"title": "Roads", "status": "available"}),
          doc),
         (c.PressuresMoved(moves=[], runtime={"pressure_plan": {}}), doc),
+        (c.LocalMapEntered(map_instance_id="campaign:map:starfall-village:1"), doc),
         (c.LevelChoiceMade(choice="attribute", attribute="strength", value=12),
          reduce(doc, [c.LevelReached(level=2, xp=0, xp_to_next=200, choices_pending=1)])[0]),
     ]
@@ -168,6 +170,6 @@ def test_each_section_has_the_writers_declared_and_no_others() -> None:
         for section in sections:
             writers.setdefault(section, set()).add(kind)
     assert set(writers) - {"(no section)"} <= set(SECTION_PATHS)
-    assert writers["location"] == {"location_changed", "presence_changed", "revision_restored"}
+    assert writers["location"] == {"location_changed", "presence_changed", "revision_restored", "local_map_entered"}
     assert writers["combat"] == {"combat_started", "combatant_hp_changed", "combat_ended", "combat_advanced",
                                  "revision_restored"}

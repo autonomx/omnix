@@ -60,3 +60,13 @@ encounter (`evaded`, `talked_down`: "You go on your way; no blow was struck."), 
 for a person, its regard; failure spends the hero's turn. Once blows are traded it is a fight: no slipping away or
 talking now. The grammar also reads "reason with", "talk it down", "parley", "negotiate with" as persuading. Found
 with it: a check easier than the easiest difficulty had no experience to pay and raised an error.
+
+## As built (RQ-7.7 part 2: where creatures are met)
+
+A creature is met where it lives (`rules/combat/fight.py` `_met_here`): in the wild, where no one lives
+(`routines.is_wild`, the road encounter's own test), or at the place a quest the hero has taken sends them to defeat
+it (the Rusty Flagon's cellar rats). Anywhere else "I attack the Echo Wolf" is refused: "No Echo Wolf is here. The
+world's creatures keep to the wild, where no one lives." Before, any creature of the bestiary could be fought
+anywhere (a wolf in the guild hall). The playthroughs, the balance simulation, the latency harness and the Aurelia
+golden now meet their creatures in the wild (Skybridge Pass, the Northern Road, Black Rain Station Interior); the
+balance bands still hold.

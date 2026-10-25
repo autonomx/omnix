@@ -8,8 +8,8 @@ Each turn class is played ``--runs`` times (default 20) in Aurelia, from the sam
 | arrive | Starfall Grove | "go to Starfall Village" |
 | question | Starfall Grove | "Liora, where am I?" |
 | buy | Starfall Village | "buy a healing potion" |
-| fight | Starfall Grove | "attack the echo wolf" |
-| tactical_move | Starfall Grove, in a fight with an echo wolf | ``POST /api/rpg/map-instances/{id}/tactical/move``, one cell back and forth |
+| fight | Skybridge Pass (creatures are met where no one lives) | "attack the echo wolf" |
+| tactical_move | Skybridge Pass, in a fight with an echo wolf | ``POST /api/rpg/map-instances/{id}/tactical/move``, one cell back and forth |
 | status | Starfall Grove | "check my inventory" |
 | wait | Starfall Grove | "wait" |
 
@@ -60,12 +60,13 @@ CLASSES: dict[str, dict[str, Any]] = {
     "arrive": {"scene": "grove", "command": "go to Starfall Village"},
     "question": {"scene": "grove", "command": "Liora, where am I?"},
     "buy": {"scene": "village", "command": "buy a healing potion"},
-    "fight": {"scene": "grove", "command": "attack the echo wolf"},
+    "fight": {"scene": "pass", "command": "attack the echo wolf"},
     "tactical_move": {"scene": "fight", "command": None},
     "status": {"scene": "grove", "command": "check my inventory"},
     "wait": {"scene": "grove", "command": "wait"},
 }
-SCENE_SETUP = {"grove": [], "village": ["go to Starfall Village"], "fight": ["attack the echo wolf"]}
+SCENE_SETUP = {"grove": [], "village": ["go to Starfall Village"], "pass": ["go to Starfall Village", "go to Skybridge Pass"],
+               "fight": ["go to Starfall Village", "go to Skybridge Pass", "attack the echo wolf"]}
 DETERMINISTIC = {"status", "wait", "tactical_move"}
 
 
@@ -188,16 +189,17 @@ class Harness:
         from app.persistence.unit_of_work import unit_of_work
 
         with unit_of_work() as work:
-            rows = work.connection.execute(
+            rows = work.connection.execute(  # the local map the hero stands on
                 "SELECT map_instance_id, map_state_revision, snapshot_jsonb FROM omnix_rpg_campaign_map_instances "
-                "WHERE campaign_id = %s AND location_id = %s",
-                (self.session_id, "location:aurelia:arrival-grove"),
+                "WHERE campaign_id = %s AND map_instance_id = (SELECT state_jsonb->'state'->>'current_map_instance_id' "
+                "FROM omnix_rpg_campaigns WHERE id = %s)",
+                (self.session_id, self.session_id),
             ).fetchall()
             campaign = work.connection.execute(
                 "SELECT revision FROM omnix_rpg_campaigns WHERE id = %s", (self.session_id,)).fetchone()
             work.rollback()
         if not rows:
-            raise RuntimeError("the grove has no map instance")
+            raise RuntimeError("the hero stands on no local map")
         instance_id, map_revision, snapshot = rows[0]
         return {"id": instance_id, "map_revision": int(map_revision), "campaign_revision": int(campaign[0]),
                 "snapshot": snapshot}

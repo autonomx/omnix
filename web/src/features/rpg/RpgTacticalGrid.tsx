@@ -11,6 +11,7 @@ import {
   type RpgGridActor,
   type RpgGridCell,
   type RpgGridPoint,
+  type RpgGridTactical,
 } from './rpgTacticalGridModel';
 import './RpgTacticalGrid.css';
 
@@ -61,7 +62,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
   const [message, setMessage] = useState('');
 
   const cells = useMemo(() => (view ? gridCells(view.projection) : []), [view]);
-  const tactical = view?.tactical ?? { combat_active: false };
+  const tactical: RpgGridTactical = view?.tactical ?? { combat_active: false };
   const yourTurn = Boolean(tactical.combat_active && tactical.your_turn);
   const reachable = useMemo(
     () => (view && yourTurn ? reachableCells(view.projection, playerActorId, tactical.movement_remaining ?? 0) : new Map<string, number>()),
@@ -94,7 +95,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
       actorId: playerActorId, targetId: target.actor_id, campaignRevision: view?.campaign_revision ?? 0,
       mapStateRevision: view?.projection.map_state_revision ?? 0,
     }),
-    onSuccess: (_result, target) => settle(`Attacked ${actorLabel(target.actor_id, playerActorId, heroName)}.`),
+    onSuccess: (_result, target) => settle(`Attacked ${actorLabel(target.actor_id, playerActorId, heroName, tactical.actor_names)}.`),
     onError: (error) => settle(`The attack was refused: ${errorText(error)}.`),
   });
   const busy = move.isPending || attack.isPending;
@@ -129,7 +130,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
     ? 'Exploring'
     : yourTurn
       ? `Your turn · ${tactical.movement_remaining ?? 0} movement · ${tactical.actions_remaining ?? 0} action${tactical.actions_remaining === 1 ? '' : 's'}`
-      : `${actorLabel(tactical.current_actor_id ?? '', playerActorId, heroName)}'s turn`;
+      : `${actorLabel(tactical.current_actor_id ?? '', playerActorId, heroName, tactical.actor_names)}'s turn`;
 
   const board = (
     <svg
@@ -164,7 +165,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
         );
       })}
       {actors.map((actor) => {
-        const label = actorLabel(actor.actor_id, playerActorId, heroName);
+        const label = actorLabel(actor.actor_id, playerActorId, heroName, tactical.actor_names);
         const tone = actor.actor_id === playerActorId ? 'player' : hostile.has(actor.actor_id) ? 'hostile' : 'other';
         const sizeX = (actor.footprint_width ?? 1) * CELL;
         const sizeY = (actor.footprint_height ?? 1) * CELL;
@@ -198,7 +199,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
           <section className="rpg-grid-card" aria-label="Selected cell">
             {selectedCell ? (
               <>
-                <h4>{selectedActor ? actorLabel(selectedActor.actor_id, playerActorId, heroName) : selectedCell.terrain ? titleCase(selectedCell.terrain.terrain_id) : 'Unexplored'}</h4>
+                <h4>{selectedActor ? actorLabel(selectedActor.actor_id, playerActorId, heroName, tactical.actor_names) : selectedCell.terrain ? titleCase(selectedCell.terrain.terrain_id) : 'Unexplored'}</h4>
                 <dl>
                   <div><dt>Cell</dt><dd>{selectedCell.point[0] + 1}, {selectedCell.point[1] + 1}</dd></div>
                   {selectedCell.terrain ? <div><dt>Terrain</dt><dd>{titleCase(selectedCell.terrain.terrain_id)}{selectedCell.terrain.walkable ? ` · cost ${selectedCell.terrain.movement_cost}` : ' · impassable'}{selectedCell.terrain.blocks_sight ? ' · blocks sight' : ''}</dd></div> : null}
@@ -211,7 +212,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
             ) : <p className="rpg-grid-hint">Select a cell to see its terrain, area and exits.</p>}
             {attackable.map((target) => (
               <button key={target.actor_id} type="button" className="rpg-grid-action rpg-grid-action-danger" disabled={busy} onClick={() => attack.mutate(target)}>
-                Attack {actorLabel(target.actor_id, playerActorId, heroName)}
+                Attack {actorLabel(target.actor_id, playerActorId, heroName, tactical.actor_names)}
               </button>
             ))}
             {message ? <p className="rpg-grid-message" role="status">{message}</p> : null}
@@ -220,7 +221,7 @@ export function RpgTacticalGrid({ mapInstanceId, playerActorId, heroName, compac
             <h4>Who is here</h4>
             <ul className="rpg-grid-roster">
               {actors.map((actor) => {
-                const label = actorLabel(actor.actor_id, playerActorId, heroName);
+                const label = actorLabel(actor.actor_id, playerActorId, heroName, tactical.actor_names);
                 const tone = actor.actor_id === playerActorId ? 'player' : hostile.has(actor.actor_id) ? 'hostile' : 'other';
                 return (
                   <li key={actor.actor_id}>

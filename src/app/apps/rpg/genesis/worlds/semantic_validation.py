@@ -253,18 +253,12 @@ def validate_scenario_against_release(
 
 
 def _default_spawn(definition: GridMapDefinition) -> GridPoint:
-    candidates = [spawn for spawn in definition.spawn_points if not spawn.secret]
-    if not candidates:
-        raise WorldSemanticError("scenario_player_spawn_missing", definition.map_id)
-    candidates.sort(
-        key=lambda spawn: (
-            0
-            if set(spawn.tags).intersection({"player", "start", "arrival"})
-            else 1,
-            spawn.spawn_point_id,
-        )
-    )
-    return candidates[0].cell
+    from app.apps.rpg.world.map_instance_runtime import MapMovementError, arrival_cell
+
+    try:
+        return arrival_cell(definition)
+    except MapMovementError as exc:
+        raise WorldSemanticError("scenario_player_spawn_missing", definition.map_id) from exc
 
 
 def initialize_starting_map_snapshot(

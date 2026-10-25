@@ -127,6 +127,17 @@ def persist_foreground_turn(
                 f"RPG campaign {session_id} was not initialized in PostgreSQL before the turn"
             )
 
+        for instance in result.get("map_instances") or ():  # a place's local map, on the hero's first visit
+            work.map_instances.create_instance(
+                context,
+                map_instance_id=str(instance["map_instance_id"]),
+                campaign_id=str(instance["campaign_id"]),
+                location_id=str(instance["location_id"]),
+                map_id=str(instance["map_id"]),
+                definition_revision=int(instance["definition_revision"]),
+                definition_hash=str(instance["definition_hash"]),
+                snapshot=dict(instance["snapshot"]),
+            )
         for map_event in result.get("map_events") or ():  # a grid move's map change (session/turn/tactical.py)
             work.map_instances.append_event(
                 context,

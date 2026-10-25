@@ -108,6 +108,18 @@ class MapMovementError(ValueError):
         super().__init__(f"{code}:{detail}" if detail else code)
 
 
+def arrival_cell(definition: GridMapDefinition) -> GridPoint:
+    """Where the hero arrives on a map: its first open spawn point tagged for the player, a start or an arrival,
+    else its first open one (by id)."""
+    candidates = sorted(
+        (spawn for spawn in definition.spawn_points if not spawn.secret),
+        key=lambda spawn: (0 if set(spawn.tags).intersection({"player", "start", "arrival"}) else 1, spawn.spawn_point_id),
+    )
+    if not candidates:
+        raise MapMovementError("map_arrival_missing", definition.map_id)
+    return candidates[0].cell
+
+
 def create_map_instance_snapshot(
     *,
     map_instance_id: str,

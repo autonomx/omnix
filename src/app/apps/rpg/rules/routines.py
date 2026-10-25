@@ -56,6 +56,13 @@ def hero_location(simulation: Mapping[str, Any]) -> str:
     return _s(_d(simulation.get("player_state")).get("location_id")) or _s(simulation.get("location_id"))
 
 
+def is_wild(simulation: Mapping[str, Any], location_id: str = "") -> bool:
+    """Whether no one lives at the place (the hero's, by default): where the world's creatures are met (encounters.md)."""
+    here = location_id or hero_location(simulation)
+    people = _d(_d(simulation.get("world_model")).get("npcs"))
+    return bool(here) and not any(_s(_d(person).get("location_id")) == here for person in people.values())
+
+
 def clock(simulation: Mapping[str, Any]) -> int:
     """The campaign clock's absolute minutes (the simulation's environment)."""
     return int(_d(simulation.get("environment")).get("absolute_minutes") or 0)
@@ -163,5 +170,5 @@ def comings_and_goings(world_model: Mapping[str, Any], before: list[str], after:
     return lines
 
 
-__all__ = ["MINUTES_PER_DAY", "Whereabouts", "clock", "comings_and_goings", "companions", "described", "hero_location",
+__all__ = ["MINUTES_PER_DAY", "Whereabouts", "clock", "comings_and_goings", "companions", "described", "hero_location", "is_wild",
            "moves", "present_at", "present_now", "whereabouts"]

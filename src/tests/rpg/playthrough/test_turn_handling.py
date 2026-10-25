@@ -170,6 +170,7 @@ def test_a_view_the_campaign_has_moved_past_is_refused_with_how_it_stands(launch
     no turn, with a plain message and the campaign as it stands, so the play screen redraws; so is a map action
     from an outdated map view."""
     play = launch("aurelia")
+    play.to_the_wild()
     play.turn("I attack the Echo Wolf.")
     seen, instance = play.revision(), play.map_instance()
     play.turn("attack")  # another tab's turn

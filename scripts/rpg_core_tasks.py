@@ -280,32 +280,29 @@ def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir:
         return f"back at {location}"
 
     def fight_on_grid() -> str:
-        screen.play("go to Starfall Grove")
-        screen.play("I attack the Echo Wolf.")
+        screen.play("go to Starfall Village")
+        screen.play("go to Skybridge Pass")  # where no one lives: the world's creatures are met there
+        check(campaign.location().endswith("skybridge-pass"), f"at {campaign.location()}")
+        if not campaign.combat().get("active"):  # nothing barred the way: seek a wolf out
+            screen.play("I attack the Echo Wolf.")
         check(campaign.combat().get("active") is True, "no fight began")
+        foe = next(str(row.get("name")) for row in campaign.combat()["participants"].values() if row.get("side") == "enemy")
         screen.button("Open interactive map").click()
         grid = page.get_by_role("region", name="Local tactical map")
-        grid.wait_for(timeout=30_000)
-        moved = False
-        for cell in grid.locator(".rpg-grid-reachable").all()[:6]:
-            cell.click(force=True)
-            move = page.get_by_role("button", name="Move here")
-            if move.count():
-                before = campaign.session().get("runtime_state", {}).get("state_revision")
-                move.first.click()
-                moved = until(lambda: campaign.session().get("runtime_state", {}).get("state_revision") != before, 20)
-                break
-        attack = grid.get_by_role("button", name=re.compile("^Attack .*Echo Wolf"))
-        check(attack.count() > 0, "no Echo Wolf to attack on the grid")
-        attack.first.click()
-        page.wait_for_timeout(1500)
+        attack = grid.get_by_role("button", name=re.compile(f"^Attack {re.escape(foe)}$"))
+        attack.wait_for(timeout=30_000)
+        check(grid.get_by_text(f"{foe} · hostile").count() > 0, f"the {foe} is not listed on the grid")
+        log = len(campaign.combat().get("combat_log") or ())
+        attack.click()
+        check(until(lambda: len(campaign.combat().get("combat_log") or ()) > log or not campaign.combat().get("active")),
+              "the grid attack was no blow")
         screen.button("Close map").click()
         for _ in range(30):
             if not campaign.combat().get("active"):
                 break
-            screen.play("I attack the Echo Wolf.")
+            screen.play(f"I attack the {foe}.")
         check(not campaign.combat().get("active"), "the fight did not end")
-        return f"moved on the grid: {moved}; {campaign.combat().get('ended_reason')}"
+        return f"{foe} struck from the grid; {campaign.combat().get('ended_reason')}"
 
     def resume_after_away() -> str:
         turns_before = campaign.session().get("runtime_state", {}).get("state_revision")

@@ -129,6 +129,17 @@ def run_planned_turn(
     if planned.mechanic not in {"clarify", "rewind"} and not resolution.refused:  # step 5: what the turn led to
         document, quested, quest_lines = turn_consequences(document, applied)
     applied += quested
+    maps_made: list[dict[str, Any]] = []
+    if planned.mechanic not in {"clarify", "rewind"} and not resolution.refused:  # the grid the hero stands on
+        from app.apps.rpg.foundation.state.changes import LocationChanged
+        from app.apps.rpg.session.turn.local_map import on_the_local_map
+
+        grounded, maps_made = on_the_local_map(
+            request.session_id, document, moved=any(isinstance(change, LocationChanged) for change in applied),
+            pending_map_event=resolution.map_event, foes_act=planned.reason != "grid_move")
+        if grounded:
+            document, _ = reduce(document, grounded)
+            applied += grounded
     lines = [*resolution.lines, *seen, *quest_lines]  # what the hero did, the comings and goings, what it led to
     if planned.mechanic != "clarify" and not resolution.refused:  # a question back or a refusal is no journal entry
         journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
@@ -174,6 +185,7 @@ def run_planned_turn(
             "presentation": _offered(document, planned),
         },
         **({"map_events": [resolution.map_event]} if resolution.map_event else {}),
+        **({"map_instances": maps_made} if maps_made else {}),
     }
     if resolution.speech:
         # The person's line is written: the narrative engine adopts it as the turn's spoken answer.

@@ -8,7 +8,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from app.apps.rpg.world.map_grid_contracts import GridMapDefinition
 from app.apps.rpg.world.map_instance_runtime import CampaignMapInstanceSnapshot
-from app.apps.rpg.world.tactical_spatial import grid_turn_summary
+from app.apps.rpg.world.tactical_spatial import foes_on_grid, grid_turn_summary
 from app.apps.rpg.world.map_observer_runtime import (
     ObserverMapKnowledge,
     ObserverPerceptionPolicy,
@@ -67,16 +67,29 @@ def _load_map(
     )
 
 
-def _campaign_turn(work: Any, context: Any, campaign_id: str, observer_actor_id: str) -> dict[str, Any]:
-    """The campaign revision a tactical command must name, and the observer's tactical turn (read-only)."""
+def _campaign_turn(work: Any, context: Any, campaign_id: str, observer_actor_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The campaign revision a tactical command must name and the observer's tactical turn (read-only), and the
+    campaign's fight as it stands."""
     campaign = work.rpg.get_campaign(context, campaign_id)
     if campaign is None:
-        return {"campaign_revision": None, "tactical": {"combat_active": False}}
+        return {"campaign_revision": None, "tactical": {"combat_active": False}}, {}
+    simulation = dict(dict(campaign.get("state") or {}).get("simulation_state") or {})
+    combat = simulation.get("combat_state") if isinstance(simulation.get("combat_state"), dict) else {}
     return {
         "campaign_revision": int(campaign["revision"]),
-        "tactical": grid_turn_summary(dict(dict(campaign.get("state") or {}).get("simulation_state") or {}),
-                                      campaign_id, observer_actor_id),
-    }
+        "tactical": grid_turn_summary(simulation, campaign_id, observer_actor_id),
+    }, combat
+
+
+def _with_foes(projection: dict[str, Any], snapshot: CampaignMapInstanceSnapshot, combat: dict[str, Any]) -> dict[str, Any]:
+    """The projection with the fight's foes standing in a square the observer sees (the fight keeps where they stand,
+    not the map)."""
+    visible = {tuple(cell) for cell in projection.get("visible_cells") or ()}
+    shown = {str(actor.get("actor_id")) for actor in projection.get("actors") or ()}
+    on_map = {actor.actor_id for actor in snapshot.actors}
+    foes = [actor.model_dump(mode="json") for actor in foes_on_grid(snapshot, combat).actors
+            if actor.actor_id not in on_map and actor.actor_id not in shown and actor.cell in visible]
+    return {**projection, "actors": [*(projection.get("actors") or ()), *foes]} if foes else projection
 
 
 def observe_campaign_map(
@@ -95,7 +108,7 @@ def observe_campaign_map(
             map_instance_id,
             for_update=True,
         )
-        turn = _campaign_turn(work, context, snapshot.campaign_id, observer_actor_id)
+        turn, combat = _campaign_turn(work, context, snapshot.campaign_id, observer_actor_id)
         previous_row = work.observers.get_knowledge(
             context,
             campaign_id=snapshot.campaign_id,
@@ -128,11 +141,11 @@ def observe_campaign_map(
                 "status": "current",
                 "reused": True,
                 "knowledge": previous.model_dump(mode="json"),
-                "projection": project_observer_knowledge(
+                "projection": _with_foes(project_observer_knowledge(
                     definition,
                     snapshot,
                     previous,
-                ),
+                ), snapshot, combat),
                 "event": None,
             }
         knowledge, event = observe_map(
@@ -156,11 +169,11 @@ def observe_campaign_map(
         "status": "observed",
         "reused": False,
         "knowledge": stored_knowledge.model_dump(mode="json"),
-        "projection": project_observer_knowledge(
+        "projection": _with_foes(project_observer_knowledge(
             definition,
             snapshot,
             stored_knowledge,
-        ),
+        ), snapshot, combat),
         "event": event.model_dump(mode="json"),
     }
 
@@ -174,7 +187,7 @@ def load_campaign_observer_projection(
     context = current_tenant()
     with unit_of_work(database) as work:
         snapshot, definition = _load_map(work, context, map_instance_id)
-        turn = _campaign_turn(work, context, snapshot.campaign_id, observer_actor_id)
+        turn, combat = _campaign_turn(work, context, snapshot.campaign_id, observer_actor_id)
         row = work.observers.get_knowledge(
             context,
             campaign_id=snapshot.campaign_id,
@@ -199,6 +212,6 @@ def load_campaign_observer_projection(
         **turn,
         "stale": knowledge.observed_map_state_revision != snapshot.map_state_revision,
         "knowledge": knowledge.model_dump(mode="json"),
-        "projection": project_observer_knowledge(definition, snapshot, knowledge),
+        "projection": _with_foes(project_observer_knowledge(definition, snapshot, knowledge), snapshot, combat),
         "recent_events": events,
     }

@@ -42,9 +42,10 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
         "I buy a Healing Potion from Brindle Gearwing.": {"purse_changed", "item_added"},
         "I drop one Lantern Bread on the ground.": {"item_dropped"},
         "I pick up the Lantern Bread.": {"item_picked_up"},
+        "I ask Orik Stonewake what he thinks of the newcomers.": {"turn_counted"},
+        "go to Skybridge Pass": {"location_changed", "local_map_entered"},  # where the wolves are met
         "I attack the Echo Wolf.": {"combat_advanced", "turn_counted"},  # the fight's section, as the turn leaves it
         "I flee from the Echo Wolf.": {"combat_advanced", "turn_counted"},
-        "I ask Orik Stonewake what he thinks of the newcomers.": {"turn_counted"},
     }
     for command, kinds in expected.items():
         before = play.stored()
@@ -65,6 +66,8 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
         replayed, _ = reduce(before, parse_changes([change.model_dump() for change in outcome.applied_changes]))
         assert _facts(replayed) == _facts(play.stored()), command
 
+    play.clear_the_road()
+    play.turn("go to Starfall Village")
     dialogue = play.turn("I ask Orik Stonewake what he thinks of the newcomers.")
     outcome = TurnOutcome.model_validate(dialogue["outcome"])
     assert outcome.model_calls.by_kind == {"provider": 1}  # one short call writes the line
@@ -142,8 +145,8 @@ def test_each_turn_offers_what_to_do_next_and_a_question_its_answers(launch) -> 
 # F3 over the latency harness's turn mix (RQ-6.1): the turns the game decides make no model call, no turn makes more
 # than two, and at least four in five make at most one.
 F3_MIX = (("look around", None), ("Liora, where am I?", None), ("check my inventory", 0), ("wait", 0),
-          ("Check my quests", 0), ("attack the echo wolf", None), ("I flee from the Echo Wolf.", None),
-          ("go to Starfall Village", None), ("buy a healing potion", None))
+          ("Check my quests", 0), ("go to Starfall Village", None), ("buy a healing potion", None),
+          ("go to Skybridge Pass", None), ("attack the echo wolf", None), ("I flee from the Echo Wolf.", None))
 
 
 def test_the_turn_mix_keeps_its_model_call_budget(launch) -> None:

@@ -34,6 +34,7 @@ def test_a_side_quest_from_a_pressure_is_offered_done_and_eases_it(launch) -> No
     assert _quest(play)["status"] == "active"
     assert [row["quest_id"] for row in play.public()["quests"] if row["title"] == TITLE] == [FIRST]  # one at a time
 
+    play.turn("go to Skybridge Pass")  # wolves are met on the road, where no one lives (encounters.md)
     for _ in range(8):  # a wolf may get away (encounters.md): hunt until three have fallen
         before, felled = _severity(play), (_quest(play).get("progress") or {}).get("counts", {}).get("creature:echo-wolf", 0)
         play.turn("I attack the Echo Wolf.")
@@ -49,6 +50,7 @@ def test_a_side_quest_from_a_pressure_is_offered_done_and_eases_it(launch) -> No
     quest = _quest(play)
     assert quest["progress"]["stage"] == 1 and quest["objective"] == "Tell Captain Rhea Sunward it is done", quest
 
+    play.turn("go to Starfall Village")
     purse = play.purse()
     play.turn("I tell Captain Rhea Sunward the wolves are dealt with.")
     assert _quest(play)["status"] == "completed"

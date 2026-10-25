@@ -63,6 +63,7 @@ from .changes import (
     AbilityUsed,
     CheckResolved,
     LevelChoiceMade,
+    LocalMapEntered,
     RegardChanged,
     RevisionRestored,
     ResourcesChanged,
@@ -359,6 +360,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(("state", "player", "skills", change.skill_id), dict(skill))
     elif isinstance(change, LocationChanged):
         _move_hero(writer, change)
+    elif isinstance(change, LocalMapEntered):
+        writer.set(("state", "current_map_instance_id"), change.map_instance_id)
     elif isinstance(change, PresenceChanged):
         writer.set(("simulation_state", "present_npc_state"),
                    {**dict(writer.get(("simulation_state", "present_npc_state")) or {}),

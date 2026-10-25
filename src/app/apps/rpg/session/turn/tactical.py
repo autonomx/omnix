@@ -16,10 +16,16 @@ from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.rules.combat.runtime_core import current_actor_id, participant
 from app.apps.rpg.rules.interactions.equipment_runtime import project_equipment_stats
 from app.apps.rpg.world.map_grid_contracts import GridMapDefinition
-from app.apps.rpg.world.map_instance_runtime import CampaignMapInstanceSnapshot, MoveActorCommand, resolve_move_command
+from app.apps.rpg.world.map_instance_runtime import (
+    CampaignMapInstanceSnapshot,
+    MoveActorCommand,
+    reduce_map_event,
+    resolve_move_command,
+)
 from app.apps.rpg.world.tactical_spatial import (
     TacticalSpatialError,
     evaluate_cover,
+    foes_on_grid,
     footprint_distance,
     hero_on_map,
     movement_left,
@@ -69,10 +75,11 @@ def grid_move(session_id: str, simulation: Mapping[str, Any], definition: GridMa
     combat = dict(_the_heros_turn(simulation))
     tactical, left = movement_left(combat)
     actor_id = hero_on_map(session_id)
-    try:
-        event, moved = resolve_move_command(definition, snapshot, MoveActorCommand(
+    try:  # the fight's foes stand in the way; the map keeps only its own actors
+        event, _ = resolve_move_command(definition, foes_on_grid(snapshot, combat), MoveActorCommand(
             command_id=command_id, actor_id=actor_id, destination=destination,
             expected_map_state_revision=snapshot.map_state_revision))
+        moved = reduce_map_event(snapshot, event)
     except ValueError as exc:  # a blocked or unknown path, a cell off the map
         raise TacticalSpatialError(str(exc)) from exc
     if event.movement_cost > left:
@@ -101,6 +108,7 @@ def grid_attack(session_id: str, simulation: Mapping[str, Any], definition: Grid
     if _s(participant(dict(combat), target_id).get("side")) != "enemy":
         raise TacticalSpatialError("tactical_target_not_hostile", target_id)
     hero = hero_on_map(session_id)
+    snapshot = foes_on_grid(snapshot, combat)  # the fight's foes, where it put them
     on_map = {actor.actor_id for actor in snapshot.actors}
     cover = 0
     reach = {"ranged_attack": int(_d(project_equipment_stats(dict(simulation), actor_id="player").get("stats")).get("range")

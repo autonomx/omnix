@@ -174,7 +174,7 @@ def road_encounter(simulation: Mapping[str, Any], *, turn_key: str) -> str:
     world_model = _d(simulation.get("world_model"))
     here = routines.hero_location(simulation)
     region = _region(world_model, here)
-    if not region or any(_s(_d(person).get("location_id")) == here for person in _d(world_model.get("npcs")).values()):
+    if not region or not routines.is_wild(simulation, here):
         return ""
     runtime = _runtime(simulation)
     level = int(_d(simulation.get("player_state")).get("level") or 1)

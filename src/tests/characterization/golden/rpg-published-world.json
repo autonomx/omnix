@@ -843,7 +843,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e853c22fc42e229f1674750119e290685d02e63ddd7b072700e4f11854223bab",
+      "document_hash": "sha256:04249a71f2eecf321bc3aca8e67f0155340ec23cc6787175789fe6f0f8e5c0d6",
       "facts": {
         "combat": {
           "active": false,
@@ -971,6 +971,7 @@
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
+        "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
         "state/player",
@@ -1026,7 +1027,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e382a144238bac923b1cd539caed9b3744cb3f05a00d3d50d1d915bb3ae1b036",
+      "document_hash": "sha256:e16a69bf405eadb4dbb93cd38d50a6913b2870d75351fa8a73c778cbd6c9e051",
       "facts": {
         "combat": {
           "active": false,
@@ -1172,7 +1173,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:dd20edff3cd8f9771640b4fcf2ef3a32255c99b7da10d9d5bb2e3f18073fc435",
+      "document_hash": "sha256:695710861cf46ce8d6c6b057001db9ec8b601dd02aa03bf562b7f5260bfda9a4",
       "facts": {
         "combat": {
           "active": false,
@@ -1322,7 +1323,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c4bafebf25a934c0456783d9433dafc4dce2419017f5e9eaf89d9c9dd33db6ed",
+      "document_hash": "sha256:acab6f9cdc1cc9f34b3ad08757baaa88bcf0677e610fab1283c6d4383dabcb65",
       "facts": {
         "combat": {
           "active": false,
@@ -1471,7 +1472,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:83401dac5b454313145621a68e6fea8eb228178fb56e33dd05106ae875fdd279",
+      "document_hash": "sha256:a7fdcefe9140b3a795fa9ac369a079af8f7207ab662764684a7e4e5791d47588",
       "facts": {
         "combat": {
           "active": false,
@@ -1625,7 +1626,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:deaca8282a7e5c61b5120928594387037475f2e676cc3555d80a6f9ffacf5c5b",
+      "document_hash": "sha256:056fd7c8ccba1f59e275119fef88065d5c13c674fb83597a50ce638b2c243a83",
       "facts": {
         "combat": {
           "active": false,
@@ -1770,7 +1771,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:d99c92d68cf493deced5e47cb3c1f1d6f152eef2e2c82d1962493516f856f3ef",
+      "document_hash": "sha256:9ae7cdf3ef39caf5657e4f6a8092b08a7971840c781772f06d8dfe537364ef39",
       "facts": {
         "combat": {
           "active": false,
@@ -1931,7 +1932,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:447ecfff1f5149f62d3ecf8c1f22e57630ffc15fd7757edd03ad25a7ea121a34",
+      "document_hash": "sha256:8dffa5f8daa6c624e9662a650365b9a20ec64f8343d07914425ee397dad5c9a2",
       "facts": {
         "combat": {
           "active": false,
@@ -2050,6 +2051,7 @@
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
+        "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
         "state/player",
@@ -2107,7 +2109,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:83240315f25073ca7763ad2aa5e39a59bf341e71dee05007167049c4047fd033",
+      "document_hash": "sha256:e0435ec98259161c12205c6d5bacf456bee37eefea6778a9b7f865f9c9d36194",
       "facts": {
         "combat": {
           "active": false,
@@ -2274,7 +2276,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:ae061c88119bbec25f2eb80e38d89fb63692576c6fdef6f173fdd41419ecde84",
+      "document_hash": "sha256:55405e88ac8031f554e7d5b8346ebb70bb1c4150966607329e07d98478f8ce20",
       "facts": {
         "combat": {
           "active": false,
@@ -2392,6 +2394,7 @@
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
+        "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
         "state/scene",
@@ -2439,7 +2442,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:0585b77e7a7924d57b1893fd7d32e321900141818c32fd57ee82fc20fd1c469e",
+      "document_hash": "sha256:78e364be21caea607aaaef29d065f6e411c6523a8f37ccd2169ed4e1c63c7262",
       "facts": {
         "combat": {
           "active": false,
@@ -2580,7 +2583,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:52abd96197f26e5a938779e42532fcf4a9d550a1b03a9d2b5bf3b495ac4d8c77",
+      "document_hash": "sha256:af023df671b9eb1827ae4b7dba2bbd7b3d7d6a851a4611765226d538ff52a7cc",
       "facts": {
         "combat": {
           "active": false,
@@ -2727,7 +2730,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:4c9efb247ec99fbd9702ce28eca407a8c7869870796127d423d6779cfa16a9e9",
+      "document_hash": "sha256:5763fc05705c3b73a70427693df4cf0883485c2d6b4fa480d5de3c535d6460c4",
       "facts": {
         "combat": {
           "active": false,
@@ -2876,7 +2879,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:6008063b02e58554c2a4730d16f61602b8396dae96cdfe46984f21112168035f",
+      "document_hash": "sha256:7a79320fe9623cc63930264f5a7bba3ceb0526771d324f766e60bfafc868f8ba",
       "facts": {
         "combat": {
           "active": false,
@@ -3035,7 +3038,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:32a57be27f9ed62d22f45619b499abd50003444ea480dd5f23d22f11609399e9",
+      "document_hash": "sha256:8143f106730b9d17cc5c794572975642c46e8fe64565b68239b74484f1055506",
       "facts": {
         "combat": {
           "active": false,
@@ -3174,181 +3177,42 @@
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-glass-wight:1": 18,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 100
           }
         },
-        "hp": -4,
-        "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
-        }
-      },
-      "document_hash": "sha256:0fd04d3c2d25a45a32d73bf767be1db74bd059191464c879609fe85c19fe39b8",
-      "facts": {
-        "combat": {
-          "active": true,
-          "participants": {
-            "enemy:creature-echo-wolf:1": 8,
-            "npc:liora-fen": 100,
-            "player": 101
-          }
-        },
-        "equipment": [
-          "Travel Cloak"
-        ],
-        "hp": 101,
-        "inventory": {
-          "Gateborn Compass": 1,
-          "Healing Potion": 1,
-          "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
-        },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
-        "party": [
-          "npc:liora-fen"
-        ],
-        "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
-        ],
-        "purse_copper": 259,
-        "quests": {
-          "Danger on the roads of Starfall March": "available",
-          "First Night in Aurelia": "completed",
-          "The Hollow Meridian": "available",
-          "Voices in the Phone": "active"
-        },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 5
-          }
+        "hp": -5,
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
+        "present_npc_ids": {
+          "added": [],
+          "removed": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ]
         },
         "survival": {
           "fatigue": 2,
-          "hunger": 4,
-          "thirst": 33
-        },
-        "turn_count": 21
-      },
-      "model_calls": [
-        "narration"
-      ],
-      "patched_sections": [
-        "manifest/current_turn",
-        "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/interaction_id_by_turn",
-        "runtime_state/interaction_lifecycles",
-        "runtime_state/interaction_seq",
-        "runtime_state/interaction_timeline",
-        "runtime_state/last_interaction",
-        "runtime_state/player_journal",
-        "runtime_state/recent_interactions",
-        "runtime_state/state_revision",
-        "simulation_state/combat_state",
-        "simulation_state/environment",
-        "simulation_state/player_state",
-        "simulation_state/survival",
-        "simulation_state/tick",
-        "state/current_turn",
-        "state/player",
-        "state/turn_count",
-        "state/world"
-      ],
-      "response": {
-        "changed_domains": [
-          "time",
-          "combat",
-          "player",
-          "survival",
-          "world",
-          "narrative"
-        ],
-        "source": "narrative_engine_resolved_turn_v1",
-        "state": {
-          "changed": true,
-          "changed_domains": [
-            "time",
-            "combat",
-            "player",
-            "survival",
-            "world",
-            "narrative"
-          ],
-          "revision": 21
+          "hunger": 2,
+          "thirst": 3
         }
       },
-      "session_summary": {
-        "interaction_seq": 21,
-        "location": "Starfall Village",
-        "player_level": 2,
-        "state_revision": 21,
-        "title": "Wren — Starfall Grove"
-      },
-      "status": 200,
-      "step": "I attack the Echo Wolf.",
-      "turn_rows": 1
-    },
-    {
-      "changes": {},
-      "document_hash": "sha256:70b519119817749f3aa01dc0abd51ad9a9e1428abe86df786fedf3dc92869b14",
+      "document_hash": "sha256:239346a2f9b4bc7aa136dcb83fc0567f18e5522a50cec4a2b6e8af2fdc5baeb9",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-glass-wight:1": 18,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 100
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 101,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3356,149 +3220,13 @@
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
-        ],
-        "purse_copper": 259,
-        "quests": {
-          "Danger on the roads of Starfall March": "available",
-          "First Night in Aurelia": "completed",
-          "The Hollow Meridian": "available",
-          "Voices in the Phone": "active"
-        },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 5
-          }
-        },
-        "survival": {
-          "fatigue": 2,
-          "hunger": 4,
-          "thirst": 33
-        },
-        "turn_count": 22
-      },
-      "model_calls": [],
-      "patched_sections": [
-        "manifest/current_turn",
-        "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/interaction_id_by_turn",
-        "runtime_state/interaction_lifecycles",
-        "runtime_state/interaction_seq",
-        "runtime_state/interaction_timeline",
-        "runtime_state/last_interaction",
-        "runtime_state/player_journal",
-        "runtime_state/recent_interactions",
-        "runtime_state/state_revision",
-        "simulation_state/combat_state",
-        "state/current_turn",
-        "state/turn_count"
-      ],
-      "response": {
-        "actor_cell": [
-          4,
-          3
-        ],
-        "detail": null,
-        "kind": "tactical_move",
-        "ok": true
-      },
-      "status": 200,
-      "step": "tactical_move [4, 3]",
-      "turn_rows": 1
-    },
-    {
-      "changes": {
-        "combat": {
-          "participants": {
-            "enemy:creature-echo-wolf:1": 7,
-            "npc:liora-fen": 100,
-            "player": 101
-          }
-        },
-        "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
-        }
-      },
-      "document_hash": "sha256:3d141bf4962588ddf729a98fa4339593b6ffa0a8da302d7ba4d9bbcd06435e25",
-      "facts": {
-        "combat": {
-          "active": true,
-          "participants": {
-            "enemy:creature-echo-wolf:1": 7,
-            "npc:liora-fen": 100,
-            "player": 101
-          }
-        },
-        "equipment": [
-          "Travel Cloak"
-        ],
-        "hp": 101,
-        "inventory": {
-          "Gateborn Compass": 1,
-          "Healing Potion": 1,
-          "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
-        },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
-        "party": [
           "npc:liora-fen"
-        ],
-        "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
         ],
         "purse_copper": 259,
         "quests": {
@@ -3552,9 +3280,9 @@
         "survival": {
           "fatigue": 3,
           "hunger": 5,
-          "thirst": 35
+          "thirst": 34
         },
-        "turn_count": 23
+        "turn_count": 21
       },
       "model_calls": [
         "narration"
@@ -3563,6 +3291,10 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -3571,76 +3303,108 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/economy_state",
         "simulation_state/environment",
+        "simulation_state/location_id",
+        "simulation_state/location_name",
+        "simulation_state/location_state",
+        "simulation_state/merchant_state",
+        "simulation_state/npc_index",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
         "simulation_state/survival",
         "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/visited_locations",
+        "simulation_state/world_event_state",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_map_instance_id",
         "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/scene",
+        "state/title",
         "state/turn_count",
         "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
+          "location",
+          "npcs",
+          "player",
           "combat",
           "survival",
           "world",
           "narrative"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "narrative_engine_scene_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
+            "location",
+            "npcs",
+            "player",
             "combat",
             "survival",
             "world",
             "narrative"
           ],
-          "revision": 23
+          "revision": 21
         }
       },
       "session_summary": {
-        "interaction_seq": 23,
-        "location": "Starfall Village",
+        "interaction_seq": 21,
+        "location": "Skybridge Pass",
         "player_level": 2,
-        "state_revision": 23,
+        "state_revision": 21,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "I attack the Echo Wolf.",
+      "step": "go to Skybridge Pass",
       "turn_rows": 1
     },
     {
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 16,
             "npc:liora-fen": 100,
-            "player": 100
+            "player": 96
           }
         },
-        "hp": -1,
+        "hp": -4,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b9e20c394fc5c7561754c53bcd9a95f74995fea38ed2dcfea85af37bae622d8f",
+      "document_hash": "sha256:d0e413ed4c32ac751448c999d5854ecef20f6d6d4970420c7a141d6f351a93d8",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 16,
             "npc:liora-fen": 100,
-            "player": 100
+            "player": 96
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 100,
+        "hp": 96,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3648,16 +3412,13 @@
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
+          "npc:liora-fen"
         ],
         "purse_copper": 259,
         "quests": {
@@ -3711,9 +3472,9 @@
         "survival": {
           "fatigue": 4,
           "hunger": 6,
-          "thirst": 37
+          "thirst": 36
         },
-        "turn_count": 24
+        "turn_count": 22
       },
       "model_calls": [
         "narration"
@@ -3736,6 +3497,7 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
+        "state/map_state",
         "state/player",
         "state/turn_count",
         "state/world"
@@ -3760,50 +3522,36 @@
             "world",
             "narrative"
           ],
-          "revision": 24
+          "revision": 22
         }
       },
       "session_summary": {
-        "interaction_seq": 24,
-        "location": "Starfall Village",
+        "interaction_seq": 22,
+        "location": "Skybridge Pass",
         "player_level": 2,
-        "state_revision": 24,
+        "state_revision": 22,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "I attack the Echo Wolf.",
+      "step": "I attack the Glass Wight.",
       "turn_rows": 1
     },
     {
-      "changes": {
-        "combat": {
-          "participants": {
-            "enemy:creature-echo-wolf:1": 6,
-            "npc:liora-fen": 100,
-            "player": 97
-          }
-        },
-        "hp": -3,
-        "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
-        }
-      },
-      "document_hash": "sha256:f99b7f2f01bbb60617f59ef29a9a698a5777356df612dbac3a66036a6d593e59",
+      "changes": {},
+      "document_hash": "sha256:cc064e40e67a5fba7d2571b4502556de273c08466a404f53c994f96c135cee23",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 16,
             "npc:liora-fen": 100,
-            "player": 97
+            "player": 96
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 97,
+        "hp": 96,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3811,16 +3559,145 @@
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
+          "npc:liora-fen"
+        ],
+        "purse_copper": 259,
+        "quests": {
+          "Danger on the roads of Starfall March": "available",
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 5
+          }
+        },
+        "survival": {
+          "fatigue": 4,
+          "hunger": 6,
+          "thirst": 36
+        },
+        "turn_count": 23
+      },
+      "model_calls": [],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/player_journal",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/combat_state",
+        "state/current_turn",
+        "state/map_state",
+        "state/turn_count"
+      ],
+      "response": {
+        "actor_cell": [
+          9,
+          6
+        ],
+        "detail": null,
+        "kind": "tactical_move",
+        "ok": true
+      },
+      "status": 200,
+      "step": "tactical_move [9, 6]",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "combat": {
+          "participants": {
+            "enemy:creature-glass-wight:1": 14,
+            "npc:liora-fen": 100,
+            "player": 91
+          }
+        },
+        "hp": -5,
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:22e10644c5230d8226a594e1996baeebeadd28881984d4b83bfd2e0496cc1a97",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-glass-wight:1": 14,
+            "npc:liora-fen": 100,
+            "player": 91
+          }
+        },
+        "equipment": [
+          "Travel Cloak"
+        ],
+        "hp": 91,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
         ],
         "purse_copper": 259,
         "quests": {
@@ -3874,7 +3751,167 @@
         "survival": {
           "fatigue": 5,
           "hunger": 7,
-          "thirst": 39
+          "thirst": 38
+        },
+        "turn_count": 24
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/player_journal",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/combat_state",
+        "simulation_state/environment",
+        "simulation_state/player_state",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [
+          "time",
+          "combat",
+          "player",
+          "survival",
+          "world",
+          "narrative"
+        ],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "combat",
+            "player",
+            "survival",
+            "world",
+            "narrative"
+          ],
+          "revision": 24
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 24,
+        "location": "Skybridge Pass",
+        "player_level": 2,
+        "state_revision": 24,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I attack the Glass Wight.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "combat": {
+          "participants": {
+            "enemy:creature-glass-wight:1": 14,
+            "npc:liora-fen": 100,
+            "player": 88
+          }
+        },
+        "hp": -3,
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:f0370b0dface4d33e76ddd48ffb1bccb1ef0ec30640e32ec839407cf6610a37d",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-glass-wight:1": 14,
+            "npc:liora-fen": 100,
+            "player": 88
+          }
+        },
+        "equipment": [
+          "Travel Cloak"
+        ],
+        "hp": 88,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 259,
+        "quests": {
+          "Danger on the roads of Starfall March": "available",
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 5
+          }
+        },
+        "survival": {
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 40
         },
         "turn_count": 25
       },
@@ -3928,64 +3965,60 @@
       },
       "session_summary": {
         "interaction_seq": 25,
-        "location": "Starfall Village",
+        "location": "Skybridge Pass",
         "player_level": 2,
         "state_revision": 25,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "I flee from the Echo Wolf.",
+      "step": "I attack the Glass Wight.",
       "turn_rows": 1
     },
     {
       "changes": {
         "combat": {
+          "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 14,
             "npc:liora-fen": 100,
-            "player": 103
+            "player": 85
           }
         },
-        "hp": 6,
-        "inventory": {
-          "Healing Potion": -1
-        },
+        "hp": -3,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b0a94261390cf7e27318ca1b5081f51a0815724b7e2c1110cad7b18a74907e4a",
+      "document_hash": "sha256:4caccbeb73a70113123a183c3bcf987d18de78773e25bb9b7bc37805a85b40b2",
       "facts": {
         "combat": {
-          "active": true,
+          "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 14,
             "npc:liora-fen": 100,
-            "player": 103
+            "player": 85
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 103,
+        "hp": 85,
         "inventory": {
           "Gateborn Compass": 1,
+          "Healing Potion": 1,
           "Lantern Bread": 2,
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
+          "npc:liora-fen"
         ],
         "purse_copper": 259,
         "quests": {
@@ -4037,9 +4070,9 @@
           }
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
+          "fatigue": 7,
+          "hunger": 9,
+          "thirst": 42
         },
         "turn_count": 26
       },
@@ -4071,9 +4104,8 @@
       "response": {
         "changed_domains": [
           "time",
-          "inventory",
-          "player",
           "combat",
+          "player",
           "survival",
           "world",
           "narrative"
@@ -4083,9 +4115,8 @@
           "changed": true,
           "changed_domains": [
             "time",
-            "inventory",
-            "player",
             "combat",
+            "player",
             "survival",
             "world",
             "narrative"
@@ -4095,47 +4126,49 @@
       },
       "session_summary": {
         "interaction_seq": 26,
-        "location": "Starfall Village",
+        "location": "Skybridge Pass",
         "player_level": 2,
         "state_revision": 26,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "I drink the Healing Potion.",
+      "step": "I flee from the Glass Wight.",
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:b01494b7466849ebfa6605c3de79f98f8a89267c8323f54e591155c6a1a687e5",
+      "changes": {
+        "hp": 20,
+        "inventory": {
+          "Healing Potion": -1
+        }
+      },
+      "document_hash": "sha256:e95a731a3c7fa99c78f98cd33f1fffd83108abc8d8a7a7b5330e0384bf4d23a9",
       "facts": {
         "combat": {
-          "active": true,
+          "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 14,
             "npc:liora-fen": 100,
-            "player": 103
+            "player": 85
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 103,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
+          "npc:liora-fen"
         ],
         "purse_copper": 259,
         "quests": {
@@ -4187,11 +4220,161 @@
           }
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
+          "fatigue": 7,
+          "hunger": 9,
+          "thirst": 42
         },
         "turn_count": 27
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/player_journal",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/economy_state",
+        "simulation_state/environment",
+        "simulation_state/merchant_state",
+        "simulation_state/player_state",
+        "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [
+          "time",
+          "inventory",
+          "player",
+          "world",
+          "narrative"
+        ],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory",
+            "player",
+            "world",
+            "narrative"
+          ],
+          "revision": 27
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 27,
+        "location": "Skybridge Pass",
+        "player_level": 2,
+        "state_revision": 27,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I drink the Healing Potion.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:6760fe00e2498ea789495959e658cf7cc6539d9383b311022f4c6d5c80b07aea",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-glass-wight:1": 14,
+            "npc:liora-fen": 100,
+            "player": 85
+          }
+        },
+        "equipment": [
+          "Travel Cloak"
+        ],
+        "hp": 105,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 259,
+        "quests": {
+          "Danger on the roads of Starfall March": "available",
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 5
+          }
+        },
+        "survival": {
+          "fatigue": 7,
+          "hunger": 9,
+          "thirst": 42
+        },
+        "turn_count": 28
       },
       "model_calls": [],
       "patched_sections": [
@@ -4221,14 +4404,14 @@
             "time",
             "narrative"
           ],
-          "revision": 27
+          "revision": 28
         }
       },
       "session_summary": {
-        "interaction_seq": 27,
-        "location": "Starfall Village",
+        "interaction_seq": 28,
+        "location": "Skybridge Pass",
         "player_level": 2,
-        "state_revision": 27,
+        "state_revision": 28,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4236,148 +4419,37 @@
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:e2ffb9281dfc5b81016e45adf216b36a9ee1bf26614fc81e19ba7d786095d189",
-      "facts": {
-        "combat": {
-          "active": true,
-          "participants": {
-            "enemy:creature-echo-wolf:1": 6,
-            "npc:liora-fen": 100,
-            "player": 103
-          }
-        },
-        "equipment": [
-          "Travel Cloak"
-        ],
-        "hp": 103,
-        "inventory": {
-          "Gateborn Compass": 1,
-          "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
-        },
+      "changes": {
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
-        "party": [
-          "npc:liora-fen"
-        ],
-        "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
-        ],
-        "purse_copper": 259,
-        "quests": {
-          "Danger on the roads of Starfall March": "available",
-          "First Night in Aurelia": "completed",
-          "The Hollow Meridian": "available",
-          "Voices in the Phone": "active"
-        },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 5
-          }
+        "present_npc_ids": {
+          "added": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ],
+          "removed": []
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
-        },
-        "turn_count": 28
-      },
-      "model_calls": [],
-      "patched_sections": [
-        "manifest/current_turn",
-        "manifest/turn_count",
-        "runtime_state/interaction_id_by_turn",
-        "runtime_state/interaction_lifecycles",
-        "runtime_state/interaction_seq",
-        "runtime_state/interaction_timeline",
-        "runtime_state/last_interaction",
-        "runtime_state/recent_interactions",
-        "runtime_state/state_revision",
-        "state/current_turn",
-        "state/turn_count"
-      ],
-      "response": {
-        "changed_domains": [
-          "time"
-        ],
-        "source": "rpg_turn_pipeline_v1",
-        "state": {
-          "changed": true,
-          "changed_domains": [
-            "time"
-          ],
-          "revision": 28
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
         }
       },
-      "session_summary": {
-        "interaction_seq": 28,
-        "location": "Starfall Village",
-        "player_level": 2,
-        "state_revision": 28,
-        "title": "Wren — Starfall Grove"
-      },
-      "status": 200,
-      "step": "go to Skybridge Pass",
-      "turn_rows": 1
-    },
-    {
-      "changes": {},
-      "document_hash": "sha256:10eab6c018e96835dff6d6feaae1dfa6290d2e93d0db22048cf5cf49f2fae586",
+      "document_hash": "sha256:5b07893b7fc1e20fc8684c591599b75021a0b823da065ccc5c8827d7c03d2999",
       "facts": {
         "combat": {
-          "active": true,
+          "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 14,
             "npc:liora-fen": 100,
-            "player": 103
+            "player": 85
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 103,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4445,35 +4517,81 @@
           }
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
+          "fatigue": 9,
+          "hunger": 11,
+          "thirst": 45
         },
         "turn_count": 29
       },
-      "model_calls": [],
+      "model_calls": [
+        "narration"
+      ],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/economy_state",
+        "simulation_state/environment",
+        "simulation_state/location_id",
+        "simulation_state/location_name",
+        "simulation_state/location_state",
+        "simulation_state/merchant_state",
+        "simulation_state/npc_index",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_map_instance_id",
         "state/current_turn",
-        "state/turn_count"
+        "state/location",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
-          "time"
+          "time",
+          "location",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
-        "source": "rpg_turn_pipeline_v1",
+        "source": "narrative_engine_scene_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time"
+            "time",
+            "location",
+            "npcs",
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 29
         }
@@ -4490,37 +4608,50 @@
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:81c0799acb89d13d1c5889268621a5c576a3c0b1d7db998492baed8b92857d4d",
+      "changes": {
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "present_npc_ids": {
+          "added": [],
+          "removed": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ]
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:9eb2d78acaca40fd8792ff902f146b24ca65be36aa3a94d3154b572f897683cc",
       "facts": {
         "combat": {
-          "active": true,
+          "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 14,
             "npc:liora-fen": 100,
-            "player": 103
+            "player": 85
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 103,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
+          "npc:liora-fen"
         ],
         "purse_copper": 259,
         "quests": {
@@ -4572,42 +4703,82 @@
           }
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
+          "fatigue": 11,
+          "hunger": 13,
+          "thirst": 48
         },
         "turn_count": 30
       },
-      "model_calls": [],
+      "model_calls": [
+        "narration"
+      ],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/environment",
+        "simulation_state/location_id",
+        "simulation_state/location_name",
+        "simulation_state/location_state",
+        "simulation_state/npc_index",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/travel_state",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_map_instance_id",
         "state/current_turn",
-        "state/turn_count"
+        "state/location",
+        "state/map_state",
+        "state/player",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
-          "time"
+          "time",
+          "location",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
-        "source": "rpg_turn_pipeline_v1",
+        "source": "narrative_engine_scene_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time"
+            "time",
+            "location",
+            "npcs",
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 30
         }
       },
       "session_summary": {
         "interaction_seq": 30,
-        "location": "Starfall Village",
+        "location": "Starfall Grove",
         "player_level": 2,
         "state_revision": 30,
         "title": "Wren — Starfall Grove"
@@ -4617,37 +4788,40 @@
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:eab41c2c1f26533e267808bdc32c59e390b3f179535608b84a78c6b7c1076a2f",
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:f071320d6000c4f690159a1c8363a6b9111cc5b911b3c37117a2747fc7485296",
       "facts": {
         "combat": {
-          "active": true,
+          "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 6,
+            "enemy:creature-glass-wight:1": 14,
             "npc:liora-fen": 100,
-            "player": 103
+            "player": 85
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 103,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
+          "npc:liora-fen"
         ],
         "purse_copper": 259,
         "quests": {
@@ -4699,9 +4873,9 @@
           }
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
+          "fatigue": 12,
+          "hunger": 14,
+          "thirst": 50
         },
         "turn_count": 31
       },
@@ -4709,32 +4883,46 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/campaign_calendar",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/environment",
+        "simulation_state/survival",
+        "simulation_state/tick",
         "state/current_turn",
-        "state/turn_count"
+        "state/map_state",
+        "state/player",
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
-          "time"
+          "time",
+          "survival",
+          "world",
+          "narrative"
         ],
         "source": "rpg_turn_pipeline_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time"
+            "time",
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 31
         }
       },
       "session_summary": {
         "interaction_seq": 31,
-        "location": "Starfall Village",
+        "location": "Starfall Grove",
         "player_level": 2,
         "state_revision": 31,
         "title": "Wren — Starfall Grove"

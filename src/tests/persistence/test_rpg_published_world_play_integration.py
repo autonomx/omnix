@@ -432,10 +432,14 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert "semantic_intent" not in model.calls and "dialogue" not in model.calls, model.calls
 
         # A fight goes blow by blow: the creature takes its turns, the narrator is told every blow, the
-        # sheet shows the wounds, and the rest of the turn (time passing) is kept.
+        # sheet shows the wounds, and the rest of the turn (time passing) is kept. Creatures are met where no
+        # one lives (encounters.md): the pass.
+        turn("go to Skybridge Pass")
+        assert "The Echo Wolf bars your way" in told[-1], told[-1]  # the road's danger (its seed's three in ten)
+        assert stored()["simulation_state"]["combat_state"]["current_actor_id"] == "player"  # the hero chooses first
         hunger, calls = stored()["simulation_state"]["survival"]["hunger"], len(model.calls)
         turn("I attack the Echo Wolf.")
-        assert "The fight begins: you against the Echo Wolf." in told[-1], told[-1]
+        assert "You hit the Echo Wolf" in told[-1] or "You miss the Echo Wolf" in told[-1], told[-1]
         combat = stored()["simulation_state"]["combat_state"]
         assert combat["active"] is True and combat["current_actor_id"] == "player"
         turn("I attack the Echo Wolf.")

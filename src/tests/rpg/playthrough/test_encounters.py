@@ -9,6 +9,7 @@ pytestmark = POSTGRES
 
 def test_an_ambusher_strikes_before_the_hero_and_a_guardian_lets_them_go(launch) -> None:
     play = launch("starter")
+    play.to_the_wild()  # the road north, where no one lives
     play.turn("I attack the Bandit Archer.")
     combat = play.combat()
     archer = next(actor for actor in combat["participants"] if actor.startswith("enemy:"))

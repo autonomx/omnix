@@ -80,4 +80,18 @@ costs trust, and beaten they yield for nothing; a companion is not turned on; de
 ## Out of scope (RQ-2.6 part 2)
 
 Ammunition, companion commands mid-fight, reactions on the grid (a blow at a foe moving
-out of reach), creatures placed on the grid when a fight starts, guards joining a fight in their town.
+out of reach), guards joining a fight in their town.
+
+## As built (RQ-7.7 part 2: the fight on the local map)
+
+The local map follows the hero (`session/turn/local_map.py`): arriving at a place the world draws a grid for makes
+that place's map instance the campaign's (`LocalMapEntered`, `state.current_map_instance_id`), made on the first
+visit with the hero at its arrival square and written in the turn's transaction; a place with no grid clears it.
+A fight on that map puts its foes on it (`world/tactical_spatial.py` `foes_take_the_field`): a foe new to the fight
+takes the free square nearest the hero, and when the foes have acted (every fight turn but the hero's grid move) a
+foe not beside the hero closes in, by the map's own paths. Where a foe stands is the fight's
+(`combat_state.participants[*].cell`), so rewind, replay and the state hash cover it; the map keeps only its own
+actors, and the grid's view, moves and attacks see the fight's foes standing on it (`foes_on_grid`): a foe blocks the
+way, and out of reach it cannot be struck from the grid. The grid names foes by the fight's names
+(`actor_names`). Not yet: a creature's own movement allowance (it always reaches the hero when a path exists), and
+the people of a place standing on its map after the opening's.

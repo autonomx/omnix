@@ -182,55 +182,65 @@
     },
     {
       "blocks": [
-        "action||The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).",
-        "result||Consequence: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).",
-        "choice||Offered choice: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left)."
+        "narration||Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.",
+        "action||You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Glass Wight bars your way: fight, break away, slip past, or talk it down. The Glass Wight hits you for 5 (100 of 105 left).",
+        "choice||Offered choice: You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Glass Wight bars your way: fight, break away, slip past, or talk it down. The Glass Wight hits you for 5 (100 of 105 left)."
       ],
-      "step": "I attack the Echo Wolf.",
-      "told": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left). The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left). The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).",
-      "visible": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).\n\nConsequence: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (101 of 105 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left)."
-    },
-    {
-      "step": "tactical_move [4, 3]"
+      "step": "go to Skybridge Pass",
+      "told": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Glass Wight bars your way: fight, break away, slip past, or talk it down. The Glass Wight hits you for 5 (100 of 105 left). You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Glass Wight bars your way: fight, break away, slip past, or talk it down. The Glass Wight hits you for 5 (100 of 105 left).",
+      "visible": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.\n\nYou travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Glass Wight bars your way: fight, break away, slip past, or talk it down. The Glass Wight hits you for 5 (100 of 105 left)."
     },
     {
       "blocks": [
-        "action||You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
-        "result||Consequence: You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
-        "choice||Offered choice: You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf."
+        "action||You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left).",
+        "result||Consequence: You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left).",
+        "choice||Offered choice: You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left)."
       ],
-      "step": "I attack the Echo Wolf.",
-      "told": "You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
-      "visible": "You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.\n\nConsequence: You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf."
+      "step": "I attack the Glass Wight.",
+      "told": "You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left). You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left). You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left).",
+      "visible": "You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left).\n\nConsequence: You hit the Glass Wight for 1 (17 of 18 left). Liora Fen hits the Glass Wight for 1 (16 of 18 left). The Glass Wight hits you for 4 (96 of 105 left)."
+    },
+    {
+      "step": "tactical_move [9, 6]"
     },
     {
       "blocks": [
-        "action||You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).",
-        "result||Consequence: You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).",
-        "choice||Offered choice: You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left)."
+        "action||You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left).",
+        "result||Consequence: You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left).",
+        "choice||Offered choice: You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left)."
       ],
-      "step": "I attack the Echo Wolf.",
-      "told": "You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).",
-      "visible": "You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).\n\nConsequence: You miss the Echo Wolf. The Echo Wolf hits you for 1 (100 of 105 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left)."
+      "step": "I attack the Glass Wight.",
+      "told": "You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left). You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left). You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left).",
+      "visible": "You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left).\n\nConsequence: You hit the Glass Wight for 1 (15 of 18 left). Liora Fen hits the Glass Wight for 1 (14 of 18 left). The Glass Wight hits you for 5 (91 of 105 left)."
     },
     {
       "blocks": [
-        "action||You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf.",
-        "result||Consequence: You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf.",
-        "choice||Offered choice: You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf."
+        "action||You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left).",
+        "result||Consequence: You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left).",
+        "choice||Offered choice: You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left)."
       ],
-      "step": "I flee from the Echo Wolf.",
-      "told": "You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf. You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf. You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf.",
-      "visible": "You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf.\n\nConsequence: You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (97 of 105 left). Liora Fen misses the Echo Wolf."
+      "step": "I attack the Glass Wight.",
+      "told": "You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left). You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left). You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left).",
+      "visible": "You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left).\n\nConsequence: You miss the Glass Wight. Liora Fen misses the Glass Wight. The Glass Wight hits you for 3 (88 of 105 left)."
     },
     {
       "blocks": [
-        "action||You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen misses the Echo Wolf.",
-        "choice||Offered choice: You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen misses the Echo Wolf."
+        "action||You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing.",
+        "result||Consequence: You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing.",
+        "choice||Offered choice: You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing."
+      ],
+      "step": "I flee from the Glass Wight.",
+      "told": "You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing. You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing. You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing.",
+      "visible": "You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing.\n\nConsequence: You break away from the Glass Wight; a parting blow follows you. The Glass Wight hits you for 3 (85 of 105 left). You escape; the fight is over, and it yields you nothing."
+    },
+    {
+      "blocks": [
+        "action||You drink the Healing Potion. It restores 20 health.",
+        "choice||Offered choice: You drink the Healing Potion. It restores 20 health."
       ],
       "step": "I drink the Healing Potion.",
-      "told": "You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen misses the Echo Wolf. You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen misses the Echo Wolf.",
-      "visible": "You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (103 of 105 left). Liora Fen misses the Echo Wolf."
+      "told": "You drink the Healing Potion. It restores 20 health. You drink the Healing Potion. It restores 20 health.",
+      "visible": "You drink the Healing Potion. It restores 20 health."
     },
     {
       "blocks": [
@@ -242,35 +252,31 @@
     },
     {
       "blocks": [
-        "result||You are in a fight: strike, break away, or use something you carry."
-      ],
-      "step": "go to Skybridge Pass",
-      "told": "",
-      "visible": "You are in a fight: strike, break away, or use something you carry."
-    },
-    {
-      "blocks": [
-        "result||You are in a fight: strike, break away, or use something you carry."
+        "narration||Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+        "action||You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen.",
+        "choice||Offered choice: You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
       ],
       "step": "go to Starfall Village",
-      "told": "",
-      "visible": "You are in a fight: strike, break away, or use something you carry."
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen.",
+      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
     },
     {
       "blocks": [
-        "result||You are in a fight: strike, break away, or use something you carry."
+        "narration||Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+        "action||You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen.",
+        "choice||Offered choice: You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen."
       ],
       "step": "go to Starfall Grove",
-      "told": "",
-      "visible": "You are in a fight: strike, break away, or use something you carry."
+      "told": "Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen. You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen.",
+      "visible": "Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen."
     },
     {
       "blocks": [
-        "result||You are in a fight: strike, break away, or use something you carry."
+        "result||You wait a while in Starfall Grove; time passes. Around you: Liora Fen."
       ],
       "step": "wait",
       "told": "",
-      "visible": "You are in a fight: strike, break away, or use something you carry."
+      "visible": "You wait a while in Starfall Grove; time passes. Around you: Liora Fen."
     }
   ]
 }

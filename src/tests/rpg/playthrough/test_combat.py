@@ -22,7 +22,7 @@ def _fight(play, foe: str, *, limit: int = 40) -> int:
 @pytest.mark.parametrize("world", in_worlds())
 def test_fight_to_victory(launch, world) -> None:
     play, foe = launch(world), FOES[world][0]
-    play.turn("look around")
+    play.to_the_wild()  # creatures are met where no one lives (encounters.md)
     for _ in range(3):  # a creature that flees when hurt may get away (encounters.md): then it earned nothing
         xp, turns = int(play.player_state().get("xp") or 0), play.turn_count()
         play.turn(f"I attack the {foe}.")
@@ -80,6 +80,7 @@ def test_fight_to_defeat_is_a_setback(launch, world) -> None:
 @pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_hardcore_defeat_ends_the_campaign(launch, world) -> None:
     play, foe = launch(world, gameplay={"permadeath": True}), FOES[world][1]
+    play.to_the_wild()
     play.turn(f"I attack the {foe}.")
     _fight(play, foe, limit=60)
     assert play.simulation()["campaign_end"]["reason"] == "defeated"
@@ -91,6 +92,7 @@ def test_hardcore_defeat_ends_the_campaign(launch, world) -> None:
 @pytest.mark.parametrize("world", in_worlds())
 def test_fleeing_ends_the_fight_and_counts(launch, world) -> None:
     play, foe = launch(world), FOES[world][0]
+    play.to_the_wild()
     play.turn(f"I attack the {foe}.")
     assert play.combat()["active"] is True
     hunger, turns = play.survival()["hunger"], play.turn_count()
@@ -105,21 +107,55 @@ def test_fleeing_ends_the_fight_and_counts(launch, world) -> None:
     assert play.survival()["hunger"] >= hunger  # time passes in a fight too
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia"))
-def test_tactical_move_and_attack_in_a_fight(launch, world) -> None:
-    play = launch(world)
+def _hero_and_foe(play) -> tuple[list[int], str, list[int]]:
+    hero = next(actor for actor in play.map_instance()["snapshot"]["actors"] if actor["actor_id"].startswith("player:"))
+    foe, row = next((actor, row) for actor, row in play.combat()["participants"].items() if actor.startswith("enemy:"))
+    return hero["cell"], foe, row["cell"]
+
+
+def _apart(left: list[int], right: list[int]) -> int:
+    return max(abs(left[0] - right[0]), abs(left[1] - right[1]))
+
+
+def test_the_fight_stands_on_the_local_map(launch) -> None:
+    """RQ-7.7: the local map follows the hero, and a fight's foe stands on it: beside the hero when the fight
+    begins, struck from the grid, left behind by the hero's grid move, and closing in again when it acts."""
+    play = launch("aurelia")
+    opening = play.map_instance()["map_instance_id"]
+    play.to_the_wild()
+    here = play.map_instance()
+    assert here["map_instance_id"] != opening and here["map_instance_id"].endswith("map-aurelia-skybridge-pass:1")
+    assert here["location_id"] == "location:aurelia:skybridge-pass"
+
     play.turn("I attack the Echo Wolf.")
     assert play.combat()["active"] is True
-    before = play.map_instance()["snapshot"]
-    hero = next(actor for actor in before["actors"] if actor["actor_id"].startswith("player:"))
-    target = (hero["cell"][0] - 1, hero["cell"][1])
-    moved = play.tactical_move(target)
-    assert moved.status_code == 200, moved.text[:300]
-    assert moved.json()["actor_cell"] == list(target)
-    assert play.map_instance()["snapshot"]["map_state_revision"] == before["map_state_revision"] + 1
-    enemy = next(actor for actor in play.combat()["participants"] if actor.startswith("enemy:"))
-    attacked = play.tactical_attack(enemy)
+    hero, foe, cell = _hero_and_foe(play)
+    assert _apart(hero, cell) == 1  # beside the hero
+    attacked = play.tactical_attack(foe)
     assert attacked.status_code == 200, attacked.text[:300]
+    if not play.combat().get("active"):
+        return  # one blow felled it, or it fled
+    hero, foe, cell = _hero_and_foe(play)
+    squares = sorted({(hero[0] + dx, hero[1] + dy) for dx in range(-3, 4) for dy in range(-3, 4)}, key=lambda point: point[::-1])
+    away = next(target for index, target in enumerate(squares)  # the first open square at least two from the foe
+                if _apart(list(target), cell) >= 2
+                and play.tactical_move(target, submission_id=f"move-{index}").status_code == 200)
+    assert _hero_and_foe(play)[2] == cell  # the foe has not acted yet: it stands where it was
+    assert _apart(list(away), cell) >= 2
+    refused = play.tactical_attack(foe, submission_id="attack-2")
+    assert refused.status_code == 409 and "out_of_reach" in refused.text, refused.text[:300]
+    play.turn("I defend myself.")
+    if play.combat().get("active"):
+        hero, _, cell = _hero_and_foe(play)
+        assert _apart(hero, cell) == 1  # it closed in on its turn
+
+
+def test_no_creature_is_met_where_people_live(launch) -> None:
+    """RQ-7.7: a wolf is met on the road, not in the guild hall; a quest sends the hero to its own foes."""
+    play = launch("aurelia")
+    refused = play.turn("I attack the Echo Wolf.")  # Liora Fen lives in the grove
+    assert refused["visible_response"]["plain_text"].startswith("No Echo Wolf is here."), refused
+    assert play.combat().get("active") is not True
 
 
 def test_fighting_a_person_costs_trust_and_earns_nothing(launch) -> None:
@@ -162,17 +198,18 @@ def test_abilities_in_a_fight_cost_cool_down_and_act(launch) -> None:
     for its turns; a control ability hinders the foe; the hotbar uses the same rule in a fight; a rest restores the
     pools; and a bare "attack" in a fight strikes the foe in front of the hero."""
     play = launch("aurelia")
-    opened = play.turn("use Aimed Shot on the Echo Wolf")
+    play.to_the_wild()  # a foe that stands its ground (a wolf may flee from the first shot)
+    opened = play.turn("use Aimed Shot on the Rootbound Knight")
     text = opened["visible_response"]["plain_text"]
-    assert text.startswith("The fight begins: you against the Echo Wolf.") and "You use Aimed Shot." in text
+    assert text.startswith("The fight begins: you against the Rootbound Knight.") and "You use Aimed Shot." in text
     assert play.public()["player"]["resources"]["stamina"]["current"] == 90
     assert play.stored()["state"]["ability_state"]["cooldowns"] == {"recon_aimed_shot": 1}
-    again = play.turn("use Aimed Shot on the Echo Wolf")
+    again = play.turn("use Aimed Shot on the Rootbound Knight")
     assert again["visible_response"]["plain_text"] == "Aimed Shot is not ready yet (1 more turn)."
     frost = play.client.post(f"/api/rpg/sessions/{play.session_id}/loadout-action",
                              json={"action": "use_ability", "ability_name": "Frost Arrow"})
     assert frost.status_code == 200, frost.text[:300]
-    assert "The Echo Wolf is hindered." in frost.json()["event"]["detail"]
+    assert "The Rootbound Knight is hindered." in frost.json()["event"]["detail"]
     assert play.public()["player"]["resources"]["mana"]["current"] == 18
     struck = play.turn("attack")
     assert struck["outcome"]["planned_action"] == "fight"
@@ -191,6 +228,7 @@ def test_a_won_fight_raises_a_level_whose_choice_waits_and_then_holds(launch) ->
     from app.apps.rpg.session.service import load_session, save_session
 
     play = launch("aurelia")
+    play.to_the_wild()
     session = load_session(play.session_id)
     session["simulation_state"]["player_state"]["xp"] = 95  # five short of level 2
     session["state"]["player"]["xp"] = {"current": 95, "max": 100}

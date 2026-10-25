@@ -151,6 +151,7 @@ def test_a_worlds_creatures_fight_blow_by_blow_with_companions(play) -> None:
     """9457f8e162: the creature is found inside a longer phrase, creatures and companions take their turns,
     the narrator is told each blow by name, and the fight keeps the turn's time passing."""
     play.turn("I ask Liora Fen to join my party as a companion.")
+    play.to_the_wild()  # with Liora along
     hunger = play.survival()["hunger"]
     play.turn("I attack the echo wolf with my dagger.")
     told = play.model.told()

@@ -456,6 +456,13 @@ class ServiceUsed(_Change):
     offer_id: str = Field(min_length=1)
 
 
+class LocalMapEntered(_Change):
+    """The local map the hero now stands on (its instance, "" where the place has none): the play screen's grid."""
+
+    type: Literal["local_map_entered"] = "local_map_entered"
+    map_instance_id: str = ""
+
+
 class JournalWritten(_Change):
     """The turn in the player's journal and on the campaign calendar, as the journal keeper left them."""
 
@@ -472,7 +479,7 @@ StateChange = Annotated[
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
     | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade
-    | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved,
+    | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved | LocalMapEntered,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

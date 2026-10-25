@@ -478,6 +478,32 @@ def _avoid(simulation: Mapping[str, Any], combat: dict[str, Any], *, kind: str, 
 
 
 # -- the turn -----------------------------------------------------------------------------------------------------------
+def _defeats(step: Any) -> list[str]:
+    """The creatures a quest step names to defeat, however its conditions nest."""
+    if isinstance(step, Mapping):
+        return [_s(step["defeat"])] if step.get("defeat") else [ref for value in step.values() for ref in _defeats(value)]
+    if isinstance(step, (list, tuple)):
+        return [ref for value in step for ref in _defeats(value)]
+    return []
+
+
+def _met_here(simulation: Mapping[str, Any], enemy: Mapping[str, Any]) -> bool:
+    """Whether the creature can be met where the hero is (encounters.md): in the wild, where no one lives, or at the
+    place a quest the hero has taken sends them to defeat it (the Rusty Flagon's cellar rats)."""
+    if routines.is_wild(simulation):
+        return True
+    here = routines.hero_location(simulation)
+    kind = _s(enemy.get("definition_id"))
+    for quest in _l(_d(simulation.get("quest_state")).get("quests")):
+        quest = _d(quest)
+        if quest.get("status") != "active" or here not in {_s(place) for place in _l(quest.get("locations"))}:
+            continue
+        if any(_s(_d(campaign_creature_definition(simulation, ref)).get("definition_id")) == kind
+               for ref in _defeats(quest.get("steps"))):
+            return True
+    return False
+
+
 def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "",
           cover: int = 0, ability: FightEffect | None = None, ability_name: str = "",
           parley: Literal["persuade", "intimidate"] = "persuade") -> FightTurn | None:
@@ -499,6 +525,9 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
             return FightTurn([], [f"There is no fight to {'flee from' if action == 'flee' else 'guard against'}."],
                              refused=True, minutes=0)
         enemy = instantiate_campaign_creature(simulation, target_ref)
+        if enemy is not None and not _met_here(simulation, enemy):  # a wolf is met on the road, not in the guild hall
+            return FightTurn([], [f"No {enemy['name']} is here. The world's creatures keep to the wild, where no one "
+                                  "lives."], refused=True, minutes=0)
         if enemy is None:
             npc_id, person = _person(simulation, target_ref)
             if not npc_id:

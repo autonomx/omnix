@@ -65,6 +65,8 @@ export interface RpgGridTactical {
   movement_remaining?: number;
   actions_remaining?: number;
   hostile_actor_ids?: string[];
+  /** The fight's foes by name (their ids are the fight's own). */
+  actor_names?: Record<string, string>;
 }
 
 export interface RpgGridView {
@@ -240,8 +242,9 @@ export function adjacentActors(projection: RpgGridProjection, actorId: string): 
 }
 
 /** A readable name for an actor id ("npc:liora-fen" is "Liora Fen"). */
-export function actorLabel(actorId: string, playerActorId: string, heroName: string): string {
+export function actorLabel(actorId: string, playerActorId: string, heroName: string, names: Record<string, string> = {}): string {
   if (actorId === playerActorId) return heroName || 'You';
+  if (names[actorId]) return names[actorId];
   const name = actorId.includes(':') ? actorId.slice(actorId.lastIndexOf(':') + 1) : actorId;
   return name.split(/[-_]/).filter(Boolean).map((part) => part[0]!.toUpperCase() + part.slice(1)).join(' ') || actorId;
 }

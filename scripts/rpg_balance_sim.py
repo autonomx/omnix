@@ -79,6 +79,17 @@ def _path_to(session: Mapping[str, Any], goals: set[str]) -> str:
     return ""
 
 
+def _wild(session: Mapping[str, Any], place_id: str) -> bool:
+    from app.apps.rpg.rules.routines import is_wild
+
+    return is_wild(_d(session.get("simulation_state")), place_id)
+
+
+def _wild_places(session: Mapping[str, Any]) -> set[str]:
+    """Where no one lives: where the world's creatures are met (encounters.md)."""
+    return {_s(place) for place in _d(_world(session).get("locations")) if _wild(session, _s(place))}
+
+
 def _name(session: Mapping[str, Any], place_id: str) -> str:
     return _s(_d(_d(_world(session).get("locations")).get(place_id)).get("name")) or place_id
 
@@ -180,8 +191,10 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
             from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
 
             creature = _d(campaign_creature_definition(simulation, _s(condition["defeat"])))
-            if _s(creature.get("name")):
+            places = {_s(place) for place in _l(quest.get("locations"))}
+            if _s(creature.get("name")) and (_wild(session, _here(session)) or _here(session) in places):
                 return f"I attack the {_s(creature.get('name'))}."
+            goals.update(places or _wild_places(session))  # hunted where the quest says, else where no one lives
         elif condition.get("talk"):
             person = _d(_d(_world(session).get("npcs")).get(_s(condition["talk"])))
             about = [_s(word) for word in (_l(condition.get("about")) or [condition.get("about")]) if _s(word)]
@@ -191,7 +204,11 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
         elif condition.get("reach"):
             goals.add(_s(condition["reach"]))
     goals.discard("")
-    if turn % 4 == 0:  # the world's creatures, met now and then
+    if turn % 4 == 0 and not _wild(session, _here(session)):  # the world's creatures keep to the wild
+        step = _path_to(session, _wild_places(session)) if turn % 8 == 0 else ""
+        if step:
+            return f"go to {_name(session, step)}"
+    elif turn % 4 == 0:  # the world's creatures, met now and then
         level = int(_player(session).get("level") or 1)
         creatures = sorted((_s(_d(row).get("name")) for row in _d(_d(simulation.get("campaign_mechanics")).get(
             "creatures")).values() if int(_d(row).get("level") or 1) <= level + 2 and _s(_d(row).get("name"))))

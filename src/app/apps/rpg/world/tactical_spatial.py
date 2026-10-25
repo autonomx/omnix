@@ -76,6 +76,11 @@ def grid_turn_summary(simulation_state: Mapping[str, Any], campaign_id: str, obs
             str(actor_id) for actor_id, row in participants.items()
             if isinstance(row, Mapping) and row.get("side") == "enemy" and int(row.get("hp") or 0) > 0
         ),
+        # The fight's foes by name: their ids are the fight's own ("enemy:creature-echo-wolf:1").
+        "actor_names": {
+            str(actor_id): str(row["name"]) for actor_id, row in participants.items()
+            if isinstance(row, Mapping) and row.get("side") == "enemy" and row.get("name")
+        },
     }
 
 
@@ -143,11 +148,96 @@ def _inside(definition: GridMapDefinition, cell: GridPoint) -> bool:
     return 0 <= cell[0] < definition.width and 0 <= cell[1] < definition.height
 
 
+def _living_foes(combat_state: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    if combat_state.get("active") is not True or not isinstance(combat_state.get("participants"), Mapping):
+        return {}
+    return {str(actor_id): row for actor_id, row in combat_state["participants"].items()
+            if isinstance(row, Mapping) and row.get("side") == "enemy" and int(row.get("hp") or 0) > 0}
+
+
+def foes_on_grid(snapshot: CampaignMapInstanceSnapshot, combat_state: Mapping[str, Any]) -> CampaignMapInstanceSnapshot:
+    """The map as the fight sees it: its living foes standing where the fight put them. The fight owns where its foes
+    stand (``combat_state.participants[*].cell``), so this is never stored on the map."""
+    on_map = {actor.actor_id for actor in snapshot.actors}
+    standing = tuple(
+        GridActorPlacement(actor_id=actor_id, cell=(int(row["cell"][0]), int(row["cell"][1])))
+        for actor_id, row in sorted(_living_foes(combat_state).items())
+        if isinstance(row.get("cell"), (list, tuple)) and len(row["cell"]) == 2 and actor_id not in on_map
+    )
+    return snapshot.model_copy(update={"actors": (*snapshot.actors, *standing)}) if standing else snapshot
+
+
+def foes_take_the_field(
+    definition: GridMapDefinition,
+    snapshot: CampaignMapInstanceSnapshot,
+    combat_state: Mapping[str, Any],
+    *,
+    hero_id: str,
+    foes_act: bool,
+) -> dict[str, Any] | None:
+    """Where the fight's foes stand once its turn is played (combat.md): a foe new to the fight takes the nearest free
+    square beside the hero, and when the foes have acted (any turn but the hero's grid move) a foe not beside the hero
+    closes in, by the map's own paths. The fight with its foes' squares, or ``None`` when no one moved."""
+    from app.apps.rpg.world.map_instance_runtime import MoveActorCommand, resolve_move_command
+
+    foes = _living_foes(combat_state)
+    if not foes or hero_id not in {actor.actor_id for actor in snapshot.actors}:
+        return None
+    hero = snapshot.actor(hero_id)
+    participants = {str(key): dict(row) for key, row in dict(combat_state["participants"]).items()}
+    changed = False
+
+    def taken(exclude: str) -> set[GridPoint]:
+        cells = {cell for actor in snapshot.actors for cell in actor_footprint_cells(actor)}
+        return cells | {tuple(row["cell"]) for key, row in participants.items()  # type: ignore[misc]
+                        if key in foes and key != exclude and isinstance(row.get("cell"), list)}
+
+    def beside_the_hero(exclude: str) -> list[GridPoint]:
+        blocked = taken(exclude)
+        return [cell for cell in ((hero.cell[0] + dx, hero.cell[1] + dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+                if cell != hero.cell and _inside(definition, cell) and cell not in blocked
+                and effective_is_walkable(definition, snapshot, cell)]
+
+    for actor_id in sorted(foes):
+        row = participants[actor_id]
+        cell = tuple(row["cell"]) if isinstance(row.get("cell"), list) else None
+        if cell is None:
+            for ring in range(1, max(definition.width, definition.height)):
+                blocked = taken(actor_id)
+                free = sorted((x, y) for y in range(hero.cell[1] - ring, hero.cell[1] + ring + 1)
+                              for x in range(hero.cell[0] - ring, hero.cell[0] + ring + 1)
+                              if max(abs(x - hero.cell[0]), abs(y - hero.cell[1])) == ring and _inside(definition, (x, y))
+                              and (x, y) not in blocked and effective_is_walkable(definition, snapshot, (x, y)))
+                if free:
+                    row["cell"], changed = [free[0][0], free[0][1]], True
+                    break
+            continue
+        if not foes_act or max(abs(cell[0] - hero.cell[0]), abs(cell[1] - hero.cell[1])) <= 1:
+            continue
+        seen = foes_on_grid(snapshot, {**combat_state, "participants": participants})
+        def nearest(point: GridPoint, origin: GridPoint = cell) -> tuple[int, int, int, int]:
+            dx, dy = abs(point[0] - origin[0]), abs(point[1] - origin[1])
+            return max(dx, dy), dx + dy, point[1], point[0]
+
+        for target in sorted(beside_the_hero(actor_id), key=nearest):
+            try:
+                resolve_move_command(definition, seen, MoveActorCommand(
+                    command_id=f"close-in:{actor_id}:{target[0]}:{target[1]}", actor_id=actor_id, destination=target,
+                    expected_map_state_revision=seen.map_state_revision))
+            except ValueError:  # no way through to that square
+                continue
+            row["cell"], changed = [target[0], target[1]], True
+            break
+    return {**combat_state, "participants": participants} if changed else None
+
+
 __all__ = [
     "CoverAssessment",
     "TacticalSpatialError",
     "TacticalSpatialPolicy",
     "evaluate_cover",
+    "foes_on_grid",
+    "foes_take_the_field",
     "footprint_distance",
     "grid_turn_summary",
     "hero_on_map",

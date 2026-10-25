@@ -193,6 +193,7 @@ class LocationSection(Section):
 
     PATHS = (PLAYER_STATE + ("location_id",), PLAYER_STATE + ("current_location_id",), ("simulation_state", "travel_state"),
              ("simulation_state", "location_state"), ("runtime_state", "current_scene"),
+             ("state", "current_map_instance_id"),  # the local map the hero stands on
              # the older readers' copies of where the hero is, kept in step by the reducer until they go (RQ-2.10)
              *(("simulation_state", key) for key in ("location_id", "location_name", "current_location",
                                                      "current_location_id", "current_location_name",

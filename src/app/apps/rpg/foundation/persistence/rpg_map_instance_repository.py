@@ -79,6 +79,17 @@ class PostgresRpgMapInstanceRepository:
         ).fetchone()
         return _definition_row(row) if row is not None else None
 
+    def latest_definition(self, context: TenantContext, map_id: str) -> dict[str, Any] | None:
+        """A map's newest definition: the one a campaign's first visit to its place stands on."""
+        row = self.connection.execute(
+            "SELECT map_id, definition_revision, world_id, world_revision, "
+            "document_jsonb, definition_hash, semantic_interface_hash, created_at "
+            "FROM omnix_rpg_map_definitions WHERE workspace_id = %s AND map_id = %s "
+            "ORDER BY definition_revision DESC LIMIT 1",
+            (context.workspace_id, map_id),
+        ).fetchone()
+        return _definition_row(row) if row is not None else None
+
     def create_instance(
         self,
         context: TenantContext,
