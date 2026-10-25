@@ -765,18 +765,10 @@ def _persisted_turn_session(
     result: dict[str, Any],
     session_id: str,
 ) -> dict[str, Any] | None:
+    """The campaign as the turn left it, for the response. The turn's commit step saved it (one save per turn,
+    roadmap §4.1); the route saves nothing."""
     result_session = result.get("session")
-    canonical_patch = result.get("narrative_session_projection_patched") is True
-    if isinstance(result_session, dict) and (
-        canonical_patch or result.get("interaction_persisted") is not True
-    ):
-        from app.apps.rpg.session.service import save_session
-
-        return save_session(result_session, compact=True)
-    if result.get("interaction_persisted") is True and isinstance(
-        result_session,
-        dict,
-    ):
+    if isinstance(result_session, dict):
         return result_session
     from app.apps.rpg.session.service import load_session
 

@@ -60,24 +60,6 @@
       "count": 1,
       "fingerprint": "save_session",
       "lines": [
-        622
-      ],
-      "path": "src/app/apps/rpg/edge/api/turn_pipeline.py",
-      "rule": "AL018"
-    },
-    {
-      "count": 1,
-      "fingerprint": "save_runtime_session",
-      "lines": [
-        154
-      ],
-      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
-      "rule": "AL018"
-    },
-    {
-      "count": 1,
-      "fingerprint": "save_session",
-      "lines": [
         554
       ],
       "path": "src/app/apps/rpg/session/loadout.py",
@@ -548,26 +530,24 @@
       "rule": "AL019"
     },
     {
-      "count": 6,
+      "count": 5,
       "fingerprint": "runtime",
       "lines": [
-        49,
-        53,
-        151,
-        211,
-        212,
-        214
+        42,
+        46,
+        165,
+        166,
+        168
       ],
       "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
       "rule": "AL019"
     },
     {
-      "count": 3,
+      "count": 2,
       "fingerprint": "session",
       "lines": [
-        54,
-        152,
-        215
+        47,
+        169
       ],
       "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
       "rule": "AL019"

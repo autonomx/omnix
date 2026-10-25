@@ -1,4 +1,5 @@
-"""Progressive interaction lifecycle for authoritative turns and deferred narration."""
+"""The lifecycle of a committed interaction: recorded by the turn's commit, its narration's outcome reported (not
+saved: the campaign is saved only by a turn's commit, roadmap §4.1)."""
 from __future__ import annotations
 
 from app.runtime.clock import utc_now
@@ -22,7 +23,6 @@ def initialize_interaction_lifecycle(
     runtime = _dict(session.get("runtime_state"))
     turn_id = _first_text(result, "turn_id")
     stateful = _first_bool(result, "stateful")
-    narration_request = _narration_request(result)
     record = {
         "format_version": INTERACTION_LIFECYCLE_VERSION,
         "interaction_id": interaction_id,
@@ -36,13 +36,6 @@ def initialize_interaction_lifecycle(
         "authoritative_response": _compact_authoritative_response(result),
         "updated_at": _utc_now(),
     }
-    if narration_request:
-        narration_request["interaction_id"] = interaction_id
-        record["status"] = "narration_pending"
-        record["narration_status"] = "queued"
-        record["narration_pending_at"] = _utc_now()
-        _replace_narration_request(result, narration_request)
-
     lifecycles = _dict(runtime.get("interaction_lifecycles"))
     lifecycles[interaction_id] = record
     lifecycles = _bounded_mapping(lifecycles)
@@ -58,50 +51,16 @@ def initialize_interaction_lifecycle(
     return record
 
 
-def queue_deferred_narration_for_interaction(
-    session_id: str,
-    result: dict[str, Any],
-) -> bool:
-    """Queue deferred narration once and bind it to the authoritative interaction."""
-
-    narration_request = _narration_request(result)
-    interaction_id = _text(result.get("interaction_id"))
-    turn_id = _text(narration_request.get("turn_id") or result.get("turn_id"))
-    if not narration_request or not interaction_id or not turn_id:
-        return False
-
-    from app.apps.rpg.session.jobs.narration_job import enqueue_rpg_narration
-
-    narration_request = deepcopy(narration_request)
-    narration_request["session_id"] = session_id
-    narration_request["interaction_id"] = interaction_id
-    performance = _dict(narration_request.get("performance"))
-    performance["enable_live_narration_llm"] = True
-    narration_request["performance"] = performance
-    # An rpg.narration job (WP-5.6): the interaction's lifecycle, committed with
-    # the turn, already records it as pending, so the session is not saved again.
-    narration_job = enqueue_rpg_narration(
-        session_id,
-        turn_id,
-        narration_request,
-        interaction_id=interaction_id,
-        tick=int(narration_request.get("tick") or result.get("tick") or 0),
-    )
-    result["narration_job"] = narration_job
-    result["narration_status"] = "queued"
-    return True
-
-
 def apply_narration_result_to_interaction(
     session_id: str,
     worker_result: dict[str, Any],
 ) -> dict[str, Any]:
-    """Update only lifecycle/presentation metadata after narration worker completion."""
+    """The narration's outcome for the turn's interaction (a narration recovered from a save made before WP-5.6).
 
-    from app.apps.rpg.session.session_runtime_store import (
-        load_runtime_session as load_runtime_session,
-        save_runtime_session as save_runtime_session,
-    )
+    It is told on the narration event log and kept by its job; nothing is saved here (one save per turn, by its
+    commit), so the campaign keeps the lifecycle its commit recorded."""
+
+    from app.apps.rpg.session.session_runtime_store import load_runtime_session
 
     session = load_runtime_session(session_id)
     if not isinstance(session, dict):
@@ -147,11 +106,6 @@ def apply_narration_result_to_interaction(
     else:
         updated["narration_pending_at"] = current.get("narration_pending_at") or _utc_now()
 
-    lifecycles[interaction_id] = updated
-    runtime["interaction_lifecycles"] = _bounded_mapping(lifecycles)
-    session["runtime_state"] = runtime
-    _update_interaction_event(session, interaction_id, updated)
-    save_runtime_session(session)
     worker_result = dict(worker_result)
     worker_result["interaction_id"] = interaction_id
     worker_result["interaction_lifecycle"] = deepcopy(updated)
@@ -213,23 +167,6 @@ def _update_interaction_event(
     if events:
         runtime["last_interaction"] = dict(events[-1])
     session["runtime_state"] = runtime
-
-
-def _narration_request(result: dict[str, Any]) -> dict[str, Any]:
-    return (
-        _dict(result.get("narration_request"))
-        or _dict(_dict(result.get("result")).get("narration_request"))
-        or _dict(_dict(result.get("authoritative")).get("narration_request"))
-    )
-
-
-def _replace_narration_request(result: dict[str, Any], request: dict[str, Any]) -> None:
-    if isinstance(result.get("narration_request"), dict):
-        result["narration_request"] = request
-    for key in ("result", "authoritative"):
-        nested = result.get(key)
-        if isinstance(nested, dict) and isinstance(nested.get("narration_request"), dict):
-            nested["narration_request"] = request
 
 
 def _compact_authoritative_response(result: dict[str, Any]) -> dict[str, Any]:

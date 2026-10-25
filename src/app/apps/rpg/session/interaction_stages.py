@@ -204,11 +204,8 @@ def _persist(ctx: Any, session: dict[str, Any], result: dict[str, Any], event: d
 
 
 def initialize_lifecycle(ctx: Any) -> Any:
-    """Enqueue deferred narration for the committed interaction.
-
-    The commit already recorded the interaction's lifecycle; it is recorded
-    here only for a result that did not pass through ``commit_interaction``.
-    """
+    """Record the lifecycle of a result that did not pass through ``commit_interaction`` (the commit records its
+    own); a turn's narration is the narrative engine's, so nothing is queued here."""
 
     result = ctx.result
     if not isinstance(result, dict) or result.get("ok") is not True:
@@ -223,25 +220,16 @@ def initialize_lifecycle(ctx: Any) -> Any:
     if not isinstance(session, dict):
         return ctx
 
-    from .interaction_lifecycle import (
-        initialize_interaction_lifecycle as initialize,
-        queue_deferred_narration_for_interaction,
-    )
+    from .interaction_lifecycle import initialize_interaction_lifecycle as initialize
 
     lifecycle = result.get("interaction_lifecycle")
     if not isinstance(lifecycle, dict) or lifecycle.get("interaction_id") != result.get("interaction_id"):
-        lifecycle = initialize(session, result)
+        initialize(session, result)
     result["session"] = session
     if isinstance(ctx.session_override, dict):
         ctx.session_override.clear()
         ctx.session_override.update(session)
     ctx.result = result
-    if lifecycle.get("status") == "narration_pending":
-        try:
-            queue_deferred_narration_for_interaction(ctx.session_id, result)
-        except Exception as exc:
-            result["narration_status"] = "failed_to_queue"
-            raise exc
     return ctx
 
 

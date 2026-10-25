@@ -76,7 +76,7 @@ def _run(jobs, job_id):
     return narration_job.execute_rpg_narration_job(jobs, job)
 
 
-def test_a_queued_narration_job_narrates_the_turn_and_completes_its_interaction(world) -> None:
+def test_a_queued_narration_job_narrates_the_turn_and_reports_its_interaction(world) -> None:
     queued = _enqueue(world["jobs"])
     assert queued["status"] == "queued"
 
@@ -85,8 +85,9 @@ def test_a_queued_narration_job_narrates_the_turn_and_completes_its_interaction(
     assert finished.status == JobStatus.COMPLETED
     runtime = world["sessions"][SESSION_ID]["runtime_state"]
     assert runtime["narration_artifacts_by_turn"]["turn:4"]["narration"] == "Rain drums on the tavern roof."
-    lifecycle = runtime["interaction_lifecycles"]["interaction:4"]
-    assert (lifecycle["status"], lifecycle["narration_status"]) == ("narration_complete", "complete")
+    # The interaction's lifecycle is the one its commit recorded: the job reports the outcome, it does not save it.
+    assert runtime["interaction_lifecycles"]["interaction:4"]["status"] == "narration_pending"
+    assert finished.output_refs[0]["status"] == "completed"
     assert "narration_jobs" not in runtime, "the queue no longer lives in the session"
     assert {"narration_complete", "narration_artifact"} <= {event.get("type") for event in world["events"]}
 
@@ -119,8 +120,8 @@ def test_generation_failures_retry_and_the_last_attempt_marks_the_narration_fail
     job._attempt_count = narration_job.MAX_ATTEMPTS
     narration_job.execute_rpg_narration_job(world["jobs"], job)
     lifecycle = world["sessions"][SESSION_ID]["runtime_state"]["interaction_lifecycles"]["interaction:4"]
-    assert lifecycle["status"] == "narration_failed"
-    assert lifecycle["narration_error"] == "provider_unavailable"
+    assert lifecycle["status"] == "narration_pending"  # no save outside a turn's commit
+    assert world["jobs"].get_job(queued["job_id"]).status == JobStatus.FAILED
     assert any(event.get("status") == "failed" for event in world["events"])
 
 
