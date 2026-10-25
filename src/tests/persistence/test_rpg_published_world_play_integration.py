@@ -419,7 +419,9 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # Renting a room is a purchase; sleeping in it is resting, and it eases fatigue.
         before = copper(public()["player"]["currency"])
         turn("I rent a room for the night from Orik Stonewake.")
-        assert copper(public()["player"]["currency"]) == before - 50
+        # Fifty copper as written, a fifth more where the roads choke trade (RQ-5.5, economy.md).
+        assert copper(public()["player"]["currency"]) == before - 60, told[-1]
+        assert "(the roads choke trade)" in told[-1]
         tired = stored()["simulation_state"]["survival"]["fatigue"]
         assert tired > 0  # paying for the room rests no one
         turn("I go to my room and sleep for the night.")
