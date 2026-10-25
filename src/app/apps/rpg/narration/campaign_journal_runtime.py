@@ -592,7 +592,7 @@ def advance_campaign_journal_for_turn(
     history = _safe_list(calendar.get("history"))
     if not history or _safe_dict(history[-1]).get("turn_index") != time_info["turn_index"]:
         history.append(time_info)
-    calendar["history"] = history[-500:]
+    calendar["history"] = history[-24:]  # only its last entry is read: a day's worth is kept (F2)
 
     action = _extract_player_action(
         player_input=player_input,

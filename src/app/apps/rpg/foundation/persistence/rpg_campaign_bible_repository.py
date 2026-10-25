@@ -44,6 +44,18 @@ class PostgresRpgCampaignBibleRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
 
+    def version(self, context: TenantContext, campaign_id: str) -> tuple[int, str, str] | None:
+        """The bible's revision and content hash, and a fingerprint of the world the campaign is bound to (its
+        canon is merged into the bible's view), without either document; None when the campaign has no bible."""
+        row = self.connection.execute(
+            "SELECT b.revision, b.content_hash, COALESCE(("
+            "SELECT md5(w.binding_jsonb::text) FROM omnix_rpg_campaign_world_bindings w "
+            "WHERE w.workspace_id = b.workspace_id AND w.campaign_id = b.campaign_id), '') "
+            "FROM omnix_rpg_campaign_bibles b WHERE b.workspace_id = %s AND b.campaign_id = %s",
+            (context.workspace_id, campaign_id),
+        ).fetchone()
+        return (int(row[0]), str(row[1]), str(row[2])) if row is not None else None
+
     def get(
         self,
         context: TenantContext,

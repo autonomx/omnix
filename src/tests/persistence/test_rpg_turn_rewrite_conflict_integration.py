@@ -11,7 +11,7 @@ from app.apps.rpg.session.persistence.session_records import (
     load_session_version_from_postgres,
     save_session_to_postgres,
 )
-from app.jobs.foreground_execution import ForegroundExecution, foreground_execution
+from app.apps.rpg.session.jobs.foreground_context import ForegroundClaim, foreground_claim
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
@@ -54,12 +54,7 @@ def _session(campaign_id: str, revision: int, note: str) -> dict:
 def test_inside_its_turn_a_campaign_cannot_be_rewritten_at_the_committed_revision(tenant) -> None:
     campaign_id = f"session:rewrite-{uuid4().hex}"
     save_session_to_postgres(_session(campaign_id, 3, "committed"))
-    execution = ForegroundExecution(
-        workspace_id=tenant.workspace_id, session_id=campaign_id,
-        submission_id="submit:1", job_id="job:1", claim_token="claim",
-    )
-
-    with foreground_execution(execution):
+    with foreground_claim(ForegroundClaim(campaign_id, "submit:1", "claim")):
         with pytest.raises(TurnStateRewriteConflict):
             save_session_to_postgres(_session(campaign_id, 3, "rewritten after the commit"))
         # Saving what the turn committed again is harmless.
@@ -67,11 +62,7 @@ def test_inside_its_turn_a_campaign_cannot_be_rewritten_at_the_committed_revisio
     assert load_session_version_from_postgres(campaign_id)[0] == 3
 
     # Another campaign's turn does not block it, and an edit outside a turn advances it.
-    other = ForegroundExecution(
-        workspace_id=tenant.workspace_id, session_id="session:other",
-        submission_id="submit:2", job_id="job:2", claim_token="claim",
-    )
-    with foreground_execution(other):
+    with foreground_claim(ForegroundClaim("session:other", "submit:2", "claim")):
         save_session_to_postgres(_session(campaign_id, 3, "renamed"))
     assert load_session_version_from_postgres(campaign_id)[0] == 4
     assert issubclass(TurnStateRewriteConflict, RevisionConflict)

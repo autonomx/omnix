@@ -34,10 +34,8 @@ def persist_foreground_turn(
     submission_id: str,
     database: PostgresDatabase | None = None,
     submission_claim_token: str | None = None,
-    worker_id: str | None = None,
-    lease_token: str | None = None,
 ) -> dict[str, Any]:
-    """Commit campaign, turn, interaction, canon, job, and submission atomically."""
+    """Commit campaign, turn, interaction, canon and the submission's claim atomically."""
 
     if not submission_id:
         submission_id = f"submission:{event.get('interaction_id') or event.get('sequence')}"
@@ -69,7 +67,7 @@ def persist_foreground_turn(
     with unit_of_work(db) as work:
         submission = work.connection.execute(
             """
-            SELECT status, claim_token, job_id, response, execution_started_at
+            SELECT status, claim_token, response, execution_started_at
               FROM omnix_rpg_foreground_submissions
              WHERE workspace_id = %s AND session_id = %s AND submission_id = %s
              FOR UPDATE
@@ -95,14 +93,13 @@ def persist_foreground_turn(
                 claim_token=claim_token,
             ):
                 raise RuntimeError("foreground submission execution could not start")
-            job_id = None
         else:
             status = str(submission[0])
-            if status == "completed" and submission[3] is not None:
+            if status == "completed" and submission[2] is not None:
                 work.rollback()
                 return {
                     "idempotent_replay": True,
-                    "response": dict(submission[3]),
+                    "response": dict(submission[2]),
                     "interaction_id": interaction_id,
                     "submission_id": submission_id,
                 }
@@ -111,8 +108,7 @@ def persist_foreground_turn(
             if not submission_claim_token or submission_claim_token != str(submission[1]):
                 raise JobClaimConflict("foreground submission requires the original claim token")
             claim_token = submission_claim_token
-            job_id = str(submission[2]) if submission[2] is not None else None
-            if submission[4] is None:
+            if submission[3] is None:
                 if not work.foreground_submissions.start_execution(
                     context,
                     session_id=session_id,
@@ -176,61 +172,9 @@ def persist_foreground_turn(
             create_snapshot=bool(event.get("stateful") is not False) and snapshot_due(state_revision),
             snapshot_id=f"snapshot:{session_id}:{state_revision}",
             locked_campaign=campaign,
+            submission_open=True,  # claimed above FOR UPDATE, so no turn of it is committed (F2)
+            maps_touched=bool(result.get("map_instances") or result.get("map_events")),
         )
-
-        completed_job: dict[str, Any] | None = None
-        if job_id:
-            job = work.jobs.get_job(context, job_id)
-            if job is None:
-                raise RuntimeError(f"foreground RPG job disappeared: {job_id}")
-            if job["status"] == "completed":
-                completed_job = job
-            else:
-                metadata_value = job.get("metadata")
-                metadata = metadata_value if isinstance(metadata_value, dict) else {}
-                contract_value = metadata.get("compat_contract")
-                contract = contract_value if isinstance(contract_value, dict) else {}
-                compat_value = contract.get("compat")
-                compat = compat_value if isinstance(compat_value, dict) else {}
-                if job["job_type"] == "rpg.turn.foreground_record" and compat.get("record_only") is True:
-                    completed_job = work.jobs.complete_record_only(
-                        context,
-                        job_id=job_id,
-                        submission_claim_token=claim_token,
-                        output_refs=[
-                            {
-                                "type": "rpg_turn_response",
-                                "module": "rpg",
-                                "session_id": session_id,
-                                "submission_id": submission_id,
-                                "interaction_id": interaction_id,
-                                "turn_response": compact_response,
-                                "source": "postgresql_foreground_transaction",
-                            }
-                        ],
-                        progress={"current": 1, "total": 1, "message": "completed"},
-                    )
-                elif not worker_id or not lease_token:
-                    raise RuntimeError(f"foreground RPG job has no active lease: {job_id}")
-                else:
-                    completed_job = work.jobs.complete(
-                        context,
-                        job_id=job_id,
-                        worker_id=worker_id,
-                        lease_token=lease_token,
-                        output_refs=[
-                            {
-                                "type": "rpg_turn_response",
-                                "module": "rpg",
-                                "session_id": session_id,
-                                "submission_id": submission_id,
-                                "interaction_id": interaction_id,
-                                "turn_response": compact_response,
-                                "source": "postgresql_foreground_transaction",
-                            }
-                        ],
-                        progress={"current": 1, "total": 1, "message": "completed"},
-                    )
 
         if not work.foreground_submissions.complete(
             context,
@@ -273,7 +217,6 @@ def persist_foreground_turn(
         "campaign": persisted.get("campaign"),
         "turn": persisted.get("turn"),
         "snapshot": persisted.get("snapshot"),
-        "job": completed_job,
         "response": compact_response,
         "submission_id": submission_id,
         "interaction_id": interaction_id,

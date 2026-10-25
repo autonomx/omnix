@@ -101,11 +101,10 @@ def test_gateway_composition_uses_the_explicit_turn_pipeline_without_installers(
     script = """
 from app.composition.gateway.main import create_gateway_app
 create_gateway_app()
-from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
+from app.apps.rpg.session.jobs.foreground_turn import execute_foreground_turn
 from app.apps.rpg.session import pipeline
-assert callable(execute_turn_with_job_mirror)
+assert callable(execute_foreground_turn)
 assert [stage.name for stage in pipeline.TURN_PIPELINE] == ["planned_turn", "interaction_commit", "interaction_lifecycle"]
-assert not hasattr(pipeline, '_omnix_rpg_turn_job_mirror_installed')
 """
     completed = subprocess.run(
         [sys.executable, "-c", script],

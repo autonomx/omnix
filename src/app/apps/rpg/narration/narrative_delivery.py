@@ -163,11 +163,10 @@ def prepare_canonical_result_delivery(
         persisted = response  # inserted with the turn, in its unit of work: not saved again (RQ-6.4)
     else:
         persisted = (response_repository or build_production_narrative_repository()).save(response)
-    projected = NarrativeDeliveryCoordinator().open(persisted, mode, delivery_repo)
-    record = delivery_repo.get(projected.response_id)
+    projected, record = NarrativeDeliveryCoordinator().open_with_record(persisted, mode, delivery_repo)
     payload = projected.as_dict()
     result["canonical_narrative_response"] = payload
-    result["narrative_delivery_state"] = record.as_dict() if record is not None else {}
+    result["narrative_delivery_state"] = record.as_dict()
     result["narrative_delivery_mode"] = mode.value
     result["narrative_delivery_response_id"] = projected.response_id
     result["narrative_delivery_semantic_hash"] = projected.semantic_hash

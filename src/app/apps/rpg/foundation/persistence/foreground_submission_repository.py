@@ -91,6 +91,8 @@ class PostgresForegroundSubmissionRepository:
         claim_token: str,
         job_id: str,
     ) -> bool:
+        """Bind a record-only job to the claim, for the kernel's record-only guard (``declarations.py``); the turn
+        route itself writes no job (F2)."""
         cursor = self.connection.execute(
             """
             UPDATE omnix_rpg_foreground_submissions

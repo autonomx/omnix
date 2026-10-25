@@ -462,6 +462,9 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # world tick a step of every turn.
         assert clock["last_tick"] >= 1
         assert {row["pressure_id"] for row in clock["pressure_plan"]["pressures"]} >= {"pressure:roads:starfall-march"}
-        assert len(clock["events"]) >= clock["last_tick"]
+        # Each tick left an event; the campaign keeps the most recent of them (F2: causal_runtime.MAX_KEPT_EVENTS).
+        from app.apps.rpg.world.causal_runtime import MAX_KEPT_EVENTS
+
+        assert min(clock["last_tick"], MAX_KEPT_EVENTS) <= len(clock["events"]) <= MAX_KEPT_EVENTS
     finally:
         job_store.reset_default_job_store_factory_for_tests()

@@ -49,12 +49,12 @@ def _refuse_rewrite_inside_turn(campaign_id: str, revision: int) -> None:
     """A turn commits its state once (WP-5.6): within its execution, saving
     different content at the committed revision would make a revision with no
     turn behind it, so it is a conflict (HTTP 409) instead of a silent bump."""
-    from app.jobs.foreground_execution import current_foreground_execution
+    from app.apps.rpg.session.jobs.foreground_context import current_foreground_claim
 
-    execution = current_foreground_execution()
-    if execution is not None and execution.session_id == campaign_id:
+    claim = current_foreground_claim()
+    if claim is not None and claim.session_id == campaign_id:
         raise TurnStateRewriteConflict(
-            f"RPG turn {execution.submission_id} attempted to rewrite revision {revision} "
+            f"RPG turn {claim.submission_id} attempted to rewrite revision {revision} "
             f"of {campaign_id} after committing it"
         )
 

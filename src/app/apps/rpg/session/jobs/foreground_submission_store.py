@@ -120,23 +120,6 @@ class InMemoryForegroundSubmissionStore:
             ).isoformat()
             return True
 
-    def attach_job(
-        self,
-        session_id: str,
-        submission_id: str,
-        claim_token: str,
-        job_id: str,
-        *,
-        now: datetime | None = None,
-    ) -> bool:
-        del now
-        with self._state.lock:
-            current = self._state.claims.get((session_id, submission_id))
-            if current is None or current["claim_token"] != claim_token or current["status"] != "claimed":
-                return False
-            current["job_id"] = job_id
-            return True
-
     def mark_execution_started(
         self,
         session_id: str,
@@ -243,12 +226,3 @@ class InMemoryForegroundSubmissionStore:
 
 
 RpgForegroundSubmissionStore = InMemoryForegroundSubmissionStore
-
-
-def submission_store_for_job_store(job_store: Any) -> Any:
-    if hasattr(job_store, 'database'):
-        from app.apps.rpg.foundation.persistence.foreground_submissions import submission_store_for_job_store as factory
-        return factory(job_store)
-    return InMemoryForegroundSubmissionStore(getattr(job_store, "db_path", None))
-
-

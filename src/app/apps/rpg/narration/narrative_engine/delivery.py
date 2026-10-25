@@ -299,6 +299,15 @@ class NarrativeDeliveryCoordinator:
         mode: DeliveryMode,
         repository: NarrativeDeliveryRepository,
     ) -> CanonicalNarrativeResponse:
+        return self.open_with_record(response, mode, repository)[0]
+
+    def open_with_record(
+        self,
+        response: CanonicalNarrativeResponse,
+        mode: DeliveryMode,
+        repository: NarrativeDeliveryRepository,
+    ) -> tuple[CanonicalNarrativeResponse, NarrativeDeliveryRecord]:
+        """The projected response and the delivery cursor as opened (a caller needs no second read of it)."""
         frozen = response.with_content_hash()
         block_ids = tuple(block.block_id for block in ordered_blocks(frozen.blocks))
         record = repository.open(
@@ -308,7 +317,7 @@ class NarrativeDeliveryCoordinator:
             block_ids=block_ids,
             metadata={"campaign_id": frozen.campaign_id, "turn_id": frozen.turn_id},
         )
-        return self._project(frozen, record)
+        return self._project(frozen, record), record
 
     def publish_next(
         self,

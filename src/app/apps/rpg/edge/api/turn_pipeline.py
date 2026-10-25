@@ -335,7 +335,7 @@ def _run_rpg_turn(
 
     from app.apps.rpg.session import pipeline
     from app.apps.rpg.foundation.llm_priority import foreground_rpg_llm_priority
-    from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
+    from app.apps.rpg.session.jobs.foreground_turn import execute_foreground_turn
     from app.apps.rpg.session.deferred_narration_guard import canonical_presentation_follows_context
     from app.apps.rpg.session.turn.narration_timing import narrating_after_commit
     from app.apps.rpg.session.turn.run import keeping_turn_start
@@ -349,8 +349,8 @@ def _run_rpg_turn(
                 # The narrative engine presents this turn below (``present_authoritative_turn``).
                 with foreground_rpg_llm_priority(), canonical_presentation_follows_context(), \
                         narrating_after_commit(narrate_after_commit):
-                    return execute_turn_with_job_mirror(pipeline.apply_turn, session_id, command,
-                                                        submission_id=submission_id, action=action)
+                    return execute_foreground_turn(pipeline.apply_turn, session_id, command,
+                                                   submission_id=submission_id, action=action)
 
             result = apply_foreground_turn()
             attach_rpg_result_timing(result)

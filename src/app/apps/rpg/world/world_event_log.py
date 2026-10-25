@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
-MAX_WORLD_EVENTS = 160
+MAX_WORLD_EVENTS = 64  # the campaign keeps the world's recent events, not all of them (F2)
 
 
 def _ensure_world_event_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:

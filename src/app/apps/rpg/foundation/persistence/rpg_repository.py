@@ -350,8 +350,15 @@ class PostgresRpgRepository:
         create_snapshot: bool = False,
         snapshot_id: str | None = None,
         locked_campaign: dict[str, Any] | None = None,
+        submission_open: bool = False,
+        maps_touched: bool | None = None,
     ) -> dict[str, Any]:
-        """Commit one turn. ``locked_campaign`` is the row the caller already read ``FOR UPDATE`` in this transaction."""
+        """Commit one turn. ``locked_campaign`` is the row the caller already read ``FOR UPDATE`` in this transaction.
+
+        ``submission_open``: the caller holds the submission's claim, still open, in this transaction; a turn commits
+        with its claim completed, so no turn of this submission exists and none is looked for. ``maps_touched``: whether
+        this transaction changed a map instance (None: find out).
+        """
         encoded_response = canonical_json(compact_response).encode("utf-8")
         if not 0 < len(encoded_response) <= MAX_COMPACT_TURN_RESPONSE_BYTES:
             raise CompactTurnResponseTooLarge(
@@ -363,7 +370,7 @@ class PostgresRpgRepository:
         if campaign is None or campaign["id"] != campaign_id:
             raise EntityNotFound(campaign_id)
 
-        existing = self.get_turn_by_submission(context, campaign_id, submission_id)
+        existing = None if submission_open else self.get_turn_by_submission(context, campaign_id, submission_id)
         if existing is not None:
             return {"idempotent_replay": True, "campaign": campaign, "turn": existing}
         # The turns' narrations are kept beside the document, not in it (RQ-1.4).
@@ -416,7 +423,7 @@ class PostgresRpgRepository:
                 encoded_response.decode("utf-8"),
                 canonical_json(_turn_delta(campaign["state"], next_state)),
                 document_version(next_state),
-                self.touched_maps_hash(context, campaign_id),
+                self.touched_maps_hash(context, campaign_id) if maps_touched is not False else None,
             ),
         ).fetchone()
         turn = _turn(row)

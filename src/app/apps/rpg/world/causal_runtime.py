@@ -199,10 +199,30 @@ def advance_causal_runtime(
     current["state"] = next_state
     current["pressure_statuses"] = next_statuses
     current["events"] = [_event_dict(event) for event in all_events]
+    _keep_recent(current)
     current["last_tick"] = tick
     current["revision"] = int(current.get("revision") or 1) + 1
     current["runtime_hash"] = _hash(current)
     return current, tuple(emitted)
+
+
+# The world's recent history kept in the campaign (F2): each pressure tick is a few kilobytes, and a campaign of a
+# thousand turns kept them all. The state before the kept events is the runtime's ``initial_state``, rolled forward
+# over the events let go, so the initial state and the events still replay to the current state.
+MAX_KEPT_EVENTS = 12
+
+
+def _keep_recent(current: dict[str, Any]) -> None:
+    events = list(current.get("events") or ())
+    if len(events) <= MAX_KEPT_EVENTS:
+        return
+    dropped, kept = events[:-MAX_KEPT_EVENTS], events[-MAX_KEPT_EVENTS:]
+    try:
+        rolled = replay_causal_events(dict(current.get("initial_state") or {}), dropped)
+    except ValueError:
+        return  # a history that does not replay is kept whole rather than cut where it breaks
+    current["initial_state"] = rolled
+    current["events"] = kept
 
 
 def pull_levers(
@@ -259,6 +279,7 @@ def pull_levers(
         _event_dict(row)
         for row in sorted((*existing, event), key=lambda row: (row.tick, row.sequence, row.event_id))
     ]
+    _keep_recent(current)
     current["revision"] = int(current.get("revision") or 1) + 1
     current["runtime_hash"] = _hash(current)
     return current, event
@@ -356,5 +377,6 @@ __all__ = [
     "ensure_causal_runtime_installed",
     "initialize_causal_runtime",
     "pull_levers",
+    "MAX_KEPT_EVENTS",
     "replay_causal_events",
 ]
