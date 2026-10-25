@@ -130,3 +130,24 @@ def test_asked_about_one_ware_they_name_that_one() -> None:
     plan = build_plan(_simulation(), ORIK, "What does a room cost?")
     assert plan is not None and plan.wares == ("Room for 3 silver",)
     assert line_keeps_the_plan(plan, "A room is three silver a night.")
+
+
+def test_their_goals_lead_what_they_say_and_which_quest_they_offer() -> None:
+    """RQ-4.3: a person's goals (the world's routines author them) bias the plan: the goals the hero's words touch
+    first, and the quest that answers what they are after."""
+    simulation = _simulation()
+    simulation["world_model"]["routines"] = [{"npc_id": ORIK, "schedule": [], "goals": [
+        {"goal_id": "goal:debts", "summary": "Pay off the brewer", "priority": 1, "topics": ["brewer", "debt"]},
+        {"goal_id": "goal:wolves", "summary": "Keep the wolves from the road", "priority": 3, "topics": ["wolves"]}]}]
+    simulation["quest_state"]["quests"].append(
+        {"quest_id": "quest:wolves", "title": "Wolves on the Road", "objective": "Drive off the wolves",
+         "status": "available", "giver_id": ORIK})
+    plan = build_plan(simulation, ORIK, "Good evening.")
+    assert plan.goals[:2] == ("Keep the wolves from the road", "Pay off the brewer") and plan.goals[2] == "keep the inn"
+    assert plan.quest_offer == {}  # neither work nor a goal of theirs asked about
+    asked = build_plan(simulation, ORIK, "Any trouble with the wolves?")
+    assert asked.quest_offer["quest_id"] == "quest:wolves"  # a goal of theirs, and a quest that answers it
+    work = build_plan(simulation, ORIK, "Do you have any work for me?")
+    assert work.quest_offer["quest_id"] == "quest:wolves"  # of the two, the one their most pressing goal is after
+    owed = build_plan(simulation, ORIK, "How is the debt to the brewer?")
+    assert owed.goals[0] == "Pay off the brewer" and owed.quest_offer == {}  # touched, but no quest answers it

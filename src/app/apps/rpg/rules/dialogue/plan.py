@@ -100,6 +100,26 @@ def _price_text(price: Mapping[str, Any]) -> str:
                      if int(price.get(coin) or 0)) or "a price"
 
 
+def _goals(world: Mapping[str, Any], npc_id: str, asked: set[str]) -> list[dict[str, Any]]:
+    """What the speaker is after (the world's routines author it, routines.md): the goals the hero's words touch
+    first, then the most pressing."""
+    goals = [_d(goal) for routine in _l(world.get("routines")) if _s(_d(routine).get("npc_id")) == npc_id
+             for goal in _l(_d(routine).get("goals")) if _s(_d(goal).get("summary"))]
+
+    def touched(goal: Mapping[str, Any]) -> bool:
+        return bool(asked & _goal_words(goal))
+
+    return sorted(goals, key=lambda goal: (not touched(goal), -int(goal.get("priority") or 1)))
+
+
+def _stemmed(words: set[str]) -> set[str]:
+    return words | {_stem(word) for word in words}
+
+
+def _goal_words(goal: Mapping[str, Any]) -> set[str]:
+    return _stemmed({_s(topic).casefold() for topic in _l(goal.get("topics"))} | _words(_s(goal.get("summary"))))
+
+
 def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> DialoguePlan | None:
     """The plan for ``speaker_id``'s answer to ``text``; ``None`` when the world does not know them."""
     world = _d(simulation.get("world_model"))
@@ -125,17 +145,25 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
             priced.append(f"{', '.join(sorted(asked & topics))} for {_price_text(_d(fact.get('price')))}")
         elif shares == "when_trusted":
             held += 1
+    goals = _goals(world, speaker_id, asked)
+    pressing = _goal_words(goals[0]) if goals else set()
     quest_offer: dict[str, str] = {}
-    if _WORK.search(text.casefold()):
-        here = _s(npc.get("location_id"))
-        for quest in _l(_d(simulation.get("quest_state")).get("quests")):
-            quest = _d(quest)
-            places = [_s(place) for place in _l(quest.get("locations"))]
-            giver = _s(quest.get("giver_id") or quest.get("offered_by"))
-            if quest.get("status") == "available" and (giver == speaker_id or (not giver and here in places)):
-                quest_offer = {"quest_id": _s(quest.get("quest_id") or quest.get("id")), "title": _s(quest.get("title")),
-                               "objective": _s(quest.get("objective"))}
-                break
+    here = _s(npc.get("location_id"))
+    offerable = []
+    for quest in _l(_d(simulation.get("quest_state")).get("quests")):
+        quest = _d(quest)
+        places = [_s(place) for place in _l(quest.get("locations"))]
+        giver = _s(quest.get("giver_id") or quest.get("offered_by"))
+        if quest.get("status") == "available" and (giver == speaker_id or (not giver and here in places)):
+            about = _stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))}"))
+            offerable.append((len(about & asked), len(about & pressing), quest))
+    # Asked for work, or about what one of their goals is after and a quest of theirs answers: the quest closest to
+    # the words, then to the goal they are most after (routines.md), offered.
+    on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(said for said, _, _ in offerable)
+    if offerable and (_WORK.search(text.casefold()) or on_a_goal):
+        _, _, quest = max(offerable, key=lambda row: (row[0], row[1]))
+        quest_offer = {"quest_id": _s(quest.get("quest_id") or quest.get("id")), "title": _s(quest.get("title")),
+                       "objective": _s(quest.get("objective"))}
     on_sale: list[dict[str, Any]] = []
     if _WARES.search(text.casefold()):
         on_sale = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
@@ -146,7 +174,8 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
     return DialoguePlan(
         speaker_id=speaker_id, speaker_name=name, role=_s(npc.get("role")), stance=stance,
         voice=_s(npc.get("speech_style")), personality=tuple(_s(trait) for trait in _l(npc.get("personality"))),
-        goals=tuple(_s(goal) for goal in _l(npc.get("goals"))), background=_s(npc.get("description")),
+        goals=tuple(dict.fromkeys([*(_s(goal.get("summary")) for goal in goals), *(_s(goal) for goal in _l(npc.get("goals")))])),
+        background=_s(npc.get("description")),
         reveals=tuple(reveals), revealed_ids=tuple(revealed_ids), for_a_price=tuple(priced), held_back=held,
         secrets=tuple(_s(secret) for secret in _l(npc.get("secrets"))), quest_offer=quest_offer,
         wares=tuple(f"{_s(offer.get('label'))} for {_price_text(_d(offer.get('price')))}" for offer in on_sale),

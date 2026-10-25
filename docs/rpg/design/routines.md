@@ -49,3 +49,12 @@ a committed `world_tick` turn, and the spatial state shows Aldric patrolling the
 Goals biasing what people say and offer, events from pressures and the surfacing budget (RQ-4.3, RQ-4.4); people moving
 on the tactical grid between their places (their cells stay in the map-instance snapshots); routines for worlds that
 author none (RQ-4.1 generates them).
+
+## As built (RQ-4.3: goals)
+
+The goals a world's routines author for a person (`NpcGoal`: summary, priority, topics) bias what they say and offer
+(`rules/dialogue/plan.py`): the plan's goals list theirs first, those the hero's words touch ahead, then by priority,
+then the character's own; of the quests they could offer, the one closest to the hero's words and then to their
+most pressing goal is offered (before, the first in the log); and a hero who asks about what one of their goals is
+after ("any trouble with the wolves?") is offered the quest that answers it, without asking for work. The starter
+world authors goals for ten of its people.
