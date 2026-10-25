@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -63,9 +64,10 @@ def _campaign_exists(
 
 # A published world revision never changes: its canon, as a campaign pins it, is projected once (RQ-6.4: each turn
 # read the revision's whole document and projected it twice).
-_PINNED: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+_PINNED: dict[tuple[str, str, str, int], tuple[float, dict[str, Any]]] = {}  # (when projected, the canon)
 _PINNED_LOCK = threading.Lock()
 _MAX_PINNED = 32
+_PINNED_TTL_SECONDS = 3600.0
 
 
 def _pinned_world_canon(
@@ -80,9 +82,9 @@ def _pinned_world_canon(
     world_revision = int(binding.get("world_revision") or 0)
     key = (str(getattr(context, "workspace_id", "")), campaign_id, world_id, world_revision)
     with _PINNED_LOCK:
-        cached = _PINNED.get(key)
-    if cached is not None:
-        return copy_state(cached)
+        kept = _PINNED.get(key)
+    if kept is not None and time.monotonic() - kept[0] < _PINNED_TTL_SECONDS:
+        return copy_state(kept[1])
     revision = work.world_scenarios.get_world_revision(context, world_id, world_revision)
     document = _mapping((revision or {}).get("document"))
     canon = _mapping(document.get("canon"))
@@ -95,7 +97,7 @@ def _pinned_world_canon(
         topology=_mapping(document.get("topology")),
     )
     with _PINNED_LOCK:
-        _PINNED[key] = copy_state(projected)
+        _PINNED[key] = (time.monotonic(), copy_state(projected))
         while len(_PINNED) > _MAX_PINNED:
             _PINNED.pop(next(iter(_PINNED)))
     return projected
@@ -282,15 +284,25 @@ def enrich_scene_lore(
 _COVERED: dict[tuple[str, str], "_Covered"] = {}
 _COVERED_LOCK = threading.Lock()
 _COVERED_LIMIT = 128
+_COVERED_TTL_SECONDS = 3600.0
 
 
 class _Covered:
-    __slots__ = ("revision", "content_hash", "binding", "resolved", "document")
+    __slots__ = ("revision", "content_hash", "binding", "resolved", "document", "at")
 
     def __init__(self, revision: int, content_hash: str, binding: str, resolved: Mapping[str, str],
                  document: Mapping[str, Any]) -> None:
         self.revision, self.content_hash, self.binding = revision, content_hash, binding
         self.resolved, self.document = dict(resolved), document
+        self.at = time.monotonic()
+
+
+def clear_lore_memos() -> None:
+    """Forget the projected world canon and what each bible covers (both are rebuilt on the next turn's miss)."""
+    with _PINNED_LOCK:
+        _PINNED.clear()
+    with _COVERED_LOCK:
+        _COVERED.clear()
 
 
 def _target_keys(targets: Sequence[SceneLoreTarget]) -> tuple[str, ...]:
@@ -301,7 +313,7 @@ def _already_covered(work: Any, context: Any, campaign_id: str, keys: Sequence[s
     """The bible as remembered and the targets' resolved ids, when it covers ``keys`` and is still the stored one."""
     with _COVERED_LOCK:
         covered = _COVERED.get((str(context.workspace_id), campaign_id))
-    if covered is None or not set(keys) <= set(covered.resolved):
+    if covered is None or time.monotonic() - covered.at >= _COVERED_TTL_SECONDS or not set(keys) <= set(covered.resolved):
         return None
     version = work.campaign_bibles.version(context, campaign_id)
     if version is None or version[1] != covered.content_hash or version[2] != covered.binding:

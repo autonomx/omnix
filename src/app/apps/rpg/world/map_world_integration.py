@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import ceil, sqrt
@@ -126,9 +127,16 @@ def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapMo
 
 # A campaign's map definitions follow from its world graph alone (places, roads, bindings, seed), and building them
 # hashes every definition: each campaign load asked for them twice (RQ-6.4). Repositories are read-only once built.
-_REPOSITORIES: dict[str, MapDefinitionRepository] = {}
+_REPOSITORIES: dict[str, tuple[float, MapDefinitionRepository]] = {}  # (when built, the repository)
 _REPOSITORY_LOCK = threading.Lock()
 _MAX_REPOSITORIES = 64
+_REPOSITORY_TTL_SECONDS = 3600.0
+
+
+def clear_map_repositories() -> None:
+    """Forget the campaigns' built map repositories (each is rebuilt from its world graph when next asked for)."""
+    with _REPOSITORY_LOCK:
+        _REPOSITORIES.clear()
 
 
 def _repository_key(session: Mapping[str, Any]) -> str:
@@ -145,12 +153,12 @@ def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepos
 
     key = _repository_key(session)
     with _REPOSITORY_LOCK:
-        cached = _REPOSITORIES.get(key)
-    if cached is not None:
-        return cached
+        kept = _REPOSITORIES.get(key)
+    if kept is not None and time.monotonic() - kept[0] < _REPOSITORY_TTL_SECONDS:
+        return kept[1]
     repository = _build_repository(model)
     with _REPOSITORY_LOCK:
-        _REPOSITORIES[key] = repository
+        _REPOSITORIES[key] = (time.monotonic(), repository)
         while len(_REPOSITORIES) > _MAX_REPOSITORIES:
             _REPOSITORIES.pop(next(iter(_REPOSITORIES)))
     return repository

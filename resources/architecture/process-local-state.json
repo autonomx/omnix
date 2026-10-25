@@ -1607,6 +1607,90 @@
       "symbol": "_IDLE_LOCK",
       "category": "per-connection",
       "reason": "Process-local mutex around the idle lock-connection pool; it carries no durable state."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_PINNED",
+      "category": "cache",
+      "reason": "A published world revision's canon as a campaign pins it, projected once per process (a revision never changes); bounded, expiring, and cleared by clear_lore_memos; a miss only costs the projection.",
+      "max_entries_symbol": "_MAX_PINNED",
+      "ttl_symbol": "_PINNED_TTL_SECONDS",
+      "invalidation": "clear_lore_memos"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_PINNED_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_COVERED",
+      "category": "cache",
+      "reason": "What each campaign's bible already covers, checked against the stored bible's version on every use (F2); bounded, expiring, and cleared by clear_lore_memos; a miss only costs the full lore pass.",
+      "max_entries_symbol": "_COVERED_LIMIT",
+      "ttl_symbol": "_COVERED_TTL_SECONDS",
+      "invalidation": "clear_lore_memos"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_COVERED_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/world/map_world_integration.py",
+      "symbol": "_REPOSITORIES",
+      "category": "cache",
+      "reason": "Each campaign's built map repository, keyed by its world graph's inputs (RQ-6.4); bounded, expiring, and cleared by clear_map_repositories; a miss rebuilds it.",
+      "max_entries_symbol": "_MAX_REPOSITORIES",
+      "ttl_symbol": "_REPOSITORY_TTL_SECONDS",
+      "invalidation": "clear_map_repositories"
+    },
+    {
+      "path": "src/app/apps/rpg/world/map_world_integration.py",
+      "symbol": "_REPOSITORY_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/world_sharing.py",
+      "symbol": "_DEVICE_FLOWS",
+      "category": "per-connection",
+      "reason": "GitHub device sign-ins in progress, each polled by its page; expired ones are forgotten when another starts and at most 32 are kept; the token a sign-in yields is stored durably, not here."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/world_sharing.py",
+      "symbol": "_DEVICE_LOCK",
+      "category": "per-connection",
+      "reason": "Process-local mutex around the sign-in flows; it carries no durable state."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/builtin_worlds.py",
+      "symbol": "_source_text.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_source_text.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/builtin_worlds.py",
+      "symbol": "bundle_bytes.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "bundle_bytes.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/builtin_worlds.py",
+      "symbol": "_revision.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_revision.cache_clear"
     }
   ]
 }

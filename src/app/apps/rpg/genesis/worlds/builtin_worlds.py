@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any, Mapping
 
 from app.runtime.paths import resources_root
@@ -29,7 +29,7 @@ class BuiltinWorld:
 STARTER = BuiltinWorld(key="starter", bundle="the-market-road")
 
 
-@lru_cache(maxsize=None)
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
 def _source_text(world: BuiltinWorld) -> str:
     return resources_root().joinpath(*BUNDLES_DIR, world.bundle, "world.source.json").read_text(encoding="utf-8")
 
@@ -39,7 +39,7 @@ def world_source(world: BuiltinWorld) -> dict[str, Any]:
     return json.loads(_source_text(world))
 
 
-@lru_cache(maxsize=None)
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
 def bundle_bytes(world: BuiltinWorld) -> bytes:
     """The world's bundle, built from its ``world.source.json``."""
     from .world_source import build_bundle
@@ -52,7 +52,7 @@ def legacy_ids(world: BuiltinWorld) -> dict[str, str]:
     return {str(old): str(new) for old, new in dict(world_source(world).get("legacy_ids") or {}).items()}
 
 
-@lru_cache(maxsize=None)
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
 def _revision(world: BuiltinWorld) -> Any:
     from .contracts import WorldRevisionDocument
     from .world_source import compile_world
