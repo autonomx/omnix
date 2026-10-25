@@ -225,7 +225,8 @@ def _republished_latest(
         indexes=base_release.indexes,
         asset_bindings=base_release.asset_bindings,
         compiler_provenance={**dict(base_release.compiler_provenance), "republished_from_revision": base.revision},
-        certification=dict(base_release.certification),
+        # The same canon and maps as the revision it is made from (its play sections are checked when written in).
+        certification={**dict(base_release.certification), "republished_from_revision": base.revision},
         artifact_stage=base_release.artifact_stage,
         runtime_seed=base_release.runtime_seed,
         materialization=base_release.materialization,
@@ -274,10 +275,12 @@ def _existing_ready_promotion(
             or {}
         )
         provenance = dict(revision_document.get("provenance") or {})
-        # A republished world's maps are its own and complete: any opening launches from it, wherever it starts.
-        if not provenance.get("republished_from_revision") and (
-            str(starter.get("starting_location_id") or "") != starting_location_id
-        ):
+        if provenance.get("republished_from_revision"):
+            # A republished world's maps are its own and complete: any opening launches from it, wherever it starts,
+            # while it is the world as it stands (a later revision, from an edit or another draft, supersedes it).
+            if revision_number != max(revision_by_number, default=0):
+                continue
+        elif str(starter.get("starting_location_id") or "") != starting_location_id:
             continue
         if str(provenance.get("authored_play_sections") or "") != play_sections:
             continue  # written before the author's latest sections (RQ-4.1)

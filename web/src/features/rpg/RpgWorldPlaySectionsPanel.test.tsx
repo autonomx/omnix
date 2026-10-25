@@ -104,5 +104,8 @@ describe('RpgWorldPlaySectionsPanel', () => {
     expect(await screen.findByText('Not valid: economy.providers.0.provider_id:String should have at least 1 character')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(screen.getByText('A newer draft was saved elsewhere. Reload it before saving again.')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Reload the saved draft' }));
+    expect(await screen.findByText('Reloaded the draft saved with the world.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reload the saved draft' })).not.toBeInTheDocument();
   });
 });

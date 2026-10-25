@@ -57,9 +57,15 @@ def _stored(world: Mapping[str, Any]) -> dict[str, Any] | None:
     return dict(stored["document"]) if isinstance(stored, Mapping) and isinstance(stored.get("document"), Mapping) else None
 
 
+def _plays(row: Any) -> bool:
+    return isinstance(row, Mapping) and any(row.get(key) for key in ("stats", "behaviour", "loot"))
+
+
 def _as_played(document: Mapping[str, Any]) -> str:
-    """A draft's hash as it plays: a revision lists its creatures in the lore's order, the draft in the author's."""
-    bestiary = sorted(document.get("bestiary") or (), key=lambda row: _text(dict(row).get("id")))
+    """A draft's hash as it plays: a revision lists its creatures in the lore's order, the draft in the author's,
+    and a creature row that says nothing of how it fights is no row at all."""
+    bestiary = sorted((row for row in document.get("bestiary") or () if _plays(row)),
+                      key=lambda row: _text(dict(row).get("id")))
     return canonical_hash({**dict(document), "bestiary": bestiary})
 
 
@@ -145,6 +151,8 @@ def save_play_sections(
     if draft is None:
         raise PlaySectionsInvalidError(findings)
     written = draft.model_dump(mode="json", exclude_none=True)
+    # A creature row that names no numbers, behaviour or loot is the creature as its lore has it: not kept.
+    written["bestiary"] = [row for row in written.get("bestiary") or () if _plays(row)]
     context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)

@@ -57,6 +57,7 @@ export function RpgWorldPlaySectionsPanel({ worldId }: RpgWorldPlaySectionsPanel
   const [active, setActive] = useState<PlaySectionId>('economy');
   const [feedback, setFeedback] = useState('');
   const [invalid, setInvalid] = useState<string[]>([]);
+  const [conflict, setConflict] = useState(false);
 
   useEffect(() => { if (view) setDraft(view.document); }, [view]);
 
@@ -70,11 +71,17 @@ export function RpgWorldPlaySectionsPanel({ worldId }: RpgWorldPlaySectionsPanel
     queryClient.setQueryData([QUERY_KEY, worldId], next);
     setDraft(next.document);
     setInvalid([]);
+    setConflict(false);
     setFeedback(message);
   };
   const fail = (error: unknown) => {
     setInvalid(error instanceof RpgPlaySectionsError ? error.findings : []);
+    setConflict(error instanceof RpgPlaySectionsError && error.code.startsWith('world_play_sections_conflict'));
     setFeedback(errorText(error));
+  };
+  const reload = async () => {
+    const fresh = await query.refetch();
+    if (fresh.data) accept(fresh.data, 'Reloaded the draft saved with the world.');
   };
   const save = useMutation({
     mutationFn: () => rpgWorldPlaySectionsClient.save(worldId, view?.content_hash ?? '', draft as RpgPlaySectionsDraft),
@@ -118,6 +125,7 @@ export function RpgWorldPlaySectionsPanel({ worldId }: RpgWorldPlaySectionsPanel
       </div>
       {neverPublished ? <p className="rpg-authoring-feedback">Publish the world once (World Generation) before writing how it plays.</p> : null}
       {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
+      {conflict ? <button className="rpg-secondary-button" type="button" onClick={() => void reload()}>Reload the saved draft</button> : null}
 
       <div className="rpg-play-toolbar">
         <button className="rpg-secondary-button" disabled={busy || neverPublished} type="button" onClick={() => fromLore.mutate()}>{fromLore.isPending ? 'Drafting…' : 'Draft empty sections from lore'}</button>
