@@ -33,10 +33,12 @@ import { buildHermesSequenceReviewRequest } from './hermesSequenceReviewRequest'
 import { createRpgTurnReadoutPreview } from './rpgTurnReadoutState';
 import {
   createRpgWorkspaceState,
+  quickActionIcon,
   type RpgQuickActionPreview,
   type RpgStoryMessagePreview,
   rpgTurnOutputText,
 } from './rpgUiState';
+import { useLatestRpgTurnOffers } from './rpgTurnOffers';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
 
@@ -383,7 +385,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
   const dynamicQuickActions = quickActionsFromHermesSuggestions(hermesSuggestions);
-  const responseOptions = dynamicQuickActions.length ? dynamicQuickActions : quickActions;
+  // The last turn's (RQ-7.3): the answers to the game's question, else what the scene offers now.
+  const turnOffers = useLatestRpgTurnOffers(selectedLiveSessionId ?? '');
+  const offeredByTurn = (turnOffers?.choices.length ? turnOffers.choices : turnOffers?.suggestions ?? [])
+    .map((row) => ({ label: row.label, command: row.command, icon: quickActionIcon(row.command) }));
+  const responseOptions = offeredByTurn.length ? offeredByTurn
+    : dynamicQuickActions.length ? dynamicQuickActions : quickActions;
   const hermesSequenceReviewRequest = buildHermesSequenceReviewRequest({
     assistMode: hermesAssistMode,
     quickActions: responseOptions,

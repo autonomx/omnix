@@ -4640,6 +4640,11 @@ export interface components {
              */
             changed_sections: string[];
             /**
+             * Choices
+             * @default []
+             */
+            choices: components["schemas"]["Suggestion"][];
+            /**
              * Facts
              * @default []
              */
@@ -4654,6 +4659,11 @@ export interface components {
              * @default false
              */
             refused: boolean;
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: components["schemas"]["Suggestion"][];
         };
         /**
          * PressuresMoved
@@ -9287,6 +9297,16 @@ export interface components {
              * @enum {string}
              */
             type: "stock_taken";
+        };
+        /**
+         * Suggestion
+         * @description Something the play screen offers to do next (RQ-7.3): a label, and the command it sends.
+         */
+        Suggestion: {
+            /** Command */
+            command: string;
+            /** Label */
+            label: string;
         };
         /**
          * TimeAdvanced

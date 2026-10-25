@@ -1204,7 +1204,7 @@ function quickActionLabel(command: string): string {
   return titleCase(verb);
 }
 
-function quickActionIcon(command: string): string {
+export function quickActionIcon(command: string): string {
   const normalized = command.toLowerCase();
   if (normalized.startsWith('talk') || normalized.startsWith('ask')) return '☯';
   if (normalized.startsWith('travel') || normalized.startsWith('go')) return '🧭';

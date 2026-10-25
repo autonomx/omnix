@@ -128,3 +128,15 @@ def test_the_campaign_reaches_the_browser_without_the_worlds_secrets(launch) -> 
     assert all(secret not in text for secret in liora["secrets"])
     assert "world_model" not in shown["simulation_state"] and "campaign_bible" not in shown["state"]
     assert "setup_payload" not in shown and shown["simulation_state"]["player_state"]
+
+
+def test_each_turn_offers_what_to_do_next_and_a_question_its_answers(launch) -> None:
+    """RQ-7.3: the outcome carries suggestions from the scene, and when the game asks, the choices that answer."""
+    play = launch("starter")  # Bran and Mira in the Rusty Flagon
+    looked = play.turn("look around")["outcome"]["presentation"]
+    labels = [row["label"] for row in looked["suggestions"]]
+    assert labels[:2] == ["Talk to Bran", "Talk to Mira"] and "Go to Market Square" in labels and len(labels) <= 6
+    assert looked["choices"] == []
+    asked = play.turn("I attack")["outcome"]["presentation"]  # "Who or what do you want to attack?"
+    assert [(row["label"], row["command"]) for row in asked["choices"]] == [
+        ("Bran", "I attack Bran."), ("Mira", "I attack Mira.")], asked

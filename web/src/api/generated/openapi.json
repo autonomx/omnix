@@ -40405,6 +40405,14 @@
             "title": "Changed Sections",
             "type": "array"
           },
+          "choices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Suggestion"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
           "facts": {
             "default": [],
             "items": {
@@ -40422,13 +40430,23 @@
             "default": false,
             "title": "Refused",
             "type": "boolean"
+          },
+          "suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Suggestion"
+            },
+            "title": "Suggestions",
+            "type": "array"
           }
         },
         "required": [
           "changed_sections",
           "location_name",
           "refused",
-          "facts"
+          "facts",
+          "suggestions",
+          "choices"
         ],
         "title": "PresentationHints",
         "type": "object"
@@ -61724,6 +61742,26 @@
           "required"
         ],
         "title": "SuccessCriterion",
+        "type": "object"
+      },
+      "Suggestion": {
+        "additionalProperties": false,
+        "description": "Something the play screen offers to do next (RQ-7.3): a label, and the command it sends.",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "command"
+        ],
+        "title": "Suggestion",
         "type": "object"
       },
       "SupplyFact": {

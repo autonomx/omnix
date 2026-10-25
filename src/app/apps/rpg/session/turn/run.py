@@ -71,6 +71,16 @@ def _reported(changes: list[StateChange]) -> list[dict[str, Any]]:
             for change in changes]
 
 
+def _offered(document: dict[str, Any], planned: PlannedAction | None) -> dict[str, Any]:
+    """What the play screen offers after the turn (RQ-7.3): suggestions from the scene, and the answers to the
+    game's question when it asked one."""
+    from app.apps.rpg.session.turn.suggestions import choices, suggestions
+
+    asked = planned is not None and planned.mechanic == "clarify"
+    return {"suggestions": [row.model_dump() for row in suggestions(document)],
+            "choices": [row.model_dump() for row in choices(document, planned.reason)] if asked else []}
+
+
 def turn_consequences(document: dict[str, Any],
                       applied: list[StateChange]) -> tuple[dict[str, Any], list[StateChange], list[str]]:
     """What the turn led to: the quests of steps it moved on (rules/quest/progress.py), the pressures its deeds pushed
@@ -161,6 +171,7 @@ def run_planned_turn(
             "intent": reading_record(reading),
             "changes": _reported(applied),
             **({"action_result": resolution.action_result} if resolution.action_result else {}),
+            "presentation": _offered(document, planned),
         },
         **({"map_events": [resolution.map_event]} if resolution.map_event else {}),
     }
@@ -239,7 +250,8 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
         "action_type": "world_tick", "semantic_family": "world", "llm_called": False, "llm_purpose": "turn_pipeline",
         "source": SOURCE, "response_mode": "world_tick", "resolved_result": resolved, "result": dict(resolved),
         "causal_world_runtime": causal, "world_tick": {"elapsed_seconds": seconds, "ticks": ticks},
-        "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick", "changes": _reported(changes)},
+        "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick", "changes": _reported(changes),
+                          "presentation": _offered(document, None)},
     }
     from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
     from app.apps.rpg.session.narrative_engine_bridge import publish_fixed_narration

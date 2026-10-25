@@ -17,6 +17,7 @@ import {
   turnFailureMessage,
 } from './rpgTurnUiStore';
 import { pipelineFetch } from '../../api/fetchPipeline';
+import { latestRpgTurnOffers } from './rpgTurnOffers';
 
 afterEach(() => {
   resetRpgTurnUiStoreForTests();
@@ -297,6 +298,30 @@ describe('rpgTurnUiStore', () => {
       { kind: 'item', text: '+Healing Potion', tone: 'gain' },
     ]);
     expect(card.text).toBe('-3 silver · +Healing Potion');
+  });
+
+  it("keeps the turn's suggestions and the answers to its question for the composer", () => {
+    beginRpgTurnUiSubmission({ sessionId: 'session:offers', submissionId: 'submit:offers', command: 'go' });
+    completeRpgTurnUiSubmission({
+      sessionId: 'session:offers',
+      submissionId: 'submit:offers',
+      payload: {
+        ok: true,
+        contract_version: 'rpg_turn_response_v2',
+        interaction_id: 'interaction:11',
+        visible_response: { narration: 'Where do you want to go?' },
+        outcome: {
+          presentation: {
+            suggestions: [{ label: 'Look around', command: 'look around' }],
+            choices: [{ label: 'The Road', command: 'go to The Road' }],
+          },
+        } as never,
+      },
+    });
+    expect(latestRpgTurnOffers('session:offers')).toEqual({
+      suggestions: [{ label: 'Look around', command: 'look around' }],
+      choices: [{ label: 'The Road', command: 'go to The Road' }],
+    });
   });
 
   it('does not request heavy query refreshes for explicit conversation-only turns', () => {

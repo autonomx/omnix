@@ -36,6 +36,15 @@ Tone = Literal["gain", "loss", "neutral"]
 _BANDS = {"strong": "a strong success", "success": "a success", "cost": "a success at a cost", "failure": "a failure"}
 
 
+class Suggestion(BaseModel):
+    """Something the play screen offers to do next (RQ-7.3): a label, and the command it sends."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label: str
+    command: str
+
+
 class OutcomeFact(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -130,4 +139,4 @@ def outcome_facts(changes: Sequence[StateChange], document: Mapping[str, Any] | 
     return tuple(facts)
 
 
-__all__ = ["OutcomeFact", "outcome_facts"]
+__all__ = ["OutcomeFact", "Suggestion", "outcome_facts"]

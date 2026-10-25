@@ -10,6 +10,7 @@ import {
   resetRpgTurnDiagnosticsForTests,
   type RpgTurnClientMilestones,
 } from './rpgTurnDiagnostics';
+import { recordRpgTurnOffers, resetRpgTurnOffersForTests } from './rpgTurnOffers';
 
 export type RpgTurnUiStatus = 'optimistic' | 'pending' | 'complete' | 'failed';
 
@@ -159,6 +160,7 @@ export function completeRpgTurnUiSubmission(input: CompleteSubmissionInput): str
     input.sessionId,
     [...remaining, ...(completedPlayer ? [completedPlayer] : []), ...responseEntries],
   );
+  recordRpgTurnOffers(input.sessionId, input.payload.outcome?.presentation);
 
   if (input.milestones && input.responseHeaders) {
     completeRpgTurnDiagnostics({
@@ -400,6 +402,7 @@ export function resetRpgTurnUiStoreForTests(): void {
   sessionResponseCache.clear();
   listeners.clear();
   resetRpgTurnDiagnosticsForTests();
+  resetRpgTurnOffersForTests();
   removeTurnMiddleware?.();
   removeTurnMiddleware = null;
 }
