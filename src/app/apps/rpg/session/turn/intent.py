@@ -17,7 +17,7 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_data
-from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView
+from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, hypothetical
 from app.prompts import prompt_template
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,10 @@ class ModelReading:
 
 
 def _scene_rows(scene: SceneView) -> list[dict[str, str]]:
+    # A person's other names (what they do, what they are called) let the model read "the union leader" or "the
+    # bartender" as the one meant.
     return [{"id": entity.entity_id, "kind": entity.kind, "name": entity.names[0] if entity.names else entity.entity_id,
+             **({"also": list(entity.names[1:6])} if entity.kind == "person" and len(entity.names) > 1 else {}),
              **({"here": "yes"} if entity.here else {})} for entity in scene.entities[:80]]
 
 
@@ -142,7 +145,10 @@ def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str) 
     except Exception:
         logger.warning("rpg_turn_intent_failed", exc_info=True)
         return ModelReading(unavailable=True)
-    return decide(valid_readings(_parse(_s(raw)), scene))
+    readings = valid_readings(_parse(_s(raw)), scene)
+    if hypothetical(text):  # what would happen if... is asked, never done, whatever the model read
+        readings = [reading for reading in readings if reading.family in {"talk", "look", "status"}]
+    return decide(readings)
 
 
 __all__ = ["CLOSE", "FAMILIES", "TRUSTED", "ModelReading", "decide", "read_with_model", "valid_readings"]

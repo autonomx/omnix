@@ -305,6 +305,16 @@ _STATUS_WORDS = (
 )
 
 
+_HYPOTHETICAL = re.compile(
+    r"\b(?:what if|what would (?:happen|it mean|they do|you do) if|what happens if|what will happen if|imagine if|"
+    r"suppose|supposing|hypothetically|what would [a-z\' ]{1,40} do if)\b")
+
+
+def hypothetical(text: str) -> bool:
+    """A question about what would happen ("what if I attacked her?"): it is asked, never done (RQ-3.2)."""
+    return bool(_HYPOTHETICAL.search(_norm(text)))
+
+
 def _question(words: list[str], original: str) -> bool:
     if original.endswith("?"):
         return True
@@ -371,6 +381,13 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     if not question and lead and lead[0].start <= 1 and _has(words, *_ORDERS):
         # "Liora, keep watch": an order to someone named first; whether they take it is the party rule's to say.
         return _candidate("order", lead[0], 0.85, "orders")
+
+    if hypothetical(text):
+        # "What would happen if I attacked Liora?" is a question, never the deed. Its target is what it is about
+        # (the person named first, else the first thing it names); who answers is the dialogue's to say.
+        subject = (lead[0] if lead and lead[0].start <= 1 else None) or _first(
+            words, scene, "person", "creature", "item", "place", "offer", "quest", "skill")
+        return _candidate("ask", subject, 0.85, "asks_hypothetical")
 
     if question:
         lead = _find(words[:3], scene.of("person"))
@@ -537,4 +554,4 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     )
 
 
-__all__ = ["STATEFUL_FAMILIES", "IntentCandidate", "SceneEntity", "SceneView", "parse_command"]
+__all__ = ["STATEFUL_FAMILIES", "IntentCandidate", "SceneEntity", "SceneView", "hypothetical", "parse_command"]

@@ -191,3 +191,16 @@ def test_a_view_the_campaign_has_moved_past_is_refused_with_how_it_stands(launch
         "overlay_revision": int(overlay["overlay_revision"]) + 1})  # a view of another revision
     assert outdated.status_code == 409, outdated.text[:300]
     assert outdated.json()["detail"]["message"].startswith("The map changed") and outdated.json()["detail"]["session"]
+
+
+def test_someone_away_is_said_to_be_away(launch) -> None:
+    """RQ-3.3 pilot: speaking to someone the world knows who is elsewhere was narrated as nothing in particular."""
+    play = launch("vesper")  # Mara Vey is at the opening; Juno Rask is not
+    assert "ent:actors:juno-rask" not in play.present()
+    from app.apps.rpg.session.turn.world_tick import clock_minute
+
+    minute = clock_minute(play.stored())
+    body = play.turn("Juno, where am I?")
+    said = body["visible_response"]["plain_text"]
+    assert said.startswith("Juno Rask is not here: at this hour, Juno is at "), said  # and where their day has them
+    assert clock_minute(play.stored()) == minute  # no time passes

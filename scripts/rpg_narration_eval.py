@@ -288,8 +288,13 @@ class Runner:
         records: list[dict[str, Any]] = []
         previous: list[str] = []
         script = campaign_script(world, turns, self.catalog, rng)
-        before = intent.material_state(self.worlds.load(session_id))
+        current = self.worlds.load(session_id)
+        before = intent.material_state(current)
         for index, step in enumerate(script, 1):
+            # Who is here is the campaign's own (people keep their routines, RQ-2.7), not the catalog's scene.
+            present = [catalog.resolve(npc) or str(npc)
+                       for npc in (((current.get("simulation_state") or {}).get("present_npc_state") or {})
+                                   .get("present_npc_ids") or ())]
             calls_before = len(self.calls())
             started = time.perf_counter()
             response = self.client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": step["input"]},
@@ -297,6 +302,7 @@ class Runner:
             elapsed = (time.perf_counter() - started) * 1000
             body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
             session = self.worlds.load(session_id)
+            current = session
             after = intent.material_state(session)
             found = intent.changes(before, after)
             before = after
@@ -304,14 +310,16 @@ class Runner:
             blocks = canonical.get("blocks") or []
             visible = (body.get("visible_response") or {}).get("plain_text") or "\n".join(
                 str(block.get("text") or "") for block in blocks)
-            present = list(self.catalog["worlds"][world]["scenes"][step["scene"]]["present"])
             speakers = [catalog.resolve(block.get("speaker_id")) or str(block.get("speaker_id"))
                         for block in blocks if block.get("kind") == "dialogue" and block.get("speaker_id")]
-            expected = step["expected_speaker"]
+            addressed = step["expected_speaker"]
+            # A person addressed who is away is no speaker turn: the game says they are not here (RQ-3.3).
+            expected = addressed if addressed and (catalog.resolve(addressed) or addressed) in present else None
             record = {
                 "world": world, "turn": index, "scene": step["scene"], "input": step["input"],
                 "family": step["family"], "corpus_id": step.get("corpus_id"), "http": response.status_code,
                 "turn_ms": round(elapsed, 1), "text": visible, "speakers": speakers, "expected_speaker": expected,
+                "addressed_absent": bool(addressed and not expected),
                 "present": present, "changes": found,
                 "validation": (canonical.get("validation") or {}),
                 "model_calls": [call.get("role") for call in self.calls()[calls_before:]],
@@ -419,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         "provider": {**identity, "resolved_models": sorted(getattr(runner.model, "resolved_models", ()))}, "turns_per_world": args.turns_per_world,
         "worlds": args.worlds, "turns": len(records),
         "turns_with_expected_speaker": sum(bool(r["expected_speaker"]) for r in records),
+        "turns_addressing_someone_away": sum(bool(r.get("addressed_absent")) for r in records),
         "metrics": report_metrics(records),
         "by_world": {world: report_metrics([r for r in records if r["world"] == world]) for world in args.worlds},
         "judge_calibration": calibration(records, runner.judge_turn if runner.judge else None),

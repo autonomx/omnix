@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
+from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules import ability_use
@@ -101,6 +101,18 @@ def free_action(session: Mapping[str, Any]) -> Resolution:
                       minutes=FREE_ACTION_MINUTES, needs="standard_turn")
 
 
+_TITLES = frozenset({"dr", "dr.", "doctor", "inspector", "captain", "sergeant", "lady", "lord", "sir", "dame",
+                     "master", "mistress", "brother", "sister", "father", "mother", "elder", "magister"})
+
+
+def _called(name: str) -> str:
+    """What a person is called in passing: their first name, after any title ("Dr. Selene Kade": Selene)."""
+    words = name.split()
+    while len(words) > 1 and words[0].casefold() in _TITLES:
+        words = words[1:]
+    return words[0] if words else name
+
+
 def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) -> Resolution | None:
     mechanic = planned.mechanic
     if mechanic == "act":
@@ -189,6 +201,18 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
 
         answer = resolve_dialogue(session, planned.target_id, text)
         if answer is None:
+            person = _d(_d(_d(simulation.get("world_model")).get("npcs")).get(planned.target_id))
+            present = set(_l(_d(simulation.get("present_npc_state")).get("present_npc_ids")))
+            if person and planned.target_id not in present:
+                # Someone the world knows, but not here: the game says so, and where their day has them; no time
+                # passes.
+                from app.apps.rpg.rules.routines import clock, whereabouts
+
+                name = _s(person.get("name")) or "They"
+                place_id = getattr(whereabouts(simulation, clock(simulation)).get(planned.target_id), "location_id", "")
+                place = _s(_d(_d(_d(simulation.get("world_model")).get("locations")).get(place_id)).get("name"))
+                line = f"{name} is not here: at this hour, {_called(name)} is at {place}." if place else f"{name} is not here."
+                return Resolution([_counted(session)], [line], refused=True, told=False)
             return None
         speech = ({"speaker_id": answer.speaker_id, "speaker": answer.speaker_name, "line": answer.line}
                   if answer.line else None)

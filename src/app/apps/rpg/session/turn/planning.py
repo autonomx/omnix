@@ -97,6 +97,11 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return PlannedAction(mechanic="status", ticks=0, reason=reading.reason)
     if reading.family in {"party", "order"} and reading.target_kind == "person" and reading.target_id:
         return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reading.reason)
+    if reading.family == "ask" and reading.reason == "asks_hypothetical":
+        # A question about what would happen is speech, whatever it is about (RQ-3.2): asked of the person it
+        # names, else of whoever the hero is talking with.
+        return PlannedAction(mechanic="talk", target_id=reading.target_id if reading.target_kind == "person" else "",
+                             ticks=0, reason=reading.reason)
     if reading.family in {"talk", "ask"} and (reading.target_kind == "person" or not reading.target_id):
         # Someone named, or the one the hero is talking to; whether anyone present is, is the dialogue's to say.
         return PlannedAction(mechanic="talk", target_id=reading.target_id or "", ticks=0, reason=reading.reason)

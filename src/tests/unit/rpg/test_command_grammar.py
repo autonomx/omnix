@@ -69,3 +69,17 @@ def test_a_purchase_of_something_not_on_sale_is_not_stateful() -> None:
 def test_multi_step_commands_keep_their_clauses() -> None:
     candidate = parse_command("I head to the village, then wait", SCENE)
     assert candidate.family == "move" and candidate.clauses == ("i head to the village", "wait")
+
+
+@pytest.mark.parametrize(("text", "target"), [
+    ("what would happen if I attacked Liora Fen?", "npc:liora"),
+    ("Liora, what if we stole the potion?", "npc:liora"),
+    ("what would Brindle do if I left without paying?", "npc:brindle"),
+    ("suppose I attacked the echo wolf", "creature:echo-wolf"),
+    ("what would happen if I dropped my dagger?", "iron_dagger"),
+])
+def test_a_hypothetical_is_asked_never_done(text: str, target: str | None) -> None:
+    """RQ-3.2 pilot: "what would happen if I attacked Liora Fen?" started a fight with her."""
+    reading = parse_command(text, SCENE)
+    assert (reading.family, reading.target_id, reading.reason) == ("ask", target, "asks_hypothetical")
+    assert reading.confidence >= 0.8  # the turn plans it as speech, with no intent call to read it as the deed

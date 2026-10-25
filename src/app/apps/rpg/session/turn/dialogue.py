@@ -71,7 +71,12 @@ def _speaker(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_i
     if target_id and target_id in present:
         return target_id
     focus = _s(_d(runtime.get("dialogue_focus")).get("target_id"))
-    return focus if not target_id and focus in present else ""
+    if target_id:
+        return ""
+    if focus in present:
+        return focus
+    # Spoken to no one in particular, with one person here: they are the one who answers.
+    return next(iter(present)) if len(present) == 1 else ""
 
 
 def resolve_dialogue(session: Mapping[str, Any], target_id: str, text: str) -> DialogueResolution | None:

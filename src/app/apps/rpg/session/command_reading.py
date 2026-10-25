@@ -8,6 +8,7 @@ intent call; an unclear command gets a question instead of a guess.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
@@ -39,6 +40,32 @@ def _names(*values: Any) -> tuple[str, ...]:
     return tuple(names)
 
 
+_TITLES = frozenset({"dr", "doctor", "inspector", "captain", "sergeant", "lady", "lord", "sir", "dame", "master",
+                     "mistress", "brother", "sister", "father", "mother", "elder", "magister"})
+
+
+def _called(name: str) -> str:
+    """The name someone goes by: the first word after any title ("Inspector Nadi Vale": Nadi)."""
+    words = [word for word in name.split() if word]
+    while len(words) > 1 and words[0].casefold().rstrip(".") in _TITLES:
+        words = words[1:]
+    return words[0] if words else ""
+
+
+def _role_names(role: str) -> tuple[str, ...]:
+    """What someone may be called by what they do: "village guard captain" gives the captain, my captain and the
+    guard captain; "guide and first companion" the guide and the companion (the description after "is" aside)."""
+    names: list[str] = []
+    for part in re.split(r",| and | of | who | for ", role.split(" is ")[0]):
+        words = part.split()
+        if not words:
+            continue
+        names += [f"the {words[-1]}", f"my {words[-1]}"]
+        if len(words) >= 2:
+            names.append(f"the {' '.join(words[-2:])}")
+    return tuple(names)
+
+
 def _label(entity_id: str) -> str:
     return entity_id.rsplit(":", 1)[-1].replace("_", " ").replace("-", " ")
 
@@ -63,10 +90,9 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
               **{str(key): _d(value) for key, value in _d(world.get("npcs")).items()}}
     for npc_id, npc in people.items():
         name = _s(npc.get("name"))
-        first = name.split()[0] if name else ""
         role = _s(npc.get("role"))
-        add(npc_id, "person", _names(name, first, f"the {role}" if role and len(role.split()) <= 3 else ""),
-            npc_id in present)
+        add(npc_id, "person", _names(name, _called(name), f"the {role}" if role and len(role.split()) <= 3 else "",
+                                     *_role_names(role.casefold())), npc_id in present)
     for creature_id, creature in _d(_d(state.get("campaign_mechanics")).get("creatures")).items():
         add(str(creature_id), "creature", _names(_d(creature).get("name"), _label(str(creature_id))), True)
     inventory = _d(_d(state.get("player_state")).get("inventory_state"))
