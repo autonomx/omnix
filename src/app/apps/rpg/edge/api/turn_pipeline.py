@@ -294,17 +294,13 @@ def run_rpg_turn(
     from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
     from app.apps.rpg.session.deferred_narration_guard import canonical_presentation_follows_context
     from app.apps.rpg.session.turn.narration_timing import narrating_after_commit
+    from app.apps.rpg.session.turn.run import keeping_turn_start
 
     # One turn of the campaign at a time, in arrival order (RQ-1.4): a second tab's turn waits for this one
     # and then runs on the state it left, instead of being refused.
     turn_stream.publish(turn_stream.stream_key(session_id, submission_id), "accepted", {"submission_id": submission_id})
     with _wait_for_campaign_turn(session_id):
-        with rpg_pipeline_span("turn.outcome_baseline"):
-            # The document the turn starts from: TurnOutcome reports what the turn changed against it (RQ-1.3).
-            # Opening a campaign stored at an older document version upgrades it first (RQ-1.1).
-            before_document = _turn_start_document(session_id)
-
-        with rpg_pipeline_span("turn.apply") as span:
+        with rpg_pipeline_span("turn.apply") as span, keeping_turn_start() as turn_start:
             def apply_foreground_turn() -> dict[str, Any]:
                 # The narrative engine presents this turn below (``present_authoritative_turn``).
                 with foreground_rpg_llm_priority(), canonical_presentation_follows_context(), \
@@ -328,6 +324,11 @@ def run_rpg_turn(
                 if isinstance(result, dict)
                 else False
             )
+
+        with rpg_pipeline_span("turn.outcome_baseline"):
+            # The document the turn started from: TurnOutcome reports what the turn changed against it (RQ-1.3).
+            # The pipeline loaded it (upgraded first if stored at an older version, RQ-1.1); else it is read here.
+            before_document = turn_start.get("document") or _turn_start_document(session_id)
 
         if not isinstance(result, dict) or result.get("ok") is not True:
             status_code = (

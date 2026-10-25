@@ -155,10 +155,14 @@ def prepare_canonical_result_delivery(
     raw = result.get("canonical_narrative_response")
     if not isinstance(raw, Mapping):
         return result
-    response = canonical_response_from_dict(raw)
-    response_repo = response_repository or build_production_narrative_repository()
+    response = canonical_response_from_dict(raw).with_content_hash()
     delivery_repo = delivery_repository or build_production_narrative_delivery_repository()
-    persisted = response_repo.save(response)
+    persistence = result.get("interaction_persistence") if isinstance(result.get("interaction_persistence"), Mapping) else {}
+    if (persistence.get("narrative_response_id") == response.response_id
+            and persistence.get("narrative_content_hash") == response.content_hash):
+        persisted = response  # inserted with the turn, in its unit of work: not saved again (RQ-6.4)
+    else:
+        persisted = (response_repository or build_production_narrative_repository()).save(response)
     projected = NarrativeDeliveryCoordinator().open(persisted, mode, delivery_repo)
     record = delivery_repo.get(projected.response_id)
     payload = projected.as_dict()

@@ -8,7 +8,9 @@ player's return) and a ``structured_action`` (the play screen's buttons and grid
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, PressuresMoved, StateChange, TimeAdvanced, WorldTicked
@@ -258,6 +260,21 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
                                    purpose=BeatPurpose.CONTINUATION, source="rpg_turn_pipeline_world_tick_v1")
 
 
+_TURN_START: ContextVar[dict[str, Any] | None] = ContextVar("RPG_TURN_START", default=None)
+
+
+@contextmanager
+def keeping_turn_start() -> Iterator[dict[str, Any]]:
+    """Hand the caller the campaign the turn starts from, as the pipeline loads it (the turn route reports the
+    TurnOutcome against it, instead of loading the campaign again: RQ-6.4)."""
+    holder: dict[str, Any] = {}
+    token = _TURN_START.set(holder)
+    try:
+        yield holder
+    finally:
+        _TURN_START.reset(token)
+
+
 def _load(ctx: Any) -> dict[str, Any]:
     """Step 1: the turn-start campaign (a copy of the caller's, when it hands one in), normalized: its simulation
     filled in from the play screen's sheet, and the hero's progression (level, skills) given its defaults."""
@@ -275,6 +292,9 @@ def _load(ctx: Any) -> dict[str, Any]:
     simulation = _d(session.get("simulation_state"))
     simulation["player_state"] = ensure_player_progression_state(_d(simulation.get("player_state")))
     session["simulation_state"] = simulation
+    holder = _TURN_START.get()
+    if holder is not None and "document" not in holder:
+        holder["document"] = session  # the turn reduces copies of it: it stays as the turn found it
     return session
 
 
