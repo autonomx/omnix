@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
-import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiState';
+import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiTypes';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 const journalDetail: RpgJournalDetailPreview = { title: 'Journal', detail: 'Daily accounts', bullets: [], tags: [] };

@@ -19,10 +19,10 @@
 
 .rpg-outcome-fact-gain {
   border-color: color-mix(in srgb, var(--c-green-870) 45%, transparent);
-  color: var(--c-green-870);
+  color: var(--fg-green-870);
 }
 
 .rpg-outcome-fact-loss {
   border-color: color-mix(in srgb, var(--c-red-720) 45%, transparent);
-  color: var(--c-red-720);
+  color: var(--fg-red-720);
 }

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rpgItemGatewayClient } from './rpgItemApi';
 import { rpgSessionClient } from './api/rpgSessionClient';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
-import { hotbarAbilities, inventoryItems } from './rpgUiState';
+import { hotbarAbilities, inventoryItems } from './rpgUiPreview';
 import { createTestQueryClient } from '../../test/renderWithProviders';
 
 type LoadoutTabsProps = Parameters<typeof RpgLoadoutTabs>[0];

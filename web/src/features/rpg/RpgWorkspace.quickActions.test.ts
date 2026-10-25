@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { quickActionsFromHermesSuggestions } from './RpgWorkspace';
+import { quickActionsFromHermesSuggestions } from './rpgWorkspaceSupport';
 
 describe('quickActionsFromHermesSuggestions', () => {
   it('projects grounded Hermes suggestions into response options', () => {

@@ -11,7 +11,7 @@ import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
 import { pushWorldEditorRoute } from './RpgWorldCompletionModels';
 import { RpgWorldEditorShell } from './RpgWorldEditorShell';
 import { requestRpgLauncherHome, useRpgLauncherSlots } from './rpgLauncherSlots';
-import type { RpgSessionSummaryPreview } from './rpgUiState';
+import type { RpgSessionSummaryPreview } from './rpgUiTypes';
 import './RpgLoreOverlay.css';
 import './RpgPlayFocus.css';
 import './RpgWorldLibraryOverlay.css';

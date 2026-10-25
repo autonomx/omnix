@@ -8,7 +8,7 @@ import { rpgSessionClient, type RpgLaunchResponse } from './api/rpgSessionClient
 import { rpgPlayerMessage } from './rpgPlayerMessage';
 import { RpgSavePointsPanel } from './RpgSavePointsPanel';
 import { setRpgLauncherDialog, setRpgLauncherHomeGrid, useRpgLauncherView } from './rpgLauncherSlots';
-import type { RpgSessionSummaryPreview } from './rpgUiState';
+import type { RpgSessionSummaryPreview } from './rpgUiTypes';
 import './RpgSessionLauncher.css';
 
 interface RpgCampaignMenuProps {

@@ -1,4 +1,4 @@
-import type { RpgInventoryItemPreview } from './rpgUiState';
+import type { RpgInventoryItemPreview } from './rpgUiTypes';
 import type { RpgItemDetailPreview, RpgItemUiAction } from './rpgItemUiState';
 import { buildItemDetailPreview } from './rpgItemUiState';
 import './RpgItemPanel.css';

@@ -1,4 +1,4 @@
-import type { RpgInventoryItemPreview } from './rpgUiState';
+import type { RpgInventoryItemPreview } from './rpgUiTypes';
 
 export type RpgItemUiActionKind = 'use' | 'equip' | 'unequip' | 'drop' | 'sell';
 

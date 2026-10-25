@@ -1,7 +1,7 @@
  
 import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import { useEffect, useState } from 'react';
-import type { RpgStoryMessagePreview } from './rpgUiState';
+import type { RpgStoryMessagePreview } from './rpgUiTypes';
 import {
   rpgNarrationEntries,
   rpgTurnChangedDomains,

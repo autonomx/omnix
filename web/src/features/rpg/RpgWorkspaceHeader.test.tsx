@@ -5,7 +5,7 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { RpgCampaignMenu } from './RpgCampaignMenu';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { resetRpgLauncherSlotsForTests, setRpgLauncherDialog, setRpgLauncherHomeGrid } from './rpgLauncherSlots';
-import { previewSessionSummary } from './rpgUiState';
+import { previewSessionSummary } from './rpgUiPreview';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {

@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEventHandler } from 'react';
 import { useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { rpgSessionClient } from './api/rpgSessionClient';
-import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
+import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiTypes';
 
 interface RpgActionComposerProps {
   commandRegistration: UseFormRegisterReturn<'command'>;

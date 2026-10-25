@@ -1,6 +1,6 @@
 /** A turn's response as the play screen reads it, and the story entries it becomes. */
 import type { components } from './api/generated';
-import type { RpgStoryMessagePreview } from './rpgUiState';
+import type { RpgStoryMessagePreview } from './rpgUiTypes';
 
 export type RpgTurnUiStatus = 'optimistic' | 'pending' | 'complete' | 'failed';
 

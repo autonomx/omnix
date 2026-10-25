@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VirtualList } from '../../design/VirtualList';
 import { RpgLorePanel } from './RpgLorePanel';
-import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiState';
+import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiTypes';
 
 type RpgNarrativeTab = 'journal' | 'lore' | 'dialogue' | 'turns';
 

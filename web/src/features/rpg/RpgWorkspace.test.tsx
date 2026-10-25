@@ -4,7 +4,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
-import { buildSubmittedTurnStoryMessages, RpgWorkspace } from './RpgWorkspace';
+import { RpgWorkspace } from './RpgWorkspace';
+import { buildSubmittedTurnStoryMessages } from './rpgWorkspaceSupport';
 import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderRpg() {

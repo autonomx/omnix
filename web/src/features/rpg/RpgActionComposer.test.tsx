@@ -4,7 +4,7 @@ import type { UseFormRegisterReturn } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgActionComposer } from './RpgActionComposer';
 import { rpgSessionClient } from './api/rpgSessionClient';
-import { previewSessionSummary, quickActions } from './rpgUiState';
+import { previewSessionSummary, quickActions } from './rpgUiPreview';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {

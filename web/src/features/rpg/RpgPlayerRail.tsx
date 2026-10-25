@@ -1,13 +1,6 @@
 import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 import type { HermesRpgSuggestion } from './api/hermesClient';
-import type {
-  RpgGearPreview,
-  RpgHeroSummaryPreview,
-  RpgPartyMemberPreview,
-  RpgQuestPreview,
-  RpgStatPreview,
-  RpgSurvivalPreview,
-} from './rpgUiState';
+import type { RpgGearPreview, RpgHeroSummaryPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgStatPreview, RpgSurvivalPreview } from './rpgUiTypes';
 import './RpgVisualAssets.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';

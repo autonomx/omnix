@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
-import { createRpgWorkspaceState, progressPercent, rpgTurnOutputText, safeSessionId } from './rpgUiState';
+import { rpgTurnOutputText } from './rpgStoryState';
+import { createRpgWorkspaceState, progressPercent, safeSessionId } from './rpgUiState';
 import { fixture } from '../../test/fixture';
 
 describe('rpg UI state', () => {

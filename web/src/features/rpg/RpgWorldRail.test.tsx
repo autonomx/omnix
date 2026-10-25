@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgWorldRail } from './RpgWorldRail';
-import { npcRelationships, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiState';
+import { npcRelationships, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiPreview';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 

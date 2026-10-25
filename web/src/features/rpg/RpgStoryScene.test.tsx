@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { RpgStoryScene } from './RpgStoryScene';
-import { previewHeroSummary, previewRecentEvents, previewSessionSummary } from './rpgUiState';
+import { previewHeroSummary, previewRecentEvents, previewSessionSummary } from './rpgUiPreview';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 
