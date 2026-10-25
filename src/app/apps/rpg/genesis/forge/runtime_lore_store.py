@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -10,6 +11,7 @@ from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.foundation.safe_values import copy_state
 
 from .campaign_lore_store import (
     _campaign_id,
@@ -59,6 +61,13 @@ def _campaign_exists(
     )
 
 
+# A published world revision never changes: its canon, as a campaign pins it, is projected once (RQ-6.4: each turn
+# read the revision's whole document and projected it twice).
+_PINNED: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+_PINNED_LOCK = threading.Lock()
+_MAX_PINNED = 32
+
+
 def _pinned_world_canon(
     work: Any,
     context: Any,
@@ -67,21 +76,29 @@ def _pinned_world_canon(
     binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
     if binding is None:
         return {}
-    revision = work.world_scenarios.get_world_revision(
-        context,
-        _text(binding.get("world_id")),
-        int(binding.get("world_revision") or 0),
-    )
+    world_id = _text(binding.get("world_id"))
+    world_revision = int(binding.get("world_revision") or 0)
+    key = (str(getattr(context, "workspace_id", "")), campaign_id, world_id, world_revision)
+    with _PINNED_LOCK:
+        cached = _PINNED.get(key)
+    if cached is not None:
+        return copy_state(cached)
+    revision = work.world_scenarios.get_world_revision(context, world_id, world_revision)
     document = _mapping((revision or {}).get("document"))
     canon = _mapping(document.get("canon"))
     if not canon:
         return {}
-    return project_published_canon(
+    projected = project_published_canon(
         canon,
         campaign_id=campaign_id,
         canon_revision=int(binding.get("world_revision") or 1),
         topology=_mapping(document.get("topology")),
     )
+    with _PINNED_LOCK:
+        _PINNED[key] = copy_state(projected)
+        while len(_PINNED) > _MAX_PINNED:
+            _PINNED.pop(next(iter(_PINNED)))
+    return projected
 
 
 def _has_dossier_and_document(

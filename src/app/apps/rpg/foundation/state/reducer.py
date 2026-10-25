@@ -15,6 +15,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.apps.rpg.foundation.safe_values import copy_state
+
 from .changes import (
     CombatantHpChanged,
     CombatStarted,
@@ -702,7 +704,7 @@ def _show_progression(writer: _Writer, *, xp: int, xp_to_next: int | None = None
 
 def reduce(document: dict[str, Any], changes: list[StateChange]) -> tuple[dict[str, Any], JsonPatch]:
     """The document with ``changes`` applied (a copy; ``document`` is unchanged), and the patch of the writes."""
-    writer = _Writer(deepcopy(document))
+    writer = _Writer(copy_state(document))  # a deep copy, about 2.5x faster than deepcopy (RQ-6.4)
     for change in changes:
         _apply(writer, change)
         if isinstance(change, (ItemRemoved, ItemDropped)):

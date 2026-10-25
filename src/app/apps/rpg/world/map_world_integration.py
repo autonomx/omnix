@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import ceil, sqrt
@@ -119,6 +122,20 @@ def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapMo
     )
 
 
+# A campaign's map definitions follow from its world graph alone (places, roads, bindings, seed), and building them
+# hashes every definition: each campaign load asked for them twice (RQ-6.4). Repositories are read-only once built.
+_REPOSITORIES: dict[str, MapDefinitionRepository] = {}
+_REPOSITORY_LOCK = threading.Lock()
+_MAX_REPOSITORIES = 64
+
+
+def _repository_key(session: Mapping[str, Any], from_world: bool) -> str:
+    raw = world_graph_source(session)
+    inputs = {key: raw.get(key) for key in ("schema_version", "seed", "locations", "routes", "map_bindings")}
+    text = json.dumps({"inputs": inputs, "from_world": from_world}, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepository:
     model = canonical_world_map_model(session)
     if model is None:
@@ -126,6 +143,20 @@ def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepos
 
     # A published world's maps are its own; the built-in fixture maps serve only a generated campaign's graph.
     from_world = not _mapping(_mapping(session.get("state")).get("world_graph"))
+    key = _repository_key(session, from_world)
+    with _REPOSITORY_LOCK:
+        cached = _REPOSITORIES.get(key)
+    if cached is not None:
+        return cached
+    repository = _build_repository(model, from_world)
+    with _REPOSITORY_LOCK:
+        _REPOSITORIES[key] = repository
+        while len(_REPOSITORIES) > _MAX_REPOSITORIES:
+            _REPOSITORIES.pop(next(iter(_REPOSITORIES)))
+    return repository
+
+
+def _build_repository(model: CanonicalWorldMapModel, from_world: bool) -> MapDefinitionRepository:
     definitions = [] if from_world else list(default_map_repository().list())
     existing_ids = {definition.map_id for definition in definitions}
     region_ids = sorted({node.region_id for node in model.graph.locations.values()})
