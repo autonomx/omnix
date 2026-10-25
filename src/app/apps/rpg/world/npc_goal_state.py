@@ -9,16 +9,6 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_li
 MAX_GOALS_PER_NPC = 4
 MAX_RECENT_GOAL_EVENTS = 20
 
-GOAL_RESPONSE_STYLE_HINTS = {
-    "maintain_order": "guarded",
-    "gather_rumors": "helpful",
-    "protect_customer": "friendly",
-    "avoid_trouble": "evasive",
-    "sell_goods": "friendly",
-    "warn_player": "helpful",
-    "seek_help": "helpful",
-    "watch_suspicious_activity": "guarded",
-}
 
 DEFAULT_NPC_GOALS = {
     "npc:Bran": [
@@ -165,11 +155,6 @@ def dominant_goal_for_npc(
 ) -> Dict[str, Any]:
     goals = active_goals_for_npc(simulation_state, npc_id, tick=tick, location_id=location_id)
     return deepcopy(goals[0]) if goals else {}
-
-
-def response_style_from_goal(goal: Dict[str, Any]) -> str:
-    goal = _safe_dict(goal)
-    return GOAL_RESPONSE_STYLE_HINTS.get(_safe_str(goal.get("kind")), "")
 
 
 def goal_topic_bias(goal: Dict[str, Any]) -> Dict[str, Any]:

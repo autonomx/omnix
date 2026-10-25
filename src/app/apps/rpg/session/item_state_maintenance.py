@@ -18,11 +18,6 @@ TRACE_LIMIT = 20
 ITEM_TRACE_LIMIT = 50
 
 
-def _text(value: Any, fallback: str = "") -> str:
-    text = str(value or "").strip()
-    return text or fallback
-
-
 def _mechanics(state: dict[str, Any]) -> dict[str, Any]:
     mechanics = _safe_dict(state.get("mechanics"))
     state["mechanics"] = mechanics

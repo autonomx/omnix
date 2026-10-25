@@ -479,42 +479,6 @@ def _normalize_semantic_state_change_proposal(proposal: dict[str, Any]) -> dict[
     return out
 
 
-def _stable_semantic_state_change_proposal_id(
-    proposal: dict[str, Any],
-    simulation_state: dict[str, Any],
-    runtime_state: dict[str, Any],
-) -> str:
-    """
-    Build a deterministic per-tick proposal identity.
-
-    IMPORTANT:
-    - proposal_id must NOT be a constant like "llm_<actor_id>"
-    - otherwise applied_proposal_ids suppress all future proposals for that actor
-    - identity must vary across ticks / payload changes but remain deterministic
-    """
-    proposal = _normalize_semantic_state_change_proposal(proposal)
-    simulation_state = _safe_dict(simulation_state)
-    runtime_state = _ensure_semantic_pipeline_state(runtime_state)
-    tick = int(
-        simulation_state.get("current_tick", 0)
-        or simulation_state.get("tick", 0)
-        or runtime_state.get("tick", 0)
-        or 0
-    )
-    payload = {
-        "tick": tick,
-        "actor_id": _safe_str(proposal.get("actor_id")),
-        "semantic_action": _safe_str(proposal.get("semantic_action")),
-        "summary": _safe_str(proposal.get("summary")),
-        "beat_summary": _safe_str(proposal.get("beat_summary")),
-        "target_id": _safe_str(proposal.get("target_id")),
-        "target_location_id": _safe_str(proposal.get("target_location_id")),
-        "delta": _safe_dict(proposal.get("delta")),
-    }
-    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-    return "semantic_proposal_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
-
-
 def _ensure_semantic_pipeline_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.session.combat_intent import (
         ensure_ambient_runtime_state as ensure_ambient_runtime_state,
@@ -660,60 +624,6 @@ def _allowed_semantic_actions() -> dict[str, dict[str, str]]:
     }
 
 
-def record_semantic_llm_capture(
-    runtime_state: dict[str, Any],
-    simulation_state: dict[str, Any],
-    *,
-    prompt: str,
-    raw_output: Any,
-    proposals: list[dict[str, Any]],
-    tick: int,
-) -> dict[str, Any]:
-
-    from app.apps.rpg.session.semantic_state_changes import (
-        _normalize_llm_text_output as _normalize_llm_text_output,
-    )
-
-    runtime_state = _ensure_semantic_pipeline_state(runtime_state)
-    normalized = [
-        _normalize_semantic_state_change_proposal(x)
-        for x in _safe_list(proposals)
-        if _safe_dict(x)
-    ][-_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS:]
-
-    # Hard filter: only allow actors in active interactions if any exist
-    interactions = _normalize_active_interactions(simulation_state, runtime_state)
-    if interactions:
-        allowed_actor_ids = set()
-        for i in interactions:
-            for p in i.get("participants") or []:
-                allowed_actor_ids.add(_safe_str(p))
-        if allowed_actor_ids:
-            normalized = [p for p in normalized if p.get("actor_id") in allowed_actor_ids]
-
-    # Fallback: if no proposals, keep one actor active to prevent dead world
-    if not normalized:
-        actor_states = _safe_actor_states(simulation_state)
-        if actor_states:
-            actor = actor_states[0]
-            normalized = [{
-                "actor_id": actor.get("id"),
-                "proposal_kind": "state_delta",
-                "semantic_action": "continue_activity",
-                "delta": {
-                    "activity": _safe_str(actor.get("activity")) or "active",
-                    "engagement": "ongoing"
-                },
-                "beat_summary": f"{_safe_str(actor.get('name'))} continues their current activity."
-            }]
-
-    runtime_state["recorded_semantic_llm_prompt"] = _safe_str(prompt)
-    runtime_state["recorded_semantic_llm_raw_output"] = _normalize_llm_text_output(raw_output)
-    runtime_state["recorded_semantic_llm_proposals"] = normalized[:_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS]
-    runtime_state["recorded_semantic_llm_capture_tick"] = int(tick or 0)
-    return runtime_state
-
-
 def clear_recorded_semantic_llm_capture(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     runtime_state["recorded_semantic_llm_proposals"] = []
@@ -816,4 +726,38 @@ def validate_semantic_state_change_proposal(
         "actor_before": _normalize_actor_state_for_delta(actor),
     }
 
-__all__ = ['_LOCATION_CONDITION_DECAY_TICKS', '_MAX_LOCATION_CONDITIONS', '_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS', '_MAX_SEMANTIC_PROPOSALS', '_MAX_WORLD_CONSEQUENCES', '_MAX_WORLD_PRESSURE', '_MAX_WORLD_RUMORS', '_WORLD_CONSEQUENCE_DECAY_TICKS', '_WORLD_PRESSURE_DECAY_TICKS', '_WORLD_RUMOR_DECAY_TICKS', '_accepted_state_change_event_ids', '_allowed_semantic_actions', '_append_location_condition', '_append_world_consequence', '_append_world_pressure', '_append_world_rumor', '_applied_semantic_proposal_ids', '_build_location_id_index', '_canonical_delta_has_values', '_emit_consequence_world_rows', '_ensure_semantic_pipeline_state', '_find_actor_state', '_normalize_actor_state_for_delta', '_normalize_semantic_state_change_proposal', '_safe_actor_states', '_stable_semantic_state_change_proposal_id', '_stable_state_change_event_id', '_write_actor_states', 'clear_recorded_semantic_llm_capture', 'decay_world_consequences_for_tick', 'emit_scene_beat', 'enqueue_semantic_state_change_proposal', 'propagate_activity_consequences_for_tick', 'record_semantic_llm_capture', 'validate_semantic_state_change_proposal']
+__all__ = [
+    "_LOCATION_CONDITION_DECAY_TICKS",
+    "_MAX_LOCATION_CONDITIONS",
+    "_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS",
+    "_MAX_SEMANTIC_PROPOSALS",
+    "_MAX_WORLD_CONSEQUENCES",
+    "_MAX_WORLD_PRESSURE",
+    "_MAX_WORLD_RUMORS",
+    "_WORLD_CONSEQUENCE_DECAY_TICKS",
+    "_WORLD_PRESSURE_DECAY_TICKS",
+    "_WORLD_RUMOR_DECAY_TICKS",
+    "_accepted_state_change_event_ids",
+    "_allowed_semantic_actions",
+    "_append_location_condition",
+    "_append_world_consequence",
+    "_append_world_pressure",
+    "_append_world_rumor",
+    "_applied_semantic_proposal_ids",
+    "_build_location_id_index",
+    "_canonical_delta_has_values",
+    "_emit_consequence_world_rows",
+    "_ensure_semantic_pipeline_state",
+    "_find_actor_state",
+    "_normalize_actor_state_for_delta",
+    "_normalize_semantic_state_change_proposal",
+    "_safe_actor_states",
+    "_stable_state_change_event_id",
+    "_write_actor_states",
+    "clear_recorded_semantic_llm_capture",
+    "decay_world_consequences_for_tick",
+    "emit_scene_beat",
+    "enqueue_semantic_state_change_proposal",
+    "propagate_activity_consequences_for_tick",
+    "validate_semantic_state_change_proposal",
+]

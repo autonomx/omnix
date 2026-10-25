@@ -380,7 +380,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `PYTEST_CURRENT_TEST` | string | — | kernel | Controls pytest current test for kernel. |
 | `PYTHONPATH` | string | — | rpg | Controls pythonpath for rpg. |
 | `RPG_TRACE_PROVIDER_CALLS` | string | — | providers | Controls rpg trace provider calls for providers. |
-| `RPG_TRACE_SESSION_TURN` | string | — | rpg | Controls rpg trace session turn for rpg. |
 | `SYSTEMROOT` | string | — | agent-runtime | Controls systemroot for agent-runtime. |
 | `VITE_ASSISTANT_STT_URL` | string | `/api/stt?language=en&authority=auto&endpoint_threshold=0.5` | launcher | Controls vite assistant stt url for launcher. |
 | `VITE_LIVE_SPECULATION_ENABLED` | string | `true` | launcher | Controls vite live speculation enabled for launcher. |

@@ -78,10 +78,6 @@ def campaign_genesis_job_id(campaign_id: str) -> str:
     return f"rpg-genesis:{campaign_id}"
 
 
-def campaign_expansion_job_id(campaign_id: str) -> str:
-    return f"rpg-world-expansion:{campaign_id}"
-
-
 def _progress(
     *,
     status: str,

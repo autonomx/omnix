@@ -13,45 +13,23 @@ from .runtime_narration_common import (
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 from .runtime_narration_fallback import (
-    _build_dialogue_state_update_payload as _build_dialogue_state_update_payload,
-    _dialogue_aware_bran_line as _dialogue_aware_bran_line,
-    _fallback_npc_line as _fallback_npc_line,
-    _known_facts_for_npc_reply as _known_facts_for_npc_reply,
-    _line_was_recently_used as _line_was_recently_used,
-    _recent_npc_lines as _recent_npc_lines,
     build_deterministic_narration_payload as build_deterministic_narration_payload,
-    classify_player_action as classify_player_action,
-    infer_npc_speaker as infer_npc_speaker,
     is_echo_narration as is_echo_narration,
 )
 from .runtime_narration_provider import (
-    CHAT_LIKE_PROVIDER_METHODS as CHAT_LIKE_PROVIDER_METHODS,
-    PROVIDER_CHILD_CANDIDATES as PROVIDER_CHILD_CANDIDATES,
-    PROVIDER_METHOD_CANDIDATES as PROVIDER_METHOD_CANDIDATES,
-    _ProviderChatMessage as _ProviderChatMessage,
-    _call_provider_text as _call_provider_text,
     _call_provider_text_with_diagnostics as _call_provider_text_with_diagnostics,
     _candidate_debug_shape as _candidate_debug_shape,
-    _extract_json_object_from_provider_text as _extract_json_object_from_provider_text,
-    _extract_json_object_with_diagnostics_from_provider_text as _extract_json_object_with_diagnostics_from_provider_text,
-    _extract_provider_text as _extract_provider_text,
     _is_runtime_narration_candidate_envelope as _is_runtime_narration_candidate_envelope,
-    _provider_candidates as _provider_candidates,
     _provider_shape as _provider_shape,
-    _public_callable_names as _public_callable_names,
-    _safe_child_objects as _safe_child_objects,
-    _try_provider_call as _try_provider_call,
 )
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.narration_runtime_narration_legacy.prompt', "1", '\nProduce structured RPG narration for a completed deterministic turn.\n\nAuthoritative compact turn contract:\n{v0}\n\nCompact state snapshot:\n{v1}\n\nOnly use the compact turn contract and compact state snapshot as authoritative truth.\nIf something is omitted, do not invent it.\n\nDo not include full runtime_state, full session, full transcript, or full memory arrays in the provider prompt.\n\nHIGH-RISK GROUNDING RULES:\n- The simulation/turn_contract is the only source of truth.\n- You are presentation only. You cannot grant rewards, create combat results, move the player, complete quests, or reveal hidden facts.\n- Do not mention rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless explicitly present in the turn_contract, state_delta, resolved_result, or combat facts.\n- Travel/location rule: You may say the player arrives at, travels to, enters, or leaves a location only when the authoritative turn contract contains state_delta.location_changed=true or result.travel_result.ok=true. Use result.travel_result.from_location_name and to_location_name for travel narration. If travel_result.ok=false, explain that the route is unavailable and mention available_routes only if present. Do not invent roads, locations, shortcuts, travel time, danger, or arrival unless present in the contract.\n- If the player claims an NPC owes them money, items, favors, or information, treat that claim as unsupported unless the turn_contract confirms it.\n- The safe_fallback candidate should be a natural refusal/deferral when the player asks for an unsupported result.\n\nUNSUPPORTED DEBT CLAIM SPECIAL CASE:\nIf the player says the NPC owes them money and the compact turn contract does not explicitly authorize a payment/debt/currency_delta/reward:\n- primary.npc.line must clearly refuse.\n- safe_fallback.npc.line must clearly refuse.\n- safe_fallback must not ask a question.\n- safe_fallback must not be ambiguous.\n- safe_fallback should say: "No. I do not owe you coin."\n\nThis is intentionally redundant. The fake-debt case is important enough to over-specify.\n\nRepair context, if any:\n{v2}\n\n{v3}\n')
 
 RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
-RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
 
 logger = logging.getLogger(__name__)
 
-RUNTIME_NARRATION_CONTEXT_JSON_LIMIT = 9000
 RUNTIME_NARRATION_STATE_JSON_LIMIT = 3500
 RUNTIME_NARRATION_CONTRACT_JSON_LIMIT = 5500
 

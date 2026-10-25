@@ -5,14 +5,10 @@ entity, and whether the correct handling changes campaign state. The harness lau
 disposable PostgreSQL database (``tests/rehearsal/rpg/worlds.py``), brings each scene about by playing its setup
 commands, and snapshots it. Then, for every item, it measures today's deterministic understanding, without a model:
 
-1. **Static reading** (``--mode static`` and ``play``): the functions the turn runs before any model call, in the
-   order ``interactive_first_call_runtime._apply_turn_core`` runs them: the service matcher
-   (``resolve_service_turn``), the companion request (``requested_companion``), the player's own requests
-   (``apply_player_requests``: quest, practice, status, sell, drop, pick up), the plain observe commands, travel
-   (``resolve_travel_destination``) and combat (``_combat_command``). Those are "the commands the game resolves
-   itself" (bb83af47aa); an input none of them takes would go to the intent model. For those, the reading falls back
-   to the rules the stateful runtime applies (``resolve_semantic_action_v2``, then
-   ``turn_contract.interpret_turn_action``), and finally to the safe dialogue reply (family ``talk``).
+1. **Static reading** (``play``): the turn's command grammar on the campaign's scene (``command_reading``,
+   RQ-3.1); a reading confident enough to skip the intent call is "resolved without a model". (Before RQ-2.10 it
+   replayed the older turn path's matchers, in the order that path ran them; the RQ-0.4 baseline measured those.)
+   ``--mode grammar`` reads the corpus scenes from the catalog instead, with no campaign at all.
 2. **Play** (``--mode play``, the default): the scene's snapshot is restored, the input is played through
    ``POST /api/rpg/sessions/{id}/turn`` with the scripted model (the intent router answers "{}", so the engine
    decides), and the saved game is compared with the snapshot. A material change (place, purse, pack, equipment,
@@ -125,101 +121,16 @@ class Catalog:
         return None
 
 
-# --- today's static reading -------------------------------------------------------------------------------------
-
-_PLAIN_WAIT = {"wait", "keep watch"}
+# --- the turn's own reading ----------------------------------------------------------------------------------
 
 
 def static_reading(simulation_state: dict[str, Any], runtime_state: dict[str, Any], text: str) -> dict[str, Any]:
-    """What today's deterministic code makes of the input, without a model (see the module docstring)."""
-    from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
-    from app.apps.rpg.rules.interactions.semantic_actions import resolve_semantic_action_v2, semantic_action_kind
-    from app.apps.rpg.session.interactive_first_call_runtime import _PLAIN_OBSERVE_COMMANDS, _combat_command
-    from app.apps.rpg.session.player_requests import apply_player_requests
-    from app.apps.rpg.session.turn_contract import interpret_turn_action
-    from app.apps.rpg.world.companion_acceptance import requested_companion
-    from app.apps.rpg.world.travel_graph import resolve_travel_destination
+    """What the turn's command grammar makes of the input in the campaign's scene, without a model (RQ-3.1)."""
+    from app.apps.rpg.session.command_reading import read_command, skip_reason
 
-    sim = copy.deepcopy(simulation_state)
-    runtime = copy.deepcopy(runtime_state)
-    plain = text.strip().lower().rstrip(".!")
-
-    def read(family: str, target: Any, stateful: bool, source: str, gate: bool) -> dict[str, Any]:
-        return {"family": family, "target_ref": target or None, "stateful": stateful, "source": source, "gate": gate}
-
-    try:
-        service = resolve_service_turn(player_input=text, action={}, resolved_action={}, simulation_state=sim,
-                                       runtime_state=runtime)
-    except Exception as exc:  # the matcher's own failure is part of today's behaviour
-        service = {"matched": False, "error": type(exc).__name__}
-    if service.get("matched"):
-        kind = str(service.get("kind") or "")
-        offer = str(service.get("selected_offer_id") or "")
-        if kind == "service_inquiry":
-            return read("ask", offer or service.get("provider_id"), False, "service_inquiry", True)
-        if kind == "service_consumption":
-            return read("rest", service.get("provider_id"), True, "service_consumption", True)
-        return read("buy", offer or service.get("provider_id"), bool(offer), "service_purchase", True)
-    companion = requested_companion(sim, text)
-    if companion:
-        return read("party", companion.get("npc_id"), True, "requested_companion", True)
-    for event in apply_player_requests(copy.deepcopy(sim), text):
-        kind = str(event.get("kind") or "")
-        if kind == "quest_accepted":
-            return read("quest", event.get("quest_id"), True, "player_request", True)
-        if kind in {"quest_already_active", "quest_unchanged"}:
-            return read("quest", event.get("quest_id"), False, "player_request", True)
-        if kind == "skill_practised":
-            return read("practice", f"skill:{event.get('skill_id')}", True, "player_request", True)
-        if kind == "status_report":
-            return read("status", None, False, "player_request", True)
-        if kind == "item_sold":
-            return read("sell", event.get("item"), True, "player_request", True)
-        if kind == "sale_refused":
-            return read("sell", event.get("item"), False, "player_request", True)
-        if kind == "item_dropped":
-            return read("drop", event.get("item"), True, "player_request", True)
-        if kind == "item_picked_up":
-            return read("take", event.get("item"), True, "player_request", True)
-        if kind == "pick_up_refused":
-            return read("take", None, False, "player_request", True)
-    if plain in _PLAIN_WAIT:
-        return read("wait", None, False, "observe_command", True)
-    if plain in _PLAIN_OBSERVE_COMMANDS:
-        return read("look", None, False, "observe_command", True)
-    try:
-        travel = resolve_travel_destination(player_input=text, state=sim)
-    except Exception:
-        travel = {}
-    if travel.get("ok"):
-        destination = travel.get("destination") if isinstance(travel.get("destination"), dict) else {}
-        return read("move", destination.get("location_id") or travel.get("to_location"), True, "travel", True)
-    try:
-        combat = _combat_command(copy.deepcopy(sim), text)
-    except Exception:
-        combat = False
-    semantic = resolve_semantic_action_v2(player_input=text, actor_id="player")
-    semantic_kind = semantic_action_kind(semantic) if semantic.get("resolved") else ""
-    if combat:
-        family = "flee" if semantic_kind == "flee" else "attack"
-        return read(family, semantic.get("target_ref"), True, "combat_command", True)
-    # Nothing above takes it: today the intent model would be asked. Without it, the runtime's own rules.
-    semantic_family = {
-        "inspect": "inspect", "open": "manipulate", "close": "manipulate", "take": "take", "drop": "drop",
-        "give": "give", "put": "give", "use": "use_item", "use_item": "use_item", "consume": "use_item",
-        "repair": "manipulate", "craft": "manipulate", "equip": "equip", "unequip": "unequip", "attack": "attack",
-        "talk": "talk", "buy": "buy", "sell": "sell", "defend": "defend", "flee": "flee",
-    }.get(semantic_kind)
-    if semantic_family:
-        return read(semantic_family, semantic.get("target_ref"), semantic_family in STATEFUL_FAMILIES,
-                    f"semantic_action:{semantic_kind}", False)
-    contract = interpret_turn_action(sim, runtime, text, {})
-    intent = str(contract.get("intent") or "")
-    contract_family = {"attack": "attack", "apologize": "talk", "service": "buy", "ask": "ask", "perform": "talk"}.get(intent)
-    if contract_family:
-        return read(contract_family, contract.get("target_id") or contract.get("target_name"),
-                    contract_family in STATEFUL_FAMILIES, f"turn_contract:{intent}", False)
-    return read("talk", None, False, "dialogue_fallback", False)
+    reading = read_command(copy.deepcopy(simulation_state), text, copy.deepcopy(runtime_state))
+    return {"family": reading.family, "target_ref": reading.target_id or None, "stateful": reading.stateful,
+            "source": f"grammar:{reading.reason}", "gate": bool(skip_reason(reading))}
 
 
 # --- material state -------------------------------------------------------------------------------------------
@@ -483,7 +394,7 @@ def grammar_records(catalog: dict[str, Any], items: list[dict[str, Any]]) -> dic
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--split", choices=("held_out", "dev", "all"), default="held_out")
-    parser.add_argument("--mode", choices=("play", "static", "grammar"), default="play")
+    parser.add_argument("--mode", choices=("play", "grammar"), default="play")
     parser.add_argument("--limit", type=int, default=0, help="evaluate only the first N items (a smoke run)")
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)

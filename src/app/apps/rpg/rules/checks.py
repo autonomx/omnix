@@ -10,7 +10,7 @@ same place within two hours, is harder.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping
+from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import (
@@ -23,10 +23,6 @@ from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.runtime_core import deterministic_roll
 from app.apps.rpg.rules.player import progression
 
-Kind = Literal["persuade", "intimidate", "deceive", "haggle", "sneak", "climb", "pick_lock", "recall_lore", "search",
-               "notice"]
-KINDS: tuple[str, ...] = ("persuade", "intimidate", "deceive", "haggle", "sneak", "climb", "pick_lock", "recall_lore",
-                          "search", "notice")
 DIFFICULTIES = {"trivial": 5, "easy": 10, "moderate": 13, "hard": 16, "very_hard": 19, "heroic": 22}
 RETRY_PENALTY, RETRY_WINDOW_TICKS = 2, 12  # the same try again, here, within two hours (a tick is 10 minutes)
 MINUTES = 10
@@ -203,4 +199,4 @@ def check(simulation: Mapping[str, Any], kind: str, target_id: str = "", *, turn
                         record=result)
 
 
-__all__ = ["DIFFICULTIES", "KINDS", "CheckOutcome", "check"]
+__all__ = ["DIFFICULTIES", "CheckOutcome", "check"]

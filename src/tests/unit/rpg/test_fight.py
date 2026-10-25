@@ -1,6 +1,7 @@
 """The fight rule (RQ-2.6; docs/rpg/design/combat.md): pure, seeded, and its changes replay the fight."""
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.foundation.state import reduce
@@ -9,6 +10,7 @@ from app.apps.rpg.foundation.state.changes import (
     CombatAdvanced,
     DefeatRecorded,
     ExperienceGained,
+    HpChanged,
     ItemAdded,
     LevelReached,
     LocationChanged,
@@ -177,3 +179,60 @@ def test_defending_raises_the_heros_guard_until_their_next_turn() -> None:
     struck = fight(document["simulation_state"], action="attack", turn_key="3")
     assert "guarding" not in struck.report["combat_state"]["participants"]["player"]
     assert plan_action(IntentCandidate("defend", confidence=0.85), fighting=True).reason == "defend"
+
+
+# Stakes in a fight (RQ-5.1; stakes.md), on the fight rule.
+def _against_the_troll(hp: int = 50, **foe: Any) -> tuple[dict[str, Any], str]:
+    """A fight with the troll begun, then the hero's health and the troll's numbers as given: the document, and the
+    troll's id."""
+    document = _document()
+    started = fight(document["simulation_state"], action="attack", target_ref="troll", turn_key="0")
+    assert started is not None and not started.ended
+    document, _ = reduce(document, started.changes)
+    combat = document["simulation_state"]["combat_state"]
+    [troll] = [actor_id for actor_id, row in combat["participants"].items() if row.get("side") == "enemy"]
+    combat["participants"][troll].update(foe)
+    combat["participants"]["player"]["hp"] = hp
+    document["simulation_state"]["player_state"]["resources"]["hp"]["current"] = hp
+    return document, troll
+
+
+def _log(turn: Any, kind: str, actor_id: str) -> list[dict[str, Any]]:
+    [advanced] = [change for change in turn.changes if isinstance(change, CombatAdvanced)]
+    return [row for row in advanced.combat_state["combat_log"] if row["kind"] == kind and row["actor_id"] == actor_id]
+
+
+def test_battered_takes_two_off_the_attack_roll() -> None:
+    fresh, _ = _against_the_troll()
+    battered = deepcopy(fresh)
+    battered["simulation_state"]["player_state"]["conditions"] = [
+        {"kind": "battered", "attack_penalty": 2, "check_penalty": 2, "until": "full_rest", "actor_id": "player"}]
+    blows = [_log(fight(document["simulation_state"], action="attack", target_ref="troll", turn_key="1"),
+                  "attack", "player")[-1] for document in (fresh, battered)]
+    assert blows[1]["condition_penalty"] == 2 and blows[1]["attack_total"] == blows[0]["attack_total"] - 2
+
+
+def test_breaking_away_costs_a_parting_blow_at_disadvantage() -> None:
+    document, troll = _against_the_troll(initiative_bonus=-10, accuracy_bonus=30, damage_min=2, damage_max=5)
+    document["simulation_state"]["combat_state"]["participants"]["player"]["initiative_bonus"] = 20  # always away
+    turn = fight(document["simulation_state"], action="flee", turn_key="1")
+    assert turn is not None and turn.ended == "fled"
+    [blow] = _log(turn, "parting_blow", troll)
+    assert blow["hit"] and 2 <= blow["damage_applied"] <= 5  # a sure-handed foe still lands it
+    assert HpChanged(delta=-blow["damage_applied"]) in turn.changes
+    assert not any(isinstance(change, ExperienceGained) for change in turn.changes)
+
+
+def test_a_quick_foe_is_hard_to_break_away_from() -> None:
+    document, troll = _against_the_troll(initiative_bonus=10)  # the hero needs 30 on a d20
+    turn = fight(document["simulation_state"], action="flee", turn_key="1")
+    assert turn is not None and not turn.ended
+    assert not _log(turn, "parting_blow", troll) and _log(turn, "flee", "player")[-1]["escaped"] is False
+
+
+def test_cut_down_while_breaking_away_is_a_defeat() -> None:
+    document, _ = _against_the_troll(hp=1, initiative_bonus=-10, accuracy_bonus=30)
+    document["simulation_state"]["combat_state"]["participants"]["player"]["initiative_bonus"] = 20
+    turn = fight(document["simulation_state"], action="flee", turn_key="1")
+    assert turn is not None and turn.ended == "defeat"
+    assert DefeatRecorded(defeats=1) in turn.changes

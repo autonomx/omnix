@@ -92,19 +92,6 @@ def current_location_id(simulation_state: Dict[str, Any]) -> str:
     return _safe_str(matched.get("location_id")) or location_id
 
 
-def has_explicit_location(simulation_state: Dict[str, Any]) -> bool:
-    """Return True only if an explicit location is stored in the simulation state."""
-    simulation_state = _safe_dict(simulation_state)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    return bool(
-        _safe_str(player_state.get("location_id"))
-        or _safe_str(player_state.get("current_location_id"))
-        or _safe_str(simulation_state.get("location_id"))
-        or _safe_str(simulation_state.get("current_location_id"))
-        or _safe_dict(simulation_state.get("location_state")).get("current_location_id")
-    )
-
-
 def normalize_location_name(value: str) -> str:
     value = _safe_str(value).strip().lower()
     if value.startswith("location:"):
@@ -173,28 +160,9 @@ def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> 
     return simulation_state
 
 
-def ensure_location_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    location_id = current_location_id(simulation_state)
-    return set_current_location(simulation_state, location_id)
-
-
 def present_npcs_for_current_location(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     location = get_location(current_location_id(simulation_state), simulation_state)
     return deepcopy(_safe_list(location.get("present_npcs")))
-
-
-def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: str = "", provider_name: str = "") -> bool:
-    location = get_location(current_location_id(simulation_state), simulation_state)
-    npcs = _safe_list(location.get("present_npcs"))
-    provider_id = _safe_str(provider_id)
-    provider_name = _safe_str(provider_name).lower()
-    for npc in npcs:
-        npc = _safe_dict(npc)
-        if provider_id and _safe_str(npc.get("id")) == provider_id:
-            return True
-        if provider_name and _safe_str(npc.get("name")).lower() == provider_name:
-            return True
-    return False
 
 
 def location_allows_service(simulation_state: Dict[str, Any], service_kind: str) -> bool:

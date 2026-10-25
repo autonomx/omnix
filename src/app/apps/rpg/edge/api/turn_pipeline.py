@@ -280,7 +280,7 @@ def run_rpg_turn(
                 headers={"Retry-After": str(exc.retry_after_seconds)},
             ) from exc
 
-    from app.apps.rpg.session import interactive_first_call_runtime
+    from app.apps.rpg.session import pipeline
     from app.apps.rpg.foundation.llm_priority import foreground_rpg_llm_priority
     from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
     from app.apps.rpg.session.deferred_narration_guard import canonical_presentation_follows_context
@@ -297,21 +297,8 @@ def run_rpg_turn(
             def apply_foreground_turn() -> dict[str, Any]:
                 # The narrative engine presents this turn below (``present_authoritative_turn``).
                 with foreground_rpg_llm_priority(), canonical_presentation_follows_context():
-                    return execute_turn_with_job_mirror(
-                        interactive_first_call_runtime.apply_turn,
-                        session_id,
-                        command,
-                        submission_id=submission_id,
-                        action=action,
-                        performance_override={
-                            "enable_live_narration_llm": True,
-                            "narration_mode": "blocking",
-                            # Addressed dialogue takes the short path (one model call writes the
-                            # line, 2-3 s); the fast visible-dialogue stage writes it through the
-                            # full narrative writer instead, about 13 s with the Claude CLI.
-                            "fast_visible_dialogue": False,
-                        },
-                    )
+                    return execute_turn_with_job_mirror(pipeline.apply_turn, session_id, command,
+                                                        submission_id=submission_id, action=action)
 
             result = apply_foreground_turn()
             attach_rpg_result_timing(result)

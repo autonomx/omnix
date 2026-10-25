@@ -372,17 +372,3 @@ def topic_is_backed_by_state(topic: Dict[str, Any]) -> bool:
 
 
 # ── Bundle H: topic pivot detection ─────────────────────────────────────────
-
-_STOP_WORDS = frozenset({
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "shall", "can", "i", "you", "he",
-    "she", "it", "we", "they", "what", "about", "that", "this", "of",
-    "in", "on", "at", "to", "for", "with", "by", "from", "up", "and",
-    "but", "or", "not", "no", "so", "me", "my", "your", "any", "all",
-    "know", "tell", "say", "said", "told", "hear", "heard", "mean",
-    "means", "meant", "please", "just", "still", "much", "more", "how",
-    "its", "our", "their", "us", "him", "her", "them", "those", "these",
-})
-
-

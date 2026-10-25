@@ -1,7 +1,6 @@
 """Pure calendar and season helpers for RPG Environment 2.0."""
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 DEFAULT_DAYS_PER_YEAR = 360
@@ -17,16 +16,6 @@ SEASON_LABELS = {
     "winter": "Winter",
 }
 
-REGION_SEASON_BIAS = {
-    "market_road": "spring",
-    "town": "spring",
-    "trade_road": "early_autumn",
-    "road_lowlands": "early_autumn",
-    "mountain_pass": "winter",
-    "northern_mountains": "winter",
-    "abandoned_works": "late_autumn",
-    "quarry_hills": "late_autumn",
-}
 
 CalendarState = dict[str, Any]
 
@@ -94,13 +83,3 @@ def _first_int(*values: Any) -> int | None:
         if isinstance(value, str) and value.strip().lstrip("-").isdigit():
             return int(value.strip())
     return None
-
-
-def _normalize_identifier(value: Any) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
-def _stable_int(*parts: Any) -> int:
-    text = "|".join(str(part) for part in parts)
-    digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
-    return int.from_bytes(digest, "big") & 0x7FFF_FFFF

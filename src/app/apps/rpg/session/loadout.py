@@ -19,7 +19,7 @@ from app.apps.rpg.session.ability_system import (
 )
 from app.apps.rpg.session.crafting import craft_from_inventory
 from app.apps.rpg.session.public_state_bridge import adopt_public_inventory
-from app.apps.rpg.session.equipment import equip_item_for_player, resolve_equipment_slot
+from app.apps.rpg.session.equipment import equip_item_for_player
 from app.apps.rpg.session.inventory_items import (
     consume_inventory_item,
     find_inventory_item,
@@ -71,10 +71,6 @@ def _utc_now() -> str:
     return utc_now().isoformat().replace("+00:00", "Z")
 
 
-def _norm(value: Any) -> str:
-    return str(value or "").strip().casefold()
-
-
 def _title(value: Any) -> str:
     return str(value or "").strip()
 
@@ -91,16 +87,6 @@ def _player(state: dict[str, Any]) -> dict[str, Any]:
     return player
 
 
-def _metric(player: dict[str, Any], key: str) -> dict[str, Any]:
-    resources = _safe_dict(player.get("resources"))
-    player["resources"] = resources
-    metric = _safe_dict(resources.get(key))
-    resources[key] = metric
-    metric.setdefault("current", 0)
-    metric.setdefault("max", metric.get("current", 0))
-    return metric
-
-
 def _inventory(player: dict[str, Any]) -> list[dict[str, Any]]:
     return normalize_player_inventory(player)["inventory"]
 
@@ -111,10 +97,6 @@ def _find_item(player: dict[str, Any], item_name: str | None) -> tuple[list[dict
 
 def _consume(inventory: list[dict[str, Any]], index: int, amount: int = 1) -> None:
     consume_inventory_item(inventory, index, amount)
-
-
-def _item_slot(item: dict[str, Any]) -> str:
-    return resolve_equipment_slot(item)
 
 
 def _equip_item(player: dict[str, Any], item: dict[str, Any]) -> str:

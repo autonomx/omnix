@@ -9,13 +9,6 @@ MAX_ACTIVE_MOTIVATIONS = 12
 MAX_EVOLUTION_EVENTS = 24
 
 
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
 def ensure_npc_evolution_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     state = _safe_dict(simulation_state.get("npc_evolution_state"))
     if not isinstance(state.get("by_npc"), dict):

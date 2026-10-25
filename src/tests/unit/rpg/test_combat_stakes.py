@@ -1,7 +1,6 @@
 """What a lost fight costs, and what a rest restores (RQ-5.1; docs/rpg/design/stakes.md)."""
 from __future__ import annotations
 
-from app.apps.rpg.rules.combat.runtime_attacks import _roll_attack
 from app.apps.rpg.rules.combat.stakes import apply_defeat, attack_penalty, record_rest
 
 WORLD = {"start_location_id": "loc:gate", "locations": {
@@ -85,13 +84,6 @@ def test_a_full_rest_records_the_rest_point_and_ends_being_battered() -> None:
     assert attack_penalty(state, "player") == 0 and attack_penalty(state, "npc:liora") == 0
 
 
-def test_battered_takes_two_off_the_attack_roll() -> None:
-    state, combat = _state(), _combat()
-    combat["participants"]["player"]["hp"] = 10
-    fresh = _roll_attack(state, combat, "player", "enemy:wolf", combat["participants"]["enemy:wolf"], {})
-    apply_defeat(state, _combat())
-    battered = _roll_attack(state, combat, "player", "enemy:wolf", combat["participants"]["enemy:wolf"], {})
-    assert battered["condition_penalty"] == 2 and battered["attack_total"] == fresh["attack_total"] - 2
 
 
 def test_a_heavy_blow_wounds_until_treated_or_two_nights_rest() -> None:
@@ -109,47 +101,8 @@ def test_a_heavy_blow_wounds_until_treated_or_two_nights_rest() -> None:
     assert treat_wound(state, "player") and attack_penalty(state, "player") == 0
 
 
-def _fight_with(foe_init: int, hero_init: int = 0, hp: int = 40):
-    state = _state()
-    combat = {"active": True, "encounter_id": "enc:test", "round": 1, "turn_index": 0, "current_actor_id": "player",
-              "initiative_order": [{"actor_id": "player"}, {"actor_id": "enemy:wolf"}],
-              "participants": {
-                  "player": {"actor_id": "player", "side": "party", "name": "You", "hp": hp, "max_hp": 40,
-                             "initiative_bonus": hero_init, "status": "active"},
-                  "enemy:wolf": {"actor_id": "enemy:wolf", "side": "enemy", "name": "Echo Wolf", "hp": 12, "max_hp": 12,
-                                 "initiative_bonus": foe_init, "damage_min": 2, "damage_max": 5, "accuracy_bonus": 30,
-                                 "status": "active"}}}
-    state["combat_state"] = combat
-    return state
 
 
-def test_breaking_away_costs_a_parting_blow_at_disadvantage() -> None:
-    from app.apps.rpg.rules.combat.runtime_attacks import resolve_combat_flee
-    from app.apps.rpg.rules.combat.exchange_lines import describe_combat_exchange
-
-    state = _fight_with(foe_init=-10, hero_init=20)  # the hero always gets away
-    result = resolve_combat_flee(state)
-    assert result["escaped"] and state["combat_state"]["ended_reason"] == "party_fled"
-    [blow] = result["parting_blows"]
-    assert blow["actor_id"] == "enemy:wolf" and blow["hit"]  # a sure-handed foe still lands it
-    assert state["combat_state"]["participants"]["player"]["hp"] == 40 - blow["damage_applied"]
-    lines = describe_combat_exchange(result)
-    assert lines[0].startswith("You break away from the Echo Wolf; a parting blow follows you.")
-    assert lines[-1] == "You escape; the fight is over, and it yields you nothing."
 
 
-def test_a_quick_foe_is_hard_to_break_away_from() -> None:
-    from app.apps.rpg.rules.combat.runtime_attacks import resolve_combat_flee
 
-    state = _fight_with(foe_init=10)  # needs 30 on a d20
-    result = resolve_combat_flee(state)
-    assert not result["escaped"] and result["parting_blows"] == [] and state["combat_state"]["active"] is True
-
-
-def test_cut_down_while_breaking_away_is_a_defeat() -> None:
-    from app.apps.rpg.rules.combat.runtime_attacks import resolve_combat_flee
-
-    state = _fight_with(foe_init=-10, hero_init=20, hp=1)
-    result = resolve_combat_flee(state)
-    assert state["combat_state"]["ended_reason"] == "party_side_defeated"
-    assert result["combat_state"]["defeat"]["hp"] == 10

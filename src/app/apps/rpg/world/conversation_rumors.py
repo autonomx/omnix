@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from hashlib import sha1
 from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
-MAX_SIGNAL_AGE_TICKS_DEFAULT = 10  # assume
-
-def _stable_id(prefix: str, *parts: Any) -> str:
-    raw = "|".join(_safe_str(p) for p in parts)
-    digest = sha1(raw.encode("utf-8")).hexdigest()[:12]
-    return f"{prefix}:{digest}"
 
 def _safe_str(v: Any) -> str:
     if v is None:
@@ -157,5 +150,3 @@ def expire_conversation_world_signals(
         },
         "source": "deterministic_conversation_rumor_expiration",
     }
-
-

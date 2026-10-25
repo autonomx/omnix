@@ -19,37 +19,6 @@ from app.apps.rpg.rules.combat.runtime_core import (
 )
 
 
-def validate_combat_turn(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-) -> Dict[str, Any]:
-    combat_state = get_combat_state(simulation_state)
-    if combat_state.get("active") is not True:
-        return {"allowed": True, "reason": "combat_not_active", "source": SOURCE}
-
-    actor_id = safe_str(actor_id or "player")
-    current_actor = current_actor_id(combat_state)
-    if actor_id != current_actor:
-        return {
-            "allowed": False,
-            "reason": "not_actor_turn",
-            "requested_actor_id": actor_id,
-            "current_actor_id": current_actor,
-            "combat_state": deepcopy(combat_state),
-            "source": SOURCE,
-        }
-
-    return {
-        "allowed": True,
-        "reason": "actor_turn_allowed",
-        "requested_actor_id": actor_id,
-        "current_actor_id": current_actor,
-        "combat_state": deepcopy(combat_state),
-        "source": SOURCE,
-    }
-
-
 def advance_combat_turn(
     simulation_state: Dict[str, Any],
     *,
@@ -105,25 +74,6 @@ def advance_combat_turn(
     }
 
 
-def gate_combat_action(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    action_kind: str,
-) -> Dict[str, Any]:
-    turn = validate_combat_turn(simulation_state, actor_id=actor_id)
-    if turn.get("allowed") is not True:
-        return _gate_response(False, turn, actor_id, action_kind, safe_str(turn.get("reason") or "not_actor_turn"))
-
-    allowed_actions = {"attack", "defend", "wait", "flee", "use", "consume", "equip"}
-    if safe_str(action_kind) not in allowed_actions:
-        response = _gate_response(False, turn, actor_id, action_kind, "combat_action_not_allowed")
-        response["allowed_actions"] = sorted(allowed_actions)
-        return response
-
-    return _gate_response(True, turn, actor_id, action_kind, "combat_action_allowed")
-
-
 def _apply_start_of_turn_conditions(combat_state: Dict[str, Any]) -> None:
     participants = safe_dict(combat_state.get("participants"))
     current_actor = safe_str(combat_state.get("current_actor_id")).strip()
@@ -157,22 +107,3 @@ def _apply_start_of_turn_conditions(combat_state: Dict[str, Any]) -> None:
         "reason": "stunned_skip_turn",
     }
     combat_state["pending_skip_turn_actor_id"] = current_actor
-
-
-def _gate_response(
-    resolved: bool,
-    turn: Dict[str, Any],
-    actor_id: str,
-    action_kind: str,
-    reason: str,
-) -> Dict[str, Any]:
-    return {
-        "resolved": resolved,
-        "changed_state": False,
-        "reason": reason,
-        "requested_actor_id": safe_str(actor_id or "player"),
-        "current_actor_id": safe_str(turn.get("current_actor_id")),
-        "action_kind": safe_str(action_kind),
-        "combat_state": deepcopy(safe_dict(turn.get("combat_state"))),
-        "source": SOURCE,
-    }

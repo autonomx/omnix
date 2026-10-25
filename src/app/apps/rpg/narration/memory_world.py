@@ -11,7 +11,6 @@ from app.apps.rpg.narration.memory_writer import (
 
 WORLD_MEMORY_KIND = "world"
 DEFAULT_WORLD_MEMORY_LIMIT = 8
-DEFAULT_WORLD_MEMORY_SALIENCE = 4
 ALLOWED_WORLD_SCOPES = {"global", "location", "faction", "quest", "actor"}
 
 

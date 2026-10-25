@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from copy import deepcopy
-import json
 from typing import Any, cast
 
 from app.apps.rpg.narration.ai.grounding_settings import normalize_grounding_settings
-from app.apps.rpg.rules.economy.currency import currency_to_copper_value, normalize_currency
-from app.apps.rpg.rules.items.inventory_state import add_inventory_items, normalize_inventory_state
+from app.apps.rpg.rules.items.inventory_state import normalize_inventory_state
 from app.apps.rpg.rules.items.world_items import ensure_world_item_state
 from app.apps.rpg.world.memory.actor_memory_state import ensure_actor_memory_state
 from app.apps.rpg.world.memory.memory_state import ensure_memory_state
@@ -18,11 +15,6 @@ from app.apps.rpg.narration.presentation.visual_state import ensure_visual_state
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
-_DEFAULT_STORY_POLICY = {
-    "save_load_stable": True,
-    "strict_replay": False,
-    "record_replay_artifacts": False,
-}
 _ALLOWED_IDLE_SECONDS = (15, 30, 60, 300, 600)
 _ALLOWED_REACTION_STYLES = ("minimal", "normal", "lively")
 _FAST_TURN_DEFAULTS = {
@@ -37,12 +29,6 @@ _FAST_TURN_DEFAULTS = {
 _MAX_NPC_REACTION_RECORDS = 64
 _MAX_INTERACTION_REACTION_STATE = 16
 
-DEFAULT_NPC_PROFILE_SETTINGS: dict[str, Any] = {
-    "auto_create_on_introduction": True,
-    "allow_manual_create": True,
-    "draft_with_llm_on_create": False,
-}
-
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -56,23 +42,6 @@ def _copy_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
-
-
-def _merge_stepped_simulation_state(
-    authoritative_state: dict[str, Any],
-    stepped_state: dict[str, Any],
-) -> dict[str, Any]:
-    """Merge stepped world state over the authoritative turn state."""
-
-    authoritative_state = _ensure_simulation_state(_safe_dict(authoritative_state))
-    stepped_state = _safe_dict(stepped_state)
-    if not stepped_state:
-        return authoritative_state
-
-    merged_state = deepcopy(authoritative_state)
-    for key, value in stepped_state.items():
-        merged_state[key] = deepcopy(value)
-    return _ensure_simulation_state(merged_state)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -194,22 +163,6 @@ def _normalize_runtime_settings(value: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _normalize_story_policy(runtime_state: dict[str, Any]) -> dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    raw = runtime_state.get("story_policy")
-    if not isinstance(raw, dict):
-        raw = {}
-    result = dict(_DEFAULT_STORY_POLICY)
-    for key in _DEFAULT_STORY_POLICY.keys():
-        if raw.get(key) is not None:
-            result[key] = bool(raw.get(key))
-    return result
-
-
-def _story_policy_record_replay_artifacts(runtime_state: dict[str, Any]) -> bool:
-    return bool(_normalize_story_policy(runtime_state).get("record_replay_artifacts", False))
-
-
 def _normalize_performance_settings(runtime_state: dict[str, Any]) -> dict[str, Any]:
     perf = {}
     if isinstance(runtime_state, dict):
@@ -234,13 +187,6 @@ def _normalize_performance_settings(runtime_state: dict[str, Any]) -> dict[str, 
     return result
 
 
-def _ensure_semantic_action_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
-    runtime_state = _copy_dict(runtime_state)
-    runtime_state.setdefault("semantic_action_records", [])
-    runtime_state.setdefault("semantic_action_index", {})
-    return runtime_state
-
-
 def _ensure_npc_reaction_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("npc_reaction_records", [])
@@ -256,155 +202,6 @@ def _ensure_active_interactions(simulation_state: dict[str, Any]) -> dict[str, A
     simulation_state = _safe_dict(simulation_state)
     interactions = _safe_list(simulation_state.get("active_interactions"))
     simulation_state["active_interactions"] = interactions
-    return simulation_state
-
-
-def _normalize_social_axes(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    seen: set[tuple[str, int]] = set()
-    for item in _safe_list(items)[:4]:
-        item = _safe_dict(item)
-        axis = _safe_str(item.get("axis")).strip().lower()
-        delta = _safe_int(item.get("delta"), 0)
-        if not axis or delta == 0:
-            continue
-        if delta > 2:
-            delta = 2
-        if delta < -2:
-            delta = -2
-        key = (axis, delta)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"axis": axis, "delta": delta})
-    return out
-
-
-def _normalize_structured_action(action: Any, player_input: str = "") -> dict[str, Any]:
-    normalized = _safe_dict(action)
-    if not normalized:
-        raw_input = _safe_str(player_input).strip()
-        if raw_input.startswith("{") and raw_input.endswith("}"):
-            try:
-                normalized = _safe_dict(json.loads(raw_input))
-            except Exception:
-                normalized = {}
-
-    if not normalized:
-        return {}
-
-    if normalized.get("action_type"):
-        action_type = _safe_str(normalized.get("action_type")).strip().lower()
-        if action_type == "talk":
-            normalized["action_type"] = "persuade"
-        elif action_type == "threaten":
-            normalized["action_type"] = "intimidate"
-        elif action_type == "threat":
-            normalized["action_type"] = "threat"
-        elif action_type == "social":
-            normalized["action_type"] = "social_activity"
-        normalized.setdefault(
-            "target_id",
-            _safe_str(normalized.get("target_id") or normalized.get("npc_id")).strip(),
-        )
-        return normalized
-
-    legacy_type = _safe_str(normalized.get("type")).strip().lower()
-    legacy_action = _safe_str(normalized.get("action")).strip().lower()
-    npc_id = _safe_str(normalized.get("npc_id")).strip()
-    npc_name = _safe_str(normalized.get("npc_name")).strip()
-
-    if legacy_type == "npc_action":
-        if legacy_action == "talk":
-            return {
-                "action_type": "persuade",
-                "npc_id": npc_id,
-                "npc_name": npc_name,
-                "target_id": npc_id,
-                "interaction": "talk",
-                "difficulty": "normal",
-            }
-        if legacy_action == "threaten":
-            return {
-                "action_type": "intimidate",
-                "npc_id": npc_id,
-                "npc_name": npc_name,
-                "target_id": npc_id,
-                "interaction": "threaten",
-                "difficulty": "normal",
-            }
-
-    normalized.setdefault("target_id", _safe_str(normalized.get("target_id") or npc_id).strip())
-    if normalized.get("type") and not normalized.get("action_type"):
-        normalized["action_type"] = _safe_str(normalized.get("type")).strip()
-    return normalized
-
-
-def _coerce_starting_inventory_items(resources: dict[str, Any]) -> list[dict[str, Any]]:
-    resources = _safe_dict(resources)
-    items: list[dict[str, Any]] = []
-
-    for key, raw_value in sorted(resources.items()):
-        qty = int(raw_value or 0)
-        if qty <= 0:
-            continue
-
-        resource_id = _safe_str(key).strip().lower()
-        if not resource_id or resource_id == "gold":
-            continue
-
-        item_id = resource_id
-        name = resource_id.replace("_", " ").title()
-        items.append({
-            "item_id": item_id,
-            "qty": qty,
-            "name": name,
-        })
-
-    return items
-
-
-def _apply_starting_resources_to_player_state(
-    simulation_state: dict[str, Any],
-    setup_payload: dict[str, Any],
-) -> dict[str, Any]:
-    simulation_state = _copy_dict(simulation_state)
-    setup_payload = _safe_dict(setup_payload)
-
-    simulation_state = ensure_player_state(simulation_state)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    player_state = ensure_player_progression_state(player_state)
-
-    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
-    currency = _safe_dict(inventory_state.get("currency"))
-    items = _safe_list(inventory_state.get("items"))
-
-    starting_resources = _safe_dict(setup_payload.get("starting_resources"))
-    if not starting_resources:
-        player_state["inventory_state"] = inventory_state
-        simulation_state["player_state"] = player_state
-        return simulation_state
-
-    currency = normalize_currency(currency)
-
-    current_currency_value = currency_to_copper_value(currency)
-    starting_currency = normalize_currency({
-        "gold": starting_resources.get("gold", 0),
-        "silver": starting_resources.get("silver", 0),
-        "copper": starting_resources.get("copper", 0),
-    })
-
-    if current_currency_value <= 0 and currency_to_copper_value(starting_currency) > 0:
-        currency = starting_currency
-
-    if not items:
-        bootstrap_items = _coerce_starting_inventory_items(starting_resources)
-        if bootstrap_items:
-            inventory_state = add_inventory_items(inventory_state, bootstrap_items)
-
-    inventory_state["currency"] = currency
-    player_state["inventory_state"] = normalize_inventory_state(inventory_state)
-    simulation_state["player_state"] = player_state
     return simulation_state
 
 

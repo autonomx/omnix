@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
@@ -263,104 +263,3 @@ def _consume_recall_request_as_conversation_reply(
 
 
 # ── Bundle H: NPC response beat after player joins ───────────────────────────
-
-
-def _npc_response_line_for_player_join(
-    *,
-    topic: Dict[str, Any],
-    topic_pivot: Dict[str, Any],
-    response_style: str,
-    recent_lines: List[str] | None = None,
-) -> str:
-    """Deterministic NPC reply line after player joins conversation.
-
-    Picks from 3 candidates per style, avoiding lines already in recent_lines.
-    Hard constraint: never creates quests, rewards, or inventory changes.
-    """
-    topic = _safe_dict(topic)
-    facts = _safe_list(topic.get("allowed_facts"))
-    fact = _safe_str(facts[0] if facts else topic.get("summary"))
-    title = _safe_str(topic.get("title") or topic.get("topic") or topic.get("topic_id"))
-    recent = {_safe_str(line).strip().lower() for line in (recent_lines or []) if _safe_str(line).strip()}
-    candidates: List[str]
-    if topic_pivot.get("requested") and not topic_pivot.get("accepted"):
-        candidates = [
-            "I have no reliable word of that. I will not dress guesses up as fact.",
-            "That is not something I can ground in anything known here.",
-            "If that tale is true, it has not reached this room as more than smoke.",
-        ]
-    elif response_style == "helpful":
-        candidates = [
-            f"Aye. What I know is this: {fact}",
-            f"The useful part is this: {fact}",
-            f"If you need something solid, start here: {fact}",
-        ]
-    elif response_style == "friendly":
-        candidates = [
-            f"I can tell you this much about {title}: {fact}",
-            f"Since you ask plain, here it is: {fact}",
-            f"Between us, the talk around {title} is simple enough: {fact}",
-        ]
-    elif response_style == "annoyed":
-        candidates = [
-            f"Mind your tone. Still, the fact of it is: {fact}",
-            f"You ask like you expect trouble. The answer is: {fact}",
-            f"Fine. But do not make a scene of it: {fact}",
-        ]
-    elif response_style == "evasive":
-        candidates = [
-            f"People are careful when speaking about {title}.",
-            f"I would not say more than this: {fact}",
-            f"That is the sort of matter best spoken of quietly: {fact}",
-        ]
-    else:
-        candidates = [
-            f"That's what folk are saying about {title}: {fact}",
-            f"The talk comes back to this: {fact}",
-            f"What reaches my ears is this: {fact}",
-        ]
-    for line in candidates:
-        if line.strip().lower() not in recent:
-            return line
-    return candidates[0]
-
-
-def _make_npc_response_beat(
-    *,
-    npc: Dict[str, Any],
-    thread: Dict[str, Any],
-    topic: Dict[str, Any],
-    topic_pivot: Dict[str, Any],
-    response_style: str,
-    tick: int,
-    thread_id: str,
-    beat_index: int,
-) -> Dict[str, Any]:
-    """Build an NPC response beat dict with avoid-repeat logic."""
-    recent_lines = [
-        _safe_str(beat.get("line"))
-        for beat in _safe_list(_safe_dict(thread).get("beats"))
-        if _safe_str(beat.get("speaker_id")).startswith("npc:")
-    ]
-    return {
-        "beat_id": f"conversation:npc_response:{int(tick or 0)}:{thread_id}:{beat_index}",
-        "thread_id": thread_id,
-        "beat_index": beat_index,
-        "speaker_id": _safe_str(npc.get("id")),
-        "speaker_name": _safe_str(npc.get("name")),
-        "listener_id": "player",
-        "listener_name": "Player",
-        "line": _npc_response_line_for_player_join(
-            topic=topic,
-            topic_pivot=topic_pivot,
-            response_style=response_style,
-            recent_lines=recent_lines,
-        ),
-        "topic_id": _safe_str(topic.get("topic_id")),
-        "topic_type": _safe_str(topic.get("topic_type")),
-        "topic": _safe_str(topic.get("title") or topic.get("topic")),
-        "tick": int(tick or 0),
-        "response_style": response_style,
-        "participation_mode": "player_joined",
-        "source": "deterministic_conversation_thread_runtime",
-    }

@@ -23,10 +23,6 @@ from .profile_authoring import require_approved_profile
 from .profile_generation_jobs import profile_manifest_run, profile_resolution_from_world
 
 
-def _database(value: Any | None) -> Any | None:
-    return value
-
-
 def _world_generation_context(
     world: Mapping[str, Any],
     *,

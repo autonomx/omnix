@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any, Dict, cast
+from typing import Any, Dict
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 REPUTATION_MIN = -5
@@ -46,49 +45,6 @@ def get_npc_reputation(
         "fear": _clamp(entry.get("fear"), 0),
         "respect": _clamp(entry.get("respect"), 0),
         "last_updated_tick": _safe_int(entry.get("last_updated_tick"), 0),
-        "source": "deterministic_npc_reputation_runtime",
-    }
-
-
-def update_npc_reputation(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-    tick: int,
-    familiarity_delta: int = 0,
-    trust_delta: int = 0,
-    annoyance_delta: int = 0,
-    fear_delta: int = 0,
-    respect_delta: int = 0,
-    reason: str = "",
-) -> Dict[str, Any]:
-    npc_id = _safe_str(npc_id)
-    if not npc_id.startswith("npc:"):
-        return {"updated": False, "reason": "invalid_npc_id"}
-
-    state = ensure_npc_reputation_state(simulation_state)
-    by_npc = _safe_dict(state.get("by_npc"))
-    current = get_npc_reputation(simulation_state, npc_id=npc_id)
-
-    updated = {
-        "npc_id": npc_id,
-        "familiarity": _clamp(cast(int, current.get("familiarity")) + int(familiarity_delta or 0)),
-        "trust": _clamp(cast(int, current.get("trust")) + int(trust_delta or 0)),
-        "annoyance": _clamp(cast(int, current.get("annoyance")) + int(annoyance_delta or 0)),
-        "fear": _clamp(cast(int, current.get("fear")) + int(fear_delta or 0)),
-        "respect": _clamp(cast(int, current.get("respect")) + int(respect_delta or 0)),
-        "last_updated_tick": int(tick or 0),
-        "last_reason": _safe_str(reason),
-        "source": "deterministic_npc_reputation_runtime",
-    }
-
-    by_npc[npc_id] = updated
-    state["by_npc"] = by_npc
-    simulation_state["npc_reputation_state"] = state
-
-    return {
-        "updated": True,
-        "entry": deepcopy(updated),
         "source": "deterministic_npc_reputation_runtime",
     }
 

@@ -36,9 +36,6 @@ class Role(str, Enum):
 # Each registered RPG prompt template, by id prefix, names its call's role. Longest prefix wins.
 _TEMPLATE_ROLES: tuple[tuple[str, Role], ...] = (
     ("rpg.turn_intent.", Role.INTENT),
-    ("rpg.ai_semantic_action_intelligence.", Role.INTENT),
-    ("rpg.ai_action_intelligence.", Role.INTENT),
-    ("rpg.cognitive_intent_enrichment.", Role.INTENT),
     ("rpg.ai_compact_dialogue.", Role.DIALOGUE),
     ("rpg.ai_conversation_prompt_builder.", Role.DIALOGUE),
     ("rpg.npc_dialogue_intelligence.", Role.DIALOGUE),
@@ -47,15 +44,9 @@ _TEMPLATE_ROLES: tuple[tuple[str, Role], ...] = (
     ("rpg.ai_world_scene_narrator_prompts.", Role.NARRATION),
     ("rpg.narration_", Role.NARRATION),
     ("rpg.narrative_", Role.NARRATION),
-    ("rpg.jobs_turn_executor.", Role.NARRATION),
     ("rpg.session_genesis_", Role.LORE),
     ("rpg.session_item_detail.", Role.LORE),
     ("rpg.session_ability_detail.", Role.LORE),
-    ("rpg.profiles_", Role.LORE),
-    ("rpg.ai_llm_mind_npc_prompt_builder.", Role.WORLD),
-    ("rpg.session_semantic_state_changes.", Role.WORLD),
-    ("rpg.cognitive_resolution_engine.", Role.WORLD),
-    ("rpg.session_player_agency_contract.", Role.CHOICES),
     ("rpg.ai_grounding_soft_audit.", Role.AUDIT),
 )
 # Templates that are fragments inside another call's prompt (grounding rules, schemas): they never name a call.
@@ -208,8 +199,6 @@ class ScriptedRoleModel:
         if call.role is Role.DIALOGUE:
             speaker, line = self._scripted(call, ("", DEFAULT_LINE))
             npc = _addressee(call, str(speaker or ""))
-            if call.template_id == "rpg.ai_compact_dialogue.choose_speaker":
-                return json.dumps({"speaker_id": str(npc.get("id") or ""), "line": line})
             if call.template_id.startswith("rpg.ai_conversation_prompt_builder."):
                 return json.dumps({"speaker": str(npc.get("name") or speaker or ""), "text": line, "kind": "statement"})
             if call.template_id.startswith("rpg.npc_dialogue_intelligence."):

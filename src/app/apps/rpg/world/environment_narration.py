@@ -25,9 +25,6 @@ ALLOWED_ENVIRONMENT_NARRATION = (
 )
 
 
-EnvironmentNarrationResult = dict[str, Any]
-
-
 def build_environment_narration_contract(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     """Return read-only environment context for narrator prompts/contracts."""
 
@@ -67,10 +64,3 @@ def _weather_label(snapshot: dict[str, Any]) -> str:
     condition = str(weather.get("condition") or "Not tracked yet")
     intensity = str(weather.get("intensity") or "").strip()
     return f"{intensity.title()} {condition.title()}".strip()
-
-
-def _context_label(snapshot: dict[str, Any]) -> str:
-    context = raw_context if isinstance(raw_context := snapshot.get("context"), dict) else {}
-    exposure = str(context.get("exposure") or "Not tracked yet")
-    shelter = str(context.get("shelter") or "Not tracked yet")
-    return f"{exposure} / {shelter}"

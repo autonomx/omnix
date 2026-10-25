@@ -4,17 +4,6 @@ from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return default
-
-
-def _clamp(value: float, lo: float = -1.0, hi: float = 1.0) -> float:
-    return max(lo, min(hi, value))
-
-
 def build_intervention_options(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     conversation = _safe_dict(conversation)
     participants = [x for x in (_safe_str(p) for p in conversation.get("participants") or []) if x]
@@ -32,5 +21,3 @@ def build_intervention_options(conversation: Dict[str, Any], simulation_state: D
         {"id": "end_discussion", "text": "End the discussion", "effect": "close_conversation"},
         {"id": "continue", "text": "Keep listening", "effect": "none"},
     ]
-
-

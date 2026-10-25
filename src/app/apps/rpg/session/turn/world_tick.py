@@ -24,7 +24,6 @@ from app.apps.rpg.rules.survival_tick_runtime import SURVIVAL_TICK_RATE_PROFILES
 from app.apps.rpg.session.causal_turn_runtime import causal_tick
 from app.apps.rpg.world.environment_time import advance_environment_time
 
-MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 DEFAULT_START_MINUTE = 9 * 60
 
 
@@ -147,4 +146,4 @@ def world_tick(
     return changes, receipt, seen
 
 
-__all__ = ["MAX_PRESSURE_TICKS", "MINUTES_PER_TICK", "clock_minute", "world_tick"]
+__all__ = ["MAX_PRESSURE_TICKS", "clock_minute", "world_tick"]

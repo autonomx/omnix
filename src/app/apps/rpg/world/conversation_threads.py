@@ -54,18 +54,12 @@ from app.apps.rpg.world.world_event_log import add_world_event
 from app.apps.rpg.world.conversation_thread_base import (
     MAX_BEATS_PER_THREAD as MAX_BEATS_PER_THREAD,
     MAX_CONVERSATION_THREADS as MAX_CONVERSATION_THREADS,
-    MAX_WORLD_SIGNALS as MAX_WORLD_SIGNALS,
     _append_world_signal as _append_world_signal,
     _apply_forced_player_invite_to_thread as _apply_forced_player_invite_to_thread,
     _apply_goal_bias_to_player_inclusion as _apply_goal_bias_to_player_inclusion,
     _companion_acceptance_runtime_result as _companion_acceptance_runtime_result,
-    _conversation_line_for_topic as _conversation_line_for_topic,
-    _deterministic_percent as _deterministic_percent,
     _find_thread as _find_thread,
-    _line_for_participant as _line_for_participant,
     _make_beat as _make_beat,
-    _normalize_present_npc as _normalize_present_npc,
-    _participant_key as _participant_key,
     _player_participation_payload as _player_participation_payload,
     _player_party_state as _player_party_state,
     _safe_dict as _safe_dict,
@@ -82,15 +76,7 @@ from app.apps.rpg.world.conversation_thread_base import (
     select_conversation_participants as select_conversation_participants,
 )
 from app.apps.rpg.world.conversation_thread_responses import (
-    _biography_grounded_npc_response as _biography_grounded_npc_response,
     _consume_recall_request_as_conversation_reply as _consume_recall_request_as_conversation_reply,
-    _make_npc_response_beat as _make_npc_response_beat,
-    _npc_response_line_for_player_join as _npc_response_line_for_player_join,
-)
-from app.apps.rpg.world.conversation_thread_pending import (
-    handle_pending_player_conversation_response as handle_pending_player_conversation_response,
-    has_pending_player_conversation_response as has_pending_player_conversation_response,
-    maybe_consume_pending_player_response as maybe_consume_pending_player_response,
 )
 
 def maybe_advance_conversation_thread(

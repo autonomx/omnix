@@ -4,7 +4,9 @@ from app.runtime.clock import utc_now
 
 # RPG session runtime responsibility module.
 from app.apps.rpg.session.state_normalization import (
-    _ensure_semantic_action_runtime_state as _ensure_semantic_action_runtime_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list,
+    _safe_dict as _safe_dict,
+    _safe_int as _safe_int,
+    _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
@@ -22,229 +24,12 @@ from app.apps.rpg.rules.economy.provider_catalog import (
 from datetime import (
     datetime as datetime, timezone as timezone,
 )
-from app.apps.rpg.session.turn_perf_trace import (
-    record_turn_perf_trace as record_turn_perf_trace,
-)
-from app.apps.rpg.session.semantic_interaction_runtime import (
-    _append_semantic_action_record as _append_semantic_action_record, _append_simulation_semantic_event as _append_simulation_semantic_event,
-    _append_world_event_row as _append_world_event_row, _apply_semantic_world_propagation as _apply_semantic_world_propagation,
-    _emit_scene_beat_from_semantic_action as _emit_scene_beat_from_semantic_action, _semantic_activity_kind as _semantic_activity_kind,
-    _semantic_consequence_summary as _semantic_consequence_summary,
-)
-from app.apps.rpg.session.narration_queue_runtime import (
-    _upsert_active_interaction_from_semantic_action as _upsert_active_interaction_from_semantic_action,
-)
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
 
 
-def _apply_semantic_action_to_runtime(
-    simulation_state: dict[str, Any],
-    runtime_state: dict[str, Any],
-    record: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    from app.apps.rpg.session.world_consequence_runtime import (
-        _append_world_consequence as _append_world_consequence,
-    )
-
-    simulation_state = _safe_dict(simulation_state)
-    runtime_state = ensure_world_consequence_state(runtime_state)
-    runtime_state = ensure_actor_activity_state(runtime_state)
-    runtime_state = _ensure_semantic_action_runtime_state(runtime_state)
-    record = _safe_dict(record)
-    if not record:
-        return simulation_state, runtime_state
-
-    target_id = _safe_str(record.get("target_id"))
-    target_name = _safe_str(record.get("target_name") or target_id)
-    tick = _safe_int(record.get("tick"), 0)
-    location_id = _safe_str(record.get("location_id"))
-    activity_kind = _semantic_activity_kind(record)
-
-    if target_id:
-        runtime_state = set_actor_activity(
-            runtime_state,
-            target_id,
-            _normalize_activity_record(
-                {
-                    "activity_id": _stable_activity_id(target_id, tick, activity_kind, location_id),
-                    "kind": activity_kind,
-                    "subtype": _safe_str(record.get("activity_label")),
-                    "summary": (
-                        f"{target_name} is engaged in { _safe_str(record.get('activity_label')).replace('_', ' ') } with the player."
-                        if _safe_str(record.get("activity_label"))
-                        else f"{target_name} is focused on the player."
-                    ),
-                    "location_id": location_id,
-                    "target_id": "player",
-                    "target_label": "Player",
-                    "started_tick": tick,
-                    "updated_tick": tick,
-                    "expected_duration": 2 if _safe_str(record.get("action_type")) != "social_competition" else 3,
-                    "status": "active",
-                    "intent": "Respond directly to the player's immediate action.",
-                    "world_tags": _safe_list(record.get("tags")) + ["player_engaged"],
-                    "priority": 5 if _safe_str(record.get("action_type")) == "social_competition" else 4,
-                }
-            ),
-        )
-
-    simulation_state = _upsert_active_interaction_from_semantic_action(
-        simulation_state,
-        runtime_state,
-        record,
-    )
-
-    consequence_summary = _semantic_consequence_summary(record)
-    consequence = {
-        "consequence_id": _stable_consequence_id(
-            "consequence",
-            tick,
-            "local" if location_id else "global",
-            location_id or target_id or "player",
-            consequence_summary,
-        ),
-        "kind": "player_action_consequence",
-        "scope": "local" if location_id else "global",
-        "location_id": location_id,
-        "summary": consequence_summary,
-        "source_actor_id": target_id,
-        "tick": tick,
-        "priority": 0.8 if _safe_str(record.get("action_type")) in ("social_competition", "social_performance") else 0.65,
-        "tags": _safe_list(record.get("tags")),
-    }
-    runtime_state = _append_world_consequence(runtime_state, consequence)
-    runtime_state = _append_world_event_row(
-        runtime_state,
-        {
-            "event_id": f"semantic_action_row:{_safe_str(record.get('semantic_action_id'))}",
-            "scope": "local" if location_id else "global",
-            "kind": "player_action_consequence",
-            "title": "World Consequence",
-            "summary": consequence_summary,
-            "tick": tick,
-            "actors": [target_id] if target_id else [],
-            "actor_id": target_id,
-            "location_id": location_id,
-            "priority": consequence.get("priority"),
-            "status": "active",
-            "source": "semantic_player_runtime",
-            "tags": _safe_list(record.get("tags")),
-        },
-     )
-    simulation_state, runtime_state = _apply_semantic_world_propagation(
-        simulation_state,
-        runtime_state,
-        record,
-    )
-    simulation_state = _append_simulation_semantic_event(simulation_state, record)
-    runtime_state = _emit_scene_beat_from_semantic_action(runtime_state, record)
-    runtime_state = _append_semantic_action_record(runtime_state, record)
-    return simulation_state, runtime_state
-
-
-def _record_real_player_activity(runtime_state: dict[str, Any]) -> dict[str, Any]:
-    """Record real player activity timestamp and reset idle streak."""
-    from app.apps.rpg.session.combat_intent import (
-        _utc_now_iso as _utc_now_iso,
-    )
-
-    runtime_state["last_real_player_activity_at"] = _utc_now_iso()
-    runtime_state["idle_streak"] = 0
-    return runtime_state
-
-
 _CRITICAL_REACTION_KINDS = frozenset({"follow_reaction", "caution_reaction", "assist_reaction", "warning"})
-_MOVEMENT_RUSH_KEYWORDS = frozenset({"run", "sprint", "rush", "charge", "hurry", "dash", "race"})
-_MOVEMENT_ADVANCE_KEYWORDS = frozenset({"walk", "move", "go", "continue", "advance", "proceed", "head", "enter", "step"})
-_MOVEMENT_RETREAT_KEYWORDS = frozenset({"retreat", "flee", "escape", "back", "withdraw", "fall back", "run away"})
-_MOVEMENT_INSPECT_KEYWORDS = frozenset({"look", "inspect", "examine", "investigate", "search", "study", "check", "peer"})
-_MOVEMENT_WAIT_KEYWORDS = frozenset({"wait", "pause", "hold", "stay", "rest", "stop"})
-_MOVEMENT_TALK_KEYWORDS = frozenset({"talk", "speak", "ask", "tell", "say", "greet", "address", "chat"})
-_MOVEMENT_ATTACK_KEYWORDS = frozenset({"attack", "strike", "fight", "hit", "slash", "stab", "shoot", "cast"})
-_MOVEMENT_APPROACH_KEYWORDS = frozenset({"approach", "near", "toward", "towards", "close"})
-
-_HIGH_RISK_KEYWORDS = frozenset({"attack", "fight", "charge", "rush", "strike", "slash", "stab", "shoot", "cast", "confront"})
-_MEDIUM_RISK_KEYWORDS = frozenset({"investigate", "enter", "approach", "sneak", "climb", "jump", "cross"})
-
-
-def _classify_player_action_context(
-    player_input: str,
-    resolved_result: dict[str, Any],
-    simulation_state: dict[str, Any],
-    runtime_state: dict[str, Any],
-) -> dict[str, Any]:
-    """Classify player action into a bounded deterministic context dict.
-
-    Uses simple keyword-based classification. No LLM call.
-    """
-    player_input = _safe_str(player_input).strip()
-    resolved_result = _safe_dict(resolved_result)
-    simulation_state = _safe_dict(simulation_state)
-    runtime_state = _safe_dict(runtime_state)
-
-    words = set(player_input.lower().split())
-    text_lower = player_input.lower()
-
-    # Determine movement intent
-    movement_intent = "unknown"
-    if words & _MOVEMENT_RUSH_KEYWORDS or any(k in text_lower for k in ("run toward", "sprint to", "rush to")):
-        movement_intent = "rush"
-    elif words & _MOVEMENT_RETREAT_KEYWORDS or "fall back" in text_lower or "run away" in text_lower:
-        movement_intent = "retreat"
-    elif words & _MOVEMENT_APPROACH_KEYWORDS or "toward" in text_lower:
-        movement_intent = "approach"
-    elif words & _MOVEMENT_ATTACK_KEYWORDS:
-        movement_intent = "attack"
-    elif words & _MOVEMENT_TALK_KEYWORDS:
-        movement_intent = "talk"
-    elif words & _MOVEMENT_INSPECT_KEYWORDS:
-        movement_intent = "inspect"
-    elif words & _MOVEMENT_WAIT_KEYWORDS:
-        movement_intent = "wait"
-    elif words & _MOVEMENT_ADVANCE_KEYWORDS:
-        movement_intent = "advance"
-
-    # Determine risk level
-    risk_level = "low"
-    if words & _HIGH_RISK_KEYWORDS:
-        risk_level = "high"
-    elif words & _MEDIUM_RISK_KEYWORDS:
-        risk_level = "medium"
-
-    # Determine urgency
-    urgency = "low"
-    if movement_intent in ("rush", "attack"):
-        urgency = "high"
-    elif movement_intent in ("approach", "retreat"):
-        urgency = "medium"
-
-    action_type = _safe_str(resolved_result.get("action_type"))
-    target_id = _safe_str(resolved_result.get("target_id"))
-    target_name = _safe_str(resolved_result.get("target_name"))
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    location_id = _safe_str(player_state.get("location_id"))
-    tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0)
-
-    result = {
-        "tick": tick,
-        "player_input": player_input[:200],
-        "action_type": action_type,
-        "movement_intent": movement_intent,
-        "risk_level": risk_level,
-        "urgency": urgency,
-        "target_id": target_id,
-        "target_name": target_name,
-        "location_id": location_id,
-    }
-    record_turn_perf_trace(
-        "authoritative_before_return",
-        reason="normal",
-        return_keys=sorted(list(_safe_dict(result).keys()))[:80],
-        ok=bool(_safe_dict(result).get("ok")),
-    )
-    return result
 
 
 def _seconds_since_iso(iso_str: str, *, now: datetime | None = None) -> int:
@@ -260,16 +45,6 @@ def _seconds_since_iso(iso_str: str, *, now: datetime | None = None) -> int:
         return max(0, int(delta.total_seconds()))
     except Exception:
         return 9999
-
-
-
-
-
-
-
-
-
-
 
 
 def _derive_transaction_context_tags(
@@ -606,13 +381,6 @@ _LOCAL_ACTIVITY_KINDS = (
     "question_patron",
 )
 
-_GLOBAL_ACTIVITY_KINDS = (
-    "move_goods",
-    "spread_rumor",
-    "scout_route",
-    "increase_patrols",
-    "organize_watch",
-)
 
 def _sorted_npc_entities(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
@@ -873,4 +641,41 @@ def emit_activity_beats_for_tick(simulation_state: dict[str, Any], runtime_state
     runtime_state["global_world_beats"] = global_world_beats[-_MAX_GLOBAL_WORLD_BEATS:]
     return runtime_state
 
-__all__ = ['_GLOBAL_ACTIVITY_KINDS', '_HIGH_RISK_KEYWORDS', '_LOCAL_ACTIVITY_KINDS', '_MAX_ACTIVE_ACTIVITIES', '_MAX_ACTIVITY_SCENE_BEATS', '_MAX_GLOBAL_WORLD_BEATS', '_MAX_RECENT_SCENE_BEATS', '_MEDIUM_RISK_KEYWORDS', '_MOVEMENT_ADVANCE_KEYWORDS', '_MOVEMENT_APPROACH_KEYWORDS', '_MOVEMENT_ATTACK_KEYWORDS', '_MOVEMENT_INSPECT_KEYWORDS', '_MOVEMENT_RETREAT_KEYWORDS', '_MOVEMENT_RUSH_KEYWORDS', '_MOVEMENT_TALK_KEYWORDS', '_MOVEMENT_WAIT_KEYWORDS', '_apply_semantic_action_to_runtime', '_build_activity_intent', '_build_activity_summary', '_build_activity_tags', '_build_transaction_menus_for_state', '_choose_activity_kind_for_actor', '_classify_player_action_context', '_derive_transaction_context_tags', '_derive_transaction_providers', '_ensure_recent_scene_beats', '_location_condition_key', '_normalize_activity_record', '_normalize_consequence_text', '_normalize_location_condition', '_normalize_pressure_record', '_normalize_scene_beat', '_normalize_world_consequence', '_normalize_world_rumor', '_record_real_player_activity', '_seconds_since_iso', '_sorted_npc_entities', '_stable_activity_id', '_stable_consequence_id', '_stable_scene_beat_id', '_stable_world_beat_id', '_world_consequence_key', '_world_pressure_key', '_world_rumor_key', 'advance_actor_activities_for_tick', 'emit_activity_beats_for_tick', 'ensure_actor_activity_state', 'ensure_world_consequence_state', 'get_actor_activity', 'set_actor_activity']
+__all__ = [
+    "_LOCAL_ACTIVITY_KINDS",
+    "_MAX_ACTIVE_ACTIVITIES",
+    "_MAX_ACTIVITY_SCENE_BEATS",
+    "_MAX_GLOBAL_WORLD_BEATS",
+    "_MAX_RECENT_SCENE_BEATS",
+    "_build_activity_intent",
+    "_build_activity_summary",
+    "_build_activity_tags",
+    "_build_transaction_menus_for_state",
+    "_choose_activity_kind_for_actor",
+    "_derive_transaction_context_tags",
+    "_derive_transaction_providers",
+    "_ensure_recent_scene_beats",
+    "_location_condition_key",
+    "_normalize_activity_record",
+    "_normalize_consequence_text",
+    "_normalize_location_condition",
+    "_normalize_pressure_record",
+    "_normalize_scene_beat",
+    "_normalize_world_consequence",
+    "_normalize_world_rumor",
+    "_seconds_since_iso",
+    "_sorted_npc_entities",
+    "_stable_activity_id",
+    "_stable_consequence_id",
+    "_stable_scene_beat_id",
+    "_stable_world_beat_id",
+    "_world_consequence_key",
+    "_world_pressure_key",
+    "_world_rumor_key",
+    "advance_actor_activities_for_tick",
+    "emit_activity_beats_for_tick",
+    "ensure_actor_activity_state",
+    "ensure_world_consequence_state",
+    "get_actor_activity",
+    "set_actor_activity",
+]

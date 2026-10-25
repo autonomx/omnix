@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from .npc_conversations import list_active_conversations
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ── Constants ─────────────────────────────────────────────────────────────
@@ -153,26 +152,3 @@ def compute_world_effect_budget(conversation: Dict[str, Any]) -> int:
 
 
 # ── Conversation mode summary for UI ──────────────────────────────────────
-
-def get_active_thread_summary(
-    simulation_state: Dict[str, Any],
-    location_id: str = "",
-) -> List[Dict[str, Any]]:
-    """Return a compact summary of active threads for the UI inspector."""
-    result: List[Dict[str, Any]] = []
-    for conv in list_active_conversations(simulation_state, location_id=location_id):
-        conv = _safe_dict(conv)
-        topic = _safe_dict(conv.get("topic"))
-        result.append({
-            "conversation_id": _safe_str(conv.get("conversation_id")),
-            "mode": _safe_str(conv.get("mode")) or "ambient",
-            "participants": _safe_list(conv.get("participants")),
-            "topic_type": _safe_str(topic.get("type")),
-            "topic_summary": _safe_str(topic.get("summary"))[:100],
-            "beat_count": _safe_int(conv.get("beat_count"), 0),
-            "max_turns": _safe_int(conv.get("max_turns"), 1),
-            "importance": _safe_int(conv.get("importance"), 0),
-            "mode_pivots": len(_safe_list(conv.get("pivot_history"))),
-            "status": _safe_str(conv.get("status")),
-        })
-    return result

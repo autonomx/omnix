@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
-from app.apps.rpg.foundation.safe_values import copy_state
 
 
 def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,22 +46,6 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(simulation.get("quest_state"), dict) and isinstance(public_state.get("quests"), list):
         simulation["quest_state"] = {"quests": deepcopy(public_state["quests"])}
     session["simulation_state"] = simulation
-    return session
-
-
-def count_player_turn(session: Dict[str, Any]) -> Dict[str, Any]:
-    """Count the turn the player is taking, whichever path resolves it.
-
-    Every stage of a turn loads the session as it was when the turn began (saves are deferred to the turn's
-    commit), so each stage that counts sets the same number: counting is idempotent within a turn.
-    """
-    state = _dict(session.get("state"))
-    manifest = _dict(session.get("manifest"))
-    count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
-    state["turn_count"] = state["current_turn"] = count
-    manifest["turn_count"] = manifest["current_turn"] = count
-    session["state"] = state
-    session["manifest"] = manifest
     return session
 
 
@@ -188,54 +171,6 @@ def synchronize_player_projections(session: Dict[str, Any]) -> Dict[str, Any]:
     return project_authoritative_player(hydrate_simulation_player(session))
 
 
-def merge_authoritative_session_state(
-    base_session: Dict[str, Any],
-    authoritative_payload: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Carry mechanic-owned state through presentation wrappers without stale overwrite."""
-
-    base = copy_state(_dict(base_session))
-    payload = _dict(authoritative_payload)
-    nested = _dict(payload.get("result"))
-    authoritative_session = _dict(payload.get("session") or nested.get("session"))
-    if authoritative_session:
-        base = copy_state(authoritative_session)
-    authoritative_simulation = _dict(
-        payload.get("simulation_state")
-        or nested.get("simulation_state")
-        or authoritative_session.get("simulation_state")
-    )
-    if authoritative_simulation:
-        base["simulation_state"] = copy_state(authoritative_simulation)
-    return project_authoritative_player(hydrate_simulation_player(base))
-
-
-def carry_stage_changes(
-    turn_start: Dict[str, Any],
-    stage: Dict[str, Any],
-    onto: Dict[str, Any],
-) -> Dict[str, Any]:
-    """``onto`` (the authoritative simulation) with what one turn stage changed from the turn's start.
-
-    A stage that resolves part of the turn on its own copy (the general interaction: a blow, loot, an item
-    used) must not replace what the authoritative stage did meanwhile, so it carries only what it changed:
-    a changed record is followed a few levels down (player_state -> resources -> hp) before it is replaced.
-    """
-    return _carry(_dict(turn_start), _dict(stage), copy_state(_dict(onto)), depth=3)
-
-
-def _carry(before: Any, stage: Any, onto: Any, *, depth: int) -> Any:
-    if depth == 0 or not (isinstance(before, dict) and isinstance(stage, dict) and isinstance(onto, dict)):
-        return deepcopy(stage)
-    merged = dict(onto)
-    for key, value in stage.items():
-        if key not in before or before[key] != value:
-            merged[key] = _carry(before.get(key), value, onto.get(key), depth=depth - 1)
-    for key in before.keys() - stage.keys():
-        merged.pop(key, None)
-    return merged
-
-
 def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
     """Make the player sheet's inventory and purse the simulation's, after an action changed the sheet directly
     (dropping, using, equipping or crafting an item); otherwise the next projection would restore the old ones."""
@@ -322,9 +257,4 @@ def _format_environment_time(environment: Dict[str, Any]) -> str:
     return f"Day {day} • {minute // 60:02d}:{minute % 60:02d}"
 
 
-__all__ = [
-    "hydrate_simulation_player",
-    "project_authoritative_player",
-    "merge_authoritative_session_state",
-    "synchronize_player_projections",
-]
+__all__ = ["hydrate_simulation_player", "project_authoritative_player", "synchronize_player_projections"]

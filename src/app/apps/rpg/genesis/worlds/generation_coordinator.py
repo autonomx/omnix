@@ -45,7 +45,6 @@ from .generation_payloads import (
     available_result_row as _available_result_row,
 )
 
-_TERMINAL_JOB_STATUSES = {"completed", "failed", "canceled", "stale"}
 _ACTIVE_JOB_STATUSES = {"queued", "leased", "running", "waiting", "retrying"}
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _reconcile_lock = threading.Lock()

@@ -20,15 +20,15 @@ def _turn_client() -> TestClient:
 
 
 def _record_apply_turn(monkeypatch) -> list[str]:
-    from app.apps.rpg.session import interactive_first_call_runtime
+    from app.apps.rpg.session import pipeline
 
     calls: list[str] = []
 
-    def apply_turn(session_id: str, command: str, performance_override: dict[str, object] | None = None):
+    def apply_turn(session_id: str, command: str, action: dict[str, object] | None = None):
         calls.append(session_id)
         return {"ok": True, "final_narration": "unused", "session": {"state": {"session_id": session_id}}}
 
-    monkeypatch.setattr(interactive_first_call_runtime, "apply_turn", apply_turn)
+    monkeypatch.setattr(pipeline, "apply_turn", apply_turn)
     return calls
 
 
@@ -102,11 +102,10 @@ def test_gateway_composition_uses_the_explicit_turn_pipeline_without_installers(
 from app.composition.gateway.main import create_gateway_app
 create_gateway_app()
 from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
-from app.apps.rpg.session import interactive_first_call_runtime as runtime
-from app.apps.rpg.session.pipeline import TURN_PIPELINE
+from app.apps.rpg.session import pipeline
 assert callable(execute_turn_with_job_mirror)
-assert [stage.name for stage in TURN_PIPELINE]
-assert not hasattr(runtime, '_omnix_rpg_turn_job_mirror_installed')
+assert [stage.name for stage in pipeline.TURN_PIPELINE] == ["planned_turn", "interaction_commit", "interaction_lifecycle"]
+assert not hasattr(pipeline, '_omnix_rpg_turn_job_mirror_installed')
 """
     completed = subprocess.run(
         [sys.executable, "-c", script],

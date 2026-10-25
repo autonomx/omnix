@@ -603,15 +603,3 @@ def apply_ability_to_state(state: dict[str, Any], *, ability_name: str | None = 
     dimensions = ", ".join(str(value) for value in ability.get("dimensions", []))
     cost_detail = f" Costs now {', '.join(cost_parts)}." if cost_parts else ""
     return RpgAbilityUseResult(ok=True, ability_id=ability_id, name=str(ability.get("name")), detail=f"You used {ability.get('name')} on {target or 'the current situation'}, changing {dimensions}.{cost_detail}", effects=effects)
-
-
-def hotbar_preview_from_state(state: dict[str, Any]) -> list[dict[str, str]]:
-    ability_index = _ability_index(_safe_dict(state.get("ability_tree")))
-    ability_state = _safe_dict(state.get("ability_state"))
-    hotbar = _safe_dict(state.get("hotbar")) or _safe_dict(ability_state.get("hotbar"))
-    previews: list[dict[str, str]] = []
-    for slot in sorted(hotbar, key=lambda value: int(value) if str(value).isdigit() else 999):
-        ability = ability_index.get(str(hotbar[slot]))
-        if ability:
-            previews.append({"key": str(slot), "icon": str(ability.get("icon") or "✦"), "label": str(ability.get("name") or ability.get("ability_id"))})
-    return previews

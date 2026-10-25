@@ -20,18 +20,6 @@ MAX_WORLD_EVENT_CANDIDATES = 16
 
 # ── Event types ───────────────────────────────────────────────────────────
 
-EVENT_TYPES = (
-    "faction_movement",
-    "rumor_spread",
-    "resource_shortage",
-    "public_disturbance",
-    "weather_change",
-    "patrol_arrival",
-    "market_lockdown",
-    "ritual_ceremony",
-    "accident_explosion",
-    "scouting_report",
-)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 

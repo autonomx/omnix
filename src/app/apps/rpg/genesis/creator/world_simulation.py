@@ -69,12 +69,7 @@ from .world_incidents import (
     merge_incidents,
     spawn_incidents_from_state_diff,
 )
-from .world_simulation_reports import (
-    _step_hash,
-    compute_simulation_diff,
-    evaluate_world_expansion,  # noqa: F401 - re-exported for the historical API.
-    summarize_simulation_step,
-)
+from .world_simulation_reports import _step_hash, compute_simulation_diff, summarize_simulation_step
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ---------------------------------------------------------------------------

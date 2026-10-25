@@ -10,90 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Sequence
 
-from pydantic import BaseModel, Field
-from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
-ITEM_TYPES = (
-    "weapon",
-    "armor",
-    "consumable",
-    "crafting_material",
-    "tool",
-    "ammo",
-    "quest",
-    "clothing",
-    "supply",
-    "camping",
-)
-WEAPON_TYPES = (
-    "dagger",
-    "sword",
-    "axe",
-    "mace",
-    "spear",
-    "bow",
-    "crossbow",
-    "staff",
-    "wand",
-    "firearm",
-    "energy_pistol",
-    "thrown",
-    "unarmed",
-)
-ARMOR_TYPES = (
-    "light",
-    "medium",
-    "heavy",
-    "shield",
-    "cloak",
-    "robe",
-    "helmet",
-    "boots",
-    "gloves",
-    "accessory",
-)
-CONSUMABLE_TYPES = (
-    "healing",
-    "mana",
-    "stamina",
-    "food",
-    "antidote",
-    "buff",
-    "utility",
-)
-DAMAGE_TYPES = (
-    "slashing",
-    "piercing",
-    "bludgeoning",
-    "fire",
-    "cold",
-    "lightning",
-    "poison",
-    "psychic",
-    "radiant",
-    "necrotic",
-    "force",
-    "arcane",
-    "ballistic",
-    "laser",
-    "plasma",
-    "explosive",
-)
-DEFENSE_TYPES = (
-    "physical",
-    "slashing",
-    "piercing",
-    "bludgeoning",
-    "fire",
-    "cold",
-    "lightning",
-    "poison",
-    "psychic",
-    "arcane",
-    "ballistic",
-    "energy",
-    "explosive",
-)
 RARITIES = ("common", "uncommon", "rare", "epic", "legendary", "mythic")
 RARITY_POWER_SCALE = {
     "common": 1.0,
@@ -154,23 +72,6 @@ AI_FICTION_ITEM_FIELDS = {
     "maker",
     "culture",
 }
-
-
-class RpgItemValidationResult(BaseModel):
-    ok: bool
-    item_id: str | None = None
-    error: str | None = None
-    detail: str = ""
-    warnings: list[str] = Field(default_factory=list)
-
-
-class RpgItemFictionProposalResult(BaseModel):
-    ok: bool
-    item: dict[str, Any]
-    source: str = "ai_item_fiction_proposal_v1"
-    ignored_fields: list[str] = Field(default_factory=list)
-    repairs: list[str] = Field(default_factory=list)
-    validation: dict[str, Any] = Field(default_factory=dict)
 
 
 def _text(value: Any, fallback: str = "") -> str:
@@ -553,62 +454,6 @@ def build_item_catalog(genre: str = "classic_fantasy", *, level: int = 1) -> dic
     return {item_id: normalize_item_instance(item) for item_id, item in catalog.items()}
 
 
-def validate_item_template(item: dict[str, Any]) -> RpgItemValidationResult:
-    item = _safe_dict(item)
-    item_id = _item_id(item)
-    warnings: list[str] = []
-    if not item_id:
-        return RpgItemValidationResult(ok=False, error="missing_item_id", detail="Item requires a stable id.")
-    if not _text(item.get("name")):
-        return RpgItemValidationResult(ok=False, item_id=item_id, error="missing_item_name", detail="Item requires a display name.")
-    item_type = _item_type(item)
-    if item_type not in ITEM_TYPES:
-        return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_item_type", detail=f"Unsupported item type: {item_type}")
-    if _text(item.get("rarity"), "common") not in RARITIES:
-        return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_item_rarity", detail=f"Unsupported item rarity: {item.get('rarity')}")
-    if _positive_int(item.get("level"), 1) < 1:
-        return RpgItemValidationResult(ok=False, item_id=item_id, error="invalid_item_level", detail="Item level must be >= 1.")
-
-    if item_type == "weapon":
-        weapon_type = _text(item.get("weapon_type"))
-        if weapon_type not in WEAPON_TYPES:
-            return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_weapon_type", detail=f"Unsupported weapon type: {weapon_type}")
-        damage = _safe_list(item.get("damage"))
-        if not damage:
-            return RpgItemValidationResult(ok=False, item_id=item_id, error="missing_weapon_damage", detail="Weapon requires at least one damage entry.")
-        for entry in damage:
-            damage_entry = _safe_dict(entry)
-            if damage_entry.get("type") not in DAMAGE_TYPES:
-                return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_damage_type", detail=f"Unsupported damage type: {damage_entry.get('type')}")
-            if int(damage_entry.get("amount") or 0) <= 0:
-                return RpgItemValidationResult(ok=False, item_id=item_id, error="invalid_damage_amount", detail="Weapon damage amount must be positive.")
-
-    if item_type == "armor":
-        armor_type = _text(item.get("armor_type"))
-        if armor_type not in ARMOR_TYPES:
-            return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_armor_type", detail=f"Unsupported armor type: {armor_type}")
-        defense = _safe_list(item.get("defense"))
-        if not defense:
-            return RpgItemValidationResult(ok=False, item_id=item_id, error="missing_armor_defense", detail="Armor requires at least one defense entry.")
-        for entry in defense:
-            defense_entry = _safe_dict(entry)
-            if defense_entry.get("type") not in DEFENSE_TYPES:
-                return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_defense_type", detail=f"Unsupported defense type: {defense_entry.get('type')}")
-            if int(defense_entry.get("amount") or 0) <= 0:
-                return RpgItemValidationResult(ok=False, item_id=item_id, error="invalid_defense_amount", detail="Armor defense amount must be positive.")
-
-    if item_type == "consumable":
-        consumable_type = _text(item.get("consumable_type"))
-        if consumable_type not in CONSUMABLE_TYPES:
-            return RpgItemValidationResult(ok=False, item_id=item_id, error="unsupported_consumable_type", detail=f"Unsupported consumable type: {consumable_type}")
-        if not _safe_list(item.get("effects")):
-            return RpgItemValidationResult(ok=False, item_id=item_id, error="missing_consumable_effect", detail="Consumable requires at least one deterministic effect.")
-
-    if item_type in {"crafting_material", "ammo", "supply"} and not bool(item.get("stackable", True)):
-        warnings.append(f"{item_id}: {item_type} is usually stackable")
-    return RpgItemValidationResult(ok=True, item_id=item_id, detail="Item template is valid.", warnings=warnings)
-
-
 def normalize_item_instance(item: dict[str, Any], *, quantity: int | None = None) -> dict[str, Any]:
     normalized = deepcopy(_safe_dict(item))
     item_id = _item_id(normalized)
@@ -629,78 +474,6 @@ def normalize_item_instance(item: dict[str, Any], *, quantity: int | None = None
         upgrade.setdefault("max_upgrade_level", int(normalized.get("max_upgrade_level") or 0))
         normalized["upgrade"] = upgrade
     return normalized
-
-
-def _find_inventory_item(inventory: list[dict[str, Any]], item_id: str) -> tuple[int, dict[str, Any] | None]:
-    for index, item in enumerate(inventory):
-        if _item_id(_safe_dict(item)) == item_id:
-            return index, _safe_dict(item)
-    return -1, None
-
-
-CRAFTING_RECIPES: dict[str, dict[str, Any]] = {
-    "healing_potion": {
-        "recipe_id": "healing_potion",
-        "result_item_id": "health_potion",
-        "quantity": 1,
-        "ingredients": [{"item_id": "keenleaf", "quantity": 2}, {"item_id": "waterskin", "quantity": 1}],
-        "station": "campfire_or_alchemy_kit",
-    },
-    "iron_dagger": {
-        "recipe_id": "iron_dagger",
-        "result_item_id": "iron_dagger",
-        "quantity": 1,
-        "ingredients": [{"item_id": "iron_ingot", "quantity": 2}, {"item_id": "leather_strip", "quantity": 1}],
-        "station": "forge_or_field_kit",
-    },
-    "leather_armor": {
-        "recipe_id": "leather_armor",
-        "result_item_id": "leather_armor",
-        "quantity": 1,
-        "ingredients": [{"item_id": "leather_strip", "quantity": 4}],
-        "station": "armorers_kit",
-    },
-}
-
-
-def apply_item_fiction_proposal(item: dict[str, Any], proposal: dict[str, Any] | None, *, genre: str | None = None) -> RpgItemFictionProposalResult:
-    """Apply AI-authored item fiction while preserving deterministic mechanics."""
-
-    compiled = normalize_item_instance(item)
-    proposal = _safe_dict(proposal)
-    ignored_fields: list[str] = []
-    repairs: list[str] = []
-    for key, value in proposal.items():
-        if key in ENGINE_OWNED_ITEM_FIELDS:
-            ignored_fields.append(key)
-            repairs.append(f"ignored_engine_owned_field:{key}")
-            continue
-        if key not in AI_FICTION_ITEM_FIELDS:
-            ignored_fields.append(key)
-            repairs.append(f"ignored_unsupported_fiction_field:{key}")
-            continue
-        if key == "name":
-            name = _text(value)
-            if not name:
-                repairs.append("ignored_blank_name")
-                continue
-            compiled["name"] = name[:80]
-        elif key == "flavor_tags":
-            tags = [_text(tag)[:40] for tag in _safe_list(value) if _text(tag)]
-            compiled["flavor_tags"] = tags[:8]
-        else:
-            compiled[key] = _text(value)[:500]
-    if genre and not proposal.get("name"):
-        suggested = suggest_genre_item_name(compiled, genre)
-        if suggested:
-            compiled["name"] = suggested
-            repairs.append("filled_genre_name")
-    validation = validate_item_template(compiled)
-    if not validation.ok:
-        repairs.append(f"fallback_original_item:{validation.error}")
-        compiled = normalize_item_instance(item)
-        validation = validate_item_template(compiled)
-    return RpgItemFictionProposalResult(ok=validation.ok, item=compiled, ignored_fields=ignored_fields, repairs=repairs, validation=validation.model_dump())
 
 
 def suggest_genre_item_name(item: dict[str, Any], genre: str) -> str:

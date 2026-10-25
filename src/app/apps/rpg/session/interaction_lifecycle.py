@@ -7,13 +7,6 @@ from copy import deepcopy
 from typing import Any
 
 INTERACTION_LIFECYCLE_VERSION = "rpg_interaction_lifecycle_v1"
-INTERACTION_LIFECYCLE_STATUSES = (
-    "accepted",
-    "runtime_resolved",
-    "narration_pending",
-    "narration_complete",
-    "narration_failed",
-)
 _MAX_LIFECYCLES = 64
 
 

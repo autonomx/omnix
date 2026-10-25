@@ -259,13 +259,16 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
 
 
 def _load(ctx: Any) -> dict[str, Any]:
-    """Step 1: the turn-start campaign, normalized as every older turn path does first: its simulation filled in
-    from the play screen's sheet, and the hero's progression (level, skills) given its defaults."""
-    from app.apps.rpg.rules.player.player_progression_state import ensure_player_progression_state
-    from app.apps.rpg.session.interactive_first_call_runtime import _select_session
-    from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
+    """Step 1: the turn-start campaign (a copy of the caller's, when it hands one in), normalized: its simulation
+    filled in from the play screen's sheet, and the hero's progression (level, skills) given its defaults."""
+    from copy import deepcopy
 
-    session = _select_session(ctx.session_id, session_override=ctx.session_override)
+    from app.apps.rpg.rules.player.player_progression_state import ensure_player_progression_state
+    from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
+    from app.apps.rpg.session.session_runtime_store import load_runtime_session
+
+    override = _d(ctx.session_override)
+    session = deepcopy(override) if override else _d(load_runtime_session(ctx.session_id))
     if not session:
         return session
     session = hydrate_simulation_player(session)
@@ -439,26 +442,37 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
 
 
+def _refused(ctx: Any, error: str, status_code: int, message: str) -> Any:
+    ctx.result = {"ok": False, "error": error, "session_id": ctx.session_id, "status_code": status_code,
+                  "message": message, "trace_id": ctx.trace_id}
+    ctx.resolved = True
+    return ctx
+
+
 def apply_planned_turn_stage(ctx: Any) -> Any:
-    """The session pipeline's first stage: every turn with words, a return or a structured action runs here."""
-    if not ctx.resolved and _d(ctx.action).get("turn_kind") == "world_tick":
-        session = _load(ctx)
-        if session:
-            request = TurnRequest(kind="world_tick", session_id=ctx.session_id, text=_s(ctx.player_input),
-                                  action=_d(ctx.action))
-            ctx.result = run_world_tick_turn(session, request=request)
-            ctx.result.setdefault("trace_id", ctx.trace_id)
-            ctx.resolved = True
+    """The session pipeline's first stage: the player's words, a return or a structured action, run on the
+    pipeline; anything else is refused, with no turn taken."""
+    if ctx.resolved:
         return ctx
-    if not ctx.resolved and _d(ctx.action).get("turn_kind") == "structured_action":
+    kind = _s(_d(ctx.action).get("turn_kind"))
+    if kind == "structured_action":
         ctx.result = _structured_turn(ctx, _d(ctx.action))
         ctx.result.setdefault("trace_id", ctx.trace_id)
         ctx.resolved = True
         return ctx
-    if ctx.resolved or ctx.action or not _s(ctx.player_input).strip():
-        return ctx
+    if ctx.action and kind != "world_tick":
+        return _refused(ctx, "rpg_turn_kind_unknown", 400, f"No turn of the kind {kind or 'unnamed'!r} runs.")
+    if kind != "world_tick" and not _s(ctx.player_input).strip():
+        return _refused(ctx, "rpg_turn_empty", 400, "Say what your hero does.")
     session = _load(ctx)
     if not session:
+        return _refused(ctx, "session_not_found", 404, "No campaign has this id.")
+    if kind == "world_tick":
+        request = TurnRequest(kind="world_tick", session_id=ctx.session_id, text=_s(ctx.player_input),
+                              action=_d(ctx.action))
+        ctx.result = run_world_tick_turn(session, request=request)
+        ctx.result.setdefault("trace_id", ctx.trace_id)
+        ctx.resolved = True
         return ctx
     text = _s(ctx.player_input)
     planned, reading = plan_player_text(session, text)

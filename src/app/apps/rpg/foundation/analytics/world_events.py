@@ -18,7 +18,6 @@ _MAX_LOCAL = 12
 _MAX_GLOBAL = 12
 _MAX_DIRECTOR = 12
 _MAX_RECENT = 12
-_MAX_PLAYER_WORLD_VIEW_ROWS = 8
 
 _SCOPE_ORDER = {"local": 0, "global": 1, "director": 2}
 
@@ -34,29 +33,6 @@ def _safe_int(v: Any, default: int = 0) -> int:
         return int(v)
     except Exception:
         return default
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v)
-    except Exception:
-        return default
-
-
-def _normalize_world_consequence(record: Dict[str, Any]) -> Dict[str, Any]:
-    record = _safe_dict(record)
-    return {
-        "consequence_id": _safe_str(record.get("consequence_id")),
-        "kind": _safe_str(record.get("kind")),
-        "scope": _safe_str(record.get("scope")) or "local",
-        "location_id": _safe_str(record.get("location_id")),
-        "summary": _safe_str(record.get("summary")),
-        "source_actor_id": _safe_str(record.get("source_actor_id")),
-        "source_activity_id": _safe_str(record.get("source_activity_id")),
-        "tick": _safe_int(record.get("tick"), 0),
-        "priority": max(1, _safe_int(record.get("priority"), 1)),
-        "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
-    }
 
 
 # ── World View normalization helpers ─────────────────────────────────────────

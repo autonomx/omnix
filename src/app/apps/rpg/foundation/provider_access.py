@@ -12,14 +12,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def chat_completion(*, messages: list[dict[str, Any]], stream: bool = False, **kwargs: Any) -> Any:
-    from app.apps.rpg.foundation.model_calls import record_model_call
-    from app.providers.service import chat_completion as provider_chat_completion
-
-    record_model_call("provider")
-    return provider_chat_completion(messages=messages, stream=stream, **kwargs)
-
-
 def rpg_llm_route() -> tuple[str, str] | None:
     """RPG's provider and model from the settings' model roles (``effective_llm_route``).
 

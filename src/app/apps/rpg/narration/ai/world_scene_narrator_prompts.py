@@ -1,6 +1,5 @@
 """Split helpers for RPG world scene narration."""
 
-from __future__ import annotations
 
 from app.apps.rpg.narration.ai.memory_narration_grounding import memory_narration_prompt_block
 from app.apps.rpg.narration.ai.world_scene_survival_grounding_bridge import (
@@ -8,49 +7,47 @@ from app.apps.rpg.narration.ai.world_scene_survival_grounding_bridge import (
 )
 
 from app.apps.rpg.narration.ai.world_scene_narrator_structured import (
-    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
-    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
-    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
-    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
-    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
-    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
-    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
-    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
-    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
-    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
-    sanitize_memory_narration_payload as sanitize_memory_narration_payload, _merge_bs1_sanitized_payload as _merge_bs1_sanitized_payload,
-    _build_ambient_conversation_line as _build_ambient_conversation_line, _bound_text as _bound_text, _clean_npc_dialogue_line as _clean_npc_dialogue_line,
-    _is_accommodation_request as _is_accommodation_request, _has_authoritative_accommodation_offer as _has_authoritative_accommodation_offer,
-    _ground_accommodation_npc_line as _ground_accommodation_npc_line, _service_result_from_context as _service_result_from_context,
-    _recalled_service_memories_from_context as _recalled_service_memories_from_context,
-    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt, _recalled_npc_memories_from_context as _recalled_npc_memories_from_context,
-    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt, _conversation_result_from_context as _conversation_result_from_context,
-    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt, _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
-    _line_has_prior_memory_reference as _line_has_prior_memory_reference, _memory_reference_is_backed as _memory_reference_is_backed,
-    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line, _strip_service_meta_language as _strip_service_meta_language,
-    _service_offer_label_with_price as _service_offer_label_with_price, _join_natural as _join_natural, _strip_basic_markdown as _strip_basic_markdown,
-    _travel_result_from_context as _travel_result_from_context, _grounded_travel_narration as _grounded_travel_narration, _grounded_travel_action as _grounded_travel_action,
-    _final_grounded_service_action_text as _final_grounded_service_action_text, _service_grounded_action_result as _service_grounded_action_result,
-    _service_grounded_npc_line as _service_grounded_npc_line, _normalized_text_for_compare as _normalized_text_for_compare,
-    _fallback_non_service_narration as _fallback_non_service_narration, _sanitize_repeated_player_input_narration as _sanitize_repeated_player_input_narration,
-    _naturalize_service_debug_language as _naturalize_service_debug_language, _service_grounded_narration_text as _service_grounded_narration_text,
-    _service_narration_needs_grounding as _service_narration_needs_grounding, _service_claim_needs_grounding as _service_claim_needs_grounding,
-    _service_purchase_is_applied as _service_purchase_is_applied, _selected_service_offer as _selected_service_offer,
-    _service_extract_price_tokens as _service_extract_price_tokens, _successful_service_purchase_text_needs_grounding as _successful_service_purchase_text_needs_grounding,
-    _ground_action_result_text as _ground_action_result_text, _player_input_action_text as _player_input_action_text,
-    _build_authoritative_action_line as _build_authoritative_action_line, _build_action_result_line as _build_action_result_line, _build_rewards_block as _build_rewards_block,
-    _titleize_action as _titleize_action, _first_nonempty as _first_nonempty, _extract_text_lines as _extract_text_lines, _normalize_speaker_block as _normalize_speaker_block,
-    _build_safe_prompt_context as _build_safe_prompt_context, _build_speaker_turns as _build_speaker_turns, _extract_json_object_from_text as _extract_json_object_from_text,
-    _normalize_narration_json as _normalize_narration_json, _parse_llm_narration_payload as _parse_llm_narration_payload, _strict_narration_payload as _strict_narration_payload,
-    _recent_authoritative_facts as _recent_authoritative_facts, _extract_continuity_price_facts as _extract_continuity_price_facts,
-    _extract_present_actor_names as _extract_present_actor_names, _extract_price_tokens as _extract_price_tokens, _sanitize_narration_text as _sanitize_narration_text,
-    _authoritative_action_text as _authoritative_action_text, _authoritative_reward_text as _authoritative_reward_text, _allowed_npc_speakers as _allowed_npc_speakers,
-    _sanitize_npc_block as _sanitize_npc_block, _desystemify_text as _desystemify_text, _strip_meta_narration as _strip_meta_narration,
-    _fallback_in_world_narration as _fallback_in_world_narration, _enforce_npc_behavior as _enforce_npc_behavior, _sanitize_narration_payload as _sanitize_narration_payload,
-    _render_narration_text_from_json as _render_narration_text_from_json, _recover_narration_from_raw_text as _recover_narration_from_raw_text,
-    _structured_fallback_response as _structured_fallback_response, _build_scene_summary as _build_scene_summary, _build_combat_facts_block as _build_combat_facts_block,
-    _pick_npc_reply_text as _pick_npc_reply_text, _build_npc_reply_block as _build_npc_reply_block, _collect_emphasis_markers as _collect_emphasis_markers,
-    apply_narration_emphasis as apply_narration_emphasis, build_structured_narration as build_structured_narration,
+    json as json,
+    re as re,
+    traceback as traceback,
+    dataclass as dataclass,
+    field as field,
+    Any as Any,
+    Callable as Callable,
+    Dict as Dict,
+    List as List,
+    Optional as Optional,
+    normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture,
+    build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    build_encounter_view as build_encounter_view,
+    logger as logger,
+    _extract_llm_text as _extract_llm_text,
+    _llm_text as _llm_text,
+    _safe_str as _safe_str,
+    _safe_dict as _safe_dict,
+    _safe_list as _safe_list,
+    _force_live_llm_required as _force_live_llm_required,
+    _build_ambient_conversation_line as _build_ambient_conversation_line,
+    _bound_text as _bound_text,
+    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt,
+    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt,
+    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt,
+    _naturalize_service_debug_language as _naturalize_service_debug_language,
+    _build_authoritative_action_line as _build_authoritative_action_line,
+    _build_safe_prompt_context as _build_safe_prompt_context,
+    _normalize_narration_json as _normalize_narration_json,
+    _parse_llm_narration_payload as _parse_llm_narration_payload,
+    _strict_narration_payload as _strict_narration_payload,
+    _recent_authoritative_facts as _recent_authoritative_facts,
+    _authoritative_action_text as _authoritative_action_text,
+    _authoritative_reward_text as _authoritative_reward_text,
+    _sanitize_narration_payload as _sanitize_narration_payload,
+    _recover_narration_from_raw_text as _recover_narration_from_raw_text,
+    _structured_fallback_response as _structured_fallback_response,
+    _build_combat_facts_block as _build_combat_facts_block,
 )
 
 
@@ -60,27 +57,9 @@ from app.apps.rpg.narration.memory_prompt import (
 )
 from app.prompts import prompt_template
 
-_PROMPT_1 = prompt_template('rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules', "1", (
-    "NARRATOR: 2 to 3 short sentence describing the scene.\n"
-        "ACTION: 2 to 3 short sentence describing the result of the player's action.\n"
-        'NPC: <npc_name>: "2 - 3 short reply" (omit if none)\n'
-        "REWARD: <xp/items if any, else omit>"
-))
 _PROMPT_2 = prompt_template('rpg.ai_world_scene_narrator_prompts.prompt', "1", 'You are a deterministic RPG narration engine.\n\nCONTEXT:\n{v0}\n\nRecent authoritative facts:\n{v1}\n\nAuthoritative combat facts:\n{v2}\n\nTurn contract PRIMARY TRUTH:\n{v3}\n\nCURRENT_TURN_PROMPT_CONTRACT_JSON:\n{v4}\n\nNPC_RESPONSE_ARCHITECTURE_JSON:\n{v5}\n\nCURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON:\n{v6}\n\n{v7}\n\nNPC STATE SUMMARY (must influence tone and dialogue):\n{v8}\n\nNPC behavior context:\n{v9}\n\nOngoing conversation threads:\n{v10}\n\n{v11}\n\n{v12}\n\nYOUR ONLY TASK: Generate narration for a player\'s action in an RPG.\n\nOUTPUT ONLY VALID JSON.\nDo not include markdown fences.\nDo not include commentary outside JSON.\n{v13}\n\n IMPORTANT RULES:\n - Output ONLY valid JSON with no extra text\n - NO markdown fences or commentary outside the JSON object\n - NO content about ticks, time, or system messages\n - NO faction goals, loyalty, awareness, or ambient content\nTURN CONTRACT RULES:\n- turn_contract is the primary truth for this turn.\n- CURRENT_TURN_PROMPT_CONTRACT_JSON is the presentation boundary for this exact player action.\n- required_focus must be addressed before older context, memories, profile hooks, or recent events.\n- NPC_RESPONSE_ARCHITECTURE_JSON may shape speaker, tone, persona, and continuity only.\n- resolved_result is legacy compatibility; prefer turn_contract when both are present.\n- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON, when present, is current-turn dialogue guidance from the intent/advisory pass. Preserve its speaker, answer intent, and emotional direction unless the authoritative turn_contract forbids NPC dialogue.\n- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON outranks conversation_threads recent_lines, older NPC memories, and prior NPC questions. Use those older records only for continuity after answering this current player input.\n- Do not copy an older NPC question from conversation_threads when the current player input is answering, correcting, or emotionally disclosing to that question.\n- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON is not permission to invent rewards, combat, travel, purchases, inventory changes, or quest progress.\n- Relevant Memory is continuity context only. It may shape tone, recall, and wording after the current turn is satisfied.\n- Relevant Memory never authorizes new rewards, combat, travel, purchases, inventory changes, quest progress, secret disclosure, or relationship changes.\n- Private Relevant Memory may shape NPC tone only; do not reveal private memory directly unless current runtime state or turn_contract exposes it.\n- You MUST base the narration primarily on turn_contract.narration_brief.\n- You MUST reflect turn_contract.state_delta when it exists.\n- You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.\n- HIGH-RISK CLAIM RULE:\n    You MUST NOT mention rewards, currency, items, XP, inventory, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless they are explicitly present in turn_contract, state_delta, resolved_result, or combat facts.\n- If the player makes an unsupported claim such as "you owe me gold", the primary and safe_fallback must refuse or defer the claim unless the turn contract explicitly authorizes payment.\n- The safe_fallback must be conservative and natural. It must never include rewards, combat, injury, blood, travel, quest completion, or hidden facts.\n- The safe_fallback should sound in-character, but it must be safe over dramatic.\n- You may freely add sensory detail, body language, pacing, and natural dialogue as presentation only.\n- NEVER copy or restate narration_brief directly. Convert it into in-world description.\n- NEVER refer to "the player" in narration. Always describe actions in-world (e.g., "You step forward..." or omit subject).\n- NEVER output internal IDs like npc:0, npc_bran, player, target_id, action_type, state_delta, narration_brief, or turn_contract.\n- The final prose must sound like an RPG narrator, not a debug summary.\n- If your output resembles an instruction, rewrite it into a natural in-world description.\n- If narration sounds like a system description, rewrite it before finalizing.\n- Never output generic filler like "Action: You act."\n\nNPC REACTION RULES:\n- If turn_contract.interpreted_action.target_id exists, that NPC MUST visibly react.\n- If npc_behavior_context.required_reaction is true, include either:\n  1. physical/body-language reaction, or\n  2. direct dialogue, preferably both.\n- NPC dialogue must match npc_behavior_context.reaction_tone.\n- hostile/angry NPCs should not respond as friendly.\n- wary NPCs should remain cautious even after an apology.\n- recent_memories MUST influence tone and dialogue.\n- If a memory includes violence or betrayal, NPC should reference or emotionally reflect it.\n- If the player recently harmed an NPC, that NPC should remember it and respond accordingly.\n- NPC dialogue should sound natural, not like a summary of emotions.\n- Avoid phrases like "I am wary" or "I feel cautious".\n- Express emotion through tone, word choice, and implication.\n- Any combat description MUST match the authoritative combat facts block\n- Do NOT invent hits, misses, damage, knockdowns, or combatants\n- The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain\n- Do NOT invent gold, reputation, items, guards, factions, or bystanders not present in the scene/context\n- NPC speaker MUST be one present actor or the explicit target NPC from context\n- Keep continuity with the recent authoritative facts block below\n- Do NOT change previously established prices, speakers, outcomes, or conflict state unless the current resolved result changed them\n- Do not end the response with an ellipsis\n- Finish with complete sentences\n- Do not leave dialogue, action, or scene description trailing mid-thought\n\nConversation thread rules:\n- If conversation_threads are provided, treat them as ongoing local dialogue context.\n- Do not restart the same NPC line from scratch.\n- Continue from recent_lines when the player\'s input references an ongoing exchange.\n- NPCs may answer, pivot, interrupt, or defer, but must not invent rewards, inventory, combat results, locations, or new NPCs.\n- If a thread has world_signals, phrase them as rumors, tension, suspicions, or social shifts only.\n- Do not resolve or mutate authoritative state unless action_result already says it happened.\n\nRelevant NPC memories from deterministic simulation:\n{v14}\n\nRelevant general NPC memories:\n{v15}\n\nDeterministic NPC-to-NPC conversation beat:\n{v16}\n\nMemory rules:\n- NPCs may reference prior interactions only if they appear in Relevant NPC memories or Relevant general NPC memories.\n- Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.\n- If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.\n- If a deterministic NPC-to-NPC conversation beat is provided, use only that speaker and line for the NPC dialogue. Do not invent additional conversation consequences.\n\nSCENE:\nTitle: {v17}\nLocation: {v18}\nTone: {v19}\nTension: {v20}\nSummary: {v21}\nActors present:\n{v22}\nStakes: {v23}\n')
 _PROMPT_3 = prompt_template('rpg.ai_world_scene_narrator_prompts.prompt_2', "1", 'You are generating NPC reactions for an RPG.\n\nCharacter: {v0}\n{v1}\n{v2}\n{v3}\n{v4}\n{v5}\n{v6}\n{v7}\n{v8}\n    {v9}\n    {v10}\n    {v11}\n    {v12}\n    {v13}\n    {v14}\n\nScene: {v15}\n\nNarrative:\n{v16}\n\n=== INSTRUCTIONS ===\nDescribe {v17}\'s internal reaction to what just happened.\n- Use the NPC\'s active goals to shape what they want right now.\n- Use belief_summary about the player to determine tone.\n- Use memory_summary to maintain continuity.\n- Use last_decision so reactions align with recent intent.\n- Do not contradict the provided structured state.\nThen provide a short line of dialogue they might say.\nSpecify their emotional state (one of: calm, tense, angry, fearful, curious, excited, neutral).\nSpecify their immediate intent (one of: observe, act, confront, flee, negotiate, wait).\n\nRespond ONLY in JSON format:\n{{\n  "reaction": "...",\n  "dialogue": "...",\n  "emotion": "...",\n  "intent": "..."\n}}\n')
 _PROMPT_4 = prompt_template('rpg.ai_world_scene_narrator_prompts.prompt_3', "1", 'You are generating player choices for an RPG scene.\n\nScene: {v0}\nStakes: {v1}\n{v2}\nNarrative situation:\n{v3}\n\n=== INSTRUCTIONS ===\nGenerate exactly {v4} meaningful choices for the player.\nEach choice should have:\n  - A short, action-oriented description (5-10 words)\n  - An implied risk or consequence\n  - A distinct approach (combat, stealth, diplomacy, observation, etc.)\n  - A mapped action type from the available action types above\n\nRespond ONLY in JSON format:\n{{\n  "choices": [\n    {{\n      "text": "...",\n      "type": "action|observe|dialogue|stealth|combat|diplomacy",\n      "action": {{\n        "type": "intervene_thread|escalate_conflict|observe_situation|...",\n        "target_id": "..."\n      }}\n    }}\n  ]\n}}\n')
-_PROMPT_5 = prompt_template('rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules_2', "1", (
-    "NARRATOR: 5 to 7 sentences describing the scene.\n"
-            "ACTION: 5 to 7 sentences describing the result of the player's action.\n"
-            'NPC: <npc_name>: "no restrictions on length" (omit if none)\n'
-            "REWARD: <xp/items if any, else omit>"
-))
-_PROMPT_6 = prompt_template('rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules_3', "1", (
-    "NARRATOR: 3 to 5 sentences describing the scene.\n"
-            "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
-            'NPC: <npc_name>: "3 to 5 short sentences" (omit if none)\n'
-            "REWARD: <xp/items if any, else omit>"
-))
 _PROMPT_7 = prompt_template('rpg.ai_world_scene_narrator_prompts.schema', "1", """
 Use exactly this object shape:
 {
@@ -152,31 +131,6 @@ class NarrativeResult:
 # ---------------------------------------------------------------------------
 # Prompt builders
 # ---------------------------------------------------------------------------
-
-
-def _normalize_response_length(value: Any) -> str:
-    value = str(value or "").strip().lower()
-    if value in ("short", "medium", "long"):
-        return value
-    return "short"
-
-
-def _response_length_prompt_rules(response_length: str) -> str:
-    response_length = _normalize_response_length(response_length)
-
-    if response_length == "long":
-        return (
-            _PROMPT_5.text
-        )
-
-    if response_length == "medium":
-        return (
-            _PROMPT_6.text
-        )
-
-    return (
-        _PROMPT_1.text
-    )
 
 
 def _current_turn_semantic_visible_response(
@@ -764,24 +718,6 @@ def _is_valid_scene_response(parsed: Dict[str, Any]) -> bool:
     return is_valid
 
 
-def _with_scene_response_defaults(parsed: Dict[str, Any]) -> Dict[str, Any]:
-    parsed = _safe_dict(parsed)
-
-    npc = parsed.get("npc")
-    if not isinstance(npc, dict):
-        parsed["npc"] = {
-            "speaker_id": "unknown",
-            "name": "",
-            "text": _safe_str(npc).strip(),
-            "emotion": "",
-            "portrait": "",
-        }
-    if not parsed.get("narrator"):
-        parsed["narrator"] = "You are here."
-
-    return parsed
-
-
 def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCReaction:
     """Parse an NPC reaction response.
 
@@ -925,37 +861,66 @@ def parse_choices(text: str, source: str = "") -> List[Dict[str, Any]]:
     )
 
 
-def apply_hooks_to_choices(
-    choices: List[Dict[str, Any]],
-    hooks: List[Dict[str, Any]],
-    *,
-    source: str = "",
-) -> List[Dict[str, Any]]:
-    """Inject action hooks into choices for binding.
-
-    Phase 5.5: Maps scene action_hooks onto choice objects so that
-    when a player selects a choice, the corresponding action is ready.
-
-    Args:
-        choices: List of choice dicts to update in-place.
-        hooks: List of action hooks from the scene (e.g. from action_hooks).
-        source: Fallback target_id when a hook has none.
-
-    Returns:
-        The same choices list, updated with action bindings.
-    """
-    for i, c in enumerate(choices):
-        if i < len(hooks):
-            hook = hooks[i]
-            c["action"] = {
-                "type": hook.get("type", "intervene_thread"),
-                "target_id": hook.get("target_id", source),
-            }
-    return choices
-
-
 # ---------------------------------------------------------------------------
 # Scene narration service
 # ---------------------------------------------------------------------------
 
-__all__ = ('annotations', 'memory_narration_prompt_block', 'append_survival_grounding_to_prompt', 'json', 'logging', 're', 'traceback', 'dataclass', 'field', 'Any', 'Callable', 'Dict', 'List', 'Optional', 'normalize_grounding_settings', 'select_grounded_narration_candidate', 'memory_reference_is_backed', 'build_runtime_npc_response_architecture', 'build_runtime_current_turn_prompt_contract', 'format_runtime_prompt_contract_block', 'build_runtime_presentation_guardrails_block', 'sanitize_unsupported_combat_payload', 'parse_runtime_provider_payload', 'build_encounter_view', 'logger', '_ACTIVE_NARRATIONS', 'NARRATION_JSON_FORMAT_VERSION', 'NARRATION_JSON_SCHEMA_HINT', '_extract_llm_text', '_llm_text', '_attach_social_context', '_safe_str_p6', '_attach_npc_mind_context', '_NARRATION_MAX_MARKDOWN', '_safe_str', '_safe_dict', '_safe_list', '_title_case_token', '_force_live_llm_required', 'sanitize_memory_narration_payload', '_merge_bs1_sanitized_payload', '_build_ambient_conversation_line', '_bound_text', '_clean_npc_dialogue_line', '_is_accommodation_request', '_has_authoritative_accommodation_offer', '_ground_accommodation_npc_line', '_service_result_from_context', '_recalled_service_memories_from_context', '_format_recalled_service_memories_for_prompt', '_recalled_npc_memories_from_context', '_format_recalled_npc_memories_for_prompt', '_conversation_result_from_context', '_format_conversation_beat_for_prompt', '_apply_grounded_conversation_beat', '_line_has_prior_memory_reference', '_memory_reference_is_backed', '_strip_unbacked_memory_reference_from_npc_line', '_strip_service_meta_language', '_service_offer_label_with_price', '_join_natural', '_strip_basic_markdown', '_travel_result_from_context', '_grounded_travel_narration', '_grounded_travel_action', '_final_grounded_service_action_text', '_service_grounded_action_result', '_service_grounded_npc_line', '_normalized_text_for_compare', '_fallback_non_service_narration', '_sanitize_repeated_player_input_narration', '_naturalize_service_debug_language', '_service_grounded_narration_text', '_service_narration_needs_grounding', '_service_claim_needs_grounding', '_service_purchase_is_applied', '_selected_service_offer', '_service_extract_price_tokens', '_successful_service_purchase_text_needs_grounding', '_ground_action_result_text', '_player_input_action_text', '_build_authoritative_action_line', '_build_action_result_line', '_build_rewards_block', '_titleize_action', '_first_nonempty', '_extract_text_lines', '_normalize_speaker_block', '_build_safe_prompt_context', '_build_speaker_turns', '_extract_json_object_from_text', '_normalize_narration_json', '_parse_llm_narration_payload', '_strict_narration_payload', '_recent_authoritative_facts', '_extract_continuity_price_facts', '_extract_present_actor_names', '_extract_price_tokens', '_sanitize_narration_text', '_authoritative_action_text', '_authoritative_reward_text', '_allowed_npc_speakers', '_sanitize_npc_block', '_desystemify_text', '_strip_meta_narration', '_fallback_in_world_narration', '_enforce_npc_behavior', '_sanitize_narration_payload', '_render_narration_text_from_json', '_recover_narration_from_raw_text', '_structured_fallback_response', '_build_scene_summary', '_build_combat_facts_block', '_pick_npc_reply_text', '_build_npc_reply_block', '_collect_emphasis_markers', 'apply_narration_emphasis', 'build_structured_narration', 'build_relevant_memory_context_from_runtime', 'build_relevant_memory_prompt_block', 'NPCReaction', 'NarrativeResult', '_normalize_response_length', '_response_length_prompt_rules', '_current_turn_semantic_visible_response', '_compact_prompt_json', '_compact_prompt_text', 'build_scene_prompt', 'build_npc_reaction_prompt', 'build_choice_prompt', 'parse_scene_response', '_is_valid_scene_response', '_with_scene_response_defaults', 'parse_npc_reaction', 'parse_choices', 'apply_hooks_to_choices')
+__all__ = (
+    "memory_narration_prompt_block",
+    "append_survival_grounding_to_prompt",
+    "json",
+    "re",
+    "traceback",
+    "dataclass",
+    "field",
+    "Any",
+    "Callable",
+    "Dict",
+    "List",
+    "Optional",
+    "normalize_grounding_settings",
+    "select_grounded_narration_candidate",
+    "build_runtime_npc_response_architecture",
+    "build_runtime_current_turn_prompt_contract",
+    "build_runtime_presentation_guardrails_block",
+    "build_encounter_view",
+    "logger",
+    "_extract_llm_text",
+    "_llm_text",
+    "_safe_str",
+    "_safe_dict",
+    "_safe_list",
+    "_force_live_llm_required",
+    "_build_ambient_conversation_line",
+    "_bound_text",
+    "_format_recalled_service_memories_for_prompt",
+    "_format_recalled_npc_memories_for_prompt",
+    "_format_conversation_beat_for_prompt",
+    "_naturalize_service_debug_language",
+    "_build_authoritative_action_line",
+    "_build_safe_prompt_context",
+    "_normalize_narration_json",
+    "_parse_llm_narration_payload",
+    "_strict_narration_payload",
+    "_recent_authoritative_facts",
+    "_authoritative_action_text",
+    "_authoritative_reward_text",
+    "_sanitize_narration_payload",
+    "_recover_narration_from_raw_text",
+    "_structured_fallback_response",
+    "_build_combat_facts_block",
+    "build_relevant_memory_context_from_runtime",
+    "build_relevant_memory_prompt_block",
+    "NPCReaction",
+    "NarrativeResult",
+    "_current_turn_semantic_visible_response",
+    "_compact_prompt_json",
+    "_compact_prompt_text",
+    "build_scene_prompt",
+    "build_npc_reaction_prompt",
+    "build_choice_prompt",
+    "parse_scene_response",
+    "_is_valid_scene_response",
+    "parse_npc_reaction",
+    "parse_choices",
+)

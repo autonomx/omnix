@@ -186,52 +186,6 @@ def _apply_ambient_narration_and_delivery(
     return narrated_updates, runtime_state
 
 
-def apply_idle_tick(
-    session_id: str,
-    *,
-    reason: str = "heartbeat",
-    clock: _Clock = _SYSTEM_CLOCK,
-) -> dict[str, Any]:
-    session = load_runtime_session(session_id)
-    if session is None:
-        return {"ok": False, "error": "session_not_found"}
-
-    session = _copy_dict(session)
-    simulation_state = session.get("simulation_state")
-    simulation_state = simulation_state if isinstance(simulation_state, dict) else {}
-    session_seed = simulation_state.get("rng_seed")
-    if not isinstance(session_seed, int) or isinstance(session_seed, bool):
-        session_seed = _rng_seed_from_session_id(session_id)
-    turn_index = simulation_state.get("tick", simulation_state.get("turn_index", 0))
-    replay_now, _ = recorded_idle_tick_time(session)
-    turn_context = _TurnContext.capture(
-        clock,
-        session_seed=session_seed if isinstance(session_seed, int) and not isinstance(session_seed, bool) else 0,
-        turn_index=turn_index if isinstance(turn_index, int) and not isinstance(turn_index, bool) else 0,
-        session_id=session_id,
-        now=replay_now,
-    )
-    with _bind_turn_context(turn_context):
-        result = _apply_idle_tick_to_session(session, reason=reason)
-    if not result.get("ok"):
-        return result
-
-    session = save_runtime_session(_safe_dict(result.get("session")))
-    runtime_state = _safe_dict(session.get("runtime_state"))
-
-    return {
-        "ok": True,
-        "session": session,
-        "updates": _safe_list(result.get("updates")),
-        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
-        "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
-        "idle_debug_trace": result.get("idle_debug_trace", {}),
-        "idle_seconds": result.get("idle_seconds", 0),
-        "idle_gate_open": result.get("idle_gate_open", False),
-        "settings": result.get("settings", {}),
-    }
-
-
 def apply_idle_ticks(
     session_id: str,
     count: int,
@@ -372,4 +326,10 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> dict[s
 
     return response
 
-__all__ = ['_apply_ambient_narration_and_delivery', '_make_initiative_update_from_candidate', '_make_scene_update_from_beat', 'apply_idle_tick', 'apply_idle_ticks', 'apply_resume_catchup']
+__all__ = [
+    "_apply_ambient_narration_and_delivery",
+    "_make_initiative_update_from_candidate",
+    "_make_scene_update_from_beat",
+    "apply_idle_ticks",
+    "apply_resume_catchup",
+]

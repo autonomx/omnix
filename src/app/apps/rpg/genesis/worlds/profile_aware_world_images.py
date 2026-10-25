@@ -206,10 +206,7 @@ def update_world_image_target(
     )
 
 
-approved_world_asset_bindings = _base.approved_world_asset_bindings
-
 __all__ = [
-    "approved_world_asset_bindings",
     "generate_world_images",
     "read_world_image_targets",
     "regenerate_world_image_prompts",

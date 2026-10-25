@@ -6,7 +6,6 @@ from typing import Any, Dict
 
 from app.apps.rpg.rules.party.companion_presence import current_player_location_id
 from app.apps.rpg.rules.party.party_state import add_companion, ensure_party_state
-from app.apps.rpg.foundation.dynamic_npc_profiles import ensure_dynamic_npc_profile
 from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
@@ -32,10 +31,6 @@ ACCEPTANCE_MARKERS = {
 }
 
 # A player asking someone to come along, rather than answering someone's offer.
-_RECRUIT_REQUEST = re.compile(
-    r"\b(join (?:my|our|the) (?:party|group|company|team)|join (?:me|us)|come (?:along )?with (?:me|us)|"
-    r"travel with (?:me|us)|(?:be|become) (?:my|our) (?:companion|ally)|as (?:my|our|a) companion)\b"
-)
 
 REJECTION_MARKERS = {
     "no",
@@ -48,7 +43,6 @@ REJECTION_MARKERS = {
     "go back",
 }
 
-MAX_PENDING_OFFERS = 8
 MAX_ACCEPTANCE_HISTORY = 24
 
 
@@ -136,30 +130,6 @@ def _text_has_any(text: str, markers: set[str]) -> bool:
     return any(re.search(rf"(?<![\w']){re.escape(marker)}(?![\w'])", normalized) for marker in markers)
 
 
-def requested_companion(simulation_state: Dict[str, Any], player_input: Any) -> Dict[str, Any]:
-    """The present person the player asks to join the party ("I ask Liora to join my party"), if any."""
-    text = _safe_str(player_input).strip().lower()
-    if not _RECRUIT_REQUEST.search(text):
-        return {}
-    from app.apps.rpg.rules.location_registry import present_npcs_for_current_location
-
-    simulation_state = _safe_dict(simulation_state)
-    index = _safe_dict(simulation_state.get("npc_index"))
-    present_ids = [
-        _safe_str(npc_id)
-        for npc_id in _safe_list(_safe_dict(simulation_state.get("present_npc_state")).get("present_npc_ids"))
-    ]
-    candidates = [{**_safe_dict(index.get(npc_id)), "id": npc_id} for npc_id in present_ids]
-    candidates += [_safe_dict(npc) for npc in present_npcs_for_current_location(simulation_state)]
-    for npc in candidates:
-        name = _safe_str(npc.get("name"))
-        first = name.split()[0].lower() if name else ""
-        if name and (name.lower() in text or (len(first) > 2 and re.search(rf"\b{re.escape(first)}\b", text))):
-            return {"npc_id": _safe_str(npc.get("id") or npc.get("npc_id")), "name": name,
-                    "role": _safe_str(npc.get("role"))}
-    return {}
-
-
 def player_input_accepts_companion_offer(player_input: Any) -> bool:
     return _text_has_any(_safe_str(player_input), ACCEPTANCE_MARKERS)
 
@@ -182,94 +152,6 @@ def ensure_companion_acceptance_state(simulation_state: Dict[str, Any]) -> Dict[
 
     simulation_state["companion_acceptance_state"] = state
     return state
-
-
-def record_companion_join_offer(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-    join_intent: Dict[str, Any],
-    tick: int,
-    profile_auto_create: bool = True,
-) -> Dict[str, Any]:
-    npc_id = _safe_str(npc_id)
-    intent = _safe_dict(join_intent)
-
-    if not intent.get("offered"):
-        return {
-            "recorded": False,
-            "reason": "join_intent_not_offered",
-            "source": "deterministic_companion_acceptance",
-        }
-
-    state = ensure_companion_acceptance_state(simulation_state)
-    pending = _safe_dict(state.get("pending_offers"))
-
-    offer_id = f"companion_offer:{npc_id}:{int(tick or 0)}"
-    eligibility = _safe_dict(intent.get("party_join_eligibility_result"))
-
-    profile_result: Dict[str, Any] = {
-        "created": False,
-        "skipped": True,
-        "reason": "auto_profile_creation_disabled",
-        "npc_id": npc_id,
-        "source": "deterministic_dynamic_npc_profile_store",
-    }
-
-    if profile_auto_create:
-        profile_result = ensure_dynamic_npc_profile(
-            npc_id=npc_id,
-            name=_safe_str(eligibility.get("name") or intent.get("name") or npc_id.replace("npc:", "")),
-            identity_arc=_safe_str(eligibility.get("identity_arc")),
-            current_role=_safe_str(eligibility.get("current_role")),
-            active_motivations=deepcopy(_safe_list(eligibility.get("active_motivations"))),
-            location_id=_safe_str(
-                _safe_dict(simulation_state.get("player_state")).get("location_id")
-                or simulation_state.get("location_id")
-            ),
-            source_event=_safe_str(intent.get("reason") or "companion_join_offer"),
-            context_summary=f"{_safe_str(eligibility.get('name') or npc_id)} was introduced as a potential companion.",
-            tick=int(tick or 0),
-        )
-
-    pending[npc_id] = {
-        "offer_id": offer_id,
-        "npc_id": npc_id,
-        "created_tick": int(tick or 0),
-        "status": "pending_player_acceptance",
-        "reason": _safe_str(intent.get("reason") or "eligible_to_join"),
-        "party_join_eligibility_result": deepcopy(eligibility),
-        "profile_result": deepcopy(profile_result),
-        "source": "deterministic_companion_acceptance",
-    }
-
-    # Bound pending offers deterministically by oldest created_tick, then npc_id.
-    ordered = sorted(
-        pending.items(),
-        key=lambda item: (
-            int(_safe_dict(item[1]).get("created_tick") or 0),
-            _safe_str(item[0]),
-        ),
-    )
-    pending = dict(ordered[-MAX_PENDING_OFFERS:])
-
-    state["pending_offers"] = pending
-    state["debug"] = {
-        "last_offer_id": offer_id,
-        "last_npc_id": npc_id,
-        "last_tick": int(tick or 0),
-        "source": "deterministic_companion_acceptance",
-    }
-    _mirror_pending_offers_to_conversation_state(simulation_state)
-
-    return {
-        "recorded": True,
-        "offer_id": offer_id,
-        "npc_id": npc_id,
-        "requires_player_acceptance": True,
-        "profile_result": deepcopy(profile_result),
-        "source": "deterministic_companion_acceptance",
-    }
 
 
 def resolve_companion_acceptance(
@@ -578,5 +460,3 @@ def resolve_pending_companion_offer_response(
     result["resolved_from_pending_offer_response"] = True
     result["pending_offer_count_before_resolution"] = len(pending)
     return result
-
-

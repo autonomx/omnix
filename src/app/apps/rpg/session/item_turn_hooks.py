@@ -24,11 +24,6 @@ TRACE_LIMIT = 20
 ITEM_TRACE_LIMIT = 50
 
 
-def _text(value: Any, fallback: str = "") -> str:
-    text = str(value or "").strip()
-    return text or fallback
-
-
 def _turn(state: dict[str, Any], current_turn: int | None = None) -> int:
     if current_turn is not None:
         return int(current_turn)

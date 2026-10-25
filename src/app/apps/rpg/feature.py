@@ -14,6 +14,7 @@ from app.apps.rpg.session.persistence.feature_repositories import RPG_REPOSITORY
 from app.apps.rpg.edge.api.compat_router import create_rpg_compatibility_router
 from app.apps.rpg.edge.api.feature_routes import create_rpg_routes_router
 from app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery
+from app.apps.rpg.edge.api.turn_job import execute_inline_feature_job as execute_rpg_turn_job
 
 from app.apps.rpg.session.jobs.turn_job_guard import rpg_turn_submission_policy
 from app.apps.rpg.session.jobs.handlers import (
@@ -22,7 +23,6 @@ from app.apps.rpg.session.jobs.handlers import (
     RpgTurnJobInput,
     execute_rpg_narration_job,
     execute_rpg_report_job,
-    execute_rpg_turn_job,
 )
 from app.apps.rpg.session.jobs.debug_observer import rpg_debug_job_observer
 from app.apps.rpg.genesis.forge.scene_lore_job import RpgSceneLoreJobInput, execute_scene_lore_job

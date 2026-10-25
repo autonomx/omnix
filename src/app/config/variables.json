@@ -2633,13 +2633,6 @@
   },
   {
     "default": "",
-    "description": "Controls rpg trace session turn for rpg.",
-    "feature": "rpg",
-    "name": "RPG_TRACE_SESSION_TURN",
-    "type": "string"
-  },
-  {
-    "default": "",
     "description": "Controls systemroot for agent-runtime.",
     "feature": "agent-runtime",
     "name": "SYSTEMROOT",

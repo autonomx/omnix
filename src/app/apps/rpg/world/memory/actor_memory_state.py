@@ -74,14 +74,3 @@ def ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
     limited_items = list(actor_memory_out.items())[:_MAX_ACTORS]
     memory_state["actor_memory"] = dict(limited_items)
     return simulation_state
-
-
-def get_actor_memory(
-    simulation_state: Dict[str, Any],
-    actor_id: str,
-) -> Dict[str, Any]:
-    """Retrieve normalized actor-specific memory state."""
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-    return _normalize_actor_memory(actor_memory.get(actor_id))

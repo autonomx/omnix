@@ -8,20 +8,19 @@ from app.runtime.clock import utc_now
 from app.apps.rpg.narration.scene_grounding import (
     _apply_grounded_scene_overlay as _apply_grounded_scene_overlay,
     _derive_grounded_scene_context as _derive_grounded_scene_context,
-    _normalize_prompt_location_name as _normalize_prompt_location_name,
-    _resolve_actor_names as _resolve_actor_names,
     _resolve_location_name as _resolve_location_name,
-    _stable_unique_strs as _stable_unique_strs,
 )
 from app.apps.rpg.session.state_normalization import (
-    _copy_dict as _copy_dict, _normalize_active_interactions as _normalize_active_interactions, _normalize_runtime_settings as _normalize_runtime_settings,
-    _safe_bool as _safe_bool, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
+    _normalize_active_interactions as _normalize_active_interactions,
+    _normalize_runtime_settings as _normalize_runtime_settings,
+    _safe_bool as _safe_bool,
+    _safe_dict as _safe_dict,
+    _safe_int as _safe_int,
+    _safe_list as _safe_list,
+    _safe_str as _safe_str,
 )
 from app.apps.rpg.genesis.creator.schema import (
     normalize_world_behavior_config as normalize_world_behavior_config,
-)
-from app.apps.rpg.narration.ai.scene_continuity import (
-    ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _MAX_AMBIENT_UPDATES as _MAX_AMBIENT_UPDATES, _MAX_DIRECTOR_LOG as _MAX_DIRECTOR_LOG,
@@ -32,229 +31,11 @@ from app.apps.rpg.session.player_activity_runtime import (
 from app.apps.rpg.session.world_consequence_runtime import (
     emit_scene_beat as emit_scene_beat,
 )
-from app.apps.rpg.rules.items.inventory_state import (
-    normalize_inventory_state as normalize_inventory_state,
-)
-from app.apps.rpg.session.semantic_state_changes import (
-    _get_combat_state as _get_combat_state,
-)
-from app.apps.rpg.rules.combat.state import (
-    normalize_combat_state as normalize_combat_state,
-)
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _force_active_combat_utility_action(
-    runtime_state: dict[str, Any],
-    action: dict[str, Any],
-    semantic_action_record: dict[str, Any],
-    player_input: str,
-) -> dict[str, Any]:
-    from app.apps.rpg.session.combat_turn_actions import (
-        _player_input_requests_combat_ability as _player_input_requests_combat_ability,
-    )
-
-    combat_state = _get_combat_state(runtime_state)
-    if not _safe_dict(combat_state).get("active"):
-        return _safe_dict(action)
-
-    if _player_input_requests_combat_ability(player_input):
-        return _safe_dict(action)
-
-    action = dict(_safe_dict(action))
-    text = _safe_str(player_input).strip().lower()
-    semantic_kind = _safe_str(
-        _safe_dict(semantic_action_record).get("kind")
-        or _safe_dict(semantic_action_record).get("action_type")
-    ).strip().lower()
-
-    if semantic_kind == "defend" or any(term in text for term in ("defend", "guard", "block", "brace", "take cover")):
-        action["action_type"] = "defend"
-        action.pop("target_id", None)
-        return action
-
-    if semantic_kind == "flee" or any(term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")):
-        action["action_type"] = "flee"
-        action.pop("target_id", None)
-        return action
-
-    if semantic_kind == "use_item" or any(term in text for term in ("use ", "drink ", "quaff ", "consume ", "eat ")):
-        action["action_type"] = "use_item"
-        action.pop("target_id", None)
-        return action
-
-    return action
-
-
-def _extract_active_combat_state_for_turn(
-    runtime_state: dict[str, Any],
-    resolved_result: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    combat_state = _safe_dict(_get_combat_state(runtime_state))
-    if combat_state.get("active"):
-        return combat_state
-
-    resolved_result = _safe_dict(resolved_result)
-    direct = _safe_dict(resolved_result.get("combat_state"))
-    if direct.get("active") and not _runtime_owned(direct):
-        return normalize_combat_state(direct)
-
-    interaction_result = _safe_dict(resolved_result.get("interaction_result"))
-    interaction_combat = _safe_dict(_safe_dict(interaction_result.get("combat_result")).get("combat_state"))
-    if interaction_combat.get("active") and not _runtime_owned(interaction_combat):
-        return normalize_combat_state(interaction_combat)
-
-    return combat_state
-
-
-def _runtime_owned(combat_state: dict[str, Any]) -> bool:
-    """A fight the general combat runtime runs (a world's creatures): it resolves every turn of it itself."""
-    from app.apps.rpg.rules.combat.runtime_core import SOURCE
-
-    return _safe_str(combat_state.get("source")) == SOURCE
-
-
-def _lookup_actor_by_id(simulation_state: dict[str, Any], actor_id: str) -> dict[str, Any]:
-    for collection_key in ("actor_states", "npc_states"):
-        for actor in _safe_list(simulation_state.get(collection_key)):
-            if _safe_str(actor.get("id")).strip() == _safe_str(actor_id).strip():
-                return actor
-    return {}
-
-
-def _actor_is_player(simulation_state: dict[str, Any], actor_id: str) -> bool:
-    actor = _lookup_actor_by_id(simulation_state, actor_id)
-    return bool(actor.get("is_player")) or _safe_str(actor.get("type")).strip().lower() == "player"
-
-
-def _build_combat_gate_result(current_actor_id: str, player_actor_id: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "blocked": True,
-        "message": "It is not your turn in combat.",
-        "reason": "combat_turn_gated",
-        "expected_actor_id": current_actor_id,
-        "player_actor_id": player_actor_id,
-    }
-
-
-def _action_requests_hostile_combat(action: dict[str, Any], player_input: str) -> bool:
-    action = _safe_dict(action)
-    action_type = _safe_str(action.get("action_type")).strip().lower()
-    if action_type in {"melee_attack", "unarmed_attack", "attack_melee", "attack_unarmed"}:
-        return True
-    if action_type in {"attack", "punch"}:
-        text = _safe_str(player_input).strip().lower()
-        hostile_terms = ("attack", "punch", "hit", "kick", "strike", "stab", "slash", "smash", "kill")
-        return any(term in text for term in hostile_terms)
-    return False
-
-
-def _action_requests_combat_defend(action: dict[str, Any], player_input: str) -> bool:
-    action = _safe_dict(action)
-    action_type = _safe_str(action.get("action_type")).strip().lower()
-    text = _safe_str(player_input).strip().lower()
-    return action_type in {"defend", "block", "dodge", "guard"} or any(
-        term in text for term in ("defend", "block", "guard", "brace", "take cover")
-    )
-
-
-def _action_requests_combat_flee(action: dict[str, Any], player_input: str) -> bool:
-    action = _safe_dict(action)
-    action_type = _safe_str(action.get("action_type")).strip().lower()
-    text = _safe_str(player_input).strip().lower()
-    return action_type in {"flee", "retreat", "escape"} or any(
-        term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")
-    )
-
-
-def _action_requests_combat_use_item(action: dict[str, Any], player_input: str) -> bool:
-    action = _safe_dict(action)
-    action_type = _safe_str(action.get("action_type")).strip().lower()
-    text = _safe_str(player_input).strip().lower()
-    return action_type == "use_item" or any(
-        term in text for term in ("use ", "drink ", "eat ", "consume ", "quaff ")
-    )
-
-
-def _action_requests_stabilize(player_input: str) -> bool:
-    text = _safe_str(player_input).strip().lower()
-    return "stabilize" in text or "staunch" in text or "stop the bleeding" in text
-
-
-def _action_requests_revive_or_heal_other(player_input: str) -> bool:
-    text = _safe_str(player_input).strip().lower()
-    return ("revive" in text or "heal" in text or "healing potion" in text) and any(
-        name in text for name in ("bran", "companion", "ally")
-    )
-
-
-def _infer_recovery_target_actor_id(runtime_state: dict[str, Any], player_input: str) -> str:
-    text = _safe_str(player_input).strip().lower()
-    combat_state = _safe_dict(_get_combat_state(runtime_state))
-    participants = _safe_dict(combat_state.get("participants"))
-
-    for actor_id, participant in participants.items():
-        participant = _safe_dict(participant)
-        name = _safe_str(participant.get("name")).strip().lower()
-        if name and name in text:
-            return str(actor_id)
-
-    if "bran" in text:
-        for actor_id, participant in participants.items():
-            if "bran" in _safe_str(_safe_dict(participant).get("name")).strip().lower():
-                return str(actor_id)
-
-    for actor_id, participant in participants.items():
-        participant = _safe_dict(participant)
-        if _safe_str(participant.get("side")).strip() == "party" and actor_id != "player":
-            return str(actor_id)
-
-    return ""
-
-
-def _infer_inventory_item_id_from_text(
-    simulation_state: dict[str, Any],
-    action: dict[str, Any],
-    player_input: str,
-) -> str:
-    explicit = _safe_str(action.get("item_id")).strip()
-    if explicit:
-        return explicit
-
-    text = _safe_str(player_input).strip().lower()
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
-
-    for item in _safe_list(inventory_state.get("items")):
-        item = _safe_dict(item)
-        item_id = _safe_str(item.get("item_id")).strip()
-        if not item_id:
-            continue
-        names = [
-            _safe_str(item.get("name")),
-            _safe_str(item.get("definition_id")),
-            item_id,
-        ]
-        names.extend([_safe_str(x) for x in _safe_list(item.get("aliases"))])
-        for name in names:
-            name_lc = name.strip().lower()
-            if name_lc and name_lc in text:
-                return item_id
-
-    # Safe fallback for common phrasing like "drink a potion".
-    for item in _safe_list(inventory_state.get("items")):
-        item = _safe_dict(item)
-        item_id = _safe_str(item.get("item_id")).strip()
-        name_lc = _safe_str(item.get("name")).strip().lower()
-        if item_id and any(token in name_lc for token in ("potion", "draught", "elixir", "food", "ration")):
-            return item_id
-
-    return ""
 
 
 def _interaction_trace_enabled(runtime_state: dict[str, Any]) -> bool:
@@ -294,34 +75,9 @@ def _log_interaction_trace(label: str, payload: dict[str, Any], runtime_state: d
     logger.debug("INTERACTION TRACE %s = %s", label, payload)
 
 
-
 def _utc_now_iso() -> str:
     return utc_now().isoformat()
 
-
-
-
-def _stable_unique_labeled_items(values: list[Any], limit: int) -> list[str]:
-    seen = set()
-    out: list[str] = []
-    for raw in _safe_list(values):
-        if isinstance(raw, dict):
-            value = (
-                _safe_str(raw.get("summary")).strip()
-                or _safe_str(raw.get("description")).strip()
-                or _safe_str(raw.get("title")).strip()
-                or _safe_str(raw.get("label")).strip()
-                or _safe_str(raw.get("name")).strip()
-            )
-        else:
-            value = _safe_str(raw).strip()
-        if not value or value in seen:
-            continue
-        seen.add(value)
-        out.append(value)
-        if len(out) >= limit:
-            break
-    return out
 
 def _build_world_advance_recap(
     simulation_state: dict[str, Any],
@@ -450,8 +206,6 @@ def _recap_has_meaningful_sections(recap: dict[str, Any]) -> bool:
         _safe_list(recap.get("npc_updates")) or
         _safe_list(recap.get("director_activity"))
     )
-
-
 
 
 def _interaction_memory_key(interaction: dict[str, Any]) -> str:
@@ -665,10 +419,6 @@ def ensure_ambient_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any
     return runtime_state
 
 
-def _ensure_scene_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
-    return ensure_persistent_scene_runtime_state(runtime_state)
-
-
 def _filter_salient_player_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep only player-meaningful events for idle initiative context."""
     result: list[dict[str, Any]] = []
@@ -731,31 +481,29 @@ def get_effective_world_behavior(session: dict[str, Any]) -> dict[str, Any]:
 # ── Phase 1 — idle tick cadence policy ────────────────────────────────────
 
 
-
-
 # ── Phase 5 — opening-aware runtime metadata ─────────────────────────────
 
 
-def _build_opening_runtime(setup: dict[str, Any]) -> dict[str, Any]:
-    """Build opening-aware runtime metadata from setup payload.
-
-    Persisted as runtime_state["opening_runtime"].
-    """
-    setup = _safe_dict(setup)
-    opening = _safe_dict(setup.get("opening"))
-
-    if not opening:
-        return {"active": False, "opening_resolved": True}
-
-    return {
-        "active": True,
-        "scene_frame": _safe_str(opening.get("scene_frame")),
-        "immediate_problem": _safe_str(opening.get("immediate_problem")),
-        "player_involvement_reason": _safe_str(opening.get("player_involvement_reason")),
-        "starter_conflict": _safe_str(setup.get("starter_conflict")),
-        "present_npc_ids": _safe_list(opening.get("present_npc_ids")),
-        "first_choices": _safe_list(opening.get("first_choices")),
-        "opening_resolved": False,
-    }
-
-__all__ = ['_MAX_AMBIENT_UPDATES', '_MAX_DIRECTOR_LOG', '_action_requests_combat_defend', '_action_requests_combat_flee', '_action_requests_combat_use_item', '_action_requests_hostile_combat', '_action_requests_revive_or_heal_other', '_action_requests_stabilize', '_actor_is_player', '_apply_grounded_scene_overlay', '_build_combat_gate_result', '_build_opening_runtime', '_build_world_advance_recap', '_compact_active_interactions', '_derive_grounded_scene_context', '_detect_interaction_changes', '_emit_scene_beats_from_active_interactions', '_ensure_scene_runtime_state', '_extract_active_combat_state_for_turn', '_filter_salient_player_events', '_force_active_combat_utility_action', '_format_arm_wrestling_beat', '_format_generic_interaction_beat', '_format_interaction_beat', '_infer_inventory_item_id_from_text', '_infer_recovery_target_actor_id', '_interaction_memory_key', '_interaction_trace_enabled', '_log_interaction_trace', '_lookup_actor_by_id', '_normalize_prompt_location_name', '_recap_has_meaningful_sections', '_resolve_actor_names', '_resolve_location_name', '_snapshot_interaction_for_memory', '_stable_unique_labeled_items', '_stable_unique_strs', '_utc_now_iso', 'ensure_ambient_runtime_state', 'get_effective_world_behavior']
+__all__ = [
+    "_MAX_AMBIENT_UPDATES",
+    "_MAX_DIRECTOR_LOG",
+    "_apply_grounded_scene_overlay",
+    "_build_world_advance_recap",
+    "_compact_active_interactions",
+    "_derive_grounded_scene_context",
+    "_detect_interaction_changes",
+    "_emit_scene_beats_from_active_interactions",
+    "_filter_salient_player_events",
+    "_format_arm_wrestling_beat",
+    "_format_generic_interaction_beat",
+    "_format_interaction_beat",
+    "_interaction_memory_key",
+    "_interaction_trace_enabled",
+    "_log_interaction_trace",
+    "_recap_has_meaningful_sections",
+    "_resolve_location_name",
+    "_snapshot_interaction_for_memory",
+    "_utc_now_iso",
+    "ensure_ambient_runtime_state",
+    "get_effective_world_behavior",
+]

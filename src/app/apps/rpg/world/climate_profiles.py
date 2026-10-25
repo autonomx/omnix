@@ -9,15 +9,6 @@ ClimateProfileResolution = dict[str, Any]
 
 DEFAULT_CLIMATE_PROFILE_ID = "temperate_hills"
 
-SEASON_IDS = ("early_spring", "spring", "summer", "early_autumn", "late_autumn", "winter")
-
-LOCATION_CLIMATE_PROFILE_IDS: dict[str, str] = {
-    "rusty_flagon_tavern": "temperate_hills",
-    "market_district": "temperate_hills",
-    "northern_road": "road_lowlands",
-    "glimmerdeep_pass": "northern_mountains",
-    "old_quarry": "quarry_hills",
-}
 
 CLIMATE_PROFILES: dict[str, ClimateProfile] = {
     "temperate_hills": {

@@ -59,12 +59,3 @@ def is_ambient_wait_or_listen_intent(player_input: str) -> bool:
         return False
 
     return True
-
-
-def is_room_context_ambient_not_lodging(player_input: str) -> bool:
-    lower = _safe_str(player_input).strip().lower()
-    if not lower:
-        return False
-    if "room" not in lower:
-        return False
-    return is_ambient_wait_or_listen_intent(lower)

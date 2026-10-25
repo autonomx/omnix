@@ -22,23 +22,17 @@ def test_every_rpg_call_template_has_a_role() -> None:
 
 def test_calls_are_answered_by_role_in_their_contracts_shape() -> None:
     from app.providers.base import ChatMessage
-    from app.apps.rpg.session.compact_dialogue import _PROMPT_1, _PROMPT_2
-    from app.apps.rpg.session.semantic_action_intelligence import _PROMPT_1 as INTENT
+    from app.apps.rpg.session.turn.dialogue import _LINE_PROMPT
+    from app.apps.rpg.session.turn.intent import _PROMPT as INTENT
 
-    context = {"present_npcs": [{"id": "npc:orik", "name": "Orik Stonewake"}, {"id": "npc:liora", "name": "Liora Fen"}]}
     model = ScriptedRoleModel({Role.DIALOGUE: ("", "Mind the step.")})
-
-    choose = _PROMPT_2.format(v0="I ask Liora where we are") + json.dumps(context)
-    answer = json.loads(model.chat_completion([ChatMessage(role="user", content=choose)]).content)
-    assert answer == {"speaker_id": "npc:liora", "line": "Mind the step."}  # the one addressed by name
-
-    line = _PROMPT_1.format(v0="hello") + json.dumps(context)
+    line = _LINE_PROMPT.format(v0="hello") + json.dumps({"speaker": "Orik Stonewake"})
     assert model.chat_completion([ChatMessage(role="user", content=line)]).content == "Mind the step."
 
-    intent = INTENT.text + "\nContext JSON:\n{}"
-    model.queue(Role.INTENT, {"action_intent": {"action_type": "observe"}})
-    assert json.loads(model.chat_completion([ChatMessage(role="user", content=intent)]).content)["action_intent"]
+    intent = INTENT.format(v0="I hum a tune") + json.dumps({"SCENE": []})
+    model.queue(Role.INTENT, {"readings": [{"family": "look", "confidence": 0.9}]})
+    assert json.loads(model.chat_completion([ChatMessage(role="user", content=intent)]).content)["readings"]
     assert model.chat_completion([ChatMessage(role="user", content=intent)]).content == "{}"  # queue spent
 
     assert classify("an unrelated prompt").role is Role.UNCLASSIFIED
-    assert model.roles() == ["dialogue", "dialogue", "intent", "intent"]
+    assert model.roles() == ["dialogue", "intent", "intent"]

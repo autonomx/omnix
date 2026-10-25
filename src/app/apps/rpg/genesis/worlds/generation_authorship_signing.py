@@ -685,17 +685,6 @@ def validate_signed_authorship(
     }
 
 
-def require_signed_authorship(
-    candidate: Mapping[str, Any],
-    *,
-    policy: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    report = validate_signed_authorship(candidate, policy=policy)
-    if not report["publishable"]:
-        raise AuthorshipValidationError(report)
-    return report
-
-
 def _unwrap_safe_wrapper(value: Mapping[str, Any]) -> Mapping[str, Any]:
     current: Mapping[str, Any] = value
     while len(current) == 1:
@@ -752,7 +741,6 @@ __all__ = [
     "attach_signed_partial_llm_authorship",
     "harden_and_sign_generation_artifact",
     "prove_path_aware_structural_repair",
-    "require_signed_authorship",
     "sanitize_untrusted_candidate",
     "sign_record",
     "strict_lore_string_leaves",

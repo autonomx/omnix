@@ -35,12 +35,6 @@ def _norm(value: Any) -> str:
     return str(value or "").strip().casefold().replace(" ", "_")
 
 
-def _append(target: dict[str, Any], key: str, value: dict[str, Any], limit: int = 20) -> None:
-    values = _safe_list(target.get(key))
-    values.insert(0, value)
-    target[key] = values[:limit]
-
-
 def _ability_state(state: dict[str, Any]) -> dict[str, Any]:
     ability_state = _safe_dict(state.get("ability_state"))
     ability_state.setdefault("ability_points", 0)

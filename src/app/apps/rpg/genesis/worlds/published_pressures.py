@@ -22,10 +22,6 @@ _THREAT_SEVERITY = {"low": 25.0, "minor": 25.0, "medium": 40.0, "moderate": 40.0
 _REGION_EFFECT_PER_TICK = 1.0
 
 
-def _rows(value: Any) -> list[dict[str, Any]]:
-    return [dict(row) for row in value or () if isinstance(row, Mapping)]
-
-
 def _text(value: Any) -> str:
     return str(value or "").strip()
 

@@ -560,17 +560,6 @@ def validate_publishable_authorship(
     }
 
 
-def require_publishable_authorship(
-    candidate: Mapping[str, Any],
-    *,
-    server_artifact: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    report = validate_publishable_authorship(candidate, server_artifact=server_artifact)
-    if not report["publishable"]:
-        raise AuthorshipValidationError(report)
-    return report
-
-
 __all__ = [
     "AuthorshipClass",
     "AuthorshipValidationError",
@@ -582,6 +571,5 @@ __all__ = [
     "generation_artifacts",
     "lore_string_leaves",
     "prove_structural_repair_non_authoring",
-    "require_publishable_authorship",
     "validate_publishable_authorship",
 ]

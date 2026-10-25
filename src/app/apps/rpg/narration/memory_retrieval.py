@@ -9,7 +9,6 @@ from app.apps.rpg.narration.memory_writer import (
     memory_state_from_session,
 )
 
-DEFAULT_RECENT_MEMORY_LIMIT = 6
 DEFAULT_RELEVANT_MEMORY_LIMIT = 8
 RETRIEVABLE_MEMORY_KINDS = {"turn", "dialogue", "recap"}
 

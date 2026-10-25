@@ -458,37 +458,3 @@ def apply_travel_result_to_state(
     next_state["tick"] = tick + int(travel_result.get("travel_time_ticks") or 1)
 
     return next_state
-
-
-def build_travel_state_delta(travel_result: Mapping[str, Any]) -> Dict[str, Any]:
-    if not travel_result.get("ok"):
-        return {}
-
-    return {
-        "location_changed": True,
-        "from_location": travel_result.get("from_location"),
-        "from_location_name": travel_result.get("from_location_name"),
-        "to_location": travel_result.get("to_location"),
-        "to_location_name": travel_result.get("to_location_name"),
-        "travel_time_ticks": travel_result.get("travel_time_ticks") or 1,
-        "travel_label": travel_result.get("label"),
-    }
-
-
-def build_travel_world_event(travel_result: Mapping[str, Any]) -> Dict[str, Any]:
-    if not travel_result.get("ok"):
-        return {}
-
-    return {
-        "type": "travel",
-        "subtype": "location_changed",
-        "from_location": travel_result.get("from_location"),
-        "to_location": travel_result.get("to_location"),
-        "title": f"Travel to {travel_result.get('to_location_name') or travel_result.get('to_location')}",
-        "summary": (
-            f"The party travels from {travel_result.get('from_location_name') or travel_result.get('from_location')} "
-            f"to {travel_result.get('to_location_name') or travel_result.get('to_location')}."
-        ),
-        "meaningful_progress": True,
-        "progress_category": "location_progression",
-    }

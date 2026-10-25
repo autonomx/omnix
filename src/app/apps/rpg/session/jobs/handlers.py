@@ -31,12 +31,6 @@ class RpgNarrationJobInput(BaseModel):
     narration_request: dict[str, Any] = Field(default_factory=dict)
 
 
-def execute_rpg_turn_job(job_store: Any, job: JobRecord) -> JobRecord:
-    from app.apps.rpg.session.jobs.turn_executor import execute_inline_feature_job
-
-    return execute_inline_feature_job(job_store, job)
-
-
 def execute_rpg_report_job(job_store: Any, job: JobRecord) -> JobRecord:
     from app.apps.rpg.session.jobs.last10_report import execute_rpg_last10_report_job
 

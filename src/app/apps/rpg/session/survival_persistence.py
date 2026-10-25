@@ -7,21 +7,14 @@ LLM-expanded survival payloads cannot become persistent truth.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.rules.survival import SURVIVAL_STATE_KEY, normalize_survival_state
 from app.apps.rpg.foundation.safe_values import mapping_copy as _safe_dict
 from app.apps.rpg.foundation.safe_values import copy_state
 
-SURVIVAL_PERSISTENCE_SOURCE = "runtime_survival_persistence"
 
 _NEED_KEYS: tuple[str, str, str] = ("hunger", "thirst", "fatigue")
-_LAST_TURN_KEYS: tuple[str, str, str] = (
-    "last_food_turn",
-    "last_water_turn",
-    "last_rest_turn",
-)
 
 
 def _has_any_need(value: Mapping[str, Any]) -> bool:
@@ -54,16 +47,6 @@ def _canonical_survival_seed(simulation_state: Mapping[str, Any]) -> dict[str, A
     return _legacy_survival_candidate(simulation_state)
 
 
-def normalize_survival_for_persistence(simulation_state: Mapping[str, Any]) -> dict[str, Any]:
-    """Return simulation_state with bounded canonical survival state.
-
-    Unknown survival keys are pruned by ``normalize_survival_state``.  Legacy
-    climate/needs fields are left untouched for backward compatibility, but they
-    no longer act as authoritative state after canonical survival is present.
-    """
-    return _normalize_owned_simulation_state(deepcopy(_safe_dict(simulation_state)))
-
-
 def _normalize_owned_simulation_state(normalized: dict[str, Any]) -> dict[str, Any]:
     state = normalize_survival_state(_canonical_survival_seed(normalized))
     normalized[SURVIVAL_STATE_KEY] = state
@@ -82,5 +65,3 @@ def normalize_session_survival_for_persistence(session: Mapping[str, Any], *, ow
         _safe_dict(normalized_session.get("simulation_state"))
     )
     return normalized_session
-
-

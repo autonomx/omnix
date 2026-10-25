@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.apps.rpg.rules.interactions.equipment_runtime import project_equipment_stats
 
 SOURCE = "deterministic_combat_runtime"
 
@@ -40,110 +38,10 @@ def get_combat_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return safe_dict(simulation_state.get("combat_state"))
 
 
-def is_combat_active(simulation_state: Dict[str, Any]) -> bool:
-    return get_combat_state(simulation_state).get("active") is True
-
-
 def player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     state = safe_dict(simulation_state.get("player_state"))
     simulation_state["player_state"] = state
     return state
-
-
-def party_companions(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    party_state = safe_dict(player_state(simulation_state).get("party_state"))
-    return [safe_dict(item) for item in safe_list(party_state.get("companions"))]
-
-
-def default_enemy_bandit() -> Dict[str, Any]:
-    return {
-        "actor_id": "enemy:bandit_1",
-        "side": "enemy",
-        "name": "Bandit",
-        "hp": 8,
-        "max_hp": 8,
-        "armor": 0,
-        "defense": 10,
-        "damage_min": 2,
-        "damage_max": 4,
-        "accuracy_bonus": 1,
-        "initiative_bonus": 0,
-        "status": "active",
-        "loot_table_id": "loot:bandit_common",
-        "source": SOURCE,
-    }
-
-
-def participant_from_player(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = player_state(simulation_state)
-    # The hero's hit points are the ones the player sees (resources.hp); a bare hp field is the older record.
-    pool = safe_dict(safe_dict(state.get("resources")).get("hp"))
-    max_hp = safe_int(pool.get("max"), safe_int(state.get("max_hp"), 20))
-    return {
-        "actor_id": "player",
-        "side": "party",
-        "name": "You",
-        "hp": safe_int(pool.get("current"), safe_int(state.get("hp"), max_hp)),
-        "max_hp": max_hp,
-        "armor": 0,
-        "defense": 10,
-        "initiative_bonus": 1,
-        "status": "active",
-        "source": SOURCE,
-    }
-
-
-def participant_from_companion(companion: Dict[str, Any]) -> Dict[str, Any]:
-    companion = safe_dict(companion)
-    npc_id = safe_str(companion.get("npc_id"))
-    return {
-        "actor_id": npc_id,
-        "side": "party",
-        "name": safe_str(companion.get("name") or npc_id),
-        "hp": safe_int(companion.get("hp"), safe_int(companion.get("max_hp"), 16)),
-        "max_hp": safe_int(companion.get("max_hp"), 16),
-        "armor": 0,
-        "defense": 10,
-        "initiative_bonus": 0,
-        "status": safe_str(companion.get("combat_status") or "active"),
-        "identity_arc": safe_str(companion.get("identity_arc")),
-        "current_role": safe_str(companion.get("current_role")),
-        "source": SOURCE,
-    }
-
-
-def participant_from_enemy(enemy: Dict[str, Any]) -> Dict[str, Any]:
-    enemy = safe_dict(enemy)
-    actor_id = safe_str(enemy.get("actor_id") or enemy.get("enemy_id") or enemy.get("id"))
-    return {
-        "actor_id": actor_id,
-        "side": safe_str(enemy.get("side") or "enemy"),
-        "name": safe_str(enemy.get("name") or actor_id),
-        "hp": safe_int(enemy.get("hp"), safe_int(enemy.get("max_hp"), 10)),
-        "max_hp": safe_int(enemy.get("max_hp"), 10),
-        "armor": safe_int(enemy.get("armor"), 0),
-        "defense": safe_int(enemy.get("defense"), 10),
-        "damage_min": safe_int(enemy.get("damage_min"), 1),
-        "damage_max": safe_int(enemy.get("damage_max"), 3),
-        "accuracy_bonus": safe_int(enemy.get("accuracy_bonus"), 0),
-        "initiative_bonus": safe_int(enemy.get("initiative_bonus"), 0),
-        "status": safe_str(enemy.get("status") or "active"),
-        "loot_table_id": safe_str(enemy.get("loot_table_id")),
-        "definition_id": safe_str(enemy.get("definition_id")),
-        "definition_revision": safe_int(enemy.get("definition_revision"), 0),
-        "level": safe_int(enemy.get("level"), 1),
-        "morale_threshold": safe_int(enemy.get("morale_threshold"), 35),
-        "tags": list(safe_list(enemy.get("tags"))),
-        "xp_value": safe_int(enemy.get("xp_value"), 0),
-        "budget_cost": safe_int(enemy.get("budget_cost"), 1),
-        "condition_immunities": list(
-            safe_list(enemy.get("condition_immunities"))
-        ),
-        "vulnerabilities": deepcopy(safe_list(enemy.get("vulnerabilities"))),
-        "status_effects": deepcopy(safe_list(enemy.get("status_effects"))),
-        "mechanics_source": safe_str(enemy.get("mechanics_source")),
-        "source": SOURCE,
-    }
 
 
 def current_actor_id(combat_state: Dict[str, Any]) -> str:
@@ -197,28 +95,6 @@ def combat_seed(combat_state: Dict[str, Any], *parts: Any) -> str:
             *[safe_str(part) for part in parts],
         ]
     )
-
-
-def damage_bounds_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, int]:
-    combat_state = get_combat_state(simulation_state)
-    row = participant(combat_state, actor_id)
-    if safe_str(row.get("side")) == "enemy":
-        return {
-            "damage_min": max(1, safe_int(row.get("damage_min"), 1)),
-            "damage_max": max(1, safe_int(row.get("damage_max"), 3)),
-            "accuracy_bonus": safe_int(row.get("accuracy_bonus"), 0),
-            "encumbrance_penalty": 0,
-            "armor": safe_int(row.get("armor"), 0),
-        }
-
-    stats = safe_dict(project_equipment_stats(simulation_state, actor_id=actor_id).get("stats"))
-    return {
-        "damage_min": max(1, safe_int(stats.get("damage_min"), 1)),
-        "damage_max": max(1, safe_int(stats.get("damage_max"), 2)),
-        "accuracy_bonus": safe_int(stats.get("accuracy_bonus"), 0),
-        "encumbrance_penalty": safe_int(stats.get("encumbrance_penalty"), 0),
-        "armor": safe_int(stats.get("armor"), 0),
-    }
 
 
 def sync_participant_hp_to_actor_state(

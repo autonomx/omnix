@@ -213,49 +213,6 @@ def _extract_json_object_with_diagnostics_from_provider_text(text: Any) -> Dict[
     return diagnostics
 
 
-def _extract_json_object_from_provider_text(text: Any) -> Dict[str, Any]:
-    return _safe_dict(
-        _extract_json_object_with_diagnostics_from_provider_text(text).get("payload")
-    )
-
-
-def _call_provider_text(provider: Any, prompt: str, *, max_tokens: int = 320) -> str:
-    if provider is None:
-        return ""
-    for method_name in ("chat", "complete", "generate", "invoke"):
-        method = getattr(provider, method_name, None)
-        if not callable(method):
-            continue
-        try:
-            if method_name == "chat":
-                response = method(
-                    [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are the presentation-only narration layer for a deterministic RPG. "
-                                "Return JSON only."
-                            ),
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=max_tokens,
-                )
-            else:
-                response = method(prompt, max_tokens=max_tokens)
-            if isinstance(response, str):
-                return response
-            if isinstance(response, dict):
-                return _safe_str(response.get("content") or response.get("text") or response.get("response"))
-            content = getattr(response, "content", "")
-            if content:
-                return str(content)
-        except Exception:
-            logger.debug("suppressed error in %s", "_call_provider_text", exc_info=True)
-            continue
-    return ""
-
-
 def _provider_shape(provider: Any) -> Dict[str, Any]:
     if provider is None:
         return {"present": False}

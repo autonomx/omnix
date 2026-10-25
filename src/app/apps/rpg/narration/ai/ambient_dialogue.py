@@ -18,20 +18,6 @@ def _safe_str(v: Any) -> str:
 
 # ── Candidate types ───────────────────────────────────────────────────────
 
-CANDIDATE_KINDS = (
-    "npc_to_player",
-    "npc_to_npc",
-    "npc_reaction",
-    "companion_comment",
-    "warning",
-    "demand",
-    "taunt",
-    "gossip",
-    "follow_reaction",
-    "caution_reaction",
-    "assist_reaction",
-    "idle_check_in",
-)
 
 # ── Cooldown constants ────────────────────────────────────────────────────
 

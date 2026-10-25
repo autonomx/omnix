@@ -20,19 +20,12 @@ from app.apps.rpg.genesis.forge.world_forge_quality import apply_world_forge_qua
 
 from .canon_repair import repair_generation_contracts
 from .contracts import WorldArtifactStage, WorldReleaseDocument, WorldRevisionDocument
-from .lifecycle_service import require_world_writable
-from .map_blueprint_authoring import (
-    latest_ready_blueprint_requirements,
-    materialize_generated_location_blueprints,
-)
-from .map_blueprint_publication import merge_authored_blueprints
 from .runtime_seed import (
     compile_runtime_seed,
     compile_vertical_slice,
     run_player_absent_playtest,
 )
 from .service import compile_world_release, compile_world_revision
-from .world_image_bindings import approved_world_asset_bindings
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
@@ -338,133 +331,3 @@ def compile_world_generation_publication(
         world_release=world_release,
         certification=certification,
     )
-
-
-def publish_world_generation(
-    run_id: str,
-    *,
-    database: Any | None = None,
-) -> dict[str, Any]:
-    """Atomically publish a completed run and make retries return the same release."""
-
-    from app.security.tenant_context import current_tenant
-    from app.persistence.unit_of_work import unit_of_work
-
-    context = current_tenant()
-    with unit_of_work(database) as work:
-        run = work.world_generation.get(context, run_id)
-        if run is None:
-            raise KeyError(f"world_generation_run_not_found:{run_id}")
-        publication = dict(run.get("plan") or {}).get("publication")
-        if isinstance(publication, Mapping):
-            work.rollback()
-            return {
-                "ok": True,
-                "status": "ready",
-                "run": run,
-                "publication": dict(publication),
-                "reused": True,
-            }
-        if str(run.get("status") or "") != "review":
-            raise ValueError(
-                f"world_generation_not_publishable:{run_id}:{run.get('status')}"
-            )
-        world_id = str(run.get("world_id") or "")
-        world = require_world_writable(work, context, world_id)
-        topic_rows = work.world_generation.list_topics(
-            context,
-            world_id=world_id,
-            draft_revision=int(run.get("draft_revision") or 1),
-        )
-        current_row = work.connection.execute(
-            "SELECT COALESCE(MAX(revision), 0) FROM omnix_rpg_world_revisions "
-            "WHERE workspace_id = %s AND world_id = %s",
-            (context.workspace_id, world_id),
-        ).fetchone()
-        current_revision = int(current_row[0])
-        asset_bindings = approved_world_asset_bindings(work, context, world_id)
-        compiled = compile_world_generation_publication(
-            run=run,
-            world=world,
-            topic_rows=topic_rows,
-            revision=current_revision + 1,
-            asset_bindings=asset_bindings,
-        )
-        canon_entities = compiled.world_revision.canon.get("entities")
-        materialization = dict(compiled.world_release.materialization)
-        selected_locations = {
-            str(materialization.get("hub_location_id") or ""),
-            *(str(item) for item in materialization.get("sublocation_ids") or ()),
-            *(str(item) for item in materialization.get("nearby_location_ids") or ()),
-        }
-        selected_locations.discard("")
-        generated_locations = {
-            str(entity_id): dict(entity)
-            for entity_id, entity in dict(canon_entities or {}).items()
-            if isinstance(entity, Mapping) and str(entity_id) in selected_locations
-        }
-        materialize_generated_location_blueprints(
-            work,
-            context,
-            world_id,
-            generated_locations,
-        )
-        requirements = latest_ready_blueprint_requirements(work, context, world_id)
-        revision_document, release_document = merge_authored_blueprints(
-            compiled.world_revision,
-            compiled.world_release,
-            requirements,
-        )
-        compiled = WorldGenerationPublication(
-            world_revision=revision_document,
-            world_release=release_document,
-            certification=dict(release_document.certification),
-        )
-        stored_revision = work.world_scenarios.publish_world_revision(
-            context,
-            world_id=world_id,
-            document=compiled.world_revision.model_dump(mode="json"),
-            content_hash=compiled.world_revision.content_hash,
-            expected_revision=current_revision,
-        )
-        stored_release = work.world_scenarios.publish_world_release(
-            context,
-            world_id=world_id,
-            world_revision=int(stored_revision["revision"]),
-            document=compiled.world_release.model_dump(mode="json"),
-            release_hash=compiled.world_release.release_hash,
-        )
-        publication_payload = {
-            "world_id": world_id,
-            "world_revision": int(stored_revision["revision"]),
-            "world_revision_hash": str(stored_revision["content_hash"]),
-            "world_release": int(stored_release["release"]),
-            "world_release_hash": str(stored_release["release_hash"]),
-            "artifact_stage": compiled.world_release.artifact_stage,
-            "certification": dict(compiled.certification),
-            "authored_map_blueprint_count": len(requirements),
-            "approved_image_binding_count": len(asset_bindings),
-        }
-        plan = {**dict(run.get("plan") or {}), "publication": publication_payload}
-        progress = {
-            **dict(run.get("progress") or {}),
-            "publication": publication_payload,
-            "artifact_stage": compiled.world_release.artifact_stage,
-            "percent": 100,
-        }
-        updated = work.world_generation.update(
-            context,
-            run_id=run_id,
-            status="ready",
-            plan=plan,
-            progress=progress,
-            error={},
-        )
-        work.commit()
-    return {
-        "ok": True,
-        "status": "ready",
-        "run": updated,
-        "publication": publication_payload,
-        "reused": False,
-    }

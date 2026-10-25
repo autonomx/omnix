@@ -133,25 +133,3 @@ def get_item_definition(item_id: str) -> Dict[str, Any]:
     """Return a copy of the item definition for *item_id*, or an empty dict."""
     item_id = str(item_id or "")
     return _safe_dict(_ITEM_DEFINITIONS.get(item_id))
-
-
-def list_item_definitions() -> Dict[str, Dict[str, Any]]:
-    """Return a sorted copy of every item definition, keyed by item_id."""
-    return {
-        str(item_id): _safe_dict(item_def)
-        for item_id, item_def in sorted(_ITEM_DEFINITIONS.items(), key=lambda kv: str(kv[0]))
-    }
-
-
-def normalize_item_definition(item_def: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize any item definition with full combat stats schema."""
-    from .item_stats import normalize_item_stats
-    item_def = dict(item_def or {})
-    item_def.setdefault("item_id", "")
-    item_def.setdefault("name", "")
-    item_def.setdefault("category", "misc")
-    item_def.setdefault("stackable", False)
-    item_def.setdefault("max_stack", 1)
-    item_def.setdefault("tags", [])
-    item_def.setdefault("value", 0)
-    return normalize_item_stats(item_def)

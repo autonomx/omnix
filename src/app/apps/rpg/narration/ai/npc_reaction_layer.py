@@ -13,23 +13,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _safe_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "on"}:
-            return True
-        if lowered in {"false", "0", "no", "off"}:
-            return False
-    if value is None:
-        return default
-    try:
-        return bool(value)
-    except Exception:
-        return default
-
-
 def _stable_hash(payload: Dict[str, Any]) -> str:
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]

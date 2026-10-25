@@ -18,7 +18,6 @@ def _safe_str(v: Any) -> str:
 # ── Interruption constants ────────────────────────────────────────────────
 
 _MIN_TICKS_BETWEEN_INTERRUPTS = 3
-_MAX_PENDING_INTERRUPTS = 2
 
 # Reaction kinds that bypass quiet-window suppression
 _REACTION_KINDS = frozenset({

@@ -31,7 +31,7 @@ needs a row here, with a turn kind or an exemption.
 
 | Entry point | Module | Writes | Concurrency | Turn kind or exemption |
 |---|---|---|---|---|
-| `POST /api/rpg/sessions/{session_id}/turn` | `edge/api/feature_routes/rpg_session_routes.py` → `edge/api/turn_pipeline.py` | Under PostgreSQL the whole turn commits atomically in `persist_foreground_turn`: campaign document and revision, turn row and patch, interaction, canon, queued jobs, submission, canonical narrative response. Early returns in `player_turn_execution` still save directly (§3). | Submission row `FOR UPDATE` and campaign row lock at commit; optimistic campaign revision (`RevisionConflict` → 409); `x-omnix-rpg-submission-id` is the idempotency key | `player_text` |
+| `POST /api/rpg/sessions/{session_id}/turn` | `edge/api/feature_routes/rpg_session_routes.py` → `edge/api/turn_pipeline.py` | Under PostgreSQL the whole turn commits atomically in `persist_foreground_turn`: campaign document and revision, turn row and patch, interaction, canon, queued jobs, submission, canonical narrative response. Every command runs on the turn pipeline (`session/pipeline.py`: planned turn, commit, lifecycle); the older path's early returns went with it (RQ-2.10). | Submission row `FOR UPDATE` and campaign row lock at commit; optimistic campaign revision (`RevisionConflict` → 409); `x-omnix-rpg-submission-id` is the idempotency key | `player_text` |
 | `POST /api/rpg/sessions/{session_id}/loadout-action` | `edge/api/feature_routes/rpg_session_routes.py` (`_loadout_turn`) → `edge/api/turn_pipeline.py`; `session/loadout.py` for the rest | use, equip, take off and drop: a structured-action turn in the turn route's unit of work (RQ-2.4); crafting, salvage, modifications and abilities still save the campaign document out of turn (`save_session`) | Turns: one at a time per campaign, a refusal takes no turn; the rest: loaded revision only | `structured_action` |
 | `POST /api/rpg/sessions/{session_id}/maps/{map_id}/map-actions` | `edge/api/feature_routes/rpg_map_routes.py`, `world/map_actions.py`, `session/turn/run.py` (`_map_travel_turn`) | travel or enter to a place of the campaign's world: a structured-action travel turn (RQ-2.1); a fixture map's other moves save the overlay state out of turn only when they change it; inspecting saves nothing | Client sends `definition_revision` and `overlay_revision` (409 when stale); a journey is one turn at a time per campaign, a road that cannot be taken is refused with no turn | `structured_action` |
 | `POST /api/rpg/map-instances/{map_instance_id}/tactical/move` | `edge/api/feature_routes/rpg_tactical_spatial_routes.py` → `session/turn/tactical.py` (`grid_move`) | A structured-action turn in the turn route's unit of work: campaign revision, turn row and patch, and the map event (covered by `maps_hash_after`) (RQ-2.6) | `expected_campaign_revision` only; one turn at a time per campaign; a refused command takes no turn | `structured_action` |
@@ -162,7 +162,7 @@ All of these write world tables or the world library and sharing state, never a 
 
 | Entry point | Module | Writes | Concurrency | Turn kind or exemption |
 |---|---|---|---|---|
-| `POST /api/hermes/rpg/approved-flow` | `edge/hermes/approved_routes.py`, `canonical_submitter.py` | When enabled, submits an approved command as a turn: `interactive_first_call_runtime.apply_turn` with `session_override`, `narration_mode: "blocking"`, not a job keyed by `submission_id` | None of its own; the turn's saves | `structured_action` (Hermes command), through the pipeline with a submission id |
+| `POST /api/hermes/rpg/approved-flow` | `edge/hermes/approved_routes.py`, `canonical_submitter.py` | When enabled, submits an approved command as a turn through the turn route's steps (`submit_rpg_turn`, keyed by `submission_id`, RQ-1.6) | None of its own; the turn's saves | `structured_action` (Hermes command), through the pipeline with a submission id |
 | `POST /api/hermes/rpg/sequence/execute-step` | `edge/hermes/sequence_approved_executor.py` | Submits one approved step through the canonical submitter, as approved-flow; writes the sequence state file | Loop guard; none for the campaign | `structured_action` (Hermes command) |
 | `POST /api/hermes/rpg/sequence/review` | `edge/hermes/approved_routes.py`, `sequence_state.py` | The sequence state in a local JSON file (`resources_data_root()/hermes_rpg_sequences.json`), not the database | None | Exemption, admin (developer tooling); the file store is process-local state for RQ-8 to move or retire |
 | `POST /api/hermes/rpg/sequence/plan` | `edge/hermes/sequence_planner_loop.py` | Nothing: model-planned sequence | None | Exemption, read-only |
@@ -181,7 +181,7 @@ All of these write world tables or the world library and sharing state, never a 
 
 | Job kind | Module | Writes | Concurrency | Turn kind or exemption |
 |---|---|---|---|---|
-| `rpg.turn` | `session/jobs/handlers.py`, `session/jobs/turn_executor.py` | The turn, as the turn route (§3 pipeline), when it runs as a job | Submission policy (`_rpg_submission_policy`), `submission_id`; campaign revision at commit | `player_text` (the job form of the turn route) |
+| `rpg.turn` | `edge/api/turn_job.py` | The turn, through the turn route's steps (`submit_rpg_turn`, keyed `job:<id>`); a job with no campaign fails | Submission policy (`_rpg_submission_policy`), `submission_id`; campaign revision at commit | `player_text` (the job form of the turn route) |
 | `rpg.narration` | `session/narration_jobs.py`, `session/jobs/narration_job.py` | Finished narration into `runtime_state.narration_artifacts` by `save_runtime_session`: an out-of-turn revision with no turn row (`narration_jobs.py:153`) | Loaded revision | Pipeline steps 8–10: finalize inserts the narrative response and marks the delivery final, with no campaign save (§4.1) |
 | `rpg.scene_lore` | `genesis/forge/scene_lore_job.py`, `runtime_lore_store.enrich_scene_lore` | Model calls, then `omnix_rpg_campaign_bibles` (newcomers' dossiers, new canon revision) | Bible `expected_revision` under lock | Exemption, canon follow-up (§4.1 step 11); writes canon only |
 | `rpg.report.last10` | `session/jobs/last10_report.py` | The job's own output (a report over recent turns) | None | Exemption, read-only |
@@ -204,8 +204,8 @@ All of these write world tables or the world library and sharing state, never a 
   other module calls these functions today: idle catch-up is not reachable in production. `/continue` only loads. The
   `world_tick` turn for time away (§4.5) is therefore new behaviour, not a move of an existing path.
 - **Out-of-turn saves inside the turn route.** `player_turn_execution` early returns (§3) and the narration-artifact
-  writers (`semantic_response_projection.py`, `companion_turn_runtime.py`, `turn_bound_narration.py`) are inside the
-  turn route, listed in §3, and move with RQ-1.4.
+  writers (`semantic_response_projection.py`, `turn_bound_narration.py`) were the older turn path's; they were deleted
+  with it (RQ-2.10).
 
 ## Counts
 
