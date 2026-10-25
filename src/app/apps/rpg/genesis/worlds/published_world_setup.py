@@ -52,6 +52,18 @@ def _label_from_id(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in re.split(r"[-_]+", tail) if part) or entity_id
 
 
+_STARTER_REGION = re.compile(r"^region:.+:starter$")
+
+
+def _part_name(location_id: str, names: Mapping[str, str]) -> str:
+    """A place the opening derives from another ("<place>:interior", "<place>:outskirts:frontier"): named after the
+    place it belongs to ("Black Rain Station Interior"), never only by its id's last word ("Interior")."""
+    parent, _, part = location_id.rpartition(":")
+    if parent in names and part:
+        return f"{names[parent]} {_label_from_id(part)}"
+    return _label_from_id(location_id)
+
+
 def _regions(canon: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return {_text(row.get("id")): row for row in lore_rows(canon, "regions") if _text(row.get("id"))}
 
@@ -67,13 +79,15 @@ def published_locations(
     known = {row.get("id") for row in rows}
     rows += [{"id": location_id} for location_id in manifest_location_ids
              if isinstance(location_id, str) and location_id not in known]
+    names = {_text(row.get("id")): _text(row.get("name")) for row in rows if _text(row.get("name"))}
     places: list[dict[str, Any]] = []
-    for row in rows:
+    for row in sorted(rows, key=lambda row: len(_text(row.get("id")))):  # a place before the parts named after it
         location_id = _text(row.get("id"))
-        if not location_id:
-            continue
+        if not location_id or _STARTER_REGION.match(location_id):
+            continue  # the starter bubble's region holds the opening's places: it is none itself
         region = regions.get(_text(row.get("region_id")), {})
-        name = _text(row.get("name")) or _label_from_id(location_id)
+        name = _text(row.get("name")) or _part_name(location_id, names)
+        names[location_id] = name
         places.append({
             **row,
             "id": location_id,

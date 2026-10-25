@@ -201,3 +201,20 @@ def test_a_worlds_person_joins_the_party_by_their_own_name() -> None:
     state = {"npc_index": {"npc:liora-fen": {"npc_id": "npc:liora-fen", "name": "Liora Fen", "role": "guide"}}}
     assert evaluate_npc_party_join_eligibility(state, npc_id="npc:liora-fen")["name"] == "Liora Fen"
     assert evaluate_npc_party_join_eligibility({}, npc_id="npc:liora-fen")["name"] == "liora-fen"
+
+
+def test_the_openings_derived_places_are_named_after_their_place_and_its_region_is_no_place() -> None:
+    """Found in the browser (RQ-7.7): Vesper-9's opening offered a road to "Starter", the starter bubble's region."""
+    from app.apps.rpg.genesis.worlds.published_world_setup import published_locations
+
+    canon = {"entities": {"ent:places:station": {"id": "ent:places:station", "kind": "location",
+                                                 "name": "Black Rain Station"}}}
+    places = published_locations(canon, {"locations": ["ent:places:station"]}, (
+        "region:ent-places-station:starter", "ent:places:station:interior", "ent:places:station:outskirts",
+        "ent:places:station:outskirts:frontier"))
+    assert {place["id"]: place["name"] for place in places} == {
+        "ent:places:station": "Black Rain Station",
+        "ent:places:station:interior": "Black Rain Station Interior",
+        "ent:places:station:outskirts": "Black Rain Station Outskirts",
+        "ent:places:station:outskirts:frontier": "Black Rain Station Outskirts Frontier",
+    }
