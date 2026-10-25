@@ -145,6 +145,7 @@ class Playthrough:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
+        from app.apps.rpg.edge.api.feature_routes.rpg_debug_routes import register_rpg_debug_routes
         from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
         from app.apps.rpg.edge.api.feature_routes.rpg_map_routes import register_rpg_map_routes
         from app.apps.rpg.edge.api.feature_routes.rpg_npc_spatial_routes import register_rpg_npc_spatial_routes
@@ -156,6 +157,7 @@ class Playthrough:
         include_router_registrar(app, register_rpg_tactical_spatial_routes)
         include_router_registrar(app, register_rpg_map_routes)
         include_router_registrar(app, register_rpg_npc_spatial_routes)
+        include_router_registrar(app, register_rpg_debug_routes)  # the operations view (RQ-8.4)
         self.session_id = session_id
         self.client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 

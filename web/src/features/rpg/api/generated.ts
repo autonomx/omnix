@@ -977,6 +977,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rpg Operations
+         * @description The workspace's turns by day (RQ-8.4): failure and degraded rates, latency per turn class, model calls.
+         */
+        get: operations["rpg_operations_api_rpg_operations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/player/codex": {
         parameters: {
             query?: never;
@@ -6703,6 +6723,50 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * RpgOperationsDay
+         * @description One day of the workspace's turns (RQ-8.4).
+         */
+        RpgOperationsDay: {
+            /** Classes */
+            classes: components["schemas"]["RpgOperationsTurnClass"][];
+            /** Day */
+            day: string;
+            /** Degraded */
+            degraded: number;
+            /** Degraded Rate */
+            degraded_rate: number;
+            /** Failed */
+            failed: number;
+            /** Failure Rate */
+            failure_rate: number;
+            /** Model Calls */
+            model_calls: number;
+            /** Model Calls Per Turn */
+            model_calls_per_turn: number;
+            /** Model Failures */
+            model_failures: number;
+            /** Turns */
+            turns: number;
+        };
+        /** RpgOperationsResponse */
+        RpgOperationsResponse: {
+            /** Days */
+            days: components["schemas"]["RpgOperationsDay"][];
+            /** Ok */
+            ok: boolean;
+        };
+        /** RpgOperationsTurnClass */
+        RpgOperationsTurnClass: {
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Turn Class */
+            turn_class: string;
+            /** Turns */
+            turns: number;
+        };
         /** RpgPersonWhereabouts */
         RpgPersonWhereabouts: {
             /** Activity */
@@ -11411,6 +11475,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_operations_api_rpg_operations_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgOperationsResponse"];
                 };
             };
             /** @description Validation Error */

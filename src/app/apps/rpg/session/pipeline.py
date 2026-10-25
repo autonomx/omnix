@@ -154,6 +154,8 @@ def run_turn_pipeline(
         )
         raise
 
+    if isinstance(ctx.result, dict) and ctx.degraded_stages:
+        ctx.result["degraded_stages"] = list(ctx.degraded_stages)  # the operations view counts them (RQ-8.4)
     summary = summarize_turn_result(ctx.result)
     turn_id = str(summary.get("turn_id") or "") or None
     ok = ctx.result.get("ok") is True if isinstance(ctx.result, dict) else False

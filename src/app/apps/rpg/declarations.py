@@ -147,8 +147,24 @@ def _count(table: str) -> Any:
     return count
 
 
+def _delete_turn_metrics(connection: Any, retention_days: int, batch_size: int) -> int:
+    """The operations view's turn rows (RQ-8.4, migration 0184) past their retention."""
+    return int(connection.execute(
+        """
+        DELETE FROM omnix_rpg_turn_metrics
+         WHERE (workspace_id, metric_id) IN (
+               SELECT workspace_id, metric_id FROM omnix_rpg_turn_metrics
+                WHERE recorded_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                ORDER BY recorded_at
+                LIMIT %s)
+        """,
+        (max(1, int(retention_days)), max(1, int(batch_size))),
+    ).rowcount or 0)
+
+
 RETENTION = (
     RetentionDeclaration("rpg_narration_events", delete=_delete_narration_events, capacity_cleanup=True),
+    RetentionDeclaration("rpg_turn_metrics", delete=_delete_turn_metrics),
     RetentionDeclaration("rpg_snapshots", delete=_delete_snapshots),
     RetentionDeclaration("rpg_archived_campaigns", delete=_delete_archived_campaigns),
     RetentionDeclaration("rpg_turn_compaction", delete=_compact_long_campaigns),

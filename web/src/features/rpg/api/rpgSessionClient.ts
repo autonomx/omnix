@@ -40,6 +40,9 @@ export type RpgLaunchResponse = components['schemas']['RpgLaunchResponse'] & { c
 
 export type RpgTurnResponse = components['schemas']['RpgTurnResponse'];
 
+/** The workspace's turns by day (RQ-8.4): failure and degraded rates, latency per turn class, model calls. */
+export type RpgOperationsResponse = components['schemas']['RpgOperationsResponse'];
+
 export type RpgSessionMutationResponse = components['schemas']['RpgSessionMutationResponse'];
 
 export type RpgLoadoutActionRequest = components['schemas']['RpgLoadoutActionRequest'];
@@ -128,6 +131,10 @@ export const rpgSessionClient = {
 
   async listRpgSessionSummaries(): Promise<RpgSessionListResponse> {
     return await unwrap(api.GET('/api/rpg/sessions')) as RpgSessionListResponse;
+  },
+
+  async getRpgOperations(days = 14): Promise<RpgOperationsResponse> {
+    return await unwrap(api.GET('/api/rpg/operations', { params: { query: { days } } })) as RpgOperationsResponse;
   },
 
   async getRpgSession(sessionId: string): Promise<RpgLaunchResponse> {

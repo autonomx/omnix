@@ -17,8 +17,7 @@ import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/Fe
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
-import { RpgHermesExecutionResult } from './RpgHermesExecutionResult';
-import { RpgHermesSequenceJobPanel } from './RpgHermesSequenceJobPanel';
+import { RpgDeveloperTools } from './RpgDeveloperTools';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
@@ -920,17 +919,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           </RpgStoryScene>
 
           {developerTools ? (
-            <section className="rpg-developer-tools" aria-label="Developer tools">
-              <RpgHermesExecutionResult result={latestHermesExecutionResult} />
-              <RpgHermesSequenceJobPanel
-                activeJob={activeHermesSequenceJob}
-                isPending={hermesSequenceJobMutation.isPending}
-                onCancel={() => hermesSequenceJobMutation.mutate('cancel')}
-                onPause={() => hermesSequenceJobMutation.mutate('pause')}
-                onResume={() => hermesSequenceJobMutation.mutate('resume')}
-                onStart={() => hermesSequenceJobMutation.mutate('start')}
-              />
-            </section>
+            <RpgDeveloperTools
+              activeJob={activeHermesSequenceJob}
+              executionResult={latestHermesExecutionResult}
+              isPending={hermesSequenceJobMutation.isPending}
+              onJobAction={(action) => hermesSequenceJobMutation.mutate(action)}
+            />
           ) : null}
 
           <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />

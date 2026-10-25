@@ -210,6 +210,50 @@ def run_rpg_turn(
     action: dict[str, Any] | None = None,
     narrate_after_commit: bool = False,
 ) -> dict[str, Any]:
+    """One player turn (``_run_rpg_turn``), recorded for the operations view (RQ-8.4): a turn the game refuses (a
+    4xx) is no failure; one that breaks is recorded as failed and raised."""
+    from app.apps.rpg.foundation.model_calls import current_model_failures
+    from app.apps.rpg.session.persistence.turn_metrics import record_turn_metric
+    from app.persistence.errors import RevisionConflict
+
+    kind = str((action or {}).get("turn_kind") or "player_text")
+    try:
+        payload = _run_rpg_turn(session_id=session_id, command=command, submission_id=submission_id,
+                                delivery_mode=delivery_mode, trace=trace, action=action,
+                                narrate_after_commit=narrate_after_commit)
+    except HTTPException as exc:
+        if exc.status_code >= 500:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=kind, ok=False,
+                               error=str(detail.get("error") or exc.status_code), complete_ms=trace.elapsed_ms,
+                               model_failures=current_model_failures())
+        raise
+    except RevisionConflict:
+        raise
+    except Exception as exc:
+        record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=kind, ok=False,
+                           error=type(exc).__name__, complete_ms=trace.elapsed_ms,
+                           model_failures=current_model_failures())
+        raise
+    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), Mapping) else {}
+    calls = outcome.get("model_calls") if isinstance(outcome.get("model_calls"), Mapping) else {}
+    record_turn_metric(campaign_id=session_id, submission_id=submission_id,
+                       turn_class=str(outcome.get("planned_action") or outcome.get("kind") or kind), ok=True,
+                       degraded_stages=int(payload.get("degraded_stage_count") or 0), complete_ms=trace.elapsed_ms,
+                       model_calls=int(calls.get("total") or 0), model_failures=current_model_failures())
+    return payload
+
+
+def _run_rpg_turn(
+    *,
+    session_id: str,
+    command: str,
+    submission_id: str,
+    delivery_mode: Any,
+    trace: Any,
+    action: dict[str, Any] | None = None,
+    narrate_after_commit: bool = False,
+) -> dict[str, Any]:
     """One player turn, from its gates to its response payload: what the turn route and Hermes both run (RQ-1.6).
 
     The caller holds the pipeline trace (``rpg_pipeline_trace``) and turns the payload into its own response; a
@@ -580,6 +624,7 @@ def _respond(result: dict[str, Any], *, session_id: str, command: str, submissio
         from app.apps.rpg.narration.narrative_delivery import deferred_public_turn_payload
 
         payload = deferred_public_turn_payload(payload)
+        payload["degraded_stage_count"] = len(result.get("degraded_stages") or ())
         from app.apps.rpg.foundation.model_calls import current_model_calls
         from app.apps.rpg.narration.presentation.turn_outcome import build_turn_outcome
         from app.apps.rpg.narration.presentation.turn_response import attach_turn_outcome
@@ -670,6 +715,10 @@ def _narrate_after_commit(result: dict[str, Any], *, session_id: str, command: s
                 "response_id": canonical.get("response_id") if isinstance(canonical, Mapping) else None})
         except Exception as exc:  # the turn has committed: its narration failing is told, not raised
             logger.warning("rpg_turn_narration_after_commit_failed session=%s", session_id, exc_info=True)
+            from app.apps.rpg.session.persistence.turn_metrics import record_turn_metric
+
+            record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class="narration",
+                               ok=False, error=type(exc).__name__)
             turn_stream.publish(stream, "error", {"stage": "narration", "error": type(exc).__name__,
                                                   "message": STORYTELLER_UNAVAILABLE})
 

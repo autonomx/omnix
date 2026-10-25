@@ -676,6 +676,33 @@ class RpgDebugLogStatusResponse(TypedDict):
     files: list[RpgDebugLogFile]
 
 
+class RpgOperationsTurnClass(TypedDict):
+    turn_class: str
+    turns: int
+    p50_ms: float | None
+    p95_ms: float | None
+
+
+class RpgOperationsDay(TypedDict):
+    """One day of the workspace's turns (RQ-8.4)."""
+
+    day: str
+    turns: int
+    failed: int
+    degraded: int
+    failure_rate: float
+    degraded_rate: float
+    model_calls: int
+    model_failures: int
+    model_calls_per_turn: float
+    classes: list[RpgOperationsTurnClass]
+
+
+class RpgOperationsResponse(TypedDict):
+    ok: bool
+    days: list[RpgOperationsDay]
+
+
 class RpgDebugClientEventResponse(TypedDict):
     ok: bool
     trace_id: str | None

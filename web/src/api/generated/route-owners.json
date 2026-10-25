@@ -360,6 +360,7 @@
     "POST /api/rpg/narrative-responses/{response_id}/cancel": "rpg",
     "GET /api/rpg/narrative-responses/{response_id}/delivery": "rpg",
     "POST /api/rpg/new-game": "rpg",
+    "GET /api/rpg/operations": "rpg",
     "POST /api/rpg/player/codex": "rpg",
     "POST /api/rpg/player/encounter": "rpg",
     "POST /api/rpg/player/journal": "rpg",

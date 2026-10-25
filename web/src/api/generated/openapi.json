@@ -49175,6 +49175,131 @@
         "title": "RpgObserverProjectionResponse",
         "type": "object"
       },
+      "RpgOperationsDay": {
+        "description": "One day of the workspace's turns (RQ-8.4).",
+        "properties": {
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/RpgOperationsTurnClass"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "integer"
+          },
+          "degraded_rate": {
+            "title": "Degraded Rate",
+            "type": "number"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "failure_rate": {
+            "title": "Failure Rate",
+            "type": "number"
+          },
+          "model_calls": {
+            "title": "Model Calls",
+            "type": "integer"
+          },
+          "model_calls_per_turn": {
+            "title": "Model Calls Per Turn",
+            "type": "number"
+          },
+          "model_failures": {
+            "title": "Model Failures",
+            "type": "integer"
+          },
+          "turns": {
+            "title": "Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "turns",
+          "failed",
+          "degraded",
+          "failure_rate",
+          "degraded_rate",
+          "model_calls",
+          "model_failures",
+          "model_calls_per_turn",
+          "classes"
+        ],
+        "title": "RpgOperationsDay",
+        "type": "object"
+      },
+      "RpgOperationsResponse": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/RpgOperationsDay"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "days"
+        ],
+        "title": "RpgOperationsResponse",
+        "type": "object"
+      },
+      "RpgOperationsTurnClass": {
+        "properties": {
+          "p50_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Ms"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "turn_class": {
+            "title": "Turn Class",
+            "type": "string"
+          },
+          "turns": {
+            "title": "Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_class",
+          "turns",
+          "p50_ms",
+          "p95_ms"
+        ],
+        "title": "RpgOperationsTurnClass",
+        "type": "object"
+      },
       "RpgPersonWhereabouts": {
         "properties": {
           "activity": {
@@ -88447,6 +88572,55 @@
         "summary": "Rpg New Game",
         "tags": [
           "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/operations": {
+      "get": {
+        "description": "The workspace's turns by day (RQ-8.4): failure and degraded rates, latency per turn class, model calls.",
+        "operationId": "rpg_operations_api_rpg_operations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 14,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgOperationsResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Operations Api Rpg Operations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Operations",
+        "tags": [
+          "rpg-debug"
         ]
       }
     },
