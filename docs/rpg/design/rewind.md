@@ -36,7 +36,8 @@ turn count, while the campaign's bookkeeping (revision, interactions, narrations
 records its kind (`turn_kind`, and `restored_revision` for a rewind). Every revision written outside a turn (the
 campaign's first, an edit) now keeps its document as a snapshot, so the history can rebuild every revision. Save
 points: `POST/GET /save-points`, `DELETE /save-points/{name}` (migration 0183 `save_point_name`; at most 20; none in
-hardcore). Not yet: the undone turns' narration marked superseded, the play screen's buttons (RQ-7).
+hardcore). The play screen (RQ-7.7): Undo beside Submit, and the Campaign Menu's save points (name this
+moment, return here, delete), each a turn in the story log. Not yet: the undone turns' narration marked superseded.
 
 ## Out of scope
 

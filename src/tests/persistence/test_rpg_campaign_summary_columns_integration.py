@@ -8,6 +8,7 @@ and the turn response's session summary.
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -76,13 +77,14 @@ def _listed(session_id: str) -> dict:
     return rows[0]
 
 
-def _expected(session_id: str, session: dict) -> dict:
+def _expected(session_id: str, session: dict, listed: dict) -> dict:
     summary = session_list_summary(_campaign_state_for_listing({"id": session_id, "state": session}))
     typed = _session_summary(session)
     summary["manifest"].update(
         turn_count=typed.get("turn_count"),
         player_level=typed.get("player_level"),
         location_name=typed.get("location"),
+        updated_at=listed["manifest"]["updated_at"],  # the row's time (checked on its own)
     )
     return summary
 
@@ -91,14 +93,18 @@ def test_list_rows_and_typed_columns_follow_every_state_write() -> None:
     session_id = f"session:summary-{uuid4().hex}"
     created = _session(session_id)
     save_session_to_postgres(created)
-    assert _listed(session_id) == _expected(session_id, created)
+    first = _listed(session_id)
+    assert first == _expected(session_id, created, first)
+    assert first["manifest"]["updated_at"] != created["manifest"]["created_at"]  # the row's, not the document's
 
     updated = _session(session_id, scene={"location": "The Old Mill"}, player={"level": 4})
     updated["manifest"]["turn_count"] = 7
     updated["runtime_state"]["state_revision"] = 2
     save_session_to_postgres(updated)
     listed = _listed(session_id)
-    assert listed == _expected(session_id, updated)
+    assert listed == _expected(session_id, updated, listed)
+    # A write moves when the campaign was last played, which the document itself never records.
+    assert datetime.fromisoformat(listed["manifest"]["updated_at"]) > datetime.fromisoformat(first["manifest"]["updated_at"])
     assert listed["manifest"]["turn_count"] == 7
     assert listed["manifest"]["player_level"] == 4
     assert listed["manifest"]["location_name"] == "The Old Mill"
@@ -112,6 +118,6 @@ def test_typed_columns_fall_back_like_the_turn_summary() -> None:
     session["turn_count"] = 12
     save_session_to_postgres(session)
     listed = _listed(session_id)
-    assert listed == _expected(session_id, session)
+    assert listed == _expected(session_id, session, listed)
     assert (listed["manifest"]["turn_count"], listed["manifest"]["player_level"]) == (12, 9)
     assert listed["manifest"]["location_name"] == "Crossroads"

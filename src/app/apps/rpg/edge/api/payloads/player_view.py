@@ -34,12 +34,29 @@ def player_session_view(session: Any) -> Any:
     view = {key: value for key, value in session.items() if key not in _PRIVATE_TOP}
     if isinstance(view.get("state"), Mapping):
         view["state"] = {key: value for key, value in view["state"].items() if key not in _PRIVATE_STATE}
+        view["state"] = _with_pack_actions(view["state"], simulation)
     view["simulation_state"] = {key: value for key, value in simulation.items() if key in SIMULATION_VIEW}
     player = view["simulation_state"].get("player_state")
     if isinstance(player, Mapping):
         view["simulation_state"]["player_state"] = {k: v for k, v in player.items() if k not in _PLAYER_PRIVATE}
     view["runtime_state"] = {key: value for key, value in runtime.items() if key in RUNTIME_VIEW}
     return view
+
+
+def _with_pack_actions(state: Mapping[str, Any], simulation: Mapping[str, Any]) -> dict[str, Any]:
+    """The sheet, each carried thing with what the item rules let the hero do with it and whether it is worn: the
+    play screen offers those actions and no others."""
+    from app.apps.rpg.rules.interactions.items import is_worn, pack_actions
+
+    player = state.get("player")
+    if not isinstance(player, Mapping) or not isinstance(player.get("inventory"), list):
+        return dict(state)
+    inventory = [
+        {**item, "actions": list(pack_actions(simulation, item)), "worn": is_worn(simulation, item)}
+        if isinstance(item, Mapping) else item
+        for item in player["inventory"]
+    ]
+    return {**state, "player": {**player, "inventory": inventory}}
 
 
 def with_player_session_view(payload: dict[str, Any]) -> dict[str, Any]:

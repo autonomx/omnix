@@ -144,7 +144,10 @@ _SLOT_WORDS = (
 
 
 def _slot(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
-    words = set(re.findall(r"[a-z]+", f"{_kind(simulation, item)} {_s(item.get('name'))}".casefold()))
+    kind = _kind(simulation, item)
+    if kind == "potion" or kind in RELIEF:  # eaten or drunk, never worn (Lantern Bread is no lantern)
+        return ""
+    words = set(re.findall(r"[a-z]+", f"{kind} {_s(item.get('name'))}".casefold()))
     return next((slot for slot, names in _SLOT_WORDS if words & set(names)), "")
 
 
@@ -178,4 +181,17 @@ def unequip_item(simulation: Mapping[str, Any], item_id: str, text: str) -> Item
     return ItemOutcome([ItemUnequipped(slot=slot)], [f"You put away the {_s(wanted.get('name')) or _id(wanted)}."])
 
 
-__all__ = ["ItemOutcome", "drop_item", "equip_item", "pick_up", "unequip_item", "use_item"]
+def is_worn(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
+    return _id(item) in _worn(simulation).values()
+
+
+def pack_actions(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> tuple[str, ...]:
+    """What these rules let the hero do with a carried thing: use it (a potion, food or drink), put it on or away (it
+    has a place), drop it, or offer it for sale (the trade rule finds the buyer, or says there is none)."""
+    kind, slot = _kind(simulation, item), _slot(simulation, item)
+    usable = ("use",) if kind == "potion" or kind in RELIEF else ()
+    wearable = (("unequip",) if is_worn(simulation, item) else ("equip",)) if slot else ()
+    return (*usable, *wearable, "drop", "sell")
+
+
+__all__ = ["ItemOutcome", "drop_item", "equip_item", "is_worn", "pack_actions", "pick_up", "unequip_item", "use_item"]

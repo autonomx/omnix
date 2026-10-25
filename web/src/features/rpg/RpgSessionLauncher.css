@@ -122,9 +122,7 @@
     font-size: 1rem;
   }
 
-  .rpg-launcher-card span,
-  .rpg-settings-note,
-  .rpg-launcher-build-note {
+  .rpg-launcher-card span {
     color: var(--omnix-muted, var(--fg-slate-730));
     font-size: 0.86rem;
     line-height: 1.45;
@@ -147,20 +145,29 @@
     gap: 1rem;
   }
 
-  .rpg-launcher-form-grid {
+  /* Naming a save point: the name, then the button. */
+  .rpg-save-point-form {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.65rem;
   }
 
-  .rpg-launcher-form-grid > label,
-  .rpg-launcher-choice-panel,
-  .rpg-launcher-toggle-grid label {
+  .rpg-save-point-form label {
     display: grid;
     gap: 0.35rem;
     color: color-mix(in srgb, var(--fg-slate-940) 92%, transparent);
     font-size: 0.82rem;
     font-weight: 700;
+  }
+
+  .rpg-save-point-form input {
+    width: 100%;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-indigo-210) 88%, transparent);
+    color: var(--fg-neutral-1000);
+    padding: 0.65rem 0.75rem;
   }
 
   .rpg-unified-header .rpg-session-launcher {
@@ -177,60 +184,6 @@
 
   .rpg-launcher-dialog-wide {
     width: min(1600px, 100%);
-  }
-
-  .rpg-launcher-form-grid > label input,
-  .rpg-launcher-form-grid > label select {
-    width: 100%;
-    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-indigo-210) 88%, transparent);
-    color: var(--fg-neutral-1000);
-    padding: 0.65rem 0.75rem;
-  }
-
-  .rpg-launcher-choice-panel {
-    grid-column: span 2;
-    padding: 0.7rem 0.8rem;
-    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 18%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-blue-280-2) 36%, transparent);
-  }
-
-  .rpg-launcher-choice-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.4rem 0.65rem;
-  }
-
-  .rpg-launcher-choice-grid label {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 0.45rem;
-    min-height: 28px;
-    color: color-mix(in srgb, var(--fg-slate-940) 86%, transparent);
-    font-weight: 600;
-  }
-
-  .rpg-launcher-toggle-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.65rem;
-  }
-
-  .rpg-launcher-toggle-grid label {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    padding: 0.65rem 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 18%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-blue-280-2) 44%, transparent);
-  }
-
-  .rpg-launcher-panel-actions {
-    display: flex;
-    justify-content: flex-end;
   }
 
   .rpg-load-game-list {
@@ -286,9 +239,7 @@
   }
 
   @media (max-width: 1100px) {
-    .rpg-launcher-home-grid,
-    .rpg-launcher-form-grid,
-    .rpg-launcher-toggle-grid {
+    .rpg-launcher-home-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -298,7 +249,6 @@
       grid-template-columns: 1fr;
     }
 
-    .rpg-launcher-panel-actions,
     .rpg-load-game-actions {
       justify-content: flex-start;
     }
@@ -306,15 +256,9 @@
 
   @media (max-width: 640px) {
     .rpg-session-launcher,
-    .rpg-launcher-form-grid,
     .rpg-launcher-home-grid,
-    .rpg-launcher-toggle-grid,
-    .rpg-launcher-choice-grid {
+    .rpg-save-point-form {
       grid-template-columns: 1fr;
-    }
-
-    .rpg-launcher-choice-panel {
-      grid-column: span 1;
     }
 
     .rpg-launcher-panel-heading,

@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { rpgSessionClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } from './api/rpgSessionClient';
-import { applyRpgItemCommand, applyRpgItemResolve, fetchRpgAbilityDetails, fetchRpgItemDiagnostics } from './rpgItemApi';
+import { fetchRpgAbilityDetails } from './rpgItemApi';
 import { RpgItemPanel } from './RpgItemPanel';
-import {
-  buildMerchantEntryPreviews,
-  buildSelectedItemActions,
-  type RpgItemUiAction,
-  type RpgMerchantEntryPreview,
-} from './rpgItemUiState';
+import { buildSelectedItemActions, type RpgItemUiAction } from './rpgItemUiState';
 import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiState';
 import './RpgLoadoutTabs.css';
 
@@ -25,6 +20,8 @@ interface RpgLoadoutTabsProps {
   isApplyingLoadoutAction?: boolean;
   onApplyLoadoutAction?: (request: RpgLoadoutActionRequest) => void;
   onSelectCommand: (command: string) => void;
+  /** Sends a typed turn, as the composer would (selling from the pack). */
+  onSubmitCommand?: (command: string) => void;
   selectedSessionId?: string | null;
 }
 
@@ -129,10 +126,8 @@ const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
 ];
 
 const REQUIRED_DIMENSIONS = ['resources', 'information', 'relationships', 'access', 'environment', 'position', 'narrative', 'economy', 'world'];
-const LOADOUT_ITEM_ACTIONS = new Set(['inspect', 'use', 'equip', 'drop', 'salvage', 'craft', 'modify']);
 
-export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: RpgLoadoutTabsProps) {
-  const queryClient = useQueryClient();
+export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, onSubmitCommand, selectedSessionId }: RpgLoadoutTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgLoadoutTab>('inventory');
   const [activeInventoryIndex, setActiveInventoryIndex] = useState(0);
   const [activeAbilityIndex, setActiveAbilityIndex] = useState(0);
@@ -145,12 +140,6 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     queryFn: () => rpgSessionClient.getRpgSession(selectedSessionId ?? ''),
     staleTime: 0,
   });
-  const itemDiagnosticsQuery = useQuery({
-    enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
-    queryKey: ['feature', 'rpg', 'item-diagnostics', selectedSessionId],
-    queryFn: () => fetchRpgItemDiagnostics(selectedSessionId ?? '', { objectiveLimit: 4, scenarioLimit: 4 }),
-    staleTime: 0,
-  });
   const abilityOverview = useMemo(
     () => buildAbilityOverview(sessionQuery.data, hotbarAbilities, Boolean(selectedSessionId)),
     [hotbarAbilities, selectedSessionId, sessionQuery.data],
@@ -160,37 +149,16 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
   const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
   const coveragePercent = Math.round(abilityOverview.coverage.score * 100);
 
-  const merchantEntries = useMemo(
-    () =>
-      buildMerchantEntryPreviews(
-        firstRecord(
-          itemDiagnosticsQuery.data?.merchant,
-          itemDiagnosticsQuery.data?.merchant_menu,
-          recordValue(itemDiagnosticsQuery.data?.diagnostics)?.merchant,
-          recordValue(itemDiagnosticsQuery.data?.diagnostics)?.merchant_menu,
-        ),
-      ),
-    [itemDiagnosticsQuery.data],
-  );
-
-  const refreshItemPanelQueries = async () => {
-    await Promise.all([
-      sessionQuery.refetch(),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-diagnostics', selectedSessionId] }),
-    ]);
-  };
-  const itemPanelMutation = useMutation({
-    mutationFn: (request: RpgItemPanelRequest) => {
-      if (!selectedSessionId) {
-        throw new Error('Select a live RPG session before applying item actions.');
-      }
-      return applyRpgItemPanelRequest(selectedSessionId, request);
-    },
-    onSuccess: refreshItemPanelQueries,
-  });
-  const itemPanelPending = isApplyingLoadoutAction || itemPanelMutation.isPending || itemDiagnosticsQuery.isFetching;
   const panelDisabled = isApplyingLoadoutAction || sessionQuery.isFetching;
+  // Each pack action is a turn: the loadout's (use, equip, take off, drop), or a typed one (sell).
+  const applyItemAction = (action: RpgItemUiAction) => {
+    if (!selectedSessionId) return;
+    if (action.mode === 'turn') {
+      onSubmitCommand?.(action.command);
+      return;
+    }
+    onApplyLoadoutAction?.(action.payload as unknown as RpgLoadoutActionRequest);
+  };
 
   useEffect(() => {
     if (wasApplyingAction.current && !isApplyingLoadoutAction && selectedSessionId) {
@@ -234,11 +202,9 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           activeItemIndex={activeInventoryIndex}
           hotbarAbilities={displayedHotbarAbilities}
           inventoryItems={inventoryItems}
-          isApplyingLoadoutAction={itemPanelPending}
+          isApplyingLoadoutAction={isApplyingLoadoutAction}
           itemActions={buildSelectedItemActions({ item: activeItem, selectedSessionId })}
-          itemMerchantEntries={merchantEntries}
-          onApplyItemAction={(action) => itemPanelMutation.mutate({ kind: 'action', action })}
-          onApplyItemMerchantEntry={(entry) => itemPanelMutation.mutate({ kind: 'merchant', entry })}
+          onApplyItemAction={applyItemAction}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectCommand={onSelectCommand}
           onSelectItem={setActiveInventoryIndex}
@@ -280,9 +246,7 @@ interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems'
   activeItemIndex: number;
   hotbarAbilities: RpgHotbarAbilityPreview[];
   itemActions: RpgItemUiAction[];
-  itemMerchantEntries: RpgMerchantEntryPreview[];
   onApplyItemAction: (action: RpgItemUiAction) => void;
-  onApplyItemMerchantEntry: (entry: RpgMerchantEntryPreview) => void;
   onSelectItem: (index: number) => void;
 }
 
@@ -292,9 +256,7 @@ function InventoryPanel({
   hotbarAbilities,
   isApplyingLoadoutAction,
   itemActions,
-  itemMerchantEntries,
   onApplyItemAction,
-  onApplyItemMerchantEntry,
   onApplyLoadoutAction,
   onSelectCommand,
   onSelectItem,
@@ -352,33 +314,11 @@ function InventoryPanel({
       <RpgItemPanel
         actions={itemActions}
         isPending={isApplyingLoadoutAction}
-        merchantEntries={itemMerchantEntries}
+        item={inventoryItems[Math.min(activeItemIndex, Math.max(inventoryItems.length - 1, 0))]}
         onApplyAction={onApplyItemAction}
-        onApplyMerchantEntry={onApplyItemMerchantEntry}
-        onSelectCommand={onSelectCommand}
       />
     </div>
   );
-}
-
-type RpgItemPanelRequest =
-  | { kind: 'action'; action: RpgItemUiAction }
-  | { kind: 'merchant'; entry: RpgMerchantEntryPreview };
-
-function applyRpgItemPanelRequest(sessionId: string, request: RpgItemPanelRequest): Promise<unknown> {
-  if (request.kind === 'action') {
-    const loadoutRequest = loadoutRequestFromPayload(request.action.payload);
-    if (loadoutRequest) {
-      return rpgSessionClient.applyRpgLoadoutAction(sessionId, loadoutRequest);
-    }
-    if (request.action.mode === 'merchant') {
-      return applyRpgItemCommand(sessionId, request.action.command);
-    }
-    return applyRpgItemResolve(sessionId, { command: request.action.command, input: request.action.payload });
-  }
-
-  const itemName = firstString(request.entry.payload.item_name, request.entry.payload.item_id, request.entry.label) ?? request.entry.label;
-  return applyRpgItemCommand(sessionId, `${request.entry.action} ${itemName}`);
 }
 
 function InventoryHotbarAbilityButton({
@@ -443,14 +383,6 @@ function formatAbilityCost(cost: Record<string, unknown> | undefined): string {
     .filter(([, value]) => typeof value === 'number')
     .map(([resource, value]) => `${value} ${titleCase(resource)}`)
     .join(' • ');
-}
-
-function loadoutRequestFromPayload(payload: Record<string, unknown>): RpgLoadoutActionRequest | null {
-  const action = firstString(payload.action);
-  if (!action || !LOADOUT_ITEM_ACTIONS.has(action)) {
-    return null;
-  }
-  return payload as unknown as RpgLoadoutActionRequest;
 }
 
 interface AbilitiesPanelProps extends Pick<RpgLoadoutTabsProps, 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
@@ -1124,16 +1056,6 @@ function numericRecord(value: unknown): Record<string, number> {
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
-  }
-  return undefined;
-}
-
-function firstRecord(...values: unknown[]): Record<string, unknown> | undefined {
-  for (const value of values) {
-    const record = recordValue(value);
-    if (record) {
-      return record;
-    }
   }
   return undefined;
 }

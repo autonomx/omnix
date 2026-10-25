@@ -15,6 +15,8 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
+import { RpgCampaignMenu } from './RpgCampaignMenu';
+import { useRpgResumeAfterAway } from './useRpgResumeAfterAway';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 import { RpgDeveloperTools } from './RpgDeveloperTools';
@@ -572,6 +574,16 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
     ]);
   };
+  // After a turn run outside the composer's job (an undo, a return to a save point, coming back after time away).
+  const refreshAfterTurn = () => {
+    void queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'session', selectedLiveSessionId] });
+    void invalidateRpgWorkspaceQueries();
+  };
+  useRpgResumeAfterAway(
+    selectedLiveSessionId ?? '',
+    sessionSummaries.find((session) => session.id === selectedLiveSessionId)?.lastPlayedMs,
+    refreshAfterTurn,
+  );
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) => {
       const sessionId = values.sessionId || selectedLiveSessionId;
@@ -642,34 +654,9 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout', selectedLiveSessionId] }),
     ]);
   }, [jobsQuery, queryClient, refetchInventory, refetchSelectedSession, selectedLiveSessionId, submittedTurnJobFromQuery]);
-  const createCheckpointMutation = useMutation({
-    mutationFn: () =>
-      omnixApiClient.createReplayCheckpoint({
-        source: 'rpg-workspace',
-        version: 'rpg-ui-control-v1',
-        metadata: {
-          module: 'rpg',
-          session_id: selectedLiveSessionId,
-          session_title: selectedSessionSummary.title,
-          reason: 'manual-ui-checkpoint',
-        },
-        payload: {
-          selected_session_id: selectedLiveSessionId,
-          title: selectedSessionSummary.title,
-          location: selectedSessionSummary.location,
-          turn_label: selectedSessionSummary.turnLabel,
-          checkpoint_label: selectedSessionSummary.checkpointLabel,
-        },
-      }),
-    onSuccess: () => {
-      void invalidateRpgWorkspaceQueries();
-    },
-  });
   const loadoutActionMutation = useMutation({
     mutationFn: ({ sessionId, request }: { sessionId: string; request: RpgLoadoutActionRequest }) => rpgSessionClient.applyRpgLoadoutAction(sessionId, request),
-    onSuccess: async () => {
-      await invalidateRpgWorkspaceQueries();
-    },
+    onSuccess: refreshAfterTurn, // a pack action is a turn
   });
   const createCampaignMutation = useMutation({
     mutationFn: (request: RpgNewGameRequest) => rpgSessionClient.createRpgNewGame(request),
@@ -786,13 +773,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         : createJobMutation.isError
           ? 'error'
           : createJobMutation.data?.status ?? 'ready';
-  const checkpointControlStatus = createCheckpointMutation.isPending
-    ? 'Creating checkpoint…'
-    : createCheckpointMutation.isError
-      ? 'Checkpoint request failed.'
-      : createCheckpointMutation.data?.checkpoint_id
-        ? `Checkpoint created: ${createCheckpointMutation.data.checkpoint_id}`
-        : undefined;
   const autoplayStatusLabel = autoplayMutation.isPending
     ? 'Updating autoplay…'
     : autoplayMutation.isError
@@ -883,25 +863,30 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             selectedSessionSummary={selectedSessionSummary}
             storyMessages={visibleStoryMessages}
           >
-            <RpgActionComposer
+            <RpgCampaignMenu
               campaignMenuHost={campaignMenuHost}
-              canSaveGame={Boolean(selectedLiveSessionId)}
-              commandRegistration={register('command', { required: true })}
-              hasCommandError={Boolean(errors.command)}
               isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
-              onQuickAction={selectCommand}
-              onSaveGame={async () => {
-                const checkpoint = await createCheckpointMutation.mutateAsync();
-                return checkpoint.checkpoint_id;
-              }}
-              onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
-              quickActions={responseOptions}
+              liveSessionId={selectedLiveSessionId ?? ''}
+              onTurnApplied={refreshAfterTurn}
               renderNewCampaign={(closeLauncher) => (
                 <RpgCreateCampaignWizard
                   onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}
                   onEnterWorld={closeLauncher}
                 />
               )}
+              selectedSessionId={selectedSessionId}
+              sessionRegistration={register('sessionId')}
+              sessionSummaries={sessionSummaries}
+            />
+            <RpgActionComposer
+              commandRegistration={register('command', { required: true })}
+              hasCommandError={Boolean(errors.command)}
+              isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
+              liveSessionId={selectedLiveSessionId ?? ''}
+              onQuickAction={selectCommand}
+              onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
+              onTurnApplied={refreshAfterTurn}
+              quickActions={responseOptions}
               selectedSessionId={selectedSessionId}
               sessionRegistration={register('sessionId')}
               sessionSummaries={sessionSummaries}
@@ -938,6 +923,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             isApplyingLoadoutAction={loadoutActionMutation.isPending}
             onApplyLoadoutAction={applyLoadoutAction}
             onSelectCommand={selectCommand}
+            onSubmitCommand={(command) => createJobMutation.mutate({ sessionId: selectedSessionId, command })}
             selectedSessionId={selectedLiveSessionId}
           />
           <FeatureSubmitFeedback
@@ -955,15 +941,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             autoplayRunning={Boolean(activeAutoplayJob)}
             autoplayStatusLabel={autoplayStatusLabel}
             className="rpg-rail-expanded"
-            checkpointControlStatus={checkpointControlStatus}
             checkpointSummary={checkpointSummary}
             encounter={encounter}
             isAutoplayPending={autoplayMutation.isPending}
-            isCreatingCheckpoint={createCheckpointMutation.isPending}
             isRefreshingJobs={isRefreshingRpgQueries}
             jobCards={jobCards}
             npcRelationships={npcRelationships}
-            onCreateCheckpoint={() => createCheckpointMutation.mutate()}
             onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
             onToggleAutoplay={() => autoplayMutation.mutate()}
             reportsHref="/api/reports"

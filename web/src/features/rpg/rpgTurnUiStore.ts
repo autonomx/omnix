@@ -83,7 +83,7 @@ export function beginRpgTurnUiSubmission(input: BeginSubmissionInput): void {
     messageKind: 'pending',
     messageIndex: 0,
   };
-  setSessionEntries(input.sessionId, [...current, playerEntry, pendingEntry]);
+  setSessionEntries(input.sessionId, input.command ? [...current, playerEntry, pendingEntry] : [...current, pendingEntry]);
 }
 
 export function completeRpgTurnUiSubmission(input: CompleteSubmissionInput): string[] {
@@ -272,7 +272,8 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
   const remove = registerFetchMiddleware('rpg-turn-ui', async (input, init, next) => {
     const originalFetch = fetchImpl ?? next;
     const requestUrl = new URL(requestUrlString(input), globalThis.location?.origin || 'http://localhost');
-    const turnMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)\/turn$/);
+    // A command, an undo or a return to a save point, and coming back after time away are all turns (rewind.md).
+    const turnMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)\/(turn|rewind|resume)$/);
     const sessionMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)$/);
     const method = String(init?.method || (isRequest(input) ? input.method : 'GET')).toUpperCase();
 
@@ -280,7 +281,7 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
       const sessionId = decodeURIComponent(turnMatch[1]);
       const submissionId = createRpgSubmissionId();
       const requestStartedMs = nowRpgClientMs();
-      const command = commandFromBody(init?.body);
+      const command = turnKindCommand(turnMatch[2], init?.body);
       const headers = new Headers(isRequest(input) ? input.headers : undefined);
       new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
       headers.set('X-Omnix-Rpg-Submission-Id', submissionId);
@@ -346,6 +347,19 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
       return response;
     }
 
+    // Any other change to a campaign (a pack action, a grid move, a save point) leaves its cached read behind.
+    const changedSession = method !== 'GET' ? requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)\//) : null;
+    if (changedSession) {
+      const response = await originalFetch(input, init);
+      sessionResponseCache.delete(`/api/rpg/sessions/${changedSession[1]}`);
+      return response;
+    }
+    if (method !== 'GET' && /^\/api\/rpg\/map-instances\/[^/]+\/tactical\//.test(requestUrl.pathname)) {
+      const response = await originalFetch(input, init);
+      sessionResponseCache.clear(); // a grid turn names its map, not its campaign
+      return response;
+    }
+
     return originalFetch(input, init);
   });
   removeTurnMiddleware = remove;
@@ -380,6 +394,25 @@ function removeLatestBaseTurns(
     else groups[groups.length - 1].push(message);
   }
   return groups.slice(0, Math.max(0, groups.length - completedTurnCount)).flat();
+}
+
+/** The player's line for a turn: what they typed, what they asked to undo, or none when they come back. */
+function turnKindCommand(kind: string, body: BodyInit | null | undefined): string {
+  if (kind === 'resume') return '';
+  if (kind === 'rewind') {
+    const savePoint = typeof body === 'string' ? bodyRecord(body).save_point : undefined;
+    return typeof savePoint === 'string' && savePoint.trim() ? `Return to “${savePoint.trim()}”` : 'Undo my last turn';
+  }
+  return commandFromBody(body);
+}
+
+function bodyRecord(body: string): Record<string, unknown> {
+  try {
+    const payload = JSON.parse(body) as unknown;
+    return payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
 }
 
 function commandFromBody(body: BodyInit | null | undefined): string {

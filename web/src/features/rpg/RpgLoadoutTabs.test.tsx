@@ -9,10 +9,6 @@ import { createTestQueryClient } from '../../test/renderWithProviders';
 
 type LoadoutTabsProps = Parameters<typeof RpgLoadoutTabs>[0];
 
-interface MockLiveItemApiOptions {
-  merchantEntries?: boolean;
-}
-
 function renderLoadoutTabs(props: LoadoutTabsProps) {
   const queryClient = createTestQueryClient();
 
@@ -23,25 +19,10 @@ function renderLoadoutTabs(props: LoadoutTabsProps) {
   );
 }
 
-function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }, options: MockLiveItemApiOptions = {}) {
+function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }) {
   const getRpgSession = vi.spyOn(rpgSessionClient, 'getRpgSession').mockResolvedValue(sessionPayload as never);
-  const applyRpgLoadoutAction = vi.spyOn(rpgSessionClient, 'applyRpgLoadoutAction').mockResolvedValue({ ok: true } as never);
-  const includeMerchantEntries = options.merchantEntries ?? true;
   const post = vi.spyOn(rpgItemGatewayClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
     const payload = body as Record<string, unknown>;
-    if (payload.action === 'item_detail') {
-      return {
-        ok: true,
-        item_detail: {
-          item_name: payload.item_name,
-          summary: `LLM detail: ${payload.item_name} restores stamina without advancing the turn.`,
-          status: 'Carried',
-          condition: 'Good',
-          source: 'llm',
-          tags: ['consumable', 'recovery'],
-        },
-      } as never;
-    }
     if (payload.action === 'ability_detail') {
       return {
         ok: true,
@@ -55,43 +36,9 @@ function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }
         },
       } as never;
     }
-    if (payload.action === 'item_objectives') {
-      return {
-        ok: true,
-        objectives: {
-          objectives: [
-            {
-              objective_id: 'craft:torch',
-              label: 'Craft torch',
-              reason: 'Enough materials are available.',
-              action: { action: 'craft', recipe_id: 'torch', station: 'campfire' },
-            },
-          ],
-        },
-      } as never;
-    }
-    if (payload.action === 'item_diagnostics') {
-      return {
-        ok: true,
-        diagnostics: {
-          summary: { issue_count: 0, warning_count: 1 },
-          report: { summary: { coverage_score: 0.5, detail: '2 of 4 item pillars covered.' } },
-          ...(includeMerchantEntries
-            ? {
-                merchant_menu: {
-                  menu: [{ id: 'buy:torch', action: 'buy', item_name: 'Torch', description: 'A useful light source.', price: { copper: 4 } }],
-                },
-              }
-            : {}),
-        },
-      } as never;
-    }
-    if (payload.action === 'item_maintenance') {
-      return { ok: true, maintenance: { summary: { dropped_count: 0 } } } as never;
-    }
     return { ok: true } as never;
   });
-  return { applyRpgLoadoutAction, getRpgSession, post };
+  return { getRpgSession, post };
 }
 
 function liveAbilitySession() {
@@ -155,8 +102,8 @@ describe('RpgLoadoutTabs', () => {
     expect(screen.getByRole('tab', { name: 'Inventory' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Inventory' })).toHaveTextContent('12');
     expect(screen.getByRole('button', { name: 'Healing potion' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Selected item details: Healing potion')).toHaveTextContent('Preview item details');
-    expect(screen.getByRole('region', { name: 'Item actions and coverage' })).toHaveTextContent('Item details and actions');
+    expect(screen.getByLabelText('Selected item details: Healing potion')).toHaveTextContent('Nothing more is known of it.');
+    expect(screen.getByRole('region', { name: 'Selected item' })).toHaveTextContent('Item details and actions');
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }));
@@ -197,68 +144,38 @@ describe('RpgLoadoutTabs', () => {
     expect(onSelectCommand).toHaveBeenLastCalledWith('Search the area for useful supplies I can pick up and add to my inventory.');
   });
 
-  it('shows item details and merchant entries without diagnostics or item objectives', async () => {
-    const { post } = mockLiveItemApis();
+  it('shows the item as the world describes it, with only the actions the game offers', () => {
+    const cloak = { icon: '◇', count: '1', label: 'Travel Cloak', actions: ['unequip', 'drop', 'sell'], category: 'clothing', description: 'keeps the rain off', worn: true };
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems: [cloak], onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
 
+    const details = screen.getByLabelText('Selected item details: Travel Cloak');
+    expect(details).toHaveTextContent('Keeps the rain off.');
+    expect(details).toHaveTextContent('StatusWorn');
+    const toolbar = screen.getByRole('toolbar', { name: 'Selected item contextual actions' });
+    expect(within(toolbar).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Unequip', 'Drop', 'Sell']);
+  });
+
+  it('takes each pack action as a turn: the loadout one, or a typed sale', () => {
+    const onApplyLoadoutAction = vi.fn();
+    const onSubmitCommand = vi.fn();
+    const potion = { icon: '◇', count: '2', label: 'Healing Potion', actions: ['use', 'drop', 'sell'] };
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems: [potion], onApplyLoadoutAction, onSelectCommand: vi.fn(), onSubmitCommand, selectedSessionId: 'session-live' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
+    expect(onApplyLoadoutAction).toHaveBeenCalledWith({ action: 'use', item_name: 'Healing Potion' });
+    fireEvent.click(screen.getByRole('button', { name: 'Sell' }));
+    expect(onSubmitCommand).toHaveBeenCalledWith('I sell the Healing Potion.');
+  });
+
+  it('describes an ability on hover from its own detail', async () => {
+    mockLiveItemApis();
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
-
-    await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
-    const itemDetails = screen.getByLabelText('Selected item details: Healing potion');
-    expect(itemDetails).toHaveTextContent('LLM item details');
-    expect(itemDetails).toHaveTextContent('StatusCarried');
-    expect(itemDetails).toHaveTextContent('ConditionGood');
-    expect(itemDetails).not.toHaveTextContent('Trade value depends');
-    expect(screen.getByRole('button', { name: 'Use' })).toHaveAttribute('title', expect.stringContaining('Apply item effects'));
-    expect(screen.queryByText('Suggested next item steps')).not.toBeInTheDocument();
-    expect(screen.queryByText('Item diagnostics')).not.toBeInTheDocument();
-    expect(screen.queryByText('Item maintenance')).not.toBeInTheDocument();
-    expect(screen.queryByText('Item coverage')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'buy Torch' })).toBeInTheDocument();
-    expect(post.mock.calls.some(([, body]) => (body as Record<string, unknown>).action === 'item_objectives')).toBe(false);
 
     fireEvent.mouseEnter(screen.getByRole('button', { name: 'Aimed Shot' }));
     const abilityDescription = await screen.findByText('LLM ability detail: Aimed Shot is grounded in the current campaign.');
     const abilityTooltip = abilityDescription.closest('[role="tooltip"]');
     expect(abilityTooltip).toHaveTextContent('10 Stamina');
     expect(abilityTooltip).toHaveTextContent('1-turn cooldown');
-  });
-
-  it('routes panel item actions through loadout and item command APIs', async () => {
-    const { applyRpgLoadoutAction, post } = mockLiveItemApis();
-
-    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
-    await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
-    await waitFor(() => {
-      expect(applyRpgLoadoutAction).toHaveBeenCalledWith('session-live', { action: 'use', item_name: 'Healing potion' });
-    });
-
-    post.mockClear();
-    fireEvent.click(screen.getByRole('button', { name: 'Sell' }));
-    await waitFor(() => {
-      expect(post).toHaveBeenCalledWith('/api/rpg/session/get', {
-        action: 'item_command',
-        session_id: 'session-live',
-        command: 'sell Healing potion',
-      });
-    });
-  });
-
-  it('disables merchant-only item actions until merchant context exists', async () => {
-    mockLiveItemApis({ ok: true }, { merchantEntries: false });
-
-    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
-    await screen.findByText('LLM detail: Healing potion restores stamina without advancing the turn.');
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Use' })).not.toBeDisabled();
-    });
-    expect(screen.getByRole('button', { name: 'Sell' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Sell' })).toHaveAttribute(
-      'title',
-      'Sell: Start a merchant conversation or open a merchant service before selling.',
-    );
   });
 
   it('wires skills, traits, effects, and coverage panels to commands or live refresh', async () => {

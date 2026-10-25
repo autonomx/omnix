@@ -28,7 +28,3 @@ DROP POLICY IF EXISTS tenant_isolation ON omnix_rpg_turn_metrics;
 CREATE POLICY tenant_isolation ON omnix_rpg_turn_metrics
     USING (workspace_id = current_setting('omnix.workspace_id', true) OR current_setting('omnix.system', true) = 'on')
     WITH CHECK (workspace_id = current_setting('omnix.workspace_id', true) OR current_setting('omnix.system', true) = 'on');
-
-INSERT INTO omnix_retention_policies (record_type, retention_days, terminal_only)
-VALUES ('rpg_turn_metrics', 90, FALSE)
-ON CONFLICT (record_type) DO NOTHING;

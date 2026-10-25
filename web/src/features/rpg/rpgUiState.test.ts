@@ -367,7 +367,7 @@ describe('rpg UI state', () => {
     expect(state.jobCards).toEqual([]);
   });
 
-  it('prefers canonical purchased inventory and currency over stale legacy player fields', () => {
+  it('lists the sheet pack, each thing with what the game offers for it', () => {
     const state = createRpgWorkspaceState({
       inventory: {
         sessions: [{ manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' } }],
@@ -379,31 +379,30 @@ describe('rpg UI state', () => {
         state: {
           player: {
             name: 'Elara',
-            currency: { gold: 0, silver: 10, copper: 0 },
-            inventory: [{ id: 'ration', name: 'Trail rations', quantity: 3 }],
+            currency: { gold: 0, silver: 5, copper: 0 },
+            inventory: [
+              { id: 'ration', name: 'Trail rations', quantity: 3, category: 'food', actions: ['use', 'drop', 'sell'], worn: false },
+              { id: 'cloak', name: 'Travel Cloak', quantity: 1, category: 'clothing', description: 'keeps the rain off',
+                actions: ['unequip', 'drop', 'sell'], worn: true },
+            ],
           },
         },
         simulation_state: {
           player_state: {
             name: 'Elara',
             currency: { gold: 0, silver: 5, copper: 0 },
-            inventory_state: {
-              currency: { gold: 0, silver: 5, copper: 0 },
-              items: [
-                { item_id: 'ration', name: 'Trail rations', qty: 3 },
-                { item_id: 'dried_rations', name: 'Dried rations', qty: 1 },
-              ],
-            },
+            inventory_state: { items: [{ item_id: 'ration', name: 'Trail rations', qty: 3 }] },
           },
         },
       },
     });
 
     expect(state.heroSummary.gold).toBe('0g 5s 0c');
-    expect(state.inventoryItems.map(({ count, label }) => ({ count, label }))).toEqual([
-      { count: '3', label: 'Trail rations' },
-      { count: '1', label: 'Dried rations' },
+    expect(state.inventoryItems.map(({ count, label, actions, worn }) => ({ count, label, actions, worn }))).toEqual([
+      { count: '3', label: 'Trail rations', actions: ['use', 'drop', 'sell'], worn: false },
+      { count: '1', label: 'Travel Cloak', actions: ['unequip', 'drop', 'sell'], worn: true },
     ]);
+    expect(state.inventoryItems[1]).toMatchObject({ category: 'clothing', description: 'keeps the rain off' });
   });
 
   it('projects registered service offers from the latest turn contract', () => {

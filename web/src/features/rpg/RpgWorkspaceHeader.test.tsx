@@ -2,10 +2,10 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { RpgActionComposer } from './RpgActionComposer';
+import { RpgCampaignMenu } from './RpgCampaignMenu';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { resetRpgLauncherSlotsForTests, setRpgLauncherDialog, setRpgLauncherHomeGrid } from './rpgLauncherSlots';
-import { previewSessionSummary, quickActions } from './rpgUiState';
+import { previewSessionSummary } from './rpgUiState';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {
@@ -93,15 +93,10 @@ describe('RpgWorkspaceHeader', () => {
   it('opens the launcher it does not own and shows the world library once the launcher mounts', async () => {
     renderWithProviders(
       <>
-        <RpgActionComposer
-          canSaveGame={false}
-          commandRegistration={registration('command')}
-          hasCommandError={false}
+        <RpgCampaignMenu
           isPending={false}
-          onQuickAction={vi.fn()}
-          onSaveGame={async () => 'checkpoint:test'}
-          onSubmit={vi.fn()}
-          quickActions={quickActions}
+          liveSessionId=""
+          onTurnApplied={vi.fn()}
           renderNewCampaign={() => null}
           selectedSessionId=""
           sessionRegistration={registration('sessionId')}

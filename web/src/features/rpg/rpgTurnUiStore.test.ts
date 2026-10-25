@@ -176,6 +176,33 @@ describe('rpgTurnUiStore', () => {
     expect(completedDiagnostic.client.requestToVisibleMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('reads a campaign afresh after any change to it, and logs an undo as a turn', async () => {
+    let reads = 0;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET') {
+        reads += 1;
+        return new Response(JSON.stringify({ ok: true, session: { read: reads } }), { status: 200 });
+      }
+      if (String(input).endsWith('/rewind')) {
+        return new Response(JSON.stringify({ contract_version: 'rpg_turn_response_v2', ok: true, interaction_id: 'interaction:9',
+          visible_response: { messages: [{ speaker: 'Omnix', text: 'You undo your last turn.' }] } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+    const read = async () => (await (await pipelineFetch('/api/rpg/sessions/session%3Abran')).json()).session.read;
+
+    expect(await read()).toBe(1);
+    expect(await read()).toBe(1); // cached
+    await pipelineFetch('/api/rpg/sessions/session%3Abran/loadout', { method: 'POST', body: '{}' });
+    expect(await read()).toBe(2); // a pack action changed it
+    await pipelineFetch('/api/rpg/map-instances/map%3A1/tactical/move', { method: 'POST', body: '{}' });
+    expect(await read()).toBe(3); // so did a grid move
+    await pipelineFetch('/api/rpg/sessions/session%3Abran/rewind', { method: 'POST', body: '{}' });
+    expect(getRpgTurnUiEntries('session:bran')[0]).toMatchObject({ tone: 'player', text: 'Undo my last turn' });
+    expect(await read()).toBe(4);
+  });
+
   it('discards optimistic entries when the client falls back from a missing foreground route', async () => {
     const fetchImpl = vi.fn(async () => new Response('not found', { status: 404 }));
     installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);

@@ -105,7 +105,6 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/trading/drawings/tools/types.ts` | `DrawingActionRequest` | What a drawing's context action asks of the chart (open the order ticket, say) |
 | `web/src/features/trading/intrabarData.ts` | `IntrabarRequest` | A request to the browser's intrabar loader and cache; the wire request is the query of `GET /api/trading/bars/intrabar` |
 | `web/src/features/rpg/api/rpgGenesis.ts` | `LooseRequest` | The new-game form's fields before `withRpgGenesisContract` folds them into the genesis contract (the wire body is `RpgNewGameRequestBody`) |
-| `web/src/features/rpg/RpgLoadoutTabs.tsx` | `RpgItemPanelRequest` | An item panel action before it becomes a loadout-action or item-command call |
 | `web/src/features/rpg/RpgWorldGenerationDashboard.tsx` | `RetryRequest` | Mutation variables; the wire body is the generation review retry request |
 | `web/src/features/rpg/rpgTurnUiStore.ts` | `CachedResponse` | A turn response the fetch middleware keeps per session to replay into the turn UI |
 

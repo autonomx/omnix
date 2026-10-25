@@ -11,11 +11,9 @@ const baseProps = {
   checkpointSummary: { label: 'Latest checkpoint', detail: 'checkpoint-001.json', source: 'live' as const },
   encounter: previewEncounter,
   isAutoplayPending: false,
-  isCreatingCheckpoint: false,
   isRefreshingJobs: false,
   jobCards: previewJobs,
   npcRelationships,
-  onCreateCheckpoint: vi.fn(),
   onRefreshJobs: vi.fn(),
   onToggleAutoplay: vi.fn(),
   reportsHref: '/api/reports',
@@ -41,18 +39,16 @@ describe('RpgWorldRail', () => {
     expect(screen.queryByRole('button', { name: 'Generate last 10 turn report' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open reports index' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start autoplay' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create checkpoint' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create checkpoint' })).not.toBeInTheDocument(); // save points replace it
     expect(screen.getByRole('heading', { name: 'rpg_checkpoint / rpg' })).toBeInTheDocument();
   });
 
   it('keeps job and compact runtime controls active', () => {
     const onRefreshJobs = vi.fn();
-    const onCreateCheckpoint = vi.fn();
     const onToggleAutoplay = vi.fn();
     renderWithProviders(
       <RpgWorldRail
         {...baseProps}
-        onCreateCheckpoint={onCreateCheckpoint}
         onRefreshJobs={onRefreshJobs}
         onToggleAutoplay={onToggleAutoplay}
         rpgJobCount={1}
@@ -61,10 +57,8 @@ describe('RpgWorldRail', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh RPG jobs' }));
     fireEvent.click(screen.getByRole('button', { name: 'Start autoplay' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create checkpoint' }));
     expect(onRefreshJobs).toHaveBeenCalledTimes(1);
     expect(onToggleAutoplay).toHaveBeenCalledTimes(1);
-    expect(onCreateCheckpoint).toHaveBeenCalledTimes(1);
     expect(screen.getByText('1 live')).toBeInTheDocument();
   });
 

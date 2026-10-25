@@ -308,6 +308,8 @@ def list_session_summaries_from_postgres(
             turn_count=row["turn_count"],
             player_level=row["player_level"],
             location_name=row["location_name"],
+            # When it was last played: the row's time, since a turn never writes the clock into the document.
+            updated_at=row["updated_at"],
         )
         summaries.append(summary)
     return summaries

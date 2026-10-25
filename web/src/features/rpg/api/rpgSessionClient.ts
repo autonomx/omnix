@@ -45,6 +45,10 @@ export type RpgOperationsResponse = components['schemas']['RpgOperationsResponse
 
 export type RpgSessionMutationResponse = components['schemas']['RpgSessionMutationResponse'];
 
+export type RpgSavePoint = components['schemas']['RpgSavePoint'];
+
+export type RpgSavePointsResponse = components['schemas']['RpgSavePointsResponse'];
+
 export type RpgLoadoutActionRequest = components['schemas']['RpgLoadoutActionRequest'];
 
 export type RpgLoadoutActionResponse = components['schemas']['RpgLoadoutActionResponse'];
@@ -135,6 +139,41 @@ export const rpgSessionClient = {
 
   async getRpgOperations(days = 14): Promise<RpgOperationsResponse> {
     return await unwrap(api.GET('/api/rpg/operations', { params: { query: { days } } })) as RpgOperationsResponse;
+  },
+
+  /** Undo the hero's last turn, or return to a save point by name: a turn of its own (rewind.md). */
+  async rewindRpgSession(sessionId: string, savePoint?: string): Promise<RpgTurnResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/rewind', {
+      params: { path: { session_id: sessionId } },
+      body: savePoint ? { save_point: savePoint } : {},
+    })) as RpgTurnResponse;
+  },
+
+  /** The player is back after time away: the world moves on, as a turn with a recap (RQ-2.7). */
+  async resumeRpgSession(sessionId: string, elapsedSeconds: number): Promise<RpgTurnResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/resume', {
+      params: { path: { session_id: sessionId } },
+      body: { elapsed_seconds: Math.max(0, Math.round(elapsedSeconds)) },
+    })) as RpgTurnResponse;
+  },
+
+  async listRpgSavePoints(sessionId: string): Promise<RpgSavePointsResponse> {
+    return await unwrap(api.GET('/api/rpg/sessions/{session_id}/save-points', {
+      params: { path: { session_id: sessionId } },
+    })) as RpgSavePointsResponse;
+  },
+
+  async createRpgSavePoint(sessionId: string, name: string): Promise<RpgSavePointsResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/save-points', {
+      params: { path: { session_id: sessionId } },
+      body: { name },
+    })) as RpgSavePointsResponse;
+  },
+
+  async deleteRpgSavePoint(sessionId: string, name: string): Promise<RpgSavePointsResponse> {
+    return await unwrap(api.DELETE('/api/rpg/sessions/{session_id}/save-points/{name}', {
+      params: { path: { session_id: sessionId, name } },
+    })) as RpgSavePointsResponse;
   },
 
   async getRpgSession(sessionId: string): Promise<RpgLaunchResponse> {

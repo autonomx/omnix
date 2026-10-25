@@ -27,16 +27,13 @@ interface RpgWorldRailProps {
   autoplayRunning: boolean;
   autoplayStatusLabel: string;
   className?: string;
-  checkpointControlStatus?: string;
   checkpointSummary: RpgCheckpointSummaryPreview;
   currentMapId?: string | null;
   encounter: RpgEncounterPreview;
   isAutoplayPending: boolean;
-  isCreatingCheckpoint: boolean;
   isRefreshingJobs: boolean;
   jobCards: RpgJobCardPreview[];
   npcRelationships: RpgNpcRelationshipPreview[];
-  onCreateCheckpoint: () => void;
   onRefreshJobs: () => void;
   onToggleAutoplay: () => void;
   reportsHref: string;
@@ -51,16 +48,13 @@ export function RpgWorldRail({
   autoplayRunning,
   autoplayStatusLabel,
   className,
-  checkpointControlStatus,
   checkpointSummary,
   currentMapId,
   encounter,
   isAutoplayPending,
-  isCreatingCheckpoint,
   isRefreshingJobs,
   jobCards,
   npcRelationships,
-  onCreateCheckpoint,
   onRefreshJobs,
   onToggleAutoplay,
   rpgAssets,
@@ -181,12 +175,8 @@ export function RpgWorldRail({
             <button className="rpg-secondary-button" type="button" onClick={onToggleAutoplay} disabled={isAutoplayPending}>
               {isAutoplayPending ? 'Updating autoplay…' : autoplayRunning ? 'Stop autoplay' : 'Start autoplay'}
             </button>
-            <button className="rpg-secondary-button" type="button" onClick={onCreateCheckpoint} disabled={isCreatingCheckpoint}>
-              {isCreatingCheckpoint ? 'Creating checkpoint…' : 'Create checkpoint'}
-            </button>
           </div>
           <small>{autoplayStatusLabel} · {checkpointSummary.label}: {checkpointSummary.detail}</small>
-          {checkpointControlStatus ? <small>{checkpointControlStatus}</small> : null}
           {visibleAssets.map((asset) => (
             <article className="rpg-job-row" key={String(asset.id)}>
               <div>

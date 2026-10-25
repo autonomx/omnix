@@ -80,6 +80,11 @@ export interface RpgInventoryItemPreview {
   icon: string;
   count: string;
   label: string;
+  /** What the item rules let the hero do with it (use, equip, unequip, drop, sell), as the game says. */
+  actions?: string[];
+  category?: string;
+  description?: string;
+  worn?: boolean;
 }
 
 export interface RpgHotbarAbilityPreview {
@@ -129,6 +134,8 @@ export interface RpgSessionSummaryPreview {
   turnLabel: string;
   checkpointLabel: string;
   sortRank: number;
+  /** When the campaign was last played (epoch ms), when the list says. */
+  lastPlayedMs?: number;
   source: 'live' | 'preview';
 }
 
@@ -519,6 +526,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     turnLabel: typeof turnCount === 'number' && turnCount > 0 ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
     checkpointLabel,
     sortRank: timestampRank(updatedRaw),
+    lastPlayedMs: timestampRank(updatedRaw) || undefined,
     source: 'live',
   };
 }
@@ -677,6 +685,8 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
   const roots = getSessionRecords(session);
   const inventoryState = recordValue(player?.inventory_state);
   const inventory = firstArray(
+    // The sheet's pack first: each thing with what the rules let the hero do with it (the player view's).
+    recordValue(recordValue(session.state)?.player)?.inventory,
     inventoryState?.items,
     player?.inventory_items,
     player?.inventory,
@@ -684,11 +694,19 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
     ...roots.map((root) => recordValue(root.inventory)?.items ?? root.items),
   );
   if (!inventory.length) return [];
-  return inventory.slice(0, 8).map((item, index) => {
+  return inventory.map((item, index) => {
     const record = recordValue(item) ?? { name: item };
     const label = firstString(record.name, record.label, record.id) ?? `Item ${index + 1}`;
     const count = firstNumber(record.count, record.quantity, record.qty, record.amount);
-    return { icon: iconForInventory(label), count: count !== undefined ? formatNumber(count) : '1', label };
+    return {
+      icon: iconForInventory(label),
+      count: count !== undefined ? formatNumber(count) : '1',
+      label,
+      actions: Array.isArray(record.actions) ? record.actions.filter((action): action is string => typeof action === 'string') : undefined,
+      category: firstString(record.category, record.type),
+      description: firstString(record.description),
+      worn: typeof record.worn === 'boolean' ? record.worn : undefined,
+    };
   });
 }
 
