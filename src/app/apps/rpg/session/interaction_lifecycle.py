@@ -9,7 +9,6 @@ from typing import Any
 from app.apps.rpg.foundation.state import access as _sections
 
 INTERACTION_LIFECYCLE_VERSION = "rpg_interaction_lifecycle_v1"
-_MAX_LIFECYCLES = 64
 
 
 def initialize_interaction_lifecycle(
@@ -21,7 +20,6 @@ def initialize_interaction_lifecycle(
     interaction_id = _text(result.get("interaction_id"))
     if not interaction_id:
         return {}
-    runtime = _dict(_sections.runtime_state_of(session))
     turn_id = _first_text(result, "turn_id")
     stateful = _first_bool(result, "stateful")
     record = {
@@ -37,18 +35,13 @@ def initialize_interaction_lifecycle(
         "authoritative_response": _compact_authoritative_response(result),
         "updated_at": _utc_now(),
     }
-    lifecycles = _dict(runtime.get("interaction_lifecycles"))
-    lifecycles[interaction_id] = record
-    lifecycles = _bounded_mapping(lifecycles)
-    runtime["interaction_lifecycles"] = lifecycles
-    if turn_id:
-        by_turn = _dict(runtime.get("interaction_id_by_turn"))
-        by_turn[turn_id] = interaction_id
-        runtime["interaction_id_by_turn"] = _bounded_mapping(by_turn)
-    session["runtime_state"] = runtime
+    from app.apps.rpg.foundation.state.changes import LifecycleRecorded
+    from app.apps.rpg.foundation.state.reducer import reduce
+
+    # The commit owns the session: the reducer records the lifecycle, and its timeline event, in place.
+    reduce(session, [LifecycleRecorded(interaction_id=interaction_id, turn_id=turn_id, lifecycle=record)], owned=True)
     result["interaction_lifecycle"] = deepcopy(record)
     result["narration_status"] = record["narration_status"]
-    _update_interaction_event(session, interaction_id, record)
     return record
 
 
@@ -146,30 +139,6 @@ def recover_pending_interaction_narration(session_id: str, session: dict[str, An
     return recovered
 
 
-def _update_interaction_event(
-    session: dict[str, Any],
-    interaction_id: str,
-    lifecycle: dict[str, Any],
-) -> None:
-    runtime = _dict(_sections.runtime_state_of(session))
-    timeline = _dict(runtime.get("interaction_timeline"))
-    events = []
-    for value in timeline.get("events", []) if isinstance(timeline.get("events"), list) else []:
-        event = dict(value) if isinstance(value, dict) else {}
-        if _text(event.get("interaction_id")) == interaction_id:
-            event["lifecycle"] = deepcopy(lifecycle)
-            enrichment = _dict(lifecycle.get("narration_enrichment"))
-            if enrichment:
-                event["narration_enrichment"] = enrichment
-        events.append(event)
-    timeline["events"] = events
-    runtime["interaction_timeline"] = timeline
-    runtime["recent_interactions"] = [dict(item) for item in events[-12:]]
-    if events:
-        runtime["last_interaction"] = dict(events[-1])
-    session["runtime_state"] = runtime
-
-
 def _compact_authoritative_response(result: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
@@ -198,11 +167,6 @@ def _compact_narration_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
         }.items()
         if value not in (None, "", {})
     }
-
-
-def _bounded_mapping(value: dict[str, Any]) -> dict[str, Any]:
-    items = list(value.items())[-_MAX_LIFECYCLES:]
-    return {key: item for key, item in items}
 
 
 def _first_text(result: dict[str, Any], *keys: str) -> str:

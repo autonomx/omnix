@@ -437,6 +437,25 @@ class NarrativeSection(Section):
                                                               "recent_scene_beats") if key in runtime})
 
 
+class InteractionsSection(Section):
+    """The campaign's bookkeeping of its turns: the interaction timeline, the sequence and state revision it has
+    reached, the recent and last interactions, and each interaction's lifecycle (roadmap §4.1 step 9)."""
+
+    PATHS = tuple(("runtime_state", key) for key in (
+        "interaction_timeline", "interaction_seq", "state_revision", "recent_interactions", "last_interaction",
+        "interaction_lifecycles", "interaction_id_by_turn"))
+
+    sequence: int = 0
+    revision: int = 0
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, Any]) -> InteractionsSection:
+        runtime = _mapping(document.get("runtime_state"))
+        return cls(sequence=_int(runtime.get("interaction_seq")), revision=_int(runtime.get("state_revision")),
+                   extensions={key: runtime[key] for _, key in cls.PATHS
+                               if key in runtime and key not in {"interaction_seq", "state_revision"}})
+
+
 class MetaSection(Section):
     PATHS = (("manifest",), ("simulation_state", "rng_seed"), ("simulation_state", "campaign_end"))
 
@@ -467,6 +486,7 @@ SECTIONS: dict[str, type[Section]] = {
     "world": WorldSection,
     "economy": EconomySection,
     "narrative": NarrativeSection,
+    "interactions": InteractionsSection,
     "meta": MetaSection,
 }
 SECTION_PATHS: dict[str, tuple[Path, ...]] = {name: section.PATHS for name, section in SECTIONS.items()}

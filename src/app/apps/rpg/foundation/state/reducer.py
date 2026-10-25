@@ -63,6 +63,10 @@ from .changes import (
     AbilityUsed,
     CheckResolved,
     HotbarChanged,
+    InteractionPresented,
+    InteractionRecorded,
+    InteractionsReplayed,
+    LifecycleRecorded,
     LevelChoiceMade,
     LocalMapEntered,
     RegardChanged,
@@ -392,6 +396,14 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(_PLAYER + ("resources", name), pool)
             if isinstance(writer.get(("state", "player")), dict):  # the play screen's sheet shows it
                 writer.set(("state", "player", "resources", name), dict(pool))
+    elif isinstance(change, InteractionRecorded):
+        _record_interaction(writer, change.event)
+    elif isinstance(change, InteractionsReplayed):
+        _replay_interactions(writer, change.events)
+    elif isinstance(change, LifecycleRecorded):
+        _record_lifecycle(writer, change)
+    elif isinstance(change, InteractionPresented):
+        _present_interaction(writer, change)
     elif isinstance(change, HotbarChanged):
         # The hotbar is the sheet's (``state.hotbar``), mirrored in the ability state the play screen also reads.
         hotbar = {str(slot): str(ability) for slot, ability in dict(writer.get(("state", "hotbar")) or {}).items()}
@@ -619,7 +631,9 @@ def _restore(writer: _Writer, change: RevisionRestored) -> None:
     for key in ("state", "simulation_state"):
         if isinstance(earlier.get(key), dict):
             writer.set((key,), deepcopy(earlier[key]))
-    game_runtime = {path[1] for paths in SECTION_PATHS.values() for path in paths if path[0] == "runtime_state"}
+    # The game's runtime sections; the interactions section is the campaign's bookkeeping, which goes on.
+    game_runtime = {path[1] for name, paths in SECTION_PATHS.items() if name != "interactions"
+                    for path in paths if path[0] == "runtime_state"}
     runtime = dict(writer.get(("runtime_state",)) or {})
     before = earlier.get("runtime_state") if isinstance(earlier.get("runtime_state"), dict) else {}
     for key in game_runtime:
@@ -715,9 +729,92 @@ def _show_progression(writer: _Writer, *, xp: int, xp_to_next: int | None = None
         writer.set(("state", "player", "level"), level)
 
 
-def reduce(document: dict[str, Any], changes: list[StateChange]) -> tuple[dict[str, Any], JsonPatch]:
-    """The document with ``changes`` applied (a copy; ``document`` is unchanged), and the patch of the writes."""
-    writer = _Writer(copy_state(document))  # a deep copy, about 2.5x faster than deepcopy (RQ-6.4)
+_RUNTIME = ("runtime_state",)
+TIMELINE_KEPT, RECENT_INTERACTIONS_KEPT, LIFECYCLES_KEPT = 50, 12, 64
+
+
+def _kept_last(mapping: dict[str, Any], count: int) -> dict[str, Any]:
+    return dict(list(mapping.items())[-count:])
+
+
+def _show_timeline(writer: _Writer, timeline: dict[str, Any], events: list[dict[str, Any]]) -> None:
+    """The timeline written with its events, and the recent and last interactions it shows."""
+    timeline["events"] = events
+    writer.set(_RUNTIME + ("interaction_timeline",), timeline)
+    writer.set(_RUNTIME + ("recent_interactions",), deepcopy(events[-RECENT_INTERACTIONS_KEPT:]))
+    if events:
+        writer.set(_RUNTIME + ("last_interaction",), deepcopy(events[-1]))
+
+
+def _record_interaction(writer: _Writer, event: dict[str, Any]) -> None:
+    timeline = dict(writer.get(_RUNTIME + ("interaction_timeline",)) or {})
+    events = [deepcopy(row) for row in timeline.get("events") or () if isinstance(row, dict)]
+    events = [*events, deepcopy(event)][-TIMELINE_KEPT:]
+    timeline.update(format_version=event.get("format_version") or timeline.get("format_version"),
+                    last_sequence=event.get("sequence"), state_revision=event.get("state_revision"))
+    writer.set(_RUNTIME + ("interaction_seq",), event.get("sequence"))
+    writer.set(_RUNTIME + ("state_revision",), event.get("state_revision"))
+    _show_timeline(writer, timeline, events)
+
+
+def _replay_interactions(writer: _Writer, replayed: list[dict[str, Any]]) -> None:
+    timeline = dict(writer.get(_RUNTIME + ("interaction_timeline",)) or {})
+    by_id = {str(row.get("interaction_id") or f"sequence:{row.get('sequence')}"): dict(row)
+             for row in timeline.get("events") or () if isinstance(row, dict)}
+    for row in replayed:
+        by_id[str(row.get("interaction_id") or f"sequence:{row.get('sequence')}")] = dict(row)
+    events = sorted(by_id.values(), key=lambda row: int(row.get("sequence") or 0))[-TIMELINE_KEPT:]
+    last = events[-1] if events else {}
+    sequence = int(last.get("sequence") or timeline.get("last_sequence") or 0)
+    revision = int(last.get("state_revision") or timeline.get("state_revision") or 0)
+    timeline.update(format_version="rpg_interaction_timeline_v1", last_sequence=sequence, state_revision=revision)
+    writer.set(_RUNTIME + ("interaction_seq",), max(int(writer.get(_RUNTIME + ("interaction_seq",)) or 0), sequence))
+    writer.set(_RUNTIME + ("state_revision",), max(int(writer.get(_RUNTIME + ("state_revision",)) or 0), revision))
+    _show_timeline(writer, timeline, events)
+
+
+def _record_lifecycle(writer: _Writer, change: LifecycleRecorded) -> None:
+    lifecycles = dict(writer.get(_RUNTIME + ("interaction_lifecycles",)) or {})
+    lifecycles[change.interaction_id] = deepcopy(change.lifecycle)
+    writer.set(_RUNTIME + ("interaction_lifecycles",), _kept_last(lifecycles, LIFECYCLES_KEPT))
+    if change.turn_id:
+        by_turn = dict(writer.get(_RUNTIME + ("interaction_id_by_turn",)) or {})
+        by_turn[change.turn_id] = change.interaction_id
+        writer.set(_RUNTIME + ("interaction_id_by_turn",), _kept_last(by_turn, LIFECYCLES_KEPT))
+    timeline = dict(writer.get(_RUNTIME + ("interaction_timeline",)) or {})
+    events = []
+    for value in timeline.get("events") if isinstance(timeline.get("events"), list) else ():
+        event = dict(value) if isinstance(value, dict) else {}
+        if str(event.get("interaction_id") or "") == change.interaction_id:
+            event["lifecycle"] = deepcopy(change.lifecycle)
+            enrichment = change.lifecycle.get("narration_enrichment")
+            if isinstance(enrichment, dict) and enrichment:
+                event["narration_enrichment"] = dict(enrichment)
+        events.append(event)
+    _show_timeline(writer, timeline, events)
+
+
+def _present_interaction(writer: _Writer, change: InteractionPresented) -> None:
+    interactions = writer.get(_RUNTIME + ("recent_interactions",))
+    if not isinstance(interactions, list) or not interactions:
+        raise ChangeRejected("no recent interaction to present")
+    rows = [dict(row) if isinstance(row, dict) else row for row in interactions]
+    index = next((at for at in range(len(rows) - 1, -1, -1) if isinstance(rows[at], dict) and (
+        (change.turn_id and str(rows[at].get("turn_id") or "") == change.turn_id)
+        or (change.response_id and str(rows[at].get("narrative_response_id") or "") == change.response_id))),
+        len(rows) - 1)
+    if not isinstance(rows[index], dict):
+        raise ChangeRejected("the recent interaction is no record")
+    rows[index] = {**rows[index], **deepcopy(change.fields)}
+    writer.set(_RUNTIME + ("recent_interactions",), rows)
+
+
+def reduce(document: dict[str, Any], changes: list[StateChange], *,
+           owned: bool = False) -> tuple[dict[str, Any], JsonPatch]:
+    """The document with ``changes`` applied, and the patch of the writes. It is a copy, ``document`` unchanged;
+    a caller that owns ``document`` (a copy made for the turn, the commit's own) passes ``owned`` and it is changed
+    in place, saving the copy (RQ-6.4)."""
+    writer = _Writer(document if owned else copy_state(document))  # a deep copy, about 2.5x faster than deepcopy
     for change in changes:
         _apply(writer, change)
         if isinstance(change, (ItemRemoved, ItemDropped)):

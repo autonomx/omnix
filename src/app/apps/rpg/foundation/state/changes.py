@@ -215,6 +215,43 @@ class HotbarChanged(_Change):
     ability_id: str = ""
 
 
+class InteractionRecorded(_Change):
+    """The turn's interaction on the campaign's timeline (its bookkeeping, roadmap §4.1 step 9): the event appended
+    (the timeline keeps the last 50), the sequence and state revision it carries the campaign's, the recent
+    interactions the last 12, and the event the last interaction."""
+
+    type: Literal["interaction_recorded"] = "interaction_recorded"
+    event: dict[str, Any]
+
+
+class InteractionsReplayed(_Change):
+    """Interactions the campaign's event log holds, merged into its timeline on load (one per interaction id, in
+    sequence order, the last 50 kept); the sequence and revision never go back."""
+
+    type: Literal["interactions_replayed"] = "interactions_replayed"
+    events: list[dict[str, Any]]
+
+
+class LifecycleRecorded(_Change):
+    """An interaction's lifecycle (resolved, narrated): kept by its id (the last 64), its turn's interaction by the
+    turn id, and the interaction's timeline event carrying it."""
+
+    type: Literal["lifecycle_recorded"] = "lifecycle_recorded"
+    interaction_id: str = Field(min_length=1)
+    turn_id: str = ""
+    lifecycle: dict[str, Any]
+
+
+class InteractionPresented(_Change):
+    """How a recent interaction is presented (the narrative engine's canonical projection): ``fields`` set on the
+    recent interaction of ``turn_id`` or ``response_id``, else on the latest."""
+
+    type: Literal["interaction_presented"] = "interaction_presented"
+    turn_id: str = ""
+    response_id: str = ""
+    fields: dict[str, Any]
+
+
 class QuestStepCompleted(_Change):
     """A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the
     branch, when the stage had more than one), and what it asks next."""
@@ -487,7 +524,7 @@ StateChange = Annotated[
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
     | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | HotbarChanged
-    | CheckResolved | LevelChoiceMade
+    | InteractionRecorded | InteractionsReplayed | LifecycleRecorded | InteractionPresented | CheckResolved | LevelChoiceMade
     | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved | LocalMapEntered,
     Field(discriminator="type"),
 ]

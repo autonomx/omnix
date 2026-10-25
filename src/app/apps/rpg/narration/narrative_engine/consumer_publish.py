@@ -49,19 +49,23 @@ def _patch_latest_interaction(
         and selected.get("visible_response") == visible
     ):
         return False
-    selected["narrative_response_id"] = response_id
-    selected["narrative_content_hash"] = str(bundle.get("content_hash") or "")
-    selected["narrative_publisher"] = CANONICAL_PUBLISHER
-    selected["canonical_narrative_response"] = dict(canonical)
-    selected["narrative_projections"] = dict(bundle)
-    selected["visible_response"] = visible
-    selected["narration"] = str(visible.get("narration") or "")
-    if grounding:
-        selected["narrative_grounding"] = dict(grounding)
-    if grounding_footer:
-        selected["narrative_grounding_footer"] = dict(grounding_footer)
-    runtime["recent_interactions"] = interactions
-    session["runtime_state"] = runtime
+    from app.apps.rpg.foundation.state.changes import InteractionPresented
+    from app.apps.rpg.foundation.state.reducer import reduce
+
+    fields: dict[str, Any] = {
+        "narrative_response_id": response_id,
+        "narrative_content_hash": str(bundle.get("content_hash") or ""),
+        "narrative_publisher": CANONICAL_PUBLISHER,
+        "canonical_narrative_response": dict(canonical),
+        "narrative_projections": dict(bundle),
+        "visible_response": visible,
+        "narration": str(visible.get("narration") or ""),
+        **({"narrative_grounding": dict(grounding)} if grounding else {}),
+        **({"narrative_grounding_footer": dict(grounding_footer)} if grounding_footer else {}),
+    }
+    # The session is the turn's own (the commit's, or the copy in hand after it): presented in place.
+    reduce(session, [InteractionPresented(turn_id=str(selected.get("turn_id") or ""), response_id=response_id,
+                                          fields=fields)], owned=True)
     return True
 
 

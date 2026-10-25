@@ -8,7 +8,6 @@ from typing import Any
 from app.apps.rpg.foundation.state import access as _sections
 
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
-MAX_RECENT_INTERACTIONS = 50
 
 
 def commit_turn_interaction(
@@ -75,22 +74,11 @@ def commit_turn_interaction(
             "created_at": utc_now().isoformat(),
         }
     )
-    events.append(event)
-    events = events[-MAX_RECENT_INTERACTIONS:]
-    timeline.update(
-        {
-            "format_version": INTERACTION_TIMELINE_VERSION,
-            "last_sequence": sequence,
-            "state_revision": revision,
-            "events": events,
-        }
-    )
-    runtime["interaction_seq"] = sequence
-    runtime["state_revision"] = revision
-    runtime["interaction_timeline"] = timeline
-    runtime["recent_interactions"] = deepcopy(events[-12:])
-    runtime["last_interaction"] = deepcopy(event)
-    session["runtime_state"] = runtime
+    from app.apps.rpg.foundation.state.changes import InteractionRecorded
+    from app.apps.rpg.foundation.state.reducer import reduce
+
+    # The commit owns the session it appends to: the reducer records the event in place.
+    session, _ = reduce(session, [InteractionRecorded(event=event)], owned=True)
     _attach_interaction_result(result, event, persisted=False, replay=False)
     result["session"] = session
     return session, result, event

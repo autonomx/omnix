@@ -127,24 +127,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "runtime",
-      "lines": [
-        62
-      ],
-      "path": "src/app/apps/rpg/narration/narrative_engine/consumer_publish.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session",
-      "lines": [
-        63
-      ],
-      "path": "src/app/apps/rpg/narration/narrative_engine/consumer_publish.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
       "fingerprint": "simulation_state",
       "lines": [
         48
@@ -312,73 +294,6 @@
         352
       ],
       "path": "src/app/apps/rpg/session/durable_store.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 5,
-      "fingerprint": "runtime",
-      "lines": [
-        102,
-        103,
-        104,
-        105,
-        107
-      ],
-      "path": "src/app/apps/rpg/session/interaction_event_store.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session",
-      "lines": [
-        108
-      ],
-      "path": "src/app/apps/rpg/session/interaction_event_store.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 5,
-      "fingerprint": "runtime",
-      "lines": [
-        42,
-        46,
-        165,
-        166,
-        168
-      ],
-      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "session",
-      "lines": [
-        47,
-        169
-      ],
-      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 5,
-      "fingerprint": "runtime",
-      "lines": [
-        87,
-        88,
-        89,
-        90,
-        91
-      ],
-      "path": "src/app/apps/rpg/session/interaction_timeline.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session",
-      "lines": [
-        92
-      ],
-      "path": "src/app/apps/rpg/session/interaction_timeline.py",
       "rule": "AL019"
     },
     {

@@ -14,6 +14,7 @@ from .sections import (
     SECTIONS,
     CombatSection,
     EconomySection,
+    InteractionsSection,
     InventorySection,
     LocationSection,
     MetaSection,
@@ -73,6 +74,10 @@ class CampaignStateView:
     @cached_property
     def npcs(self) -> NpcsSection:
         return NpcsSection.from_document(self.document)
+
+    @cached_property
+    def interactions(self) -> InteractionsSection:
+        return InteractionsSection.from_document(self.document)
 
     @cached_property
     def world(self) -> WorldSection:
