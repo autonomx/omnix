@@ -159,7 +159,7 @@ def _common_knowledge(world: Mapping[str, Any], text: str, speaker_id: str) -> t
 
     def named(*names: str, as_written: bool = False) -> bool:
         """Whether the words name one of ``names`` as whole words; ``as_written``: in its capitals (a first name
-        alone: "Will you help?" names no Will, "a miracle" no Mira)."""
+        alone: "Will you help?" names no Will, "a hopeful look" no Hope)."""
         return any(len(name) > 3 and re.search(
             (r"(?<![.!?]\s)(?<!^)" if as_written else "") + rf"(?<![\w']){re.escape(name)}(?![\w'])", text.strip(),
             flags=0 if as_written else re.IGNORECASE) for name in names if name)

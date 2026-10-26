@@ -44,7 +44,7 @@ campaigns started later play the new release. Campaigns already under way keep t
 
 ## How It Plays
 
-Each of the five sections is optional. A section you leave empty is inferred from the lore when a campaign starts,
+Each of the six sections is optional. A section you leave empty is inferred from the lore when a campaign starts,
 and the editor's tabs and the campaign setup say which sections the world wrote ("Written") and which come from its
 lore ("From lore").
 
@@ -90,14 +90,27 @@ which it boiled over, and then stirs again, so a long campaign keeps turning; th
 
 For each creature: its **numbers** (level, health, defense, damage range, accuracy, experience), its **behaviour**
 (fights, flees when hurt, calls allies, guards, ambushes; or as its lore tells), and its **drops** (an item, the
-chance from 0 to 1, how many). A creature without numbers fights at the numbers its threat rating gives it.
+chance from 0 to 1, how many). A creature without numbers fights at the numbers its threat rating gives it, so a
+world whose creatures stop at a low level leaves a grown hero nothing to fear: give the deeper places stronger ones.
+
+### Quests
+
+What each quest takes, step by step (see Quests below): pick the quest, who gives it and an optional deadline, then
+its steps. Each step has a summary (what the hero is told) and one or more ways to do it; more than one way is a
+branch. A way is all of its conditions, each chosen by what it asks (a place to reach, a person to talk to, optionally
+about some words, an item to hold, a creature to defeat and how many, a check to pass, a companion to have), and may
+say what came of it ("The gate becomes a guarded bridge"), told when the hero takes that way. A quest left out is
+done by reaching its places. World Forge drafts no steps: they are yours.
 
 ## Quests
 
 A quest's **steps** are done in order. Each step is a set of conditions that must all hold, or `any_of` branches
 where either way completes it. A condition is `reach` a place, `talk` to someone (optionally `about` topics),
-`hold` an item, `defeat` a creature (with a `count`), or pass a `check`. A quest with `deadline_hours` fails when
-that much time passes after it is taken up, and its giver trusts the hero less. For example, from The Market Road:
+`hold` an item, `defeat` a creature (with a `count`), pass a `check` (its kind: persuade, intimidate, deceive,
+haggle, sneak, climb, pick_lock, recall_lore, search, notice), or have a `companion` (someone, or `anyone`). A way
+written `{"all_of": [...], "told": "..."}` among the `any_of` says what came of it. A quest with `deadline_hours` fails
+when that much time passes after it is taken up, and its giver trusts the hero less. A finale (`"tier": "finale"`) is
+offered only when someone is asked about it by its name. For example, from The Market Road:
 
 ```json
 {
@@ -112,7 +125,11 @@ that much time passes after it is taken up, and its giver trusts the hero less. 
 }
 ```
 
-A quest without steps advances as the hero reaches its places.
+A quest without steps advances as the hero reaches its places, and is done on reaching the last: write steps for
+any quest whose objective asks more than travel (a fight, a choice, a word with someone).
+
+Every place should be reachable by your roads; a place none reaches is joined to them at launch, from its region's
+capital, by a road of three hours.
 
 ## In a world source file
 

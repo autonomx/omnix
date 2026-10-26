@@ -30,8 +30,10 @@ conditions, quest steps, offers and any dice that were rolled. When a roll decid
 climbing a wall, picking a lock), you see the roll, your skill and the difficulty. Failing changes the situation
 rather than stopping the story.
 
-Time passes with what you do: looking around takes a few minutes, waiting half an hour, a night's sleep until
-morning. The world rail shows the day, the time, the weather and where you are.
+Time passes with what you do: looking around takes a few minutes, a night's sleep lasts until morning, and a wait
+as long as you say ("I wait until evening", "wait for three hours"; half an hour when you name no time). People keep
+their own days, so someone who is not here now may be later. The world rail shows the day, the time, the weather and
+where you are.
 
 A journey takes its road's time. A place further than one road away is set out for: you take the first road of the
 way there ("You set out for Moonroot Ruins: the way goes by Skybridge Pass") and arrive somewhere on the way, with
@@ -40,8 +42,10 @@ whatever is there; say it again to go on.
 ## People
 
 Talk to whoever is there. Each answers in their own voice about what they would know. They share some things
-freely, some for a price, some only once they trust you, and their secrets never. Ask for work and someone who has
-it offers you a quest. Ask a shopkeeper what they sell and they tell you, with prices.
+freely, some for a price, some only once they trust you, and their secrets never. Ask for work, or ask someone
+about a quest of theirs, and they offer it. Ask a shopkeeper what they sell and they tell you, with prices; buy
+several at once by saying how many ("I buy two healing potions"). Ask aloud about a place or a person and whoever is
+here answers with what anyone knows of it. Your companions grow closer with every fight you win together.
 
 People keep their days: a stallholder is at her stall by day and at the tavern in the evening. Someone you are with
 does not vanish mid-conversation; you see them leave when their day turns, and others arrive.
