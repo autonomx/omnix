@@ -3,17 +3,17 @@
     "ask": {
       "action_family_accuracy": {
         "n": 344,
-        "rate": 0.9331,
-        "successes": 321,
-        "wilson_lower": 0.9017,
-        "wilson_upper": 0.955
+        "rate": 0.9826,
+        "successes": 338,
+        "wilson_lower": 0.9625,
+        "wilson_upper": 0.992
       },
       "action_family_exact_label": {
         "n": 344,
-        "rate": 0.8081,
-        "successes": 278,
-        "wilson_lower": 0.7632,
-        "wilson_upper": 0.8463
+        "rate": 0.9593,
+        "successes": 330,
+        "wilson_lower": 0.9329,
+        "wilson_upper": 0.9756
       },
       "false_stateful_rate": {
         "n": 344,
@@ -32,26 +32,26 @@
       "n": 344,
       "target_entity_accuracy": {
         "n": 330,
-        "rate": 0.8697,
-        "successes": 287,
-        "wilson_lower": 0.8291,
-        "wilson_upper": 0.9018
+        "rate": 0.9091,
+        "successes": 300,
+        "wilson_lower": 0.8732,
+        "wilson_upper": 0.9356
       }
     },
     "attack": {
       "action_family_accuracy": {
         "n": 42,
-        "rate": 1.0,
-        "successes": 42,
-        "wilson_lower": 0.9162,
-        "wilson_upper": 1.0
+        "rate": 0.9762,
+        "successes": 41,
+        "wilson_lower": 0.8768,
+        "wilson_upper": 0.9958
       },
       "action_family_exact_label": {
         "n": 42,
-        "rate": 1.0,
-        "successes": 42,
-        "wilson_lower": 0.9162,
-        "wilson_upper": 1.0
+        "rate": 0.9762,
+        "successes": 41,
+        "wilson_lower": 0.8768,
+        "wilson_upper": 0.9958
       },
       "false_stateful_rate": {
         "n": 0,
@@ -70,26 +70,26 @@
       "n": 42,
       "target_entity_accuracy": {
         "n": 42,
-        "rate": 0.9286,
-        "successes": 39,
-        "wilson_lower": 0.8099,
-        "wilson_upper": 0.9754
+        "rate": 0.9048,
+        "successes": 38,
+        "wilson_lower": 0.7793,
+        "wilson_upper": 0.9623
       }
     },
     "buy": {
       "action_family_accuracy": {
         "n": 55,
-        "rate": 0.9273,
-        "successes": 51,
-        "wilson_lower": 0.8274,
-        "wilson_upper": 0.9714
+        "rate": 0.9455,
+        "successes": 52,
+        "wilson_lower": 0.8515,
+        "wilson_upper": 0.9813
       },
       "action_family_exact_label": {
         "n": 55,
-        "rate": 0.9273,
-        "successes": 51,
-        "wilson_lower": 0.8274,
-        "wilson_upper": 0.9714
+        "rate": 0.9455,
+        "successes": 52,
+        "wilson_lower": 0.8515,
+        "wilson_upper": 0.9813
       },
       "false_stateful_rate": {
         "n": 11,
@@ -100,34 +100,34 @@
       },
       "missed_stateful_rate": {
         "n": 44,
-        "rate": 0.0455,
-        "successes": 2,
-        "wilson_lower": 0.0126,
-        "wilson_upper": 0.1513
+        "rate": 0.0227,
+        "successes": 1,
+        "wilson_lower": 0.004,
+        "wilson_upper": 0.1181
       },
       "n": 55,
       "target_entity_accuracy": {
         "n": 55,
-        "rate": 0.8364,
-        "successes": 46,
-        "wilson_lower": 0.7174,
-        "wilson_upper": 0.9114
+        "rate": 0.8545,
+        "successes": 47,
+        "wilson_lower": 0.7384,
+        "wilson_upper": 0.9244
       }
     },
     "clarify": {
       "action_family_accuracy": {
         "n": 44,
-        "rate": 0.8409,
-        "successes": 37,
-        "wilson_lower": 0.7063,
-        "wilson_upper": 0.9207
+        "rate": 0.8182,
+        "successes": 36,
+        "wilson_lower": 0.6804,
+        "wilson_upper": 0.9049
       },
       "action_family_exact_label": {
         "n": 44,
-        "rate": 0.8409,
-        "successes": 37,
-        "wilson_lower": 0.7063,
-        "wilson_upper": 0.9207
+        "rate": 0.8182,
+        "successes": 36,
+        "wilson_lower": 0.6804,
+        "wilson_upper": 0.9049
       },
       "false_stateful_rate": {
         "n": 44,
@@ -155,24 +155,24 @@
     "decline": {
       "action_family_accuracy": {
         "n": 42,
-        "rate": 0.881,
-        "successes": 37,
-        "wilson_lower": 0.75,
-        "wilson_upper": 0.9481
+        "rate": 1.0,
+        "successes": 42,
+        "wilson_lower": 0.9162,
+        "wilson_upper": 1.0
       },
       "action_family_exact_label": {
         "n": 42,
-        "rate": 0.5952,
-        "successes": 25,
-        "wilson_lower": 0.4449,
-        "wilson_upper": 0.7296
+        "rate": 1.0,
+        "successes": 42,
+        "wilson_lower": 0.9162,
+        "wilson_upper": 1.0
       },
       "false_stateful_rate": {
         "n": 42,
-        "rate": 0.0476,
-        "successes": 2,
-        "wilson_lower": 0.0132,
-        "wilson_upper": 0.1579
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0838
       },
       "missed_stateful_rate": {
         "n": 0,
@@ -366,10 +366,10 @@
       },
       "missed_stateful_rate": {
         "n": 21,
-        "rate": 0.4762,
-        "successes": 10,
-        "wilson_lower": 0.2834,
-        "wilson_upper": 0.6763
+        "rate": 0.4286,
+        "successes": 9,
+        "wilson_lower": 0.2447,
+        "wilson_upper": 0.6345
       },
       "n": 21,
       "target_entity_accuracy": {
@@ -383,24 +383,24 @@
     "inspect": {
       "action_family_accuracy": {
         "n": 99,
-        "rate": 0.8889,
-        "successes": 88,
-        "wilson_lower": 0.8119,
-        "wilson_upper": 0.9368
+        "rate": 0.9899,
+        "successes": 98,
+        "wilson_lower": 0.945,
+        "wilson_upper": 0.9982
       },
       "action_family_exact_label": {
         "n": 99,
-        "rate": 0.0404,
-        "successes": 4,
-        "wilson_lower": 0.0158,
-        "wilson_upper": 0.0993
+        "rate": 0.9495,
+        "successes": 94,
+        "wilson_lower": 0.8872,
+        "wilson_upper": 0.9782
       },
       "false_stateful_rate": {
         "n": 99,
-        "rate": 0.0202,
-        "successes": 2,
-        "wilson_lower": 0.0056,
-        "wilson_upper": 0.0707
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0374
       },
       "missed_stateful_rate": {
         "n": 0,
@@ -412,26 +412,26 @@
       "n": 99,
       "target_entity_accuracy": {
         "n": 99,
-        "rate": 0.9394,
-        "successes": 93,
-        "wilson_lower": 0.874,
-        "wilson_upper": 0.9719
+        "rate": 0.9798,
+        "successes": 97,
+        "wilson_lower": 0.9293,
+        "wilson_upper": 0.9944
       }
     },
     "look": {
       "action_family_accuracy": {
         "n": 46,
-        "rate": 0.9348,
-        "successes": 43,
-        "wilson_lower": 0.825,
-        "wilson_upper": 0.9776
+        "rate": 0.9565,
+        "successes": 44,
+        "wilson_lower": 0.8547,
+        "wilson_upper": 0.988
       },
       "action_family_exact_label": {
         "n": 46,
-        "rate": 0.9348,
-        "successes": 43,
-        "wilson_lower": 0.825,
-        "wilson_upper": 0.9776
+        "rate": 0.9565,
+        "successes": 44,
+        "wilson_lower": 0.8547,
+        "wilson_upper": 0.988
       },
       "false_stateful_rate": {
         "n": 46,
@@ -716,10 +716,10 @@
       "n": 15,
       "target_entity_accuracy": {
         "n": 15,
-        "rate": 0.8667,
-        "successes": 13,
-        "wilson_lower": 0.6212,
-        "wilson_upper": 0.9626
+        "rate": 1.0,
+        "successes": 15,
+        "wilson_lower": 0.7961,
+        "wilson_upper": 1.0
       }
     },
     "status": {
@@ -763,10 +763,10 @@
     "talk": {
       "action_family_accuracy": {
         "n": 192,
-        "rate": 0.9948,
-        "successes": 191,
-        "wilson_lower": 0.9711,
-        "wilson_upper": 0.9991
+        "rate": 1.0,
+        "successes": 192,
+        "wilson_lower": 0.9804,
+        "wilson_upper": 1.0
       },
       "action_family_exact_label": {
         "n": 192,
@@ -777,10 +777,10 @@
       },
       "false_stateful_rate": {
         "n": 192,
-        "rate": 0.0052,
-        "successes": 1,
-        "wilson_lower": 0.0009,
-        "wilson_upper": 0.0289
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0196
       },
       "missed_stateful_rate": {
         "n": 0,
@@ -839,17 +839,17 @@
     "use_item": {
       "action_family_accuracy": {
         "n": 24,
-        "rate": 0.9583,
-        "successes": 23,
-        "wilson_lower": 0.7976,
-        "wilson_upper": 0.9926
+        "rate": 1.0,
+        "successes": 24,
+        "wilson_lower": 0.862,
+        "wilson_upper": 1.0
       },
       "action_family_exact_label": {
         "n": 24,
-        "rate": 0.9583,
-        "successes": 23,
-        "wilson_lower": 0.7976,
-        "wilson_upper": 0.9926
+        "rate": 1.0,
+        "successes": 24,
+        "wilson_lower": 0.862,
+        "wilson_upper": 1.0
       },
       "false_stateful_rate": {
         "n": 14,
@@ -868,10 +868,10 @@
       "n": 24,
       "target_entity_accuracy": {
         "n": 24,
-        "rate": 0.9583,
-        "successes": 23,
-        "wilson_lower": 0.7976,
-        "wilson_upper": 0.9926
+        "rate": 1.0,
+        "successes": 24,
+        "wilson_lower": 0.862,
+        "wilson_upper": 1.0
       }
     },
     "wait": {
@@ -917,100 +917,100 @@
     "aurelia": {
       "action_family_accuracy": {
         "n": 401,
-        "rate": 0.9601,
-        "successes": 385,
-        "wilson_lower": 0.9362,
-        "wilson_upper": 0.9753
+        "rate": 0.9825,
+        "successes": 394,
+        "wilson_lower": 0.9644,
+        "wilson_upper": 0.9915
       },
       "action_family_exact_label": {
         "n": 401,
-        "rate": 0.8554,
-        "successes": 343,
-        "wilson_lower": 0.8176,
-        "wilson_upper": 0.8864
+        "rate": 0.9776,
+        "successes": 392,
+        "wilson_lower": 0.9579,
+        "wilson_upper": 0.9881
       },
       "false_stateful_rate": {
         "n": 285,
-        "rate": 0.0175,
-        "successes": 5,
-        "wilson_lower": 0.0075,
-        "wilson_upper": 0.0404
+        "rate": 0.014,
+        "successes": 4,
+        "wilson_lower": 0.0055,
+        "wilson_upper": 0.0355
       },
       "missed_stateful_rate": {
         "n": 116,
-        "rate": 0.069,
-        "successes": 8,
-        "wilson_lower": 0.0354,
-        "wilson_upper": 0.1302
+        "rate": 0.0603,
+        "successes": 7,
+        "wilson_lower": 0.0295,
+        "wilson_upper": 0.1193
       },
       "n": 401,
       "target_entity_accuracy": {
         "n": 297,
-        "rate": 0.9529,
-        "successes": 283,
-        "wilson_lower": 0.9224,
-        "wilson_upper": 0.9717
+        "rate": 0.9832,
+        "successes": 292,
+        "wilson_lower": 0.9612,
+        "wilson_upper": 0.9928
       }
     },
     "starter": {
       "action_family_accuracy": {
         "n": 399,
-        "rate": 0.9499,
-        "successes": 379,
-        "wilson_lower": 0.9238,
-        "wilson_upper": 0.9673
+        "rate": 0.9799,
+        "successes": 391,
+        "wilson_lower": 0.9609,
+        "wilson_upper": 0.9898
       },
       "action_family_exact_label": {
         "n": 399,
-        "rate": 0.817,
-        "successes": 326,
-        "wilson_lower": 0.7761,
-        "wilson_upper": 0.8519
+        "rate": 0.9599,
+        "successes": 383,
+        "wilson_lower": 0.9359,
+        "wilson_upper": 0.9752
       },
       "false_stateful_rate": {
         "n": 294,
-        "rate": 0.034,
-        "successes": 10,
-        "wilson_lower": 0.0186,
-        "wilson_upper": 0.0615
+        "rate": 0.0238,
+        "successes": 7,
+        "wilson_lower": 0.0116,
+        "wilson_upper": 0.0483
       },
       "missed_stateful_rate": {
         "n": 105,
-        "rate": 0.0667,
-        "successes": 7,
-        "wilson_lower": 0.0327,
-        "wilson_upper": 0.1313
+        "rate": 0.0571,
+        "successes": 6,
+        "wilson_lower": 0.0264,
+        "wilson_upper": 0.1191
       },
       "n": 399,
       "target_entity_accuracy": {
         "n": 298,
-        "rate": 0.896,
-        "successes": 267,
-        "wilson_lower": 0.8561,
-        "wilson_upper": 0.9257
+        "rate": 0.9362,
+        "successes": 279,
+        "wilson_lower": 0.9026,
+        "wilson_upper": 0.9588
       }
     },
     "vesper-9": {
       "action_family_accuracy": {
         "n": 400,
-        "rate": 0.9475,
-        "successes": 379,
-        "wilson_lower": 0.9211,
-        "wilson_upper": 0.9654
+        "rate": 0.98,
+        "successes": 392,
+        "wilson_lower": 0.961,
+        "wilson_upper": 0.9898
       },
       "action_family_exact_label": {
         "n": 400,
-        "rate": 0.8375,
-        "successes": 335,
-        "wilson_lower": 0.7982,
-        "wilson_upper": 0.8704
+        "rate": 0.9725,
+        "successes": 389,
+        "wilson_lower": 0.9514,
+        "wilson_upper": 0.9846
       },
       "false_stateful_rate": {
         "n": 323,
-        "rate": 0.0031,
-        "successes": 1,
-        "wilson_lower": 0.0005,
-        "wilson_upper": 0.0173
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0118
       },
       "missed_stateful_rate": {
         "n": 77,
@@ -1022,46 +1022,39 @@
       "n": 400,
       "target_entity_accuracy": {
         "n": 324,
-        "rate": 0.9074,
-        "successes": 294,
-        "wilson_lower": 0.8709,
-        "wilson_upper": 0.9344
+        "rate": 0.9043,
+        "successes": 293,
+        "wilson_lower": 0.8674,
+        "wilson_upper": 0.9318
       }
     }
   },
   "database": "omnix_intent_gate",
-  "elapsed_s": 2386.9,
+  "elapsed_s": 2213.0,
   "family_confusion": {
     "ask": {
-      "ask": 278,
-      "buy": 2,
-      "equip": 5,
-      "look": 9,
-      "quest": 2,
-      "sell": 4,
-      "status": 1,
-      "talk": 43
+      "ask": 330,
+      "quest": 6,
+      "talk": 8
     },
     "attack": {
-      "attack": 42
+      "attack": 41,
+      "clarify": 1
     },
     "buy": {
       "ask": 2,
-      "buy": 51,
-      "clarify": 2
+      "buy": 52,
+      "clarify": 1
     },
     "clarify": {
       "ask": 2,
-      "clarify": 37,
+      "buy": 1,
+      "clarify": 36,
       "take": 1,
       "talk": 4
     },
     "decline": {
-      "clarify": 1,
-      "decline": 25,
-      "talk": 12,
-      "unequip": 2,
-      "wait": 2
+      "decline": 42
     },
     "defend": {
       "defend": 4
@@ -1080,14 +1073,11 @@
     },
     "inspect": {
       "ask": 1,
-      "check": 8,
-      "inspect": 4,
-      "look": 84,
-      "practice": 2
+      "inspect": 94,
+      "look": 4
     },
     "look": {
-      "clarify": 1,
-      "look": 43,
+      "look": 44,
       "talk": 2
     },
     "manipulate": {
@@ -1116,15 +1106,14 @@
       "status": 49
     },
     "talk": {
-      "practice": 1,
+      "ask": 1,
       "talk": 191
     },
     "unequip": {
       "unequip": 13
     },
     "use_item": {
-      "equip": 1,
-      "use_item": 23
+      "use_item": 24
     },
     "wait": {
       "order": 1,
@@ -1137,36 +1126,36 @@
   "held_out_sha256": "80fec6faa4b5ff71f6e7505bfd3f345a17e91526b8a9b302647eb104b5217811",
   "items": 1200,
   "labels": "model-labelled, pending the owner's spot check",
-  "measured_on": "2026-10-25",
+  "measured_on": "2026-10-26",
   "measurement": "RPG intent understanding with the intent call (RQ-3, M2)",
   "metrics": {
     "action_family_accuracy": {
       "n": 1200,
-      "rate": 0.9525,
-      "successes": 1143,
-      "wilson_lower": 0.939,
-      "wilson_upper": 0.9632
+      "rate": 0.9808,
+      "successes": 1177,
+      "wilson_lower": 0.9714,
+      "wilson_upper": 0.9872
     },
     "action_family_exact_label": {
       "n": 1200,
-      "rate": 0.8367,
-      "successes": 1004,
-      "wilson_lower": 0.8147,
-      "wilson_upper": 0.8565
+      "rate": 0.97,
+      "successes": 1164,
+      "wilson_lower": 0.9587,
+      "wilson_upper": 0.9783
     },
     "false_stateful_rate": {
       "n": 902,
-      "rate": 0.0177,
-      "successes": 16,
-      "wilson_lower": 0.0109,
-      "wilson_upper": 0.0286
+      "rate": 0.0122,
+      "successes": 11,
+      "wilson_lower": 0.0068,
+      "wilson_upper": 0.0217
     },
     "missed_stateful_rate": {
       "n": 298,
-      "rate": 0.1141,
-      "successes": 34,
-      "wilson_lower": 0.0828,
-      "wilson_upper": 0.1552
+      "rate": 0.1074,
+      "successes": 32,
+      "wilson_lower": 0.0771,
+      "wilson_upper": 0.1477
     },
     "resolved_without_model": {
       "n": 1200,
@@ -1177,40 +1166,40 @@
     },
     "target_entity_accuracy": {
       "n": 919,
-      "rate": 0.9184,
-      "successes": 844,
-      "wilson_lower": 0.8989,
-      "wilson_upper": 0.9344
+      "rate": 0.9402,
+      "successes": 864,
+      "wilson_lower": 0.9229,
+      "wilson_upper": 0.9537
     }
   },
   "metrics_reached_scenes_only": {
     "action_family_accuracy": {
       "n": 1200,
-      "rate": 0.9525,
-      "successes": 1143,
-      "wilson_lower": 0.939,
-      "wilson_upper": 0.9632
+      "rate": 0.9808,
+      "successes": 1177,
+      "wilson_lower": 0.9714,
+      "wilson_upper": 0.9872
     },
     "action_family_exact_label": {
       "n": 1200,
-      "rate": 0.8367,
-      "successes": 1004,
-      "wilson_lower": 0.8147,
-      "wilson_upper": 0.8565
+      "rate": 0.97,
+      "successes": 1164,
+      "wilson_lower": 0.9587,
+      "wilson_upper": 0.9783
     },
     "false_stateful_rate": {
       "n": 902,
-      "rate": 0.0177,
-      "successes": 16,
-      "wilson_lower": 0.0109,
-      "wilson_upper": 0.0286
+      "rate": 0.0122,
+      "successes": 11,
+      "wilson_lower": 0.0068,
+      "wilson_upper": 0.0217
     },
     "missed_stateful_rate": {
       "n": 298,
-      "rate": 0.1141,
-      "successes": 34,
-      "wilson_lower": 0.0828,
-      "wilson_upper": 0.1552
+      "rate": 0.1074,
+      "successes": 32,
+      "wilson_lower": 0.0771,
+      "wilson_upper": 0.1477
     },
     "resolved_without_model": {
       "n": 1200,
@@ -1221,10 +1210,10 @@
     },
     "target_entity_accuracy": {
       "n": 919,
-      "rate": 0.9184,
-      "successes": 844,
-      "wilson_lower": 0.8989,
-      "wilson_upper": 0.9344
+      "rate": 0.9402,
+      "successes": 864,
+      "wilson_lower": 0.9229,
+      "wilson_upper": 0.9537
     }
   },
   "mode": "play",
@@ -1236,8 +1225,8 @@
       "claude-sonnet-5-5"
     ]
   },
-  "model_calls": 703,
-  "revision": "93471cfc36",
+  "model_calls": 548,
+  "revision": "c29f269f60",
   "scenes": {
     "aurelia/grove": {
       "http": [
@@ -1291,6 +1280,6 @@
   "static_sources": {
     "grammar": 1200
   },
-  "turn_ms_p50": 2119.5,
+  "turn_ms_p50": 300.1,
   "unreached_scene_items": 0
 }

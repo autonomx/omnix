@@ -18,6 +18,8 @@ _KINDS = {
     "bestiary": frozenset({"creature", "monster", "beast", "threat"}),
     "items": frozenset({"item", "equipment", "gear", "weapon", "armor", "armour", "consumable", "augmentation"}),
     "quests": frozenset({"quest"}),
+    "groups": frozenset({"group", "faction", "network", "organization", "organisation", "guild", "order", "cult",
+                         "union", "company", "corporation", "gang"}),
 }
 _PLACE_KINDS = frozenset({"location", "place", "settlement", "site"})
 DERIVED_TRAVEL_TIME = "30 minutes"
@@ -49,16 +51,31 @@ def _of_kind(kind: str, kinds: frozenset[str]) -> bool:
     return kind in kinds or any(kind.endswith(f"_{suffix}") for suffix in kinds)
 
 
+_ROLE_ENDS = frozenset({"can", "is", "are", "was", "were", "will", "who", "that", "which", "has", "have", "keeps",
+                        "must", "would", "could", "may", "might"})
+
+
 def _role(entity: Mapping[str, Any]) -> str:
-    """What someone does, in a few words: their role as written, else the start of their summary."""
+    """What someone does, in a few words: their role as written, else the start of their summary, up to where its
+    verb begins ("A memory courier transports unnetworked copies" is a memory courier; the intent gate: a six-word cut
+    called the fixer "fixer arranges documents", and so "the documents")."""
     written = _text(entity.get("role") or entity.get("occupation"))
     if written:
         return written
     summary = _text(entity.get("short_summary") or entity.get("description"))
-    head = summary.split(".")[0].split(",")[0]
+    head = summary.split(".")[0].split(",")[0].split(";")[0]
     for article in ("A ", "An ", "The "):
         head = head.removeprefix(article)
-    return " ".join(head.split()[:6])
+    words = head.split()
+    kept: list[str] = []
+    for index, word in enumerate(words[:12]):
+        bare = word.casefold().strip("'\"")
+        # A verb: a word of the list, or a lowercase word in -s after a lowercase one ("courier transports").
+        if index and (bare in _ROLE_ENDS or (word.islower() and len(word) > 3 and word.endswith("s")
+                                             and not word.endswith("ss") and kept and kept[-1][:1].islower())):
+            break
+        kept.append(word)
+    return " ".join(kept[:8])
 
 
 def _character(entity: Mapping[str, Any]) -> dict[str, Any]:
@@ -91,12 +108,18 @@ def _item(entity: Mapping[str, Any]) -> dict[str, Any]:
             "effect": _text(entity.get("effect") or entity.get("short_summary") or entity.get("description"))}
 
 
+def _group(entity: Mapping[str, Any]) -> dict[str, Any]:
+    return {"id": _text(entity.get("id")), "name": _text(entity.get("name")),
+            "summary": _text(entity.get("short_summary") or entity.get("description"))}
+
+
 def _quest(entity: Mapping[str, Any]) -> dict[str, Any]:
     return {"id": _text(entity.get("id")), "name": _text(entity.get("name") or entity.get("title")),
             "summary": _text(entity.get("short_summary") or entity.get("description"))}
 
 
-_SHAPES = {"characters": _character, "regions": _region, "bestiary": _creature, "items": _item, "quests": _quest}
+_SHAPES = {"characters": _character, "regions": _region, "bestiary": _creature, "items": _item, "quests": _quest,
+           "groups": _group}
 
 
 def lore_rows(canon: Mapping[str, Any], section: str) -> list[dict[str, Any]]:

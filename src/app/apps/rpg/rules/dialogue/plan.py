@@ -173,6 +173,10 @@ def _common_knowledge(world: Mapping[str, Any], text: str, speaker_id: str) -> t
                   for person in people.values() if _s(_d(person).get("location_id")) == place_id]
         known.append({"place": _s(place.get("name")), "is": _s(place.get("description")),
                       **({"who_is_there": living[:4]} if living else {})})
+    for group in _d(world.get("groups")).values():  # a faction, a union, a network the world names
+        group = _d(group)
+        if named(_s(group.get("name")), *_s(group.get("name")).split()[-1:]) and _s(group.get("summary")):
+            known.append({"group": _s(group.get("name")), "is": _s(group.get("summary"))})
     for person_id, person in people.items():
         person = _d(person)
         full = _s(person.get("name"))

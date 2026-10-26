@@ -422,9 +422,16 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         "items": [
             {"id": _text(item.get("id")), "name": _text(item.get("name")), "type": _text(item.get("type")),
              "effect": _text(item.get("effect") or item.get("description"))}
-            for item in _rows(canon.get("items"))
+            for item in lore_rows(canon, "items")  # as authored, else the lore's (a world written as lore)
             if _text(item.get("id"))
         ],
+        # The world's groups (its factions, unions, networks), by what the world says of them, for a question about
+        # one ("what is the union?": the intent gate found none named in a world written as lore).
+        "groups": {_text(row.get("id")): {"name": _text(row.get("name")),
+                                          "summary": _text(row.get("summary") or row.get("agenda")
+                                                           or row.get("description"))}
+                   for row in [*_rows(canon.get("factions")), *lore_rows(canon, "groups")]
+                   if _text(row.get("id")) and _text(row.get("name"))},
         "offers": offers,
         "world_id": _text(getattr(revision, "world_id", "")),
         "world_revision": int(getattr(revision, "revision", 0) or 0),
@@ -606,7 +613,7 @@ def creator_setup(revision: Any, scenario: Any, world_model: Mapping[str, Any], 
 
 
 def _canon_item(canon: Mapping[str, Any], item_id: str) -> dict[str, Any]:
-    return next((row for row in _rows(canon.get("items")) if _text(row.get("id")) == item_id), {})
+    return next((row for row in lore_rows(canon, "items") if _text(row.get("id")) == item_id), {})
 
 
 def opening_kit(

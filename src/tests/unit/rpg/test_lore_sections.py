@@ -60,3 +60,21 @@ def test_a_place_the_world_s_roads_leave_unreached_is_joined_to_them() -> None:
     assert added == {("ruins", "meridian"): DERIVED_TRAVEL_TIME,  # a reached place of its own region
                      ("village", "capital"): DERIVED_JOURNEY_TIME}  # else the nearest region's capital
     assert joined_routes(roads, places, regions, start="grove") == roads  # all reached: nothing more
+
+
+def test_a_role_from_a_summary_ends_where_its_verb_begins() -> None:
+    """The intent gate: a six-word cut made Vesper-9's fixer "fixer arranges documents" (and so "the documents")."""
+    from app.apps.rpg.genesis.worlds.lore_sections import _role
+
+    assert _role({"description": "A fixer arranges documents, rooms and rides."}) == "fixer"
+    assert _role({"description": "A memory courier transports unnetworked copies."}) == "memory courier"
+    assert _role({"description": "A crane operator and elected Red Knives strike coordinator can stop the docks."}) == (
+        "crane operator and elected Red Knives strike coordinator")
+    assert _role({"role": "innkeeper"}) == "innkeeper"  # as written
+
+
+def test_a_lore_worlds_groups_are_its_own() -> None:
+    canon = {"entities": [{"id": "ent:groups:union", "kind": "group", "name": "Red Knives Union",
+                           "short_summary": "The dock workers' union."}]}
+    assert lore_rows(canon, "groups") == [{"id": "ent:groups:union", "name": "Red Knives Union",
+                                           "summary": "The dock workers' union."}]

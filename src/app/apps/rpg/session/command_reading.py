@@ -73,6 +73,18 @@ _CALLING_NAMES = {
 }
 
 
+_TITLE_CALLINGS = {"dr": "doctor", "doctor": "doctor", "inspector": "inspector", "captain": "captain",
+                   "sergeant": "sergeant", "professor": "professor", "father": "priest", "brother": "brother",
+                   "sister": "sister", "mother": "mother", "lord": "lord", "lady": "lady"}
+
+
+def _title_names(name: str) -> tuple[str, ...]:
+    """A title in someone's name names their calling ("Dr. Selene Kade" is the doctor; the intent gate)."""
+    first = name.split()[0].casefold().rstrip(".") if name.split() else ""
+    calling = _TITLE_CALLINGS.get(first)
+    return (f"the {calling}",) if calling and len(name.split()) > 1 else ()
+
+
 def _role_names(role: str) -> tuple[str, ...]:
     """What someone may be called by what they do: "village guard captain" gives the captain, my captain and the
     guard captain; "guide and first companion" the guide and the companion (the description after "is" aside)."""
@@ -114,6 +126,7 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
         name = _s(npc.get("name"))
         role = _s(npc.get("role"))
         add(npc_id, "person", _names(name, _called(name), *(_s(alias) for alias in _l(npc.get("aliases"))),
+                                     *_title_names(name),
                                      f"the {role}" if role and len(role.split()) <= 3 else "",
                                      *_role_names(role.casefold())), npc_id in present)
     for creature_id, creature in _d(_d(state.get("campaign_mechanics")).get("creatures")).items():
@@ -129,7 +142,10 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
         add(item_id, "item", _names(item.get("name"), _label(item_id)), True)
     for item in _l(world.get("items")):
         item = _d(item)
-        add(_s(item.get("id")), "item", _names(item.get("name")), False)
+        add(_s(item.get("id")), "item", _names(item.get("name"), *_kind_names(_s(item.get("name")))), False)
+    for group_id, group in _d(world.get("groups")).items():  # the world's factions, unions, networks
+        name = _s(_d(group).get("name"))
+        add(str(group_id), "group", _names(name, *_kind_names(name)), False)
     here_location = _d(_d(world.get("locations")).get(location_id))
     exits = set(_d(here_location.get("exits")).values())
     for place_id, place in _d(world.get("locations")).items():

@@ -1,5 +1,6 @@
 # RPG documentation
 
+- [Current state](current-state.md): where the RPG stands, each gate's latest number, and what is open.
 - [Playing the RPG](player-guide.md): for players.
 - [Writing worlds](world-author-guide.md): for world authors, including the How It Plays sections.
 - [RPG operator notes](operator-notes.md): for whoever runs Omnix.

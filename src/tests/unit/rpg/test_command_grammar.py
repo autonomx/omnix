@@ -196,3 +196,16 @@ def test_a_thing_carried_and_a_calling_answer_to_their_other_names() -> None:
     assert parse_command("ask the trader about the road", scene).target_id == "npc:elara"
     no = parse_command("Elara, no, I don't need anything.", scene)
     assert (no.family, no.target_id) == ("decline", "npc:elara")
+
+
+def test_a_title_names_a_calling_and_a_group_is_asked_about() -> None:
+    from app.apps.rpg.session.command_reading import scene_view
+
+    simulation = {"world_model": {"npcs": {"npc:kade": {"name": "Dr. Selene Kade", "role": "clinical director"},
+                                           "npc:juno": {"name": "Juno Rask", "role": "crane operator"}},
+                                  "groups": {"ent:groups:union": {"name": "Red Knives Union", "summary": "Dockers."}}},
+                  "present_npc_state": {"present_npc_ids": ["npc:kade", "npc:juno"]}}
+    scene = scene_view(simulation)
+    assert parse_command("ask the doctor about the docks", scene).target_id == "npc:kade"
+    union = parse_command("what is the union?", scene)
+    assert (union.family, union.target_id) == ("ask", "ent:groups:union")
