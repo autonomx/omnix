@@ -551,10 +551,12 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         companions.append({"npc_id": change.npc_id, "name": change.name, "role": change.role, "hp": 100,
                            "max_hp": 100, "status": "active", "follow_mode": "following_player"})
         writer.set(_PLAYER + ("party_state",), {**party, "companions": companions, "max_size": party.get("max_size", 3)})
+        _show_party(writer)
     elif isinstance(change, CompanionLeft):
         party = dict(writer.get(_PLAYER + ("party_state",)) or {})
         companions = [dict(row) for row in party.get("companions") or () if row.get("npc_id") != change.npc_id]
         writer.set(_PLAYER + ("party_state",), {**party, "companions": companions})
+        _show_party(writer)
     elif isinstance(change, CompanionOrdered):
         party = dict(writer.get(_PLAYER + ("party_state",)) or {})
         companions = [dict(row) for row in party.get("companions") or () if isinstance(row, dict)]
@@ -617,6 +619,7 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         party["companions"] = [{**row, "hp": min(change.hp, int(row.get("max_hp") or change.hp))}
                                if row.get("npc_id") == change.npc_id else row for row in companions]
         writer.set(_PLAYER + ("party_state",), party)
+        _show_party(writer)
     elif isinstance(change, DefeatRecorded):
         writer.set(_PLAYER + ("defeats",), change.defeats)
     elif isinstance(change, CampaignEnded):
@@ -684,6 +687,18 @@ def _show_cooldowns(writer: _Writer) -> None:
     ready = writer.get(("state", "ability_state", "ready_at")) or {}
     writer.set(("state", "ability_state", "cooldowns"),
                {str(ability_id): int(at) - turn - 1 for ability_id, at in ready.items() if int(at) - turn - 1 > 0})
+
+
+def _show_party(writer: _Writer) -> None:
+    """The play screen's party: each companion's name, role and health, as the simulation holds them (a companion who
+    joined in play was in the simulation's party only, and the party panel stayed empty)."""
+    if not isinstance(writer.get(("state",)), dict):
+        return
+    companions = [row for row in writer.get(_PLAYER + ("party_state", "companions")) or () if isinstance(row, dict)]
+    writer.set(("state", "party"), [
+        {"npc_id": str(row.get("npc_id") or ""), "name": str(row.get("name") or row.get("npc_id") or ""),
+         "class": str(row.get("role") or "companion"), "role": str(row.get("role") or "companion"),
+         "hp": row.get("hp"), "max_hp": row.get("max_hp")} for row in companions])
 
 
 def _show_regard(writer: _Writer, name: str, trust: int) -> None:

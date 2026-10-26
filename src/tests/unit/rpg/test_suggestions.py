@@ -47,3 +47,19 @@ def test_a_question_comes_with_its_answers() -> None:
     assert _labels(choices(_document(), "speech_without_listener")) == ["Orik", "Liora"]
     assert _labels(choices(_document(), "attack_without_target")) == ["Orik", "Liora"]
     assert choices(_document(), "give_without_item") == []
+
+
+def test_a_waiting_level_choice_is_offered_first_and_said_by_status() -> None:
+    """The playtest: level 2 was reached, a choice waited, and nothing on the screen said so."""
+    from app.apps.rpg.rules.player.requests import status
+    from app.apps.rpg.session.turn.suggestions import suggestions
+
+    simulation = {"player_state": {"level": 2, "xp": 80, "xp_to_next": 200, "level_choices_pending": 1,
+                                   "skills": {"stealth": {"level": 1, "xp": 5}, "persuasion": {"level": 0, "xp": 20},
+                                              "archery": {"level": 0, "xp": 0}}}}
+    offered = suggestions({"simulation_state": simulation})
+    assert [row.command for row in offered[:2]] == ["raise strength", "improve stealth and persuasion"]
+    told = status(simulation, "what level am I?").lines
+    assert any("A level's choice is waiting" in line for line in told)
+    simulation["player_state"]["level_choices_pending"] = 0
+    assert not any(row.command == "raise strength" for row in suggestions({"simulation_state": simulation}))

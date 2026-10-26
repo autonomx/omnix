@@ -625,7 +625,8 @@ def command_for(reading: IntentCandidate, scene: SceneView) -> str:
         return f"I try to {reading.reason.removeprefix('check:').replace('_', ' ')}" + (f" {name}" if name else "")
     said = {"move": f"go to {name}", "talk": f"Talk to {name}", "attack": f"I attack {name}", "buy": f"I buy {name}",
             "sell": f"I sell my {name}", "take": f"I take the {name}", "drop": f"I drop the {name}",
-            "give": f"I give the {name}",
+            "give": f"I give the {name}" + (f" to {names[reading.second_target_id]}"
+                                             if reading.second_target_id in names else ""),
             "use_item": f"I use the {name}", "equip": f"I equip the {name}", "unequip": f"I take off the {name}",
             "quest": f"I accept the quest {name}", "practice": f"I practise {name}", "party": f"I invite {name} to join me",
             "ability": f"I use {name}", "look": f"look at {name}" if name else "look around"}

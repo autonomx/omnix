@@ -436,6 +436,9 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         "routines": [routine.model_dump(mode="json") for routine in sections.routines],
         "knowledge": [entry.model_dump(mode="json") for entry in sections.knowledge],
         "pressures": [pressure.model_dump(mode="json") for pressure in sections.pressures],
+        # Every quest the world has, as the log would keep it: one not in the log yet can be offered in play.
+        "quests": {_text(quest.get("id")): world_quest_row(quest, start) for quest in _rows(canon.get("quests"))
+                   if _text(quest.get("id"))},
     }
 
 
@@ -690,28 +693,39 @@ def opening_quests(revision: Any, scenario: Any, *, lead_seed_id: str = "") -> l
         quest = quests.get(_text(seed.get("quest_id")))
         if quest and all(quest is not existing for existing, _ in ordered):
             ordered.append((quest, _text(seed.get("hook"))))
-    log: list[dict[str, Any]] = []
-    for index, (quest, hook) in enumerate(ordered):
-        quest_id = _text(quest.get("id"))
-        places = [_text(place) for place in quest.get("locations") or () if _text(place)]
-        log.append({
-            "id": quest_id,
-            "quest_id": quest_id,
-            "title": _text(quest.get("title")) or _label_from_id(quest_id),
-            "status": "active" if index == 0 else "available",
-            "objective": _text(quest.get("objective")),
-            "hook": hook,
-            "rewards": [_text(reward) for reward in quest.get("rewards") or () if _text(reward)],
-            "locations": places,
-            # The player starts at the opening's place, so a quest that names it has already been there.
-            "visited_locations": [start] if start in places else [],
-            # A quest of steps, its deadline and who gave it, as the world wrote them (quests.md).
-            **{key: quest[key] for key in ("steps", "deadline_hours", "giver_id") if quest.get(key)},
-            **({"objective": _text(_mapping(quest["steps"][0]).get("summary")) or _text(quest.get("objective"))}
-               if quest.get("steps") else {}),
-            "source": "published_world",
-        })
-    return log
+    return [{**world_quest_row(quest, start, hook=hook), "status": "active" if index == 0 else "available"}
+            for index, (quest, hook) in enumerate(ordered)]
+
+
+def world_quest_row(quest: Mapping[str, Any], start: str, *, hook: str = "") -> dict[str, Any]:
+    """A world's quest as a campaign's log keeps it (without its status): the opening's log, and a quest offered in
+    play that the log does not have yet."""
+    quest_id = _text(quest.get("id"))
+    places = [_text(place) for place in quest.get("locations") or () if _text(place)]
+    return {
+        "id": quest_id,
+        "quest_id": quest_id,
+        "title": _to_the_hero(_text(quest.get("title"))) or _label_from_id(quest_id),
+        "objective": _to_the_hero(_text(quest.get("objective"))),
+        "hook": _to_the_hero(hook),
+        "rewards": [_text(reward) for reward in quest.get("rewards") or () if _text(reward)],
+        "locations": places,
+        # The player starts at the opening's place, so a quest that names it has already been there.
+        "visited_locations": [start] if start in places else [],
+        # A quest of steps, its deadline and who gave it, and its kind (an intro, a finale), as the world wrote them.
+        **{key: quest[key] for key in ("steps", "deadline_hours", "giver_id", "tier") if quest.get(key)},
+        **({"objective": _to_the_hero(_text(_mapping(quest["steps"][0]).get("summary")) or _text(quest.get("objective")))}
+           if quest.get("steps") else {}),
+        "source": "published_world",
+    }
+
+
+def _to_the_hero(text: str) -> str:
+    """A quest's words as the hero reads them: an author's "the protagonist" is the hero ("Repair the protagonist's
+    phone" is "Repair your phone"). Only where the words read as written (a possessive, an object); a sentence that
+    opens with it keeps it, its verb being the author's."""
+    text = re.sub(r"\b[Tt]he protagonist's\b", lambda match: "Your" if match.group(0)[0] == "T" else "your", text)
+    return re.sub(r"(?<=[a-z,;] )the protagonist\b", "you", text)
 
 
 __all__ = [
@@ -724,4 +738,5 @@ __all__ = [
     "opening_quests",
     "published_locations",
     "session_world_model",
+    "world_quest_row",
 ]

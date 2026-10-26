@@ -32,6 +32,8 @@ SCENE = SceneView((
     ("I ask Liora Fen where Archon Malrec is", "ask", "npc:liora"),
     ("what do people say about the Archon?", "ask", "npc:archon"),
     ("Liora, where am I?", "ask", "npc:liora"),
+    ("Liora, where am I? I woke up here and remember nothing.", "ask", "npc:liora"),  # the playtest's first line
+    ("Liora, I woke up here and I remember nothing.", "talk", "npc:liora"),
     ("where am I?", "look", None),
     ("what am I carrying?", "status", None),
     ("tell Liora a joke", "talk", "npc:liora"),

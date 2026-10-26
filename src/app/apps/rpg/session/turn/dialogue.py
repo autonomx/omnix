@@ -21,12 +21,15 @@ from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 _LINE_PROMPT = prompt_template(
-    "rpg.ai_compact_dialogue.plan", "3",
+    "rpg.ai_compact_dialogue.plan", "6",
     "Reply as the speaker in the PLAN, in one or two concise spoken sentences, in their voice and stance. Output "
     "only the words they say: no name label, narration, JSON or markdown. Share what may_reveal holds, offer what "
-    "offers_quest or offers_to_tell_for_a_price hold, and name each of wares with its price as written; about anything else, answer from their role and "
+    "offers_quest or offers_to_tell_for_a_price hold, and name each of wares with its price as written. Asked what to "
+    "do or how, point to heros_quests: where each goes on (one that is done is done: do not send them back to it). "
+    "Never invent a task, item or requirement the PLAN does not hold, and never speak of the plan itself. About "
+    "anything else, answer from their role and "
     "background or say they do not know. Keep continuity with "
-    "recent_exchanges without repeating them. " + WORLD_DATA_RULE + "\nPLAYER: {v0}\nPLAN: ",
+    "recent_exchanges without repeating them: no phrase, image or saying of theirs again. " + WORLD_DATA_RULE + "\nPLAYER: {v0}\nPLAN: ",
 )
 MAX_LINE = 400
 _LINE_OPTIONS = {"temperature": 0.55, "max_tokens": 90, "chat_template_kwargs": {"enable_thinking": False}}

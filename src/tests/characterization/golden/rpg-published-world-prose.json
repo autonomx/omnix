@@ -26,11 +26,11 @@
     },
     {
       "blocks": [
-        "action||You take on the quest Voices in the Phone: Repair the protagonist's phone and identify the voice calling from Earth."
+        "action||You take on the quest Voices in the Phone: Repair your phone and identify the voice calling from Earth."
       ],
       "step": "I accept the quest Voices in the Phone.",
-      "told": "You take on the quest Voices in the Phone: Repair the protagonist's phone and identify the voice calling from Earth. You take on the quest Voices in the Phone: Repair the protagonist's phone and identify the voice calling from Earth.",
-      "visible": "You take on the quest Voices in the Phone: Repair the protagonist's phone and identify the voice calling from Earth."
+      "told": "You take on the quest Voices in the Phone: Repair your phone and identify the voice calling from Earth. You take on the quest Voices in the Phone: Repair your phone and identify the voice calling from Earth.",
+      "visible": "You take on the quest Voices in the Phone: Repair your phone and identify the voice calling from Earth."
     },
     {
       "blocks": [
@@ -217,11 +217,11 @@
     },
     {
       "blocks": [
-        "result||Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian, Echo beasts on the March roads."
+        "result||Active quests: Voices in the Phone (Repair your phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian, Echo beasts on the March roads."
       ],
       "step": "Check my quests",
       "told": "",
-      "visible": "Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian, Echo beasts on the March roads."
+      "visible": "Active quests: Voices in the Phone (Repair your phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian, Echo beasts on the March roads."
     },
     {
       "blocks": [

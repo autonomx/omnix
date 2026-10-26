@@ -80,3 +80,68 @@ def test_the_streamed_line_has_the_lines_own_limits(monkeypatch) -> None:
     assert asked[0]["timeout_s"] == dialogue.LINE_TIMEOUT_SECONDS
     assert asked[0]["provider_options"]["max_tokens"] == 90
     assert asked[0]["provider_options"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_the_plan_tells_where_the_heros_quest_goes_on() -> None:
+    """The playtest: asked how to mend the phone, Brindle wanted "aether-coil wire"; the quest goes on at the
+    Moonroot Ruins. The plan carries the hero's quests the speaker bears on, and where each goes on."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {
+        "world_model": {"npcs": {"npc:brindle": {"name": "Brindle Gearwing", "role": "relic mechanic",
+                                                 "location_id": "location:village"},
+                                 "npc:rhea": {"name": "Rhea Sunward", "role": "captain", "location_id": "location:pass"}},
+                        "locations": {"location:village": {"name": "Starfall Village"},
+                                      "location:ruins": {"name": "Moonroot Ruins"}}},
+        "present_npc_state": {"present_npc_ids": ["npc:brindle", "npc:rhea"]},
+        "quest_state": {"quests": [{"quest_id": "quest:phone", "title": "Voices in the Phone", "status": "active",
+                                    "objective": "Repair your phone", "visited_locations": ["location:village"],
+                                    "locations": ["location:village", "location:ruins"]}]},
+    }
+    told = build_plan(simulation, "npc:brindle", "What would you need to fix it?").context()
+    assert told["heros_quests"] == [{"title": "Voices in the Phone", "objective": "Repair your phone",
+                                     "goes_on_at": ["Moonroot Ruins"]}]
+    assert "heros_quests" not in build_plan(simulation, "npc:rhea", "Any news?").context()  # it is not hers
+
+
+def test_someone_who_hands_out_work_offers_a_quest_no_one_gave() -> None:
+    """The playtest: the Wayfarers' Guild's registrar, asked for contracts, had none, though the roads' quest was open."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {
+        "world_model": {"npcs": {"npc:miri": {"name": "Miri Kestrel", "role": "guild registrar",
+                                              "location_id": "location:guild"},
+                                 "npc:orik": {"name": "Orik", "role": "innkeeper", "location_id": "location:guild"}}},
+        "present_npc_state": {"present_npc_ids": ["npc:miri", "npc:orik"]},
+        "quest_state": {"quests": [
+            {"quest_id": "quest:wolves", "title": "Echo beasts on the March roads", "status": "available",
+             "objective": "Defeat 3 Echo Wolves", "locations": ["location:pass"]},
+            {"quest_id": "quest:first", "title": "First Night", "status": "completed", "locations": ["location:guild"]}]},
+    }
+    miri = build_plan(simulation, "npc:miri", "What contracts does the guild have for me?")
+    assert miri.quest_offer["title"] == "Echo beasts on the March roads"
+    assert {"title": "First Night", "done": True} in [dict(quest) for quest in miri.hero_quests]
+    assert build_plan(simulation, "npc:orik", "Any work for me?").quest_offer == {}  # an innkeeper hands out none
+
+
+def test_a_worlds_quest_not_in_the_log_is_offered_and_joins_it_and_a_finale_comes_last() -> None:
+    """The playtest: three of Aurelia's six quests could never be offered (only the opening's were in the log), and a
+    newcomer asking for work was offered the finale."""
+    from app.apps.rpg.foundation.state.reducer import reduce
+    from app.apps.rpg.rules.dialogue.plan import build_plan, plan_changes
+
+    engine = {"id": "quest:engine", "quest_id": "quest:engine", "title": "The Princess and the Engine",
+              "objective": "Help restore the royal engine", "locations": ["location:guild"], "tier": "political"}
+    simulation = {
+        "world_model": {"npcs": {"npc:seraphine": {"name": "Seraphine", "role": "princess and engineer",
+                                                   "location_id": "location:guild"}},
+                        "quests": {"quest:engine": engine}},
+        "present_npc_state": {"present_npc_ids": ["npc:seraphine"]},
+        "quest_state": {"quests": [{"quest_id": "quest:finale", "title": "The Hollow Meridian", "status": "available",
+                                    "tier": "finale", "locations": ["location:guild"]}]},
+    }
+    plan = build_plan(simulation, "npc:seraphine", "Is there any work I could help you with?")
+    assert plan.quest_offer["title"] == "The Princess and the Engine"
+    document, _ = reduce({"manifest": {}, "state": {}, "simulation_state": simulation}, plan_changes(plan))
+    rows = {row["quest_id"]: row for row in document["simulation_state"]["quest_state"]["quests"]}
+    assert rows["quest:engine"]["status"] == "available" and rows["quest:engine"]["offered_by"] == "npc:seraphine"

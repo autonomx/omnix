@@ -110,6 +110,11 @@ def status(simulation: Mapping[str, Any], text: str) -> RequestOutcome:
     if "progress" in topics:
         lines.append(f"You are level {int(player.get('level') or 1)}, with {int(player.get('xp') or 0)} of "
                      f"{int(player.get('xp_to_next') or 100)} experience toward the next level.")
+        pending = int(player.get("level_choices_pending") or 0)
+        if pending > 0:
+            lines.append(("A level's choice is waiting" if pending == 1 else f"{pending} levels' choices are waiting")
+                         + ': raise an attribute ("raise strength"), learn an ability ("learn <ability>"), or improve '
+                         'two skills ("improve stealth and persuasion").')
     if "inventory" in topics:
         store = _d(_sections.inventory_state_of(player))
         items = [_d(item) for item in _l(store.get("items")) if _d(item).get("name")]

@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:3a8bcff181f344ebf99f8a43824cfbbe8b4903e498646d3a534dee738ba59887",
+    "document_hash": "sha256:cadcd14caaa9d2cc182c22221a3c204ea6067c602cc7bfc10e92ac4321e67594",
     "facts": {
       "combat": {
         "active": false,
@@ -35,14 +35,6 @@
           "xp": 0
         },
         "defense": {
-          "level": 0,
-          "xp": 0
-        },
-        "firearms": {
-          "level": 0,
-          "xp": 0
-        },
-        "hacking": {
           "level": 0,
           "xp": 0
         },
@@ -88,7 +80,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:80d5ffb1e3630b59e864610c7a3da8abd82ba1aa8b46764f877752473af20dc4",
+      "document_hash": "sha256:ac21a4c0f4ac8d451ca640c166464a1c2828a00ab522b0078437b4164c7ffbfb",
       "facts": {
         "combat": {
           "active": false,
@@ -123,14 +115,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -229,7 +213,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3c33d1f9605d0d69c97072da4a45d6634f218e2259cff7d08be9b66e043e8e53",
+      "document_hash": "sha256:6984f2a3c76151b415a462c097fa177c89b6cddc68f6113b5ce431a96d921056",
       "facts": {
         "combat": {
           "active": false,
@@ -264,14 +248,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -379,7 +355,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:a92779f226d0952885933f7731c9653e69330fcba4a9d56e11ade8e44a080acb",
+      "document_hash": "sha256:bf271cd58cdd89345011c1e3db2f35251ce94bde997f2f9173d413dd6f1659a7",
       "facts": {
         "combat": {
           "active": false,
@@ -416,14 +392,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -480,6 +448,7 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
+        "state/party",
         "state/turn_count",
         "state/world"
       ],
@@ -528,7 +497,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:dfd9d1237e236d2d7b06ab79589018d6cfdf28e1be8ba6d19b150e6e8afd4dfe",
+      "document_hash": "sha256:07e438ef2c33632f2bf43bf74820d15814adba689ef7550223102ed56f04230a",
       "facts": {
         "combat": {
           "active": false,
@@ -565,14 +534,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -678,7 +639,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cd433a89217bedd68cebbe18e4493621a650029f11201604a2233a169e1b6697",
+      "document_hash": "sha256:b379eb62845ff014b9024979d8043fe630ea0e53cf9f3596ca8db8870044d6d2",
       "facts": {
         "combat": {
           "active": false,
@@ -715,14 +676,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -846,7 +799,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f24f34de5af3331f63d6bdf143b7798c8c975baa4b6a6aed2ea49e2879556f2f",
+      "document_hash": "sha256:b6f3bde3905fc3b698498af5f4b047eba9c60ccbba23b65cf490ec7ec15fd9ea",
       "facts": {
         "combat": {
           "active": false,
@@ -887,14 +840,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1031,7 +976,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b826017765b2f12522a3b4dbacf1205cf2eef246d127cdd0932a7e5b9d25e9c7",
+      "document_hash": "sha256:ed881bcdc6462957b9e0d83a153991fb0b3d6ec924cce6b2230768b26d663d4f",
       "facts": {
         "combat": {
           "active": false,
@@ -1072,14 +1017,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1175,7 +1112,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0f32eb8783ec6d58db5b0d74b3185aecc1298608c65b8889662edf0810d2200a",
+      "document_hash": "sha256:809300feeec74a157a39678872c58244a5f1e03da5701538e15646d90e66c93f",
       "facts": {
         "combat": {
           "active": false,
@@ -1216,14 +1153,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1325,7 +1254,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:22a2a326f8e6581fb97d93ce23d9c0e89c80f3f6d9ebed79c7c35bbb9682b597",
+      "document_hash": "sha256:3649a6d4556b291b41b6b70b4430b07dcfc0d504e2105b3d45c87638608ecbf1",
       "facts": {
         "combat": {
           "active": false,
@@ -1366,14 +1295,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1474,7 +1395,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:078d8b40a0e5a5a10f75b5971378a0beb4c78e88048775b47d779ba357482817",
+      "document_hash": "sha256:7e12e812a44fecb797b3743d6917f45d1dabaf48536bfd813eeb72616d42d2e6",
       "facts": {
         "combat": {
           "active": false,
@@ -1516,14 +1437,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1628,7 +1541,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:c40ad4db1a4a129d728995aca7c4406dcd6257c94edf7be64d991db7f2810a99",
+      "document_hash": "sha256:e9ac657c907690b4d4782f1087c122219900cc6ed67bd3cd32dc7245eedc8a83",
       "facts": {
         "combat": {
           "active": false,
@@ -1668,14 +1581,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1773,7 +1678,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:2b75fd87a1afb839415058e3e8a7acb4f068052bd11f3a2655b3305516825c8c",
+      "document_hash": "sha256:1e06d1057d781f44cdec59b774edb905f25b30e74b5a58a3eff9c142ed95a3ed",
       "facts": {
         "combat": {
           "active": false,
@@ -1813,14 +1718,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -1934,7 +1831,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f056d3db3635b128f85f6dc3213aba69881bd7216d16dea9b8a137afe4055be8",
+      "document_hash": "sha256:159a65ae8528d6e53b8821cc0bd4024bec34e6c306e9c78fcf9c84938add2af3",
       "facts": {
         "combat": {
           "active": false,
@@ -1974,14 +1871,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -2113,7 +2002,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:4d28947152891ecf0c94213be69f399483b637c6f7af486a97d19baad6777c62",
+      "document_hash": "sha256:373dc06cc9ea23b9dd51e4a62925488b8bd0f27113c612b95d9e13b0729aa464",
       "facts": {
         "combat": {
           "active": false,
@@ -2153,14 +2042,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -2278,7 +2159,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:b5c6ea043e10747b3010357b0a7286921bc669299204261a662a72572ac5048e",
+      "document_hash": "sha256:624ce6150e2ad05487c1b789c5c824e9c176f46d848db091f18a829fa1cfcaae",
       "facts": {
         "combat": {
           "active": false,
@@ -2319,14 +2200,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -2446,7 +2319,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:9bdbaf8c16898912852f4d64775865c5a4916a7701a3c3787f29f1830011ef89",
+      "document_hash": "sha256:e748425ee6bcc7ab0694c2cac4751c54c050ce4f50861bcffa995b6a0b02b6e9",
       "facts": {
         "combat": {
           "active": false,
@@ -2487,14 +2360,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -2586,7 +2451,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:9754cbe02bfeee95c33fd0bd2670d70baed803f780dda8c7f797b96b6c2450ef",
+      "document_hash": "sha256:d29830f6d5debf94c5f38fe7aeec0c7d528306871ae953f04d2705b53963d9f7",
       "facts": {
         "combat": {
           "active": false,
@@ -2627,14 +2492,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -2733,7 +2590,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:b544908d3844a7fdd3f9df4921b2552262ce3ee9f3bf7324fb4e043e9685677f",
+      "document_hash": "sha256:82f8e69c10da8feac97d21d2707455a06cbd1ff991adc2b27bd23b8c6630f7fa",
       "facts": {
         "combat": {
           "active": false,
@@ -2774,14 +2631,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -2891,7 +2740,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:901c598976f76fe263ecfcf1176e9c68afe2cc7470dbe04d0a00565db08e376a",
+      "document_hash": "sha256:15cc8c09e80ebb7ee2b70b86cec4d90447be0c0ce2f86b80642f80e6de735a07",
       "facts": {
         "combat": {
           "active": false,
@@ -2931,14 +2780,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -3055,7 +2896,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c630105423475f17e8261214e72d5efde1e7b1ef08589fdd2262c6a3bc3de6b7",
+      "document_hash": "sha256:caf09786cb3d64e15240b1626c932837e08066e292c0e3f7d9aa68d1aa8b74bb",
       "facts": {
         "combat": {
           "active": false,
@@ -3095,14 +2936,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -3213,7 +3046,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:738637c914b691a4ed2a2a1f10ab34938415a645ad018b4889260e3548ade465",
+      "document_hash": "sha256:0a3b358c4c29c86ac7407b3141aa423912eefb04fe925f77a3499f99dec59fb9",
       "facts": {
         "combat": {
           "active": true,
@@ -3255,14 +3088,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -3406,7 +3231,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5ab89766cb990ade7ce0ec8485f6ef6f39d4787028e8db6a5e84373555652c36",
+      "document_hash": "sha256:0fc651d55a00c95a4969c93c98ce4de7752965b774b504ea77893db98e46b6ba",
       "facts": {
         "combat": {
           "active": true,
@@ -3448,14 +3273,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -3555,7 +3372,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:fff398eafa5e6732705b135e14611c91836ae6abc62d74357cde0fe85e65182b",
+      "document_hash": "sha256:8d115cd96c8fb83a3f6578d24a096e871d7a11b17004bcb3d52eb088762f7057",
       "facts": {
         "combat": {
           "active": true,
@@ -3597,14 +3414,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -3685,7 +3494,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ebc56830cd59b716ebeea3db90e6df8a2d2f2800cae8829237bbec2674ceb1c2",
+      "document_hash": "sha256:d395528c441a631073b5786545fda6b894857f1d2efc395e8ae391b5773a5f8d",
       "facts": {
         "combat": {
           "active": true,
@@ -3727,14 +3536,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -3841,7 +3642,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cc2689ca2a7d0a2e34794b0accb0a4e2427612c7aaa4dc40c3ad769c1f1f4251",
+      "document_hash": "sha256:86682b22470a34327c394ed81e8e0ac29be6547ce465105fe6cb1c5977ff597b",
       "facts": {
         "combat": {
           "active": true,
@@ -3883,14 +3684,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -4002,7 +3795,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5cbf0731a78b46c8cb0886b0493cc5c41a8c30efe78a5d04f529d1e7abe9825e",
+      "document_hash": "sha256:b451ebf26b6a2eb5f3be572c6bf83842123d1cf3c55a091096b070ff566fc8a0",
       "facts": {
         "combat": {
           "active": false,
@@ -4044,14 +3837,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -4153,7 +3938,7 @@
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:efb35c8c4c854e3b8b855a26e62864d9047c4c567592dbb4eba6b0822b82ca14",
+      "document_hash": "sha256:dd4e977fc5a9d3999397a451a338134c378d6f51790a2692fa357fe361f7879e",
       "facts": {
         "combat": {
           "active": false,
@@ -4194,14 +3979,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -4303,7 +4080,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:7ee60d9aeb98f1f639a8d741bdf50960500745a8332b32486c2a535d582dec94",
+      "document_hash": "sha256:cfbd7fdd2e2e6aff42c121c8bb31d0d87a116d47da93466892903e4d76b793ea",
       "facts": {
         "combat": {
           "active": false,
@@ -4344,14 +4121,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -4448,7 +4217,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:7fc274a3fdc914c981724d3d64c02eb6739471401c5a1736cec33d2882868733",
+      "document_hash": "sha256:63dd05fb34c8216c0b2993381f58fce23e0d5b22580e87fdad7545a2536bb65a",
       "facts": {
         "combat": {
           "active": false,
@@ -4493,14 +4262,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -4643,7 +4404,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:3fa29020b27904fe17c7477c087e489f5a42a97059740be179e781d40b8f5d7f",
+      "document_hash": "sha256:4a8c294cdbd9c60f57bd0668564a0c3d6cbbd4ccb4f914abdd33cee06d120d8d",
       "facts": {
         "combat": {
           "active": false,
@@ -4685,14 +4446,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },
@@ -4814,7 +4567,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:62b80c96ef25a6bd1abe436df3707cf727bebd53080f3464fa6b6053d5acf966",
+      "document_hash": "sha256:c0e921cb83cb6e1ec6651088cb6115abd9b4f68572e7be404b937a06af8ec233",
       "facts": {
         "combat": {
           "active": false,
@@ -4856,14 +4609,6 @@
             "xp": 0
           },
           "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
             "level": 0,
             "xp": 0
           },

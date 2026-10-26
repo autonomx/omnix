@@ -336,7 +336,7 @@ def asked_not_done(text: str) -> bool:
 
 
 def _question(words: list[str], original: str) -> bool:
-    if original.endswith("?"):
+    if original.endswith("?") or re.match(r"[^.!?]*\?", original):  # "Liora, where am I? I woke up here."
         return True
     return bool(words) and words[0] in _QUESTION_WORDS and not _starts(words, "what a", "how nice", "how lovely")
 
@@ -401,6 +401,11 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     if not question and lead and lead[0].start <= 1 and _has(words, *_ORDERS):
         # "Liora, keep watch": an order to someone named first; whether they take it is the party rule's to say.
         return _candidate("order", lead[0], 0.85, "orders")
+
+    if lead and lead[0].start == 0 and re.match(r"\s*[^,.!?]{1,60},", original) and not question:
+        # "Liora, I woke up here and remember nothing": a name and a comma first is speech to them, whatever the
+        # words after it name (a look's "where am I", a place).
+        return _candidate("talk", lead[0], 0.85, "talks")
 
     if hypothetical(text):
         # "What would happen if I attacked Liora?" is a question, never the deed. Its target is what it is about

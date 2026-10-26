@@ -18,8 +18,12 @@ from app.apps.rpg.foundation.state import access as _sections
 _WORD = re.compile(r"[a-z0-9']+")
 _STOP = frozenset("a an the and or of to in on at for with about from is are was were be you your me my i we "
                   "what who where when why how do does did can could would will tell ask know heard any some this "
-                  "that there here it its".split())
-_WORK = re.compile(r"\b(work|job|jobs|task|tasks|help|quest|quests|errand|hire|bounty|contract)\b")
+                  "that there here it its she he his her him hers they them their has have had not no".split())
+_WORK = re.compile(r"\b(work|jobs?|tasks?|help|quests?|errands?|hire|bount(y|ies)|contracts?)\b")
+# Someone whose work is handing out work (a guild's registrar, a quartermaster, a bounty clerk): they offer a quest
+# no one else gave, wherever it is (the playtest: the Wayfarers' Guild's registrar had no contract to offer).
+_GIVES_WORK = re.compile(r"\b(guild|registrar|registry|contracts?|bount(y|ies)|quest|notice|clerk|quartermaster|"
+                         r"broker|mercenar(y|ies)|wayfarer)\b")
 _WARES = re.compile(r"\b(sell|selling|wares|buy|price|prices|cost|costs|goods|offer|stock|room|rooms|food|drink)\b")
 FRIENDLY_TRUST = 50
 
@@ -40,6 +44,8 @@ class DialoguePlan:
     held_back: int = 0  # facts they will share once they trust the hero more
     secrets: tuple[str, ...] = ()  # never in the line
     quest_offer: dict[str, str] = field(default_factory=dict)
+    hero_quests: tuple[dict[str, Any], ...] = ()  # the hero's quests they bear on, and where each goes on
+    offered_rows: dict[str, dict[str, Any]] = field(default_factory=dict)  # an offer's row, when the log has none
     wares: tuple[str, ...] = ()  # "Healing Potion for 3 silver"
     ware_names: tuple[str, ...] = ()  # each named in the line, or the line lists them itself
     player_said: str = ""
@@ -53,6 +59,7 @@ class DialoguePlan:
             "personality": list(self.personality), "goals": list(self.goals), "background": self.background,
             "may_reveal": list(self.reveals), "offers_to_tell_for_a_price": list(self.for_a_price),
             "keeps_back_until_trusted": self.held_back, "offers_quest": self.quest_offer,
+            "heros_quests": [dict(quest) for quest in self.hero_quests],
             "wares": list(self.wares),
         }.items() if value}
 
@@ -123,6 +130,36 @@ def _goal_words(goal: Mapping[str, Any]) -> set[str]:
     return _stemmed({_s(topic).casefold() for topic in _l(goal.get("topics"))} | _words(_s(goal.get("summary"))))
 
 
+def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speaker_id: str, name: str,
+                 here: str) -> tuple[dict[str, Any], ...]:
+    """The hero's quests under way that the speaker bears on (one they gave, one at their place, one naming them, or
+    any, for someone travelling with the hero), each with where the game says it goes on: the places it has not
+    reached yet. A line then points there rather than inventing an errand the game does not have (the playtest: asked
+    how to mend the phone, Brindle wanted "aether-coil wire"; the quest goes on at the Moonroot Ruins)."""
+    companions = {_s(_d(row).get("npc_id")) for row in
+                  _l(_d(_sections.party_state_of(_d(_sections.player_state_of(simulation)))).get("companions"))}
+    places = _d(world.get("locations"))
+    first_name = name.split()[0].casefold() if name else ""
+    found: list[dict[str, Any]] = []
+    for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests")):
+        quest = _d(quest)
+        if quest.get("status") not in {"active", "completed"}:
+            continue
+        locations = [_s(place) for place in _l(quest.get("locations"))]
+        told = f"{_s(quest.get('title'))} {_s(quest.get('objective'))}".casefold()
+        if not (speaker_id in companions or _s(quest.get("giver_id")) == speaker_id or (here and here in locations)
+                or (first_name and first_name in told)):
+            continue
+        if quest.get("status") == "completed":  # done: a line does not send the hero back to it
+            found.append({"title": _s(quest.get("title")), "done": True})
+            continue
+        visited = {_s(place) for place in _l(quest.get("visited_locations"))}
+        ahead = [_s(_d(places.get(place)).get("name")) or place for place in locations if place not in visited]
+        found.append({"title": _s(quest.get("title")), "objective": _s(quest.get("objective")),
+                      **({"goes_on_at": ahead} if ahead else {})})
+    return tuple(found[:3])
+
+
 def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> DialoguePlan | None:
     """The plan for ``speaker_id``'s answer to ``text``; ``None`` when the world does not know them."""
     world = _d(_sections.world_model_of(simulation))
@@ -151,22 +188,34 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
     goals = _goals(world, speaker_id, asked)
     pressing = _goal_words(goals[0]) if goals else set()
     quest_offer: dict[str, str] = {}
+    new_quests: dict[str, dict[str, Any]] = {}  # an offered quest the log does not have yet, with its row
     here = _s(npc.get("location_id"))
     offerable = []
-    for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests")):
-        quest = _d(quest)
+    hands_out_work = bool(_GIVES_WORK.search(_s(npc.get("role")).casefold()))
+    logged = [_d(quest) for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests"))]
+    in_log = {_s(quest.get("quest_id") or quest.get("id")) for quest in logged}
+    # The log's quests on offer, and the world's that are not in it yet (offered, they join it).
+    unlogged = [{**_d(row), "status": "available"} for quest_id, row in _d(world.get("quests")).items()
+                if quest_id not in in_log]
+    for quest in [*logged, *unlogged]:
         places = [_s(place) for place in _l(quest.get("locations"))]
         giver = _s(quest.get("giver_id") or quest.get("offered_by"))
-        if quest.get("status") == "available" and (giver == speaker_id or (not giver and here in places)):
+        if quest.get("status") == "available" and (giver == speaker_id or (not giver and (here in places
+                                                                                          or hands_out_work))):
             about = _stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))}"))
-            offerable.append((len(about & asked), len(about & pressing), quest))
+            # A finale is the last thing offered for work in general (a newcomer was offered the Hollow Meridian).
+            fitting = 0 if _s(quest.get("tier")) == "finale" else 1
+            offerable.append((len(about & asked), fitting, len(about & pressing), quest))
     # Asked for work, or about what one of their goals is after and a quest of theirs answers: the quest closest to
     # the words, then to the goal they are most after (routines.md), offered.
-    on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(said for said, _, _ in offerable)
+    on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(row[0] for row in offerable)
     if offerable and (_WORK.search(text.casefold()) or on_a_goal):
-        _, _, quest = max(offerable, key=lambda row: (row[0], row[1]))
-        quest_offer = {"quest_id": _s(quest.get("quest_id") or quest.get("id")), "title": _s(quest.get("title")),
-                       "objective": _s(quest.get("objective"))}
+        quest = max(offerable, key=lambda row: row[:3])[3]
+        quest_id = _s(quest.get("quest_id") or quest.get("id"))
+        quest_offer = {"quest_id": quest_id, "title": _s(quest.get("title")), "objective": _s(quest.get("objective"))}
+        if quest_id not in in_log:
+            new_quests[quest_id] = quest
+    hero_quests = _hero_quests(simulation, world, speaker_id, name, here)
     on_sale: list[dict[str, Any]] = []
     if _WARES.search(text.casefold()):
         on_sale = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
@@ -174,7 +223,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
         # Asked about some of them ("what does a room cost"), those; asked what they sell, all of them.
         named = [offer for offer in on_sale if asked & {_stem(word) for word in _words(_s(offer.get("label")))}]
         on_sale = named or on_sale
-    secrets = tuple(_s(secret) for secret in _l(npc.get("secrets")))
+    secrets = tuple(_s(secret) for secret in _l(npc.get("secrets")) if _s(secret).strip())
     # What the writer is told leaves out whatever repeats a secret (an author's description or goal may), so the
     # model never sees one and the line can be shown as it is written (Q-12).
     goal_texts = dict.fromkeys([*(_s(goal.get("summary")) for goal in goals), *(_s(goal) for goal in _l(npc.get("goals")))])
@@ -186,7 +235,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
         goals=tuple(goal for goal in goal_texts if goal and not _names_a_secret(goal, secrets)),
         background=background,
         reveals=tuple(reveals), revealed_ids=tuple(revealed_ids), for_a_price=tuple(priced), held_back=held,
-        secrets=secrets, quest_offer=quest_offer,
+        secrets=secrets, quest_offer=quest_offer, offered_rows=new_quests, hero_quests=hero_quests,
         wares=tuple(f"{_s(offer.get('label'))} for {_price_text(_d(offer.get('price')))}" for offer in on_sale),
         ware_names=tuple(_s(offer.get("label")) for offer in on_sale),
         player_said=text,
@@ -198,7 +247,9 @@ def plan_changes(plan: DialoguePlan) -> list[StateChange]:
     changes: list[StateChange] = []
     changes.extend(KnowledgeShared(npc_id=plan.speaker_id, fact_id=fact_id) for fact_id in plan.revealed_ids)
     if plan.quest_offer.get("quest_id"):
-        changes.append(QuestOffered(quest_id=plan.quest_offer["quest_id"], npc_id=plan.speaker_id))
+        quest_id = plan.quest_offer["quest_id"]
+        changes.append(QuestOffered(quest_id=quest_id, npc_id=plan.speaker_id,
+                                    quest=dict(plan.offered_rows.get(quest_id) or {})))
     return changes
 
 
@@ -207,6 +258,8 @@ def _names_a_secret(text: str, secrets: tuple[str, ...]) -> bool:
     the shrine word Heronglass"); or most of the words of one with four or more."""
     lowered, said = text.casefold(), _words(text)
     for secret in secrets:
+        if not secret.strip():
+            continue
         words = _words(secret)
         if secret.casefold() in lowered or (words and len(words) < 4 and words <= said) or (
                 len(words) >= 4 and len(words & said) >= max(4, len(words) * 2 // 3)):

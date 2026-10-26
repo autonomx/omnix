@@ -25,6 +25,27 @@ def _normalize_xp_meter(progress: Dict[str, Any]) -> None:
             progress["xp_to_next"] = 100
 
 
+# The skills a hero of each kind of world starts with (the playtest: a hero of Aurelia, a high-fantasy world, had
+# firearms and hacking); a world of no kind named here keeps them all.
+_GENRE_SKILLS = {
+    "fantasy": ("swordsmanship", "archery", "defense", "stealth", "persuasion", "intimidation", "investigation",
+                "magic"),
+    "future": ("swordsmanship", "firearms", "defense", "stealth", "persuasion", "intimidation", "investigation",
+               "hacking"),
+}
+_GENRE_WORDS = {"future": ("cyber", "sci", "future", "space", "tech", "punk"),
+                "fantasy": ("fantasy", "isekai", "myth", "medieval", "sword", "sorcery")}
+
+
+def skills_for_genre(genre: str) -> Dict[str, Any] | None:
+    """The starting skills for a world of ``genre`` ("fantasy_isekai", "cyberpunk"); None when it names no kind."""
+    lowered = str(genre or "").casefold()
+    kind = next((kind for kind, words in _GENRE_WORDS.items() if any(word in lowered for word in words)), "")
+    if not kind:
+        return None
+    return {name: {"level": 0, "xp": 0, "xp_to_next": 25} for name in _GENRE_SKILLS[kind]}
+
+
 def ensure_player_progression_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
     """Ensure player_state has canonical progression fields (on a copy). Idempotent."""
     progress = dict(player_state or {})  # a fresh copy: the hero given is only read

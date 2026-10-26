@@ -50,6 +50,22 @@ def _fight(simulation: Mapping[str, Any]) -> list[Suggestion]:
     return offered
 
 
+def _level_choice(simulation: Mapping[str, Any]) -> list[Suggestion]:
+    """A level's choice waiting (progression.md): raising an attribute, or the two skills the hero has practised
+    most, in the words the level rule reads (the playtest: level 2 was reached and nothing said a choice waited)."""
+    player = _d(_sections.player_state_of(simulation))
+    if int(player.get("level_choices_pending") or 0) <= 0:
+        return []
+    skills = sorted(_d(player.get("skills")).items(), key=lambda row: (-int(_d(row[1]).get("xp") or 0)
+                                                                      - 100 * int(_d(row[1]).get("level") or 0), row[0]))
+    offered = [Suggestion(label="Level up: raise strength", command="raise strength")]
+    if len(skills) >= 2:
+        first, second = (name.replace("_", " ") for name, _ in skills[:2])
+        offered.append(Suggestion(label=f"Level up: improve {first} and {second}",
+                                  command=f"improve {first} and {second}"))
+    return offered
+
+
 def suggestions(document: Mapping[str, Any]) -> list[Suggestion]:
     """What to do next where the hero stands: in a fight, its moves; else the people here, an offered quest, a
     seller's wares, the roads out, and a look around."""
@@ -57,7 +73,8 @@ def suggestions(document: Mapping[str, Any]) -> list[Suggestion]:
     if _d(_sections.combat_state_of(simulation)).get("active") is True:
         return _fight(simulation)[:MAX_SUGGESTIONS]
     people = _people_here(simulation)
-    offered = [Suggestion(label=f"Talk to {name}", command=f"Talk to {name}") for _, name in people[:2]]
+    offered = _level_choice(simulation)
+    offered += [Suggestion(label=f"Talk to {name}", command=f"Talk to {name}") for _, name in people[:2]]
     quest = next((_d(row) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))
                   if _s(_d(row).get("status")) == "available" and _s(_d(row).get("title"))), None)
     if quest:
