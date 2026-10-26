@@ -182,3 +182,17 @@ def test_a_question_about_a_thing_is_answered_by_its_seller_or_whoever_is_here_a
     assert (planned.mechanic, planned.target_id) == ("look", "iron_dagger")
     no = parse_command("no thanks, Brindle", SCENE)
     assert plan_action(no, fighting=False).mechanic == "talk"
+
+
+def test_a_thing_carried_and_a_calling_answer_to_their_other_names() -> None:
+    """The intent gate: "examine my knife" named no Iron Dagger, "ask the trader" no merchant."""
+    from app.apps.rpg.session.command_reading import scene_view
+
+    simulation = {"world_model": {"npcs": {"npc:elara": {"name": "Elara", "role": "merchant of the market square"}}},
+                  "present_npc_state": {"present_npc_ids": ["npc:elara"]},
+                  "player_state": {"inventory_state": {"items": [{"item_id": "iron_dagger", "name": "Iron Dagger"}]}}}
+    scene = scene_view(simulation)
+    assert parse_command("examine my knife", scene).target_id == "iron_dagger"
+    assert parse_command("ask the trader about the road", scene).target_id == "npc:elara"
+    no = parse_command("Elara, no, I don't need anything.", scene)
+    assert (no.family, no.target_id) == ("decline", "npc:elara")

@@ -44,6 +44,35 @@ def _names(*values: Any) -> tuple[str, ...]:
 
 
 
+# What a thing carried is also called by its kind (the intent gate: "examine my knife" named no Iron Dagger): the last
+# word of its name, and that kind's other names. A word of a world's own (a "coilwire monoblade") keeps its own.
+_KIND_NAMES = {
+    "dagger": ("knife", "blade", "weapon"), "knife": ("dagger", "blade", "weapon"), "sword": ("blade", "weapon"),
+    "monoblade": ("blade", "weapon"), "axe": ("weapon",), "bow": ("weapon",), "staff": ("weapon",),
+    "pistol": ("gun", "weapon"), "rifle": ("gun", "weapon"), "cloak": ("coat",), "coat": ("cloak",),
+    "jacket": ("coat",), "bread": ("food",), "rations": ("food",), "bars": ("food",), "potion": ("drink",),
+}
+
+
+def _kind_names(name: str) -> tuple[str, ...]:
+    words = name.casefold().split()
+    if len(words) < 2:
+        return ()
+    kind = words[-1]
+    return (kind, *_KIND_NAMES.get(kind, ()))
+
+
+# What a calling is also called (the intent gate: "ask the trader" named no merchant).
+_CALLING_NAMES = {
+    "merchant": ("trader", "vendor", "shopkeeper", "seller"), "trader": ("merchant", "vendor"),
+    "vendor": ("merchant", "trader", "seller"), "shopkeeper": ("merchant", "shop keeper"),
+    "innkeeper": ("barkeep", "bartender", "landlord"), "barkeep": ("bartender", "innkeeper"),
+    "bartender": ("barkeep",), "doctor": ("medic", "healer"), "medic": ("doctor", "healer"),
+    "healer": ("doctor",), "courier": ("runner", "messenger"), "guard": ("watchman", "guardsman"),
+    "captain": ("commander",), "porter": ("carrier",), "smith": ("blacksmith",), "blacksmith": ("smith",),
+}
+
+
 def _role_names(role: str) -> tuple[str, ...]:
     """What someone may be called by what they do: "village guard captain" gives the captain, my captain and the
     guard captain; "guide and first companion" the guide and the companion (the description after "is" aside)."""
@@ -53,6 +82,7 @@ def _role_names(role: str) -> tuple[str, ...]:
         if not words:
             continue
         names += [f"the {words[-1]}", f"my {words[-1]}"]
+        names += [f"the {other}" for other in _CALLING_NAMES.get(words[-1], ())]  # "the trader" for a merchant
         if len(words) >= 2:
             names.append(f"the {' '.join(words[-2:])}")
     return tuple(names)
@@ -92,7 +122,7 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     for item in _l(inventory.get("items")):
         item = _d(item)
         item_id = _s(item.get("item_id") or item.get("id"))
-        add(item_id, "item", _names(item.get("name"), _label(item_id)), True)
+        add(item_id, "item", _names(item.get("name"), _label(item_id), *_kind_names(_s(item.get("name")))), True)
     for item in _l(_d(_d(state.get("world_items")).get("by_location")).get(location_id)):
         item = _d(item)  # lying where the hero stands, to pick up
         item_id = _s(item.get("item_id") or item.get("id"))

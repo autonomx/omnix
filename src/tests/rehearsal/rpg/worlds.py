@@ -292,8 +292,10 @@ def world_bundle(world: str) -> bytes:
     return build(directory)
 
 
-def launch_published(world: str, *, player_name: str = "Wren", scenario_hint: str = "") -> str:
-    """Import, adopt and launch a bundled world's opening scenario; the new campaign's session id."""
+def launch_published(world: str, *, player_name: str = "Wren", scenario_hint: str = "",
+                     starter_gear: tuple[str, ...] = ()) -> str:
+    """Import, adopt and launch a bundled world's opening scenario; the new campaign's session id. ``starter_gear``:
+    the hero's own kit, as a player who chooses it ("Iron Dagger", "10 silver"), in place of the opening's."""
     from app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes import SESSION_CAMPAIGN_SESSIONS
     from app.apps.rpg.genesis.worlds.published_launch import launch_published_scenario
     from app.apps.rpg.genesis.worlds.world_adoption import adopt_shared_world
@@ -340,6 +342,7 @@ def launch_published(world: str, *, player_name: str = "Wren", scenario_hint: st
         scenario_revision=int(document["revision"]),
         player={"name": player_name, "pronouns": "they/them"},
         features={"llm_narration": True, "image_generation": False},
+        new_game={"generated_class_summary": f"Starter gear: {', '.join(starter_gear)}"} if starter_gear else None,
     )
     return str(launched["session_id"])
 
@@ -353,10 +356,10 @@ def launch_starter(seed: int = 7) -> str:
     return str(created["session_id"])
 
 
-def launch(world: str) -> str:
+def launch(world: str, *, starter_gear: tuple[str, ...] = ()) -> str:
     if world == "starter":
         return launch_starter()
-    return launch_published(world)
+    return launch_published(world, starter_gear=starter_gear)
 
 
 def turn_client():

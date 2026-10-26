@@ -59,6 +59,11 @@ STATEFUL_FAMILIES = {"move", "buy", "sell", "attack", "take", "drop", "give", "u
                      "quest", "practice", "party"}
 
 
+# The kit the corpus's scenes were written for, where a world's own opening now gives another: Vesper-9's hero carries
+# a future world's gear since 2026-10-26, and its frozen items still name the iron dagger and travel cloak.
+CORPUS_KIT = {"vesper-9": ("Iron Dagger", "Travel Cloak", "10 silver")}
+
+
 def held_out_digest() -> str:
     """The held-out file's SHA-256, over LF line endings (a Windows checkout may write CRLF)."""
     return hashlib.sha256(HELD_OUT.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
@@ -331,7 +336,7 @@ class Worlds:
 
     def prepare(self, world: str) -> None:
         catalog = self.catalog[world]
-        session_id = self.harness.launch(world)
+        session_id = self.harness.launch(world, starter_gear=CORPUS_KIT.get(world, ()))
         self.sessions[world] = session_id
         status, _ = self.turn(session_id, "look around")
         opening = self.harness.load(session_id)
