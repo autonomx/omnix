@@ -7,7 +7,8 @@ from typing import Any
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import current_tenant
-from app.apps.rpg.foundation.persistence.rpg_repository import canonical_json, state_hash
+from app.apps.rpg.foundation.persistence.document_parts import assembled, hash_matches, stored_form
+from app.apps.rpg.foundation.persistence.rpg_repository import CAMPAIGN_PARTS, canonical_json
 from app.apps.rpg.foundation.persistence.rpg_session_save_policy import session_save_deferred
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import register_repository_specs
@@ -84,7 +85,6 @@ def save_session_to_postgres(
     if isinstance(session.get("setup_payload"), dict):
         session["setup_payload"] = stored_setup_payload(session["setup_payload"])
     revision = _revision(session)
-    digest = state_hash(session)
     manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
     engine_version = str(
         manifest.get("engine_version") or session.get("engine_version") or "rpg-engine"
@@ -93,7 +93,7 @@ def save_session_to_postgres(
     seed = str(manifest.get("seed") or session.get("seed") or campaign_id)
     title = str(manifest.get("title") or campaign_id)
     written = dict(campaign_id=campaign_id, session=session, artifacts=artifacts, narrations=narrations,
-                   revision=revision, digest=digest, manifest=manifest, engine_version=engine_version,
+                   revision=revision, manifest=manifest, engine_version=engine_version,
                    schema_version=schema_version, seed=seed, title=title)
     if work is not None:
         return _write_session(work, context, owned=False, **written)
@@ -111,7 +111,6 @@ def _write_session(
     artifacts: dict[str, dict[str, Any]],
     narrations: Any,
     revision: int,
-    digest: str,
     manifest: dict[str, Any],
     engine_version: str,
     schema_version: str,
@@ -121,6 +120,7 @@ def _write_session(
     """The save's writes; an owned unit of work is committed here, a caller's by the caller."""
     existing = work.rpg.get_campaign(context, campaign_id, for_update=True)
     if existing is None:
+        form = stored_form(session)
         work.connection.execute(
             """
             INSERT INTO omnix_rpg_campaigns (
@@ -134,8 +134,8 @@ def _write_session(
                 context.user_id,
                 title,
                 revision,
-                canonical_json(session),
-                digest,
+                form.head,
+                form.digest,
                 engine_version,
                 schema_version,
                 seed,
@@ -143,6 +143,7 @@ def _write_session(
                 canonical_json({"compatibility_save": True}),
             ),
         )
+        work.rpg.write_parts(context, campaign_id, form)
         work.connection.execute(
             """
             INSERT INTO omnix_rpg_participants
@@ -161,7 +162,8 @@ def _write_session(
                 f"RPG session {campaign_id} attempted to save stale revision {revision}; "
                 f"current {existing['revision']}"
             )
-        if revision == existing["revision"] and digest == existing["state_hash"]:
+        unchanged = hash_matches(session, existing["state_hash"])
+        if revision == existing["revision"] and unchanged:
             if not artifacts and not narrations:
                 if owned:
                     work.rollback()
@@ -172,7 +174,7 @@ def _write_session(
             if owned:
                 work.commit()
             return existing["state"]
-        if revision == existing["revision"] and digest != existing["state_hash"]:
+        if revision == existing["revision"] and not unchanged:
             _refuse_rewrite_inside_turn(campaign_id, revision)
             # An edit outside a turn (rename, lore, settings): the session
             # was loaded at this revision, so the edit is the next one.
@@ -182,7 +184,7 @@ def _write_session(
                 runtime = {}
                 session["runtime_state"] = runtime
             runtime["state_revision"] = revision
-            digest = state_hash(session)
+        form = stored_form(session, before=existing["state"], stored_parts=existing["part_hashes"])
         cursor = work.connection.execute(
             """
             UPDATE omnix_rpg_campaigns
@@ -195,8 +197,8 @@ def _write_session(
             (
                 title,
                 revision,
-                canonical_json(session),
-                digest,
+                form.head,
+                form.digest,
                 engine_version,
                 schema_version,
                 seed,
@@ -209,6 +211,7 @@ def _write_session(
         )
         if cursor.rowcount != 1:
             raise RevisionConflict(f"RPG session changed while saving: {campaign_id}")
+        work.rpg.write_parts(context, campaign_id, form)
         # A revision written outside a turn has no patch: its document is kept whole, so history still
         # rebuilds every revision (rewind.md, the replay audit).
         work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
@@ -363,14 +366,13 @@ def archive_session_in_postgres(session_id: str) -> dict[str, Any]:
                    ),
                    updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
-            RETURNING state_jsonb
-            """,
+            RETURNING state_jsonb, """ + CAMPAIGN_PARTS,
             (session_id, context.workspace_id),
         ).fetchone()
     if row is None:
         # Absent, or another workspace's: either way this caller has no such campaign.
         return {"ok": False, "error": "session_not_found", "session": None}
-    return {"ok": True, "session": dict(row[0])}
+    return {"ok": True, "session": assembled(dict(row[0]), row[1])[0]}
 
 
 def append_interaction_event_postgres(

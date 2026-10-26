@@ -33,7 +33,9 @@ def _replay_audit():
 
 def _store_as_v5(session_id: str) -> dict:
     """Rewrite the campaign's stored document the way the v5 code stored it; the v5 document."""
-    from app.apps.rpg.foundation.persistence.rpg_repository import canonical_json, state_hash
+    import hashlib
+
+    from app.apps.rpg.foundation.persistence.rpg_repository import canonical_json
     from app.persistence.unit_of_work import unit_of_work
     from app.security.tenant_context import current_tenant
 
@@ -54,9 +56,12 @@ def _store_as_v5(session_id: str) -> dict:
             for section in ("setup_payload", "state", "runtime_state"):
                 document[section]["bootstrap_snapshot"] = deepcopy(artifacts["bootstrap_snapshot"])
             work.connection.execute("DELETE FROM omnix_rpg_campaign_artifacts WHERE campaign_id = %s", (session_id,))
+        # The v5 code stored the document whole, in the campaign row (no parts, Q-13), hashed whole.
+        work.connection.execute("DELETE FROM omnix_rpg_campaign_parts WHERE campaign_id = %s", (session_id,))
+        encoded = canonical_json(document)
         work.connection.execute(
             "UPDATE omnix_rpg_campaigns SET state_jsonb = %s::jsonb, state_hash = %s WHERE id = %s",
-            (canonical_json(document), state_hash(document), session_id),
+            (encoded, hashlib.sha256(encoded.encode("utf-8")).hexdigest(), session_id),
         )
         # The v5 code recorded no document version on its turn rows.
         work.connection.execute("UPDATE omnix_rpg_turns SET document_version = NULL WHERE campaign_id = %s", (session_id,))

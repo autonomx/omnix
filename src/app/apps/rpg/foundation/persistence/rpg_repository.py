@@ -4,6 +4,14 @@ import hashlib
 import json
 from typing import Any, Mapping
 
+from app.apps.rpg.foundation.persistence.document_parts import (
+    StoredForm,
+    assembled,
+    canonical_json,
+    hash_matches,
+    state_hash,
+    stored_form,
+)
 from app.apps.rpg.foundation.persistence.turn_narrations import split_turn_narrations
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
@@ -11,19 +19,6 @@ from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
 
 MAX_COMPACT_TURN_RESPONSE_BYTES = 20_000
-
-
-def canonical_json(value: Any) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def state_hash(state: dict[str, Any]) -> str:
-    return hashlib.sha256(canonical_json(state).encode("utf-8")).hexdigest()
 
 
 def document_version(state: Any) -> int | None:
@@ -39,14 +34,19 @@ def document_version(state: Any) -> int | None:
 _document_version_of = document_version  # for the methods whose parameter of that name shadows it
 
 
-def _campaign(row: Any) -> dict[str, Any]:
+def _campaign(row: Any, *, state: dict[str, Any] | None = None, part_hashes: dict[str, str] | None = None) -> dict[str, Any]:
+    """A campaign row; its ``state`` assembled from its head and parts (``_CAMPAIGN_COLUMNS``), or the one given (a
+    commit's, with its parts' hashes)."""
+    if state is None:
+        state, part_hashes = assembled(dict(row[5]), row[14])
     return {
         "id": str(row[0]),
         "workspace_id": str(row[1]),
         "owner_user_id": str(row[2]) if row[2] is not None else None,
         "title": str(row[3]),
         "revision": int(row[4]),
-        "state": dict(row[5]),
+        "state": state,
+        "part_hashes": dict(part_hashes or {}),
         "state_hash": str(row[6]),
         "engine_version": str(row[7]),
         "schema_version": str(row[8]),
@@ -68,10 +68,44 @@ SESSION_SUMMARY_STATE_KEYS = (
     "environment_snapshot",
 )
 
-_CAMPAIGN_COLUMNS = """
+# A campaign row's parts as one object, {path: [hash, value]} (``assembled``; Q-13). JSON, not JSONB: each part's
+# text is written out as it is, where a JSONB aggregate rebuilds every part first.
+CAMPAIGN_PARTS = """(SELECT json_object_agg(part.path, json_build_array(part.part_hash, part.part_jsonb))
+   FROM omnix_rpg_campaign_parts AS part
+  WHERE part.workspace_id = omnix_rpg_campaigns.workspace_id AND part.campaign_id = omnix_rpg_campaigns.id)"""
+_CAMPAIGN_COLUMNS = f"""
 id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash,
+engine_version, schema_version, seed, status, created_at, updated_at, metadata,
+{CAMPAIGN_PARTS}
+"""
+# A written row's columns, its state left out (the writer has it): ``_campaign(row, state=...)``.
+_CAMPAIGN_ROW_COLUMNS = """
+id, workspace_id, owner_user_id, title, revision, NULL, state_hash,
 engine_version, schema_version, seed, status, created_at, updated_at, metadata
 """
+# What a write does to the campaign's parts (Q-13): the changed ones upserted, the ones no longer parts deleted. A
+# prefix (``WITH``), so a turn's commit writes its parts in the statement that writes its head.
+_PARTS_WRITE = """
+WITH written_parts AS (
+    INSERT INTO omnix_rpg_campaign_parts (workspace_id, campaign_id, path, part_hash, part_jsonb)
+    SELECT %s, %s, part.key, part.value ->> 0, part.value -> 1 FROM jsonb_each(%s::jsonb) AS part
+    ON CONFLICT (workspace_id, campaign_id, path) DO UPDATE
+       SET part_hash = EXCLUDED.part_hash, part_jsonb = EXCLUDED.part_jsonb
+    RETURNING 1
+), removed_parts AS (
+    DELETE FROM omnix_rpg_campaign_parts
+     WHERE workspace_id = %s AND campaign_id = %s AND path = ANY(%s::text[])
+    RETURNING 1
+)
+"""
+
+
+def _parts_params(context: TenantContext, campaign_id: str, form: StoredForm) -> tuple[Any, ...]:
+    # The written parts as one object, {path: [hash, value]}, made of the texts already serialized.
+    written = ",".join(f"{json.dumps(path)}:[{json.dumps(digest)},{text}]"
+                       for path, (text, digest) in sorted(form.written.items()))
+    return (context.workspace_id, campaign_id, "{" + written + "}", context.workspace_id, campaign_id,
+            list(form.removed))
 
 
 def _turn(row: Any) -> dict[str, Any]:
@@ -135,22 +169,22 @@ class PostgresRpgRepository:
         seed: str,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        digest = state_hash(state)
+        form = stored_form(state)
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_rpg_campaigns (
                 id, workspace_id, owner_user_id, title, state_jsonb, state_hash,
                 engine_version, schema_version, seed, metadata
             ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s::jsonb)
-            RETURNING {_CAMPAIGN_COLUMNS}
+            RETURNING {_CAMPAIGN_ROW_COLUMNS}
             """,
             (
                 campaign_id,
                 context.workspace_id,
                 context.user_id,
                 title,
-                canonical_json(state),
-                digest,
+                form.head,
+                form.digest,
                 engine_version,
                 schema_version,
                 seed,
@@ -166,7 +200,13 @@ class PostgresRpgRepository:
             """,
             (campaign_id, context.user_id),
         )
-        return _campaign(row)
+        self.write_parts(context, campaign_id, form)
+        return _campaign(row, state=state, part_hashes=form.part_hashes)
+
+    def write_parts(self, context: TenantContext, campaign_id: str, form: StoredForm) -> None:
+        """Store what ``form`` changed of the campaign's parts (Q-13); its head is the caller's to write."""
+        if form.written or form.removed:
+            self.connection.execute(_PARTS_WRITE + "SELECT 1", _parts_params(context, campaign_id, form))
 
     def get_campaign(
         self,
@@ -389,9 +429,10 @@ class PostgresRpgRepository:
 
         resulting_revision = expected_revision + 1
         sequence = resulting_revision
-        # Serialized and hashed once: the campaign row and the snapshot store the same text.
-        encoded_state = canonical_json(next_state)
-        after_hash = hashlib.sha256(encoded_state.encode("utf-8")).hexdigest()
+        # Only what changed is serialized, hashed and written: the parts the turn left as they were keep their stored
+        # text and hashes (Q-13).
+        form = stored_form(next_state, before=campaign["state"], stored_parts=campaign.get("part_hashes"))
+        after_hash = form.digest
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_rpg_turns (
@@ -429,7 +470,7 @@ class PostgresRpgRepository:
         turn = _turn(row)
 
         updated = self.connection.execute(
-            f"""
+            _PARTS_WRITE + f"""
             UPDATE omnix_rpg_campaigns
                SET state_jsonb = %s::jsonb,
                    state_hash = %s,
@@ -438,10 +479,11 @@ class PostgresRpgRepository:
                    schema_version = %s,
                    updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s AND revision = %s
-            RETURNING {_CAMPAIGN_COLUMNS}
+            RETURNING {_CAMPAIGN_ROW_COLUMNS}
             """,
             (
-                encoded_state,
+                *_parts_params(context, campaign_id, form),
+                form.head,
                 after_hash,
                 resulting_revision,
                 engine_version,
@@ -453,7 +495,7 @@ class PostgresRpgRepository:
         ).fetchone()
         if updated is None:
             raise RevisionConflict(f"campaign changed while committing turn: {campaign_id}")
-        updated_campaign = _campaign(updated)
+        updated_campaign = _campaign(updated, state=next_state, part_hashes=form.part_hashes)
         self.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
 
         self.connection.execute(
@@ -485,7 +527,7 @@ class PostgresRpgRepository:
                 state_hash_value=after_hash,
                 engine_version=engine_version,
                 schema_version=schema_version,
-                encoded_state=encoded_state,
+                hash_computed=True,
             )
         return {
             "idempotent_replay": False,
@@ -505,18 +547,16 @@ class PostgresRpgRepository:
         state_hash_value: str,
         engine_version: str,
         schema_version: str,
-        encoded_state: str | None = None,
         pinned: bool = False,
         document_version: int | None = None,
+        hash_computed: bool = False,
     ) -> dict[str, Any]:
-        """``encoded_state``, when given, is ``canonical_json(state)`` already computed by the caller.
-
-        A ``pinned`` snapshot is never deleted by retention (RQ-1.7).
-        """
-        encoded = encoded_state if encoded_state is not None else canonical_json(state)
+        """A ``pinned`` snapshot is never deleted by retention (RQ-1.7). ``hash_computed``: the caller has just
+        computed ``state_hash_value`` from ``state`` (a commit), so it is not checked again."""
+        encoded = canonical_json(state)
         if document_version is None:
             document_version = _document_version_of(state)
-        if hashlib.sha256(encoded.encode("utf-8")).hexdigest() != state_hash_value:
+        if not hash_computed and not hash_matches(state, state_hash_value):
             raise StateHashConflict("snapshot state hash does not match snapshot state")
         row = self.connection.execute(
             """
@@ -581,7 +621,7 @@ class PostgresRpgRepository:
             """,
             (context.workspace_id, campaign_id, int(revision)),
         ).fetchone()
-        if snapshot is None or state_hash(dict(snapshot[1])) != str(snapshot[2]):
+        if snapshot is None or not hash_matches(dict(snapshot[1]), str(snapshot[2])):
             return None
         state, at, digest = dict(snapshot[1]), int(snapshot[0]), str(snapshot[2])
         for resulting, delta, before, after in self.connection.execute(
@@ -595,17 +635,15 @@ class PostgresRpgRepository:
             if int(resulting) != at + 1 or delta is None or str(before) != digest:
                 return None
             state = apply_state_delta(state, list(delta))
-            digest = state_hash(state)
-            if digest != str(after):
+            if not hash_matches(state, str(after)):
                 return None
-            at = int(resulting)
+            at, digest = int(resulting), str(after)
         return state if at == int(revision) else None
 
     def keep_snapshot(self, context: TenantContext, *, campaign_id: str, revision: int, state: dict[str, Any],
                       engine_version: str, schema_version: str) -> None:
         """The document of a revision no turn row patches (a campaign's first, an edit outside a turn) kept as its
         snapshot, so the campaign's history can rebuild every revision (rewind.md, the replay audit)."""
-        encoded = canonical_json(state)
         self.connection.execute(
             """
             INSERT INTO omnix_rpg_snapshots (
@@ -614,9 +652,8 @@ class PostgresRpgRepository:
             ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s)
             ON CONFLICT DO NOTHING
             """,
-            (f"snapshot:{campaign_id}:{int(revision)}", context.workspace_id, campaign_id, int(revision), encoded,
-             hashlib.sha256(encoded.encode("utf-8")).hexdigest(), engine_version, schema_version,
-             _document_version_of(state)),
+            (f"snapshot:{campaign_id}:{int(revision)}", context.workspace_id, campaign_id, int(revision),
+             canonical_json(state), state_hash(state), engine_version, schema_version, _document_version_of(state)),
         )
 
     def turn_history(self, context: TenantContext, campaign_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
@@ -681,20 +718,12 @@ class PostgresRpgRepository:
 
         A snapshot already at that revision is pinned in place. None when the campaign does not exist.
         """
-        row = self.connection.execute(
-            """
-            SELECT revision, state_jsonb, state_hash, engine_version, schema_version
-              FROM omnix_rpg_campaigns
-             WHERE id = %s AND workspace_id = %s
-             FOR UPDATE
-            """,
-            (campaign_id, context.workspace_id),
-        ).fetchone()
-        if row is None:
+        campaign = self.get_campaign(context, campaign_id, for_update=True)
+        if campaign is None:
             return None
-        revision = int(row[0])
+        revision = campaign["revision"]
         if document_version is None:
-            document_version = _document_version_of(dict(row[1]))
+            document_version = _document_version_of(campaign["state"])
         existing = self.connection.execute(
             """
             UPDATE omnix_rpg_snapshots
@@ -711,10 +740,10 @@ class PostgresRpgRepository:
             campaign_id=campaign_id,
             snapshot_id=f"snapshot:{campaign_id}:{revision}",
             revision=revision,
-            state=dict(row[1]),
-            state_hash_value=str(row[2]),
-            engine_version=str(row[3]),
-            schema_version=str(row[4]),
+            state=campaign["state"],
+            state_hash_value=campaign["state_hash"],
+            engine_version=campaign["engine_version"],
+            schema_version=campaign["schema_version"],
             pinned=True,
             document_version=document_version,
         )

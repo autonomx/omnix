@@ -13,8 +13,9 @@ needs a row here, with a turn kind or an exemption.
 
 ## Terms
 
-- **Campaign document**: `omnix_rpg_campaigns.state_jsonb` (the session: `state`, `simulation_state`,
-  `runtime_state`, manifest), hashed into `state_hash`.
+- **Campaign document**: the session (`state`, `simulation_state`, `runtime_state`, manifest), stored as its head
+  in `omnix_rpg_campaigns.state_jsonb` and its large entries in `omnix_rpg_campaign_parts`, a write storing only
+  the parts it changed (`foundation/persistence/document_parts.py`); hashed into `state_hash`.
 - **Out-of-turn save**: `save_session` / `save_runtime_session` outside a turn. Under PostgreSQL the save is an
   optimistic `UPDATE ... WHERE revision = <loaded revision>`; when the loaded revision equals the stored one and the
   hash differs, the save becomes the next revision (`session_records.py:121-142`). It writes no turn row and no

@@ -37,10 +37,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from app.apps.rpg.foundation.persistence.document_parts import assembled, hash_matches  # noqa: E402
 from app.apps.rpg.foundation.persistence.rpg_repository import (  # noqa: E402
+    CAMPAIGN_PARTS,
     canonical_json,
     document_version,
-    state_hash,
 )
 from app.apps.rpg.foundation.persistence.state_delta import apply_state_delta  # noqa: E402
 
@@ -103,7 +104,7 @@ def audit_campaign(
     for snapshot in snapshots:
         start = int(snapshot["revision"])
         state = snapshot["state"]
-        if state is None or state_hash(state) != snapshot["state_hash"]:
+        if state is None or not hash_matches(state, snapshot["state_hash"]):
             bad_snapshots.append(start)
             continue
         verified_snapshots.append(start)
@@ -114,14 +115,14 @@ def audit_campaign(
             if turn is None or turn["state_delta"] is None or turn["state_hash_before"] != digest:
                 break
             state = apply_state_delta(state, list(turn["state_delta"]))
-            digest = state_hash(state)
             recorded = turn.get("document_version")
             if recorded is not None and document_version(state) != recorded:
                 version_mismatches.append(at + 1)  # the patch did not produce a document of the turn's version
                 break
-            if digest != turn["state_hash_after"]:
+            if not hash_matches(state, turn["state_hash_after"]):
                 mismatched_turns.append(at + 1)
                 break
+            digest = turn["state_hash_after"]
             at += 1
             verified_turns.add(at)
             by_version[str(recorded if recorded is not None else "unrecorded")].add(at)
@@ -181,11 +182,13 @@ def _load(connection: Any, campaign_ids: list[str]) -> list[dict[str, Any]]:
     where = "WHERE id = ANY(%s)" if campaign_ids else ""
     params: tuple[Any, ...] = (campaign_ids,) if campaign_ids else ()
     campaigns = connection.execute(
-        f"SELECT id, revision, state_jsonb, state_hash, schema_version FROM omnix_rpg_campaigns {where} ORDER BY id",
+        f"SELECT id, revision, state_jsonb, state_hash, schema_version, {CAMPAIGN_PARTS} "
+        f"FROM omnix_rpg_campaigns {where} ORDER BY id",
         params,
     ).fetchall()
     results = []
-    for campaign_id, revision, state, digest, schema_version in campaigns:
+    for campaign_id, revision, head, digest, schema_version, parts in campaigns:
+        state = assembled(dict(head), parts)[0]  # the head and its parts (Q-13)
         turns = [
             {
                 "resulting_revision": row[0],
