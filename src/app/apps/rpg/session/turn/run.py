@@ -607,7 +607,7 @@ def plan_player_text(session: Mapping[str, Any], text: str) -> tuple[PlannedActi
         return PlannedAction(mechanic="clarify", ticks=0, reason="two_readings",
                              question=f"Do you mean {options[0]!r} or {options[1]!r}?", options=options), reading
     if model.reading is not None:
-        planned = plan_action(model.reading, fighting=fighting)
+        planned = plan_action(model.reading, fighting=fighting, decided=True)
         if planned is not None:
             return planned, model.reading
     if fighting:  # a fight goes on: strike, break away, or use something

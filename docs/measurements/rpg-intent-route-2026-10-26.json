@@ -3,17 +3,24 @@
     "ask": {
       "action_family_accuracy": {
         "n": 344,
-        "rate": 0.9012,
-        "successes": 310,
-        "wilson_lower": 0.8651,
-        "wilson_upper": 0.9284
+        "rate": 0.9738,
+        "successes": 335,
+        "wilson_lower": 0.951,
+        "wilson_upper": 0.9862
+      },
+      "action_family_exact_label": {
+        "n": 344,
+        "rate": 0.9506,
+        "successes": 327,
+        "wilson_lower": 0.9223,
+        "wilson_upper": 0.9689
       },
       "false_stateful_rate": {
         "n": 344,
-        "rate": 0.0465,
-        "successes": 16,
-        "wilson_lower": 0.0288,
-        "wilson_upper": 0.0742
+        "rate": 0.0058,
+        "successes": 2,
+        "wilson_lower": 0.0016,
+        "wilson_upper": 0.0209
       },
       "missed_stateful_rate": {
         "n": 0,
@@ -25,14 +32,21 @@
       "n": 344,
       "target_entity_accuracy": {
         "n": 330,
-        "rate": 0.8273,
-        "successes": 273,
-        "wilson_lower": 0.7828,
-        "wilson_upper": 0.8642
+        "rate": 0.8818,
+        "successes": 291,
+        "wilson_lower": 0.8425,
+        "wilson_upper": 0.9123
       }
     },
     "attack": {
       "action_family_accuracy": {
+        "n": 42,
+        "rate": 1.0,
+        "successes": 42,
+        "wilson_lower": 0.9162,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 42,
         "rate": 1.0,
         "successes": 42,
@@ -48,10 +62,10 @@
       },
       "missed_stateful_rate": {
         "n": 42,
-        "rate": 0.4524,
-        "successes": 19,
-        "wilson_lower": 0.3122,
-        "wilson_upper": 0.6005
+        "rate": 0.3095,
+        "successes": 13,
+        "wilson_lower": 0.1907,
+        "wilson_upper": 0.4603
       },
       "n": 42,
       "target_entity_accuracy": {
@@ -65,10 +79,17 @@
     "buy": {
       "action_family_accuracy": {
         "n": 55,
-        "rate": 0.9636,
-        "successes": 53,
-        "wilson_lower": 0.8768,
-        "wilson_upper": 0.99
+        "rate": 0.9455,
+        "successes": 52,
+        "wilson_lower": 0.8515,
+        "wilson_upper": 0.9813
+      },
+      "action_family_exact_label": {
+        "n": 55,
+        "rate": 0.9455,
+        "successes": 52,
+        "wilson_lower": 0.8515,
+        "wilson_upper": 0.9813
       },
       "false_stateful_rate": {
         "n": 11,
@@ -79,22 +100,29 @@
       },
       "missed_stateful_rate": {
         "n": 44,
-        "rate": 0.2727,
-        "successes": 12,
-        "wilson_lower": 0.1635,
-        "wilson_upper": 0.4185
+        "rate": 0.0227,
+        "successes": 1,
+        "wilson_lower": 0.004,
+        "wilson_upper": 0.1181
       },
       "n": 55,
       "target_entity_accuracy": {
         "n": 55,
-        "rate": 0.4545,
-        "successes": 25,
-        "wilson_lower": 0.3303,
-        "wilson_upper": 0.5848
+        "rate": 0.7636,
+        "successes": 42,
+        "wilson_lower": 0.6365,
+        "wilson_upper": 0.8563
       }
     },
     "clarify": {
       "action_family_accuracy": {
+        "n": 44,
+        "rate": 0.9318,
+        "successes": 41,
+        "wilson_lower": 0.8177,
+        "wilson_upper": 0.9765
+      },
+      "action_family_exact_label": {
         "n": 44,
         "rate": 0.9318,
         "successes": 41,
@@ -127,10 +155,17 @@
     "decline": {
       "action_family_accuracy": {
         "n": 42,
-        "rate": 0.7381,
-        "successes": 31,
-        "wilson_lower": 0.5893,
-        "wilson_upper": 0.847
+        "rate": 0.9762,
+        "successes": 41,
+        "wilson_lower": 0.8768,
+        "wilson_upper": 0.9958
+      },
+      "action_family_exact_label": {
+        "n": 42,
+        "rate": 0.7143,
+        "successes": 30,
+        "wilson_lower": 0.5643,
+        "wilson_upper": 0.8283
       },
       "false_stateful_rate": {
         "n": 42,
@@ -157,6 +192,13 @@
     },
     "defend": {
       "action_family_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 4,
         "rate": 1.0,
         "successes": 4,
@@ -194,6 +236,13 @@
         "wilson_lower": 0.862,
         "wilson_upper": 1.0
       },
+      "action_family_exact_label": {
+        "n": 24,
+        "rate": 1.0,
+        "successes": 24,
+        "wilson_lower": 0.862,
+        "wilson_upper": 1.0
+      },
       "false_stateful_rate": {
         "n": 0,
         "rate": null,
@@ -211,14 +260,21 @@
       "n": 24,
       "target_entity_accuracy": {
         "n": 24,
-        "rate": 0.875,
-        "successes": 21,
-        "wilson_lower": 0.69,
-        "wilson_upper": 0.9566
+        "rate": 0.9583,
+        "successes": 23,
+        "wilson_lower": 0.7976,
+        "wilson_upper": 0.9926
       }
     },
     "equip": {
       "action_family_accuracy": {
+        "n": 11,
+        "rate": 1.0,
+        "successes": 11,
+        "wilson_lower": 0.7412,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 11,
         "rate": 1.0,
         "successes": 11,
@@ -242,14 +298,21 @@
       "n": 11,
       "target_entity_accuracy": {
         "n": 11,
-        "rate": 0.8182,
-        "successes": 9,
-        "wilson_lower": 0.523,
-        "wilson_upper": 0.9486
+        "rate": 0.9091,
+        "successes": 10,
+        "wilson_lower": 0.6226,
+        "wilson_upper": 0.9838
       }
     },
     "flee": {
       "action_family_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 4,
         "rate": 1.0,
         "successes": 4,
@@ -287,6 +350,13 @@
         "wilson_lower": 0.7109,
         "wilson_upper": 0.9735
       },
+      "action_family_exact_label": {
+        "n": 21,
+        "rate": 0.9048,
+        "successes": 19,
+        "wilson_lower": 0.7109,
+        "wilson_upper": 0.9735
+      },
       "false_stateful_rate": {
         "n": 0,
         "rate": null,
@@ -296,10 +366,10 @@
       },
       "missed_stateful_rate": {
         "n": 21,
-        "rate": 1.0,
-        "successes": 21,
-        "wilson_lower": 0.8454,
-        "wilson_upper": 1.0
+        "rate": 0.9524,
+        "successes": 20,
+        "wilson_lower": 0.7733,
+        "wilson_upper": 0.9915
       },
       "n": 21,
       "target_entity_accuracy": {
@@ -312,6 +382,13 @@
     },
     "inspect": {
       "action_family_accuracy": {
+        "n": 99,
+        "rate": 0.9293,
+        "successes": 92,
+        "wilson_lower": 0.8612,
+        "wilson_upper": 0.9653
+      },
+      "action_family_exact_label": {
         "n": 99,
         "rate": 0.3131,
         "successes": 31,
@@ -335,14 +412,21 @@
       "n": 99,
       "target_entity_accuracy": {
         "n": 99,
-        "rate": 0.798,
-        "successes": 79,
-        "wilson_lower": 0.7085,
-        "wilson_upper": 0.8652
+        "rate": 0.8586,
+        "successes": 85,
+        "wilson_lower": 0.7765,
+        "wilson_upper": 0.9139
       }
     },
     "look": {
       "action_family_accuracy": {
+        "n": 46,
+        "rate": 1.0,
+        "successes": 46,
+        "wilson_lower": 0.9229,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 46,
         "rate": 1.0,
         "successes": 46,
@@ -380,6 +464,13 @@
         "wilson_lower": 0.4365,
         "wilson_upper": 0.9699
       },
+      "action_family_exact_label": {
+        "n": 6,
+        "rate": 0.8333,
+        "successes": 5,
+        "wilson_lower": 0.4365,
+        "wilson_upper": 0.9699
+      },
       "false_stateful_rate": {
         "n": 6,
         "rate": 0.1667,
@@ -406,10 +497,17 @@
     "move": {
       "action_family_accuracy": {
         "n": 75,
-        "rate": 0.88,
-        "successes": 66,
-        "wilson_lower": 0.7874,
-        "wilson_upper": 0.9356
+        "rate": 1.0,
+        "successes": 75,
+        "wilson_lower": 0.9513,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
+        "n": 75,
+        "rate": 1.0,
+        "successes": 75,
+        "wilson_lower": 0.9513,
+        "wilson_upper": 1.0
       },
       "false_stateful_rate": {
         "n": 0,
@@ -420,22 +518,29 @@
       },
       "missed_stateful_rate": {
         "n": 75,
-        "rate": 0.3867,
-        "successes": 29,
-        "wilson_lower": 0.2846,
-        "wilson_upper": 0.4998
+        "rate": 0.2533,
+        "successes": 19,
+        "wilson_lower": 0.1686,
+        "wilson_upper": 0.3621
       },
       "n": 75,
       "target_entity_accuracy": {
         "n": 75,
-        "rate": 0.72,
-        "successes": 54,
-        "wilson_lower": 0.6096,
-        "wilson_upper": 0.809
+        "rate": 0.96,
+        "successes": 72,
+        "wilson_lower": 0.8889,
+        "wilson_upper": 0.9863
       }
     },
     "party": {
       "action_family_accuracy": {
+        "n": 3,
+        "rate": 1.0,
+        "successes": 3,
+        "wilson_lower": 0.4385,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 3,
         "rate": 1.0,
         "successes": 3,
@@ -473,6 +578,13 @@
         "wilson_lower": 0.9082,
         "wilson_upper": 1.0
       },
+      "action_family_exact_label": {
+        "n": 38,
+        "rate": 1.0,
+        "successes": 38,
+        "wilson_lower": 0.9082,
+        "wilson_upper": 1.0
+      },
       "false_stateful_rate": {
         "n": 0,
         "rate": null,
@@ -498,6 +610,13 @@
     },
     "quest": {
       "action_family_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 4,
         "rate": 1.0,
         "successes": 4,
@@ -535,6 +654,13 @@
         "wilson_lower": 0.8318,
         "wilson_upper": 1.0
       },
+      "action_family_exact_label": {
+        "n": 19,
+        "rate": 1.0,
+        "successes": 19,
+        "wilson_lower": 0.8318,
+        "wilson_upper": 1.0
+      },
       "false_stateful_rate": {
         "n": 0,
         "rate": null,
@@ -566,6 +692,13 @@
         "wilson_lower": 0.7961,
         "wilson_upper": 1.0
       },
+      "action_family_exact_label": {
+        "n": 15,
+        "rate": 1.0,
+        "successes": 15,
+        "wilson_lower": 0.7961,
+        "wilson_upper": 1.0
+      },
       "false_stateful_rate": {
         "n": 10,
         "rate": 0.2,
@@ -575,22 +708,29 @@
       },
       "missed_stateful_rate": {
         "n": 5,
-        "rate": 0.4,
-        "successes": 2,
-        "wilson_lower": 0.1176,
-        "wilson_upper": 0.7693
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.4345
       },
       "n": 15,
       "target_entity_accuracy": {
         "n": 15,
-        "rate": 0.8,
-        "successes": 12,
-        "wilson_lower": 0.5481,
-        "wilson_upper": 0.9295
+        "rate": 0.8667,
+        "successes": 13,
+        "wilson_lower": 0.6212,
+        "wilson_upper": 0.9626
       }
     },
     "status": {
       "action_family_accuracy": {
+        "n": 49,
+        "rate": 1.0,
+        "successes": 49,
+        "wilson_lower": 0.9273,
+        "wilson_upper": 1.0
+      },
+      "action_family_exact_label": {
         "n": 49,
         "rate": 1.0,
         "successes": 49,
@@ -623,10 +763,17 @@
     "talk": {
       "action_family_accuracy": {
         "n": 192,
-        "rate": 0.974,
-        "successes": 187,
-        "wilson_lower": 0.9405,
-        "wilson_upper": 0.9888
+        "rate": 0.9896,
+        "successes": 190,
+        "wilson_lower": 0.9628,
+        "wilson_upper": 0.9971
+      },
+      "action_family_exact_label": {
+        "n": 192,
+        "rate": 0.9844,
+        "successes": 189,
+        "wilson_lower": 0.9551,
+        "wilson_upper": 0.9947
       },
       "false_stateful_rate": {
         "n": 192,
@@ -645,14 +792,21 @@
       "n": 192,
       "target_entity_accuracy": {
         "n": 151,
-        "rate": 0.947,
-        "successes": 143,
-        "wilson_lower": 0.8989,
-        "wilson_upper": 0.9729
+        "rate": 0.9404,
+        "successes": 142,
+        "wilson_lower": 0.8906,
+        "wilson_upper": 0.9683
       }
     },
     "unequip": {
       "action_family_accuracy": {
+        "n": 13,
+        "rate": 0.9231,
+        "successes": 12,
+        "wilson_lower": 0.6669,
+        "wilson_upper": 0.9863
+      },
+      "action_family_exact_label": {
         "n": 13,
         "rate": 0.9231,
         "successes": 12,
@@ -690,6 +844,13 @@
         "wilson_lower": 0.7976,
         "wilson_upper": 0.9926
       },
+      "action_family_exact_label": {
+        "n": 24,
+        "rate": 0.9583,
+        "successes": 23,
+        "wilson_lower": 0.7976,
+        "wilson_upper": 0.9926
+      },
       "false_stateful_rate": {
         "n": 14,
         "rate": 0.1429,
@@ -715,6 +876,13 @@
     },
     "wait": {
       "action_family_accuracy": {
+        "n": 26,
+        "rate": 0.9615,
+        "successes": 25,
+        "wilson_lower": 0.8111,
+        "wilson_upper": 0.9932
+      },
+      "action_family_exact_label": {
         "n": 26,
         "rate": 0.9615,
         "successes": 25,
@@ -749,86 +917,107 @@
     "aurelia": {
       "action_family_accuracy": {
         "n": 401,
-        "rate": 0.8878,
-        "successes": 356,
-        "wilson_lower": 0.8531,
-        "wilson_upper": 0.9151
+        "rate": 0.98,
+        "successes": 393,
+        "wilson_lower": 0.9611,
+        "wilson_upper": 0.9899
+      },
+      "action_family_exact_label": {
+        "n": 401,
+        "rate": 0.9202,
+        "successes": 369,
+        "wilson_lower": 0.8895,
+        "wilson_upper": 0.9429
       },
       "false_stateful_rate": {
         "n": 285,
-        "rate": 0.0456,
-        "successes": 13,
-        "wilson_lower": 0.0268,
-        "wilson_upper": 0.0765
+        "rate": 0.014,
+        "successes": 4,
+        "wilson_lower": 0.0055,
+        "wilson_upper": 0.0355
       },
       "missed_stateful_rate": {
         "n": 116,
-        "rate": 0.1552,
-        "successes": 18,
-        "wilson_lower": 0.1005,
-        "wilson_upper": 0.232
+        "rate": 0.1466,
+        "successes": 17,
+        "wilson_lower": 0.0936,
+        "wilson_upper": 0.2222
       },
       "n": 401,
       "target_entity_accuracy": {
         "n": 297,
-        "rate": 0.9428,
-        "successes": 280,
-        "wilson_lower": 0.9103,
-        "wilson_upper": 0.964
+        "rate": 0.9562,
+        "successes": 284,
+        "wilson_lower": 0.9266,
+        "wilson_upper": 0.9742
       }
     },
     "starter": {
       "action_family_accuracy": {
         "n": 399,
-        "rate": 0.8872,
-        "successes": 354,
-        "wilson_lower": 0.8524,
-        "wilson_upper": 0.9146
+        "rate": 0.9724,
+        "successes": 388,
+        "wilson_lower": 0.9513,
+        "wilson_upper": 0.9845
+      },
+      "action_family_exact_label": {
+        "n": 399,
+        "rate": 0.9098,
+        "successes": 363,
+        "wilson_lower": 0.8776,
+        "wilson_upper": 0.9341
       },
       "false_stateful_rate": {
         "n": 294,
-        "rate": 0.0306,
-        "successes": 9,
-        "wilson_lower": 0.0162,
-        "wilson_upper": 0.0571
+        "rate": 0.017,
+        "successes": 5,
+        "wilson_lower": 0.0073,
+        "wilson_upper": 0.0392
       },
       "missed_stateful_rate": {
         "n": 105,
-        "rate": 0.3619,
-        "successes": 38,
-        "wilson_lower": 0.2764,
-        "wilson_upper": 0.4572
+        "rate": 0.0952,
+        "successes": 10,
+        "wilson_lower": 0.0526,
+        "wilson_upper": 0.1665
       },
       "n": 399,
       "target_entity_accuracy": {
         "n": 298,
-        "rate": 0.6779,
-        "successes": 202,
-        "wilson_lower": 0.6228,
-        "wilson_upper": 0.7284
+        "rate": 0.8725,
+        "successes": 260,
+        "wilson_lower": 0.8298,
+        "wilson_upper": 0.9057
       }
     },
     "vesper-9": {
       "action_family_accuracy": {
         "n": 400,
-        "rate": 0.88,
-        "successes": 352,
-        "wilson_lower": 0.8445,
-        "wilson_upper": 0.9083
+        "rate": 0.97,
+        "successes": 388,
+        "wilson_lower": 0.9483,
+        "wilson_upper": 0.9828
+      },
+      "action_family_exact_label": {
+        "n": 400,
+        "rate": 0.89,
+        "successes": 356,
+        "wilson_lower": 0.8555,
+        "wilson_upper": 0.917
       },
       "false_stateful_rate": {
         "n": 323,
-        "rate": 0.0124,
-        "successes": 4,
-        "wilson_lower": 0.0048,
-        "wilson_upper": 0.0314
+        "rate": 0.0093,
+        "successes": 3,
+        "wilson_lower": 0.0032,
+        "wilson_upper": 0.0269
       },
       "missed_stateful_rate": {
         "n": 77,
-        "rate": 0.4675,
-        "successes": 36,
-        "wilson_lower": 0.3603,
-        "wilson_upper": 0.5778
+        "rate": 0.4545,
+        "successes": 35,
+        "wilson_lower": 0.3481,
+        "wilson_upper": 0.5653
       },
       "n": 400,
       "target_entity_accuracy": {
@@ -840,24 +1029,23 @@
       }
     }
   },
-  "database": "omnix_probe_rq",
-  "elapsed_s": 1859.6,
+  "database": "omnix_intent_gate",
+  "elapsed_s": 2182.3,
   "family_confusion": {
     "ask": {
-      "ask": 310,
-      "buy": 16,
+      "ask": 327,
+      "buy": 1,
       "look": 2,
-      "practice": 3,
       "quest": 1,
       "sell": 5,
-      "talk": 7
+      "talk": 8
     },
     "attack": {
       "attack": 42
     },
     "buy": {
-      "ask": 1,
-      "buy": 53,
+      "ask": 2,
+      "buy": 52,
       "clarify": 1
     },
     "clarify": {
@@ -866,8 +1054,8 @@
       "talk": 1
     },
     "decline": {
-      "decline": 31,
-      "talk": 10,
+      "decline": 30,
+      "talk": 11,
       "unequip": 1
     },
     "defend": {
@@ -887,9 +1075,9 @@
       "sell": 2
     },
     "inspect": {
-      "check": 4,
+      "check": 5,
       "inspect": 31,
-      "look": 62,
+      "look": 61,
       "practice": 2
     },
     "look": {
@@ -900,8 +1088,7 @@
       "practice": 1
     },
     "move": {
-      "ability": 9,
-      "move": 66
+      "move": 75
     },
     "party": {
       "party": 3
@@ -923,8 +1110,8 @@
     },
     "talk": {
       "ask": 1,
-      "look": 4,
-      "talk": 187
+      "look": 2,
+      "talk": 189
     },
     "unequip": {
       "buy": 1,
@@ -950,24 +1137,31 @@
   "metrics": {
     "action_family_accuracy": {
       "n": 1200,
-      "rate": 0.885,
-      "successes": 1062,
-      "wilson_lower": 0.8657,
-      "wilson_upper": 0.9018
+      "rate": 0.9742,
+      "successes": 1169,
+      "wilson_lower": 0.9636,
+      "wilson_upper": 0.9817
+    },
+    "action_family_exact_label": {
+      "n": 1200,
+      "rate": 0.9067,
+      "successes": 1088,
+      "wilson_lower": 0.8889,
+      "wilson_upper": 0.9219
     },
     "false_stateful_rate": {
       "n": 902,
-      "rate": 0.0288,
-      "successes": 26,
-      "wilson_lower": 0.0197,
-      "wilson_upper": 0.0419
+      "rate": 0.0133,
+      "successes": 12,
+      "wilson_lower": 0.0076,
+      "wilson_upper": 0.0231
     },
     "missed_stateful_rate": {
       "n": 298,
-      "rate": 0.3087,
-      "successes": 92,
-      "wilson_lower": 0.259,
-      "wilson_upper": 0.3633
+      "rate": 0.2081,
+      "successes": 62,
+      "wilson_lower": 0.1658,
+      "wilson_upper": 0.2577
     },
     "resolved_without_model": {
       "n": 1200,
@@ -978,33 +1172,40 @@
     },
     "target_entity_accuracy": {
       "n": 919,
-      "rate": 0.8313,
-      "successes": 764,
-      "wilson_lower": 0.8058,
-      "wilson_upper": 0.8542
+      "rate": 0.8988,
+      "successes": 826,
+      "wilson_lower": 0.8776,
+      "wilson_upper": 0.9167
     }
   },
   "metrics_reached_scenes_only": {
     "action_family_accuracy": {
       "n": 1200,
-      "rate": 0.885,
-      "successes": 1062,
-      "wilson_lower": 0.8657,
-      "wilson_upper": 0.9018
+      "rate": 0.9742,
+      "successes": 1169,
+      "wilson_lower": 0.9636,
+      "wilson_upper": 0.9817
+    },
+    "action_family_exact_label": {
+      "n": 1200,
+      "rate": 0.9067,
+      "successes": 1088,
+      "wilson_lower": 0.8889,
+      "wilson_upper": 0.9219
     },
     "false_stateful_rate": {
       "n": 902,
-      "rate": 0.0288,
-      "successes": 26,
-      "wilson_lower": 0.0197,
-      "wilson_upper": 0.0419
+      "rate": 0.0133,
+      "successes": 12,
+      "wilson_lower": 0.0076,
+      "wilson_upper": 0.0231
     },
     "missed_stateful_rate": {
       "n": 298,
-      "rate": 0.3087,
-      "successes": 92,
-      "wilson_lower": 0.259,
-      "wilson_upper": 0.3633
+      "rate": 0.2081,
+      "successes": 62,
+      "wilson_lower": 0.1658,
+      "wilson_upper": 0.2577
     },
     "resolved_without_model": {
       "n": 1200,
@@ -1015,10 +1216,10 @@
     },
     "target_entity_accuracy": {
       "n": 919,
-      "rate": 0.8313,
-      "successes": 764,
-      "wilson_lower": 0.8058,
-      "wilson_upper": 0.8542
+      "rate": 0.8988,
+      "successes": 826,
+      "wilson_lower": 0.8776,
+      "wilson_upper": 0.9167
     }
   },
   "mode": "play",
@@ -1030,8 +1231,8 @@
       "claude-sonnet-5-5"
     ]
   },
-  "model_calls": 647,
-  "revision": "10fbf595af",
+  "model_calls": 692,
+  "revision": "cb70b4792d",
   "scenes": {
     "aurelia/grove": {
       "http": [
@@ -1062,7 +1263,7 @@
         200,
         200
       ],
-      "location": "location:market-road:northern-road",
+      "location": "location:market-road:market-square",
       "reached": true
     },
     "starter/tavern": {
@@ -1085,6 +1286,6 @@
   "static_sources": {
     "grammar": 1200
   },
-  "turn_ms_p50": 1965.9,
+  "turn_ms_p50": 2131.1,
   "unreached_scene_items": 0
 }

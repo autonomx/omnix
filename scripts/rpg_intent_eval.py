@@ -104,6 +104,17 @@ class Catalog:
                     self.by_name.append((_norm(name), key))
         self.by_name.sort(key=lambda pair: -len(pair[0]))
 
+    def same_target(self, predicted: str | None, label: str) -> bool:
+        """The labelled entity, or for an offer the thing it sells (buying "a torch" is buying the torch on offer)."""
+        if predicted == label:
+            return True
+        offer, thing = self.entities.get(label) or {}, self.entities.get(predicted or "") or {}
+        if offer.get("kind") != "offer" or thing.get("kind") != "item":
+            return False
+        sold = [_norm(name) for name in offer.get("names") or ()]
+        return any(re.search(rf"(?<![a-z0-9]){re.escape(_norm(name))}(?![a-z0-9])", text)
+                   for name in thing.get("names") or () if _norm(name) for text in sold)
+
     def resolve(self, value: Any) -> str | None:
         text = str(value or "").strip()
         if not text:
@@ -353,7 +364,8 @@ class Worlds:
         record["correct"] = {
             "family": same_family(prediction["family"], item["action_family"]),
             "family_exact": prediction["family"] == item["action_family"],
-            "target": (prediction["target_entity"] == item["target_entity"]) if item["target_entity"] else None,
+            "target": self.catalog[world].same_target(prediction["target_entity"], item["target_entity"])
+            if item["target_entity"] else None,
             "stateful": prediction["stateful"] == item["stateful"],
         }
         return record

@@ -140,3 +140,13 @@ def test_an_unlisted_id_is_named_by_its_last_part() -> None:
     }, "scenes": {}})
     assert catalog.resolve("location:market-road:northern-road") is None  # its region's slug is no market
     assert catalog.resolve("ent:actors:juno-rask") == "npc:juno"
+
+
+def test_buying_the_thing_an_offer_sells_is_buying_the_offer() -> None:
+    catalog = intent.Catalog({"entities": {
+        "elara_torch": {"kind": "offer", "names": ["a torch", "a new torch"], "alias_ids": []},
+        "torch": {"kind": "item", "names": ["torch"], "alias_ids": []},
+        "rope": {"kind": "item", "names": ["rope"], "alias_ids": []},
+    }, "scenes": {}})
+    assert catalog.same_target("torch", "elara_torch") and catalog.same_target("elara_torch", "elara_torch")
+    assert not catalog.same_target("rope", "elara_torch") and not catalog.same_target("elara_torch", "torch")

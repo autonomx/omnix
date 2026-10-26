@@ -36,8 +36,11 @@ class PlannedAction(BaseModel):
     options: tuple[str, ...] = ()  # a question's answers, as the commands they send (RQ-7.3)
 
 
-def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
+def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bool = False) -> PlannedAction | None:
     """The plan for a confident, single-step reading of a mechanic the pipeline runs; else ``None``.
+
+    ``decided`` is a reading the intent call chose (``intent.decide``: above its own trust, with no close rival, aimed
+    at something really here): its confidence is the model's, not the grammar's, so the grammar's bar does not apply.
 
     In a fight a bare "attack" means the foe in front of the hero, so it is not asked about.
     """
@@ -80,7 +83,7 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return None  # a move the grammar does not name; abilities and orders in a fight are RQ-2.6 part 2's
     if reading.family in {"buy", "sell"}:  # which offer, or which buyer, is the trade rule's to say
         return PlannedAction(mechanic="trade", reason=reading.family)
-    if reading.confidence < SKIP_CONFIDENCE:
+    if not decided and reading.confidence < SKIP_CONFIDENCE:
         return None
     if reading.family == "look":
         return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)

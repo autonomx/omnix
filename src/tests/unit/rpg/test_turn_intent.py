@@ -63,3 +63,15 @@ def test_a_question_about_a_deed_is_asked_not_done_but_a_request_is_done(monkeyp
     assert asked.reading is not None and asked.reading.family == "talk"
     requested = intent.read_with_model({}, SCENE, "Bran, can you fight me?")
     assert requested.reading is not None and requested.reading.family == "attack"
+
+
+def test_a_reading_the_intent_call_chose_is_planned_at_the_models_own_confidence() -> None:
+    """The route's intent eval: "examine my knife" read by the model as looking at the Iron Dagger (0.6) was dropped
+    by the grammar's bar (0.8) and played as a free action."""
+    from app.apps.rpg.rules.intent.grammar import IntentCandidate
+    from app.apps.rpg.session.turn.planning import plan_action
+
+    reading = IntentCandidate(family="look", target_id="iron_dagger", target_kind="item", confidence=0.6, reason="model")
+    assert plan_action(reading) is None  # the grammar's own reading, unsure: the intent call decides
+    planned = plan_action(reading, decided=True)
+    assert planned is not None and (planned.mechanic, planned.target_id) == ("look", "iron_dagger")
