@@ -138,15 +138,8 @@ def enforce_dialogue_quality(
         recent_interactions=recent,
     )
     repaired = False
-    content_repair_reason = _content_repair_reason(
-        visible,
-        player_input=player_input,
-        profile=profile,
-        session=session,
-        recent_interactions=recent,
-    )
     provider_authored = _result_used_llm(result)
-    if (not assessment["acceptable"] or content_repair_reason) and not provider_authored:
+    if not assessment["acceptable"] and not provider_authored:
         visible = build_profile_aware_dialogue_fallback(
             player_input=player_input,
             profile=profile,
@@ -164,10 +157,7 @@ def enforce_dialogue_quality(
 
     output = deepcopy(result)
     _apply_visible_response(output, visible)
-    quality_requires_retry = bool(
-        provider_authored
-        and (not assessment["acceptable"] or content_repair_reason)
-    )
+    quality_requires_retry = bool(provider_authored and not assessment["acceptable"])
     diagnostics = {
         **assessment,
         "format_version": DIALOGUE_QUALITY_VERSION,
@@ -184,7 +174,6 @@ def enforce_dialogue_quality(
         "provider_authored": provider_authored,
         "quality_requires_provider_retry": quality_requires_retry,
         "deterministic_replacement_forbidden": provider_authored,
-        "content_repair_reason": content_repair_reason or None,
         "target_word_range": [TARGET_MIN_WORDS, TARGET_MAX_WORDS],
     }
     output["dialogue_quality"] = diagnostics
@@ -334,121 +323,31 @@ def _fallback_line(
     profile: dict[str, Any],
     location: str,
 ) -> str:
-    is_bran = _normalize(speaker) == "bran"
+    """A line from the speaker's own profile, in no world's words but theirs (A4: the starter town's innkeeper had
+    lines of his own here, and every world's people talked of its old road)."""
     continuity = "Like I said, " if repeated_topic else ""
-    if mode == "emotional_disclosure":
-        return (
-            "Being frightened does not make you faithless. I learned on the road that fear is useful when you name it plainly. "
-            "Tell me who you are most afraid of failing, and we can separate the danger from the shame."
-        )
-    if mode == "hostile_noncombat":
-        return (
-            "You can be angry without turning my common room into a battlefield. Lower your voice and ask the question plainly, "
-            "and I will answer it; keep throwing insults and this conversation ends at the door."
-        )
-    if mode == "private_secret_probe":
-        return (
-            "Some stories are mine to keep. Trust is earned by what people do when the road turns bad, not by forcing open "
-            "another person's private history. Ask what I can tell you publicly instead."
-        )
-    if mode == "relationship_low_trust":
-        return (
-            "We have only just met, so I will give you the part any traveler can earn: the old road has been unusually quiet. "
-            "Show good judgment, keep your word, and you may earn trust enough for the rest later."
-        )
-    if mode == "relationship_high_trust":
-        return (
-            "You have earned more than a stranger's answer. The old road worries me because the missing caravan crews break a pattern "
-            "I know well, and I trust you to look without frightening every traveler in the common room."
-        )
-    if mode == "follow_up_continuity":
-        return (
-            "Yes, the missing caravan crews are the clearest reason the quiet road feels wrong. Fewer wagons mean fewer guards, fewer rumors, "
-            "and fewer honest explanations. I would start where the last crews were seen turning east."
-        )
-    if is_bran and topic == "business":
-        return (
-            f"{continuity}business is steady enough to keep the fire lit, but slower than I would like. "
-            "The regulars still come through; it is the road traffic that has thinned this week. "
-            "You came in from outside—did the old road seem unusually quiet to you?"
-        )
-    if is_bran and topic == "wellbeing":
-        return (
-            f"{continuity}my day has been steady, quiet, and a little too long. I have had worse days on the caravan road, "
-            "but an empty common room gives a man too much time to count worries. Did you see many travelers on your way here?"
-        )
-    if is_bran and topic == "combat":
-        return (
-            f"{continuity}fancy styles have their place, but footing and judgment keep you alive. Mud, fear, and a bad angle "
-            "will ruin a perfect stance faster than any master can correct it. Keep your guard honest and watch what your opponent does when pressed."
-        )
-    if is_bran and topic == "local_knowledge":
-        return (
-            f"{continuity}the old road carries most of the useful truth around here. Caravans, guards, and tired travelers all leave pieces of it at this bar. "
-            "Lately those pieces have been fewer, which worries me more than loud rumors would."
-        )
     public = _public_profile_sentence(profile)
-    style = _speech_style_hint(profile)
+    if mode == "emotional_disclosure":
+        return ("Being frightened does not make you faithless. Name the fear plainly, and we can separate the danger "
+                "from the shame. Who are you most afraid of failing?")
+    if mode == "hostile_noncombat":
+        return ("You can be angry without making this a fight. Lower your voice and ask the question plainly, and I "
+                "will answer it; keep throwing insults and this conversation is over.")
+    if mode == "private_secret_probe":
+        return ("Some stories are mine to keep. Trust is earned by what people do when things turn bad, not by forcing "
+                "open another person's private history. Ask what I can tell you openly instead.")
+    if mode == "relationship_low_trust":
+        return re.sub(r"\s+", " ", f"We have only just met, so I will tell you what anyone may hear. {public} "
+                      "Keep your word, and you may earn trust enough for the rest later.").strip()
+    if mode == "relationship_high_trust":
+        return re.sub(r"\s+", " ", f"You have earned more than a stranger's answer. {public}").strip()
     detail = public or f"Things around {location} have been steady, though conditions keep changing."
     if topic == "wellbeing":
         detail = f"{speaker} has had a demanding but manageable day, with enough quiet to notice what others miss."
     elif topic == "opinion":
         detail = f"From practical experience, {speaker} trusts sound judgment more than showy certainty."
-    line = f"{continuity}{detail} {style} What did you notice before you came in?"
+    line = f"{continuity}{detail} What did you notice before you came in?"
     return re.sub(r"\s+", " ", line).strip()
-
-
-def _content_repair_reason(
-    visible: dict[str, Any],
-    *,
-    player_input: str,
-    profile: dict[str, Any],
-    session: dict[str, Any],
-    recent_interactions: list[dict[str, Any]],
-) -> str:
-    topic = _topic(player_input)
-    repeated_topic = any(
-        topic != "general"
-        and topic
-        in {
-            _topic(_text(item.get("player_input"))),
-            _topic(_recent_npc_line(item)),
-        }
-        for item in recent_interactions[-6:]
-    )
-    mode = _dialogue_mode(
-        player_input,
-        profile=profile,
-        session=session,
-        repeated_topic=repeated_topic,
-    )
-    requirements = _mode_requirements(mode)
-    if not requirements:
-        return ""
-    normalized = _normalize(_text(visible.get("plain_text")))
-    missing = [fragment for fragment in requirements if _normalize(fragment) not in normalized]
-    return f"{mode}:missing:{','.join(missing)}" if missing else ""
-
-
-def _mode_requirements(mode: str) -> tuple[str, ...]:
-    return {
-        "business": ("regulars", "old road"),
-        "business_travelers": ("regulars", "road traffic"),
-        "emotional_disclosure": ("frightened", "road"),
-        "hostile_noncombat": ("angry", "common room"),
-        "private_secret_probe": ("mine to keep", "trust"),
-        "relationship_low_trust": ("just met", "earn trust"),
-        "relationship_high_trust": ("earned", "old road"),
-        "follow_up_continuity": ("caravan crews", "quiet road"),
-        "repetition_repair": ("like i said", "old road"),
-        "road_safety": ("old road", "guards"),
-        "wellbeing": ("caravan road",),
-        "combat": ("footing",),
-        "local_knowledge": ("old road",),
-        "opinion": ("judgment",),
-        "identity": ("old road",),
-        "group_conversation": ("old road", "wagon tracks"),
-    }.get(mode, ())
 
 
 def build_canonical_dialogue_quality_context(
@@ -523,34 +422,15 @@ def build_canonical_dialogue_quality_context(
     )
     if len(addressed_speaker_ids) > 1:
         mode = "group_conversation"
-    requirements = _mode_requirements(mode)
-    if not requirements:
-        return {
-            "format_version": "rpg_canonical_dialogue_quality_context_v1",
-            "mode": mode,
-            "required_fragments": [],
-            "speaker_id": speaker_id,
-            "speaker": speaker,
-            "speaker_ids": addressed_speaker_ids or ([speaker_id] if speaker_id else []),
-            "fast_path": fast_path,
-            "llm_prose_required": llm_prose_required,
-        }
-    fallback = build_profile_aware_dialogue_fallback(
-        player_input=player_input,
-        profile=profile,
-        session=session,
-        recent_interactions=recent,
-    )
-    message = _npc_message(fallback)
+    # A mode guides the writer; no words are required of it (the starter town's benchmark required "old road" and
+    # "caravan crews" of every world's people). Only an absent person's "not here" is (above).
     return {
         "format_version": "rpg_canonical_dialogue_quality_context_v1",
         "mode": mode,
-        "required_fragments": list(requirements),
-        "narration": _text(fallback.get("narration")),
-        "speaker_id": _text(message.get("speaker_id")) or speaker_id,
-        "speaker": _text(message.get("speaker")) or speaker,
+        "required_fragments": [],
+        "speaker_id": speaker_id,
+        "speaker": speaker,
         "speaker_ids": addressed_speaker_ids or ([speaker_id] if speaker_id else []),
-        "line": _text(message.get("text")),
         "fast_path": fast_path,
         "llm_prose_required": llm_prose_required,
     }
@@ -688,8 +568,6 @@ def _dialogue_mode(
         term in normalized for term in ("fail", "failing", "depending on me")
     ):
         return "emotional_disclosure"
-    if "caravan crews" in normalized and "quiet road" in normalized:
-        return "follow_up_continuity"
     trust = _relationship_trust(session, profile)
     if "only just met" in normalized or (
         trust == "low"
@@ -703,11 +581,7 @@ def _dialogue_mode(
     if repeated_topic:
         return "repetition_repair"
     if _topic(player_input) == "business":
-        if any(term in normalized for term in ("travelers", "stop here", "road traffic")):
-            return "business_travelers"
         return "business"
-    if _topic(player_input) == "local_knowledge" and any(term in normalized for term in ("safe", "guards")):
-        return "road_safety"
     if _topic(player_input) in {
         "wellbeing",
         "combat",
@@ -1081,14 +955,10 @@ def _topic(text: str) -> str:
 
 
 def _public_profile_sentence(profile: dict[str, Any]) -> str:
+    """What anyone may know of the speaker: the first two sentences of their public biography."""
     public = _text(_dict(profile.get("biography")).get("public"))
-    return public.split(".")[0].strip() + "." if public else ""
-
-
-def _speech_style_hint(profile: dict[str, Any]) -> str:
-    style = _text(_dict(profile.get("personality")).get("speech_style"))
-    first = style.split(".")[0].strip() if style else ""
-    return f"Speaking plainly, {first[:1].lower() + first[1:]}." if first else ""
+    sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", public) if sentence.strip()]
+    return " ".join(sentences[:2])
 
 
 def _target_name(player_input: str) -> str:

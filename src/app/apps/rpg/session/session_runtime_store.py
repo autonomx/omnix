@@ -42,7 +42,7 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
 
     # Deterministic inn / room rental fallback.
     # This catches flows like:
-    #   "i ask bran for a room"
+    #   "i ask the innkeeper for a room"
     #   "ill take the best one"
     # without letting "take" become pickup_item.
     inn_words = ("room", "inn", "bed", "stay", "rent", "lodging", "sleep")

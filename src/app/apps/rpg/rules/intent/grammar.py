@@ -135,7 +135,7 @@ def _words(text: str) -> list[str]:
     raw = [word for word in re.split(r"[\s?-]+", text) if word]
     for index, word in enumerate(raw):
         if word == "tak":
-            # "tak to Mira" is talking; "tak the dagger" is taking.
+            # "tak to the guide" is talking; "tak the dagger" is taking.
             word = "talk" if index + 1 < len(raw) and raw[index + 1] in {"to", "too", "with"} else "take"
         elif word == "by" and index == 0:
             word = "buy"

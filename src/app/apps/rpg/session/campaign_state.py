@@ -101,7 +101,6 @@ CREATION_ARTIFACT_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
         ("runtime_state", "bootstrap_snapshot"),
     ),
 }
-_DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 
 
 def creation_artifacts(document: Any) -> dict[str, dict[str, Any]]:
@@ -227,8 +226,10 @@ def _to_v6_sections(document: dict[str, Any]) -> dict[str, Any]:
     state = _safe_dict(document.get("state"))
     binding = _safe_dict(state.get("world_binding"))
     if not binding.get("world_id") and not binding.get("kind"):
+        from app.apps.rpg.genesis.worlds.builtin_worlds import LEGACY_DEMO_PRESET_ID
+
         manifest = _safe_dict(document.get("manifest"))
-        demo = _DEMO_PRESET_ID in (manifest.get("created_from_preset"), manifest.get("source_template_id"))
+        demo = LEGACY_DEMO_PRESET_ID in (manifest.get("created_from_preset"), manifest.get("source_template_id"))
         state["world_binding"] = {"kind": "demo" if demo else "starter"}
         document["state"] = state
     return document

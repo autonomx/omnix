@@ -123,7 +123,7 @@ def present_at(simulation: Mapping[str, Any], location_id: str, minute: int, *, 
 
 def described(simulation: Mapping[str, Any], npc_ids: list[str], minute: int, *, since: int | None = None,
               hero_at: str = "") -> list[str]:
-    """The people named as the hero sees them: "Bran (keeping the tavern)"."""
+    """The people named as the hero sees them: "the innkeeper (keeping the inn)"."""
     people = {**_d(_sections.npc_index_of(simulation)), **_d(_d(_sections.world_model_of(simulation)).get("npcs"))}
     found = whereabouts(simulation, minute, since=since, hero_at=hero_at)
     seen = []

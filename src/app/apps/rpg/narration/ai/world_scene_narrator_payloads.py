@@ -335,7 +335,6 @@ def _sanitize_narration_text(
         "the room",
         "the inn",
         "the bar",
-        "the rusty flagon tavern",
     }
 
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]

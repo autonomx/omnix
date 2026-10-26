@@ -49,7 +49,7 @@ def _holds(condition: Mapping[str, Any], simulation: Mapping[str, Any], applied:
     if condition.get("reach"):
         return routines.hero_location(simulation) == _s(condition["reach"])
     if condition.get("talk"):
-        # ``about``: words the hero's line must touch (asking Bran about the weather is not asking about the rumor).
+        # ``about``: words the hero's line must touch (asking the innkeeper about the weather is not asking about the rumor).
         about = [_s(word).casefold() for word in (_l(condition.get("about")) or [condition.get("about")]) if _s(word)]
         return any(isinstance(change, DialogueExchanged) and change.npc_id == _s(condition["talk"])
                    and (not about or any(word in change.player_line.casefold() for word in about))

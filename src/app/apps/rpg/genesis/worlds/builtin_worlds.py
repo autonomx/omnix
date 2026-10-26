@@ -27,6 +27,8 @@ class BuiltinWorld:
 
 
 STARTER = BuiltinWorld(key="starter", bundle="the-market-road")
+# The preset a campaign made before worlds were bound was launched from as the demo (the document upcast reads it).
+LEGACY_DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 
 
 @bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)

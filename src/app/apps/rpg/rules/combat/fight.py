@@ -507,7 +507,7 @@ def _defeats(step: Any) -> list[str]:
 
 def _met_here(simulation: Mapping[str, Any], enemy: Mapping[str, Any]) -> bool:
     """Whether the creature can be met where the hero is (encounters.md): in the wild, where no one lives, or at the
-    place a quest the hero has taken sends them to defeat it (the Rusty Flagon's cellar rats)."""
+    place a quest the hero has taken sends them to defeat it (an inn's cellar rats)."""
     if routines.is_wild(simulation):
         return True
     here = routines.hero_location(simulation)

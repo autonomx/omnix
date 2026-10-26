@@ -223,7 +223,7 @@ def _memory_entries(memory_context: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _weak_context_tokens(context: Mapping[str, Any], entries: Sequence[Mapping[str, Any]]) -> Set[str]:
-    weak: Set[str] = {"bran", "elara", "player"}
+    weak: Set[str] = {"player"}  # and the actors' own ids, below
     for value in _extract_actor_ids(context):
         weak.update(_tokens(value.replace("npc:", "").replace("_", " ")))
     for entry in entries:

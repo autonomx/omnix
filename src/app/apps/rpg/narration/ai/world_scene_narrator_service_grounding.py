@@ -391,13 +391,10 @@ def _service_narration_needs_grounding(text: str) -> bool:
         "what she sells",
         "heard any rumors",
         "buy a torch",
-        "from elara",
-        "from bran",
         "request for lodging",
         "seeking shelter",
         "seeking lodging",
         "as you address",
-        "address bran",
         "travelers seeking shelter",
     )
     return any(phrase in lower for phrase in repeated_action_phrases)
