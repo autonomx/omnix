@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneEntity, SceneView, parse_command
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.state.people import called as _called
 
 # Families the game resolves with its own rules, so a confident reading needs no intent model call.
 # Speech (talk, ask) still goes to the dialogue call, which chooses who answers and writes their line;
@@ -41,16 +42,6 @@ def _names(*values: Any) -> tuple[str, ...]:
     return tuple(names)
 
 
-_TITLES = frozenset({"dr", "doctor", "inspector", "captain", "sergeant", "lady", "lord", "sir", "dame", "master",
-                     "mistress", "brother", "sister", "father", "mother", "elder", "magister"})
-
-
-def _called(name: str) -> str:
-    """The name someone goes by: the first word after any title ("Inspector Nadi Vale": Nadi)."""
-    words = [word for word in name.split() if word]
-    while len(words) > 1 and words[0].casefold().rstrip(".") in _TITLES:
-        words = words[1:]
-    return words[0] if words else ""
 
 
 def _role_names(role: str) -> tuple[str, ...]:

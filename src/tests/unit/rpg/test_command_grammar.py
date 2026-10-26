@@ -48,6 +48,9 @@ SCENE = SceneView((
     ("take a look around", "look", None),
     ("give my iron dagger to Liora Fen", "give", "iron_dagger"),
     ("take off some lantern bread", "unequip", None),  # no order of the bread on sale
+    ("I hunt for echo wolves along the pass", "attack", "creature:echo-wolf"),  # the playtest: it came to nothing
+    ("search for the wolf", "attack", "creature:echo-wolf"),
+    ("search for hidden doors", "manipulate", None),  # a search, as before (no creature named)
 ])
 def test_commands_read_as_their_family_and_target(text, family, target) -> None:
     candidate = parse_command(text, SCENE)
@@ -121,3 +124,17 @@ def test_a_person_is_named_by_the_aliases_their_world_gives_them() -> None:
                   "present_npc_state": {"present_npc_ids": ["npc:bran"]}}
     reading = parse_command("ask the barkeep about the road north", scene_view(simulation))
     assert (reading.family, reading.target_id) == ("ask", "npc:bran")
+
+
+
+@pytest.mark.parametrize(("text", "family", "target", "second"), [
+    ("Brindle, I'd like some lantern bread.", "buy", "npc:brindle:bread", "npc:brindle"),  # the playtest: a room asked for
+    ("Brindle, give me some lantern bread", "buy", "npc:brindle:bread", "npc:brindle"),  # "give me" asks for it
+    ("Liora, I give you my dagger", "give", "iron_dagger", "npc:liora"),  # "you" is the one named
+    ("Liora, I woke up here and remember nothing.", "talk", "npc:liora", None),
+    ("Liora, keep watch", "order", "npc:liora", None),
+    ("Liora, join my party", "party", "npc:liora", None),
+])
+def test_a_name_and_a_comma_first_is_said_to_them_or_done_with_them(text, family, target, second) -> None:
+    reading = parse_command(text, SCENE)
+    assert (reading.family, reading.target_id, reading.second_target_id) == (family, target, second)

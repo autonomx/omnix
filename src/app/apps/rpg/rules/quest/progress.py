@@ -27,6 +27,18 @@ from app.apps.rpg.rules import routines
 from app.apps.rpg.foundation.state import access as _sections
 
 FAILED_REGARD = -10  # a quest failed costs its giver's trust (quests.md)
+DONE_REGARD = 10  # and one done earns it (the playtest: the captain's contract finished, her regard unmoved)
+
+
+def giver_thanks(simulation: Mapping[str, Any], quest: Mapping[str, Any]) -> list[StateChange]:
+    """The regard a finished quest earns from whoever gave it, when they are one of the world's people."""
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
+    giver = _s(quest.get("giver_id") or quest.get("offered_by"))
+    if giver not in people:
+        return []
+    quest_id = _s(quest.get("quest_id") or quest.get("id"))
+    return [RegardChanged(npc_id=giver, name=_s(_d(people[giver]).get("name")) or giver, delta=DONE_REGARD,
+                          reason=f"completed:{quest_id}")]
 
 
 def victories(applied: Sequence[StateChange]) -> dict[str, int]:
@@ -117,13 +129,15 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
             changes.append(QuestStepCompleted(quest_id=quest_id, stage=stage, step_id=_s(steps[stage - 1].get("id")),
                                               branch=branch if len(ways) > 1 else None, next_objective=following))
             done = _s(steps[stage - 1].get("summary")) or "a step"
-            lines.append(f"{title}: {done}" + (f". Next: {following}." if following else "."))
+            if stage < len(steps):  # the last step is told by the quest's completion
+                lines.append(f"{title}: {done}. Next: {following}.")
         if stage >= len(steps) and stage > int(progress.get("stage") or 0):
             changes.append(QuestStatusChanged(quest_id=quest_id, status="completed"))
             paid, said = rewards(quest)
             changes.extend(paid)
+            changes.extend(giver_thanks(simulation, quest))
             lines.append(f"Quest complete: {title}." + (f" {said}" if said else ""))
     return changes, lines
 
 
-__all__ = ["FAILED_REGARD", "quest_progress", "victories"]
+__all__ = ["DONE_REGARD", "FAILED_REGARD", "giver_thanks", "quest_progress", "victories"]

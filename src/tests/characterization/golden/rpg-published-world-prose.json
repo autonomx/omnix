@@ -67,11 +67,11 @@
     },
     {
       "blocks": [
-        "dialogue|npc:brindle-gearwing|I have Healing Potion for 3 silver."
+        "dialogue|npc:brindle-gearwing|I have Healing Potion for 3 silver, 6 copper."
       ],
       "step": "I ask Brindle Gearwing what a Healing Potion costs.",
       "told": "",
-      "visible": "Brindle Gearwing: \"I have Healing Potion for 3 silver.\""
+      "visible": "Brindle Gearwing: \"I have Healing Potion for 3 silver, 6 copper.\""
     },
     {
       "blocks": [
@@ -166,11 +166,11 @@
     {
       "blocks": [
         "narration||Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.",
-        "action||You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: The Memory Loom stirs is held in check. Word comes: Unrest in the Meridian Heartland grows worse."
+        "action||You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland grows worse."
       ],
       "step": "go to Skybridge Pass",
-      "told": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: The Memory Loom stirs is held in check. Word comes: Unrest in the Meridian Heartland grows worse. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: The Memory Loom stirs is held in check. Word comes: Unrest in the Meridian Heartland grows worse.",
-      "visible": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.\n\nYou travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: The Memory Loom stirs is held in check. Word comes: Unrest in the Meridian Heartland grows worse."
+      "told": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland grows worse. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland grows worse.",
+      "visible": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.\n\nYou travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Sky Manta bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland grows worse."
     },
     {
       "blocks": [
@@ -226,11 +226,11 @@
     {
       "blocks": [
         "narration||Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
-        "action||You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: The Memory Loom stirs stirs again. Word comes: Unrest in the Meridian Heartland stirs again."
+        "action||You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again."
       ],
       "step": "go to Starfall Village",
-      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: The Memory Loom stirs stirs again. Word comes: Unrest in the Meridian Heartland stirs again. You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: The Memory Loom stirs stirs again. Word comes: Unrest in the Meridian Heartland stirs again.",
-      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: The Memory Loom stirs stirs again. Word comes: Unrest in the Meridian Heartland stirs again."
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again. You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again.",
+      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again."
     },
     {
       "blocks": [

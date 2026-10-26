@@ -88,6 +88,9 @@ def arrival_changes(simulation_state: Mapping[str, Any], location_id: str, *,
         if set(places) <= {*visited, location_id}:
             rewards = [_s(reward) for reward in _l(quest.get("rewards"))]
             changes.append(QuestStatusChanged(quest_id=quest_id, status="completed"))
+            from app.apps.rpg.rules.quest.progress import giver_thanks
+
+            changes.extend(giver_thanks(simulation_state, quest))
             coins = _reward_coins(rewards)
             copper = sum(amount * _COINS[coin] for coin, amount in coins.items())
             if copper:

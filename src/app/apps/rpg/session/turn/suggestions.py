@@ -75,8 +75,10 @@ def suggestions(document: Mapping[str, Any]) -> list[Suggestion]:
     people = _people_here(simulation)
     offered = _level_choice(simulation)
     offered += [Suggestion(label=f"Talk to {name}", command=f"Talk to {name}") for _, name in people[:2]]
-    quest = next((_d(row) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))
-                  if _s(_d(row).get("status")) == "available" and _s(_d(row).get("title"))), None)
+    available = [_d(row) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))
+                 if _s(_d(row).get("status")) == "available" and _s(_d(row).get("title"))]
+    # One someone offered first, a finale last (the playtest: the finale was suggested on every screen).
+    quest = min(available, key=lambda row: (not row.get("offered_by"), _s(row.get("tier")) == "finale"), default=None)
     if quest:
         title = _s(quest.get("title"))
         offered.append(Suggestion(label=f"Take on {title}", command=f"I accept the quest {title}."))

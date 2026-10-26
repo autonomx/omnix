@@ -21,11 +21,12 @@ from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 _LINE_PROMPT = prompt_template(
-    "rpg.ai_compact_dialogue.plan", "6",
+    "rpg.ai_compact_dialogue.plan", "7",
     "Reply as the speaker in the PLAN, in one or two concise spoken sentences, in their voice and stance. Output "
     "only the words they say: no name label, narration, JSON or markdown. Share what may_reveal holds, offer what "
     "offers_quest or offers_to_tell_for_a_price hold, and name each of wares with its price as written. Asked what to "
-    "do or how, point to heros_quests: where each goes on (one that is done is done: do not send them back to it). "
+    "do or how, point to heros_quests: where each goes on, in the speaker's own words, never quoting a quest's title "
+    "(one that is done is done: do not send them back to it). "
     "Never invent a task, item or requirement the PLAN does not hold, and never speak of the plan itself. About "
     "anything else, answer from their role and "
     "background or say they do not know. Keep continuity with "

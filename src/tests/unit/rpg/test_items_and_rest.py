@@ -83,7 +83,7 @@ def test_a_night_in_a_room_paid_for_restores_uses_the_room_and_is_a_full_rest() 
 def test_no_sleeping_in_the_street_where_rooms_are_rented_but_camping_in_the_wild() -> None:
     village = _campaign(providers=INN, offers=ROOM_OFFER)
     refused = rest(village["simulation_state"], "I sleep.")
-    assert refused.refused and refused.lines == ["You have no room here to sleep in. Orik offers A night's lodging."]
+    assert refused.refused and refused.lines == ["You have no room here to sleep in. Orik offers a night's lodging."]
     camp = rest(_campaign()["simulation_state"], "I make camp and sleep for the night.")
     assert camp.kind == "camp" and _after(_campaign(), camp)["player_state"]["rest_point"] == "loc:here"
     short = rest(_campaign()["simulation_state"], "rest for a while")
@@ -118,3 +118,16 @@ def test_a_gift_leaves_the_pack_for_someone_here_who_trusts_the_hero_more() -> N
     simulation["relationship_state"] = {"npc:liora": {"trust": 25}}
     assert [change.type for change in give_item(simulation, "item:bread", "", "give a Lantern Bread").changes] == [
         "item_removed"]
+
+
+def test_a_nights_sleep_lasts_until_morning_and_never_less_than_eight_hours() -> None:
+    """The playtest: a room taken at 20:36 was slept in for eight hours, and the hero woke at 04:36 to a village
+    asleep, the narration saying "by morning"."""
+    def slept(at_minute: int) -> int:
+        campaign = _campaign()
+        campaign["simulation_state"]["environment"] = {"absolute_minutes": at_minute}
+        return rest(campaign["simulation_state"], "make camp and sleep").minutes
+
+    assert slept(1440 + 20 * 60 + 36) == 11 * 60 + 24  # 20:36 to 08:00
+    assert slept(1440 + 2 * 60) == 480  # 02:00: eight hours, to 10:00
+    assert slept(1440 + 14 * 60) == 480  # an afternoon's: eight hours

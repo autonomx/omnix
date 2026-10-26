@@ -25,6 +25,7 @@ from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.trade import resolve_trade
 from app.apps.rpg.session.turn.travel import resolve_travel
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.state.people import called as _called
 
 MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 
@@ -114,16 +115,6 @@ def free_action(session: Mapping[str, Any]) -> Resolution:
                       minutes=FREE_ACTION_MINUTES, needs="standard_turn")
 
 
-_TITLES = frozenset({"dr", "dr.", "doctor", "inspector", "captain", "sergeant", "lady", "lord", "sir", "dame",
-                     "master", "mistress", "brother", "sister", "father", "mother", "elder", "magister"})
-
-
-def _called(name: str) -> str:
-    """What a person is called in passing: their first name, after any title ("Dr. Selene Kade": Selene)."""
-    words = name.split()
-    while len(words) > 1 and words[0].casefold() in _TITLES:
-        words = words[1:]
-    return words[0] if words else name
 
 
 def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) -> Resolution | None:

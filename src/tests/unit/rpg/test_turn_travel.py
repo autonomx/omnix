@@ -88,3 +88,14 @@ def test_reaching_a_quests_last_place_completes_it_and_pays_its_rewards() -> Non
     changes, lines = arrival_changes(_campaign([halfway])["simulation_state"], "loc:village")
     assert [change.type for change in changes] == ["quest_place_reached"]
     assert lines == ["Progress on First Night: 1 of 2 places reached."]
+
+
+def test_a_quest_finished_earns_its_givers_regard() -> None:
+    """The playtest: the captain's contract was finished and her regard did not move (a failed one costs 10)."""
+    from app.apps.rpg.rules.quest.progress import DONE_REGARD
+
+    quest = {"id": "quest:escort", "title": "Escort", "status": "active", "locations": ["loc:grove", "loc:village"],
+             "visited_locations": ["loc:grove"], "giver_id": "npc:orik"}
+    changes, _ = arrival_changes(_campaign([quest])["simulation_state"], "loc:village")
+    regard = [change for change in changes if change.type == "regard_changed"]
+    assert [(change.npc_id, change.delta) for change in regard] == [("npc:orik", DONE_REGARD)]

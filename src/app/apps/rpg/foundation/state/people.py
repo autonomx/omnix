@@ -19,4 +19,21 @@ def world_people(simulation_state: Mapping[str, Any] | None) -> dict[str, dict[s
     return people
 
 
-__all__ = ["world_people"]
+# What a name may open with that is no name: a rank, a calling, a station (the playtest: "Princess Seraphine
+# Valecourt" was "Princess" in passing).
+TITLES = frozenset({"dr", "doctor", "inspector", "captain", "sergeant", "commander", "general", "lieutenant", "lady",
+                    "lord", "sir", "dame", "master", "mistress", "brother", "sister", "father", "mother", "elder",
+                    "magister", "princess", "prince", "queen", "king", "archon", "saint", "professor", "mr", "mrs",
+                    "ms", "madam", "high", "grand"})
+
+
+def called(name: str) -> str:
+    """What someone goes by in passing: the first word of their name after any title ("Dr. Selene Kade": Selene;
+    "Princess Seraphine Valecourt": Seraphine)."""
+    words = [word for word in str(name or "").split() if word]
+    while len(words) > 1 and words[0].casefold().rstrip(".") in TITLES:
+        words = words[1:]
+    return words[0] if words else ""
+
+
+__all__ = ["TITLES", "called", "world_people"]

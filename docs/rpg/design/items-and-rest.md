@@ -38,6 +38,8 @@ camp in the wild, restores the hero; a short rest takes the edge off.
   | a camp, where no one rents rooms | 8 h | −40 | +25% of what is missing | yes |
   | a while ("rest", no sleep or camp) | 1 h | −15 | none | no |
 
+  A night's sleep (a room or a camp) lasts until the next 08:00 when that is within 12 hours, and never less than
+  its 8 hours: lying down at 20:36 wakes the hero at 08:00, at 02:00 at 10:00.
   Where rooms are for rent and the hero has none, sleeping is refused with the offer: a bed costs coin here.
   A **full rest** makes the place the hero's rest point, ends `battered`, and brings a wound a night nearer healing.
   Stamina and mana (what abilities spend) come back in full with a night's rest, and by health's share with a short

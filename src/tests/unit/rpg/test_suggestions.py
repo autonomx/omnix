@@ -63,3 +63,17 @@ def test_a_waiting_level_choice_is_offered_first_and_said_by_status() -> None:
     assert any("A level's choice is waiting" in line for line in told)
     simulation["player_state"]["level_choices_pending"] = 0
     assert not any(row.command == "raise strength" for row in suggestions({"simulation_state": simulation}))
+
+
+def test_the_quest_suggested_is_one_someone_offered_and_a_finale_last() -> None:
+    """The playtest: "I accept the quest The Hollow Meridian." was suggested on every screen, never the captain's
+    contract just offered."""
+    from app.apps.rpg.session.turn.suggestions import suggestions
+
+    simulation = {"quest_state": {"quests": [
+        {"quest_id": "quest:finale", "title": "The Hollow Meridian", "status": "available", "tier": "finale"},
+        {"quest_id": "quest:wolves", "title": "Echo beasts on the March roads", "status": "available",
+         "offered_by": "npc:rhea"}]}}
+    commands = [row.command for row in suggestions({"simulation_state": simulation})]
+    assert "I accept the quest Echo beasts on the March roads." in commands
+    assert "I accept the quest The Hollow Meridian." not in commands

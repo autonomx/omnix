@@ -14,7 +14,7 @@ Matching is by whole words. Verbs and the longer words of names tolerate one typ
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Iterable, Literal
 
 Family = Literal[
@@ -280,6 +280,11 @@ def _clarify(reason: str) -> IntentCandidate:
 
 def parse_command(text: str, scene: SceneView) -> IntentCandidate:
     """What ``text`` asks for in ``scene``; ``confidence`` below 0.6 means the grammar is guessing."""
+    candidate = _parse_text(text, scene)
+    return _spoken_to(text, scene, candidate) or candidate
+
+
+def _parse_text(text: str, scene: SceneView) -> IntentCandidate:
     normalized = _norm(text)
     clauses = _clauses(normalized)
     first = _strip_leading(clauses[0] if clauses else normalized)
@@ -287,6 +292,35 @@ def parse_command(text: str, scene: SceneView) -> IntentCandidate:
     if len(clauses) > 1:
         candidate = IntentCandidate(**{**candidate.__dict__, "clauses": clauses})
     return candidate
+
+
+def _spoken_to(text: str, scene: SceneView, whole: IntentCandidate) -> IntentCandidate | None:
+    """A name and a comma first ("Liora, I woke up here and remember nothing", "Orik, I'd like a room"): what the
+    words after the name do, said to that person. An order is read with its listener; a deed in the words after the
+    name is the turn (a purchase from them, an invitation to them); anything else (a look's "where am I", a remark) is speech to them. None when no one's name and a comma open the
+    text (normalizing drops the comma, so this reads the raw text)."""
+    match = re.match(r"\s*([^,.!?]{1,60}),\s*(.+)", text, flags=re.DOTALL)
+    if match is None:
+        return None
+    named = _find(_words(_norm(match.group(1))), scene.of("person"))
+    if not named or named[0].start != 0:
+        return None
+    person = named[0].entity.entity_id
+    if whole.family == "order":  # "Liora, keep watch": an order is read with its listener
+        return None
+    rest = _parse_text(match.group(2), scene)
+    if rest.family not in {"look", "talk", "ask", "clarify"} and rest.reason not in {"remark", "looks_without_subject"}:
+        if rest.family == "buy" and not rest.second_target_id:
+            return replace(rest, second_target_id=person)  # bought from them
+        if rest.family == "party" and not rest.target_id:
+            return replace(rest, target_id=person, target_kind="person")  # "Liora, join my party"
+        if rest.family == "give" and not rest.second_target_id:
+            return replace(rest, second_target_id=person)  # "Liora, I give you my dagger"
+        return rest
+    if rest.family == "ask":  # asked of them, as the words ask it (a hypothetical stays one)
+        return replace(rest, target_id=person, target_kind="person")
+    asked = _question(_words(_norm(match.group(2))), match.group(2).strip())
+    return _candidate("ask" if asked else "talk", named[0], 0.85, "asks_someone" if asked else "talks")
 
 
 _ORDERS = (
@@ -402,11 +436,6 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         # "Liora, keep watch": an order to someone named first; whether they take it is the party rule's to say.
         return _candidate("order", lead[0], 0.85, "orders")
 
-    if lead and lead[0].start == 0 and re.match(r"\s*[^,.!?]{1,60},", original) and not question:
-        # "Liora, I woke up here and remember nothing": a name and a comma first is speech to them, whatever the
-        # words after it name (a look's "where am I", a place).
-        return _candidate("talk", lead[0], 0.85, "talks")
-
     if hypothetical(text):
         # "What would happen if I attacked Liora?" is a question, never the deed. Its target is what it is about
         # (the person named first, else the first thing it names); who answers is the dialogue's to say.
@@ -458,6 +487,8 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     offer = _first(words, scene, "offer")
     if _has(words, "rent", "book", "buy", "purchase", "order") or _starts(
             words, "get me", "sell me", "pay for", "i will take", "one", "two", "give me") or (
+            offer is not None and _starts(words, "i'd like", "id like", "i would like", "i want", "can i get",
+                                          "could i get", "may i have", "i'll take")) or (
             offer is not None and _starts(words, "take", "have", "i will have") and not _has(words, "bite")
             and not _starts(words, "take off")):  # "take off my bread" is no order of it
         hit = offer or _first(words, scene, "item")
@@ -483,13 +514,21 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
             _starts(words, "learn") and not _has(words, "about", "more", "what", "how", "where", "who", "why")) or (
             _starts(words, "improve") and _has(words, "and")):
         return _candidate("grow", None, 0.85, "level_choice")  # a level's choice (progression.md)
+    if _starts(words, "hunt", "track", "stalk", "seek out", "go after") or _has(
+            words, "hunt for", "hunt down", "look for", "search for", "track down", "seek out", "go looking for"):
+        # Seeking a creature of the world by name is how its fight begins, where it is met (the playtest: "I hunt for
+        # echo wolves along the pass" came to nothing, while "I attack an echo wolf" found one).
+        prey = _first(words, scene, "creature")
+        if prey is not None:
+            return _candidate("attack", prey, 0.85, "hunts")
     kind = next((kind for kind, phrases in _CHECKS if _has(words, *phrases)), "")
     if kind and not _has(words, "notice board"):
         # A try decided by a roll (checks.md): persuading someone, sneaking past, climbing, picking a lock...
         target = _first(words, scene, "person", "creature", "item", "place")
         return _candidate("check", target, 0.85, f"check:{kind}")
 
-    if _starts(words, "give", "hand", "offer", "pass", "lend") or _has(words, "give", "hand over"):
+    if (_starts(words, "give", "hand", "offer", "pass", "lend") or _has(words, "give", "hand over")) and not _starts(
+            words, "give me"):  # "give me a room" asks for one
         item = _first(words, scene, "item")
         person = _first(words, scene, "person")
         if item is None and _has(words, *_PRONOUNS):

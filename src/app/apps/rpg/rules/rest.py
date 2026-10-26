@@ -22,11 +22,14 @@ from app.apps.rpg.foundation.state.changes import (
 )
 from app.apps.rpg.rules.combat.stakes import BATTERED, WOUND_RESTS, WOUNDED, conditions
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.rules.wording import in_sentence
 
 _SLEEP = re.compile(r"\b(sleep|slumber|bed|night|room)\b")
 _CAMP = re.compile(r"\b(camp|bedroll|tent)\b")
 # kind: (minutes, fatigue, share of missing HP restored, a full rest)
 RESTS = {"room": (480, -60, 0.5, True), "camp": (480, -40, 0.25, True), "while": (60, -15, 0.0, False)}
+WAKE_MINUTE = 8 * 60  # a night's sleep lasts until morning (time.md)
+LONGEST_NIGHT = 12 * 60
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,7 @@ def _rooms_for_rent(simulation: Mapping[str, Any], location: str) -> list[str]:
         for offer in _l(_d(world.get("offers")).get(provider_id)):
             offer = _d(offer)
             if offer.get("service_kind") == "lodging":
-                lines.append(f"{_s(provider.get('provider_name'))} offers {_s(offer.get('label'))}")
+                lines.append(f"{_s(provider.get('provider_name'))} offers {in_sentence(_s(offer.get('label')))}")
     return lines
 
 
@@ -104,6 +107,10 @@ def rest(simulation: Mapping[str, Any], text: str) -> RestOutcome:
     else:
         kind = "while"
     minutes, fatigue, share, full = RESTS[kind]
+    if full:  # a night's sleep: until the next morning when that is within a night, never shorter than its hours
+        to_morning = (WAKE_MINUTE - int(_d(simulation.get("environment")).get("absolute_minutes") or 0)) % 1440 or 1440
+        if to_morning <= LONGEST_NIGHT:
+            minutes = max(minutes, to_morning)
     hp = _d(_d(player.get("resources")).get("hp"))
     restored = int((int(hp.get("max") or 0) - int(hp.get("current") or 0)) * share)
     changes: list[StateChange] = [NeedsChanged(fatigue=fatigue)]
@@ -120,7 +127,7 @@ def rest(simulation: Mapping[str, Any], text: str) -> RestOutcome:
     if full:
         changes.append(RestTaken(location_id=location))
         changes.extend(_full_rest(simulation))
-    hours = minutes // 60
+    hours = round(minutes / 60)
     duration = f"{hours} hour{'s' if hours != 1 else ''}"
     said = {
         "room": f"You rest through the night in the room you paid for ({_s(room.get('label')).casefold() or 'a room'}, "

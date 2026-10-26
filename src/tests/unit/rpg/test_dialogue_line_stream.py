@@ -145,3 +145,28 @@ def test_a_worlds_quest_not_in_the_log_is_offered_and_joins_it_and_a_finale_come
     document, _ = reduce({"manifest": {}, "state": {}, "simulation_state": simulation}, plan_changes(plan))
     rows = {row["quest_id"]: row for row in document["simulation_state"]["quest_state"]["quests"]}
     assert rows["quest:engine"]["status"] == "available" and rows["quest:engine"]["offered_by"] == "npc:seraphine"
+
+
+def test_a_seller_asked_what_is_for_sale_names_their_wares_and_a_hunt_goes_on_in_the_wild() -> None:
+    """The playtest: Brindle, asked "what do you have for sale?", had nothing priced; the captain, asked where the
+    echo wolves are, could only say "the March roads"."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {
+        "world_model": {
+            "npcs": {"npc:brindle": {"name": "Brindle", "role": "relic mechanic", "location_id": "location:village"}},
+            "locations": {"location:village": {"name": "Starfall Village"}, "location:far": {"name": "Cinderhold"},
+                          "location:pass": {"name": "Skybridge Pass"}},
+            "routes": [{"from": "location:village", "to": "location:pass"}, {"from": "location:pass", "to": "location:far"}],
+            "offers": {"npc:brindle": [{"label": "Healing Potion", "price": {"silver": 3}}]}},
+        "present_npc_state": {"present_npc_ids": ["npc:brindle"]},
+        "quest_state": {"quests": [{"quest_id": "quest:wolves", "title": "Echo beasts", "status": "active",
+                                    "objective": "Defeat 3 Echo Wolves", "offered_by": "npc:brindle"}]},
+        "party_state": {},
+    }
+    simulation["player_state"] = {"location_id": "location:village",
+                                  "party_state": {"companions": [{"npc_id": "npc:brindle"}]}}
+    plan = build_plan(simulation, "npc:brindle", "What do you have for sale?")
+    assert plan.wares == ("Healing Potion for 3 silver",)
+    # No one lives there, so creatures are met there; the nearest by road first (not Cinderhold, two roads off).
+    assert plan.hero_quests[0]["goes_on_at"] == ["Skybridge Pass", "Cinderhold"]

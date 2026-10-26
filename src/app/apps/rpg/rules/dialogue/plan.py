@@ -12,7 +12,9 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import KnowledgeShared, QuestOffered, StateChange
-from app.apps.rpg.rules.economy.trade import stock_left
+from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.economy.trade import coins, price_of, stock_left
+from app.apps.rpg.rules.wording import in_sentence
 from app.apps.rpg.foundation.state import access as _sections
 
 _WORD = re.compile(r"[a-z0-9']+")
@@ -24,7 +26,9 @@ _WORK = re.compile(r"\b(work|jobs?|tasks?|help|quests?|errands?|hire|bount(y|ies
 # no one else gave, wherever it is (the playtest: the Wayfarers' Guild's registrar had no contract to offer).
 _GIVES_WORK = re.compile(r"\b(guild|registrar|registry|contracts?|bount(y|ies)|quest|notice|clerk|quartermaster|"
                          r"broker|mercenar(y|ies)|wayfarer)\b")
-_WARES = re.compile(r"\b(sell|selling|wares|buy|price|prices|cost|costs|goods|offer|stock|room|rooms|food|drink)\b")
+_DEFEAT = re.compile(r"\b(defeat|slay|kill|hunt|drive off|destroy)\b")
+_WARES = re.compile(r"\b(sell|selling|sale|wares|buy|price|prices|cost|costs|goods|offer|stock|shop|merchandise|room|rooms|"
+                    r"food|drink)\b")
 FRIENDLY_TRUST = 50
 
 
@@ -130,6 +134,30 @@ def _goal_words(goal: Mapping[str, Any]) -> set[str]:
     return _stemmed({_s(topic).casefold() for topic in _l(goal.get("topics"))} | _words(_s(goal.get("summary"))))
 
 
+def _by_road(world: Mapping[str, Any], start: str) -> list[str]:
+    """The world's places, nearest first by its roads from ``start`` (then those no road reaches)."""
+    neighbours: dict[str, list[str]] = {}
+    for route in _l(world.get("routes")):
+        origin, target = _s(_d(route).get("from")), _s(_d(route).get("to"))
+        neighbours.setdefault(origin, []).append(target)
+        neighbours.setdefault(target, []).append(origin)
+    order, queue = [start], [start]
+    while queue:
+        for place in neighbours.get(queue.pop(0), ()):
+            if place not in order:
+                order.append(place)
+                queue.append(place)
+    return [*order[1:], *(place for place in _d(world.get("locations")) if place not in order)]
+
+
+def _charged(simulation: Mapping[str, Any], world: Mapping[str, Any], speaker_id: str, here: str,
+             offer: Mapping[str, Any]) -> str:
+    """An offer's price as the trade rule would charge it now (the playtest: Brindle said a potion was 3 silver, and
+    the roads' fifth made it 3 silver 6 copper at the counter)."""
+    provider = _d(_d(world.get("providers")).get(speaker_id)) or {"provider_id": speaker_id, "location_id": here}
+    return coins(price_of(simulation, provider, offer)[0])
+
+
 def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speaker_id: str, name: str,
                  here: str) -> tuple[dict[str, Any], ...]:
     """The hero's quests under way that the speaker bears on (one they gave, one at their place, one naming them, or
@@ -155,6 +183,11 @@ def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speake
             continue
         visited = {_s(place) for place in _l(quest.get("visited_locations"))}
         ahead = [_s(_d(places.get(place)).get("name")) or place for place in locations if place not in visited]
+        if not ahead and _DEFEAT.search(_s(quest.get("objective")).casefold()):
+            # A creature to defeat, at no place of its own: where the world's creatures are met (encounters.md).
+            ahead = [_s(_d(places.get(place_id)).get("name")) or place_id
+                     for place_id in _by_road(world, routines.hero_location(simulation))
+                     if routines.is_wild(simulation, place_id)][:2]
         found.append({"title": _s(quest.get("title")), "objective": _s(quest.get("objective")),
                       **({"goes_on_at": ahead} if ahead else {})})
     return tuple(found[:3])
@@ -236,7 +269,8 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
         background=background,
         reveals=tuple(reveals), revealed_ids=tuple(revealed_ids), for_a_price=tuple(priced), held_back=held,
         secrets=secrets, quest_offer=quest_offer, offered_rows=new_quests, hero_quests=hero_quests,
-        wares=tuple(f"{_s(offer.get('label'))} for {_price_text(_d(offer.get('price')))}" for offer in on_sale),
+        wares=tuple(f"{in_sentence(_s(offer.get('label')))} for {_charged(simulation, world, speaker_id, here, offer)}"
+                    for offer in on_sale),
         ware_names=tuple(_s(offer.get("label")) for offer in on_sale),
         player_said=text,
     )
