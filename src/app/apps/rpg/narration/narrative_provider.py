@@ -25,6 +25,7 @@ from app.apps.rpg.narration.narration_drafts import (
     narration_draft_active,
     publish_narration_draft,
 )
+from app.apps.rpg.narration.narrative_engine.claims import claim_ledger
 from app.apps.rpg.narration.narrative_engine.contracts import EvidenceRecord, TurnPresentationRequest
 from app.apps.rpg.narration.narrative_engine.planner import NarrativePlan
 from app.apps.rpg.narration.narrative_engine.writer import (
@@ -332,7 +333,7 @@ class ProductionStructuredNarrativeWriter:
             remaining_calls = max(0, remaining_calls - attempts)
             total_attempts += attempts
             try:
-                blocks = parse_structured_blocks(raw, plan)
+                blocks = parse_structured_blocks(raw, plan, claim_ledger(request))
             except (TypeError, ValueError) as exc:
                 if quality_attempt >= maximum_attempts or remaining_calls <= 0:
                     raise

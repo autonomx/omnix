@@ -7,6 +7,7 @@ from time import perf_counter
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .authority import AuthorityClass, BeatKind, BeatPurpose, VisibilityClass
+from .claims import claim_ledger
 from .contracts import (
     ClaimAssertion,
     EvidenceRecord,
@@ -93,31 +94,38 @@ def _writer_evidence(record: EvidenceRecord) -> dict[str, Any]:
     return {key: row[key] for key in _WRITER_EVIDENCE_FIELDS if row.get(key) not in (None, "", [], ())}
 
 
+def evidence_handles(plan: NarrativePlan) -> dict[str, str]:
+    """Each evidence id the plan's beats grant, by a short handle ("E1", "E2", ...) in the beats' order.
+
+    The writer cites evidence by handle, so its claims do not spell out ids such as
+    ``bible:document:lore:published:location-...`` (RQ-6.5); the parser turns each handle back into its id.
+    """
+    refs = dict.fromkeys(ref for beat in plan.beats for ref in beat.evidence_refs)
+    return {ref: f"E{index}" for index, ref in enumerate(refs, start=1)}
+
+
 def writer_payload(
     request: TurnPresentationRequest,
     plan: NarrativePlan,
     evidence: Sequence[EvidenceRecord],
 ) -> dict[str, Any]:
     by_id = {record.evidence_id: record for record in evidence}
+    handles = evidence_handles(plan)
     beats = []
     for beat in plan.beats:
         # Each beat carries its evidence once, as the writer needs it (RQ-6.5: the payload sent it three times, with
-        # the records' bookkeeping).
-        scoped = [_writer_evidence(by_id[ref]) for ref in beat.evidence_refs if ref in by_id]
+        # the records' bookkeeping), under its handle.
+        scoped = [{**_writer_evidence(by_id[ref]), "evidence_id": handles[ref]}
+                  for ref in beat.evidence_refs if ref in by_id]
         row = beat.as_dict()
+        row["evidence_refs"] = [handles[ref] for ref in beat.evidence_refs]
         row["approved_evidence"] = scoped
         row["evidence_scope"] = str(beat.metadata.get("evidence_scope") or "player")
         row["claim_contract"] = {
             "required_claim_ids": list(beat.required_claim_refs),
-            "return_fields": [
-                "claim_id",
-                "text",
-                "authority",
-                "evidence_refs",
-                "subject_id",
-                "predicate",
-                "value",
-            ],
+            # What the claim says and what supports it; a required claim's subject, predicate and value are the
+            # rules' (its ledger entry), so the writer does not restate them.
+            "return_fields": ["claim_id", "text", "authority", "evidence_refs"],
         }
         beats.append(row)
     dialogue_context = request.metadata.get("dialogue_quality_context")
@@ -181,7 +189,9 @@ def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _claims(row: Mapping[str, Any], beat: NarrativeBeat) -> tuple[ClaimAssertion, ...]:
+def _claims(
+    row: Mapping[str, Any], beat: NarrativeBeat, ledger: Mapping[str, Mapping[str, Any]], ids: Mapping[str, str],
+) -> tuple[ClaimAssertion, ...]:
     raw = row.get("claims")
     if not isinstance(raw, list | tuple):
         return ()
@@ -196,34 +206,43 @@ def _claims(row: Mapping[str, Any], beat: NarrativeBeat) -> tuple[ClaimAssertion
         except ValueError as exc:
             raise ValueError(f"invalid claim authority: {beat.beat_id}:{index}") from exc
         evidence_refs = tuple(
-            str(value)
+            ids.get(str(value).strip(), str(value).strip())  # a handle is its evidence id; an id stands as written
             for value in item.get("evidence_refs") or beat.evidence_refs
             if str(value).strip()
         )
+        claim_id = _text(item.get("claim_id")) or f"claim:{beat.beat_id}:{index}"
+        # A required claim's subject, predicate and value are its ledger entry's unless the writer gave its own,
+        # which the validator then holds to the ledger.
+        expected = ledger.get(claim_id) or {}
+        subject_id = _text(item.get("subject_id")) or _text(expected.get("subject_id")) or beat.speaker_id
         claims.append(
             ClaimAssertion(
-                claim_id=_text(item.get("claim_id")) or f"claim:{beat.beat_id}:{index}",
+                claim_id=claim_id,
                 text=_text(item.get("text")) or _text(row.get("text")),
                 authority=authority,
                 evidence_refs=evidence_refs,
                 # A claim is in its beat's scope: the writer's own label for it (a turn id, "world") is no grant.
                 scope=str(beat.metadata.get("evidence_scope") or "player"),
-                subject_id=_text(item.get("subject_id")) or beat.speaker_id,
-                predicate=_text(item.get("predicate")),
-                value=item.get("value"),
+                subject_id=subject_id,
+                predicate=_text(item.get("predicate")) or _text(expected.get("predicate")),
+                value=item["value"] if "value" in item else expected.get("value"),
                 metadata=dict(item.get("metadata") or {}),
             )
         )
     return tuple(claims)
 
 
-def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> tuple[NarrativeBlock, ...]:
+def parse_structured_blocks(
+    payload: Mapping[str, Any], plan: NarrativePlan, ledger: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[NarrativeBlock, ...]:
+    """The writer's blocks, checked against the plan; ``ledger`` is the turn's claim ledger (``claim_ledger``)."""
     rows = payload.get("blocks")
     if not isinstance(rows, list):
         raise ValueError("structured narrative output requires a blocks array")
     expected = {beat.beat_id: beat for beat in plan.beats}
     if len(rows) != len(expected):
         raise ValueError("structured narrative output must contain exactly one block per planned beat")
+    ids = {handle: ref for ref, handle in evidence_handles(plan).items()}
     blocks: list[NarrativeBlock] = []
     seen: set[str] = set()
     for row in rows:
@@ -247,7 +266,7 @@ def parse_structured_blocks(payload: Mapping[str, Any], plan: NarrativePlan) -> 
             raise ValueError(f"narrative beat kind or purpose changed: {beat_id}")
         if speaker_id != beat.speaker_id:
             raise ValueError(f"narrative beat speaker changed: {beat_id}")
-        claims = _claims(row, beat)
+        claims = _claims(row, beat, ledger or {}, ids)
         blocks.append(
             NarrativeBlock(
                 block_id=_text(row.get("block_id")) or f"block:{beat_id}",
@@ -297,7 +316,7 @@ class StructuredNarrativeWriter:
         raw = self._generate(writer_payload(request, plan, evidence))
         if not isinstance(raw, Mapping):
             raise ValueError("narrative provider returned a non-object response")
-        blocks = parse_structured_blocks(raw, plan)
+        blocks = parse_structured_blocks(raw, plan, claim_ledger(request))
         return WriterResult(
             blocks=blocks,
             source="structured_provider",

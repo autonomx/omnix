@@ -344,3 +344,23 @@ def test_a_claim_is_in_its_beats_scope_whatever_the_writer_labels_it() -> None:
     (block,) = parse_structured_blocks(payload, _plan())
     assert [claim.scope for claim in block.claims] == ["speaker"]
     assert _validate(block).passed is True
+
+
+def test_a_required_claims_subject_predicate_and_value_are_the_ledgers() -> None:
+    from app.apps.rpg.narration.narrative_engine.writer import parse_structured_blocks
+
+    claim_id = "currency.gold"
+    ledger = {claim_id: {"text": "The player now has twelve gold.", "authority": "confirmed_turn",
+                         "subject_id": "player", "predicate": "gold_balance", "value": 12}}
+    payload = {"blocks": [{
+        "beat_id": "beat:answer", "sequence": 1, "kind": "dialogue", "purpose": "direct_answer",
+        "speaker_id": "npc:bran", "text": "The east road is muddy but passable.",
+        "claims": [{"claim_id": claim_id, "text": "The east road is muddy but passable.",
+                    "authority": "confirmed_turn", "evidence_refs": ["evidence:road"]}],
+    }]}
+    (block,) = parse_structured_blocks(payload, _plan(claim_id), ledger)
+    (claim,) = block.claims
+    assert (claim.subject_id, claim.predicate, claim.value) == ("player", "gold_balance", 12)
+    report = _validate(block, request=_request(claim_id=claim_id, ledger=ledger), plan=_plan(claim_id),
+                       evidence=_evidence(AuthorityClass.CONFIRMED_TURN))
+    assert not [issue for issue in report.issues if issue.code == "authoritative_claim_mismatch"]

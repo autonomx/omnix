@@ -48,7 +48,8 @@ def record_turn_metric(*, campaign_id: str, submission_id: str, turn_class: str,
 
 
 def operations(days: int = 14) -> list[dict[str, Any]]:
-    """The workspace's turns of the last ``days`` days, a row per day (newest first) with each turn class's latency."""
+    """The workspace's turns of the last ``days`` days (UTC dates, today the first), a row per day (newest first) with
+    each turn class's latency."""
     from app.persistence.database import default_database
     from app.persistence.unit_of_work import unit_of_work
     from app.security.tenant_context import current_tenant
@@ -66,7 +67,9 @@ def operations(days: int = 14) -> list[dict[str, Any]]:
                    sum(model_calls) AS model_calls,
                    sum(model_failures) AS model_failures
               FROM omnix_rpg_turn_metrics
-             WHERE workspace_id = %s AND recorded_at >= CURRENT_TIMESTAMP - make_interval(days => %s)
+             WHERE workspace_id = %s
+               AND recorded_at >= (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+                                   - make_interval(days => %s - 1)) AT TIME ZONE 'UTC'
              GROUP BY day, turn_class
              ORDER BY day DESC, turn_class
             """,

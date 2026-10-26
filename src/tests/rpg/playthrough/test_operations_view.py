@@ -45,3 +45,26 @@ def test_the_turns_played_are_counted_by_class_with_their_time_and_calls(launch,
     after = _today(play)
     assert after["failed"] == today["failed"] + 1 and after["turns"] == today["turns"] + 1
     assert after["failure_rate"] == pytest.approx(after["failed"] / after["turns"], abs=1e-4)
+
+
+def test_a_day_is_a_utc_date_not_the_last_24_hours(launch) -> None:
+    from app.persistence.database import default_database
+    from app.persistence.unit_of_work import unit_of_work
+    from app.security.tenant_context import current_tenant
+
+    play = launch("aurelia")
+    with unit_of_work(default_database()) as work:  # a turn a minute before today began (UTC)
+        work.connection.execute(
+            """
+            INSERT INTO omnix_rpg_turn_metrics (workspace_id, campaign_id, submission_id, turn_class, ok, error,
+                                                degraded_stages, complete_ms, model_calls, model_failures, recorded_at)
+            VALUES (%s, %s, 'ops-yesterday', 'look', true, '', 0, 10, 0, 0,
+                    (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - interval '1 minute') AT TIME ZONE 'UTC')
+            """,
+            (current_tenant().workspace_id, play.session_id),
+        )
+        work.commit()
+    play.turn("wait")
+    today = _today(play)  # one day: today's date only
+    days = play.client.get("/api/rpg/operations", params={"days": 2}).json()["days"]
+    assert [row["day"] for row in days][:1] == [today["day"]] and len(days) == 2
