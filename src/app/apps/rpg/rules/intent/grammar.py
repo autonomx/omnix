@@ -319,16 +319,20 @@ def hypothetical(text: str) -> bool:
 
 
 # A question that asks for the deed itself ("can I buy the bread?", "Liora, could you heal me?") is a request.
-_REQUESTS = ("can i", "could i", "may i", "can you", "could you", "would you", "will you", "i'd like", "i would like",
-             "let me", "i want")
+_REQUESTS = ("can i", "could i", "may i", "can we", "could we", "may we", "can you", "could you", "would you",
+             "will you")
 
 
 def asked_not_done(text: str) -> bool:
-    """A question about a deed that is no request for it ("what does the bread cost?", "should I trust her?", "would
-    practising help?"): it is asked, never done, as a hypothetical is."""
+    """A question about a deed that is no request for it ("what does the bread cost?", "where can I buy bread?",
+    "should I trust her?"): it is asked, never done, as a hypothetical is. It opens with a question word, after the
+    person it is put to ("Liora, ..."); "attack the wolf?" is a command, and "could we buy some bread?" a request."""
+    head, comma, rest = text.partition(",")
+    named = _words(_norm(head))
+    if comma and 0 < len(named) <= 3 and named[0] not in _QUESTION_WORDS:
+        text = rest  # "Liora, where am I?": the question is what follows the name
     words = _words(_norm(text))
-    request = _starts(words, *_REQUESTS) or _starts(words[1:], *_REQUESTS) or "please" in words  # after a name, too
-    return _question(words, text.strip()) and not request
+    return bool(words) and words[0] in _QUESTION_WORDS and not _starts(words, *_REQUESTS)
 
 
 def _question(words: list[str], original: str) -> bool:

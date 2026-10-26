@@ -722,6 +722,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             message = {
                 "rpg_campaign_already_in_library": "This campaign is already in your library.",
                 "rpg_campaign_world_not_installed": "Its world is not installed here: import the world first.",
+                "rpg_campaign_world_not_adopted": "Its world was made elsewhere: adopt it in the world library first.",
                 "rpg_campaign_package_without_campaign": "This file holds no campaign.",
             }.get(code, "This campaign could not be imported.")
             raise HTTPException(

@@ -353,7 +353,12 @@ def bind_campaign_world(
 ) -> dict[str, Any]:
     context = current_tenant()
     with unit_of_work(database) as work:
+        from .world_adoption import require_adopted_if_shared
+
         require_scenario_writable(work, context, binding.scenario_id)
+        world = work.world_scenarios.get_world(context, binding.world_id)
+        if world is not None:
+            require_adopted_if_shared(world)  # a world made elsewhere is played once it is adopted here
         world_revision = _world_revision_from_work(
             work,
             context,

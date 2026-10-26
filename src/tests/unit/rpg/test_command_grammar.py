@@ -92,3 +92,15 @@ ABILITY_SCENE = SceneView((*SCENE.entities, SceneEntity("survival_make_camp", "a
 def test_an_ability_is_read_by_its_whole_name_only() -> None:
     assert parse_command("I make my way to the village", ABILITY_SCENE).family == "move"  # "make" is no Make Camp
     assert parse_command("use Aimed Shot on the wolf", ABILITY_SCENE).target_id == "aimed_shot"
+
+
+@pytest.mark.parametrize(("text", "asked"), [
+    ("what does the local news cost?", True), ("Where can I buy bread?", True), ("What could I buy with 5 gold?", True),
+    ("What does the bread cost, please?", True), ("should I trust the guide?", True), ("Liora, where am I?", True),
+    ("can I buy the bread?", False), ("Liora, can you show me the way?", False), ("Could we buy some bread?", False),
+    ("Shall we head to the market?", False), ("Attack the wolf?", False), ("buy the bread", False),
+])
+def test_a_question_about_a_deed_is_asked_and_a_request_or_command_is_done(text: str, asked: bool) -> None:
+    from app.apps.rpg.rules.intent.grammar import asked_not_done
+
+    assert asked_not_done(text) is asked

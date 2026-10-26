@@ -109,6 +109,20 @@ def test_a_campaign_exported_from_one_omnix_plays_on_in_another(tmp_path, monkey
         assert missing.json()["detail"] == {"ok": False, "error": "rpg_campaign_world_not_installed",
                                             "subject": "world:not-here",
                                             "message": "Its world is not installed here: import the world first."}
+        # A world made elsewhere that no one here has adopted plays no campaign brought to it.
+        from app.apps.rpg.genesis.worlds.world_adoption import shared_world_state
+
+        world_id = transfer["world_binding"]["world_id"]
+        with unit_of_work() as work:
+            world = work.world_scenarios.get_world(current_tenant(), world_id)
+            work.rollback()
+        if shared_world_state(world)["shared"]:
+            metadata = {key: value for key, value in dict(world.get("metadata") or {}).items() if key != "world_adoption"}
+            with unit_of_work() as work:
+                work.world_scenarios.replace_world_metadata(current_tenant(), world_id, metadata)
+                work.commit()
+            unadopted = client.post("/api/rpg/sessions/import", json=package)
+            assert unadopted.status_code == 409 and unadopted.json()["detail"]["error"] == "rpg_campaign_world_not_adopted"
         garbled = client.post("/api/rpg/sessions/import", json={"package_type": "something else"})
         assert garbled.status_code == 422
         assert client.get(f"/api/rpg/sessions/{session_id}").status_code == 404  # nothing was written

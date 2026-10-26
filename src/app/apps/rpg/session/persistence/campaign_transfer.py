@@ -10,7 +10,8 @@ narrations. Its ``transfer`` section carries what the campaign plays from beside
 Importing writes all of it in one transaction, under the campaign's own id. A campaign already in this library is
 refused (``rpg_campaign_already_in_library``): its ids run through its document, and a copy under another id is
 not offered. A campaign bound to a world needs that world's revision and release here (installed from its
-bundle), else it is refused (``rpg_campaign_world_not_installed``); a document newer than this Omnix is refused as
+bundle) and, a world made elsewhere, adopted here (``rpg_campaign_world_not_adopted``), else it is refused
+(``rpg_campaign_world_not_installed``); a document newer than this Omnix is refused as
 everywhere (``rpg_campaign_requires_newer_omnix``, 503). The history of turns before the export stays behind: the
 imported campaign starts its history at the revision it arrives with, kept whole as its first snapshot.
 """
@@ -99,6 +100,12 @@ def import_campaign(package: Any) -> dict[str, Any]:
             if (work.world_scenarios.get_world_revision(context, world_id, revision) is None
                     or work.world_scenarios.get_world_release(context, world_id, revision, release) is None):
                 raise CampaignTransferRefused(f"rpg_campaign_world_not_installed:{world_id}")
+            from app.apps.rpg.genesis.worlds.world_adoption import shared_world_state
+
+            world = work.world_scenarios.get_world(context, world_id) or {}
+            state = shared_world_state(world)
+            if state["shared"] and not state["adopted"]:  # a world made elsewhere is played once it is adopted here
+                raise CampaignTransferRefused(f"rpg_campaign_world_not_adopted:{world_id}")
         from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
 
         save_session_to_postgres(hydrate_hero(document), work=work)
