@@ -193,11 +193,11 @@
     },
     {
       "blocks": [
-        "action||You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 1 (7 of 10 left)."
+        "action||You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left)."
       ],
       "step": "I attack the Glass Wight.",
-      "told": "You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 1 (7 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 1 (7 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 1 (7 of 10 left).",
-      "visible": "You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 1 (7 of 10 left)."
+      "told": "You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left).",
+      "visible": "You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left)."
     },
     {
       "blocks": [

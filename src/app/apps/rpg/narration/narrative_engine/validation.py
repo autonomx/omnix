@@ -71,20 +71,28 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 # there is. Only a line that hits the hero says the hero's health ("you hit the wolf for 4 (6 of 10 left)" is the wolf's).
 _HEALTH_UNITS = frozenset({"health", "hit points", "hp"})
 _HEALTH_FORMS = (r"\byou for {n} \(", r"\byou for \d+ \({n} of \d+ left\)", r"\byou for \d+ \(\d+ of {n} left\)")
+# A foe's health, said in a sentence that does not speak of the hero's own: any blow's numbers (the playtest: "the
+# wolf, down to 4 of its 10 health" sent the writer back, every other round, to write the turn again).
+_ANY_HEALTH_FORMS = (r"\bfor {n} \(", r"\bfor \d+ \({n} of \d+ left\)", r"\bfor \d+ \(\d+ of {n} left\)")
+_HEROS_HEALTH = re.compile(r"\b(?:you (?:have|are|stand|sit|remain|stay|keep|lose|lost|take|took|suffer|suffered|"
+                           r"heal|regain)|your (?:health|wounds?)|leaves? you|"
+                           r"leaving you|you(?:'re| are) (?:at|down))\b", re.IGNORECASE)
 
 
 def _unsupported_material(text: str, evidence_text: str) -> list[str]:
     """The rules' facts the prose states and the evidence does not hold."""
     said: list[str] = []
-    for number, unit in _AMOUNT.findall(text):
-        amount = number.replace(",", "")
-        if re.search(rf"\b{re.escape(amount)}\s+{re.escape(unit.casefold().rstrip('s'))}", evidence_text):
-            continue
-        if unit.casefold() in _HEALTH_UNITS and any(
-            re.search(form.format(n=re.escape(amount)), evidence_text) for form in _HEALTH_FORMS
-        ):
-            continue
-        said.append(f"{number} {unit}")
+    for sentence in _SENTENCE.split(text):
+        forms = _HEALTH_FORMS if _HEROS_HEALTH.search(sentence) else _ANY_HEALTH_FORMS
+        for number, unit in _AMOUNT.findall(sentence):
+            amount = number.replace(",", "")
+            if re.search(rf"\b{re.escape(amount)}\s+{re.escape(unit.casefold().rstrip('s'))}", evidence_text):
+                continue
+            if unit.casefold() in _HEALTH_UNITS and any(
+                re.search(form.format(n=re.escape(amount)), evidence_text) for form in forms
+            ):
+                continue
+            said.append(f"{number} {unit}")
     for level in _LEVEL.findall(text):
         if not re.search(rf"\blevel\s+{level}\b", evidence_text):
             said.append(f"level {level}")

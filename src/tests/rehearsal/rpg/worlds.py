@@ -196,7 +196,7 @@ class CountingProvider:
         text = "\n".join(str(getattr(message, "content", "") if not isinstance(message, dict) else message.get("content", ""))
                          for message in messages)
         started = time.perf_counter()
-        record = {"role": self._roles.classify(text), "started": started, "head": text[:160]}
+        record = {"role": self._roles.classify(text), "started": started, "head": text[:160], "tail": text[-400:]}
         self.calls.append(record)
 
         def note(response: Any) -> None:

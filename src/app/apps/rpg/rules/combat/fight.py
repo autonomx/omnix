@@ -89,6 +89,9 @@ _FIGHTER_WORDS = {"guard", "soldier", "captain", "knight", "warrior", "mercenary
                   "champion", "veteran", "hunter", "ranger", "scout", "bandit", "thug", "enforcer", "duelist"}
 _HARDY_WORDS = {"smith", "blacksmith", "porter", "miner", "sailor", "dockhand", "farmer", "woodcutter", "innkeeper",
                 "bouncer", "tracker", "guide", "keeper", "sentry"}
+# The skill a weapon is fought with, by the words of its name (else a blade's: swordsmanship); progression.md.
+_WEAPON_SKILLS = (("archery", {"bow", "longbow", "shortbow", "crossbow", "sling"}),
+                  ("magic", {"staff", "wand", "rod", "orb", "focus", "tome", "grimoire"}))
 
 
 @dataclass(frozen=True)
@@ -135,12 +138,37 @@ def _numbers(simulation: Mapping[str, Any], combat: Mapping[str, Any], actor_id:
     numbers = {"damage_min": max(1, int(stats.get("damage_min") or 1)), "damage_max": max(1, int(stats.get("damage_max") or 2)),
                "accuracy_bonus": int(stats.get("accuracy_bonus") or 0),
                "encumbrance_penalty": int(stats.get("encumbrance_penalty") or 0)}
-    if actor_id == "player":  # the hero's level and attributes count, not their gear alone (progression.md)
+    if actor_id == "player":  # the hero's level, attributes and weapon's skill count, not their gear alone (progression.md)
         strength, dexterity = _modifier(simulation, "strength"), _modifier(simulation, "dexterity")
         harder = max(0, strength)
-        numbers.update(accuracy_bonus=numbers["accuracy_bonus"] + (_level(simulation) - 1) // 3 + max(0, strength, dexterity),
+        trained = _skill_rank(simulation, _weapon_skill(simulation))
+        numbers.update(accuracy_bonus=numbers["accuracy_bonus"] + (_level(simulation) - 1) // 3 + max(0, strength, dexterity)
+                       + trained,
                        damage_min=numbers["damage_min"] + harder, damage_max=numbers["damage_max"] + harder)
+    elif _s(row.get("side")) == "party":  # a companion fights as their calling does (combat.md), and with their gear
+        calling = _calling_numbers(_d(_d(_d(_sections.world_model_of(simulation)).get("npcs")).get(actor_id)))
+        numbers.update(accuracy_bonus=numbers["accuracy_bonus"] + calling["accuracy_bonus"],
+                       damage_min=max(numbers["damage_min"], calling["damage_min"]),
+                       damage_max=max(numbers["damage_max"], calling["damage_max"]))
     return numbers
+
+
+def _skill_rank(simulation: Mapping[str, Any], skill: str) -> int:
+    """The hero's rank in a skill (0 to 5): the level's choices and practice raise it (progression.md)."""
+    return max(0, int(_d(_d(_player(simulation).get("skills")).get(skill)).get("level") or 0))
+
+
+def _weapon_skill(simulation: Mapping[str, Any]) -> str:
+    """The skill the hero's weapon is fought with (the playtest: swordsmanship, chosen twice, counted for nothing)."""
+    worn = _l(project_equipment_stats(dict(simulation), actor_id="player").get("equipped_items"))
+    words = {word for item in worn for word in _s(_d(item).get("name")).casefold().split()}
+    return next((skill for skill, kinds in _WEAPON_SKILLS if words & kinds), "swordsmanship")
+
+
+def _calling_numbers(person: Mapping[str, Any]) -> dict[str, int]:
+    """Someone's fighting numbers by what they do (a guard fights as a fighter, a guide as the hardy)."""
+    words = set(_s(f"{person.get('role')} {person.get('name')}").casefold().replace("-", " ").split())
+    return _PERSON_NUMBERS["fighter" if words & _FIGHTER_WORDS else "hardy" if words & _HARDY_WORDS else "townsfolk"]
 
 
 def _level(simulation: Mapping[str, Any]) -> int:
@@ -182,9 +210,8 @@ def _names(text: str, name: str) -> bool:
 
 
 def _person_foe(npc_id: str, person: Mapping[str, Any]) -> dict[str, Any]:
-    words = set(_s(f"{person.get('role')} {person.get('name')}").casefold().replace("-", " ").split())
-    rank = "fighter" if words & _FIGHTER_WORDS else "hardy" if words & _HARDY_WORDS else "townsfolk"
-    numbers = _PERSON_NUMBERS[rank]
+    numbers = _calling_numbers(person)
+    rank = next(name for name, row in _PERSON_NUMBERS.items() if row is numbers)
     return {"actor_id": npc_id, "enemy_id": npc_id, "npc_id": npc_id, "definition_id": npc_id, "kind": "person",
             "name": _s(person.get("name")) or npc_id, "side": "enemy", "max_hp": numbers["hp"], "tags": [rank],
             **numbers}
@@ -197,15 +224,18 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
     armor = int(_d(project_equipment_stats(dict(simulation), actor_id="player").get("stats")).get("armor") or 0)
     participants: dict[str, dict[str, Any]] = {"player": {
         "actor_id": "player", "side": "party", "name": "You", "hp": hp, "max_hp": max_hp, "armor": armor,
-        "defense": 10 + max(0, _modifier(simulation, "dexterity")) + _level(simulation) // 4,
+        "defense": 10 + max(0, _modifier(simulation, "dexterity")) + _level(simulation) // 4
+        + _skill_rank(simulation, "defense"),
         "initiative_bonus": 1 + max(0, _modifier(simulation, "dexterity")), "status": "active", "status_effects": []}}
     for companion in _companions(simulation):
         npc_id = _s(companion.get("npc_id"))
         maximum = int(companion.get("max_hp") or 16)
+        calling = _calling_numbers(_d(_d(_d(_sections.world_model_of(simulation)).get("npcs")).get(npc_id)))
         participants[npc_id] = {
             "actor_id": npc_id, "side": "party", "name": _s(companion.get("name")) or npc_id,
             "hp": int(companion.get("hp") if companion.get("hp") is not None else maximum), "max_hp": maximum,
-            "armor": 0, "defense": 10, "initiative_bonus": 0, "status": "active", "status_effects": []}
+            "armor": calling["armor"], "defense": calling["defense"], "initiative_bonus": calling["initiative_bonus"],
+            "status": "active", "status_effects": []}
         if participants[npc_id]["hp"] <= 0:
             participants[npc_id]["status"] = "defeated"  # a companion still down from before sits this one out
     participants[_s(enemy["actor_id"])] = {**enemy, "status_effects": []}

@@ -56,3 +56,7 @@ def test_a_fight_going_on_shows_each_foe_s_health() -> None:
         "enemy:1": {"name": "Rootbound Knight", "side": "enemy", "hp": 28, "max_hp": 40}}})
     assert [(fact.kind, fact.text) for fact in outcome_facts([round_], DOCUMENT)] == [
         ("fight", "Rootbound Knight: 28 of 40 health")]
+    begun = CombatAdvanced(combat_state={**round_.combat_state, "participants": {
+        "enemy:1": {"name": "Rootbound Knight", "side": "enemy", "hp": 40, "max_hp": 40}}})
+    assert [fact.text for fact in outcome_facts([begun, round_], DOCUMENT)] == [
+        "Rootbound Knight: 28 of 40 health"]  # a fight begun and struck in one turn: as the turn leaves it, once

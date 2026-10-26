@@ -25,7 +25,7 @@ from app.apps.rpg.foundation.state import access as _sections
 Pull = Callable[[Mapping[str, Any], Mapping[str, float]], tuple[dict[str, Any], Any]]
 PRESSURE_QUEST_SEVERITY = 60.0
 PRESSURE_QUEST_REWARD = "10 silver"
-PRESSURE_QUEST_EVERY = 24 * 60  # the world's troubles raise a new side quest at most once a day (on its clock)
+PRESSURE_QUEST_EVERY = 24 * 60  # the world's troubles raise a new side quest a day after the last ended, at most
 HUNT_EASES = 20.0  # a pressure quest's hunt pushes its pressure back by at least this much
 _UNIQUE = {"boss", "legendary", "mythic", "extreme", "deadly"}  # a world's boss is no side quest's quarry
 _FITTING = re.compile(r"\b(guard|guards|captain|watch|warden|guild|registrar|elder|mayor|sheriff|ranger|marshal)\b")
@@ -124,7 +124,9 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
     if not fitting or any(_s(quest.get("pressure_id")) and _s(quest.get("status")) in _OPEN for quest in quests):
         return [], []
     now = routines.clock(simulation)
-    last = max((int(quest.get("offered_at_minute") or 0) for quest in quests if _s(quest.get("pressure_id"))), default=None)
+    # A day from when the last one ended (the playtest: the captain, paying for one, asked for the next in a breath).
+    last = max((int(quest.get("ended_at_minute") or quest.get("offered_at_minute") or 0)
+                for quest in quests if _s(quest.get("pressure_id"))), default=None)
     if last is not None and now - last < PRESSURE_QUEST_EVERY:
         return [], []
     ordered = sorted(_pressures(runtime), key=lambda row: (_pressure_region(world_model, row) != here,

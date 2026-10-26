@@ -224,3 +224,17 @@ def test_the_line_writer_is_told_who_the_hero_is() -> None:
     simulation = {"world_model": {"npcs": {"npc:orik": {"name": "Orik", "role": "innkeeper"}}}}
     told = build_plan(simulation, "npc:orik", "Hello.", hero={"name": "Wren", "pronouns": "they/them"}).context()
     assert told["hero"] == {"name": "Wren", "pronouns": "they/them"}
+
+
+def test_asked_about_their_own_quest_a_giver_offers_it_and_their_name_alone_is_not_asking() -> None:
+    """The playtest: asked what vow he would have witnessed, Vael never offered the quest of his vow."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {"world_model": {
+        "npcs": {"npc:vael": {"name": "Vael Ardyn", "role": "exiled general", "location_id": "location:ruins"}},
+        "quests": {"quest:bridge": {"id": "quest:bridge", "title": "Bridge of Promises", "giver_id": "npc:vael",
+                                    "objective": "Hear the vow Vael Ardyn would have you witness"}}}}
+    offered = build_plan(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
+    assert offered["offers_quest"]["quest_id"] == "quest:bridge"
+    assert build_plan(simulation, "npc:vael", "Is there anything you need of me?").context()["offers_quest"]
+    assert "offers_quest" not in build_plan(simulation, "npc:vael", "Vael, nice weather.").context()

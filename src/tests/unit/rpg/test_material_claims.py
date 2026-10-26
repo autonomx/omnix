@@ -30,3 +30,11 @@ def test_only_the_line_that_hits_the_hero_says_the_heros_health() -> None:
     assert _unsupported_material("You have 6 health.", fight) == ["6 health"]  # the wolf's
     assert _unsupported_material("You lose 4 health.", fight) == ["4 health"]  # the wolf's wound
     assert _unsupported_material("You are at 10 hp.", fight) == ["10 hp"]  # the wolf's most
+
+
+def test_a_foes_health_may_be_said_as_its_blows_give_it() -> None:
+    """The playtest: "the wolf, down to 4 of its 10 health" sent the writer back to write the turn again."""
+    fight = "you hit the wolf for 4 (6 of 10 left). the wolf hits you for 2 (98 of 100 left)."
+    assert _unsupported_material("The wolf is down to 6 of its 10 health.", fight) == []
+    assert _unsupported_material("Your blow takes 4 health from the wolf.", fight) == []
+    assert _unsupported_material("The wolf has 50 health.", fight) == ["50 health"]  # no blow says it

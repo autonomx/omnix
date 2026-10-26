@@ -56,3 +56,6 @@ def test_a_side_quest_from_a_pressure_is_offered_done_and_eases_it(launch) -> No
     assert _quest(play)["status"] == "completed"
     assert play.purse() == purse + 100  # 10 silver
     assert not any(row["quest_id"] == FIRST.replace(":1", ":2") for row in play.public()["quests"])  # a day apart
+    # A day from when it ended, not from when it was offered (the playtest: paid for one, asked for the next at once).
+    clock = play.simulation()["environment"]["absolute_minutes"]
+    assert _quest(play)["ended_at_minute"] == clock

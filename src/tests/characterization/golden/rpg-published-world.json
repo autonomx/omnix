@@ -3023,7 +3023,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f604a48c3a7eb1db42a8d6381c220eab1a44042e442589c879600db2cdf92ee5",
+      "document_hash": "sha256:131b5ac30556b5c4b64c43d7345687b33f828bb32099641ef9cea65831f0914f",
       "facts": {
         "combat": {
           "active": true,
@@ -3207,7 +3207,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c4c1d97b42c3da5709940d924a9b1a93edb17adcf4ccf793897883ec8b7302c9",
+      "document_hash": "sha256:5c4e738d6155d63583e8eb1e8a04ed5dd6d8acaf74aad489f63799735534e6ae",
       "facts": {
         "combat": {
           "active": true,
@@ -3347,7 +3347,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:b4275faa9e86c566ba8f2d0b370af6a2ee2adaadec12f4db8032e7e8147d506c",
+      "document_hash": "sha256:8ceafa2d66c63df56770d915f6bb86e8265cd434f6416288df70f4c90a9f9621",
       "facts": {
         "combat": {
           "active": true,
@@ -3469,7 +3469,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:a9791db8183cb45d16c12b338c9e6d349fb6d13ed1f22d86dab72cec1a2a2eba",
+      "document_hash": "sha256:f5ec2a8bea91fd3721dd76f2bd805ba1e49824468a952b599beafbe448baf60b",
       "facts": {
         "combat": {
           "active": true,
@@ -3608,7 +3608,7 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -3620,12 +3620,12 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b5053be6b3d95ce285835e79127781f423faf041cbb71682666c6ea8b811baec",
+      "document_hash": "sha256:5c975008f32f8606b1c0b5b0f38869716201dbc24ddbccac949f92e5f5a37de5",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -3766,12 +3766,12 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1a65ba35642df6ddf61b992d42161f75e95aff26bbdf1443e74de5aa729b203b",
+      "document_hash": "sha256:0a696e3b3c9809495d4a94cf093755867ee54646707ab2524d1f386ad9f2f5d5",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -3904,12 +3904,12 @@
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:a85040a1058b5a9f9649a9e4c7cc96f4e1c58d5cb96a104d1edbaea9529d3fc3",
+      "document_hash": "sha256:b28e0d46594a5daec5ac267cf39d9f3c248038d3a52d7d04b03d208cb63a3559",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -4045,12 +4045,12 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a53d4202d6f6487d8e14b0e73014d479893f678829e341be542356a2eb735e23",
+      "document_hash": "sha256:44b838669352f74c00ff28b572a7cdec350d227d27d7871abcc5e14eb1cf4807",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -4181,12 +4181,12 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:6dd72cb450df8aa9cf99f000070b633cd2e5d5695d9c6bf071a849962054eda6",
+      "document_hash": "sha256:569a58ac4364983f64304f3c2d21a5768cef61e6c63c3d4cda213a762f91edf9",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -4367,12 +4367,12 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:170710ecc20a84bfe76a5ecee3d096b0bea5328807a3cd24d65717f168ec6d9e",
+      "document_hash": "sha256:b6fe7a1f1d310cd681b665ef44e756c32206ee3547c6a3d09a77e4729562dd7b",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }
@@ -4529,12 +4529,12 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7e8ba147491587236c7dd68405607f6fe124b0011efc6617da08bd7a697ec9db",
+      "document_hash": "sha256:9eb3cc3026057e5384348a3f94a3fffaf7ea33dade29b30abeb4f190bf2ad1cf",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-echo-wolf:1": 7,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
             "player": 92
           }

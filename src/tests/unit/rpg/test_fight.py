@@ -176,6 +176,7 @@ def test_a_person_present_is_fought_by_what_they_do_and_everyone_who_saw_trusts_
 
 def test_defending_raises_the_heros_guard_until_their_next_turn() -> None:
     document = _with_people(_document())
+    document["simulation_state"]["player_state"]["party_state"] = {"companions": []}  # the hero alone: Ash, a scout, would end it
     assert fight(document["simulation_state"], action="defend", turn_key="1").refused  # no fight to guard against
     started = fight(document["simulation_state"], action="attack", target_ref="npc:baker", turn_key="1")
     document, _ = reduce(document, started.changes)
@@ -243,3 +244,26 @@ def test_cut_down_while_breaking_away_is_a_defeat() -> None:
     turn = fight(document["simulation_state"], action="flee", turn_key="1")
     assert turn is not None and turn.ended == "defeat"
     assert DefeatRecorded(defeats=1) in turn.changes
+
+
+def test_the_heros_trained_skills_and_a_companions_calling_count_in_a_fight() -> None:
+    """The playtest: swordsmanship and defense chosen at each level counted for nothing, and Liora, a guide, fought
+    at +0, so a level-6 knight took seventeen rounds."""
+    from app.apps.rpg.rules.combat.fight import _numbers, _start
+
+    def numbers(skills: dict[str, int]) -> tuple[dict[str, int], dict[str, Any]]:
+        document = _with_people(_document())
+        simulation = document["simulation_state"]
+        simulation["player_state"]["skills"] = {name: {"level": rank, "xp": 0} for name, rank in skills.items()}
+        combat = _start(simulation, {"actor_id": "enemy:rat", "definition_id": "creature:rat", "name": "Rat",
+                                     "side": "enemy", "hp": 5, "max_hp": 5, "defense": 10}, turn_key="1")
+        return _numbers(simulation, combat, "player"), combat
+
+    untrained, combat = numbers({})
+    trained, trained_combat = numbers({"swordsmanship": 2, "defense": 3})
+    assert trained["accuracy_bonus"] == untrained["accuracy_bonus"] + 2  # a blade is fought with swordsmanship
+    hero, untrained_hero = trained_combat["participants"]["player"], combat["participants"]["player"]
+    assert hero["defense"] == untrained_hero["defense"] + 3
+    ash = combat["participants"]["npc:ally"]  # a scout fights as a fighter does
+    assert (ash["defense"], ash["armor"]) == (13, 1)
+    assert _numbers({**_with_people(_document())["simulation_state"]}, combat, "npc:ally")["accuracy_bonus"] == 3

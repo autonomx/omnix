@@ -28,7 +28,8 @@ _WORD = re.compile(r"[a-z0-9']+")
 _STOP = frozenset("a an the and or of to in on at for with about from is are was were be you your me my i we "
                   "what who where when why how do does did can could would will tell ask know heard any some this "
                   "that there here it its she he his her him hers they them their has have had not no".split())
-_WORK = re.compile(r"\b(work|jobs?|tasks?|help|quests?|errands?|hire|bount(y|ies)|contracts?)\b")
+_WORK = re.compile(r"\b(work|jobs?|tasks?|help|quests?|errands?|hire|bount(y|ies)|contracts?|need (of|from) me|"
+                   r"anything i can do)\b")
 # Someone whose work is handing out work (a guild's registrar, a quartermaster, a bounty clerk): they offer a quest
 # no one else gave, wherever it is (the playtest: the Wayfarers' Guild's registrar had no contract to offer).
 _GIVES_WORK = re.compile(r"\b(guild|registrar|registry|contracts?|bount(y|ies)|quest|notice|clerk|quartermaster|"
@@ -336,14 +337,18 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
         giver = _s(quest.get("giver_id") or quest.get("offered_by"))
         if quest.get("status") == "available" and (giver == speaker_id or (not giver and (here in places
                                                                                           or hands_out_work))):
-            about = _stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))}"))
+            # The speaker's own name is no word of the quest's ("Vael, nice weather" is not about his vow).
+            about = _stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))}")) - _stemmed(_words(name))
             # A finale is the last thing offered for work in general (a newcomer was offered the Hollow Meridian).
             fitting = 0 if _s(quest.get("tier")) == "finale" else 1
             offerable.append((len(about & asked), fitting, len(about & pressing), quest))
-    # Asked for work, or about what one of their goals is after and a quest of theirs answers: the quest closest to
-    # the words, then to the goal they are most after (routines.md), offered.
+    # Asked for work, about what one of their goals is after and a quest of theirs answers, or about a quest of their
+    # own (the playtest: asked what vow he would have witnessed, Vael never offered his): the quest closest to the
+    # words, then to the goal they are most after (routines.md), offered.
     on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(row[0] for row in offerable)
-    if offerable and (_WORK.search(text.casefold()) or on_a_goal):
+    on_their_quest = any(row[0] and _s(row[3].get("giver_id") or row[3].get("offered_by")) == speaker_id
+                         for row in offerable)
+    if offerable and (_WORK.search(text.casefold()) or on_a_goal or on_their_quest):
         quest = max(offerable, key=lambda row: row[:3])[3]
         quest_id = _s(quest.get("quest_id") or quest.get("id"))
         quest_offer = {"quest_id": quest_id, "title": _s(quest.get("title")), "objective": _s(quest.get("objective"))}
