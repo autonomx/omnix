@@ -6,9 +6,14 @@ that matter, and how to check it. Install-wide operations (backups, restores, re
 
 ## Where the state lives
 
-PostgreSQL is the authority. A campaign is one document (`omnix_rpg_campaigns`) changed only by turns. Each turn
-commits, in one transaction, the new document and revision, a turn row with the state's patch, the interaction, the
-canonical narration, the submission's response and a metrics row. A full snapshot is kept every
+PostgreSQL is the authority. A campaign is one document changed only by turns, stored as its head
+(`omnix_rpg_campaigns.state_jsonb`) and its large sections (`omnix_rpg_campaign_parts`, migration 0186): a write
+stores only the sections it changed. Its `state_hash` is `e1:` and the hash of its sections' hashes; a hash without
+the prefix was written before parts and stays valid in history. Each turn commits, in one transaction, the new
+document and revision, a turn row with the state's patch, the interaction, the canonical narration, the submission's
+response and a metrics row. Each process keeps the last stored document of up to 16 campaigns, used only while the
+row's revision and hash are still the kept ones, so a turn reads its campaign whole only when another process wrote
+it. A full snapshot is kept every
 `OMNIX_RPG_SNAPSHOT_EVERY` revisions (20). Worlds, their revisions, releases, maps and scenarios are in the
 `omnix_rpg_world*`, `omnix_rpg_map*` and `omnix_rpg_scenario*` tables.
 
@@ -65,5 +70,6 @@ apart from successful ones.
 
 An older campaign document is upgraded the first time it is opened, as a system turn with a pinned backup. A
 campaign or save package from a newer Omnix is refused (`rpg_campaign_requires_newer_omnix`) rather than opened.
-Schema changes ship as forward migrations under `src/app/persistence/migrations`; run
+Schema changes ship as forward migrations under `src/app/persistence/migrations` and the RPG's own
+`src/app/apps/rpg/migrations`; run
 `python -m app.persistence migrate` before starting a new version.

@@ -78,7 +78,9 @@ The troubles the world's clock moves: a name, a description, where it bears (a r
 down (who governs, trade, resources, or the people), its severity (0 to 100) and trend, and the levels at which it
 boils over or counts as resolved. **Levers** are what the hero can do about it: defeating a creature
 (`defeat:<creature>`, for each one felled) or finishing a quest (`quest:<quest>`), each easing or worsening it by an
-amount. A pressure that runs high makes travel in its region dangerous and raises side quests.
+amount. A pressure that runs high makes travel in its region dangerous and raises side quests. The world answers its
+own troubles: a rising pressure that boils over is held in check for a while, eases until it is ten below the level at
+which it boiled over, and then stirs again, so a long campaign keeps turning; the hero's levers push it as before.
 
 ### Bestiary
 

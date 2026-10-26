@@ -33,6 +33,10 @@ rather than stopping the story.
 Time passes with what you do: looking around takes a few minutes, waiting half an hour, a night's sleep until
 morning. The world rail shows the day, the time, the weather and where you are.
 
+A journey takes its road's time. A place further than one road away is set out for: you take the first road of the
+way there ("You set out for Moonroot Ruins: the way goes by Skybridge Pass") and arrive somewhere on the way, with
+whatever is there; say it again to go on.
+
 ## People
 
 Talk to whoever is there. Each answers in their own voice about what they would know. They share some things
@@ -54,7 +58,8 @@ The player rail shows health, stamina, mana, experience, coin and survival (hung
 rest to keep them down; **Eat**, **Drink** and **Rest** put the turn in the box for you to send.
 
 Open an item in **Inventory** to read it and use, equip, unequip, drop or sell it. A potion heals and closes a wound,
-food eases hunger, a drink eases thirst. Something put down stays where you left it. A night's sleep, in a room paid
+food eases hunger, a drink eases thirst. Something put down stays where you left it. You can give what you carry to
+someone who is there ("give my dagger to Liora"): it is a gift, not a sale, and they think a little better of you. A night's sleep, in a room paid
 for or at a camp in the wild, restores you; a short rest takes the edge off.
 
 Experience comes from fights won, quests finished, checks passed and discoveries. Each level brings a choice: a
