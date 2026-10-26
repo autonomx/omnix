@@ -32,6 +32,7 @@ MECHANIC_OWNERS = {
     "clarify": "app.apps.rpg.session.turn.resolvers", "travel": "app.apps.rpg.session.turn.travel",
     "trade": "app.apps.rpg.rules.economy.trade", "use_item": "app.apps.rpg.rules.interactions.items",
     "drop": "app.apps.rpg.rules.interactions.items", "take": "app.apps.rpg.rules.interactions.items",
+    "give": "app.apps.rpg.rules.interactions.items",
     "equip": "app.apps.rpg.rules.interactions.items", "unequip": "app.apps.rpg.rules.interactions.items",
     "rest": "app.apps.rpg.rules.rest", "quest": "app.apps.rpg.rules.player.requests",
     "practice": "app.apps.rpg.rules.player.requests", "status": "app.apps.rpg.rules.player.requests",

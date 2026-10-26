@@ -28,14 +28,16 @@ from app.apps.rpg.foundation.state import access as _sections
 
 # Each mechanic as the turn's outcome names it: its action type and family.
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
-                "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
+                "trade": "trade", "use_item": "use_item", "drop": "drop_item", "give": "give_item", "take": "pick_up_item",
+                "rest": "rest",
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
                 "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "hotbar": "hotbar_slot",
                 "check": "skill_check",
                 "grow": "level_choice", "rewind": "rewind", "act": "free_action"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
-           "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
+           "trade": "commerce", "use_item": "inventory", "drop": "inventory", "give": "inventory", "take": "inventory",
+           "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
            "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat",
            "hotbar": "loadout",
@@ -596,7 +598,7 @@ def plan_player_text(session: Mapping[str, Any], text: str) -> tuple[PlannedActi
     if planned is not None:
         return planned, reading
     scene = scene_view(simulation, runtime, abilities)
-    model = read_with_model(simulation, scene, text)
+    model = read_with_model(simulation, scene, text, remark=reading.reason == "remark")
     if model.unavailable:  # the storyteller is down: only what the grammar read runs (RQ-8.8), and it says what does
         from app.apps.rpg.narration.presentation.visible_response import NOTHING_COMES_OF_IT
 

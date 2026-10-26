@@ -48,7 +48,8 @@ def _campaign(**simulation):
     (IntentCandidate("wait", confidence=0.9, clauses=("wait", "look")), None),  # two steps
     (IntentCandidate("buy", target_id="offer:bread", target_kind="offer", confidence=0.9), "trade"),
     (IntentCandidate("sell", target_id="item:dagger", target_kind="item", confidence=0.9), "trade"),
-    (IntentCandidate("give", target_id="item:dagger", target_kind="item", confidence=0.9), None),  # not moved yet
+    (IntentCandidate("give", target_id="item:dagger", target_kind="item", confidence=0.9), "give"),
+    (IntentCandidate("give", confidence=0.5), None),  # nothing named to give: the intent call reads it
 ])
 def test_only_confident_single_step_look_and_wait_are_planned(reading, planned) -> None:
     plan = plan_action(reading)

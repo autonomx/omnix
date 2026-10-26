@@ -44,6 +44,8 @@ SCENE = SceneView((
     ("rest for a while", "rest", None),
     ("I wait a while", "wait", None),
     ("take a look around", "look", None),
+    ("give my iron dagger to Liora Fen", "give", "iron_dagger"),
+    ("take off some lantern bread", "unequip", None),  # no order of the bread on sale
 ])
 def test_commands_read_as_their_family_and_target(text, family, target) -> None:
     candidate = parse_command(text, SCENE)

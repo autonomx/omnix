@@ -180,14 +180,15 @@ def test_renting_a_room_is_buying_one(play) -> None:
 def test_travel_follows_the_world_routes_by_name(play) -> None:
     """RQ-0.3 (fixed here): a route is named by where it leads, both ways, and a word two places share or the
     place the hero stands in sends no one anywhere ("go to Starfall Village" in the village used to lead back
-    out to Starfall Grove; "go to Moonroot Ruins" from the village led to the Wayfarers' Guild)."""
+    out to Starfall Grove; "go to Moonroot Ruins" from the village led to the Wayfarers' Guild). A place further
+    off is set out for by the first road of its way (time.md)."""
     play.turn("go to Starfall Village")
     play.turn("go to Starfall Village")
-    assert play.location() == "location:aurelia:starfall-village"
-    play.turn("go to Moonroot Ruins")
     assert play.location() == "location:aurelia:starfall-village"
     play.turn("I ask Liora Fen to leave.")
     assert play.location() == "location:aurelia:starfall-village"
+    play.turn("go to Moonroot Ruins")
+    assert play.location() == "location:aurelia:skybridge-pass"  # on the way to the ruins, not the guild
 
 
 def test_a_second_import_of_a_lore_world_prepares_its_openings(launch) -> None:

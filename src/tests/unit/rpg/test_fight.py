@@ -165,6 +165,11 @@ def test_a_person_present_is_fought_by_what_they_do_and_everyone_who_saw_trusts_
     assert after["simulation_state"]["relationship_state"]["npc:baker"]["trust"] == -15
     assert fight(document["simulation_state"], action="attack", target_ref="npc:ally", turn_key="1").refused
     assert fight(document["simulation_state"], action="attack", target_ref="npc:nobody", turn_key="1") is None
+    # Someone the world knows, elsewhere at this hour: no blow, the game says so (the route's intent eval: "I attack
+    # Dr. Kade" with Kade away played as a free action, "nothing comes of it").
+    document["simulation_state"]["world_model"]["npcs"]["npc:smith"] = {"name": "Bryn Hollow", "role": "smith"}
+    away = fight(document["simulation_state"], action="attack", target_ref="Bryn Hollow", turn_key="1")
+    assert away is not None and away.refused and away.lines == ["Bryn Hollow is not here."] and away.changes == []
 
 
 def test_defending_raises_the_heros_guard_until_their_next_turn() -> None:

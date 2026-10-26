@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from app.apps.rpg.foundation.state.reducer import reduce
-from app.apps.rpg.rules.interactions.items import drop_item, pick_up, use_item
+from app.apps.rpg.foundation.state.changes import ItemRemoved, RegardChanged
+from app.apps.rpg.rules.interactions.items import GIFT_REGARD, drop_item, give_item, pick_up, use_item
 from app.apps.rpg.rules.rest import rest
 
 
@@ -87,3 +88,25 @@ def test_no_sleeping_in_the_street_where_rooms_are_rented_but_camping_in_the_wil
     assert camp.kind == "camp" and _after(_campaign(), camp)["player_state"]["rest_point"] == "loc:here"
     short = rest(_campaign()["simulation_state"], "rest for a while")
     assert short.kind == "while" and short.minutes == 60 and not any(c.type == "rest_taken" for c in short.changes)
+
+
+def test_a_gift_leaves_the_pack_for_someone_here_who_trusts_the_hero_more() -> None:
+    dagger = {"item_id": "iron_dagger", "name": "Iron Dagger", "qty": 1, "category": "weapon"}
+    campaign = _campaign(items=[dagger, BREAD])
+    simulation = campaign["simulation_state"]
+    simulation["world_model"]["npcs"] = {"npc:liora": {"name": "Liora Fen"}, "npc:orik": {"name": "Orik"}}
+    simulation["present_npc_state"] = {"present_npc_ids": ["npc:liora"]}
+    given = give_item(simulation, "iron_dagger", "npc:liora", "give my iron dagger to Liora Fen")
+    assert given.lines == ["You give the Iron Dagger to Liora Fen."] and not given.refused
+    assert given.changes == [ItemRemoved(item_id="iron_dagger", quantity=1),
+                             RegardChanged(npc_id="npc:liora", name="Liora Fen", delta=GIFT_REGARD, reason="gift:iron_dagger")]
+    after = _after(campaign, given)
+    assert [item["item_id"] for item in after["player_state"]["inventory_state"]["items"]] == ["item:bread"]
+    assert give_item(simulation, "item:bread", "", "give two Lantern Bread").lines == [
+        "You give 2 Lantern Bread to Liora Fen."]  # unnamed: to the one person here
+    away = give_item(simulation, "iron_dagger", "npc:orik", "give the dagger to Orik")
+    assert away.refused and away.lines == ["Orik is not here."] and away.changes == []
+    assert give_item(simulation, "rope", "npc:liora", "give Liora the rope").lines == ["You carry nothing like that."]
+    simulation["present_npc_state"] = {"present_npc_ids": ["npc:liora", "npc:orik"]}
+    asked = give_item(simulation, "iron_dagger", "", "give away my dagger")
+    assert asked.refused and asked.lines == ["To whom do you give the Iron Dagger?"]

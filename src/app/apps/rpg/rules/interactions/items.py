@@ -1,5 +1,5 @@
 """Items (RQ-2.4; docs/rpg/design/items-and-rest.md): using what the hero carries, putting it down, picking it up,
-and wearing or wielding it.
+giving it, and wearing or wielding it.
 
 A pure rule: it reads the hero's pack, the ground where they stand and the world's items, and says what happens
 as changes. What an item does comes from its kind in the world (potion, food, drink).
@@ -20,6 +20,7 @@ from app.apps.rpg.foundation.state.changes import (
     ItemRemoved,
     ItemUnequipped,
     NeedsChanged,
+    RegardChanged,
     StateChange,
 )
 from app.apps.rpg.rules.combat.stakes import WOUNDED, conditions, healing
@@ -27,6 +28,7 @@ from app.apps.rpg.foundation.state import access as _sections
 
 HEAL_SHARE = 0.30
 MIN_HEAL = 10
+GIFT_REGARD = 5  # a gift warms its receiver a little
 RELIEF = {"food": ("hunger", -25), "drink": ("thirst", -30)}
 _NUMBERS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "both": 2, "all": 0}
 
@@ -118,6 +120,29 @@ def drop_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOut
     return ItemOutcome([ItemDropped(item_id=_id(item), quantity=quantity, location_id=location)],
                        [f"You put down {quantity} {name}; it lies here now." if quantity > 1
                         else f"You put down the {name}; it lies here now."])
+
+
+def give_item(simulation: Mapping[str, Any], item_id: str, recipient_id: str, text: str) -> ItemOutcome:
+    """Something carried, given to someone here; unnamed, to the one person here."""
+    item = _find(_pack(simulation), item_id, text)
+    if not item:
+        return ItemOutcome(lines=["You carry nothing like that."], refused=True)
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
+    present = [_s(npc) for npc in _l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids"))]
+    name = _s(item.get("name")) or _id(item)
+    if not recipient_id:
+        if len(present) != 1:
+            return ItemOutcome(lines=[f"To whom do you give the {name}?" if present else "There is no one here to give it to."],
+                               refused=True)
+        recipient_id = present[0]
+    person = _s(_d(people.get(recipient_id)).get("name")) or recipient_id
+    if recipient_id not in present:
+        return ItemOutcome(lines=[f"{person} is not here."], refused=True)
+    quantity = _quantity(text, _count(item))
+    given = f"{quantity} {name}" if quantity > 1 else f"the {name}"
+    return ItemOutcome([ItemRemoved(item_id=_id(item), quantity=quantity),
+                        RegardChanged(npc_id=recipient_id, name=person, delta=GIFT_REGARD, reason=f"gift:{_id(item)}")],
+                       [f"You give {given} to {person}."])
 
 
 def pick_up(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:

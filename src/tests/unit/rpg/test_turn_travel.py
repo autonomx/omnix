@@ -56,10 +56,20 @@ def test_a_journey_moves_the_party_says_who_is_there_and_takes_the_roads_time() 
     assert scene["present_npc_ids"] == ["npc:orik", "npc:liora"]
 
 
-def test_a_place_no_road_reaches_and_the_place_the_hero_is_in_are_refused_and_change_nothing_else() -> None:
+def test_a_place_further_off_is_set_out_for_by_the_first_road_of_the_way() -> None:
     far = resolve_travel(PlannedAction(mechanic="travel", target_id="loc:ruins"), _campaign())
+    assert not far.refused and far.destination == "loc:village" and far.minutes == 20
+    assert far.lines[:2] == ["You set out for The Ruins: the way goes by The Village.",
+                             "You travel to The Village; the road takes 20 minutes."]
+    assert "location_changed" in [change.type for change in far.changes]
+
+
+def test_a_place_no_road_reaches_and_the_place_the_hero_is_in_are_refused_and_change_nothing_else() -> None:
+    campaign = _campaign()
+    campaign["simulation_state"]["world_model"]["locations"]["loc:island"] = {"name": "The Island", "exits": {}}
+    far = resolve_travel(PlannedAction(mechanic="travel", target_id="loc:island"), campaign)
     assert far.refused and [change.type for change in far.changes] == ["turn_counted"]
-    assert far.lines == ["No road leads straight from here to The Ruins. Available routes: The Village"]
+    assert far.lines == ["No road leads from here to The Island. Available routes: The Village"]
     here = resolve_travel(PlannedAction(mechanic="travel", target_id="loc:grove"), _campaign())
     assert here.refused and here.lines[0].startswith("You are already in The Grove.")
 

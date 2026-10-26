@@ -3,7 +3,7 @@
 ## What the player experiences
 
 What the hero carries can be used: a potion heals and closes a wound, food eases hunger, a drink eases thirst.
-Things can be put down where the hero stands and picked up again later. A night's sleep, in a room paid for or at a
+Things can be put down where the hero stands and picked up again later, or given to someone. A night's sleep, in a room paid for or at a
 camp in the wild, restores the hero; a short rest takes the edge off.
 
 ## Rules
@@ -16,10 +16,13 @@ camp in the wild, restores the hero; a short rest takes the edge off.
   - anything else: refused, "the {item} is not something you can use like that", with no time passed.
 - **Putting down and picking up** (no time): one of a stack, or the number the player says ("two"). What lies on the
   ground stays where it was put down.
+- **Giving** (no time): one of a stack, or the number said, goes to someone here, who trusts the hero a little
+  more for it (regard +5). Unnamed, it goes to the one person here; with more, the game asks to whom. To someone
+  not here, or with nothing like it carried, it is refused. A gift is no sale: nothing is paid for it.
 - **Wearing and wielding** (no time): a weapon is taken up in the main hand (a shield in the off hand), armour,
   a helmet, a cloak or a ring goes on its place, and a tool (a compass, a lantern, a torch) is held to hand, each
   taking the place of what was there; it stays in the pack. Food and potions are not worn. Asking for what is already worn changes nothing. Taking something off puts it
-  away. Gear that leaves the pack (dropped, sold, used up) is no longer worn.
+  away. Gear that leaves the pack (dropped, given, sold, used up) is no longer worn.
 - **One gear record** (document version 8): what is worn is the store's (`inventory_state.equipment`, by slot:
   `main_hand`, `off_hand`, `body`, `head`, `cloak`, `ring`, `tool`), which combat reads; the play screen's sheet lists it
   ("Weapon", "Cloak", ...). The old third record (`player_state.inventory`) is gathered into the store.
@@ -43,17 +46,18 @@ camp in the wild, restores the hero; a short rest takes the edge off.
 ## State it changes
 
 `ItemRemoved`, `HpChanged`, `NeedsChanged`, `ItemDropped`, `ItemPickedUp`, `ItemEquipped`, `ItemUnequipped`,
-`ConditionsChanged`, `RestTaken`, `ServiceUsed`, `TimeAdvanced`.
+`ConditionsChanged`, `RegardChanged` (a gift), `RestTaken`, `ServiceUsed`, `TimeAdvanced`.
 
 ## What the narrator is told
 
-The facts: what was used and what it did, what was put down or picked up, how long the rest was and what it
+The facts: what was used and what it did, what was put down, picked up or given and to whom, how long the rest was and what it
 restored.
 
 ## Scenarios
 
 Drink a healing potion when hurt; eat bread when hungry; put down one of two loaves, leave, return and pick it up;
-rent a room and sleep, twice on two nights; camp in the wild; try to sleep in the village without a room.
+give a dagger to the guide (it leaves the pack, unworn, and the guide's regard rises); give with two people here
+and no one named (asked to whom); rent a room and sleep, twice on two nights; camp in the wild; try to sleep in the village without a room.
 
 ## Out of scope
 

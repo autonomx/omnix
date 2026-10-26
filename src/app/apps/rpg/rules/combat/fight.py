@@ -162,6 +162,19 @@ def _person(simulation: Mapping[str, Any], target_ref: str) -> tuple[str, dict[s
     return "", {}
 
 
+def _known_person(simulation: Mapping[str, Any], target_ref: str) -> str:
+    """The name of the world's person ``target_ref`` means, by id or by name, wherever they are; "" when none."""
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
+    wanted = target_ref.casefold().removeprefix("the ").strip()
+    if not wanted:
+        return ""
+    for npc_id, record in people.items():
+        name = _s(_d(record).get("name"))
+        if wanted == str(npc_id).casefold() or (name and name.casefold() in wanted):
+            return name or str(npc_id)
+    return ""
+
+
 def _person_foe(npc_id: str, person: Mapping[str, Any]) -> dict[str, Any]:
     words = set(_s(f"{person.get('role')} {person.get('name')}").casefold().replace("-", " ").split())
     rank = "fighter" if words & _FIGHTER_WORDS else "hardy" if words & _HARDY_WORDS else "townsfolk"
@@ -530,6 +543,9 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
         if enemy is None:
             npc_id, person = _person(simulation, target_ref)
             if not npc_id:
+                absent = _known_person(simulation, target_ref)
+                if absent:  # someone the world knows, elsewhere at this hour: no blow, and no time passes
+                    return FightTurn([], [f"{absent} is not here."], refused=True, minutes=0)
                 return None
             name = _s(person.get("name")) or npc_id
             if npc_id in {_s(row.get("npc_id")) for row in _companions(simulation)}:

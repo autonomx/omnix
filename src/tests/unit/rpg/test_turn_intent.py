@@ -91,3 +91,32 @@ def test_a_question_about_a_place_elsewhere_is_no_look_at_it(monkeypatch) -> Non
 
     monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
     assert intent.read_with_model({}, scene, "what is the pass like?").reading is None  # asked, not looked at
+
+
+def test_a_remark_to_no_one_is_said_to_the_room_not_asked_about_or_looked_at(monkeypatch) -> None:
+    """The route's intent eval: in the docks, with three people there, "I smile" asked which of two it was for, and
+    "such white walls" looked around."""
+    from app.apps.rpg.foundation import llm_app_gateway
+    from app.apps.rpg.session.turn import intent
+
+    scene = SceneView((SceneEntity("npc:kade", "person", ("Selene Kade", "the doctor"), here=True),
+                       SceneEntity("npc:juno", "person", ("Juno Rask", "the union leader"), here=True)))
+    replies: list[str] = []
+
+    class _Gateway:
+        def generate(self, prompt, **_kwargs):
+            return replies.pop(0)
+
+    monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
+    replies.append('{"readings": [{"family": "talk", "target_id": "npc:kade", "confidence": 0.6},'
+                   ' {"family": "talk", "target_id": "npc:juno", "confidence": 0.55}]}')
+    smiled = intent.read_with_model({}, scene, "I smile", remark=True)
+    assert smiled.reading is None and smiled.between is None and not smiled.unavailable  # a free action
+    replies.append('{"readings": [{"family": "look", "confidence": 0.7}]}')
+    assert intent.read_with_model({}, scene, "Such white walls.", remark=True).reading is None
+    replies.append('{"readings": [{"family": "talk", "target_id": "npc:juno", "confidence": 0.9}]}')
+    greeted = intent.read_with_model({}, scene, "I greet the union leader", remark=True).reading
+    assert greeted is not None and (greeted.family, greeted.target_id) == ("talk", "npc:juno")
+    replies.append('{"readings": [{"family": "talk", "target_id": "npc:kade", "confidence": 0.6},'
+                   ' {"family": "talk", "target_id": "npc:juno", "confidence": 0.55}]}')
+    assert intent.read_with_model({}, scene, "talk to one of them").between is not None  # not a remark: asked

@@ -17,7 +17,7 @@ from app.apps.rpg.rules import ability_use
 from app.apps.rpg.rules.checks import check
 from app.apps.rpg.rules.player import progression
 from app.apps.rpg.rules.combat.fight import fight
-from app.apps.rpg.rules.interactions.items import drop_item, equip_item, pick_up, unequip_item, use_item
+from app.apps.rpg.rules.interactions.items import drop_item, equip_item, give_item, pick_up, unequip_item, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
 from app.apps.rpg.rules.rest import rest
 from app.apps.rpg.session.turn.planning import PlannedAction
@@ -178,6 +178,10 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         tried = check(simulation, planned.reason, target, turn_key=str(_counted(session).turn_count))
         return Resolution(_timed(session, tried.changes, tried.minutes), tried.lines, minutes=tried.minutes,
                           needs="standard_turn", action_result={"kind": "check", **tried.record})
+    if mechanic == "give":
+        given = give_item(simulation, planned.target_id, planned.second_target_id, text)
+        return Resolution(_timed(session, given.changes, given.minutes), given.lines, minutes=given.minutes,
+                          refused=given.refused, told=not given.refused)
     if mechanic in {"use_item", "drop", "take", "equip", "unequip"}:
         rule = {"use_item": use_item, "drop": drop_item, "take": pick_up, "equip": equip_item,
                 "unequip": unequip_item}[mechanic]

@@ -1,5 +1,7 @@
 """Travel on the pipeline (RQ-2.1): the road from here to a neighbouring place, how long it takes, who is there, and
-the quests it advances; or why the hero cannot go.
+the quests it advances; or why the hero cannot go. A place further off is set out for: the hero takes the first road
+of the shortest way there open now, a road a turn, so each place on the way is arrived at as any other (its people,
+its quests, what bars the way on a dangerous road).
 
 A published world's routes and places are its world model's; a campaign without one (the starter town until
 RQ-2.8) takes the older path, since the command grammar has no places to read for it.
@@ -7,6 +9,7 @@ RQ-2.8) takes the older path, since the command grammar has no places to read fo
 from __future__ import annotations
 
 import math
+from collections import deque
 import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -56,6 +59,23 @@ def _routes_line(graph: Any, simulation: Mapping[str, Any], current: str) -> str
     return ("Available routes: " + ", ".join(names[:4])) if names else "No routes are currently available."
 
 
+def _first_road(graph: Any, simulation: Mapping[str, Any], current: str, target: str) -> str:
+    """The next place on the shortest way from ``current`` to ``target`` by the roads open now; "" when none."""
+    previous: dict[str, str] = {current: ""}
+    queue = deque([current])
+    while queue:
+        place = queue.popleft()
+        if place == target:
+            while previous[place] != current:
+                place = previous[place]
+            return place
+        for edge in graph.outgoing(place):
+            if edge.to_location not in previous and _edge_is_available(edge, simulation):
+                previous[edge.to_location] = place
+                queue.append(edge.to_location)
+    return ""
+
+
 def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> TravelResolution:
     """The journey's changes and the facts the narrator is told, or a refusal (a counted turn; nothing else changes)."""
     simulation = _d(_sections.simulation_state_of(document))
@@ -72,10 +92,15 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
                                 refused=True)
     edge = next((edge for edge in graph.outgoing(current)
                  if edge.to_location == target and _edge_is_available(edge, simulation)), None)
+    on_the_way = ""
     if edge is None:
-        return TravelResolution(
-            [counted], [f"No road leads straight from here to {name}. " + _routes_line(graph, simulation, current)],
-            refused=True)
+        step = _first_road(graph, simulation, current, target)
+        if not step:
+            return TravelResolution(
+                [counted], [f"No road leads from here to {name}. " + _routes_line(graph, simulation, current)],
+                refused=True)
+        on_the_way, target = name, step  # set out for it: the first road of the way
+        name = _s(_d(locations.get(target)).get("name")) or target
     minutes = _road_minutes(world, current, target)
     now = clock_minute(document)  # who is there when the hero arrives, the day gone on by the road's time
     present = routines.present_at(simulation, target, now + minutes, since=now)
@@ -90,7 +115,9 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
     ]
     here = routines.described(simulation, present, now + minutes, since=now, hero_at=target)
     # The place's own description reaches the narrator with the scene (runtime_state.current_scene).
-    lines = [f"You travel to {name}; the road takes {minutes} minutes."]
+    lines = [f"You set out for {on_the_way}: the way goes by {name}." if on_the_way else "",
+             f"You travel to {name}; the road takes {minutes} minutes."]
+    lines = [line for line in lines if line]
     if here:
         lines.append(f"Here: {', '.join(here)}.")
     return TravelResolution(changes, [*lines, *quest_lines], minutes=minutes, destination=target,

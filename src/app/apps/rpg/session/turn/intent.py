@@ -38,6 +38,7 @@ FAMILIES: dict[str, tuple[str, frozenset[str]]] = {
     "defend": ("guard in a fight", frozenset({""})),
     "take": ("pick something up", frozenset({"item"})),
     "drop": ("put something carried down", frozenset({"item"})),
+    "give": ("give something carried to someone here", frozenset({"item"})),
     "use_item": ("use something carried", frozenset({"item"})),
     "equip": ("wear or wield something carried", frozenset({"item"})),
     "unequip": ("take off something worn", frozenset({"item"})),
@@ -129,8 +130,9 @@ def decide(readings: list[IntentCandidate]) -> ModelReading:
     return ModelReading(reading=first)
 
 
-def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str) -> ModelReading:
-    """The intent call's reading of ``text`` in ``scene``; no reading without a model, or past its time."""
+def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str, *, remark: bool = False) -> ModelReading:
+    """The intent call's reading of ``text`` in ``scene``; no reading without a model, or past its time. ``remark``:
+    the grammar read words said to no one named ("I smile", "such white walls")."""
     from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 
     gateway = build_app_llm_gateway()
@@ -154,6 +156,14 @@ def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str) 
         here = {entity.entity_id for entity in scene.entities if entity.here}
         readings = [reading for reading in readings if reading.family in {"talk", "status"}
                     or (reading.family == "look" and (not reading.target_id or reading.target_id in here))]
+    if remark:
+        # Said to the room: the call may tell whom it was for ("I greet the union leader"), but it is no look around,
+        # and two people it could be for are no question to ask the player, who named neither.
+        readings = [reading for reading in readings if reading.family != "look" or reading.target_id]
+        decided = decide(readings)
+        if decided.between and all(reading.family == "talk" for reading in decided.between):
+            return ModelReading()
+        return decided
     return decide(readings)
 
 

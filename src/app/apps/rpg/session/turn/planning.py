@@ -13,7 +13,7 @@ from app.apps.rpg.rules.intent.grammar import IntentCandidate
 from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
-PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
+PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "give", "take", "rest",
                            "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
                            "ability", "hotbar", "check", "grow", "rewind", "act"]
 
@@ -32,7 +32,7 @@ class PlannedAction(BaseModel):
     ticks: int = 1
     reason: str = ""
     question: str = ""
-    second_target_id: str = ""  # an ability's target (the foe it is aimed at)
+    second_target_id: str = ""  # an ability's target (the foe it is aimed at); a gift's receiver
     options: tuple[str, ...] = ()  # a question's answers, as the commands they send (RQ-7.3)
 
 
@@ -92,6 +92,9 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
     if (reading.family in {"use_item", "drop", "take", "equip", "unequip"} and reading.target_kind == "item"
             and reading.target_id):
         return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reading.reason)
+    if reading.family == "give" and reading.target_kind == "item" and reading.target_id:
+        return PlannedAction(mechanic="give", target_id=reading.target_id, second_target_id=reading.second_target_id or "",
+                             ticks=0, reason=reading.reason)
     if reading.family == "quest" and reading.target_kind == "quest":
         return PlannedAction(mechanic="quest", target_id=reading.target_id or "", ticks=0, reason=reading.reason)
     if reading.family == "practice" and reading.target_kind == "skill":

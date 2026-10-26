@@ -48,3 +48,12 @@ was one step, so a twenty-round fight moved each pressure as much as twenty jour
 (escalates, is held in check, ends, or stirs again) word of it reaches the hero in the turn's lines ("Word comes:
 Danger on the roads of Starfall March grows worse."), their own region's first, at most two a turn; the recap of
 time away says it too. What the hero does to a pressure was RQ-5.4's levers (quests.md).
+
+## As built (journeys further than a road)
+
+A road takes the time the world gives it (30 minutes when it gives none), and a journey to a neighbouring place is
+one turn. A place further off is set out for (`session/turn/travel.py`): the hero takes the first road of the
+shortest way there by the roads open now ("You set out for The Ruins: the way goes by The Village."), so
+each place on the way is arrived at as any other, its people, its quests and what bars a dangerous road
+(encounters.md) included; saying it again goes on. A place no open road reaches is refused, as is the place the
+hero is in.

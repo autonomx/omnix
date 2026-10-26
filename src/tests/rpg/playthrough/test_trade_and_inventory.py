@@ -46,6 +46,22 @@ def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
 
 
 @pytest.mark.parametrize("world", in_worlds())
+def test_a_gift_to_the_merchant_is_no_sale(launch, world) -> None:
+    """The route's intent eval: "give my trail rations to Elara" was sold to her, and "give my iron dagger to Liora
+    Fen" dropped on the ground (no give mechanic, the intent call's nearest family planned)."""
+    play, shop = launch(world), SHOP[world]
+    for step in shop["route"]:
+        play.turn(step)
+    purse, carried = play.purse(), play.inventory()[shop["food"]]
+
+    play.turn(f"I give one {shop['food']} to {shop['merchant']}.")
+    assert play.inventory().get(shop["food"], 0) == carried - 1
+    assert play.purse() == purse  # given, not sold
+    play.turn(f"I pick up the {shop['food']}.")  # nor put down here
+    assert play.inventory().get(shop["food"], 0) == carried - 1
+
+
+@pytest.mark.parametrize("world", in_worlds())
 def test_inventory_round_trip_drop_leave_return_pick_up(launch, world) -> None:
     play, shop = launch(world), SHOP[world]
     for step in shop["route"]:

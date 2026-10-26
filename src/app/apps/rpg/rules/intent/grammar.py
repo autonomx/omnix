@@ -453,7 +453,8 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     offer = _first(words, scene, "offer")
     if _has(words, "rent", "book", "buy", "purchase", "order") or _starts(
             words, "get me", "sell me", "pay for", "i will take", "one", "two", "give me") or (
-            offer is not None and _starts(words, "take", "have", "i will have") and not _has(words, "bite")):
+            offer is not None and _starts(words, "take", "have", "i will have") and not _has(words, "bite")
+            and not _starts(words, "take off")):  # "take off my bread" is no order of it
         hit = offer or _first(words, scene, "item")
         seller = _first(words, scene, "person", here=True)
         return _candidate("buy", hit, 0.85 if hit else 0.55, "buys",
