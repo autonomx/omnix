@@ -173,15 +173,16 @@ def current_location_identity(session: Mapping[str, Any]) -> dict[str, str] | No
 
 
 def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
-    projection = deepcopy(_mapping(session.get("campaign_bible_projection")))
+    # Each part the bible takes from the session is copied once, as it is taken (the projection itself is only read).
+    projection = _mapping(session.get("campaign_bible_projection"))
     state = _mapping(session.get("state"))
     state_bible = _mapping(state.get("campaign_bible"))
     manifest = _mapping(session.get("manifest"))
 
-    documents = _rows(projection.get("documents"))
+    documents = copy_state(_rows(projection.get("documents")))
     if not documents:
-        documents = _rows(_mapping(state_bible.get("lore_pages")).values())
-    entities = deepcopy(_mapping(projection.get("entities")))
+        documents = copy_state(_rows(_mapping(state_bible.get("lore_pages")).values()))
+    entities = copy_state(_mapping(projection.get("entities")))
     if not entities:
         for key, kind in (
             ("npc_dossiers", "npc"),
@@ -192,7 +193,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
                 if isinstance(row, Mapping):
                     entities[str(entity_id)] = {"kind": kind, **dict(row)}
 
-    discovery = deepcopy(
+    discovery = copy_state(
         _mapping(projection.get("discovery_state"))
         or _mapping(state_bible.get("discovery_state"))
     )
@@ -212,7 +213,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
             or state_bible.get("canon_revision")
             or 0
         ),
-        "manifest": deepcopy(_mapping(projection.get("manifest") or state_bible.get("manifest"))),
+        "manifest": copy_state(_mapping(projection.get("manifest") or state_bible.get("manifest"))),
         "documents": documents,
         "entities": entities,
         "discovery_state": discovery,
@@ -222,7 +223,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
             continue
         value = projection.get(key)
         if value is not None:
-            bible[key] = deepcopy(value)
+            bible[key] = copy_state(value)
         elif key not in bible:
             bible[key] = {} if key in {"indexes", "mechanics_catalog"} else []
     return bible

@@ -55,6 +55,21 @@ def _sectioned(name: str, value: Any) -> bool:
     return isinstance(value, dict) and name not in WHOLE_SECTIONS
 
 
+def _jsonb_key(key: str) -> tuple[int, bytes]:
+    encoded = key.encode("utf-8")
+    return len(encoded), encoded
+
+
+def _jsonb_ordered(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """An object's keys in the order JSONB keeps them (shorter first, then bytewise): the order a read returns, and
+    the order the game's iterations then follow."""
+    return dict(sorted(pairs, key=lambda pair: _jsonb_key(pair[0])))
+
+
+def _loads(text: str) -> Any:
+    return json.loads(text, object_pairs_hook=_jsonb_ordered)
+
+
 def _digest(hashes: Mapping[str, str]) -> str:
     return HASH_PREFIX + _sha(canonical_json(sorted(hashes.items())))
 
@@ -118,6 +133,7 @@ def assembled(head: Mapping[str, Any], parts: Mapping[str, Any] | None) -> tuple
     head overrides (a document written whole, out of band) is ``STALE``: the next write rewrites or removes it."""
     document = dict(head)
     hashes: dict[str, str] = {}
+    filled: set[int] = set()
     for path, (digest, value) in sorted((parts or {}).items()):
         section, _, entry = path[1:].partition("/")
         holder = document.get(_untoken(section))
@@ -127,7 +143,35 @@ def assembled(head: Mapping[str, Any], parts: Mapping[str, Any] | None) -> tuple
             continue
         holder[name] = value
         hashes[path] = str(digest)
+        filled.add(id(holder))
+    for key, holder in list(document.items()):  # a section with parts put in: in its stored order, as stored whole
+        if id(holder) in filled:
+            document[key] = _jsonb_ordered(list(holder.items()))
     return document, hashes
+
+
+def stored_document(form: StoredForm, before: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The document as storage holds it once ``form`` is written over ``before`` (the stored document it was formed
+    against): what a read of it returns, in JSON's own types. None when ``before`` lacks a part ``form`` kept."""
+    document = _loads(form.head)
+    filled: set[str] = set()
+    for path in form.part_hashes:
+        section, _, entry = (_untoken(token) for token in path[1:].partition("/"))
+        if path in form.written:
+            value = _loads(form.written[path][0])
+        else:
+            previous = before.get(section)
+            if not isinstance(previous, Mapping) or entry not in previous:
+                return None
+            value = previous[entry]
+        holder = document.get(section)
+        if not isinstance(holder, dict):
+            return None
+        holder[entry] = value
+        filled.add(section)
+    for section in filled:
+        document[section] = _jsonb_ordered(list(document[section].items()))
+    return document
 
 
 def state_hash(document: Mapping[str, Any]) -> str:
@@ -143,4 +187,4 @@ def hash_matches(document: Mapping[str, Any], recorded: str) -> bool:
 
 
 __all__ = ["HASH_PREFIX", "HEAD_PATHS", "PART_MIN_BYTES", "STALE", "StoredForm", "assembled", "canonical_json",
-           "hash_matches", "state_hash", "stored_form"]
+           "hash_matches", "state_hash", "stored_document", "stored_form"]

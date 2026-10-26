@@ -138,3 +138,40 @@ def test_a_campaign_stored_whole_before_parts_loads_and_its_next_turn_splits_it(
     with unit_of_work(database) as work:
         assert work.rpg.document_at_revision(context, campaign_id, 1) == after  # across both hash schemes
         work.rollback()
+
+
+def test_a_kept_document_is_read_only_while_the_row_still_has_its_revision_and_hash(database) -> None:
+    """F2: a turn reads its campaign at its load and under its commit's lock; the kept document stands in for the
+    stored one only while the row's revision and hash are the kept ones, and a reader gets a copy."""
+    from app.apps.rpg.foundation.persistence import rpg_repository
+
+    context = ensure_local_identity(database)
+    campaign_id = f"campaign:kept-{uuid4().hex}"
+    start = _start(campaign_id)
+    with unit_of_work(database) as work:
+        work.rpg.create_campaign(context, campaign_id=campaign_id, title="Kept", state=start, engine_version="test",
+                                 schema_version="test", seed="1")
+        work.commit()
+    after = copy.deepcopy(start)
+    after["runtime_state"]["state_revision"] = 1
+    after["runtime_state"]["interaction_timeline"].append({"turn": 1, "text": "y" * 5000})
+    rpg_repository.clear_kept_documents()
+    with unit_of_work(database) as work:
+        work.rpg.get_campaign(context, campaign_id)  # a miss: read whole, and kept
+        work.rollback()
+    _commit(database, context, campaign_id, 1, after)  # the commit keeps what it wrote
+    kept = rpg_repository._kept((context.workspace_id, campaign_id))
+    assert kept is not None and kept.revision == 1 and kept.document == after
+
+    with unit_of_work(database) as work:
+        read = work.rpg.get_campaign(context, campaign_id)
+        assert read["state"] == after and read["state"] is not kept.document  # a copy
+        read["state"]["state"]["player"]["level"] = 99  # changing it changes nothing kept
+        assert work.rpg.get_campaign(context, campaign_id)["state"] == after
+        # Out of band, the stored document and its hash change at the same revision: the kept one is not used.
+        changed = copy.deepcopy(after)
+        changed["state"]["player"]["level"] = 7
+        work.connection.execute("UPDATE omnix_rpg_campaigns SET state_jsonb = %s::jsonb, state_hash = %s WHERE id = %s",
+                                (canonical_json(changed), state_hash(changed), campaign_id))
+        assert work.rpg.get_campaign(context, campaign_id)["state"]["state"]["player"]["level"] == 7
+        work.rollback()

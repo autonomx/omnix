@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.persistence.document_parts import (
@@ -10,8 +14,10 @@ from app.apps.rpg.foundation.persistence.document_parts import (
     canonical_json,
     hash_matches,
     state_hash,
+    stored_document,
     stored_form,
 )
+from app.apps.rpg.foundation.safe_values import copy_state
 from app.apps.rpg.foundation.persistence.turn_narrations import split_turn_narrations
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
@@ -78,6 +84,64 @@ id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash,
 engine_version, schema_version, seed, status, created_at, updated_at, metadata,
 {CAMPAIGN_PARTS}
 """
+# The row, its document left out when its revision and hash are the ones this process keeps (four parameters, first).
+_CAMPAIGN_COLUMNS_UNLESS_KEPT = f"""
+id, workspace_id, owner_user_id, title, revision,
+CASE WHEN revision = %s AND state_hash = %s THEN NULL ELSE state_jsonb END, state_hash,
+engine_version, schema_version, seed, status, created_at, updated_at, metadata,
+CASE WHEN revision = %s AND state_hash = %s THEN NULL ELSE {CAMPAIGN_PARTS} END
+"""
+
+
+# The campaign document each campaign last had in this process, as stored (F2): a turn reads its campaign at its load
+# and again under its commit's lock, a megabyte each time at 1 MB. A read whose row still has the kept revision and
+# hash gets the kept document, and the database sends none; the hash is of the content, so a kept document is the
+# stored one. A commit keeps the document it wrote. The kept document is never handed out to change: a reader gets a
+# copy, the commit (which only reads it) the document itself.
+@dataclass(frozen=True)
+class _Kept:
+    revision: int
+    state_hash: str
+    document: dict[str, Any]
+    part_hashes: dict[str, str]
+    at: float
+
+
+_KEPT: OrderedDict[tuple[str, str], _Kept] = OrderedDict()
+_KEPT_LOCK = threading.Lock()
+_MAX_KEPT = 16
+_KEPT_TTL_SECONDS = 900.0
+
+
+def clear_kept_documents() -> None:
+    """Forget the kept campaign documents (each is read whole when next asked for)."""
+    with _KEPT_LOCK:
+        _KEPT.clear()
+
+
+def _kept(key: tuple[str, str]) -> _Kept | None:
+    with _KEPT_LOCK:
+        kept = _KEPT.get(key)
+        if kept is not None and time.monotonic() - kept.at > _KEPT_TTL_SECONDS:
+            _KEPT.pop(key, None)
+            return None
+        if kept is not None:
+            _KEPT.move_to_end(key)
+        return kept
+
+
+def _keep(key: tuple[str, str], revision: int, digest: str, document: dict[str, Any] | None,
+          part_hashes: Mapping[str, str]) -> None:
+    with _KEPT_LOCK:
+        if document is None:
+            _KEPT.pop(key, None)
+            return
+        _KEPT[key] = _Kept(revision, digest, document, dict(part_hashes), time.monotonic())
+        _KEPT.move_to_end(key)
+        while len(_KEPT) > _MAX_KEPT:
+            _KEPT.popitem(last=False)
+
+
 # A written row's columns, its state left out (the writer has it): ``_campaign(row, state=...)``.
 _CAMPAIGN_ROW_COLUMNS = """
 id, workspace_id, owner_user_id, title, revision, NULL, state_hash,
@@ -214,14 +278,27 @@ class PostgresRpgRepository:
         campaign_id: str,
         *,
         for_update: bool = False,
+        read_only: bool = False,
     ) -> dict[str, Any] | None:
+        """The campaign; ``read_only``: the caller never changes its ``state`` (a commit), so a kept document is not
+        copied for it."""
         suffix = " FOR UPDATE" if for_update else ""
+        key = (context.workspace_id, campaign_id)
+        kept = _kept(key)
+        version = (kept.revision, kept.state_hash) if kept is not None else (-1, "")
         row = self.connection.execute(
-            f"SELECT {_CAMPAIGN_COLUMNS} FROM omnix_rpg_campaigns "
+            f"SELECT {_CAMPAIGN_COLUMNS_UNLESS_KEPT} FROM omnix_rpg_campaigns "
             f"WHERE id = %s AND workspace_id = %s{suffix}",
-            (campaign_id, context.workspace_id),
+            (*version, *version, campaign_id, context.workspace_id),
         ).fetchone()
-        return _campaign(row) if row is not None else None
+        if row is None:
+            return None
+        if row[5] is None and kept is not None:  # still the kept revision and hash: the database sent no document
+            return _campaign(row, state=kept.document if read_only else copy_state(kept.document),
+                             part_hashes=kept.part_hashes)
+        state, part_hashes = assembled(dict(row[5]), row[14])
+        _keep(key, int(row[4]), str(row[6]), state if read_only else copy_state(state), part_hashes)
+        return _campaign(row, state=state, part_hashes=part_hashes)
 
     def lock_campaign(self, context: TenantContext, campaign_id: str) -> bool:
         """Lock the campaign row ``FOR UPDATE`` without reading its state; False when there is none."""
@@ -411,8 +488,9 @@ class PostgresRpgRepository:
             raise EntityNotFound(campaign_id)
 
         existing = None if submission_open else self.get_turn_by_submission(context, campaign_id, submission_id)
-        if existing is not None:
-            return {"idempotent_replay": True, "campaign": campaign, "turn": existing}
+        if existing is not None:  # the campaign as read (it may be the kept document): a copy goes out
+            return {"idempotent_replay": True, "campaign": {**campaign, "state": copy_state(campaign["state"])},
+                    "turn": existing}
         # The turns' narrations are kept beside the document, not in it (RQ-1.4).
         next_state, narrations = split_turn_narrations(dict(next_state))
 
@@ -496,6 +574,9 @@ class PostgresRpgRepository:
         if updated is None:
             raise RevisionConflict(f"campaign changed while committing turn: {campaign_id}")
         updated_campaign = _campaign(updated, state=next_state, part_hashes=form.part_hashes)
+        # The document as now stored, kept for the next turn's reads: what the commit wrote, and the parts it left.
+        _keep((context.workspace_id, campaign_id), resulting_revision, after_hash,
+              stored_document(form, campaign["state"]), form.part_hashes)
         self.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
 
         self.connection.execute(

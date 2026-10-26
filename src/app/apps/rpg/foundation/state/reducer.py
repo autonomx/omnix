@@ -12,7 +12,6 @@ quest it does not know) raises ``ChangeRejected``; resolvers check before they p
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.foundation.safe_values import copy_state
@@ -137,7 +136,7 @@ class _Writer:
                 continue
             outermost = [other for other in outermost if other[: len(path)] != path]
             outermost.append(path)
-        return [{"op": "add", "path": "".join(f"/{_escape(key)}" for key in path), "value": deepcopy(self.get(path))}
+        return [{"op": "add", "path": "".join(f"/{_escape(key)}" for key in path), "value": copy_state(self.get(path))}
                 for path in outermost]
 
 
@@ -221,7 +220,7 @@ def _quest_rows(writer: _Writer, quest_id: str) -> tuple[list[dict[str, Any]], i
 
 def _write_quests(writer: _Writer, rows: list[dict[str, Any]]) -> None:
     writer.set(("simulation_state", "quest_state", "quests"), rows)
-    writer.set(("state", "quests"), deepcopy(rows))  # the play screen's projection
+    writer.set(("state", "quests"), copy_state(rows))  # the play screen's projection
 
 
 def _move_hero(writer: _Writer, change: LocationChanged) -> None:
@@ -248,7 +247,7 @@ def _move_hero(writer: _Writer, change: LocationChanged) -> None:
     if place:
         exits = place.get("exits") if isinstance(place.get("exits"), dict) else {}
         writer.set(("simulation_state", "location_state"), {"current_location_id": location_id,
-                                                             "current_location": deepcopy(place),
+                                                             "current_location": copy_state(place),
                                                              "available_exits": dict(exits)})
     if not change.location_name:
         return
@@ -398,7 +397,7 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             if isinstance(writer.get(("state", "player")), dict):  # the play screen's sheet shows it
                 writer.set(("state", "player", "resources", name), dict(pool))
     elif isinstance(change, MapStateProjected):
-        writer.set(("state", "map_state"), deepcopy(change.map_state))
+        writer.set(("state", "map_state"), copy_state(change.map_state))
         writer.set(("state", "current_location_id"), change.location_id)
         if isinstance(writer.get(("state", "player")), dict):
             writer.set(("state", "player", "location_id"), change.location_id)
@@ -609,7 +608,7 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             raise ChangeRejected("there is no fight to end")
         writer.set(("simulation_state", "combat_state"), {**combat, "active": False, "outcome": change.outcome})
     elif isinstance(change, CombatAdvanced):
-        writer.set(("simulation_state", "combat_state"), deepcopy(change.combat_state))
+        writer.set(("simulation_state", "combat_state"), copy_state(change.combat_state))
     elif isinstance(change, CompanionHpChanged):
         party = dict(writer.get(_PLAYER + ("party_state",)) or {})
         companions = [dict(row) for row in party.get("companions") or () if isinstance(row, dict)]
@@ -636,7 +635,7 @@ def _restore(writer: _Writer, change: RevisionRestored) -> None:
     earlier = change.document
     for key in ("state", "simulation_state"):
         if isinstance(earlier.get(key), dict):
-            writer.set((key,), deepcopy(earlier[key]))
+            writer.set((key,), copy_state(earlier[key]))
     # The game's runtime sections; the interactions section is the campaign's bookkeeping, which goes on.
     game_runtime = {path[1] for name, paths in SECTION_PATHS.items() if name != "interactions"
                     for path in paths if path[0] == "runtime_state"}
@@ -645,7 +644,7 @@ def _restore(writer: _Writer, change: RevisionRestored) -> None:
     for key in game_runtime:
         runtime.pop(key, None)
         if key in before:
-            runtime[key] = deepcopy(before[key])
+            runtime[key] = copy_state(before[key])
     writer.set(("runtime_state",), runtime)
     manifest = earlier.get("manifest") if isinstance(earlier.get("manifest"), dict) else {}
     for key in ("turn_count", "current_turn"):
@@ -747,15 +746,15 @@ def _show_timeline(writer: _Writer, timeline: dict[str, Any], events: list[dict[
     """The timeline written with its events, and the recent and last interactions it shows."""
     timeline["events"] = events
     writer.set(_RUNTIME + ("interaction_timeline",), timeline)
-    writer.set(_RUNTIME + ("recent_interactions",), deepcopy(events[-RECENT_INTERACTIONS_KEPT:]))
+    writer.set(_RUNTIME + ("recent_interactions",), copy_state(events[-RECENT_INTERACTIONS_KEPT:]))
     if events:
-        writer.set(_RUNTIME + ("last_interaction",), deepcopy(events[-1]))
+        writer.set(_RUNTIME + ("last_interaction",), copy_state(events[-1]))
 
 
 def _record_interaction(writer: _Writer, event: dict[str, Any]) -> None:
     timeline = dict(writer.get(_RUNTIME + ("interaction_timeline",)) or {})
-    events = [deepcopy(row) for row in timeline.get("events") or () if isinstance(row, dict)]
-    events = [*events, deepcopy(event)][-TIMELINE_KEPT:]
+    events = [copy_state(row) for row in timeline.get("events") or () if isinstance(row, dict)]
+    events = [*events, copy_state(event)][-TIMELINE_KEPT:]
     timeline.update(format_version=event.get("format_version") or timeline.get("format_version"),
                     last_sequence=event.get("sequence"), state_revision=event.get("state_revision"))
     writer.set(_RUNTIME + ("interaction_seq",), event.get("sequence"))
@@ -781,7 +780,7 @@ def _replay_interactions(writer: _Writer, replayed: list[dict[str, Any]]) -> Non
 
 def _record_lifecycle(writer: _Writer, change: LifecycleRecorded) -> None:
     lifecycles = dict(writer.get(_RUNTIME + ("interaction_lifecycles",)) or {})
-    lifecycles[change.interaction_id] = deepcopy(change.lifecycle)
+    lifecycles[change.interaction_id] = copy_state(change.lifecycle)
     writer.set(_RUNTIME + ("interaction_lifecycles",), _kept_last(lifecycles, LIFECYCLES_KEPT))
     if change.turn_id:
         by_turn = dict(writer.get(_RUNTIME + ("interaction_id_by_turn",)) or {})
@@ -792,7 +791,7 @@ def _record_lifecycle(writer: _Writer, change: LifecycleRecorded) -> None:
     for value in timeline.get("events") if isinstance(timeline.get("events"), list) else ():
         event = dict(value) if isinstance(value, dict) else {}
         if str(event.get("interaction_id") or "") == change.interaction_id:
-            event["lifecycle"] = deepcopy(change.lifecycle)
+            event["lifecycle"] = copy_state(change.lifecycle)
             enrichment = change.lifecycle.get("narration_enrichment")
             if isinstance(enrichment, dict) and enrichment:
                 event["narration_enrichment"] = dict(enrichment)
@@ -811,7 +810,7 @@ def _present_interaction(writer: _Writer, change: InteractionPresented) -> None:
         len(rows) - 1)
     if not isinstance(rows[index], dict):
         raise ChangeRejected("the recent interaction is no record")
-    rows[index] = {**rows[index], **deepcopy(change.fields)}
+    rows[index] = {**rows[index], **copy_state(change.fields)}
     writer.set(_RUNTIME + ("recent_interactions",), rows)
 
 

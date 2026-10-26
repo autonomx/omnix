@@ -1654,6 +1654,21 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/apps/rpg/foundation/persistence/rpg_repository.py",
+      "symbol": "_KEPT",
+      "category": "cache",
+      "reason": "Each campaign's last stored document in this process, with its revision and hash (F2); a read whose row still has them gets it instead of the document, so it is never stale; bounded, expiring, and cleared by clear_kept_documents; a miss reads the row.",
+      "max_entries_symbol": "_MAX_KEPT",
+      "ttl_symbol": "_KEPT_TTL_SECONDS",
+      "invalidation": "clear_kept_documents"
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/persistence/rpg_repository.py",
+      "symbol": "_KEPT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
       "path": "src/app/apps/rpg/genesis/worlds/world_sharing.py",
       "symbol": "_DEVICE_FLOWS",
       "category": "per-connection",

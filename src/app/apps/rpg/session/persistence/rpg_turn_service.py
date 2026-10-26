@@ -117,7 +117,7 @@ def persist_foreground_turn(
                 ):
                     raise RuntimeError("foreground submission execution fence was rejected")
 
-        campaign = work.rpg.get_campaign(context, session_id, for_update=True)
+        campaign = work.rpg.get_campaign(context, session_id, for_update=True, read_only=True)  # the commit's "before"
         if campaign is None:
             raise RuntimeError(
                 f"RPG campaign {session_id} was not initialized in PostgreSQL before the turn"

@@ -13,6 +13,7 @@ from app.apps.rpg.foundation.persistence.document_parts import (
     canonical_json,
     hash_matches,
     state_hash,
+    stored_document,
     stored_form,
 )
 
@@ -110,3 +111,33 @@ def test_a_hash_from_before_parts_is_the_whole_texts_sha256() -> None:
     assert hash_matches(document, legacy)
     document["turn_count"] = 4
     assert not hash_matches(document, legacy)
+
+
+def test_the_stored_document_after_a_write_is_what_a_read_of_it_returns() -> None:
+    head, parts = _stored(_document())
+    stored, stored_hashes = assembled(head, parts)
+    after = deepcopy(stored)
+    after["runtime_state"]["interaction_timeline"].append({"turn": 201, "text": ("y", "z")})  # a tuple, as JSON a list
+    after["state"]["player"]["level"] = 3
+    form = stored_form(after, before=stored, stored_parts=stored_hashes)
+    kept = stored_document(form, stored)
+    assert kept == json.loads(canonical_json(after))  # JSON's own types, as the database gives it back
+    assert kept["state"]["player_journal_archive"] is stored["state"]["player_journal_archive"]  # unchanged: shared
+    assert stored_document(form, {"state": {}}) is None  # a part the given document lacks
+
+
+def test_a_read_and_a_kept_document_keep_jsonb_key_order() -> None:
+    """The published-world golden: a kept document in sorted-key order changed who acted first in a fight. JSONB
+    keeps an object's keys shorter first, then bytewise; the game iterates in that order."""
+    def jsonb(keys):
+        return sorted(keys, key=lambda key: (len(key.encode("utf-8")), key.encode("utf-8")))
+
+    head, parts = _stored(_document())
+    stored, stored_hashes = assembled(head, parts)
+    assert list(stored["state"]) == jsonb(stored["state"])  # the section a part was put in
+    after = deepcopy(stored)
+    after["runtime_state"]["interaction_timeline"].append({"zz": 1, "a": 2, "turn": 3})
+    form = stored_form(after, before=stored, stored_parts=stored_hashes)
+    kept = stored_document(form, stored)
+    assert list(kept) == jsonb(kept) and list(kept["runtime_state"]) == jsonb(kept["runtime_state"])
+    assert list(kept["runtime_state"]["interaction_timeline"][-1]) == ["a", "zz", "turn"]
