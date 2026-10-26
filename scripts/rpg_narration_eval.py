@@ -161,6 +161,12 @@ def contradictions(text: str, found: list[dict[str, Any]], catalog: intent.Catal
 
 # --- the campaign script ----------------------------------------------------------------------------------------
 
+def speaker_items(world: str, scene: str) -> list[dict[str, Any]]:
+    """The dev items of a scene that address someone (the speaker turns)."""
+    return [item for item in intent.load_items("dev") if item["world"] == world and item["scene"] == scene
+            and item["action_family"] in SPEAKER_FAMILIES and item["target_entity"]]
+
+
 def campaign_script(world: str, turns: int, catalog: dict[str, Any], rng: random.Random) -> list[dict[str, Any]]:
     """The inputs of one campaign: per scene visit, travel there, then speaker turns and other turns."""
     dev = [item for item in intent.load_items("dev") if item["world"] == world]
@@ -176,7 +182,8 @@ def campaign_script(world: str, turns: int, catalog: dict[str, Any], rng: random
         speak = [item for item in dev if item["scene"] == scene and item["action_family"] in SPEAKER_FAMILIES
                  and item["target_entity"] in present]
         other = [item for item in dev if item["scene"] == scene and item["action_family"] in OTHER_FAMILIES]
-        block = [("speak", rng.choice(speak)) for _ in range(11) if speak] + [("other", rng.choice(other)) for _ in range(3) if other]
+        # N1 wants at least 600 of 900 turns with a speaker: 13 words with someone to 2 other turns a visit.
+        block = [("speak", rng.choice(speak)) for _ in range(13) if speak] + [("other", rng.choice(other)) for _ in range(2) if other]
         rng.shuffle(block)
         for kind, item in block:
             script.append({"scene": scene, "input": item["input"], "family": item["action_family"],
@@ -287,14 +294,15 @@ class Runner:
         session_id = self.worlds.launch(world)
         records: list[dict[str, Any]] = []
         previous: list[str] = []
-        script = campaign_script(world, turns, self.catalog, rng)
+        script = iter(campaign_script(world, turns * 4, self.catalog, rng))
         current = self.worlds.load(session_id)
         before = intent.material_state(current)
-        for index, step in enumerate(script, 1):
+        for index in range(1, turns + 1):
             # Who is here is the campaign's own (people keep their routines, RQ-2.7), not the catalog's scene.
             present = [catalog.resolve(npc) or str(npc)
                        for npc in (((current.get("simulation_state") or {}).get("present_npc_state") or {})
                                    .get("present_npc_ids") or ())]
+            step = self.next_step(world, script, current, present, rng)
             calls_before = len(self.calls())
             started = time.perf_counter()
             response = self.client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": step["input"]},
@@ -338,8 +346,27 @@ class Runner:
                 record["judge"] = self.judge_turn(record)
             previous.append(visible)
             records.append(record)
-            print(f"{world} {index}/{len(script)}: {response.status_code} {round(elapsed)} ms", file=sys.stderr)
+            print(f"{world} {index}/{turns}: {response.status_code} {round(elapsed)} ms", file=sys.stderr)
         return records
+
+    def next_step(self, world: str, script: Any, current: dict[str, Any], present: list[str],
+                  rng: random.Random) -> dict[str, Any]:
+        """The campaign's next input, as a player would give it here and now: a fight under way is fought to its end,
+        and a word for someone away at this hour goes to someone of the scene who is here (that the game says who is
+        away is the dialogue suite's, RQ-3.3; this eval measures narration, with at least 600 speaker turns)."""
+        simulation = current.get("simulation_state") or {}
+        if ((simulation.get("combat_state") or {}).get("active")) is True:
+            return {"scene": "fight", "input": "attack", "family": "attack", "expected_speaker": None}
+        for _ in range(20):  # a word for no one here is passed over
+            step = next(script)
+            if not step["expected_speaker"] or step["expected_speaker"] in present:
+                return step
+            here = [item for item in speaker_items(world, step["scene"]) if item["target_entity"] in present]
+            if here:
+                item = rng.choice(here)
+                return {**step, "input": item["input"], "family": item["action_family"],
+                        "expected_speaker": item["target_entity"], "corpus_id": item["id"]}
+        return step
 
     def judge_turn(self, record: dict[str, Any]) -> dict[str, Any] | None:
         from app.providers.base import ChatMessage

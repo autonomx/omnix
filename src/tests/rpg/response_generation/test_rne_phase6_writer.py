@@ -164,3 +164,17 @@ def test_deterministic_writer_never_has_a_character_recite_their_dossier() -> No
     spoken = [block.text for block in result.blocks if block.speaker_id]
     assert spoken
     assert not any("Keeps the Flagon" in text or "Name:" in text for text in spoken)
+
+
+def test_a_dialogue_no_one_here_speaks_is_planned_as_the_action_it_is() -> None:
+    """The narration eval (Vesper-9, no model): "what if I punched the union leader?" asks no one present, and a
+    dialogue beat with no speaker failed validation (invalid_speaker) instead of telling the turn."""
+    from app.apps.rpg.narration.narrative_engine import BeatKind
+
+    request = TurnPresentationRequest(
+        request_id="request:nobody", turn_id="turn:nobody", campaign_id="campaign:writer",
+        player_input="what if I punched the union leader?", presentation_profile=PresentationProfile.FAST,
+        metadata={"response_mode": "dialogue"},
+    )
+    plan = DeterministicBeatPlanner().plan(request, bran_fixture_evidence())
+    assert plan.beats and all(beat.kind is not BeatKind.DIALOGUE for beat in plan.beats)

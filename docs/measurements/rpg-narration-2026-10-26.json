@@ -1,0 +1,332 @@
+{
+  "by_world": {
+    "aurelia": {
+      "correct_speaker": {
+        "n": 223,
+        "rate": 0.8969,
+        "successes": 200,
+        "wilson_lower": 0.85,
+        "wilson_upper": 0.9303
+      },
+      "empty_narration": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "engine_claim_validation_failed": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "judge_continuous": {
+        "n": 299,
+        "rate": 0.9465,
+        "successes": 283,
+        "wilson_lower": 0.9149,
+        "wilson_upper": 0.9668
+      },
+      "judge_grounded": {
+        "n": 299,
+        "rate": 0.8763,
+        "successes": 262,
+        "wilson_lower": 0.8341,
+        "wilson_upper": 0.9089
+      },
+      "judge_varied": {
+        "n": 299,
+        "rate": 0.786,
+        "successes": 235,
+        "wilson_lower": 0.736,
+        "wilson_upper": 0.8287
+      },
+      "near_duplicate": {
+        "n": 300,
+        "rate": 0.0033,
+        "successes": 1,
+        "wilson_lower": 0.0006,
+        "wilson_upper": 0.0186
+      },
+      "private_canon_leak": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "state_contradictions": {
+        "n": 300,
+        "rate": 0.0033,
+        "successes": 1,
+        "wilson_lower": 0.0006,
+        "wilson_upper": 0.0186
+      },
+      "turn_failures": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      }
+    },
+    "starter": {
+      "correct_speaker": {
+        "n": 65,
+        "rate": 0.8923,
+        "successes": 58,
+        "wilson_lower": 0.794,
+        "wilson_upper": 0.9468
+      },
+      "empty_narration": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "engine_claim_validation_failed": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "judge_continuous": {
+        "n": 300,
+        "rate": 0.4633,
+        "successes": 139,
+        "wilson_lower": 0.4077,
+        "wilson_upper": 0.5199
+      },
+      "judge_grounded": {
+        "n": 300,
+        "rate": 0.4167,
+        "successes": 125,
+        "wilson_lower": 0.3623,
+        "wilson_upper": 0.4732
+      },
+      "judge_varied": {
+        "n": 300,
+        "rate": 0.2967,
+        "successes": 89,
+        "wilson_lower": 0.2478,
+        "wilson_upper": 0.3507
+      },
+      "near_duplicate": {
+        "n": 300,
+        "rate": 0.61,
+        "successes": 183,
+        "wilson_lower": 0.5537,
+        "wilson_upper": 0.6635
+      },
+      "private_canon_leak": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "state_contradictions": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "turn_failures": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      }
+    },
+    "vesper-9": {
+      "correct_speaker": {
+        "n": 80,
+        "rate": 0.9375,
+        "successes": 75,
+        "wilson_lower": 0.8619,
+        "wilson_upper": 0.973
+      },
+      "empty_narration": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "engine_claim_validation_failed": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "judge_continuous": {
+        "n": 298,
+        "rate": 0.9597,
+        "successes": 286,
+        "wilson_lower": 0.9309,
+        "wilson_upper": 0.9768
+      },
+      "judge_grounded": {
+        "n": 298,
+        "rate": 0.9295,
+        "successes": 277,
+        "wilson_lower": 0.8947,
+        "wilson_upper": 0.9534
+      },
+      "judge_varied": {
+        "n": 298,
+        "rate": 0.4866,
+        "successes": 145,
+        "wilson_lower": 0.4304,
+        "wilson_upper": 0.5431
+      },
+      "near_duplicate": {
+        "n": 300,
+        "rate": 0.4333,
+        "successes": 130,
+        "wilson_lower": 0.3785,
+        "wilson_upper": 0.4899
+      },
+      "private_canon_leak": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "state_contradictions": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      },
+      "turn_failures": {
+        "n": 300,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0126
+      }
+    }
+  },
+  "calibration_template_rows_written": 0,
+  "contradiction_reasons": {
+    "blow": 1
+  },
+  "database": "omnix_rq_main",
+  "elapsed_s": 4888.9,
+  "gates": {
+    "N1 (from RQ-3)": "contradictions upper <= 0.020; correct speaker lower >= 0.985; grounded lower >= 0.93 (calibrated judge only); near-duplicate <= 0.05"
+  },
+  "judge_calibration": {
+    "gates": false,
+    "labelled_items": 0,
+    "reason": "the human labels are not complete; the rubric does not gate",
+    "required": 150,
+    "status": "uncalibrated"
+  },
+  "judged": true,
+  "measured_on": "2026-10-25",
+  "measurement": "RPG narration over published worlds (RQ-0.6)",
+  "metrics": {
+    "correct_speaker": {
+      "n": 368,
+      "rate": 0.9049,
+      "successes": 333,
+      "wilson_lower": 0.8706,
+      "wilson_upper": 0.9308
+    },
+    "empty_narration": {
+      "n": 900,
+      "rate": 0.0,
+      "successes": 0,
+      "wilson_lower": 0.0,
+      "wilson_upper": 0.0043
+    },
+    "engine_claim_validation_failed": {
+      "n": 900,
+      "rate": 0.0,
+      "successes": 0,
+      "wilson_lower": 0.0,
+      "wilson_upper": 0.0043
+    },
+    "judge_continuous": {
+      "n": 897,
+      "rate": 0.7893,
+      "successes": 708,
+      "wilson_lower": 0.7614,
+      "wilson_upper": 0.8147
+    },
+    "judge_grounded": {
+      "n": 897,
+      "rate": 0.7402,
+      "successes": 664,
+      "wilson_lower": 0.7106,
+      "wilson_upper": 0.7679
+    },
+    "judge_varied": {
+      "n": 897,
+      "rate": 0.5229,
+      "successes": 469,
+      "wilson_lower": 0.4901,
+      "wilson_upper": 0.5554
+    },
+    "near_duplicate": {
+      "n": 900,
+      "rate": 0.3489,
+      "successes": 314,
+      "wilson_lower": 0.3185,
+      "wilson_upper": 0.3806
+    },
+    "private_canon_leak": {
+      "n": 900,
+      "rate": 0.0,
+      "successes": 0,
+      "wilson_lower": 0.0,
+      "wilson_upper": 0.0043
+    },
+    "state_contradictions": {
+      "n": 900,
+      "rate": 0.0011,
+      "successes": 1,
+      "wilson_lower": 0.0002,
+      "wilson_upper": 0.0063
+    },
+    "turn_failures": {
+      "n": 900,
+      "rate": 0.0,
+      "successes": 0,
+      "wilson_lower": 0.0,
+      "wilson_upper": 0.0043
+    }
+  },
+  "model_calls_per_turn": 0.78,
+  "provider": {
+    "effort": "low",
+    "model": "sonnet",
+    "provider": "claude_cli",
+    "resolved_models": [
+      "claude-sonnet-5-5",
+      "sonnet"
+    ]
+  },
+  "revision": "6797790065",
+  "schema_version": 1,
+  "turns": 900,
+  "turns_addressing_someone_away": 314,
+  "turns_per_world": 300,
+  "turns_with_expected_speaker": 368,
+  "worlds": [
+    "aurelia",
+    "vesper-9",
+    "starter"
+  ]
+}

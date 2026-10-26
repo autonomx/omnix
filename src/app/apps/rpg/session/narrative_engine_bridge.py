@@ -87,11 +87,15 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
     visible = _mapping(result.get("visible_response"))
     visible_npc = _mapping(visible.get("npc"))
     resolved = _mapping(result.get("resolved_result") or result.get("result"))
-    # The turn's target speaks only when it is a person: a journey's place, an item or an offer is no speaker.
+    # The turn's target speaks only when it is a person: a journey's place, an item or an offer is no speaker. A
+    # world's own people are persons whatever their ids look like (Vesper-9's are "ent:actors:...").
+    from app.apps.rpg.foundation.state.people import world_people
+
+    people = world_people(_sections.simulation_state_of(_mapping(result.get("session"))))
     target = _text(resolved.get("target_id"))
     target_kind = _text(resolved.get("target_kind")).casefold()
     typed_as = target.split(":", 1)[0].casefold() if ":" in target else ""
-    if (typed_as and typed_as != "npc") or target_kind not in {"", "npc", "person"}:
+    if target not in people and ((typed_as and typed_as != "npc") or target_kind not in {"", "npc", "person"}):
         target = ""
     raw_id = _text(
         npc.get("speaker_id")
@@ -104,7 +108,7 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
         or (resolved.get("target_name") if target else "")
         or "NPC"
     )
-    if raw_id and not raw_id.startswith("npc:"):
+    if raw_id and raw_id not in people and not raw_id.startswith("npc:"):
         raw_id = f"npc:{raw_id.casefold().replace(' ', '_')}"
     if not raw_id:
         raw_id = f"npc:{name.casefold().replace(' ', '_')}"

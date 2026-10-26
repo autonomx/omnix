@@ -335,7 +335,10 @@ class DeterministicBeatPlanner:
 
         beats: list[NarrativeBeat] = []
         _append_scene_beats(beats, request, narrator_evidence)
-        if mode == "dialogue" or request.target_actor_id:
+        # A dialogue needs someone to speak it: a social turn no one here answers ("what if I punched the union
+        # leader?") is told as the action it is.
+        speaks = bool(speaker or request.metadata.get("dialogue_speaker_ids"))
+        if speaks and (mode == "dialogue" or request.target_actor_id):
             _dialogue_beats(
                 beats,
                 request,
