@@ -159,3 +159,11 @@ def test_a_quest_someone_offers_is_no_deed_of_the_heros_but_taking_it_is() -> No
     assert intent.changes(intent.material_state(before), intent.material_state(offered)) == []
     assert [change["kind"] for change in intent.changes(intent.material_state(offered),
                                                          intent.material_state(taken))] == ["quest_changed"]
+
+
+def test_a_journey_set_out_for_a_place_further_off_is_a_move_to_that_place() -> None:
+    found = [{"kind": "location", "to": "ent:places:null-chapel"}]
+    meant = intent.observed_reading(found, {"family": "move", "target_ref": "ent:places:undertone"}, {})
+    assert meant == {"family": "move", "target_ref": "ent:places:undertone"}  # arrived on the way there
+    moved = intent.observed_reading(found, {"family": "talk", "target_ref": None}, {})
+    assert moved == {"family": "move", "target_ref": "ent:places:null-chapel"}

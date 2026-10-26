@@ -1299,10 +1299,8 @@
      "buyer": "",
      "creatures": [],
      "exits": [
-      "ent:places:saint-voltage-market",
-      "ent:places:black-rain-station",
-      "ent:places:halcyon-memory-clinic",
-      "ent:places:undertone"
+      "ent:places:null-chapel",
+      "ent:places:black-rain-station"
      ],
      "location_id": "ent:places:tidebreak-docks",
      "offers": [],

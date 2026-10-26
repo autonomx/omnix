@@ -232,7 +232,9 @@ def observed_reading(found: list[dict[str, Any]], static: dict[str, Any], sessio
         return None
     service = ((session.get("runtime_state") or {}).get("last_turn_contract") or {}).get("service_result") or {}
     if "location" in kinds:
-        return {"family": "move", "target_ref": kinds["location"]["to"]}
+        # A journey to a place further off arrives on its way there (time.md): the place meant is the one set out for.
+        meant = static.get("target_ref") if static.get("family") == "move" else None
+        return {"family": "move", "target_ref": meant or kinds["location"]["to"]}
     if "combat_started" in kinds or "npc_hurt" in kinds or "player_hurt" in kinds:
         target = (kinds.get("npc_hurt") or {}).get("ids", [None])[0] or static.get("target_ref")
         return {"family": "attack", "target_ref": target}
