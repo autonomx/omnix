@@ -70,9 +70,9 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
 
     first = read_play_sections(world_id)
     assert not first["saved"] and first["published_revision"] is not None
-    lore = {"economy": "derived", "routines": "authored", "knowledge": "derived", "pressures": "derived",
+    lore = {"economy": "derived", "routines": "authored", "knowledge": "derived", "pressures": "authored",
             "bestiary": "derived"}
-    assert first["readiness"]["published"] == lore  # Aurelia's author wrote its people's days; the rest is its lore
+    assert first["readiness"]["published"] == lore  # Aurelia's author wrote its people's days and its pressures
     assert first["references"]["people"] and first["references"]["places"]
 
     drafted = draft_play_sections_from_lore(world_id)["document"]

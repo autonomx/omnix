@@ -84,8 +84,9 @@ def test_escalation_event_is_not_repeated_on_later_ticks() -> None:
         "pressure_tick",
         "pressure_escalated",
     ]
-    assert [event.event_type for event in later] == ["pressure_tick"]
-    assert second["pressure_statuses"]["pressure:001"] == "escalated"
+    # Not escalated again: the world answers it (roadmap §7 Q-10), and holds it in check.
+    assert [event.event_type for event in later] == ["pressure_tick", "pressure_contained"]
+    assert second["pressure_statuses"]["pressure:001"] == "contained"
 
 
 def test_resolved_pressure_stops_runtime_mutation() -> None:

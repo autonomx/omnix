@@ -103,20 +103,22 @@ def test_resolved_pressure_stops_emitting_deltas() -> None:
     assert repeated_state["state_hash"] == resolved_state["state_hash"]
 
 
-def test_already_escalated_pressure_does_not_repeat_transition() -> None:
+def test_an_escalated_pressure_is_answered_by_the_world_and_stirs_again() -> None:
+    """Roadmap §7 Q-10: a rising pressure that escalated is held in check (it falls as a contained one does), never
+    escalated again on the next tick, and stirs again WORLD_ANSWER_SPAN below its escalation threshold."""
+    from app.apps.rpg.world.pressure_effects import WORLD_ANSWER_SPAN
+
     plan, state = _fixture("escalating")
-    state["cells"]["pressure:001"]["values"]["pressure_severity"] = 40
+    threshold = float(plan["pressures"][0]["escalation_threshold"])
+    state["cells"]["pressure:001"]["values"]["pressure_severity"] = threshold + 5
 
-    _, result = apply_pressure_tick(
-        plan,
-        state,
-        tick=2,
-        pressure_statuses={"pressure:001": "escalated"},
-    )
+    _, held = apply_pressure_tick(plan, state, tick=2, pressure_statuses={"pressure:001": "escalated"})
+    assert (held.effects[0].status_after, held.effects[0].escalated) == ("contained", False)
+    assert held.effects[0].severity_delta < 0
 
-    assert result.effects[0].status_after == "escalated"
-    assert result.effects[0].transitioned is False
-    assert result.effects[0].escalated is False
+    state["cells"]["pressure:001"]["values"]["pressure_severity"] = threshold - WORLD_ANSWER_SPAN + 1
+    _, stirring = apply_pressure_tick(plan, state, tick=3, pressure_statuses={"pressure:001": "contained"})
+    assert stirring.effects[0].status_after == "active" and stirring.effects[0].transitioned is True
 
 
 def test_pressure_tick_result_carries_reduction_receipt() -> None:

@@ -248,8 +248,8 @@
     "version": "1"
   },
   "rpg.ai_compact_dialogue.plan": {
-    "sha256": "0097dc646d5f3b3b974796dbde5cb8300306740d493b9cb1c75625b11e47f3f2",
-    "version": "2"
+    "sha256": "7199d4f81662193f2714795341810dfed672bc3290a2edc5b4d7a9c7ece05a9b",
+    "version": "3"
   },
   "rpg.ai_conversation_prompt_builder.build_npc_conversation_line_prompt": {
     "sha256": "b4d541d7a929afa4e4d44c7207df694029656e8e23001c32d76aa5b0afd74a51",

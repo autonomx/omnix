@@ -75,3 +75,19 @@ def test_a_reading_the_intent_call_chose_is_planned_at_the_models_own_confidence
     assert plan_action(reading) is None  # the grammar's own reading, unsure: the intent call decides
     planned = plan_action(reading, decided=True)
     assert planned is not None and (planned.mechanic, planned.target_id) == ("look", "iron_dagger")
+
+
+def test_a_question_about_a_place_elsewhere_is_no_look_at_it(monkeypatch) -> None:
+    from app.apps.rpg.foundation import llm_app_gateway
+    from app.apps.rpg.rules.intent.grammar import SceneEntity, SceneView
+    from app.apps.rpg.session.turn import intent
+
+    scene = SceneView((SceneEntity("npc:bran", "person", ("Bran",), here=True),
+                       SceneEntity("loc:pass", "place", ("the pass",), here=False)))
+
+    class _Gateway:
+        def generate(self, prompt, **_kwargs):
+            return '{"readings": [{"family": "look", "target_id": "loc:pass", "confidence": 0.9}]}'
+
+    monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
+    assert intent.read_with_model({}, scene, "what is the pass like?").reading is None  # asked, not looked at

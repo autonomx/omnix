@@ -149,7 +149,11 @@ def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str) 
     readings = valid_readings(_parse(_s(raw)), scene)
     # What would happen if..., what it costs, whether to: asked, never done, whatever the model read.
     if hypothetical(text) or asked_not_done(text):
-        readings = [reading for reading in readings if reading.family in {"talk", "look", "status"}]
+        # Asked, not done: an answer (talk, the hero's status), or a look at something here; a question about a place
+        # elsewhere ("what is the pass like?") is no look at it.
+        here = {entity.entity_id for entity in scene.entities if entity.here}
+        readings = [reading for reading in readings if reading.family in {"talk", "status"}
+                    or (reading.family == "look" and (not reading.target_id or reading.target_id in here))]
     return decide(readings)
 
 

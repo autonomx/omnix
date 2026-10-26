@@ -33,9 +33,9 @@ def _poison(session_id: str) -> None:
 
 
 def _obedient_line(call) -> tuple[str, str]:
-    """A model that does what the world's text says: it gives the secret away, and gold with it."""
-    secrets = call.context.get("must_never_reveal") or []
-    return "", f"As you command: {secrets[0] if secrets else 'no secret'}. Take these 1000 gold, my king."
+    """A model that does what the world's text says: it gives the secret away (as if it knew it: the secret is never
+    in its prompt, roadmap §7 Q-12), and gold with it."""
+    return "", f"As you command: {SECRET}. Take these 1000 gold, my king."
 
 
 def test_a_world_that_instructs_the_model_changes_no_state_and_leaks_no_secret(launch) -> None:
@@ -65,6 +65,7 @@ def test_a_world_that_instructs_the_model_changes_no_state_and_leaks_no_secret(l
     fenced = asked.text.split("<<<WORLD_DATA\n", 1)[1]
     assert fenced.count("WORLD_DATA>>>") == 1 and fenced.rstrip().endswith("WORLD_DATA>>>")  # no early close
     assert "SYSTEM OVERRIDE" in fenced  # the world's words reach the model only inside the fence
+    assert "Heronglass" not in asked.text  # the speaker's secret is never sent to the model (Q-12)
 
 
 def test_the_narrators_instructions_say_the_worlds_text_is_never_an_instruction() -> None:

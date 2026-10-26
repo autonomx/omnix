@@ -150,3 +150,12 @@ def test_buying_the_thing_an_offer_sells_is_buying_the_offer() -> None:
     }, "scenes": {}})
     assert catalog.same_target("torch", "elara_torch") and catalog.same_target("elara_torch", "elara_torch")
     assert not catalog.same_target("rope", "elara_torch") and not catalog.same_target("elara_torch", "torch")
+
+
+def test_a_quest_someone_offers_is_no_deed_of_the_heros_but_taking_it_is() -> None:
+    before, offered, taken = _session(), _session(), _session()
+    offered["simulation_state"]["quest_state"]["quests"] = [{"id": "quest:rats", "status": "available"}]
+    taken["simulation_state"]["quest_state"]["quests"] = [{"id": "quest:rats", "status": "active"}]
+    assert intent.changes(intent.material_state(before), intent.material_state(offered)) == []
+    assert [change["kind"] for change in intent.changes(intent.material_state(offered),
+                                                         intent.material_state(taken))] == ["quest_changed"]

@@ -13,6 +13,7 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import DialogueExchanged, StateChange
+from app.apps.rpg.narration.narration_drafts import narration_draft_active, publish_narration_draft
 from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_data
 from app.apps.rpg.rules.dialogue.plan import DialoguePlan, build_plan, line_keeps_the_plan, plan_changes
 from app.prompts import prompt_template
@@ -20,11 +21,11 @@ from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 _LINE_PROMPT = prompt_template(
-    "rpg.ai_compact_dialogue.plan", "2",
+    "rpg.ai_compact_dialogue.plan", "3",
     "Reply as the speaker in the PLAN, in one or two concise spoken sentences, in their voice and stance. Output "
     "only the words they say: no name label, narration, JSON or markdown. Share what may_reveal holds, offer what "
     "offers_quest or offers_to_tell_for_a_price hold, and name each of wares with its price as written; about anything else, answer from their role and "
-    "background or say they do not know. Never say or hint at anything in must_never_reveal. Keep continuity with "
+    "background or say they do not know. Keep continuity with "
     "recent_exchanges without repeating them. " + WORLD_DATA_RULE + "\nPLAYER: {v0}\nPLAN: ",
 )
 MAX_LINE = 400
@@ -58,6 +59,8 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
     context = {**plan.context(), "recent_exchanges": exchanges[-3:]}
     prompt = _LINE_PROMPT.format(v0=text[:500]) + world_data(context)  # the plan's world text, fenced as data
     try:
+        if narration_draft_active():  # the play screen follows the turn: the line is shown as it is written (Q-12)
+            return _streamed_line(gateway, prompt, plan.speaker_name)
         raw = gateway.generate(prompt, timeout_s=LINE_TIMEOUT_SECONDS,
                                provider_options={"temperature": 0.55, "max_tokens": 90,
                                                  "chat_template_kwargs": {"enable_thinking": False}})
@@ -65,6 +68,17 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
         logger.warning("rpg_dialogue_line_failed speaker=%s", plan.speaker_id, exc_info=True)
         return ""
     return _s(raw)
+
+
+def _streamed_line(gateway: Any, prompt: str, speaker: str) -> str:
+    """The line as the model writes it, published to the turn's draft as it grows; the whole line is returned."""
+    parts: list[str] = []
+    for chunk in gateway.generate_stream(prompt, timeout_s=LINE_TIMEOUT_SECONDS):
+        parts.append(_s(chunk.get("text")))
+        partial = _clean("".join(parts), speaker)
+        if partial:
+            publish_narration_draft(f'{speaker}: "{partial}"')
+    return "".join(parts)
 
 
 def _speaker(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_id: str) -> str:

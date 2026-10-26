@@ -45,13 +45,15 @@ class DialoguePlan:
     player_said: str = ""
 
     def context(self) -> dict[str, Any]:
-        """The plan as the line's writer is told it (secrets included, as what must not be said)."""
+        """The plan as the line's writer is told it. The speaker's secrets are not in it: the model cannot say what it
+        never sees, so the line can be shown as it is written (roadmap §7 Q-12); ``line_keeps_the_plan`` still checks
+        the written line against them."""
         return {key: value for key, value in {
             "speaker": self.speaker_name, "role": self.role, "stance": self.stance, "voice": self.voice,
             "personality": list(self.personality), "goals": list(self.goals), "background": self.background,
             "may_reveal": list(self.reveals), "offers_to_tell_for_a_price": list(self.for_a_price),
             "keeps_back_until_trusted": self.held_back, "offers_quest": self.quest_offer,
-            "wares": list(self.wares), "must_never_reveal": list(self.secrets),
+            "wares": list(self.wares),
         }.items() if value}
 
     def fallback_line(self) -> str:

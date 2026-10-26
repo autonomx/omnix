@@ -201,7 +201,10 @@ def changes(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any
         found.append({"kind": "party_joined", "ids": joined})
     if after["party"] != before["party"] and not joined:
         found.append({"kind": "party_changed"})
-    quests = [key for key, status in after["quests"].items() if before["quests"].get(key) != status]
+    # A quest someone now offers (new, "available") is the world's doing, not the hero's: what the hero did to a
+    # quest (took it, finished it, failed it) is.
+    quests = [key for key, status in after["quests"].items()
+              if before["quests"].get(key) != status and not (key not in before["quests"] and status == "available")]
     if quests:
         found.append({"kind": "quest_changed", "ids": quests})
     skills = [key for key, value in after["skills"].items() if value != before["skills"].get(key)]

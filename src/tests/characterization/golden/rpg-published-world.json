@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:808ee7e1f8bdc1d5a1132866d5ad1b3c482d379a683c16f5cfe9c53fe23da5cb",
+    "document_hash": "sha256:3a8bcff181f344ebf99f8a43824cfbbe8b4903e498646d3a534dee738ba59887",
     "facts": {
       "combat": {
         "active": false,
@@ -88,7 +88,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:6ec0e5d50c26f5de8e7574d8e8c5580e728302d6738e434b78e7e6fa5f19cde1",
+      "document_hash": "sha256:80d5ffb1e3630b59e864610c7a3da8abd82ba1aa8b46764f877752473af20dc4",
       "facts": {
         "combat": {
           "active": false,
@@ -229,7 +229,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:daf2b060be66dbb51c94eae05927af533f583bb02df733917f6bc9b8a1ce55b7",
+      "document_hash": "sha256:3c33d1f9605d0d69c97072da4a45d6634f218e2259cff7d08be9b66e043e8e53",
       "facts": {
         "combat": {
           "active": false,
@@ -379,7 +379,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:71d9a0bec8203250658fe2d5f89c729f2747385aa6691a801a9a551dc5d55fbe",
+      "document_hash": "sha256:a92779f226d0952885933f7731c9653e69330fcba4a9d56e11ade8e44a080acb",
       "facts": {
         "combat": {
           "active": false,
@@ -528,7 +528,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e52fb01deda494d750626f01c41faec464ccbc568d01b256298a4de165f17666",
+      "document_hash": "sha256:dfd9d1237e236d2d7b06ab79589018d6cfdf28e1be8ba6d19b150e6e8afd4dfe",
       "facts": {
         "combat": {
           "active": false,
@@ -678,7 +678,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:295c7e97b3a64b7efbde56dc580766c564a64478599aa8051d9778cefad6a0f7",
+      "document_hash": "sha256:493f09d2ed3b6348372f97375a93ab9378123fe06f97a0b6e482c51b38439341",
       "facts": {
         "combat": {
           "active": false,
@@ -838,7 +838,7 @@
           "removed": []
         },
         "quests": {
-          "Danger on the roads of Starfall March": "available"
+          "Echo beasts on the March roads": "available"
         },
         "survival": {
           "fatigue": 2,
@@ -846,7 +846,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e62847f625ffe71450c6768dd130144ad30344c164e78bfc0126274aa2c1bbb5",
+      "document_hash": "sha256:f24f34de5af3331f63d6bdf143b7798c8c975baa4b6a6aed2ea49e2879556f2f",
       "facts": {
         "combat": {
           "active": false,
@@ -876,7 +876,7 @@
         ],
         "purse_copper": 160,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1031,7 +1031,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:37931d426a3a8aec8dc94edcd3714f91561c6ce8c7f706785d78c67c8a59509f",
+      "document_hash": "sha256:b826017765b2f12522a3b4dbacf1205cf2eef246d127cdd0932a7e5b9d25e9c7",
       "facts": {
         "combat": {
           "active": false,
@@ -1061,7 +1061,7 @@
         ],
         "purse_copper": 160,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1175,7 +1175,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1e50622e4eadcbe9877c12cecc10fc810915db7c646f2e47c82ee2a0b14db34f",
+      "document_hash": "sha256:0f32eb8783ec6d58db5b0d74b3185aecc1298608c65b8889662edf0810d2200a",
       "facts": {
         "combat": {
           "active": false,
@@ -1205,7 +1205,7 @@
         ],
         "purse_copper": 160,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1325,7 +1325,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:eec1e3b60e8f3fdc4ebc3a5dfc963c91f2310cf3d0509e79203ddd6aa0820669",
+      "document_hash": "sha256:22a2a326f8e6581fb97d93ce23d9c0e89c80f3f6d9ebed79c7c35bbb9682b597",
       "facts": {
         "combat": {
           "active": false,
@@ -1355,7 +1355,7 @@
         ],
         "purse_copper": 160,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1474,7 +1474,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:2b33601d324ad57915d00fdbd183e751b905070ab91d042ff3c5da24e4bf2891",
+      "document_hash": "sha256:078d8b40a0e5a5a10f75b5971378a0beb4c78e88048775b47d779ba357482817",
       "facts": {
         "combat": {
           "active": false,
@@ -1505,7 +1505,7 @@
         ],
         "purse_copper": 124,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1628,7 +1628,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:2a9608f3d66295cf91043941273ce24a185334db9515355254a3c61c8a26e2f7",
+      "document_hash": "sha256:c40ad4db1a4a129d728995aca7c4406dcd6257c94edf7be64d991db7f2810a99",
       "facts": {
         "combat": {
           "active": false,
@@ -1657,7 +1657,7 @@
         ],
         "purse_copper": 129,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1773,7 +1773,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:d16bab4e16ae5d49424e1d7f867b2cb386b79891c06891d515e8f4ac3574620d",
+      "document_hash": "sha256:2b75fd87a1afb839415058e3e8a7acb4f068052bd11f3a2655b3305516825c8c",
       "facts": {
         "combat": {
           "active": false,
@@ -1802,7 +1802,7 @@
         ],
         "purse_copper": 129,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1934,7 +1934,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:4ca9476faa8e00632caabde5e7e1ae72ab6146ec1d6cc16f3a159ebb83af7491",
+      "document_hash": "sha256:f056d3db3635b128f85f6dc3213aba69881bd7216d16dea9b8a137afe4055be8",
       "facts": {
         "combat": {
           "active": false,
@@ -1963,7 +1963,7 @@
         ],
         "purse_copper": 329,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2033,6 +2033,7 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
@@ -2112,7 +2113,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:09a94ef32ec886395129cf974c15fa7095ebd69173b153b96beb67d42cae18f6",
+      "document_hash": "sha256:4d28947152891ecf0c94213be69f399483b637c6f7af486a97d19baad6777c62",
       "facts": {
         "combat": {
           "active": false,
@@ -2141,7 +2142,7 @@
         ],
         "purse_copper": 329,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2277,7 +2278,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:a287ddea75a06e0ffbc014f5e9b70b4eaac6c71dbec2091374ad1c1daaed5d43",
+      "document_hash": "sha256:b5c6ea043e10747b3010357b0a7286921bc669299204261a662a72572ac5048e",
       "facts": {
         "combat": {
           "active": false,
@@ -2307,7 +2308,7 @@
         ],
         "purse_copper": 329,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2445,7 +2446,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:2613402f6573bd49a74c0ac137fc96d45fda77efedcc03166174953ca24c9e13",
+      "document_hash": "sha256:9bdbaf8c16898912852f4d64775865c5a4916a7701a3c3787f29f1830011ef89",
       "facts": {
         "combat": {
           "active": false,
@@ -2475,7 +2476,7 @@
         ],
         "purse_copper": 329,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2585,7 +2586,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:8c0bdda8e619ce142c5351001b0de00b85f8e577ab927f565833bc6abbbc06f8",
+      "document_hash": "sha256:9754cbe02bfeee95c33fd0bd2670d70baed803f780dda8c7f797b96b6c2450ef",
       "facts": {
         "combat": {
           "active": false,
@@ -2615,7 +2616,7 @@
         ],
         "purse_copper": 319,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2732,7 +2733,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:deb2569d85466af4d1322ca58f3045630f5b1e25932701aa29a58e9503dd4067",
+      "document_hash": "sha256:b544908d3844a7fdd3f9df4921b2552262ce3ee9f3bf7324fb4e043e9685677f",
       "facts": {
         "combat": {
           "active": false,
@@ -2762,7 +2763,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2890,7 +2891,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cad72fec675fbd8d54ef3c89d67fd64b6b1d1bfe9949ad8920d431e62cd2c0b2",
+      "document_hash": "sha256:901c598976f76fe263ecfcf1176e9c68afe2cc7470dbe04d0a00565db08e376a",
       "facts": {
         "combat": {
           "active": false,
@@ -2919,7 +2920,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3054,7 +3055,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b023b9a2d9e799b2e78ae5c2dc5a7bdcc1b494dfb6fcf6187486360d2de1f4da",
+      "document_hash": "sha256:c630105423475f17e8261214e72d5efde1e7b1ef08589fdd2262c6a3bc3de6b7",
       "facts": {
         "combat": {
           "active": false,
@@ -3083,7 +3084,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3192,12 +3193,11 @@
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-glass-wight:1": 18,
+            "enemy:creature-sky-manta:1": 18,
             "npc:liora-fen": 100,
-            "player": 100
+            "player": 105
           }
         },
-        "hp": -5,
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
         "present_npc_ids": {
@@ -3213,20 +3213,20 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f4c4ff16d3bf703b8719a4aaaf921d0f22ea7a0a163f222727580a2855bdb73a",
+      "document_hash": "sha256:738637c914b691a4ed2a2a1f10ab34938415a645ad018b4889260e3548ade465",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-glass-wight:1": 18,
+            "enemy:creature-sky-manta:1": 18,
             "npc:liora-fen": 100,
-            "player": 100
+            "player": 105
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 100,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3244,7 +3244,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3394,9 +3394,9 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-glass-wight:1": 16,
+            "enemy:creature-sky-manta:1": 17,
             "npc:liora-fen": 100,
-            "player": 96
+            "player": 101
           }
         },
         "hp": -4,
@@ -3406,20 +3406,20 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:fa214713340767a813992cd46bc43ce51de5b12328b021df03b3f49585b57d8f",
+      "document_hash": "sha256:5ab89766cb990ade7ce0ec8485f6ef6f39d4787028e8db6a5e84373555652c36",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-glass-wight:1": 16,
+            "enemy:creature-sky-manta:1": 17,
             "npc:liora-fen": 100,
-            "player": 96
+            "player": 101
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 96,
+        "hp": 101,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3437,7 +3437,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3555,20 +3555,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:c698fa9b1cc52ef5e4e69d7a1f64491f6fe2f2be37c25544b8e59b634b45081a",
+      "document_hash": "sha256:fff398eafa5e6732705b135e14611c91836ae6abc62d74357cde0fe85e65182b",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-glass-wight:1": 16,
+            "enemy:creature-sky-manta:1": 17,
             "npc:liora-fen": 100,
-            "player": 96
+            "player": 101
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 96,
+        "hp": 101,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3586,7 +3586,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3674,32 +3674,31 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 15,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 101
           }
         },
-        "hp": -5,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:acc9d11c771d2bbf591d35b4b19b8d68d500d2ec60dcf68f7f94e60fec37c607",
+      "document_hash": "sha256:ebc56830cd59b716ebeea3db90e6df8a2d2f2800cae8829237bbec2674ceb1c2",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 15,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 101
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 91,
+        "hp": 101,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3717,7 +3716,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3788,11 +3787,9 @@
         "runtime_state/state_revision",
         "simulation_state/combat_state",
         "simulation_state/environment",
-        "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
-        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -3800,7 +3797,6 @@
         "changed_domains": [
           "time",
           "combat",
-          "player",
           "survival",
           "world",
           "narrative"
@@ -3811,7 +3807,6 @@
           "changed_domains": [
             "time",
             "combat",
-            "player",
             "survival",
             "world",
             "narrative"
@@ -3834,32 +3829,32 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 88
+            "player": 96
           }
         },
-        "hp": -3,
+        "hp": -5,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:dc035a1873bd5fd78aa7c8d24edecd40cb320ee26b6cfa136162fe799ce97ff9",
+      "document_hash": "sha256:cc2689ca2a7d0a2e34794b0accb0a4e2427612c7aaa4dc40c3ad769c1f1f4251",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 88
+            "player": 96
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 88,
+        "hp": 96,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3877,7 +3872,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3995,32 +3990,32 @@
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
-        "hp": -3,
+        "hp": -5,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b8c2cc056078e9a5532c3f6449ecbe8fcd1fb8a24c3dd2f2bf9182e5fd32a049",
+      "document_hash": "sha256:5cbf0731a78b46c8cb0886b0493cc5c41a8c30efe78a5d04f529d1e7abe9825e",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 85,
+        "hp": 91,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -4038,7 +4033,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4153,19 +4148,19 @@
     },
     {
       "changes": {
-        "hp": 20,
+        "hp": 14,
         "inventory": {
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:f7da58d1016ad52838ff8a71169d9133a1d8175216bd7646af278effbd7a080c",
+      "document_hash": "sha256:efb35c8c4c854e3b8b855a26e62864d9047c4c567592dbb4eba6b0822b82ca14",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
         "equipment": [
@@ -4188,7 +4183,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4308,14 +4303,14 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:32745fbb4d7fa38dbec566948694ca9b64e42dedc7b5e3daa79ac99b2bd9e58d",
+      "document_hash": "sha256:7ee60d9aeb98f1f639a8d741bdf50960500745a8332b32486c2a535d582dec94",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
         "equipment": [
@@ -4338,7 +4333,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4453,14 +4448,14 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:7258e8cab05f0d9d8241aa53e46f4b72ec1e2eb9e7f86cb7c68f7633e6fcbcbf",
+      "document_hash": "sha256:7fc274a3fdc914c981724d3d64c02eb6739471401c5a1736cec33d2882868733",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
         "equipment": [
@@ -4487,7 +4482,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4648,14 +4643,14 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f1062ca9a051c47c966d494ba33400916270ea723199dc71f887cf6ab8ed53d7",
+      "document_hash": "sha256:3fa29020b27904fe17c7477c087e489f5a42a97059740be179e781d40b8f5d7f",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
         "equipment": [
@@ -4679,7 +4674,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4819,14 +4814,14 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:580319595e47684ea8ed4f4198487edae7ec79a9ad16239734fc8a72ab6097f5",
+      "document_hash": "sha256:62b80c96ef25a6bd1abe436df3707cf727bebd53080f3464fa6b6053d5acf966",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-glass-wight:1": 14,
+            "enemy:creature-sky-manta:1": 14,
             "npc:liora-fen": 100,
-            "player": 85
+            "player": 91
           }
         },
         "equipment": [
@@ -4850,7 +4845,7 @@
         ],
         "purse_copper": 259,
         "quests": {
-          "Danger on the roads of Starfall March": "available",
+          "Echo beasts on the March roads": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"

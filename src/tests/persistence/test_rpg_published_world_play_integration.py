@@ -434,8 +434,12 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # A fight goes blow by blow: the creature takes its turns, the narrator is told every blow, the
         # sheet shows the wounds, and the rest of the turn (time passing) is kept. Creatures are met where no
         # one lives (encounters.md): the pass.
-        turn("go to Skybridge Pass")
-        assert "The Echo Wolf bars your way" in told[-1], told[-1]  # the road's danger (its seed's three in ten)
+        for _ in range(8):  # the road's danger is a chance (three in ten at the pass): walk it until a wolf bars it
+            turn("go to Skybridge Pass")
+            if "bars your way" in told[-1]:
+                break
+            turn("go to Starfall Village")
+        assert "The Echo Wolf bars your way" in told[-1], told[-1]
         assert stored()["simulation_state"]["combat_state"]["current_actor_id"] == "player"  # the hero chooses first
         hunger, calls = stored()["simulation_state"]["survival"]["hunger"], len(model.calls)
         turn("I attack the Echo Wolf.")
@@ -461,7 +465,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # Not every turn ticks it yet: fast dialogue and fallback answers skip the advance until RQ-1.4 makes the
         # world tick a step of every turn.
         assert clock["last_tick"] >= 1
-        assert {row["pressure_id"] for row in clock["pressure_plan"]["pressures"]} >= {"pressure:roads:starfall-march"}
+        assert {row["pressure_id"] for row in clock["pressure_plan"]["pressures"]} >= {"pressure:echo-beasts"}  # its author's
         # Each tick left an event; the campaign keeps the most recent of them (F2: causal_runtime.MAX_KEPT_EVENTS).
         from app.apps.rpg.world.causal_runtime import MAX_KEPT_EVENTS
 

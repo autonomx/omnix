@@ -1,14 +1,14 @@
 """Playthrough: a pressure running high raises a side quest, and doing it pushes the pressure back (RQ-5.4;
-docs/rpg/design/quests.md). Aurelia's roads are dangerous from the start (severity 70); Captain Rhea Sunward keeps
-the peace in Starfall March."""
+docs/rpg/design/quests.md). Aurelia's author makes the March roads dangerous from the start (Echo beasts, severity 62,
+play-sections.json); Captain Rhea Sunward keeps the peace in Starfall March."""
 from __future__ import annotations
 
 from tests.rpg.playthrough.campaigns import POSTGRES
 
 pytestmark = POSTGRES
-ROADS = "pressure:roads:starfall-march"
-TITLE = "Danger on the roads of Starfall March"
-FIRST = "quest:pressure:roads:starfall-march:1"
+ROADS = "pressure:echo-beasts"
+TITLE = "Echo beasts on the March roads"
+FIRST = "quest:pressure:echo-beasts:1"
 
 
 def _quest(play, quest_id: str = FIRST) -> dict:
@@ -29,7 +29,7 @@ def test_a_side_quest_from_a_pressure_is_offered_done_and_eases_it(launch) -> No
     assert quest["status"] == "available" and quest["offered_by"] == "npc:captain-rhea-sunward", quest
     hunt = quest["steps"][0]["all_of"][0]
     assert quest["objective"] == "Defeat 3 Echo Wolves" and hunt == {"defeat": "creature:echo-wolf", "count": 3}  # fits
-    assert 'Captain Rhea Sunward asks for your help: "Danger on the roads of Starfall March".' in play.model.told()
+    assert 'Captain Rhea Sunward asks for your help: "Echo beasts on the March roads".' in play.model.told()
     play.turn(f"I accept the quest {TITLE}.")
     assert _quest(play)["status"] == "active"
     assert [row["quest_id"] for row in play.public()["quests"] if row["title"] == TITLE] == [FIRST]  # one at a time
