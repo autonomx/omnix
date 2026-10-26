@@ -42,16 +42,19 @@ MOST_AT_ONCE = 10  # goods bought in one go (the playtest: "two Healing Potions"
 _COUNTS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
            "a couple of": 2, "a pair of": 2, "a few": 3, "several": 3}
 _COUNT_WORDS = r"(\d+|" + "|".join(sorted(_COUNTS, key=len, reverse=True)) + r")"
+_COINS = frozenset({"gold", "silver", "copper", "coin", "coins", "crown", "crowns", "credit", "credits"})
+_COIN_WORDS = "|".join(sorted(_COINS))
 
 
 def wanted_count(text: str, label: str) -> int:
     """How many of ``label`` the words ask for: a number or a number's word just before its name ("two Healing
     Potions", "3 lantern bread"), else one; at most ``MOST_AT_ONCE``. A price ("for 15 coppers") is no count."""
-    words = [re.escape(word.rstrip("s")) for word in re.findall(r"[a-z]+", label.casefold())
-             if word not in {"a", "an", "the", "some", "of"}]
+    named = [word for word in re.findall(r"[a-z]+", label.casefold()) if word not in {"a", "an", "the", "some", "of"}]
+    words = [re.escape(word) for word in named if word not in _COINS] or [re.escape(word) for word in named]
     if not words:
         return 1
-    match = re.search(rf"\b{_COUNT_WORDS}\s+(?:[a-z']+\s+)?(?:{'|'.join(words)})", text.casefold())
+    match = re.search(rf"\b{_COUNT_WORDS}\s+(?:[a-z']+\s+)?(?:{'|'.join(words)})(?:s|es)?\b(?!\s+(?:{_COIN_WORDS})\b)",
+                      text.casefold())
     if match is None:
         return 1
     word = match.group(1)

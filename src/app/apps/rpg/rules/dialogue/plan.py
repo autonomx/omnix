@@ -340,7 +340,9 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
         if quest.get("status") == "available" and (giver == speaker_id or (not giver and (here in places
                                                                                           or hands_out_work))):
             # The speaker's own name is no word of the quest's ("Vael, nice weather" is not about his vow).
-            about = _stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))}")) - _stemmed(_words(name))
+            steps = " ".join(_s(_d(step).get("summary")) for step in _l(quest.get("steps")))
+            about = (_stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))} {steps}"))
+                     - _stemmed(_words(name)))
             # A finale is the last thing offered for work in general (a newcomer was offered the Hollow Meridian).
             fitting = 0 if _s(quest.get("tier")) == "finale" else 1
             offerable.append((len(about & asked), fitting, len(about & pressing), quest))
@@ -350,7 +352,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
     on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(row[0] for row in offerable)
     # Two of its own words, at least, and never the finale this way ("Liora, should we head to the village?" touched
     # the finale's "should" and offered it: the review).
-    on_their_quest = any(row[0] >= 2 and row[1] and _s(row[3].get("giver_id") or row[3].get("offered_by")) == speaker_id
+    on_their_quest = any(row[0] >= 2 and _s(row[3].get("giver_id") or row[3].get("offered_by")) == speaker_id
                          for row in offerable)
     # A finale is offered only when asked about in its own words (two of them), never for work in general.
     offerable = [row for row in offerable if row[1] or row[0] >= 2]

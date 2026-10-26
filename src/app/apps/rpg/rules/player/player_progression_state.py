@@ -33,8 +33,8 @@ _GENRE_SKILLS = {
     "future": ("swordsmanship", "firearms", "defense", "stealth", "persuasion", "intimidation", "investigation",
                "hacking"),
 }
-_GENRE_WORDS = {"future": ("cyber", "sci", "future", "space", "tech", "punk"),
-                "fantasy": ("fantasy", "isekai", "myth", "medieval", "sword", "sorcery")}
+_GENRE_WORDS = {"fantasy": ("fantasy", "isekai", "myth", "medieval", "sword", "sorcery"),
+                "future": ("cyber", "sci", "future", "space", "tech")}
 
 
 def genre_kind(genre: str) -> str:

@@ -48,3 +48,12 @@ def test_a_foes_numbers_never_stand_for_the_heros_health() -> None:
         assert _unsupported_material(said, fight) == ["5 health"], said
     assert _unsupported_material("The wolf is down to 6 health.", fight) == ["6 health"]  # the hero's, not the wolf's
     assert _unsupported_material("The wolf staggers, down to 5 of its 8 health.", fight) == []
+
+
+def test_a_clause_that_points_at_the_foe_may_give_its_health() -> None:
+    """The second review: "you hit the wolf, leaving it at 5 health" sent the writer back again."""
+    fight = "the wolf hits you for 4 (6 of 10 left). you hit the wolf for 3 (5 of 8 left)."
+    for said in ("You hit the wolf, leaving it at 5 health.", "You drive the wolf back; it has 5 health left.",
+                 "You strike true; the wolf staggers, down to 5 of its 8 health."):
+        assert _unsupported_material(said, fight) == [], said
+    assert _unsupported_material("Bleeding, down to 5 health, you press on.", fight) == ["5 health"]

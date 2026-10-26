@@ -124,3 +124,17 @@ Noted, not changed:
   grow with the hero there; a world's author would write its shops' goods.
 - Elyra could not name the voice from Earth: the world's lore never does.
 - Orik's inn gives "new arrivals one free night", in its lore; the economy charges six silver.
+
+## A short Vesper-9 session (turns 1-5)
+
+Vesper-9 is lore-only: a world compiled from lore topics, played from what launch infers from them.
+
+| What the player met | Cause | Fix |
+|---|---|---|
+| A cyberpunk hero set out with a travel cloak and an iron dagger, and no coin | the build's default kit is a fantasy one, and the opening names no purse | a hero of a world to come carries its kind of gear (a utility knife, a rain cloak, ration bars, a flashlight); an opening that names no purse keeps the build's |
+| The opening quest, "Black Rain Rising", showed no objective | the opening scenario's quest kept its beats as `next_step` only | it says what it asks now |
+
+Noted, not changed: its opening quest is the scenario's beats, with no steps or places the rules can judge, so it can
+never be completed; Mara Vey's calling reads "encountered at this station" and Juno knows nothing of the black rain her
+city is named for. A lore-only world plays as well as launch's inference of it; its author (or World Forge) would write
+its quests' steps and its people's knowledge.

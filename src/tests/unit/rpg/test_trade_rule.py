@@ -178,3 +178,12 @@ def test_a_price_or_a_measure_is_no_count() -> None:
     assert wanted_count("buy 50 feet of rope", "Rope") == 1
     assert wanted_count("I buy two Healing Potions", "Healing Potion") == 2
     assert wanted_count("buy a few torches", "Torch") == 3
+
+
+def test_a_coin_in_an_offers_name_makes_no_price_a_count() -> None:
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    assert wanted_count("buy the gold ring for 5 gold", "Gold Ring") == 1
+    assert wanted_count("buy a copper kettle for 30 copper", "Copper Kettle") == 1
+    assert wanted_count("buy two gold rings", "Gold Ring") == 2
+    assert wanted_count("buy 3 buses", "Bus") == 3 and wanted_count("buy 3 bushels", "Bus") == 1

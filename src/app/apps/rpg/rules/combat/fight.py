@@ -92,6 +92,7 @@ _FIGHTER_WORDS = {"guard", "soldier", "captain", "knight", "warrior", "mercenary
 _HARDY_WORDS = {"smith", "blacksmith", "porter", "miner", "sailor", "dockhand", "farmer", "woodcutter", "innkeeper",
                 "bouncer", "tracker", "guide", "keeper", "sentry"}
 # The skill a weapon is fought with, by the words of its name (else a blade's: swordsmanship); progression.md.
+_WEAPON_SLOTS = frozenset({"weapon", "main hand", "mainhand", "right hand", "primary", "two hands"})
 _WEAPON_SKILLS = (("archery", {"bow", "longbow", "shortbow", "crossbow", "sling"}),
                   ("magic", {"staff", "wand", "rod", "orb", "focus", "tome", "grimoire"}))
 
@@ -163,7 +164,7 @@ def _skill_rank(simulation: Mapping[str, Any], skill: str) -> int:
 def _weapon_skill(simulation: Mapping[str, Any]) -> str:
     """The skill the hero's weapon is fought with (the playtest: swordsmanship, chosen twice, counted for nothing)."""
     worn = [_d(item) for item in _l(project_equipment_stats(dict(simulation), actor_id="player").get("equipped_items"))
-            if any(slot in _s(_d(item).get("slot")).casefold() for slot in ("weapon", "hand"))]  # not a ring of focus
+            if _s(_d(item).get("slot")).casefold().replace("_", " ") in _WEAPON_SLOTS]  # not a ring or gloves of focus
     words = {word for item in worn for word in _s(item.get("name")).casefold().split()}
     return next((skill for skill, kinds in _WEAPON_SKILLS if words & kinds), "swordsmanship")
 

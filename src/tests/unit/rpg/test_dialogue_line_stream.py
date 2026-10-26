@@ -254,3 +254,23 @@ def test_a_word_in_common_with_a_quest_offers_no_quest_and_the_finale_never_so()
         assert "offers_quest" not in build_plan(simulation, "npc:liora", line).context(), line
     assert "common_knowledge" not in build_plan(simulation, "npc:liora", "Will you help me?").context()
     assert build_plan(simulation, "npc:liora", "Where is Will?").context()["common_knowledge"][0]["person"] == "Will Marsh"
+
+
+def test_a_finale_asked_about_in_its_own_words_is_offered_and_a_quest_by_its_steps_words() -> None:
+    """The second review: asking Liora about the Hollow Meridian offered nothing, and in two of Aurelia's openings
+    that is the only way to it; Vael's quest is about his vow in its first step, not its objective."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {"world_model": {
+        "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide"}, "npc:vael": {"name": "Vael Ardyn", "role": "general"}},
+        "quests": {
+            "quest:finale": {"id": "quest:finale", "title": "The Hollow Meridian", "giver_id": "npc:liora",
+                             "tier": "finale", "objective": "Confront Malrec and choose the gate's fate"},
+            "quest:bridge": {"id": "quest:bridge", "title": "Bridge of One Thousand Promises", "giver_id": "npc:vael",
+                             "objective": "Cross Skybridge Pass while a gale spirit tests the party's vows",
+                             "steps": [{"id": "vow", "summary": "Hear the vow Vael Ardyn would have you witness",
+                                        "all_of": [{"talk": "npc:vael"}]}]}}}}
+    told = build_plan(simulation, "npc:liora", "Liora, tell me about the Hollow Meridian.").context()
+    assert told["offers_quest"]["quest_id"] == "quest:finale"
+    told = build_plan(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
+    assert told["offers_quest"]["quest_id"] == "quest:bridge"

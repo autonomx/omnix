@@ -30,3 +30,8 @@ def test_a_wait_lasts_as_long_as_its_words_say(text: str, now: int, minutes: int
 
 def test_its_length_reads_as_the_hero_hears_it() -> None:
     assert (said(45), said(60), said(540)) == ("45 minutes", "1 hour", "9 hours")
+
+
+def test_tomorrows_time_is_the_next_days() -> None:
+    assert wait_minutes("wait until tomorrow morning", 7 * 60) == 25 * 60  # not today's, an hour off
+    assert wait_minutes("wait for the night watch to pass", 9 * 60) == A_WHILE  # no time of day waited for
