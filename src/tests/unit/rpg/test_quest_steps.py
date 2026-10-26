@@ -80,3 +80,15 @@ def test_a_companion_step_is_done_by_one_named_or_by_anyone_in_the_party() -> No
     named = _document(quest("npc:bran"))
     named["simulation_state"]["player_state"]["party_state"] = {"companions": [{"npc_id": "npc:liora"}]}
     assert _advance(named, [])[1] == []  # Liora is not Bran
+
+
+def test_a_way_taken_tells_what_came_of_it() -> None:
+    """The playtest: the finale's choice of the gate's fate ended on "Quest complete" and nothing of the choice."""
+    gate = {"quest_id": "quest:gate", "title": "The Gate", "status": "active", "giver_id": "npc:bran", "steps": [
+        {"id": "choose", "summary": "Choose the gate's fate", "any_of": [
+            {"all_of": [{"talk": "npc:bran", "about": ["close"]}], "told": "The gate is sealed forever."},
+            {"all_of": [{"talk": "npc:bran", "about": ["bridge"]}], "told": "The gate becomes a guarded bridge."}]}]}
+    document, _, lines = _advance(_document(gate), [DialogueExchanged(npc_id="npc:bran", player_line="Make it a bridge.")])
+    assert _quest(document)["status"] == "completed" and _quest(document)["progress"]["branches"] == [
+        {"stage": 0, "branch": 1}]
+    assert lines[0] == "The gate becomes a guarded bridge." and lines[1].startswith("Quest complete: The Gate.")

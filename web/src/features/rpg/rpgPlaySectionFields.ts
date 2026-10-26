@@ -266,7 +266,10 @@ const CONDITIONS: PlayRows = {
 };
 
 const WAYS: PlayRows = {
-  fields: [{ key: 'conditions', label: 'All of', kind: 'list', rows: CONDITIONS }],
+  fields: [
+    { key: 'conditions', label: 'All of', kind: 'list', rows: CONDITIONS },
+    { key: 'told', label: 'What came of it, told when it is done this way (an ending, a choice)', kind: 'textarea' },
+  ],
   blank: () => ({ conditions: [CONDITIONS.blank([])] }),
   title: (row, name) => rowsOf(row.conditions).map((condition) => conditionText(condition, name)).join(' and ') || 'New way',
   add: 'Add another way (a branch)',

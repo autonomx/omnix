@@ -77,3 +77,19 @@ def test_the_quest_suggested_is_one_someone_offered_and_a_finale_last() -> None:
     commands = [row.command for row in suggestions({"simulation_state": simulation})]
     assert "I accept the quest Echo beasts on the March roads." in commands
     assert "I accept the quest The Hollow Meridian." not in commands
+
+
+def test_what_the_heros_quests_ask_now_comes_first() -> None:
+    """The playtest: at the Hollow Meridian the Archon's fight was not offered, nor the road to Valecourt."""
+    def quest(step: dict, places: list[str]) -> dict:
+        return {"quest_id": "q:main", "title": "Main", "status": "active", "locations": places,
+                "progress": {"stage": 0}, "steps": [{"id": "s", "summary": "Do it", "all_of": [step]}]}
+
+    archon = _document(quest_state={"quests": [quest({"defeat": "creature:archon"}, ["loc:inn"])]},
+                       campaign_mechanics={"creatures": {"creature:archon": {"name": "Hollow Archon"}}})
+    first = suggestions(archon)[0]
+    assert (first.label, first.command) == ("Fight the Hollow Archon", "I attack the Hollow Archon.")
+    far = suggestions(_document(quest_state={"quests": [quest({"reach": "loc:far"}, [])]}))
+    assert _labels(far)[0] == "Go to Far"  # set out for it: the journey goes by its roads
+    orik = suggestions(_document(quest_state={"quests": [quest({"talk": "npc:orik"}, [])]}))
+    assert _labels(orik)[:2] == ["Talk to Orik", "Talk to Liora"]  # once, first

@@ -266,3 +266,19 @@ def test_a_world_whose_canon_already_has_steps_reads_them_as_its_quest_section()
     canon = with_play_sections(_canon(quests=[rumor]), PlaySectionsDraft.model_validate({"quests": [play]}))
     assert canon["quests"][0]["steps"][0]["any_of"] == [{"talk": "npc:brindle", "about": ["rumor"]},
                                                         {"talk": "npc:liora", "about": ["story"]}]
+
+
+def test_a_ways_telling_is_kept_in_the_canon_and_read_back() -> None:
+    play = {"id": "quest:gate", "steps": [
+        {"id": "choose", "summary": "Choose", "ways": [
+            {"conditions": [{"kind": "talk", "subject": "npc:liora", "about": ["close"]}], "told": "It is sealed."},
+            {"conditions": [{"kind": "talk", "subject": "npc:liora", "about": ["open"]}]}]},
+        {"id": "home", "summary": "Go home", "ways": [{"conditions": [{"kind": "reach", "subject": "loc:hearth"}],
+                                                      "told": "You are home."}]}]}
+    canon = with_play_sections(_canon(quests=[_QUEST]), PlaySectionsDraft.model_validate({"quests": [play]}))
+    choose, home = canon["quests"][0]["steps"]
+    assert choose["any_of"] == [{"all_of": [{"talk": "npc:liora", "about": ["close"]}], "told": "It is sealed."},
+                                {"talk": "npc:liora", "about": ["open"]}]
+    assert home == {"id": "home", "summary": "Go home", "all_of": [{"reach": "loc:hearth"}], "told": "You are home."}
+    [read] = play_sections_document(canon)["quests"]
+    assert read == PlaySectionsDraft.model_validate({"quests": [play]}).model_dump(mode="json", exclude_none=True)["quests"][0]

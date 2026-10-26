@@ -185,8 +185,9 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
         steps, stage = _l(quest.get("steps")), int(_d(quest.get("progress")).get("stage") or 0)
         if quest.get("status") != "active" or stage >= len(steps):
             continue
-        ways = _l(_d(steps[stage]).get("any_of")) or [_l(_d(steps[stage]).get("all_of") or _d(steps[stage]).get("conditions"))]
-        condition = _d((_l(ways[0]) or [{}])[0] if isinstance(ways[0], list) else ways[0])
+        from app.apps.rpg.rules.quest.progress import step_ways
+
+        condition = _d((step_ways(_d(steps[stage]))[0][0] or [{}])[0])
         if condition.get("defeat"):
             from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
 

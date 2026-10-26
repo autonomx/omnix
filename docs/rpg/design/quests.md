@@ -90,7 +90,11 @@ wrote steps in its canon (the Market Road) reads them back as its section (`ques
 checked at release: a place, person, item or creature the world lacks, or a check the game does not have
 (`rules/checks.CHECK_KINDS`), is a finding. A quest can name its giver and a deadline. A new condition, `companion`
 (someone named, or `anyone`, in the party), ends Aurelia's first night when a first companion is chosen. World Forge
-drafts no steps: they are the author's.
+drafts no steps: they are the author's. A way may say what came of it (`told`): the rules tell it when it is taken
+(an ending's branch, a choice's consequence), and the canon keeps such a way as `{"all_of": [...], "told": ...}` among
+the step's `any_of` (`progress.step_ways` reads every shape). What the hero's quests ask now leads the play screen's
+suggestions (a creature to fight where the quest meets it, a place to set out for, someone here to talk to), and a
+pressure's next side quest waits a day from when the last ended (`ended_at_minute`).
 
 Aurelia's author wrote every quest's steps: before, each was places only, so the finale (confront Malrec, choose the
 gate's fate) was done on arriving at the Hollow Meridian. Now the first night is reach the village, register with Miri,

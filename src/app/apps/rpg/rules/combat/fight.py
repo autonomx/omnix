@@ -70,6 +70,7 @@ GUARD_BONUS = 2  # defending: added to the hero's defence until their next turn
 FLEE_SHARE, CALL_SHARE, CALL_CHANCE = 0.30, 0.50, 50
 # Attacking someone: how far they, and everyone who sees it, trust the hero less (combat.md).
 ATTACKED_REGARD, WITNESS_REGARD = -40, -15
+FOUGHT_BESIDE_REGARD = 2  # a fight won together: each companion still standing trusts the hero more
 # pass: the hero's turn went on something else (a potion); ability: one of the hero's, its effect given;
 # confront: a foe comes at the hero (the road's danger), and the fight stands at the hero's turn;
 # sneak, parley: before blows are traded, slipping past or talking it down (encounters.md)
@@ -86,7 +87,8 @@ _PERSON_NUMBERS = {
                   "accuracy_bonus": 0, "initiative_bonus": 0},
 }
 _FIGHTER_WORDS = {"guard", "soldier", "captain", "knight", "warrior", "mercenary", "sellsword", "watch", "sergeant",
-                  "champion", "veteran", "hunter", "ranger", "scout", "bandit", "thug", "enforcer", "duelist"}
+                  "champion", "veteran", "hunter", "ranger", "scout", "bandit", "thug", "enforcer", "duelist",
+                  "general", "commander", "warlord", "protector", "gatewarden", "warden", "paladin", "templar"}
 _HARDY_WORDS = {"smith", "blacksmith", "porter", "miner", "sailor", "dockhand", "farmer", "woodcutter", "innkeeper",
                 "bouncer", "tracker", "guide", "keeper", "sentry"}
 # The skill a weapon is fought with, by the words of its name (else a blade's: swordsmanship); progression.md.
@@ -680,6 +682,12 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     after: list[StateChange] = []
     if ended == "victory":
         after, spoils = _spoils(simulation, combat)
+        # Fought beside them and won (the playtest: a whole campaign together, and Liora's regard moved only when a
+        # quest ended).
+        after = [*after, *(RegardChanged(npc_id=_s(row.get("npc_id")), name=_s(row.get("name")) or _s(row.get("npc_id")),
+                                         delta=FOUGHT_BESIDE_REGARD, reason="fought_beside")
+                           for row in _companions(simulation)
+                           if int(participant(combat, _s(row.get("npc_id"))).get("hp") or 0) > 0)]
     elif ended == "defeat":
         after, minutes = _defeat(simulation, combat, conditions)
         minutes = minutes or MINUTES_PER_TURN
@@ -706,4 +714,4 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     return FightTurn(changes, lines, minutes=minutes, ended=ended, report=report)
 
 
-__all__ = ["ATTACKED_REGARD", "FightTurn", "GUARD_BONUS", "MINUTES_PER_TURN", "WITNESS_REGARD", "fight"]
+__all__ = ["ATTACKED_REGARD", "FOUGHT_BESIDE_REGARD", "FightTurn", "GUARD_BONUS", "MINUTES_PER_TURN", "WITNESS_REGARD", "fight"]

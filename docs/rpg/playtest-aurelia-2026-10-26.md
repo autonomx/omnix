@@ -72,3 +72,55 @@ Noted, not changed:
 - Two replies came back without their outcome section ("planned None" in the playtest client); the play screen
   reads the same reply. To trace.
 - Some dialogue turns made four calls.
+
+## Session 3: the whole campaign, to the gate's fate (turns 1-176)
+
+A fresh campaign played to its end: every one of Aurelia's six quests, the roads contract, level 7, Liora and Vael in
+the party. Before it could be played, two things had to change. Every quest was places only, so each, the finale too,
+was done on arriving (Seraphine's engine was "decided" by reaching Valecourt). And the world's four roads never reached
+Valecourt, Cinderhold or the Hollow Meridian, so the finale could not be reached at all.
+
+The run: Liora joined in the grove; the first night ended at the guild with Miri's registry and a companion chosen;
+Seraphine's summons led to Valecourt, where she holds court each evening, and to the choice (democratized, which she
+remembered afterwards); Orik's daughter's memory was won back past the Loom's Rootbound Knights (a level-6 knight
+fought once, then the knights' broken oath named, the other way through) and paid the Moonroot Key; the phone's voice
+was followed to the ruins and named by Elyra; Vael's vow was witnessed, the pass crossed and the gale kept faith with
+by a climb; then, with the key, the descent, Malrec confronted ("the harvest of what Earth's children never knew they
+could spare"), the Hollow Archon (level 10, 120 health) fought for some 40 rounds with three potions, Vael striking the
+last blow, and the gate made a guarded bridge.
+
+Found and fixed:
+
+| What the player met | Cause | Fix |
+|---|---|---|
+| Every quest done on arriving; the finale with no fight and no choice | Aurelia's quests were authored as places only | a quest's steps are a play section (steps of ways of conditions, a giver, a deadline; How It Plays edits them); Aurelia's author wrote all six |
+| "Choose a first companion" could not be a step | no condition said it | a `companion` condition (someone named, or anyone) |
+| No road to Valecourt, Cinderhold or the Hollow Meridian | the world's four roads left three places unreached | a place no road reaches is joined to the roads, from its region's capital |
+| A grown hero won nearly every fight there was | the bestiary topped at level 3 below a level-8 boss | Aurelia's author wrote its creatures' numbers: mantas 4, wights 5, the Loom's knights 6, the Archon 10 |
+| "Liora, will you come with me to the village?" asked Captain Rhea | one word of a calling ("village" of the "village guard captain") named her | a calling matches whole; an invitation after a name goes to that person |
+| Asked "tell me about the engine", the game called the model to read whom the question was for | a question after a name kept its 0.6 confidence | asked of the one named, it is theirs at 0.85 |
+| "I wait until evening" waited half an hour, and the princess who holds court each evening never came | a wait was always a while | a wait lasts as its words say (until evening, for three hours), at most twelve hours |
+| Told what should become of the engine, in Valecourt, Seraphine said "come to Valecourt and tell me" | the plan said the quest went on at its unvisited places, and not that the words did the step | the plan says what the hero's words do now, and where a step goes on ("here") |
+| Orik called Wren (they/them) "lass" | the line writer was not told who the hero is | it is told the hero's name and pronouns, and to use no gendered address they do not call for |
+| Asked about his daughter, Orik offered nothing | "his daughter's memory" kept the possessive, and "daughter" never met it | a possessive's "'s" is no part of the word |
+| "I accept the quest The Memory That Burned" before Orik offered it: "you do so; a few minutes pass" | a quest no one offered was no quest the grammar knew | it is refused by name, and never another taken in its place |
+| "I buy two Healing Potions" bought one | a purchase was always one | goods by the count asked, as far as stock and purse go |
+| Seventeen rounds against one knight; swordsmanship, chosen at each level, counted for nothing | a fight read the hero's level and attributes, not their skills; a companion fought at +0 | the weapon's skill adds to the hero's blows and the defense skill to their defense; a companion fights as their calling (a guide hardy, a general a fighter) |
+| Eight rounds read as eight misses | the card told only the hero's wounds | the card shows each foe's health, once, as the turn leaves it |
+| Every other fight round took twice as long | the writer's "down to 4 of its 10 health" was judged an invented claim, and the turn written again | a foe's health, as its blows give it, may be said |
+| Paid for the roads contract, the captain asked for the next in the same breath | the next waited a day from the last's offer | a day from when it ended |
+| Asked what vow he would have witnessed, Vael never offered his quest | a quest was offered for work words or a goal | a giver offers the quest the words ask about; "anything you need of me" asks for work |
+| At the Hollow Meridian the Archon's fight was not suggested, nor Valecourt's road | suggestions knew the scene, not the quests | what the hero's quests ask now leads them |
+| "I drink a Healing Potion", the last gone: "you are in a fight" | a use of nothing carried read as a deed refused | "you carry nothing like that to use" |
+| A whole campaign together, and Liora's regard moved only when a quest ended | nothing else moved a companion's | a fight won together brings each companion still standing closer |
+| The finale's choice ended on "Quest complete" | a branch taken told nothing | a way may tell what came of it; Aurelia's gate, engine, knights and gale tell theirs |
+
+Noted, not changed:
+
+- Valecourt, a capital, has no one in it by day (its princess holds court there only from 19:00); its lore names no one
+  else there. A place someone's day brings them to is still wild, or the pass, where Captain Rhea checks the barricades
+  by night, would have no wolves.
+- Aurelia sells no weapons or armour: its lore has six items, its one weapon Vael's legendary Oathblade. Gear does not
+  grow with the hero there; a world's author would write its shops' goods.
+- Elyra could not name the voice from Earth: the world's lore never does.
+- Orik's inn gives "new arrivals one free night", in its lore; the economy charges six silver.

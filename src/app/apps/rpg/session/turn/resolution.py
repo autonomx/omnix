@@ -145,9 +145,10 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
             return None
         return Resolution(trade.changes, trade.lines, minutes=trade.minutes, refused=trade.refused)
     simulation = _d(_sections.simulation_state_of(session))
-    if mechanic == "fight" and planned.reason == "busy":
-        return Resolution([_counted(session)], ["You are in a fight: strike, break away, or use something you carry."],
-                          refused=True, told=False)
+    if mechanic == "fight" and planned.reason in {"busy", "nothing_to_use"}:
+        said = ("You carry nothing like that to use. The fight goes on: strike, break away, or use something you carry."
+                if planned.reason == "nothing_to_use" else "You are in a fight: strike, break away, or use something you carry.")
+        return Resolution([_counted(session)], [said], refused=True, told=False)
     if mechanic == "fight":
         turn = fight(simulation, action={"flee": "flee", "defend": "defend", "sneak": "sneak", "persuade": "parley",
                                          "intimidate": "parley"}.get(planned.reason, "attack"),

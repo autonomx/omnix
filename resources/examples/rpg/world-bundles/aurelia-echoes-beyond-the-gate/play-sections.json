@@ -715,7 +715,8 @@
                   "kind": "check",
                   "subject": "persuade"
                 }
-              ]
+              ],
+              "told": "The gale hears the vow for what it is and falls quiet; the bridge stills underfoot."
             },
             {
               "conditions": [
@@ -727,7 +728,8 @@
                   "kind": "check",
                   "subject": "climb"
                 }
-              ]
+              ],
+              "told": "Hand over hand through the gale, the vow is kept to the far side, and the spirit lets the crossing stand."
             },
             {
               "conditions": [
@@ -736,7 +738,8 @@
                   "subject": "creature:sky-manta",
                   "count": 2
                 }
-              ]
+              ],
+              "told": "With its mantas driven off, the gale spirit has nothing more to throw; the bridge is crossed."
             }
           ]
         }
@@ -793,7 +796,8 @@
                   "subject": "creature:rootbound-knight",
                   "count": 2
                 }
-              ]
+              ],
+              "told": "The Rootbound Knights lie broken among the roots, and the way to the Loom is open."
             },
             {
               "conditions": [
@@ -805,7 +809,8 @@
                   "kind": "check",
                   "subject": "recall_lore"
                 }
-              ]
+              ],
+              "told": "Named aloud, the oath they broke stills the Rootbound Knights; they kneel among the roots and let you pass."
             }
           ]
         },
@@ -902,7 +907,8 @@
                     "mend"
                   ]
                 }
-              ]
+              ],
+              "told": "Seraphine sets her engineers to mend the royal engine as it was; the crown keeps its power, and the court breathes easier."
             },
             {
               "conditions": [
@@ -917,7 +923,8 @@
                     "break it"
                   ]
                 }
-              ]
+              ],
+              "told": "Seraphine orders the royal engine taken apart, stone by stone, and the memories it held set free; the crown loses its greatest tool."
             },
             {
               "conditions": [
@@ -933,7 +940,8 @@
                     "council"
                   ]
                 }
-              ]
+              ],
+              "told": "Seraphine gives the engine's keeping to a council of the guilds and the people; no crown or faction will hold it alone."
             }
           ]
         }
@@ -1014,7 +1022,8 @@
                     "shut"
                   ]
                 }
-              ]
+              ],
+              "told": "The Meridian Gate closes behind its last light. No more Earthborn will wake in Starfall Grove, and none will go home: Aurelia keeps its own, and its own keep it."
             },
             {
               "conditions": [
@@ -1028,7 +1037,8 @@
                     "throw it open"
                   ]
                 }
-              ]
+              ],
+              "told": "The gate is thrown open and kept so. Earth's lights spill into Aurelia's sky, and travellers come and go unguarded, as Malrec once wanted, with no one left to ask what they carry."
             },
             {
               "conditions": [
@@ -1043,7 +1053,8 @@
                     "both worlds"
                   ]
                 }
-              ]
+              ],
+              "told": "The gate becomes a guarded bridge between the worlds: wardens at both ends, a crossing for those who give their names, and no memory taken as its toll."
             },
             {
               "conditions": [
@@ -1056,7 +1067,8 @@
                     "shut"
                   ]
                 }
-              ]
+              ],
+              "told": "The Meridian Gate closes behind its last light. No more Earthborn will wake in Starfall Grove, and none will go home: Aurelia keeps its own, and its own keep it."
             },
             {
               "conditions": [
@@ -1070,7 +1082,8 @@
                     "throw it open"
                   ]
                 }
-              ]
+              ],
+              "told": "The gate is thrown open and kept so. Earth's lights spill into Aurelia's sky, and travellers come and go unguarded, as Malrec once wanted, with no one left to ask what they carry."
             },
             {
               "conditions": [
@@ -1085,7 +1098,8 @@
                     "both worlds"
                   ]
                 }
-              ]
+              ],
+              "told": "The gate becomes a guarded bridge between the worlds: wardens at both ends, a crossing for those who give their names, and no memory taken as its toll."
             }
           ]
         }

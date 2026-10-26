@@ -14,7 +14,7 @@ This writes:
 
 `resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
-Bundle SHA-256: `a22a456f00329708f2b0cfb3f366aaf0d18e80317f864c6d873621814a833289`
+Bundle SHA-256: `5baebe1b2f9f17d90e450ecd3b663f6ba4497eb11998867b2e55e2f44781087f`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
 

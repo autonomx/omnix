@@ -43193,7 +43193,7 @@
       },
       "QuestCondition": {
         "additionalProperties": false,
-        "description": "One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when\ngiven), ``hold`` an item, ``defeat`` ``count`` of a creature, or pass a ``check`` (its skill, against ``target``\nwhen named).",
+        "description": "One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when\ngiven), ``hold`` an item, ``defeat`` ``count`` of a creature, pass a ``check`` (its kind, ``rules/checks.py``,\nagainst ``target`` when named), or have a ``companion`` (someone, or ``anyone``) in the party.",
         "properties": {
           "about": {
             "default": [],
@@ -43216,7 +43216,8 @@
               "talk",
               "hold",
               "defeat",
-              "check"
+              "check",
+              "companion"
             ],
             "title": "Kind",
             "type": "string"
@@ -43502,7 +43503,7 @@
       },
       "QuestWay": {
         "additionalProperties": false,
-        "description": "One way to do a step: all of its conditions.",
+        "description": "One way to do a step: all of its conditions, and what is told when it is taken (an ending's branch).",
         "properties": {
           "conditions": {
             "items": {
@@ -43512,10 +43513,17 @@
             "minItems": 1,
             "title": "Conditions",
             "type": "array"
+          },
+          "told": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Told",
+            "type": "string"
           }
         },
         "required": [
-          "conditions"
+          "conditions",
+          "told"
         ],
         "title": "QuestWay",
         "type": "object"

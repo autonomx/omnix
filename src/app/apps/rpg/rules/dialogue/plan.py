@@ -208,19 +208,17 @@ def _step_places(simulation: Mapping[str, Any], world: Mapping[str, Any], quest:
     """Where a quest of steps goes on now: the places its stage's ways send the hero to (a place to reach, where the
     one to talk to is at this hour, the quest's own places for a creature), "here" for the hero's own place (the
     playtest: a quest's unvisited places said "come to Valecourt" to a hero standing in it)."""
-    from app.apps.rpg.rules.quest.progress import ANYONE
+    from app.apps.rpg.rules.quest.progress import ANYONE, step_ways
 
     steps = [_d(step) for step in _l(quest.get("steps"))]
     stage = int(_d(quest.get("progress")).get("stage") or 0)
     if stage >= len(steps):
         return []
-    step = steps[stage]
-    ways = _l(step.get("any_of")) or [_l(step.get("all_of") or step.get("conditions"))]
     places, people, hero = _d(world.get("locations")), _d(world.get("npcs")), routines.hero_location(simulation)
     found: list[str] = []
     now = routines.whereabouts(simulation, routines.clock(simulation))
-    for way in ways:
-        for condition in (map(_d, way) if isinstance(way, list) else [_d(way)]):
+    for way, _ in step_ways(steps[stage]):
+        for condition in way:
             if condition.get("reach"):
                 found.append(_s(condition["reach"]))
             elif condition.get("talk"):

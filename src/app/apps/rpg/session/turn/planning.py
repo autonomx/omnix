@@ -77,6 +77,8 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
     if fighting and reading.family == "use_item" and reading.target_kind == "item" and reading.target_id:
         # Something carried, used in the fight: the hero's turn, and then everyone else's (combat.md).
         return PlannedAction(mechanic="use_item", target_id=reading.target_id, ticks=0, reason="in_fight")
+    if fighting and reading.family == "use_item":  # nothing carried by that name (the playtest: the last potion gone)
+        return PlannedAction(mechanic="fight", ticks=0, reason="nothing_to_use")
     if fighting and reading.family in _NOT_IN_A_FIGHT:
         return PlannedAction(mechanic="fight", ticks=0, reason="busy")  # the game says no: the fight goes on
     if fighting and reading.family != "status":

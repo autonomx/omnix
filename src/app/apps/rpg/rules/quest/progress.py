@@ -1,7 +1,8 @@
 """Quests of several steps, with branches, deadlines and failure (RQ-5.4; docs/rpg/design/quests.md).
 
 A world may author a quest's ``steps``: stages done in order, each a set of conditions that must all hold, or
-``any_of`` alternatives (the branches: either way completes the stage). A condition is one of ``reach`` a place,
+``any_of`` alternatives (the branches: either way completes the stage; one written ``{"all_of": [...], "told": ...}``
+says what came of it, told when it is taken). A condition is one of ``reach`` a place,
 ``talk`` to someone, ``hold`` an item, ``defeat`` a creature (``count`` of them), pass a ``check`` (its kind, and
 a target when named), or have a ``companion`` (someone named, or ``anyone``) in the party. Progress is judged after every turn, against the campaign as the turn leaves it and the turn's
 own changes: a stage done advances the quest, the last one completes it and pays its rewards. A quest with a
@@ -83,11 +84,19 @@ def _holds(condition: Mapping[str, Any], simulation: Mapping[str, Any], applied:
     return False
 
 
-def _alternatives(step: Mapping[str, Any]) -> list[list[dict[str, Any]]]:
-    """A step's ways to be done: each a list of conditions that must all hold."""
+def step_ways(step: Mapping[str, Any]) -> list[tuple[list[dict[str, Any]], str]]:
+    """A step's ways to be done: each the conditions that must all hold, and what is told when it is taken."""
     if _l(step.get("any_of")):
-        return [[_d(row) for row in _l(way)] if isinstance(way, list) else [_d(way)] for way in _l(step["any_of"])]
-    return [[_d(row) for row in _l(step.get("all_of") or step.get("conditions"))]]
+        ways = []
+        for way in _l(step["any_of"]):
+            if isinstance(way, list):
+                ways.append(([_d(row) for row in way], ""))
+            elif isinstance(way, Mapping) and "all_of" in way:  # a way with its own telling
+                ways.append(([_d(row) for row in _l(way.get("all_of"))], _s(way.get("told"))))
+            else:
+                ways.append(([_d(way)], ""))
+        return ways
+    return [([_d(row) for row in _l(step.get("all_of") or step.get("conditions"))], _s(step.get("told")))]
 
 
 def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange],
@@ -123,16 +132,19 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
         if counts != {key: int(value) for key, value in _d(progress.get("counts")).items()}:
             changes.append(QuestProgressed(quest_id=quest_id, counts=counts))
         while stage < len(steps):
-            ways = _alternatives(steps[stage])
-            branch = next((index for index, way in enumerate(ways)
+            ways = step_ways(steps[stage])
+            branch = next((index for index, (way, _) in enumerate(ways)
                            if way and all(_holds(condition, simulation, applied, counts) for condition in way)), None)
             if branch is None:
                 break
+            told = ways[branch][1]
             stage += 1
             following = _s(steps[stage].get("summary")) if stage < len(steps) else ""
             changes.append(QuestStepCompleted(quest_id=quest_id, stage=stage, step_id=_s(steps[stage - 1].get("id")),
                                               branch=branch if len(ways) > 1 else None, next_objective=following))
             done = _s(steps[stage - 1].get("summary")) or "a step"
+            if told:  # what came of the way taken (an ending's branch: the gate made a guarded bridge)
+                lines.append(told)
             if stage < len(steps):  # the last step is told by the quest's completion
                 lines.append(f"{title}: {done}. Next: {following}.")
         if stage >= len(steps) and stage > int(progress.get("stage") or 0):
@@ -144,4 +156,4 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
     return changes, lines
 
 
-__all__ = ["ANYONE", "DONE_REGARD", "FAILED_REGARD", "giver_thanks", "quest_progress", "victories"]
+__all__ = ["ANYONE", "DONE_REGARD", "FAILED_REGARD", "giver_thanks", "quest_progress", "step_ways", "victories"]

@@ -207,9 +207,10 @@ class QuestCondition(_Section):
 
 
 class QuestWay(_Section):
-    """One way to do a step: all of its conditions."""
+    """One way to do a step: all of its conditions, and what is told when it is taken (an ending's branch)."""
 
     conditions: tuple[QuestCondition, ...] = Field(min_length=1, max_length=8)
+    told: str = Field(default="", max_length=600)
 
 
 class QuestStep(_Section):
@@ -271,11 +272,19 @@ def _condition_play(condition: Mapping[str, Any]) -> dict[str, Any]:
 
 def _step_play(step: Mapping[str, Any]) -> dict[str, Any]:
     if _rows(step.get("any_of")):
-        ways = [way if isinstance(way, (list, tuple)) else [way] for way in _rows(step["any_of"])]
+        ways = [way if isinstance(way, (list, tuple)) or (isinstance(way, Mapping) and "all_of" in way) else [way]
+                for way in _rows(step["any_of"])]
     else:
         ways = [_rows(step.get("all_of") or step.get("conditions"))]
-    return {"id": step.get("id"), "summary": step.get("summary"),
-            "ways": [{"conditions": [_condition_play(_mapping(row)) for row in way]} for way in ways]}
+    plays = []
+    for way in ways:
+        told = ""
+        if isinstance(way, Mapping) and "all_of" in way:  # a way with its own telling
+            way, told = _rows(way.get("all_of")), str(way.get("told") or "")
+        elif len(ways) == 1:
+            told = str(step.get("told") or "")
+        plays.append({"conditions": [_condition_play(_mapping(row)) for row in way], **({"told": told} if told else {})})
+    return {"id": step.get("id"), "summary": step.get("summary"), "ways": plays}
 
 
 def quest_play_of(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -296,9 +305,13 @@ def quest_canon_fields(play: QuestPlay) -> dict[str, Any]:
     steps = []
     for step in play.steps:
         ways = [[_condition_canon(condition) for condition in way.conditions] for way in step.ways]
-        steps.append({"id": step.id, "summary": step.summary,
-                      **({"all_of": ways[0]} if len(ways) == 1 else
-                         {"any_of": [way[0] if len(way) == 1 else way for way in ways]})})
+        if len(ways) == 1:
+            steps.append({"id": step.id, "summary": step.summary, "all_of": ways[0],
+                          **({"told": step.ways[0].told} if step.ways[0].told else {})})
+            continue
+        steps.append({"id": step.id, "summary": step.summary, "any_of": [
+            {"all_of": way, "told": play_way.told} if play_way.told else way[0] if len(way) == 1 else way
+            for way, play_way in zip(ways, step.ways)]})
     return {**({"steps": steps} if steps else {}), **({"giver_id": play.giver_id} if play.giver_id else {}),
             **({"deadline_hours": play.deadline_hours} if play.deadline_hours is not None else {})}
 

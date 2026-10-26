@@ -140,6 +140,7 @@ def test_in_a_fight_the_hero_strikes_flees_or_uses_something_and_nothing_else() 
     assert plan_action(reading("flee"), fighting=True).reason == "flee"
     assert plan_action(reading("use_item", target_id="item:potion", target_kind="item"), fighting=True).reason == "in_fight"
     assert plan_action(reading("move", target_id="loc:inn", target_kind="place"), fighting=True).reason == "busy"
+    assert plan_action(reading("use_item"), fighting=True).reason == "nothing_to_use"  # the last potion gone
     assert plan_action(reading("status"), fighting=True).mechanic == "status"
 
 
@@ -267,3 +268,15 @@ def test_the_heros_trained_skills_and_a_companions_calling_count_in_a_fight() ->
     ash = combat["participants"]["npc:ally"]  # a scout fights as a fighter does
     assert (ash["defense"], ash["armor"]) == (13, 1)
     assert _numbers({**_with_people(_document())["simulation_state"]}, combat, "npc:ally")["accuracy_bonus"] == 3
+
+
+def test_a_fight_won_together_brings_each_standing_companion_closer() -> None:
+    """The playtest: a whole campaign together, and Liora's regard moved only when a quest ended."""
+    from app.apps.rpg.foundation.state.changes import RegardChanged
+    from app.apps.rpg.rules.combat.fight import FOUGHT_BESIDE_REGARD
+
+    document = _with_people(_document())
+    _, turn = _until_over(document, "rat")
+    assert turn.ended == "victory"
+    assert [(change.npc_id, change.delta) for change in turn.changes if isinstance(change, RegardChanged)] == [
+        ("npc:ally", FOUGHT_BESIDE_REGARD)]

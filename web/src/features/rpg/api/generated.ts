@@ -5219,8 +5219,8 @@ export interface components {
         /**
          * QuestCondition
          * @description One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when
-         *     given), ``hold`` an item, ``defeat`` ``count`` of a creature, or pass a ``check`` (its skill, against ``target``
-         *     when named).
+         *     given), ``hold`` an item, ``defeat`` ``count`` of a creature, pass a ``check`` (its kind, ``rules/checks.py``,
+         *     against ``target`` when named), or have a ``companion`` (someone, or ``anyone``) in the party.
          */
         QuestCondition: {
             /**
@@ -5237,7 +5237,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "reach" | "talk" | "hold" | "defeat" | "check";
+            kind: "reach" | "talk" | "hold" | "defeat" | "check" | "companion";
             /** Subject */
             subject: string;
             /**
@@ -5372,11 +5372,16 @@ export interface components {
         };
         /**
          * QuestWay
-         * @description One way to do a step: all of its conditions.
+         * @description One way to do a step: all of its conditions, and what is told when it is taken (an ending's branch).
          */
         QuestWay: {
             /** Conditions */
             conditions: components["schemas"]["QuestCondition"][];
+            /**
+             * Told
+             * @default
+             */
+            told: string;
         };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];

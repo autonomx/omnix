@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.narration.presentation.outcome_facts import Suggestion
 from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.quest.progress import step_ways
 from app.apps.rpg.foundation.state import access as _sections
 
 MAX_SUGGESTIONS = 6
@@ -66,14 +67,44 @@ def _level_choice(simulation: Mapping[str, Any]) -> list[Suggestion]:
     return offered
 
 
+def _quest_steps(simulation: Mapping[str, Any], people: list[tuple[str, str]]) -> list[Suggestion]:
+    """What the hero's quests ask now (quests.md): a creature their step names, where the quest meets it; the place
+    a step names, set out for; someone a step names, when they are here (the playtest: at the Hollow Meridian the
+    Archon's fight was not offered, nor Valecourt's road when the princess's engine waited there)."""
+    world = _d(_sections.world_model_of(simulation))
+    places, here = _d(world.get("locations")), routines.hero_location(simulation)
+    creatures = _d(_d(simulation.get("campaign_mechanics")).get("creatures"))
+    present = dict(people)
+    offered: list[Suggestion] = []
+    for quest in map(_d, _l(_d(_sections.quest_state_of(simulation)).get("quests"))):
+        steps, stage = [_d(step) for step in _l(quest.get("steps"))], int(_d(quest.get("progress")).get("stage") or 0)
+        if quest.get("status") != "active" or stage >= len(steps):
+            continue
+        quest_places = {_s(place) for place in _l(quest.get("locations"))}
+        for condition in (row for way, _ in step_ways(steps[stage]) for row in way):
+            if condition.get("defeat") and (here in quest_places or (not quest_places and routines.is_wild(simulation))):
+                name = _s(_d(creatures.get(_s(condition["defeat"]))).get("name"))
+                if name:
+                    offered.append(Suggestion(label=f"Fight the {name}", command=f"I attack the {name}."))
+            elif condition.get("reach") and _s(condition["reach"]) != here:
+                name = _s(_d(places.get(_s(condition["reach"]))).get("name"))
+                if name:
+                    offered.append(Suggestion(label=f"Go to {name}", command=f"go to {name}"))
+            elif condition.get("talk") and _s(condition["talk"]) in present:
+                name = present[_s(condition["talk"])]
+                offered.append(Suggestion(label=f"Talk to {name}", command=f"Talk to {name}"))
+    return list({row.command: row for row in offered}.values())[:2]
+
+
 def suggestions(document: Mapping[str, Any]) -> list[Suggestion]:
-    """What to do next where the hero stands: in a fight, its moves; else the people here, an offered quest, a
-    seller's wares, the roads out, and a look around."""
+    """What to do next where the hero stands: in a fight, its moves; else a level's choice, what the hero's quests ask
+    now, the people here, an offered quest, a seller's wares, the roads out, and a look around."""
     simulation = _d(_sections.simulation_state_of(document))
     if _d(_sections.combat_state_of(simulation)).get("active") is True:
         return _fight(simulation)[:MAX_SUGGESTIONS]
     people = _people_here(simulation)
     offered = _level_choice(simulation)
+    offered += _quest_steps(simulation, people)
     offered += [Suggestion(label=f"Talk to {name}", command=f"Talk to {name}") for _, name in people[:2]]
     available = [_d(row) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))
                  if _s(_d(row).get("status")) == "available" and _s(_d(row).get("title"))]
@@ -88,7 +119,7 @@ def suggestions(document: Mapping[str, Any]) -> list[Suggestion]:
         offered.append(Suggestion(label=f"See {seller}'s wares", command=f"I buy supplies from {seller}."))
     offered += [Suggestion(label=f"Go to {place}", command=f"go to {place}") for place in _exits(simulation)[:2]]
     offered.append(Suggestion(label="Look around", command="look around"))
-    return offered[:MAX_SUGGESTIONS]
+    return list({row.command: row for row in offered}.values())[:MAX_SUGGESTIONS]  # each once
 
 
 def choices(document: Mapping[str, Any], reason: str) -> list[Suggestion]:
