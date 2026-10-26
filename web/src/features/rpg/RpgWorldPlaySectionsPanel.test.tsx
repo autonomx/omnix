@@ -8,8 +8,8 @@ function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const DERIVED = { economy: 'derived', routines: 'derived', knowledge: 'derived', pressures: 'derived', bestiary: 'derived' };
-const EMPTY = { economy: { providers: [] }, routines: [], knowledge: [], pressures: [], bestiary: [] };
+const DERIVED = { economy: 'derived', routines: 'derived', knowledge: 'derived', pressures: 'derived', bestiary: 'derived', quests: 'derived' };
+const EMPTY = { economy: { providers: [] }, routines: [], knowledge: [], pressures: [], bestiary: [], quests: [] };
 const OFFER = { offer_key: 'room', service: 'lodging', name: 'A room', description: '', price: { gold: 0, silver: 5, copper: 0 },
   item_id: '', stock: 6, restock_per_day: 0 };
 const PROVIDER = { provider_id: 'npc:mara', location_id: 'loc:inn', sells: [OFFER], buys: null };
@@ -107,5 +107,31 @@ describe('RpgWorldPlaySectionsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reload the saved draft' }));
     expect(await screen.findByText('Reloaded the draft saved with the world.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reload the saved draft' })).not.toBeInTheDocument();
+  });
+
+  it('writes a quest step by step, its subjects chosen by what each condition asks', async () => {
+    const quest = { id: 'quest:gate', giver_id: 'npc:mara', deadline_hours: null, steps: [{ id: 'step-1', summary: 'Ask Mara about the gate',
+      ways: [{ conditions: [{ kind: 'talk', subject: 'npc:mara', about: ['gate'], count: 1, target: '' }] }] }] };
+    const calls = renderPanel((_url, init) => (init?.method === 'PUT' ? jsonResponse(view()) : jsonResponse(view({
+      document: { ...EMPTY, quests: [quest] },
+      references: { people: [{ id: 'npc:mara', name: 'Mara Vey' }], places: [{ id: 'loc:inn', name: 'The Inn' }], items: [],
+        creatures: [], regions: [], quests: [{ id: 'quest:gate', name: 'The Gate' }] },
+    }))));
+    await screen.findByRole('heading', { name: 'How It Plays' });
+    fireEvent.click(screen.getByRole('tab', { name: /Quests/ }));
+    expect(screen.getAllByText('Talk to Mara Vey about gate')).toHaveLength(2);  // the way and its condition, in words
+    const condition = screen.getByRole('group', { name: 'All of' });
+    const asks = within(condition).getByRole('combobox', { name: 'What it asks' }) as HTMLSelectElement;
+    fireEvent.change(asks, { target: { value: 'reach' } });  // a place is reached: the places are offered
+    expect(within(condition).getByRole('option', { name: 'The Inn' })).toBeInTheDocument();
+    fireEvent.change(asks, { target: { value: 'companion' } });  // a companion: anyone, or someone named
+    expect(within(condition).getByRole('option', { name: 'Anyone' })).toBeInTheDocument();
+    fireEvent.change(asks, { target: { value: 'check' } });  // a check names its kind
+    fireEvent.change(within(condition).getByRole('combobox', { name: 'Check' }), { target: { value: 'persuade' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByText(/Saved with the world/);
+    const put = calls.find((call) => call.init?.method === 'PUT');
+    const [saved] = JSON.parse(String(put?.init?.body)).document.quests;
+    expect(saved.steps[0].ways[0].conditions[0]).toMatchObject({ kind: 'check', subject: 'persuade' });
   });
 });

@@ -130,6 +130,14 @@ def outcome_facts(changes: Sequence[StateChange], document: Mapping[str, Any] | 
         elif isinstance(change, RegardChanged) and change.delta:
             facts.append(OutcomeFact(kind="regard", text=f"{change.name} trusts you {'more' if change.delta > 0 else 'less'}",
                                      tone="gain" if change.delta > 0 else "loss"))
+        elif isinstance(change, CombatAdvanced) and change.combat_state.get("active") is True:
+            # A fight going on: each foe's health as the round leaves it (the playtest: the card told only the
+            # hero's wounds, so eight rounds against the Rootbound Knight read as eight misses).
+            for row in _d(change.combat_state.get("participants")).values():
+                row = _d(row)
+                if _s(row.get("side")) == "enemy" and int(row.get("max_hp") or 0) > 0:
+                    facts.append(OutcomeFact(kind="fight", text=f"{_s(row.get('name')) or 'The foe'}: "
+                                             f"{max(0, int(row.get('hp') or 0))} of {int(row['max_hp'])} health"))
         elif isinstance(change, CombatAdvanced) and change.combat_state.get("active") is not True:
             ended = _s(change.combat_state.get("ended_reason"))
             said = {"enemy_side_defeated": ("Fight won", "gain"), "party_side_defeated": ("Fight lost", "loss"),

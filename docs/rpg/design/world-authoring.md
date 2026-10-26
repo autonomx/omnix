@@ -2,11 +2,13 @@
 
 ## What the author experiences
 
-In the world editor, **How It Plays** (Game Master) shows the world's five play sections: its economy (who sells
+In the world editor, **How It Plays** (Game Master) shows the world's six play sections: its economy (who sells
 what, at what price and stock, and what they buy back), routines (where each person is through the day, and their
 goals), knowledge (what each person knows, and on what terms they tell it), pressures (the forces the world's clock
-moves, and what eases or worsens them), and bestiary (how its creatures fight, and what they drop). Each section is a
-list of rows edited as a form; people, places, items, creatures, regions and quests are chosen from the world's own.
+moves, and what eases or worsens them), bestiary (how its creatures fight, and what they drop), and quests (what each
+takes, step by step, and where it branches; quests.md). Each section is a list of rows edited as a form; people,
+places, items, creatures, regions and quests are chosen from the world's own, a step's subject from what its
+condition asks (a place to reach, a person to talk to, a check's kind).
 
 **Draft empty sections from lore** asks World Forge for a first draft of each section the author has not written:
 what launch would infer from the world's words, written out to read, correct and keep. **Save draft** keeps the
@@ -29,7 +31,8 @@ its lore. The campaign setup shows the same for the revision it launches ("Writt
   world's own prices and only its own items; each person at their place all day with their goals; what they say
   openly (their public truth) and what they keep until trusted (their secrets, trust 50); the world's pressure
   entities, eased by the quests that name them, then the danger its creatures put on each region's roads; each
-  creature's numbers by its threat and its behaviour as its lore tells. A section the world wrote is kept as written.
+  creature's numbers by its threat and its behaviour as its lore tells. A section the world wrote is kept as written,
+  and a quest's steps are left to the author (a quest without them is done by reaching its places).
 - Publication writes the draft into the new revision's canon (`play_section_publication.py`) after the authored map
   blueprints, at both of the library's publications: a generation run's and the repair's. Publishing from the page
   repairs each opening at its starting place, so each is pinned to a revision with the draft; a world with nothing to

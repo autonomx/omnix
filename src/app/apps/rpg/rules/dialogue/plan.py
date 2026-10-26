@@ -11,7 +11,14 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
-from app.apps.rpg.foundation.state.changes import KnowledgeShared, QuestOffered, StateChange
+from app.apps.rpg.foundation.state.changes import (
+    DialogueExchanged,
+    KnowledgeShared,
+    QuestOffered,
+    QuestStatusChanged,
+    QuestStepCompleted,
+    StateChange,
+)
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.economy.trade import coins, price_of, stock_left
 from app.apps.rpg.rules.wording import in_sentence
@@ -50,6 +57,9 @@ class DialoguePlan:
     quest_offer: dict[str, str] = field(default_factory=dict)
     hero_quests: tuple[dict[str, Any], ...] = ()  # the hero's quests they bear on, and where each goes on
     offered_rows: dict[str, dict[str, Any]] = field(default_factory=dict)  # an offer's row, when the log has none
+    common_knowledge: tuple[dict[str, Any], ...] = ()  # what anyone here may know of the places and people asked of
+    settled_now: tuple[dict[str, Any], ...] = ()  # the quest steps the hero's words to them do, as they are said
+    hero: dict[str, str] = field(default_factory=dict)  # the hero's name and pronouns (the playtest: "lass")
     wares: tuple[str, ...] = ()  # "Healing Potion for 3 silver"
     ware_names: tuple[str, ...] = ()  # each named in the line, or the line lists them itself
     player_said: str = ""
@@ -60,10 +70,13 @@ class DialoguePlan:
         the written line against them."""
         return {key: value for key, value in {
             "speaker": self.speaker_name, "role": self.role, "stance": self.stance, "voice": self.voice,
+            "hero": dict(self.hero),
             "personality": list(self.personality), "goals": list(self.goals), "background": self.background,
             "may_reveal": list(self.reveals), "offers_to_tell_for_a_price": list(self.for_a_price),
             "keeps_back_until_trusted": self.held_back, "offers_quest": self.quest_offer,
             "heros_quests": [dict(quest) for quest in self.hero_quests],
+            "what_these_words_do": [dict(step) for step in self.settled_now],
+            "common_knowledge": [dict(known) for known in self.common_knowledge],
             "wares": list(self.wares),
         }.items() if value}
 
@@ -86,7 +99,9 @@ class DialoguePlan:
 
 
 def _words(text: str) -> set[str]:
-    return {word for word in _WORD.findall(text.casefold()) if word not in _STOP and len(word) > 2}
+    """The words that carry meaning, a possessive's "'s" aside ("his daughter's memory" is about the daughter)."""
+    words = (re.sub(r"'s?$", "", word) for word in _WORD.findall(text.casefold().replace("’", "'")))
+    return {word for word in words if word not in _STOP and len(word) > 2}
 
 
 def _stem(word: str) -> str:
@@ -134,6 +149,36 @@ def _goal_words(goal: Mapping[str, Any]) -> set[str]:
     return _stemmed({_s(topic).casefold() for topic in _l(goal.get("topics"))} | _words(_s(goal.get("summary"))))
 
 
+def _common_knowledge(world: Mapping[str, Any], text: str, speaker_id: str) -> tuple[dict[str, Any], ...]:
+    """What anyone here may know of the places and people the player names: a place's own description and who lives
+    there; a person's calling and where they are found (the playtest: Liora, asked about the Moonroot Ruins, knew
+    "not much beyond the name"). Never a secret: only what the world states openly."""
+    lowered = f" {text.casefold()} "
+    places = _d(world.get("locations"))
+    people = _d(world.get("npcs"))
+
+    def named(*names: str) -> bool:
+        return any(len(name) > 3 and f" {name.casefold()}" in lowered for name in names if name)
+
+    known: list[dict[str, Any]] = []
+    for place_id, place in places.items():
+        place = _d(place)
+        if not named(_s(place.get("name")), *(_s(alias) for alias in _l(place.get("aliases")))):
+            continue
+        living = [f"{_s(_d(person).get('name'))}, {_s(_d(person).get('role'))}".strip(", ")
+                  for person in people.values() if _s(_d(person).get("location_id")) == place_id]
+        known.append({"place": _s(place.get("name")), "is": _s(place.get("description")),
+                      **({"who_is_there": living[:4]} if living else {})})
+    for person_id, person in people.items():
+        person = _d(person)
+        if person_id == speaker_id or not named(_s(person.get("name")), *_s(person.get("name")).split()[:1]):
+            continue
+        found = _s(_d(places.get(_s(person.get("location_id")))).get("name"))
+        known.append({"person": _s(person.get("name")), "is": _s(person.get("role")),
+                      **({"found_at": found} if found else {})})
+    return tuple(known[:3])
+
+
 def _by_road(world: Mapping[str, Any], start: str) -> list[str]:
     """The world's places, nearest first by its roads from ``start`` (then those no road reaches)."""
     neighbours: dict[str, list[str]] = {}
@@ -156,6 +201,59 @@ def _charged(simulation: Mapping[str, Any], world: Mapping[str, Any], speaker_id
     the roads' fifth made it 3 silver 6 copper at the counter)."""
     provider = _d(_d(world.get("providers")).get(speaker_id)) or {"provider_id": speaker_id, "location_id": here}
     return coins(price_of(simulation, provider, offer)[0])
+
+
+def _step_places(simulation: Mapping[str, Any], world: Mapping[str, Any], quest: Mapping[str, Any]) -> list[str]:
+    """Where a quest of steps goes on now: the places its stage's ways send the hero to (a place to reach, where the
+    one to talk to is at this hour, the quest's own places for a creature), "here" for the hero's own place (the
+    playtest: a quest's unvisited places said "come to Valecourt" to a hero standing in it)."""
+    from app.apps.rpg.rules.quest.progress import ANYONE
+
+    steps = [_d(step) for step in _l(quest.get("steps"))]
+    stage = int(_d(quest.get("progress")).get("stage") or 0)
+    if stage >= len(steps):
+        return []
+    step = steps[stage]
+    ways = _l(step.get("any_of")) or [_l(step.get("all_of") or step.get("conditions"))]
+    places, people, hero = _d(world.get("locations")), _d(world.get("npcs")), routines.hero_location(simulation)
+    found: list[str] = []
+    now = routines.whereabouts(simulation, routines.clock(simulation))
+    for way in ways:
+        for condition in (map(_d, way) if isinstance(way, list) else [_d(way)]):
+            if condition.get("reach"):
+                found.append(_s(condition["reach"]))
+            elif condition.get("talk"):
+                where = now.get(_s(condition["talk"]))
+                found.append(where.location_id if where else _s(_d(people.get(_s(condition["talk"]))).get("location_id")))
+            elif condition.get("defeat"):
+                found.extend(_s(place) for place in _l(quest.get("locations")))
+            elif condition.get("companion") and _s(condition["companion"]) != ANYONE:
+                found.append(_s(_d(people.get(_s(condition["companion"]))).get("location_id")))
+    return list(dict.fromkeys("here" if place == hero else _s(_d(places.get(place)).get("name")) or place
+                              for place in found if place))
+
+
+def _settled_now(simulation: Mapping[str, Any], speaker_id: str, text: str) -> tuple[dict[str, Any], ...]:
+    """The quest steps the hero's words to the speaker do, judged by the quest rules as if the words were said (the
+    playtest: told what should become of the engine, the princess asked to be told it at the engine)."""
+    from app.apps.rpg.rules.quest.progress import quest_progress
+
+    changes, _ = quest_progress(simulation, [DialogueExchanged(npc_id=speaker_id, player_line=text[:500])],
+                                lambda quest: ([], ""))
+    quests = {_s(_d(row).get("quest_id") or _d(row).get("id")): _d(row)
+              for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))}
+    done = {change.quest_id for change in changes if isinstance(change, QuestStatusChanged) and change.status == "completed"}
+    settled = []
+    for change in changes:
+        if not isinstance(change, QuestStepCompleted):
+            continue
+        quest = quests.get(change.quest_id, {})
+        steps = [_d(step) for step in _l(quest.get("steps"))]
+        did = _s(steps[change.stage - 1].get("summary")) if 0 < change.stage <= len(steps) else ""
+        settled.append({"quest": _s(quest.get("title")), "done": did,
+                        **({"quest_complete": True} if change.quest_id in done and not change.next_objective
+                           else {"next": change.next_objective} if change.next_objective else {})})
+    return tuple(settled)
 
 
 def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speaker_id: str, name: str,
@@ -182,7 +280,8 @@ def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speake
             found.append({"title": _s(quest.get("title")), "done": True})
             continue
         visited = {_s(place) for place in _l(quest.get("visited_locations"))}
-        ahead = [_s(_d(places.get(place)).get("name")) or place for place in locations if place not in visited]
+        ahead = (_step_places(simulation, world, quest) if _l(quest.get("steps"))
+                 else [_s(_d(places.get(place)).get("name")) or place for place in locations if place not in visited])
         if not ahead and _DEFEAT.search(_s(quest.get("objective")).casefold()):
             # A creature to defeat, at no place of its own: where the world's creatures are met (encounters.md).
             ahead = [_s(_d(places.get(place_id)).get("name")) or place_id
@@ -193,8 +292,10 @@ def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speake
     return tuple(found[:3])
 
 
-def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> DialoguePlan | None:
-    """The plan for ``speaker_id``'s answer to ``text``; ``None`` when the world does not know them."""
+def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
+               hero: Mapping[str, str] | None = None) -> DialoguePlan | None:
+    """The plan for ``speaker_id``'s answer to ``text``, to the ``hero`` (their name and pronouns); ``None`` when the
+    world does not know them."""
     world = _d(_sections.world_model_of(simulation))
     npc = {**_d(_d(_sections.npc_index_of(simulation)).get(speaker_id)), **_d(_d(world.get("npcs")).get(speaker_id))}
     if not npc:
@@ -249,6 +350,8 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
         if quest_id not in in_log:
             new_quests[quest_id] = quest
     hero_quests = _hero_quests(simulation, world, speaker_id, name, here)
+    common = _common_knowledge(world, text, speaker_id)
+    settled = _settled_now(simulation, speaker_id, text)
     on_sale: list[dict[str, Any]] = []
     if _WARES.search(text.casefold()):
         on_sale = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
@@ -269,6 +372,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
         background=background,
         reveals=tuple(reveals), revealed_ids=tuple(revealed_ids), for_a_price=tuple(priced), held_back=held,
         secrets=secrets, quest_offer=quest_offer, offered_rows=new_quests, hero_quests=hero_quests,
+        common_knowledge=common, settled_now=settled, hero=dict(hero or {}),
         wares=tuple(f"{in_sentence(_s(offer.get('label')))} for {_charged(simulation, world, speaker_id, here, offer)}"
                     for offer in on_sale),
         ware_names=tuple(_s(offer.get("label")) for offer in on_sale),

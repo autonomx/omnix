@@ -799,14 +799,15 @@ RpgPlaySectionSource = Literal["authored", "derived"]
 
 
 class RpgPlaySectionsReadiness(TypedDict):
-    """Each section (economy, routines, knowledge, pressures, bestiary): written by the world, or inferred from its
-    lore at launch."""
+    """Each section (economy, routines, knowledge, pressures, bestiary, quests): written by the world, or inferred
+    from its lore at launch."""
 
     economy: RpgPlaySectionSource
     routines: RpgPlaySectionSource
     knowledge: RpgPlaySectionSource
     pressures: RpgPlaySectionSource
     bestiary: RpgPlaySectionSource
+    quests: RpgPlaySectionSource
 
 
 class RpgWorldRevision(TypedDict, total=False):

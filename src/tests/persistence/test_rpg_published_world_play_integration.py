@@ -357,15 +357,15 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert stored()["simulation_state"]["player_state"]["skills"]["swordsmanship"]["xp"] == 5  # an hour of practice
         assert public()["player"]["skills"]["swordsmanship"]["xp"] == 5
 
-        # Reaching a place the quest names advances it.
-        assert quests()["First Night in Aurelia"]["visited_locations"] == ["location:aurelia:arrival-grove"]
+        # Reaching the place a quest's step names advances it (Aurelia's first night: the village, then the guild).
+        assert quests()["First Night in Aurelia"]["objective"] == "Reach Starfall Village"
         turn("go to Starfall Village")
         # Arriving, the narrator is told what the place is like, from the world's own description of it.
         village = stored()["simulation_state"]["world_model"]["locations"]["location:aurelia:starfall-village"]
         assert village["description"] and village["description"] in told[-1]
         first_night = quests()["First Night in Aurelia"]
-        assert first_night["status"] == "active"
-        assert "location:aurelia:starfall-village" in first_night["visited_locations"]
+        assert first_night["status"] == "active" and first_night["progress"]["stage"] == 1
+        assert first_night["objective"] == "Register with Miri Kestrel at the Wayfarers' Guild"
 
         # Time passes: needs rise.
         turn("wait")

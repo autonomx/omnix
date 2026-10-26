@@ -82,15 +82,20 @@ _WORD = {"pressure_escalated": "grows worse", "pressure_contained": "is held in 
 
 def _word(event_ids: list[str], runtime: Mapping[str, Any], region: str) -> list[str]:
     """What reaches the hero of the world's pressures turning (escalated, contained, resolved, stirring again): word of
-    it, the hero's region first, at most ``SURFACED_PER_TURN``."""
+    it, the hero's region first, at most ``SURFACED_PER_TURN``. A pressure that turned more than once in the turn's
+    hours is told where it ended (the playtest: "grows worse" and "is held in check" in one night's word)."""
     plan = {_d(row).get("pressure_id"): _d(row) for row in _d(runtime.get("pressure_plan")).get("pressures") or ()}
-    heard = []
+    last: dict[str, str] = {}
     for event_id in event_ids:
-        for pressure_id, row in plan.items():
-            kind = event_id.rsplit(":", 1)[-1]
+        kind = event_id.rsplit(":", 1)[-1]
+        for pressure_id in plan:
             if f":{pressure_id}:" in event_id and kind in _WORD:
-                local = _d(row.get("next_tick_delta")).get("target_id") == region
-                heard.append((not local, f"Word comes: {row.get('name') or pressure_id} {_WORD[kind]}."))
+                last[pressure_id] = kind
+    heard = []
+    for pressure_id, kind in last.items():
+        row = plan[pressure_id]
+        local = _d(row.get("next_tick_delta")).get("target_id") == region
+        heard.append((not local, f"Word comes: {row.get('name') or pressure_id} {_WORD[kind]}."))
     return [line for _, line in sorted(heard, key=lambda item: item[0])][:SURFACED_PER_TURN]
 
 

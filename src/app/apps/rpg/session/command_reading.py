@@ -116,6 +116,8 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     for quest in _l(_d(_sections.quest_state_of(state)).get("quests")):
         quest = _d(quest)
         add(_s(quest.get("quest_id") or quest.get("id")), "quest", _names(quest.get("title")), True)
+    for quest_id, quest in _d(world.get("quests")).items():  # the world's, not offered yet: named, to be refused
+        add(_s(quest_id), "quest", _names(_d(quest).get("title")), False)
     focus = _s(_d(_d(runtime_state).get("dialogue_focus")).get("target_id"))
     for ability_id, name in abilities:
         add(ability_id, "ability", (name,), False)

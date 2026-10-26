@@ -38,7 +38,7 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
     expected = {
         "look around": {"turn_counted"},
         "I ask Liora Fen to join my party as a companion.": {"companion_joined", "turn_counted"},
-        "go to Starfall Village": {"location_changed", "presence_changed", "quest_place_reached"},
+        "go to Starfall Village": {"location_changed", "presence_changed", "quest_step_completed"},  # its first step
         "I buy a Healing Potion from Brindle Gearwing.": {"purse_changed", "item_added"},
         "I drop one Lantern Bread on the ground.": {"item_dropped"},
         "I pick up the Lantern Bread.": {"item_picked_up"},

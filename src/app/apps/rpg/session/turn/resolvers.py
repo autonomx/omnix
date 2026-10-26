@@ -11,6 +11,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import LocationChanged, StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.location_registry import current_location_id
+from app.apps.rpg.rules.waiting import A_WHILE, said
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
 from app.apps.rpg.foundation.state import access as _sections
@@ -44,7 +45,9 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
     name = _s(location.get("name")) or _s(_d(document.get("state")).get("current_location_name")) or "this place"
     present = routines.described(simulation, routines.present_now(simulation)[1], clock_minute(document))
     if planned.mechanic == "wait":
-        return [f"You wait a while in {name}; time passes.", *([f"Around you: {', '.join(present)}."] if present else [])]
+        waited = planned.ticks * MINUTES_PER_TICK
+        how_long = "a while" if waited == A_WHILE else said(waited)
+        return [f"You wait {how_long} in {name}; time passes.", *([f"Around you: {', '.join(present)}."] if present else [])]
     lines = [f"You look around {name}."]
     if present:
         lines.append(f"Here: {', '.join(present)}.")

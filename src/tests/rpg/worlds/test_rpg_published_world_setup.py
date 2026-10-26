@@ -70,7 +70,8 @@ def test_world_model_places_people_routes_and_services() -> None:
     assert [npc["name"] for npc in lamp["present_npcs"]] == ["Bo Kett"]
     assert model["npcs"]["npc:cy"]["location_id"] == ""
     assert lamp["services"] == ["lodging", "meal", "drink"]
-    assert strand["exits"] == {"salt lamp": "location:salt-lamp"}
+    # The lighthouse no road reaches is joined to the roads (lore_sections.joined_routes), from the strand.
+    assert strand["exits"] == {"salt lamp": "location:salt-lamp", "lighthouse": "location:lighthouse"}
     assert model["locations"]["location:lighthouse"]["name"] == "Lighthouse"
     assert location_label(REVISION, "location:lighthouse") == "Lighthouse"
 

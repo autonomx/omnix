@@ -38,6 +38,19 @@ RELIEF = {"meal": ("hunger", -35), "drink": ("thirst", -30)}
 _WORD = re.compile(r"[a-z0-9']+")
 # Words that name what is wanted without naming an offer ("supplies"), and words for each kind of service.
 _GENERIC = frozenset({"supplies", "goods", "wares", "something", "anything", "stuff", "things", "items"})
+MOST_AT_ONCE = 10  # goods bought in one go (the playtest: "two Healing Potions" bought one)
+_COUNTS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+           "a couple of": 2, "a pair of": 2, "a few": 3, "several": 3}
+_COUNT = re.compile(r"\b(\d+|" + "|".join(sorted(_COUNTS, key=len, reverse=True)) + r")\b(?!\s*(?:gold|silver|copper|coins?)\b)")
+
+
+def wanted_count(text: str) -> int:
+    """How many the words ask for: a number or a number's word, else one; at most ``MOST_AT_ONCE``."""
+    match = _COUNT.search(text.casefold())
+    if match is None:
+        return 1
+    word = match.group(1)
+    return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
 _KIND_WORDS = {
     "lodging": frozenset({"room", "rent", "lodging", "bed", "stay", "night", "sleep"}),
     "meal": frozenset({"meal", "food", "stew", "supper", "dinner", "breakfast", "lunch", "eat"}),
@@ -201,13 +214,19 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
                             refused=True, kind="refused")
     kind = _s(offer.get("service_kind"))
     effects = _d(offer.get("effects"))
-    changes: list[StateChange] = [PurseChanged(delta_copper=-price, reason=f"bought {label} from {name}")]
-    lines = [f"You pay {coins(price)} to {name} for {label}" + (f" ({', '.join(why)})" if why else "")
+    # Goods by the count asked, as many as are left and the purse covers; a room, a meal or a drink is one.
+    asked = wanted_count(text) if kind == "shop_goods" else 1
+    count = min(asked, left if left is not None else asked, purse // price)
+    what = label if count == 1 else f"{count} × {label}"
+    changes: list[StateChange] = [PurseChanged(delta_copper=-price * count, reason=f"bought {what} from {name}")]
+    lines = [f"You pay {coins(price * count)} to {name} for {what}" + (f" ({', '.join(why)})" if why else "")
              + ". The transaction is complete."]
+    if count < asked:
+        lines.append(f"That is all {'there is' if left is not None and left < asked else 'you can afford'} of {label}.")
     for item in _l(effects.get("items_added")):
         item = _d(item)
         changes.append(ItemAdded(item_id=_s(item.get("item_id")), name=_s(item.get("name")) or label,
-                                 quantity=max(1, int(item.get("quantity") or 1)), category=_s(item.get("type")),
+                                 quantity=max(1, int(item.get("quantity") or 1)) * count, category=_s(item.get("type")),
                                  fields={"description": _s(item.get("description"))} if item.get("description") else {}))
     if kind in RELIEF:
         need, delta = RELIEF[kind]
@@ -218,9 +237,9 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
                                        provider_id=_s(provider.get("provider_id")), provider_name=name, label=label,
                                        duration=_s(effects.get("duration")) or "one_night"))
     if left is not None:
-        changes.append(StockTaken(offer_id=_s(offer.get("offer_id")), remaining=left - 1, day=_today(simulation)))
+        changes.append(StockTaken(offer_id=_s(offer.get("offer_id")), remaining=left - count, day=_today(simulation)))
     changes.append(TradeRemembered(provider_id=_s(provider.get("provider_id")), provider_name=name, deal="bought",
-                                   what=label, copper=price))
+                                   what=what, copper=price * count))
     return TradeOutcome(changes=changes, lines=lines, kind="bought")
 
 

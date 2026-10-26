@@ -170,3 +170,57 @@ def test_a_seller_asked_what_is_for_sale_names_their_wares_and_a_hunt_goes_on_in
     assert plan.wares == ("Healing Potion for 3 silver",)
     # No one lives there, so creatures are met there; the nearest by road first (not Cinderhold, two roads off).
     assert plan.hero_quests[0]["goes_on_at"] == ["Skybridge Pass", "Cinderhold"]
+
+
+def test_a_place_or_person_asked_of_is_told_as_anyone_here_knows_them() -> None:
+    """The playtest: Liora, asked about the Moonroot Ruins, knew "not much beyond the name"."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {
+        "world_model": {
+            "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide", "location_id": "location:grove"},
+                     "npc:elyra": {"name": "Elyra Moonroot", "role": "dryad archivist", "location_id": "location:ruins"}},
+            "locations": {"location:ruins": {"name": "Moonroot Ruins", "description": "Forests over memory vaults."},
+                          "location:grove": {"name": "Starfall Grove", "description": "Where the gate fell."}}},
+        "present_npc_state": {"present_npc_ids": ["npc:liora"]},
+    }
+    told = build_plan(simulation, "npc:liora", "What do you know about the Moonroot Ruins?").context()
+    assert told["common_knowledge"] == [{"place": "Moonroot Ruins", "is": "Forests over memory vaults.",
+                                         "who_is_there": ["Elyra Moonroot, dryad archivist"]}]
+    told = build_plan(simulation, "npc:liora", "Who is Elyra?").context()
+    assert told["common_knowledge"] == [{"person": "Elyra Moonroot", "is": "dryad archivist", "found_at": "Moonroot Ruins"}]
+
+
+def test_words_that_do_a_quest_step_are_answered_as_done_and_a_step_goes_on_where_it_is() -> None:
+    """The playtest: told in Valecourt what should become of the engine, the princess asked to be told it at the
+    engine ("come to Valecourt"): the plan said the quest went on at a place it had not visited."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    engine = {"quest_id": "quest:engine", "title": "The Princess and the Engine", "status": "active",
+              "giver_id": "npc:seraphine", "locations": ["location:valecourt"], "visited_locations": [],
+              "objective": "Tell Seraphine what should become of the engine", "progress": {"stage": 1},
+              "steps": [{"id": "engine", "summary": "See the engine", "all_of": [{"reach": "location:valecourt"}]},
+                        {"id": "decide", "summary": "Tell Seraphine what should become of the engine", "any_of": [
+                            {"talk": "npc:seraphine", "about": ["repair"]}, {"talk": "npc:seraphine", "about": ["share"]}]}]}
+    simulation = {
+        "world_model": {"npcs": {"npc:seraphine": {"name": "Seraphine", "role": "princess", "location_id": "location:guild"}},
+                        "locations": {"location:valecourt": {"name": "Valecourt"}, "location:guild": {"name": "The Guild"}}},
+        "player_state": {"location_id": "location:valecourt"},
+        "present_npc_state": {"location_id": "location:valecourt", "present_npc_ids": ["npc:seraphine"]},
+        "quest_state": {"quests": [engine]},
+    }
+    told = build_plan(simulation, "npc:seraphine", "It should be shared with the people.").context()
+    assert told["heros_quests"][0]["goes_on_at"] == ["here"]  # she is with the hero: it goes on here, not "Valecourt"
+    assert told["what_these_words_do"] == [{"quest": "The Princess and the Engine",
+                                            "done": "Tell Seraphine what should become of the engine",
+                                            "quest_complete": True}]
+    assert "what_these_words_do" not in build_plan(simulation, "npc:seraphine", "Nice towers.").context()
+
+
+def test_the_line_writer_is_told_who_the_hero_is() -> None:
+    """The playtest: Orik called Wren (they/them) "lass"."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {"world_model": {"npcs": {"npc:orik": {"name": "Orik", "role": "innkeeper"}}}}
+    told = build_plan(simulation, "npc:orik", "Hello.", hero={"name": "Wren", "pronouns": "they/them"}).context()
+    assert told["hero"] == {"name": "Wren", "pronouns": "they/them"}

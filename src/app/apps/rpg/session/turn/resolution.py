@@ -7,6 +7,7 @@ trade on the pipeline), and the older path answers.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -20,6 +21,7 @@ from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.rules.interactions.items import drop_item, equip_item, give_item, pick_up, unequip_item, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
 from app.apps.rpg.rules.rest import rest
+from app.apps.rpg.rules.waiting import wait_minutes
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.trade import resolve_trade
@@ -122,6 +124,11 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
     if mechanic == "act":
         return free_action(session)
     if mechanic in {"look", "wait", "clarify"}:
+        if mechanic == "wait":  # as long as the words say: until evening, for three hours; else a while
+            from app.apps.rpg.session.turn.world_tick import clock_minute
+
+            minutes = wait_minutes(text, clock_minute(session) % 1440)
+            planned = planned.model_copy(update={"ticks": max(1, math.ceil(minutes / 10))})
         changes = resolve(planned, session)
         document, _ = reduce(dict(session), changes)  # what is seen, from where the hero then stands
         # Waiting is the game's own line, with no model call (F3: deterministic turns make none); looking is told.

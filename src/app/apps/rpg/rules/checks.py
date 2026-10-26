@@ -34,6 +34,7 @@ _RESTS_ON = {
     "pick_lock": ("stealth", "dexterity"), "recall_lore": ("investigation", "intelligence"),
     "search": ("investigation", "wisdom"), "notice": ("investigation", "wisdom"),
 }
+CHECK_KINDS = tuple(_RESTS_ON)  # what a quest's step may ask a check of (world_play_sections.QuestCondition)
 _XP_SCALE = {5: 0.2, 10: 0.5, 13: 1.0, 16: 1.5, 19: 2.0, 22: 3.0}
 SKILL_XP = 10  # a success at moderate difficulty
 

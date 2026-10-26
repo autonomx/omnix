@@ -4237,6 +4237,65 @@ export interface components {
         IbkrWebApiStatus: core["schemas"]["IbkrWebApiStatus"];
         /** InstallLive2DModelRequest */
         InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
+        /**
+         * InteractionPresented
+         * @description How a recent interaction is presented (the narrative engine's canonical projection): ``fields`` set on the
+         *     recent interaction of ``turn_id`` or ``response_id``, else on the latest.
+         */
+        InteractionPresented: {
+            /** Fields */
+            fields: {
+                [key: string]: unknown;
+            };
+            /**
+             * Response Id
+             * @default
+             */
+            response_id: string;
+            /**
+             * Turn Id
+             * @default
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interaction_presented";
+        };
+        /**
+         * InteractionRecorded
+         * @description The turn's interaction on the campaign's timeline (its bookkeeping, roadmap §4.1 step 9): the event appended
+         *     (the timeline keeps the last 50), the sequence and state revision it carries the campaign's, the recent
+         *     interactions the last 12, and the event the last interaction.
+         */
+        InteractionRecorded: {
+            /** Event */
+            event: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interaction_recorded";
+        };
+        /**
+         * InteractionsReplayed
+         * @description Interactions the campaign's event log holds, merged into its timeline on load (one per interaction id, in
+         *     sequence order, the last 50 kept); the sequence and revision never go back.
+         */
+        InteractionsReplayed: {
+            /** Events */
+            events: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interactions_replayed";
+        };
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -4530,6 +4589,29 @@ export interface components {
             /** Xp To Next */
             xp_to_next: number;
         };
+        /**
+         * LifecycleRecorded
+         * @description An interaction's lifecycle (resolved, narrated): kept by its id (the last 64), its turn's interaction by the
+         *     turn id, and the interaction's timeline event carrying it.
+         */
+        LifecycleRecorded: {
+            /** Interaction Id */
+            interaction_id: string;
+            /** Lifecycle */
+            lifecycle: {
+                [key: string]: unknown;
+            };
+            /**
+             * Turn Id
+             * @default
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lifecycle_recorded";
+        };
         /** Live2DAvatarActionResponse */
         Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
@@ -4706,6 +4788,24 @@ export interface components {
              * @enum {string}
              */
             type: "set_object_state" | "place_actor" | "set_route_state" | "set_hazard_state";
+        };
+        /**
+         * MapStateProjected
+         * @description The world map the play screen shows, projected from where the hero stands (``map_world_integration``): the
+         *     sheet's map state, and its place on the sheet.
+         */
+        MapStateProjected: {
+            /** Location Id */
+            location_id: string;
+            /** Map State */
+            map_state: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "map_state_projected";
         };
         /** ModelCalls */
         ModelCalls: {
@@ -4922,6 +5022,11 @@ export interface components {
              */
             pressures: components["schemas"]["WorldPressure"][];
             /**
+             * Quests
+             * @default []
+             */
+            quests: components["schemas"]["QuestPlay"][];
+            /**
              * Routines
              * @default []
              */
@@ -5112,6 +5217,36 @@ export interface components {
             type: "purse_changed";
         };
         /**
+         * QuestCondition
+         * @description One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when
+         *     given), ``hold`` an item, ``defeat`` ``count`` of a creature, or pass a ``check`` (its skill, against ``target``
+         *     when named).
+         */
+        QuestCondition: {
+            /**
+             * About
+             * @default []
+             */
+            about: string[];
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "reach" | "talk" | "hold" | "defeat" | "check";
+            /** Subject */
+            subject: string;
+            /**
+             * Target
+             * @default
+             */
+            target: string;
+        };
+        /**
          * QuestOffered
          * @description A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest
          *     a pressure raised, quests.md) comes with its row.
@@ -5142,6 +5277,26 @@ export interface components {
              * @enum {string}
              */
             type: "quest_place_reached";
+        };
+        /**
+         * QuestPlay
+         * @description How one of the world's quests is done; its title, objective, places and rewards stay its lore's.
+         */
+        QuestPlay: {
+            /** Deadline Hours */
+            deadline_hours?: number | null;
+            /**
+             * Giver Id
+             * @default
+             */
+            giver_id: string;
+            /** Id */
+            id: string;
+            /**
+             * Steps
+             * @default []
+             */
+            steps: components["schemas"]["QuestStep"][];
         };
         /**
          * QuestProgressed
@@ -5176,6 +5331,18 @@ export interface components {
             type: "quest_status_changed";
         };
         /**
+         * QuestStep
+         * @description A stage of a quest, done by any one of its ways (more than one: the quest branches there).
+         */
+        QuestStep: {
+            /** Id */
+            id: string;
+            /** Summary */
+            summary: string;
+            /** Ways */
+            ways: components["schemas"]["QuestWay"][];
+        };
+        /**
          * QuestStepCompleted
          * @description A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the
          *     branch, when the stage had more than one), and what it asks next.
@@ -5202,6 +5369,14 @@ export interface components {
              * @enum {string}
              */
             type: "quest_step_completed";
+        };
+        /**
+         * QuestWay
+         * @description One way to do a step: all of its conditions.
+         */
+        QuestWay: {
+            /** Conditions */
+            conditions: components["schemas"]["QuestCondition"][];
         };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
@@ -7171,8 +7346,8 @@ export interface components {
         };
         /**
          * RpgPlaySectionsReadiness
-         * @description Each section (economy, routines, knowledge, pressures, bestiary): written by the world, or inferred from its
-         *     lore at launch.
+         * @description Each section (economy, routines, knowledge, pressures, bestiary, quests): written by the world, or inferred
+         *     from its lore at launch.
          */
         RpgPlaySectionsReadiness: {
             /**
@@ -7195,6 +7370,11 @@ export interface components {
              * @enum {string}
              */
             pressures: "authored" | "derived";
+            /**
+             * Quests
+             * @enum {string}
+             */
+            quests: "authored" | "derived";
             /**
              * Routines
              * @enum {string}
@@ -10016,7 +10196,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["HotbarChanged"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"] | components["schemas"]["LocalMapEntered"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["HotbarChanged"] | components["schemas"]["MapStateProjected"] | components["schemas"]["InteractionRecorded"] | components["schemas"]["InteractionsReplayed"] | components["schemas"]["LifecycleRecorded"] | components["schemas"]["InteractionPresented"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"] | components["schemas"]["LocalMapEntered"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;

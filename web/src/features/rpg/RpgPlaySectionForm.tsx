@@ -1,5 +1,5 @@
 import type { RpgPlaySectionsReferences } from './api/rpgWorldPlaySectionsClient';
-import type { NameOf, PlayField, PlayRow, PlayRows, RefKind } from './rpgPlaySectionFields';
+import { CHECK_KINDS, CONDITION_SUBJECTS, type NameOf, type PlayField, type PlayRow, type PlayRows, type RefKind } from './rpgPlaySectionFields';
 
 /** A play section's rows as a form (RQ-4.1): each row a collapsible card of its fields; lists within lists. */
 
@@ -57,6 +57,32 @@ function LeverInput({ value, onChange, context }: { value: unknown; onChange: (n
   );
 }
 
+function SubjectInput({ kind, value, onChange, context }: { kind: unknown; value: unknown; onChange: (next: string) => void; context: FormContext }) {
+  const refs = CONDITION_SUBJECTS[String(kind ?? '')];
+  const current = typeof value === 'string' ? value : '';
+  if (!refs) {
+    return (
+      <select aria-label="Check" value={current} onChange={(event) => onChange(event.currentTarget.value)}>
+        <option value="">Choose…</option>
+        {current && !CHECK_KINDS.some(([option]) => option === current) ? <option value={current}>{current} (not a check)</option> : null}
+        {CHECK_KINDS.map(([option, label]) => <option key={option} value={option}>{label}</option>)}
+      </select>
+    );
+  }
+  if (kind === 'companion') {
+    const people = context.refs.people;
+    return (
+      <select aria-label="Companion" value={current} onChange={(event) => onChange(event.currentTarget.value)}>
+        <option value="">Choose…</option>
+        <option value="anyone">Anyone</option>
+        {current && current !== 'anyone' && !people.some((row) => row.id === current) ? <option value={current}>{current} (not in this world)</option> : null}
+        {people.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+      </select>
+    );
+  }
+  return <RefSelect field={{ key: 'subject', label: REF_LABELS[refs], kind: 'ref', refs: [refs] }} value={current} onChange={onChange} context={context} />;
+}
+
 function PriceInput({ value, onChange, nullable }: { value: unknown; onChange: (next: PlayRow | null) => void; nullable?: boolean }) {
   if (value === null || value === undefined) {
     return nullable
@@ -95,9 +121,10 @@ function GroupInput({ field, value, onChange, context }: {
   );
 }
 
-function FieldInput({ field, value, onChange, context }: {
+function FieldInput({ field, value, row, onChange, context }: {
   field: PlayField;
   value: unknown;
+  row: PlayRow;
   onChange: (next: unknown) => void;
   context: FormContext;
 }) {
@@ -123,6 +150,8 @@ function FieldInput({ field, value, onChange, context }: {
       return <PriceInput nullable={field.nullable} value={value} onChange={onChange} />;
     case 'lever':
       return <LeverInput value={value} onChange={onChange} context={context} />;
+    case 'subject':
+      return <SubjectInput kind={row[field.by]} value={value} onChange={onChange} context={context} />;
     case 'group':
       return <GroupInput field={field} value={value} onChange={onChange} context={context} />;
     case 'list':
@@ -140,7 +169,7 @@ function FieldGrid({ fields, row, onChange, context }: {
     <div className="rpg-play-fields">
       {fields.map((field) => {
         const wide = field.kind === 'list' || field.kind === 'group' || field.kind === 'textarea';
-        const control = <FieldInput field={field} value={row[field.key]} onChange={(next) => onChange({ ...row, [field.key]: next })} context={context} />;
+        const control = <FieldInput field={field} value={row[field.key]} row={row} onChange={(next) => onChange({ ...row, [field.key]: next })} context={context} />;
         return wide || field.kind === 'price' || field.kind === 'lever'
           ? <div className={wide ? 'rpg-play-field is-wide' : 'rpg-play-field'} key={field.key} role="group" aria-label={field.label}><span>{field.label}</span>{control}</div>
           : <label className="rpg-play-field" key={field.key}><span>{field.label}</span>{control}</label>;

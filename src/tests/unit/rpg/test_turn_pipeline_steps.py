@@ -159,7 +159,8 @@ def test_word_of_a_pressure_turning_reaches_the_hero() -> None:
     _, _, seen = world_tick(campaign, needs=None, minutes=10, turn_key="turn:4")
     assert seen == []  # 09:00 to 09:10: no hour crossed, so the pressures did not move
     changes, receipt, seen = world_tick(campaign, needs=None, minutes=3 * 60, turn_key="turn:4")
-    # The hero's region first, at most two: it grew worse, and the world held it in check the next hour (Q-10).
-    assert seen == ["Word comes: Danger in region:a grows worse.", "Word comes: Danger in region:a is held in check."]
+    # The hero's region first, at most two: it grew worse, and the world held it in check the next hour (Q-10); the
+    # word is where it ended, not both. Then the next of the others.
+    assert seen == ["Word comes: Danger in region:a is held in check.", "Word comes: Danger in region:b is held in check."]
     [ticked] = [change for change in changes if change.type == "world_ticked"]
     assert ticked.simulation["causal_world_runtime"]["last_tick"] == 3  # three hours: three moves

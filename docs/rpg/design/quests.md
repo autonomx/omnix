@@ -80,3 +80,24 @@ hero whose home is safe is still asked about the roads beyond it. A `defeat:` le
 region the creature fell in (a world's derived pressures list every creature in every region); a `quest:` lever is
 the quest's, wherever it was done.
 
+## As built (the Aurelia playtest, 2026-10-26)
+
+A quest's steps are a play section (`world_play_sections.QuestPlay`, written in **How It Plays** beside the economy,
+routines, knowledge, pressures and bestiary): each step a summary and one or more `ways` (more than one: the quest
+branches there), each way all of its conditions. The canon keeps them in the rules' own shape, beside the quest's
+title, objective, places and rewards (`quest_canon_fields`: one way is `all_of`, several are `any_of`), so a world that
+wrote steps in its canon (the Market Road) reads them back as its section (`quest_play_of`). A step's conditions are
+checked at release: a place, person, item or creature the world lacks, or a check the game does not have
+(`rules/checks.CHECK_KINDS`), is a finding. A quest can name its giver and a deadline. A new condition, `companion`
+(someone named, or `anyone`, in the party), ends Aurelia's first night when a first companion is chosen. World Forge
+drafts no steps: they are the author's.
+
+Aurelia's author wrote every quest's steps: before, each was places only, so the finale (confront Malrec, choose the
+gate's fate) was done on arriving at the Hollow Meridian. Now the first night is reach the village, register with Miri,
+choose a companion; the phone is Brindle's to mend, then followed to the ruins, then named by Elyra; the bridge is
+Vael's vow, the crossing, and the gale spirit kept faith with (a word, a climb, or the mantas driven off); Orik's
+daughter's memory is his story, the Loom, its Rootbound Knights (fought, or their broken oath named), Elyra's
+restoring and the way home; the princess's engine is her summons, Valecourt, and the choice (repair, dismantle,
+democratize); the finale is the Moonroot Key (Orik's quest's reward), the descent, Malrec, the Hollow Archon, and the
+gate closed, kept open or made a guarded bridge.
+

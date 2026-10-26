@@ -61,12 +61,18 @@ def _plays(row: Any) -> bool:
     return isinstance(row, Mapping) and any(row.get(key) for key in ("stats", "behaviour", "loot"))
 
 
+def _quest_plays(row: Any) -> bool:
+    return isinstance(row, Mapping) and any(row.get(key) for key in ("steps", "giver_id", "deadline_hours"))
+
+
 def _as_played(document: Mapping[str, Any]) -> str:
-    """A draft's hash as it plays: a revision lists its creatures in the lore's order, the draft in the author's,
-    and a creature row that says nothing of how it fights is no row at all."""
+    """A draft's hash as it plays: a revision lists its creatures and quests in the lore's order, the draft in the
+    author's, and a row that says nothing of how it fights (or how it is done) is no row at all."""
     bestiary = sorted((row for row in document.get("bestiary") or () if _plays(row)),
                       key=lambda row: _text(dict(row).get("id")))
-    return canonical_hash({**dict(document), "bestiary": bestiary})
+    quests = sorted((row for row in document.get("quests") or () if _quest_plays(row)),
+                    key=lambda row: _text(dict(row).get("id")))
+    return canonical_hash({**dict(document), "bestiary": bestiary, "quests": quests})
 
 
 def _published(revision: WorldRevisionDocument | None) -> dict[str, Any]:

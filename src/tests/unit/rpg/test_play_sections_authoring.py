@@ -87,7 +87,9 @@ def test_world_forge_drafts_every_section_from_the_lore() -> None:
     # The draft is valid and names only what the world has.
     published = with_play_sections(CANON, PlaySectionsDraft.model_validate(draft))
     assert play_section_findings(published, location_ids=_places(), region_ids={"ent:regions:sump"}) == ()
-    assert set(authorship(parse_play_sections(published)[0]).values()) == {"authored"}
+    # Every section but the quests' steps, which are their author's (a quest without them is done by its places).
+    assert {section for section, source in authorship(parse_play_sections(published)[0]).items()
+            if source != "authored"} == {"quests"}
 
 
 def test_a_section_the_world_wrote_is_kept_as_written() -> None:

@@ -20,6 +20,7 @@ from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_dat
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, asked_not_done, hypothetical
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.rules.checks import CHECK_KINDS as _CHECK_KINDS
 
 logger = logging.getLogger(__name__)
 INTENT_TIMEOUT_SECONDS = 10.0
@@ -52,8 +53,7 @@ FAMILIES: dict[str, tuple[str, frozenset[str]]] = {
     "check": ("try something risky: persuade, intimidate, deceive, haggle, sneak, climb, pick a lock, recall "
               "lore, search, notice", frozenset({"", "person", "creature", "item", "place"})),
 }
-CHECK_KINDS = frozenset({"persuade", "intimidate", "deceive", "haggle", "sneak", "climb", "pick_lock",
-                         "recall_lore", "search", "notice"})
+CHECK_KINDS = frozenset(_CHECK_KINDS)  # the checks the rules resolve (rules/checks.py)
 _PROMPT = prompt_template(
     "rpg.turn_intent.readings", "1",
     "Read what the player means, as up to three readings, most likely first. Each is one of FAMILIES and, when it is "

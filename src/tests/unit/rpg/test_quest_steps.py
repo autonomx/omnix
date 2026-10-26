@@ -64,3 +64,19 @@ def test_a_talk_about_something_needs_the_heros_words_to_touch_it() -> None:
     assert _quest(document)["status"] == "active"
     document, _, _ = _advance(document, [DialogueExchanged(npc_id="npc:bran", player_line="Which RUMOR is true?")])
     assert _quest(document)["status"] == "completed"
+
+
+def test_a_companion_step_is_done_by_one_named_or_by_anyone_in_the_party() -> None:
+    """Aurelia's first night ends with a first companion chosen (the playtest: it ended on reaching the guild)."""
+    def quest(who: str) -> dict:
+        return {"quest_id": "quest:first", "title": "First Night", "status": "active", "steps": [
+            {"id": "companion", "summary": "Choose a first companion", "all_of": [{"companion": who}]}]}
+
+    alone = _document(quest("anyone"))
+    assert _advance(alone, [])[1] == []
+    joined = _document(quest("anyone"))
+    joined["simulation_state"]["player_state"]["party_state"] = {"companions": [{"npc_id": "npc:liora"}]}
+    assert _quest(_advance(joined, [])[0])["status"] == "completed"
+    named = _document(quest("npc:bran"))
+    named["simulation_state"]["player_state"]["party_state"] = {"companions": [{"npc_id": "npc:liora"}]}
+    assert _advance(named, [])[1] == []  # Liora is not Bran

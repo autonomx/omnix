@@ -52,12 +52,16 @@ def test_quest_from_offer_to_reward(launch, world) -> None:
     assert "You take on the quest Voices in the Phone" in play.model.told()
 
     purse = play.purse()
-    play.turn("go to Starfall Village")
+    play.turn("go to Starfall Village")  # Aurelia's first night, step by step: the village, the guild, a companion
     first_night = play.quests()["First Night in Aurelia"]
-    assert first_night["status"] == "active" and "location:aurelia:starfall-village" in first_night["visited_locations"]
-    assert "Progress on First Night in Aurelia: 2 of 3 places reached." in play.model.told()
+    assert first_night["status"] == "active" and first_night["progress"]["stage"] == 1
+    assert ("First Night in Aurelia: Reach Starfall Village. Next: Register with Miri Kestrel at the Wayfarers' Guild."
+            in play.model.told())
 
     play.turn("go to Wayfarers' Guild")
+    play.turn("I ask Miri Kestrel to register me with the guild.")
+    assert play.quests()["First Night in Aurelia"]["objective"] == "Choose a first companion"
+    play.turn("I ask Miri Kestrel to join my party.")
     assert play.quests()["First Night in Aurelia"]["status"] == "completed"
     assert play.purse() == purse + 200  # 20 silver
     assert play.inventory()["Wayfarer Sigil"] == 1

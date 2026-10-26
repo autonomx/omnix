@@ -11,7 +11,7 @@ import { PLAY_SECTIONS, describeFinding, type NameOf, type PlaySectionId } from 
 import './RpgWorldPlaySections.css';
 
 /**
- * How a world plays, in the world editor (RQ-4.1): its economy, routines, knowledge, pressures and bestiary. The
+ * How a world plays, in the world editor (RQ-4.1): its economy, routines, knowledge, pressures, bestiary and quests. The
  * author drafts them (or has World Forge draft them from the lore), saves the draft with the world, and publishes
  * it; a section left empty is inferred from the lore when a campaign starts.
  */
@@ -119,7 +119,7 @@ export function RpgWorldPlaySectionsPanel({ worldId }: RpgWorldPlaySectionsPanel
         <div>
           <p className="eyebrow">Game Master</p>
           <h2>How It Plays</h2>
-          <p>Who sells what, where people are through the day, what they know, the pressures the world’s clock moves, and how its creatures fight. A section left empty is inferred from the world’s lore when a campaign starts.</p>
+          <p>Who sells what, where people are through the day, what they know, the pressures the world’s clock moves, how its creatures fight, and what its quests take. A section left empty is inferred from the world’s lore when a campaign starts.</p>
         </div>
         <span>{status}</span>
       </div>

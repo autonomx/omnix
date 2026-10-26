@@ -21,12 +21,16 @@ from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 _LINE_PROMPT = prompt_template(
-    "rpg.ai_compact_dialogue.plan", "7",
+    "rpg.ai_compact_dialogue.plan", "10",
     "Reply as the speaker in the PLAN, in one or two concise spoken sentences, in their voice and stance. Output "
     "only the words they say: no name label, narration, JSON or markdown. Share what may_reveal holds, offer what "
     "offers_quest or offers_to_tell_for_a_price hold, and name each of wares with its price as written. Asked what to "
     "do or how, point to heros_quests: where each goes on, in the speaker's own words, never quoting a quest's title "
-    "(one that is done is done: do not send them back to it). "
+    "(one that is done is done: do not send them back to it). Asked of a place or person, they may tell what "
+    "common_knowledge holds, in their own way. When what_these_words_do names a step, the hero's words do it now: "
+    "answer as one to whom it has just been done, never asking for it again or for it to be done elsewhere. "
+    "Speak to and of the hero as hero names them, with no gendered address (lass, lad, sir, madam) their pronouns "
+    "do not call for. "
     "Never invent a task, item or requirement the PLAN does not hold, and never speak of the plan itself. About "
     "anything else, answer from their role and "
     "background or say they do not know. Keep continuity with "
@@ -101,7 +105,9 @@ def resolve_dialogue(session: Mapping[str, Any], target_id: str, text: str) -> D
     """The answer of the person spoken to; ``None`` when no one present is clearly spoken to (the older path's)."""
     simulation = _d(_sections.simulation_state_of(session))
     speaker_id = _speaker(simulation, _d(_sections.runtime_state_of(session)), target_id)
-    plan = build_plan(simulation, speaker_id, text) if speaker_id else None
+    sheet = _d(_d(session.get("state")).get("player"))  # who the hero is, as their sheet names them
+    hero = {key: _s(sheet.get(key)) for key in ("name", "pronouns") if _s(sheet.get(key))}
+    plan = build_plan(simulation, speaker_id, text, hero=hero) if speaker_id else None
     if plan is None:
         return None
     exchanges = [_d(row) for row in _l(_d(_d(simulation.get("dialogue")).get("exchanges")).get(speaker_id))]

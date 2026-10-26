@@ -1,4 +1,5 @@
-"""What a world says about how it plays: its economy, its people's routines and knowledge, its pressures (RQ-2.0).
+"""What a world says about how it plays: its economy, its people's routines and knowledge, its pressures, how its
+creatures fight and how its quests are done (RQ-2.0).
 
 These are optional sections of a world revision's canon. A world that has them is played as its
 author wrote it; one that does not is played from what launch infers from its lore
@@ -10,6 +11,9 @@ launch readiness can say so.
 - ``canon.knowledge``: what each person knows, and on what terms they share it.
 - ``canon.pressures``: the forces the world's clock moves (a threat, a shortage, a feud).
 - ``canon.bestiary[*]``: optional fighting numbers, behaviour and loot beside threat and weakness.
+- ``canon.quests[*]``: optional steps (what doing it takes, stage by stage, with its branches), who gives it and its
+  deadline, beside its title and objective. A quest without steps is done by reaching its places
+  (``rules/quest/arrival.py``); one with them, as ``rules/quest/progress.py`` judges them.
 
 Older bundles carry none of these and import as before; the sections ride inside canon, so a
 bundle that has them needs no new bundle version.
@@ -25,9 +29,12 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from app.apps.rpg.rules.checks import CHECK_KINDS
+from app.apps.rpg.rules.quest.progress import ANYONE
+
 from .lore_sections import lore_rows
 
-SECTIONS = ("economy", "routines", "knowledge", "pressures", "bestiary")
+SECTIONS = ("economy", "routines", "knowledge", "pressures", "bestiary", "quests")
 ServiceKind = Literal["lodging", "meal", "drink", "shop_goods", "repair", "paid_information"]
 
 
@@ -183,12 +190,52 @@ class BestiaryPlay(BaseModel):
     loot: tuple[LootDrop, ...] = ()
 
 
+ConditionKind = Literal["reach", "talk", "hold", "defeat", "check", "companion"]
+_CONDITION_KINDS: tuple[str, ...] = ("reach", "talk", "hold", "defeat", "check", "companion")
+
+
+class QuestCondition(_Section):
+    """One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when
+    given), ``hold`` an item, ``defeat`` ``count`` of a creature, pass a ``check`` (its kind, ``rules/checks.py``,
+    against ``target`` when named), or have a ``companion`` (someone, or ``anyone``) in the party."""
+
+    kind: ConditionKind
+    subject: str = Field(min_length=1, max_length=120)
+    about: tuple[str, ...] = ()
+    count: int = Field(default=1, ge=1, le=50)
+    target: str = ""
+
+
+class QuestWay(_Section):
+    """One way to do a step: all of its conditions."""
+
+    conditions: tuple[QuestCondition, ...] = Field(min_length=1, max_length=8)
+
+
+class QuestStep(_Section):
+    """A stage of a quest, done by any one of its ways (more than one: the quest branches there)."""
+
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    summary: str = Field(min_length=1, max_length=200)
+    ways: tuple[QuestWay, ...] = Field(min_length=1, max_length=6)
+
+
+class QuestPlay(_Section):
+    """How one of the world's quests is done; its title, objective, places and rewards stay its lore's."""
+
+    id: str = Field(min_length=1)
+    giver_id: str = ""
+    deadline_hours: float | None = Field(default=None, gt=0, le=24 * 60)
+    steps: tuple[QuestStep, ...] = Field(default=(), max_length=12)
+
+
 class WorldPlaySections(_Section):
     providers: tuple[ProviderEconomy, ...] = ()
     routines: tuple[NpcRoutine, ...] = ()
     knowledge: tuple[NpcKnowledge, ...] = ()
     pressures: tuple[WorldPressure, ...] = ()
     bestiary: tuple[BestiaryPlay, ...] = ()
+    quests: tuple[QuestPlay, ...] = ()
     authored: tuple[str, ...] = ()
 
 
@@ -208,6 +255,56 @@ def _error_code(error: ValidationError) -> str:
 
 
 _BESTIARY_PLAY = ("stats", "behaviour", "loot")
+_QUEST_PLAY = ("steps", "giver_id", "deadline_hours")
+
+
+def _condition_play(condition: Mapping[str, Any]) -> dict[str, Any]:
+    """A condition as the canon keeps it (``{"defeat": id, "count": 3}``) in the editor's shape."""
+    kind = next((key for key in _CONDITION_KINDS if condition.get(key)), "")
+    about = condition.get("about")
+    return {"kind": kind, "subject": str(condition.get(kind) or ""),
+            **({"about": [str(word) for word in (about if isinstance(about, (list, tuple)) else [about]) if word]}
+               if about else {}),
+            **({"count": condition["count"]} if condition.get("count") else {}),
+            **({"target": str(condition["target"])} if condition.get("target") else {})}
+
+
+def _step_play(step: Mapping[str, Any]) -> dict[str, Any]:
+    if _rows(step.get("any_of")):
+        ways = [way if isinstance(way, (list, tuple)) else [way] for way in _rows(step["any_of"])]
+    else:
+        ways = [_rows(step.get("all_of") or step.get("conditions"))]
+    return {"id": step.get("id"), "summary": step.get("summary"),
+            "ways": [{"conditions": [_condition_play(_mapping(row)) for row in way]} for way in ways]}
+
+
+def quest_play_of(row: Mapping[str, Any]) -> dict[str, Any]:
+    """A canon quest row's play fields in the editor's shape (``QuestPlay``)."""
+    return {"id": row.get("id"), **{key: row[key] for key in ("giver_id", "deadline_hours") if row.get(key)},
+            "steps": [_step_play(_mapping(step)) for step in _rows(row.get("steps"))]}
+
+
+def _condition_canon(condition: QuestCondition) -> dict[str, Any]:
+    return {condition.kind: condition.subject, **({"about": list(condition.about)} if condition.about else {}),
+            **({"count": condition.count} if condition.kind == "defeat" and condition.count > 1 else {}),
+            **({"target": condition.target} if condition.kind == "check" and condition.target else {})}
+
+
+def quest_canon_fields(play: QuestPlay) -> dict[str, Any]:
+    """A quest's play fields as the canon keeps them and ``rules/quest/progress.py`` reads them: a step of one way
+    is ``all_of`` its conditions; of several, ``any_of`` them (each a condition, or a list that must all hold)."""
+    steps = []
+    for step in play.steps:
+        ways = [[_condition_canon(condition) for condition in way.conditions] for way in step.ways]
+        steps.append({"id": step.id, "summary": step.summary,
+                      **({"all_of": ways[0]} if len(ways) == 1 else
+                         {"any_of": [way[0] if len(way) == 1 else way for way in ways]})})
+    return {**({"steps": steps} if steps else {}), **({"giver_id": play.giver_id} if play.giver_id else {}),
+            **({"deadline_hours": play.deadline_hours} if play.deadline_hours is not None else {})}
+
+
+def _quest_plays(row: Mapping[str, Any]) -> bool:
+    return any(row.get(key) for key in _QUEST_PLAY)
 
 
 def _plays(row: Mapping[str, Any]) -> bool:
@@ -245,6 +342,10 @@ def parse_play_sections(canon: Mapping[str, Any]) -> tuple[WorldPlaySections, tu
     parsed["bestiary"] = parse("bestiary", BestiaryPlay, bestiary)
     if any(_plays(row) for row in bestiary):
         authored.append("bestiary")
+    quests = [quest_play_of(row) for row in _rows(canon.get("quests")) if isinstance(row, Mapping) and _quest_plays(row)]
+    if quests:
+        parsed["quests"] = parse("quests", QuestPlay, quests)
+        authored.append("quests")
     return WorldPlaySections(**parsed, authored=tuple(authored)), tuple(findings)
 
 
@@ -300,6 +401,21 @@ def play_section_findings(
         for drop in creature.loot:
             if drop.item_id not in item_ids:
                 unknown.append(f"play_section_unknown_item:bestiary:{drop.item_id}")
+    known = {"reach": (location_ids, "place"), "talk": (npc_ids, "person"), "hold": (item_ids, "item"),
+             "defeat": (creature_ids, "creature"), "companion": (npc_ids | {ANYONE}, "person"),
+             "check": (set(CHECK_KINDS), "check")}
+    for quest in sections.quests:
+        if quest.id not in quest_ids:
+            unknown.append(f"play_section_unknown_quest:quests:{quest.id}")
+        if quest.giver_id and quest.giver_id not in npc_ids:
+            unknown.append(f"play_section_unknown_person:quests:{quest.giver_id}")
+        for step in quest.steps:
+            for condition in (condition for way in step.ways for condition in way.conditions):
+                ids, what = known.get(condition.kind, (None, ""))
+                if ids is not None and condition.subject not in ids:
+                    unknown.append(f"play_section_unknown_{what}:quests:{condition.subject}")
+                if condition.target and condition.target not in npc_ids:
+                    unknown.append(f"play_section_unknown_person:quests:{condition.target}")
     return tuple(sorted(set((*findings, *unknown))))
 
 
@@ -330,6 +446,7 @@ class PlaySectionsDraft(_Section):
     knowledge: tuple[NpcKnowledge, ...] = ()
     pressures: tuple[WorldPressure, ...] = ()
     bestiary: tuple[CreaturePlay, ...] = ()
+    quests: tuple[QuestPlay, ...] = ()
 
 
 def draft_findings(document: Any) -> tuple[PlaySectionsDraft | None, tuple[str, ...]]:
@@ -366,6 +483,7 @@ def play_sections_document(canon: Mapping[str, Any]) -> dict[str, Any]:
         "knowledge": [_dump(row) for row in sections.knowledge],
         "pressures": [_dump(row) for row in sections.pressures],
         "bestiary": plays,
+        "quests": [_dump(row) for row in sections.quests],
     }
 
 
@@ -395,14 +513,25 @@ def with_play_sections(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> di
             creatures.append({**lore, **({key: value for key, value in _dump(play).items() if key != "id"}
                                          if play is not None else {})})
         canon["bestiary"] = creatures  # a creature the world lacks is left out (unknown_creatures names it)
+    quests = {row.id: row for row in draft.quests}
+    if quests or any(_quest_plays(row) for row in lore_rows(canon, "quests")):
+        rows = []
+        for row in lore_rows(canon, "quests"):
+            lore = {key: value for key, value in row.items() if key not in _QUEST_PLAY}
+            play = quests.pop(str(row.get("id") or ""), None)
+            rows.append({**lore, **(quest_canon_fields(play) if play is not None else {})})
+        canon["quests"] = rows  # a quest the world lacks is left out (unknown_creatures names it)
     return canon
 
 
 def unknown_creatures(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> tuple[str, ...]:
-    """The draft's creatures ``canon`` does not have (``play_section_unknown_creature:bestiary:<id>``)."""
-    known = _ids(canon, "bestiary")
-    return tuple(sorted(f"play_section_unknown_creature:bestiary:{row.id}" for row in draft.bestiary
-                        if row.id not in known))
+    """The draft's creatures and quests ``canon`` does not have (``play_section_unknown_creature:bestiary:<id>``,
+    ``play_section_unknown_quest:quests:<id>``): ``with_play_sections`` has nowhere to put them."""
+    creatures, quests = _ids(canon, "bestiary"), _ids(canon, "quests")
+    return tuple(sorted([*(f"play_section_unknown_creature:bestiary:{row.id}" for row in draft.bestiary
+                           if row.id not in creatures),
+                         *(f"play_section_unknown_quest:quests:{row.id}" for row in draft.quests
+                           if row.id not in quests)]))
 
 
 __all__ = [
@@ -417,6 +546,10 @@ __all__ = [
     "NpcRoutine",
     "PlaySectionsDraft",
     "ProviderEconomy",
+    "QuestCondition",
+    "QuestPlay",
+    "QuestStep",
+    "QuestWay",
     "RoutineStep",
     "ShopOffer",
     "WorldPlaySections",
@@ -426,6 +559,8 @@ __all__ = [
     "parse_play_sections",
     "play_section_findings",
     "play_sections_document",
+    "quest_canon_fields",
+    "quest_play_of",
     "unknown_creatures",
     "with_play_sections",
 ]

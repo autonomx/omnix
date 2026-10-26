@@ -2,8 +2,8 @@
 
 A world may author a quest's ``steps``: stages done in order, each a set of conditions that must all hold, or
 ``any_of`` alternatives (the branches: either way completes the stage). A condition is one of ``reach`` a place,
-``talk`` to someone, ``hold`` an item, ``defeat`` a creature (``count`` of them), or pass a ``check`` (its kind, and
-a target when named). Progress is judged after every turn, against the campaign as the turn leaves it and the turn's
+``talk`` to someone, ``hold`` an item, ``defeat`` a creature (``count`` of them), pass a ``check`` (its kind, and
+a target when named), or have a ``companion`` (someone named, or ``anyone``) in the party. Progress is judged after every turn, against the campaign as the turn leaves it and the turn's
 own changes: a stage done advances the quest, the last one completes it and pays its rewards. A quest with a
 ``deadline_hours`` fails when the time since it was taken up runs out, and its giver trusts the hero less. A quest
 with no steps advances by its places, as before (``arrival.py``). Pure: it returns the changes.
@@ -27,6 +27,7 @@ from app.apps.rpg.rules import routines
 from app.apps.rpg.foundation.state import access as _sections
 
 FAILED_REGARD = -10  # a quest failed costs its giver's trust (quests.md)
+ANYONE = "anyone"  # a ``companion`` condition any companion meets
 DONE_REGARD = 10  # and one done earns it (the playtest: the captain's contract finished, her regard unmoved)
 
 
@@ -72,6 +73,9 @@ def _holds(condition: Mapping[str, Any], simulation: Mapping[str, Any], applied:
                    for item in _l(_d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation)))).get("items")))
     if condition.get("defeat"):
         return counts.get(_s(condition["defeat"]), 0) >= max(1, int(condition.get("count") or 1))
+    if condition.get("companion"):
+        party, who = routines.companions(simulation), _s(condition["companion"])
+        return bool(party) if who == ANYONE else who in party
     if condition.get("check"):
         target = _s(condition.get("target"))
         return any(isinstance(change, CheckResolved) and change.kind == _s(condition["check"])
@@ -140,4 +144,4 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
     return changes, lines
 
 
-__all__ = ["DONE_REGARD", "FAILED_REGARD", "giver_thanks", "quest_progress", "victories"]
+__all__ = ["ANYONE", "DONE_REGARD", "FAILED_REGARD", "giver_thanks", "quest_progress", "victories"]

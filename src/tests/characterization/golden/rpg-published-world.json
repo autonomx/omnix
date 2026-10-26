@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:be3677ec75e5f6dc392714b937232c3a2237ff705a47ccddd72a63d9d426cb29",
+    "document_hash": "sha256:ba176bef2358696e683ba26e9652007ff15846a3f87d5a375a7962903e4f7017",
     "facts": {
       "combat": {
         "active": false,
@@ -80,7 +80,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:608b077a693eaf309cce7924aa431c9868a85c2e72f6ca61c6644832cf8cf210",
+      "document_hash": "sha256:8f373b4ad0afbb5ececa76075cc7e5b767c7d1b4cb2cb604cadbf4c4e7b4857a",
       "facts": {
         "combat": {
           "active": false,
@@ -213,7 +213,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:af97610a2f5099024c2ab607ab92a5e2b3d8070a14b144ad2a6a9ef38e01ca0b",
+      "document_hash": "sha256:0cd622e75b74bceca9624cb8d76f4d8cdc5767c4a8c4ed90669853b83cb4bf52",
       "facts": {
         "combat": {
           "active": false,
@@ -355,7 +355,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:75b92904110ac91d4f6b1581678f493b3d60adf19ae172494a384aa4a9af5c8a",
+      "document_hash": "sha256:dcc8eb37d9d462fc7d87f1eb459d5f6208ca1f8084f7b98f02eefaff6327de3c",
       "facts": {
         "combat": {
           "active": false,
@@ -497,7 +497,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ead8f140106df9b86b2ef49dd67e359aa82e1585d0160a4e7252367b88d9f8b7",
+      "document_hash": "sha256:5a425f9ced19b856591e1a5504bb4e318526f965e045ec840224bf733f926e3f",
       "facts": {
         "combat": {
           "active": false,
@@ -639,7 +639,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:4b26407dcbb7306987eace8e380806853128746d4d3e734d6254bf2c5bf72493",
+      "document_hash": "sha256:0fe1da90f587d973410a9ec1b0b740963b970b5f1541d7fea72f9412c485b888",
       "facts": {
         "combat": {
           "active": false,
@@ -799,7 +799,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:fefe0e438b0a3bb1ea684c8c697adff1c3c36f8c68febfefdc92a023bf5080d9",
+      "document_hash": "sha256:fc4347067a6aac83e98900cd18806aa0b97882116716b29f695c622cea69a8ea",
       "facts": {
         "combat": {
           "active": false,
@@ -935,10 +935,10 @@
           "time",
           "location",
           "npcs",
-          "quests",
           "player",
           "survival",
           "world",
+          "quests",
           "narrative"
         ],
         "source": "narrative_engine_scene_turn_v1",
@@ -948,10 +948,10 @@
             "time",
             "location",
             "npcs",
-            "quests",
             "player",
             "survival",
             "world",
+            "quests",
             "narrative"
           ],
           "revision": 6
@@ -976,7 +976,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:9ae725495b93830a0a06f6d2432220ce990f790f7cfd962118d6756345144bd2",
+      "document_hash": "sha256:0dc4a66c2a359bc642f885695f0a6023732216d513828cc71a5db007d7deb5b5",
       "facts": {
         "combat": {
           "active": false,
@@ -1112,7 +1112,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:26fee8306cd904a662ad8002a8619e8fe1a16d7a99b6a576679a92263a4e81a0",
+      "document_hash": "sha256:02d4889cb94abf379a44e75ad8ebb26efddb4f2a7dbf8e50fd582351e0d48a23",
       "facts": {
         "combat": {
           "active": false,
@@ -1254,7 +1254,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:21feb2fa2bfe0a906e7110eb9a08e808fb11b57c83c35b4055c0fb0796ae1e88",
+      "document_hash": "sha256:ad17a88b181100bc732cdf0d0f393c7976be9ea3624a5d5331e1136c80568215",
       "facts": {
         "combat": {
           "active": false,
@@ -1395,7 +1395,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:0ee1aa06b3d9b7f6e2c72ec8a4c9a4808d8c6878c7acd7a9b4e493787237d63a",
+      "document_hash": "sha256:4f0f789947b4a5b65f2683fd47417054a280b6f78c29d2db218a7df7ab67c267",
       "facts": {
         "combat": {
           "active": false,
@@ -1541,7 +1541,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:03b5d1dde482857c08165d9875b47ce94cc83480b6f7d25d0a0c1a3ce1a2c749",
+      "document_hash": "sha256:d1158ae5962da0dfb624bb6dcd44e5965c945eb0509360b8e98435cc66868925",
       "facts": {
         "combat": {
           "active": false,
@@ -1678,7 +1678,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:7e29ce683f7b69fe48e69cf88bedd24978bbfaa31b36e1a60dd2848bbf19e498",
+      "document_hash": "sha256:b018d76e1d0612054f1bde6276a7c09fe28700cab3ae6ac7d941bce07e0f8ede",
       "facts": {
         "combat": {
           "active": false,
@@ -1804,10 +1804,6 @@
     },
     {
       "changes": {
-        "hp": 5,
-        "inventory": {
-          "Wayfarer Sigil": 1
-        },
         "location_id": "location:aurelia:wayfarer-guild",
         "location_name": "Wayfarers' Guild",
         "present_npc_ids": {
@@ -1821,17 +1817,13 @@
             "npc:orik-stonewake"
           ]
         },
-        "purse_copper": 200,
-        "quests": {
-          "First Night in Aurelia": "completed"
-        },
         "survival": {
           "fatigue": 2,
           "hunger": 2,
           "thirst": 3
         }
       },
-      "document_hash": "sha256:75cf88541f2c1e2d20172f6c5ed4e32245e247b6089accfbb2ab3738f0b3e2dc",
+      "document_hash": "sha256:c9d80d642b2581d349b03f57d88f15664f199a7e1759759a2f699bb4dc1c8f85",
       "facts": {
         "combat": {
           "active": false,
@@ -1840,13 +1832,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 1,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:wayfarer-guild",
         "location_name": "Wayfarers' Guild",
@@ -1858,10 +1849,10 @@
           "npc:miri-kestrel",
           "npc:seraphine-valecourt"
         ],
-        "purse_copper": 329,
+        "purse_copper": 129,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -1922,7 +1913,6 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
@@ -1935,7 +1925,6 @@
         "simulation_state/present_npc_state",
         "simulation_state/present_npcs",
         "simulation_state/previous_location",
-        "simulation_state/quest_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
@@ -1948,7 +1937,6 @@
         "state/location",
         "state/map_state",
         "state/player",
-        "state/quests",
         "state/scene",
         "state/title",
         "state/turn_count",
@@ -1959,8 +1947,6 @@
           "time",
           "location",
           "npcs",
-          "quests",
-          "inventory",
           "player",
           "survival",
           "world",
@@ -1973,8 +1959,6 @@
             "time",
             "location",
             "npcs",
-            "quests",
-            "inventory",
             "player",
             "survival",
             "world",
@@ -1986,7 +1970,7 @@
       "session_summary": {
         "interaction_seq": 13,
         "location": "Wayfarers' Guild",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 13,
         "title": "Wren — Starfall Grove"
       },
@@ -2002,7 +1986,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b282a89fefe44a0f2d6f560e2a737ad0b680ad19978bc7b956c5fadb05220a0d",
+      "document_hash": "sha256:1c9be8b07e68d22b3a324e26975b2294e4255eded9f5e781878d87bc892a7653",
       "facts": {
         "combat": {
           "active": false,
@@ -2011,13 +1995,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 1,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:wayfarer-guild",
         "location_name": "Wayfarers' Guild",
@@ -2029,10 +2012,10 @@
           "npc:miri-kestrel",
           "npc:seraphine-valecourt"
         ],
-        "purse_copper": 329,
+        "purse_copper": 129,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -2130,7 +2113,7 @@
       "session_summary": {
         "interaction_seq": 14,
         "location": "Wayfarers' Guild",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 14,
         "title": "Wren — Starfall Grove"
       },
@@ -2159,7 +2142,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:cd3919c6accea4a650bdfb0150ba0bb6d3c3e8fcb4fbadcde162cdf78a10be2a",
+      "document_hash": "sha256:4f4a3014557b5597e4a9ab2fc0d7f4e8a630f740ca413683064927af24820402",
       "facts": {
         "combat": {
           "active": false,
@@ -2168,13 +2151,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 1,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -2187,10 +2169,10 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 329,
+        "purse_copper": 129,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -2305,7 +2287,7 @@
       "session_summary": {
         "interaction_seq": 15,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 15,
         "title": "Wren — Starfall Grove"
       },
@@ -2319,7 +2301,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:6fc2fee88c4ca0e974a483403c0f81902dbcadffb7d64a6df8abf246ceac3b69",
+      "document_hash": "sha256:701fcdef2545b55e35eb99689fbbc8f1ca8d8c4f2154b1b360f822c93ba0ea7f",
       "facts": {
         "combat": {
           "active": false,
@@ -2328,13 +2310,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -2347,10 +2328,10 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 329,
+        "purse_copper": 129,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -2436,7 +2417,7 @@
       "session_summary": {
         "interaction_seq": 16,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 16,
         "title": "Wren — Starfall Grove"
       },
@@ -2451,7 +2432,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:45dfff0b0ce5a2c67e2266d04c52f85a1a26eb088fd8440c960eac271cd56570",
+      "document_hash": "sha256:7597b9fe9c0acf0ca7ec5447a3ea9791305c8aad798107749288807067510680",
       "facts": {
         "combat": {
           "active": false,
@@ -2460,13 +2441,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -2479,10 +2459,10 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 319,
+        "purse_copper": 119,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -2578,7 +2558,7 @@
       "session_summary": {
         "interaction_seq": 17,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 17,
         "title": "Wren — Starfall Grove"
       },
@@ -2590,7 +2570,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:7f9a7cbc1c6708d33fda746104a870785a34f7f10302cf3fa0fb51d676bbc676",
+      "document_hash": "sha256:7e5458fa14778028e96c37a406352b61b77c816cad94b163df3a8e378798d903",
       "facts": {
         "combat": {
           "active": false,
@@ -2599,13 +2579,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -2618,10 +2597,10 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -2715,7 +2694,7 @@
       "session_summary": {
         "interaction_seq": 18,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 18,
         "title": "Wren — Starfall Grove"
       },
@@ -2740,7 +2719,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:8d48c9980d3e032af8c4c48a2441d75fabaec13b7ad31c2422f48b8b5775cddb",
+      "document_hash": "sha256:b491d9aa7165c75eb7c680711fe79f71ee7025b6d91738cda8e064d92642daa4",
       "facts": {
         "combat": {
           "active": false,
@@ -2749,13 +2728,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -2767,10 +2745,10 @@
           "npc:miri-kestrel",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -2880,7 +2858,7 @@
       "session_summary": {
         "interaction_seq": 19,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 19,
         "title": "Wren — Starfall Grove"
       },
@@ -2896,7 +2874,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:507e1eebe32f792e9ba6ce71d713b2f868a95e0215ceefcd76547a494f737b09",
+      "document_hash": "sha256:5d805b24659be1389169d3981f828a4fee54216269664e5a718c79e3ebd85dbe",
       "facts": {
         "combat": {
           "active": false,
@@ -2905,13 +2883,12 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -2923,10 +2900,10 @@
           "npc:miri-kestrel",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3013,7 +2990,7 @@
       "session_summary": {
         "interaction_seq": 20,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 20,
         "title": "Wren — Starfall Grove"
       },
@@ -3026,9 +3003,9 @@
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-sky-manta:1": 18,
+            "enemy:creature-echo-wolf:1": 10,
             "npc:liora-fen": 100,
-            "player": 105
+            "player": 100
           }
         },
         "location_id": "location:aurelia:skybridge-pass",
@@ -3046,26 +3023,25 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:1b9d9037b528aaf88f4e9f6556faab3abb3b230b7f138348b4bcb9c68a139128",
+      "document_hash": "sha256:f604a48c3a7eb1db42a8d6381c220eab1a44042e442589c879600db2cdf92ee5",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-sky-manta:1": 18,
+            "enemy:creature-echo-wolf:1": 10,
             "npc:liora-fen": 100,
-            "player": 105
+            "player": 100
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3075,10 +3051,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3207,7 +3183,7 @@
       "session_summary": {
         "interaction_seq": 21,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 21,
         "title": "Wren — Starfall Grove"
       },
@@ -3219,38 +3195,37 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-sky-manta:1": 17,
+            "enemy:creature-echo-wolf:1": 9,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 99
           }
         },
-        "hp": -4,
+        "hp": -1,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:344aaf50c0a18de85b35b09f6bb8f4ecfba5db505a323a5483cc33e6c78d945b",
+      "document_hash": "sha256:c4c1d97b42c3da5709940d924a9b1a93edb17adcf4ccf793897883ec8b7302c9",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-sky-manta:1": 17,
+            "enemy:creature-echo-wolf:1": 9,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 99
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 101,
+        "hp": 99,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3260,10 +3235,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3362,7 +3337,7 @@
       "session_summary": {
         "interaction_seq": 22,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 22,
         "title": "Wren — Starfall Grove"
       },
@@ -3372,26 +3347,25 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:caa7daac75a8606bb163fb9f60439d3b7f8804de57cfe38c48603ff2c46e6dab",
+      "document_hash": "sha256:b4275faa9e86c566ba8f2d0b370af6a2ee2adaadec12f4db8032e7e8147d506c",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-sky-manta:1": 17,
+            "enemy:creature-echo-wolf:1": 9,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 99
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 101,
+        "hp": 99,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3401,10 +3375,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3483,37 +3457,37 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-sky-manta:1": 15,
+            "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 96
           }
         },
+        "hp": -3,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b9293f0a105fb9f6c5814ebfd563e2b8ebdbb70e9e185f426cba66ba0bc94ad4",
+      "document_hash": "sha256:a9791db8183cb45d16c12b338c9e6d349fb6d13ed1f22d86dab72cec1a2a2eba",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-sky-manta:1": 15,
+            "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
-            "player": 101
+            "player": 96
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 101,
+        "hp": 96,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3523,10 +3497,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3588,9 +3562,11 @@
         "runtime_state/state_revision",
         "simulation_state/combat_state",
         "simulation_state/environment",
+        "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
+        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -3598,6 +3574,7 @@
         "changed_domains": [
           "time",
           "combat",
+          "player",
           "survival",
           "world",
           "narrative"
@@ -3608,6 +3585,7 @@
           "changed_domains": [
             "time",
             "combat",
+            "player",
             "survival",
             "world",
             "narrative"
@@ -3618,7 +3596,7 @@
       "session_summary": {
         "interaction_seq": 24,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 24,
         "title": "Wren — Starfall Grove"
       },
@@ -3630,38 +3608,37 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 96
+            "player": 92
           }
         },
-        "hp": -5,
+        "hp": -4,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:848d4332fb701aafc0009de136d51be6b1a5b1bfab432e45925aa74796e13c69",
+      "document_hash": "sha256:b5053be6b3d95ce285835e79127781f423faf041cbb71682666c6ea8b811baec",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 96
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 96,
+        "hp": 92,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3671,10 +3648,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3770,7 +3747,7 @@
       "session_summary": {
         "interaction_seq": 25,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 25,
         "title": "Wren — Starfall Grove"
       },
@@ -3781,40 +3758,33 @@
     {
       "changes": {
         "combat": {
-          "active": false,
-          "participants": {
-            "enemy:creature-sky-manta:1": 14,
-            "npc:liora-fen": 100,
-            "player": 91
-          }
+          "active": false
         },
-        "hp": -5,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:848656424dcaea0d1bcb4e4aadb93c289dba956063decf7a128064113b29fd9c",
+      "document_hash": "sha256:1a65ba35642df6ddf61b992d42161f75e95aff26bbdf1443e74de5aa729b203b",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 91,
+        "hp": 92,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3824,10 +3794,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -3889,11 +3859,9 @@
         "runtime_state/state_revision",
         "simulation_state/combat_state",
         "simulation_state/environment",
-        "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
-        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -3901,7 +3869,6 @@
         "changed_domains": [
           "time",
           "combat",
-          "player",
           "survival",
           "world",
           "narrative"
@@ -3912,7 +3879,6 @@
           "changed_domains": [
             "time",
             "combat",
-            "player",
             "survival",
             "world",
             "narrative"
@@ -3923,7 +3889,7 @@
       "session_summary": {
         "interaction_seq": 26,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 26,
         "title": "Wren — Starfall Grove"
       },
@@ -3933,30 +3899,29 @@
     },
     {
       "changes": {
-        "hp": 14,
+        "hp": 8,
         "inventory": {
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:5e55ae81b7fad11eab4c464aeeff10d8f23ba13ef65997c481dace744dc7ce57",
+      "document_hash": "sha256:a85040a1058b5a9f9649a9e4c7cc96f4e1c58d5cb96a104d1edbaea9529d3fc3",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -3966,10 +3931,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -4070,7 +4035,7 @@
       "session_summary": {
         "interaction_seq": 27,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 27,
         "title": "Wren — Starfall Grove"
       },
@@ -4080,25 +4045,24 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:0df93705a58cc36bfd63106fb13f31b3dc2b75ec9b8ae18d0d8e9923a5544a64",
+      "document_hash": "sha256:a53d4202d6f6487d8e14b0e73014d479893f678829e341be542356a2eb735e23",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:skybridge-pass",
         "location_name": "Skybridge Pass",
@@ -4108,10 +4072,10 @@
         "present_npc_ids": [
           "npc:liora-fen"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -4190,7 +4154,7 @@
       "session_summary": {
         "interaction_seq": 28,
         "location": "Skybridge Pass",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 28,
         "title": "Wren — Starfall Grove"
       },
@@ -4217,25 +4181,24 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:58cd1dd27efef57042bb03d751d9dfe17b20b1d472b89026c4ebc974ab4158cd",
+      "document_hash": "sha256:6dd72cb450df8aa9cf99f000070b633cd2e5d5695d9c6bf071a849962054eda6",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:starfall-village",
         "location_name": "Starfall Village",
@@ -4249,10 +4212,10 @@
           "npc:miri-kestrel",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -4375,7 +4338,7 @@
       "session_summary": {
         "interaction_seq": 29,
         "location": "Starfall Village",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 29,
         "title": "Wren — Starfall Grove"
       },
@@ -4404,25 +4367,24 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e0cb0f8596e79ef82233c0c0a410b6fbc82661aa45202b424fc631bb01bdf019",
+      "document_hash": "sha256:170710ecc20a84bfe76a5ecee3d096b0bea5328807a3cd24d65717f168ec6d9e",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:arrival-grove",
         "location_name": "Starfall Grove",
@@ -4433,10 +4395,10 @@
           "npc:liora-fen",
           "npc:naia-of-the-open-hand"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -4551,7 +4513,7 @@
       "session_summary": {
         "interaction_seq": 30,
         "location": "Starfall Grove",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 30,
         "title": "Wren — Starfall Grove"
       },
@@ -4567,25 +4529,24 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:261943a80abb06817b512fec3d4d0bf2ad1535a423f2df8a591060cb9f11b514",
+      "document_hash": "sha256:7e8ba147491587236c7dd68405607f6fe124b0011efc6617da08bd7a697ec9db",
       "facts": {
         "combat": {
           "active": false,
           "participants": {
-            "enemy:creature-sky-manta:1": 14,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 91
+            "player": 92
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
+          "Travel Cloak": 1
         },
         "location_id": "location:aurelia:arrival-grove",
         "location_name": "Starfall Grove",
@@ -4596,10 +4557,10 @@
           "npc:liora-fen",
           "npc:naia-of-the-open-hand"
         ],
-        "purse_copper": 259,
+        "purse_copper": 59,
         "quests": {
           "Echo beasts on the March roads": "available",
-          "First Night in Aurelia": "completed",
+          "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
         },
@@ -4686,7 +4647,7 @@
       "session_summary": {
         "interaction_seq": 31,
         "location": "Starfall Grove",
-        "player_level": 2,
+        "player_level": 1,
         "state_revision": 31,
         "title": "Wren — Starfall Grove"
       },

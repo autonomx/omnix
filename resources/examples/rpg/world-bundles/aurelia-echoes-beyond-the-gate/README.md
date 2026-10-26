@@ -14,13 +14,15 @@ This writes:
 
 `resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
-Bundle SHA-256: `83c385d12d2efe86aedbe225ed7170e44f0192f166d6315b5a52377f1e906659`
+Bundle SHA-256: `a22a456f00329708f2b0cfb3f366aaf0d18e80317f864c6d873621814a833289`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
 
 ## How it plays
 
-Aurelia's author wrote its people's days (`play-sections.json`): where each of the ten is, hour by hour, and their goals. By day everyone keeps their place (Liora in the grove, Miri and Seraphine at the guild, Orik, Brindle and Rhea in the village); evenings and nights differ (Liora by the inn's hearth, Brindle pitching at the guild, Rhea checking the pass's barricades, Naia at the grove at dawn). Its economy, knowledge, pressures and bestiary are still played from its lore.
+Aurelia's author wrote its people's days (`play-sections.json`): where each of the ten is, hour by hour, and their goals. By day everyone keeps their place (Liora in the grove, Miri and Seraphine at the guild, Orik, Brindle and Rhea in the village); evenings and nights differ (Liora by the inn's hearth, Brindle pitching at the guild, Rhea checking the pass's barricades, Naia at the grove at dawn).
+
+The author also wrote its pressures, how its creatures fight (the deeper the place, the stronger what lives there: the pass's Sky Mantas at level 4, the ashen Glass Wights at 5, the Loom's Rootbound Knights at 6, the Hollow Archon at 10), and every quest's steps: the first night ends with a companion chosen, the phone is mended and its voice followed and named, Orik's daughter's memory is won back past the Loom's knights (and pays the Moonroot Key), and the finale needs that key, the descent, Malrec, the Archon, and a choice of the gate's fate. Its economy and knowledge are still played from its lore. Its four roads leave Valecourt, Cinderhold and the Hollow Meridian unreached; a launch joins each to them (`lore_sections.joined_routes`).
 
 The sections are written in the way a world author writes them, by the world library's own lifecycle: `author_play_sections.py` imports the bundle into a disposable database, saves and publishes the sections (a new world revision, each opening pinned to it), exports the world, and writes its `world.json` into the source parts, the checksum above and this README.
 

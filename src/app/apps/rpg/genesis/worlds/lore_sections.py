@@ -5,7 +5,8 @@ not as the sections a launch reads (``characters``, ``regions``, ``bestiary``), 
 id alone, with no roads between them. Launch reads the authored section where the world has one, and otherwise
 these: each section taken from the entities of its kinds, each place from its entity, and, where the world names no
 roads, roads derived from its regions (every place reaches the others of its region, and the regions are joined in
-the order the world lists them, through their first places). Pure: it reads the canon and returns rows.
+the order the world lists them, through their first places). A world whose roads leave a place unreached has that
+place joined to them (``joined_routes``). Pure: it reads the canon and returns rows.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ _KINDS = {
 }
 _PLACE_KINDS = frozenset({"location", "place", "settlement", "site"})
 DERIVED_TRAVEL_TIME = "30 minutes"
+DERIVED_JOURNEY_TIME = "3 hours"  # a road the launch adds between two regions
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -145,4 +147,57 @@ def lore_routes(locations: Iterable[Mapping[str, Any]], regions: Iterable[Mappin
     return routes
 
 
-__all__ = ["DERIVED_TRAVEL_TIME", "lore_location_rows", "lore_routes", "lore_rows"]
+def joined_routes(routes: Iterable[Mapping[str, Any]], locations: Iterable[Mapping[str, Any]],
+                  regions: Iterable[Mapping[str, Any]], *, start: str = "") -> list[dict[str, Any]]:
+    """The world's roads, and one more to each place they leave unreached from ``start`` (by default its first place):
+    from a reached place of its own region, else of the nearest region in the order the world lists them, that
+    region's capital when reached (a road leaves a town, not the wilds by it), else its first reached place (the
+    playtest: Aurelia's four roads never reached Valecourt or the Hollow Meridian, where two of its quests, the finale
+    one, are done)."""
+    routes = [dict(route) for route in routes]
+    rows = [row for row in locations if _text(row.get("id"))]
+    region_of = {_text(row.get("id")): _text(row.get("region_id")) for row in rows}
+    regions = list(regions)
+    capitals = {_text(row.get("id")): _text(row.get("capital")) for row in regions}
+    order = [_text(row.get("id")) for row in regions]
+    order += [region for region in dict.fromkeys(region_of.values()) if region not in order]
+    neighbours: dict[str, set[str]] = {place: set() for place in region_of}
+    for route in routes:
+        origin, target = _text(route.get("from")), _text(route.get("to"))
+        if origin in neighbours and target in neighbours:
+            neighbours[origin].add(target)
+            neighbours[target].add(origin)
+
+    def reach(first: str) -> list[str]:
+        seen, queue = [first], [first]
+        while queue:
+            for place in sorted(neighbours[queue.pop(0)]):
+                if place not in seen:
+                    seen.append(place)
+                    queue.append(place)
+        return seen
+
+    first = start if start in region_of else next(iter(region_of), "")
+    reached = reach(first) if first else []
+    for place in region_of:
+        if place in reached:
+            continue
+        own = [known for known in reached if region_of[known] == region_of[place]]
+        if own:
+            region, time = region_of[place], DERIVED_TRAVEL_TIME
+        else:
+            index = order.index(region_of[place])
+            region = region_of[min(reached, key=lambda known: (abs(order.index(region_of[known]) - index),
+                                                                reached.index(known)))]
+            time = DERIVED_JOURNEY_TIME
+        candidates = [known for known in reached if region_of[known] == region]
+        origin = capitals.get(region) if capitals.get(region) in candidates else candidates[0]
+        routes.append({"id": f"route:joined:{origin}:{place}", "from": origin, "to": place, "travel_time": time})
+        neighbours[origin].add(place)
+        neighbours[place].add(origin)
+        reached += [found for found in reach(place) if found not in reached]
+    return routes
+
+
+__all__ = ["DERIVED_JOURNEY_TIME", "DERIVED_TRAVEL_TIME", "joined_routes", "lore_location_rows", "lore_routes",
+           "lore_rows"]

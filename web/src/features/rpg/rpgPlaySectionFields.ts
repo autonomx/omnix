@@ -7,7 +7,7 @@ import type { RpgPlaySectionsDraft, RpgPlaySectionsReferences } from './api/rpgW
  */
 export type RefKind = keyof RpgPlaySectionsReferences;
 export type PlayRow = Record<string, unknown>;
-export type PlaySectionId = 'economy' | 'routines' | 'knowledge' | 'pressures' | 'bestiary';
+export type PlaySectionId = 'economy' | 'routines' | 'knowledge' | 'pressures' | 'bestiary' | 'quests';
 export type NameOf = (id: unknown) => string;
 
 export type PlayField =
@@ -18,6 +18,7 @@ export type PlayField =
   | { key: string; label: string; kind: 'tags' }
   | { key: string; label: string; kind: 'price'; nullable?: boolean }
   | { key: string; label: string; kind: 'lever' }
+  | { key: string; label: string; kind: 'subject'; by: string }
   | { key: string; label: string; kind: 'list'; rows: PlayRows }
   | { key: string; label: string; kind: 'group'; fields: PlayField[]; blank: () => PlayRow };
 
@@ -222,6 +223,78 @@ const BESTIARY: PlayRows = {
   add: 'Add creature',
 };
 
+/** What a quest condition's subject is chosen from, by the condition's kind (a check names its kind instead). */
+export const CONDITION_SUBJECTS: Record<string, RefKind | null> = {
+  reach: 'places', talk: 'people', hold: 'items', defeat: 'creatures', companion: 'people', check: null,
+};
+
+/** The checks a step may ask (``rules/checks.py``). */
+export const CHECK_KINDS: Array<[string, string]> = [
+  ['persuade', 'Persuade'], ['intimidate', 'Intimidate'], ['deceive', 'Deceive'], ['haggle', 'Haggle'],
+  ['sneak', 'Sneak'], ['climb', 'Climb'], ['pick_lock', 'Pick a lock'], ['recall_lore', 'Recall lore'],
+  ['search', 'Search'], ['notice', 'Notice'],
+];
+
+const CONDITION_VERBS: Record<string, string> = {
+  reach: 'Reach', talk: 'Talk to', hold: 'Hold', defeat: 'Defeat', check: 'Pass a check to', companion: 'Travel with',
+};
+
+function conditionText(row: PlayRow, name: NameOf): string {
+  const kind = String(row.kind ?? '');
+  const check = CHECK_KINDS.find(([value]) => value === row.subject);
+  const subject = kind === 'check' ? (check ? check[1].toLowerCase() : text(row.subject, 'do something'))
+    : kind === 'companion' && row.subject === 'anyone' ? 'a companion' : name(row.subject);
+  const count = kind === 'defeat' && Number(row.count ?? 1) > 1 ? `${String(row.count)} × ` : '';
+  const about = kind === 'talk' && Array.isArray(row.about) && row.about.length ? ` about ${row.about.join(' / ')}` : '';
+  return `${CONDITION_VERBS[kind] ?? 'Do'} ${count}${subject}${about}`;
+}
+
+const CONDITIONS: PlayRows = {
+  fields: [
+    { key: 'kind', label: 'What it asks', kind: 'select', options: [
+      ['reach', 'Reach a place'], ['talk', 'Talk to someone'], ['hold', 'Hold an item'], ['defeat', 'Defeat a creature'],
+      ['check', 'Pass a check'], ['companion', 'Travel with a companion'],
+    ] },
+    { key: 'subject', label: 'Of', kind: 'subject', by: 'kind' },
+    { key: 'about', label: 'About (talk: any of these words, comma separated)', kind: 'tags' },
+    { key: 'count', label: 'How many (defeat)', kind: 'number', min: 1, max: 50 },
+    { key: 'target', label: 'Against (check)', kind: 'ref', refs: ['people'], optional: 'Whoever is there' },
+  ],
+  blank: () => ({ kind: 'reach', subject: '', about: [], count: 1, target: '' }),
+  title: conditionText,
+  add: 'Add condition',
+};
+
+const WAYS: PlayRows = {
+  fields: [{ key: 'conditions', label: 'All of', kind: 'list', rows: CONDITIONS }],
+  blank: () => ({ conditions: [CONDITIONS.blank([])] }),
+  title: (row, name) => rowsOf(row.conditions).map((condition) => conditionText(condition, name)).join(' and ') || 'New way',
+  add: 'Add another way (a branch)',
+};
+
+const STEPS: PlayRows = {
+  fields: [
+    { key: 'summary', label: 'What the hero is told', kind: 'textarea' },
+    { key: 'ways', label: 'Done by any one of', kind: 'list', rows: WAYS },
+    { key: 'id', label: 'Step id', kind: 'text' },
+  ],
+  blank: (siblings) => ({ id: nextId('step', siblings, 'id'), summary: '', ways: [WAYS.blank([])] }),
+  title: (row) => text(row.summary, 'New step'),
+  add: 'Add step',
+};
+
+const QUESTS: PlayRows = {
+  fields: [
+    { key: 'id', label: 'Quest', kind: 'ref', refs: ['quests'] },
+    { key: 'giver_id', label: 'Given by', kind: 'ref', refs: ['people'], optional: 'No one in particular' },
+    { key: 'deadline_hours', label: 'Deadline in hours (blank: none)', kind: 'number', min: 1, nullable: true },
+    { key: 'steps', label: 'Steps, in order', kind: 'list', rows: STEPS },
+  ],
+  blank: () => ({ id: '', giver_id: '', deadline_hours: null, steps: [] }),
+  title: (row, name) => name(row.id),
+  add: 'Add quest',
+};
+
 function rowsOf(value: unknown): PlayRow[] {
   return Array.isArray(value) ? value as PlayRow[] : [];
 }
@@ -257,6 +330,12 @@ export const PLAY_SECTIONS: PlaySection[] = [
     read: (draft) => rowsOf(draft.bestiary),
     write: (draft, rows) => ({ ...draft, bestiary: rows as never }),
   },
+  {
+    id: 'quests', label: 'Quests', summary: 'What each quest takes, step by step, and where it branches; a quest left out is done by reaching its places.',
+    rows: QUESTS,
+    read: (draft) => rowsOf(draft.quests),
+    write: (draft, rows) => ({ ...draft, quests: rows as never }),
+  },
 ];
 
 /** What a release finding means, for the author: ``play_section_unknown_person:routines:npc:x`` and the like. */
@@ -269,6 +348,8 @@ export function describeFinding(finding: string, name: NameOf): string {
     play_section_unknown_item: 'names an item the world does not have',
     play_section_unknown_creature: 'names a creature the world does not have',
     play_section_unknown_lever: 'is pulled by something the world does not have',
+    play_section_unknown_quest: 'names a quest the world does not have',
+    play_section_unknown_check: 'asks a check the game does not have',
   };
   const label = section ? section.charAt(0).toUpperCase() + section.slice(1).replace(/\..*$/, '') : 'A section';
   if (what[code]) return `${label} ${what[code]}: ${name(subject)}`;

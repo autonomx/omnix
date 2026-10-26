@@ -196,13 +196,26 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
                 return f"I attack the {_s(creature.get('name'))}."
             goals.update(places or _wild_places(session))  # hunted where the quest says, else where no one lives
         elif condition.get("talk"):
+            from app.apps.rpg.rules.routines import clock, whereabouts
+
             person = _d(_d(_world(session).get("npcs")).get(_s(condition["talk"])))
             about = [_s(word) for word in (_l(condition.get("about")) or [condition.get("about")]) if _s(word)]
-            if _s(person.get("location_id")) == _here(session):
+            where = whereabouts(simulation, clock(simulation)).get(_s(condition["talk"]))  # where their day has them
+            at = where.location_id if where else _s(person.get("location_id"))
+            if at == _here(session):
                 return f"I ask {_s(person.get('name'))} about the {about[0] if about else 'job'}."
-            goals.add(_s(person.get("location_id")))
+            goals.add(at)
         elif condition.get("reach"):
             goals.add(_s(condition["reach"]))
+        elif condition.get("companion"):  # someone met along the way, asked to come
+            from app.apps.rpg.rules.routines import clock, companions, present_at
+
+            wanted = _s(condition["companion"])
+            here = [npc for npc in present_at(simulation, _here(session), clock(simulation))
+                    if npc not in companions(simulation) and wanted in {"anyone", npc}]
+            if here:
+                name = _s(_d(_d(_world(session).get("npcs")).get(here[0])).get("name"))
+                return f"I ask {name} to join my party."
     goals.discard("")
     if turn % 4 == 0 and not _wild(session, _here(session)):  # the world's creatures keep to the wild
         step = _path_to(session, _wild_places(session)) if turn % 8 == 0 else ""

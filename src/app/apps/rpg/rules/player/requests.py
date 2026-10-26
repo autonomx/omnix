@@ -52,11 +52,14 @@ def _quest_id(quest: Mapping[str, Any]) -> str:
 def accept_quest(simulation: Mapping[str, Any], quest_id: str) -> RequestOutcome:
     quests = _quests(simulation)
     quest = next((row for row in quests if _quest_id(row) == quest_id), None)
-    if quest is None:
+    if quest is None and not quest_id:  # "I accept the quest", with one on offer: that one
         available = [row for row in quests if row.get("status") == "available"]
         quest = available[0] if len(available) == 1 else None
     if quest is None:
-        return RequestOutcome(lines=["No such quest is offered to you."], refused=True, minutes=0)
+        # One of the world's quests no one has offered yet (the playtest: it was a free action, "you do so").
+        unoffered = _s(_d(_d(_d(_sections.world_model_of(simulation)).get("quests")).get(quest_id)).get("title"))
+        return RequestOutcome(lines=[f"No one has offered you {unoffered} yet." if unoffered
+                                     else "No such quest is offered to you."], refused=True, minutes=0)
     if quest.get("status") != "available":
         # A side quest offered again under its title (a pressure's next, quests.md): the offer is the one meant.
         quest = next((row for row in quests if row.get("status") == "available"

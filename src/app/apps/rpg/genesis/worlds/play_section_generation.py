@@ -193,7 +193,8 @@ def _bestiary(canon: Mapping[str, Any]) -> list[CreaturePlay]:
 
 
 def generate_play_sections(revision: Any, *, start_location_id: str = "") -> dict[str, Any]:
-    """A draft of every section from the revision's lore; a section the world already wrote is kept as written."""
+    """A draft of every section from the revision's lore; a section the world already wrote is kept as written. A
+    quest's steps are its author's: World Forge drafts none (a quest without them is done by reaching its places)."""
     canon = dict(getattr(revision, "canon", None) or {})
     written = play_sections_document(canon)
     authored = set(parse_play_sections(canon)[0].authored)
@@ -211,6 +212,7 @@ def generate_play_sections(revision: Any, *, start_location_id: str = "") -> dic
         else [row.model_dump(mode="json", exclude_none=True) for row in _pressures(canon, places)],
         "bestiary": written["bestiary"] if "bestiary" in authored
         else [row.model_dump(mode="json", exclude_none=True) for row in _bestiary(canon)],
+        "quests": written["quests"],
     }
     return PlaySectionsDraft.model_validate(draft).model_dump(mode="json", exclude_none=True)
 

@@ -126,6 +126,8 @@ def test_trade_keeps_one_purse_and_sells_only_what_the_world_offers(play) -> Non
     assert "You sell the Iron Dagger to Brindle Gearwing for 5 copper." in play.model.told()
     assert play.purse() == purse - 36 + 15 + 5
     play.turn("go to Wayfarers' Guild")  # First Night in Aurelia pays 20 silver and the Wayfarer Sigil
+    play.turn("I ask Miri Kestrel to register me with the guild.")
+    play.turn("I ask Miri Kestrel to join my party.")  # its last step: a first companion
     play.turn("go to Starfall Village")
     reward = play.purse()
     play.turn("I sell my Wayfarer Sigil to Brindle Gearwing.")

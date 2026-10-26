@@ -25604,6 +25604,90 @@
         "title": "InstrumentType",
         "type": "string"
       },
+      "InteractionPresented": {
+        "additionalProperties": false,
+        "description": "How a recent interaction is presented (the narrative engine's canonical projection): ``fields`` set on the\nrecent interaction of ``turn_id`` or ``response_id``, else on the latest.",
+        "properties": {
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "response_id": {
+            "default": "",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "default": "",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "interaction_presented",
+            "default": "interaction_presented",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fields",
+          "type",
+          "turn_id",
+          "response_id"
+        ],
+        "title": "InteractionPresented",
+        "type": "object"
+      },
+      "InteractionRecorded": {
+        "additionalProperties": false,
+        "description": "The turn's interaction on the campaign's timeline (its bookkeeping, roadmap \u00a74.1 step 9): the event appended\n(the timeline keeps the last 50), the sequence and state revision it carries the campaign's, the recent\ninteractions the last 12, and the event the last interaction.",
+        "properties": {
+          "event": {
+            "additionalProperties": true,
+            "title": "Event",
+            "type": "object"
+          },
+          "type": {
+            "const": "interaction_recorded",
+            "default": "interaction_recorded",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "type"
+        ],
+        "title": "InteractionRecorded",
+        "type": "object"
+      },
+      "InteractionsReplayed": {
+        "additionalProperties": false,
+        "description": "Interactions the campaign's event log holds, merged into its timeline on load (one per interaction id, in\nsequence order, the last 50 kept); the sequence and revision never go back.",
+        "properties": {
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "type": {
+            "const": "interactions_replayed",
+            "default": "interactions_replayed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events",
+          "type"
+        ],
+        "title": "InteractionsReplayed",
+        "type": "object"
+      },
       "InterdayMonitorOperationsStatus": {
         "description": "Operator-only runtime status for the causal discovery/learning monitors.",
         "properties": {
@@ -27194,6 +27278,41 @@
           "max_hp_gain"
         ],
         "title": "LevelReached",
+        "type": "object"
+      },
+      "LifecycleRecorded": {
+        "additionalProperties": false,
+        "description": "An interaction's lifecycle (resolved, narrated): kept by its id (the last 64), its turn's interaction by the\nturn id, and the interaction's timeline event carrying it.",
+        "properties": {
+          "interaction_id": {
+            "minLength": 1,
+            "title": "Interaction Id",
+            "type": "string"
+          },
+          "lifecycle": {
+            "additionalProperties": true,
+            "title": "Lifecycle",
+            "type": "object"
+          },
+          "turn_id": {
+            "default": "",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "lifecycle_recorded",
+            "default": "lifecycle_recorded",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interaction_id",
+          "lifecycle",
+          "type",
+          "turn_id"
+        ],
+        "title": "LifecycleRecorded",
         "type": "object"
       },
       "Live2DAvatarActionResponse": {
@@ -30093,6 +30212,35 @@
           "target_id"
         ],
         "title": "MapInitializationOperation",
+        "type": "object"
+      },
+      "MapStateProjected": {
+        "additionalProperties": false,
+        "description": "The world map the play screen shows, projected from where the hero stands (``map_world_integration``): the\nsheet's map state, and its place on the sheet.",
+        "properties": {
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "map_state": {
+            "additionalProperties": true,
+            "title": "Map State",
+            "type": "object"
+          },
+          "type": {
+            "const": "map_state_projected",
+            "default": "map_state_projected",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "map_state",
+          "location_id",
+          "type"
+        ],
+        "title": "MapStateProjected",
         "type": "object"
       },
       "MarkdownProjectionResponse": {
@@ -39183,6 +39331,14 @@
             "title": "Pressures",
             "type": "array"
           },
+          "quests": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestPlay"
+            },
+            "title": "Quests",
+            "type": "array"
+          },
           "routines": {
             "default": [],
             "items": {
@@ -39197,7 +39353,8 @@
           "routines",
           "knowledge",
           "pressures",
-          "bestiary"
+          "bestiary",
+          "quests"
         ],
         "title": "PlaySectionsDraft",
         "type": "object"
@@ -43034,6 +43191,58 @@
         "title": "PushSubscriptionWrite",
         "type": "object"
       },
+      "QuestCondition": {
+        "additionalProperties": false,
+        "description": "One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when\ngiven), ``hold`` an item, ``defeat`` ``count`` of a creature, or pass a ``check`` (its skill, against ``target``\nwhen named).",
+        "properties": {
+          "about": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "About",
+            "type": "array"
+          },
+          "count": {
+            "default": 1,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "reach",
+              "talk",
+              "hold",
+              "defeat",
+              "check"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "target": {
+            "default": "",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "subject",
+          "about",
+          "count",
+          "target"
+        ],
+        "title": "QuestCondition",
+        "type": "object"
+      },
       "QuestOffered": {
         "additionalProperties": false,
         "description": "A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest\na pressure raised, quests.md) comes with its row.",
@@ -43094,6 +43303,51 @@
           "type"
         ],
         "title": "QuestPlaceReached",
+        "type": "object"
+      },
+      "QuestPlay": {
+        "additionalProperties": false,
+        "description": "How one of the world's quests is done; its title, objective, places and rewards stay its lore's.",
+        "properties": {
+          "deadline_hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 1440,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline Hours"
+          },
+          "giver_id": {
+            "default": "",
+            "title": "Giver Id",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "steps": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestStep"
+            },
+            "maxItems": 12,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "giver_id",
+          "steps"
+        ],
+        "title": "QuestPlay",
         "type": "object"
       },
       "QuestProgressed": {
@@ -43159,6 +43413,41 @@
         "title": "QuestStatusChanged",
         "type": "object"
       },
+      "QuestStep": {
+        "additionalProperties": false,
+        "description": "A stage of a quest, done by any one of its ways (more than one: the quest branches there).",
+        "properties": {
+          "id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "ways": {
+            "items": {
+              "$ref": "#/components/schemas/QuestWay"
+            },
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Ways",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "summary",
+          "ways"
+        ],
+        "title": "QuestStep",
+        "type": "object"
+      },
       "QuestStepCompleted": {
         "additionalProperties": false,
         "description": "A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the\nbranch, when the stage had more than one), and what it asks next.",
@@ -43209,6 +43498,26 @@
           "next_objective"
         ],
         "title": "QuestStepCompleted",
+        "type": "object"
+      },
+      "QuestWay": {
+        "additionalProperties": false,
+        "description": "One way to do a step: all of its conditions.",
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestCondition"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Conditions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conditions"
+        ],
+        "title": "QuestWay",
         "type": "object"
       },
       "QuoteResponse": {
@@ -49947,7 +50256,7 @@
         "type": "object"
       },
       "RpgPlaySectionsReadiness": {
-        "description": "Each section (economy, routines, knowledge, pressures, bestiary): written by the world, or inferred from its\nlore at launch.",
+        "description": "Each section (economy, routines, knowledge, pressures, bestiary, quests): written by the world, or inferred\nfrom its lore at launch.",
         "properties": {
           "bestiary": {
             "enum": [
@@ -49981,6 +50290,14 @@
             "title": "Pressures",
             "type": "string"
           },
+          "quests": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Quests",
+            "type": "string"
+          },
           "routines": {
             "enum": [
               "authored",
@@ -49995,7 +50312,8 @@
           "routines",
           "knowledge",
           "pressures",
-          "bestiary"
+          "bestiary",
+          "quests"
         ],
         "title": "RpgPlaySectionsReadiness",
         "type": "object"
@@ -68263,6 +68581,9 @@
                   "experience_gained": "#/components/schemas/ExperienceGained",
                   "hotbar_changed": "#/components/schemas/HotbarChanged",
                   "hp_changed": "#/components/schemas/HpChanged",
+                  "interaction_presented": "#/components/schemas/InteractionPresented",
+                  "interaction_recorded": "#/components/schemas/InteractionRecorded",
+                  "interactions_replayed": "#/components/schemas/InteractionsReplayed",
                   "item_added": "#/components/schemas/ItemAdded",
                   "item_dropped": "#/components/schemas/ItemDropped",
                   "item_equipped": "#/components/schemas/ItemEquipped",
@@ -68273,8 +68594,10 @@
                   "knowledge_shared": "#/components/schemas/KnowledgeShared",
                   "level_choice_made": "#/components/schemas/LevelChoiceMade",
                   "level_reached": "#/components/schemas/LevelReached",
+                  "lifecycle_recorded": "#/components/schemas/LifecycleRecorded",
                   "local_map_entered": "#/components/schemas/LocalMapEntered",
                   "location_changed": "#/components/schemas/LocationChanged",
+                  "map_state_projected": "#/components/schemas/MapStateProjected",
                   "needs_changed": "#/components/schemas/NeedsChanged",
                   "presence_changed": "#/components/schemas/PresenceChanged",
                   "pressures_moved": "#/components/schemas/PressuresMoved",
@@ -68432,6 +68755,21 @@
                 },
                 {
                   "$ref": "#/components/schemas/HotbarChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/MapStateProjected"
+                },
+                {
+                  "$ref": "#/components/schemas/InteractionRecorded"
+                },
+                {
+                  "$ref": "#/components/schemas/InteractionsReplayed"
+                },
+                {
+                  "$ref": "#/components/schemas/LifecycleRecorded"
+                },
+                {
+                  "$ref": "#/components/schemas/InteractionPresented"
                 },
                 {
                   "$ref": "#/components/schemas/CheckResolved"

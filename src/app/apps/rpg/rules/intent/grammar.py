@@ -218,8 +218,10 @@ def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
             matched = [p for p in positions if p is not None]
             if len(matched) == len(tokens):
                 score = len(tokens) + 0.5 + (0.25 if entity.here else 0.0)
-            elif len(tokens) >= 2 and matched and any(len(tokens[i]) >= 4 for i, p in enumerate(positions) if p is not None):
-                # A distinctive part of a longer name ("Juno" for "Juno Rask", "the market" for a long market name).
+            elif (len(tokens) >= 2 and matched and any(len(tokens[i]) >= 4 for i, p in enumerate(positions) if p is not None)
+                  and not name.startswith(("the ", "my "))):
+                # A distinctive part of a longer name ("Juno" for "Juno Rask", "the market" for a long market name);
+                # not of a calling ("village" is not the "village guard captain": the playtest).
                 score = len(matched) / len(tokens) + (0.25 if entity.here else 0.0)
             else:
                 continue
@@ -312,13 +314,13 @@ def _spoken_to(text: str, scene: SceneView, whole: IntentCandidate) -> IntentCan
     if rest.family not in {"look", "talk", "ask", "clarify"} and rest.reason not in {"remark", "looks_without_subject"}:
         if rest.family == "buy" and not rest.second_target_id:
             return replace(rest, second_target_id=person)  # bought from them
-        if rest.family == "party" and not rest.target_id:
-            return replace(rest, target_id=person, target_kind="person")  # "Liora, join my party"
+        if rest.family == "party":  # "Liora, join my party"; "Liora, will you come with me to the village?"
+            return replace(rest, target_id=person, target_kind="person")
         if rest.family == "give" and not rest.second_target_id:
             return replace(rest, second_target_id=person)  # "Liora, I give you my dagger"
         return rest
-    if rest.family == "ask":  # asked of them, as the words ask it (a hypothetical stays one)
-        return replace(rest, target_id=person, target_kind="person")
+    if rest.family == "ask":  # asked of them, as the words ask it (a hypothetical stays one), and sure of whom
+        return replace(rest, target_id=person, target_kind="person", confidence=max(rest.confidence, 0.85))
     asked = _question(_words(_norm(match.group(2))), match.group(2).strip())
     return _candidate("ask" if asked else "talk", named[0], 0.85, "asks_someone" if asked else "talks")
 

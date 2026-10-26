@@ -47,3 +47,12 @@ def test_each_change_the_player_should_see_is_one_plain_fact_with_its_tone() -> 
         ("quest", "Rats in the Cellar: complete", "gain"),
         ("check", "Pick lock: d20 12 - 1 = 11 against 13, a success at a cost", "gain"),
         ("regard", "Bran trusts you less", "loss"), ("fight", "Slipped past", "gain")]
+
+
+def test_a_fight_going_on_shows_each_foe_s_health() -> None:
+    """The playtest: eight rounds against the Rootbound Knight showed only the hero's wounds."""
+    round_ = CombatAdvanced(combat_state={"active": True, "participants": {
+        "player": {"name": "You", "side": "party", "hp": 68, "max_hp": 110},
+        "enemy:1": {"name": "Rootbound Knight", "side": "enemy", "hp": 28, "max_hp": 40}}})
+    assert [(fact.kind, fact.text) for fact in outcome_facts([round_], DOCUMENT)] == [
+        ("fight", "Rootbound Knight: 28 of 40 health")]

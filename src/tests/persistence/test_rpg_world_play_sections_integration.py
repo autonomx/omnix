@@ -71,8 +71,9 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
     first = read_play_sections(world_id)
     assert not first["saved"] and first["published_revision"] is not None
     lore = {"economy": "derived", "routines": "authored", "knowledge": "derived", "pressures": "authored",
-            "bestiary": "derived"}
-    assert first["readiness"]["published"] == lore  # Aurelia's author wrote its people's days and its pressures
+            "bestiary": "authored", "quests": "authored"}
+    # Aurelia's author wrote its people's days, its pressures, its creatures' numbers and its quests' steps.
+    assert first["readiness"]["published"] == lore
     assert first["references"]["people"] and first["references"]["places"]
 
     drafted = draft_play_sections_from_lore(world_id)["document"]
@@ -80,7 +81,7 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
     provider["sells"][0]["price"] = {"gold": 7, "silver": 0, "copper": 0}
     saved = save_play_sections(world_id, expected_content_hash=first["content_hash"], document=drafted)
     assert saved["saved"] and saved["unpublished"] and saved["findings"] == []
-    assert set(saved["readiness"]["draft"].values()) == {"authored"}
+    assert set(saved["readiness"]["draft"].values()) == {"authored"}  # the written sections kept as written
     assert saved["readiness"]["published"] == lore  # not published yet
 
     with pytest.raises(ValueError, match="world_play_sections_conflict"):  # written over a newer save

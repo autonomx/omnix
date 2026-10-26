@@ -107,8 +107,8 @@ class ScriptedModel:
             return "narration_candidates"
         if "materializes durable, player-safe RPG canon" in text:
             return "canon_dossier"
-        if "first-call semantic intent router" in text:
-            return "semantic_intent"
+        if "first-call semantic intent router" in text or "Read what the player means" in text:
+            return "semantic_intent"  # the intent call (session/turn/intent.py), when the grammar is unsure
         if "Omnix RPG Narrative Writer" in text:
             return "narrative_writer"
         if "CONTEXT:" in text:
@@ -196,7 +196,7 @@ class CountingProvider:
         text = "\n".join(str(getattr(message, "content", "") if not isinstance(message, dict) else message.get("content", ""))
                          for message in messages)
         started = time.perf_counter()
-        record = {"role": self._roles.classify(text), "started": started}
+        record = {"role": self._roles.classify(text), "started": started, "head": text[:160]}
         self.calls.append(record)
 
         def note(response: Any) -> None:
@@ -255,7 +255,7 @@ def install_counting_provider(route: tuple[str, str] | None = LIVE_RPG_ROUTE, *,
         route = (route[0], model)
     if route is not None:
         setattr(provider_access, "rpg_llm_route", lambda: route)
-    inner = provider_access.routed_provider()
+    inner = provider_access.routed_provider(counted=False)  # the game counts its calls itself (model_calls): once
     if inner is None:
         raise SystemExit("RPG's route names no provider")
     if effort:

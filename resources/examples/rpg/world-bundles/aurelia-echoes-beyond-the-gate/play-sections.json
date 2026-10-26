@@ -535,5 +535,615 @@
         }
       ]
     }
+  ],
+  "quests": [
+    {
+      "id": "quest:first-night-in-aurelia",
+      "giver_id": "npc:liora-fen",
+      "steps": [
+        {
+          "id": "village",
+          "summary": "Reach Starfall Village",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:starfall-village"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "register",
+          "summary": "Register with Miri Kestrel at the Wayfarers' Guild",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:miri-kestrel",
+                  "about": [
+                    "register",
+                    "registry",
+                    "sign",
+                    "join",
+                    "enrol",
+                    "enroll",
+                    "guild",
+                    "wayfarer"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "companion",
+          "summary": "Choose a first companion",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "companion",
+                  "subject": "anyone"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:voices-in-the-phone",
+      "steps": [
+        {
+          "id": "mend",
+          "summary": "Have Brindle Gearwing look at your phone",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:brindle-gearwing",
+                  "about": [
+                    "phone",
+                    "radio",
+                    "repair",
+                    "fix",
+                    "mend",
+                    "signal",
+                    "voice",
+                    "call",
+                    "ring"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "follow",
+          "summary": "Follow the voice to the Moonroot Ruins, where it is strongest",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:moonroot-ruins"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "identify",
+          "summary": "Ask Elyra Moonroot whose voice it is",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:elyra-moonroot",
+                  "about": [
+                    "voice",
+                    "phone",
+                    "call",
+                    "earth",
+                    "radio",
+                    "who"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:bridge-of-one-thousand-promises",
+      "giver_id": "npc:vael-ardyn",
+      "steps": [
+        {
+          "id": "vow",
+          "summary": "Hear the vow Vael Ardyn would have you witness",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "vow",
+                    "oath",
+                    "promise",
+                    "witness",
+                    "crown",
+                    "bridge"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cross",
+          "summary": "Cross Skybridge Pass with the vow spoken",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:skybridge-pass"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "gale",
+          "summary": "Keep faith before the gale spirit of the pass",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:skybridge-pass"
+                },
+                {
+                  "kind": "check",
+                  "subject": "persuade"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:skybridge-pass"
+                },
+                {
+                  "kind": "check",
+                  "subject": "climb"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "defeat",
+                  "subject": "creature:sky-manta",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:the-memory-that-burned",
+      "giver_id": "npc:orik-stonewake",
+      "steps": [
+        {
+          "id": "daughter",
+          "summary": "Hear from Orik Stonewake what the Loom took from his daughter",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:orik-stonewake",
+                  "about": [
+                    "daughter",
+                    "memory",
+                    "loom",
+                    "moonroot",
+                    "stolen",
+                    "burned"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "loom",
+          "summary": "Go down to the Memory Loom in the Moonroot Ruins",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:moonroot-ruins"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "guardians",
+          "summary": "Get past the Rootbound Knights that keep the Loom",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "defeat",
+                  "subject": "creature:rootbound-knight",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:moonroot-ruins"
+                },
+                {
+                  "kind": "check",
+                  "subject": "recall_lore"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "restore",
+          "summary": "Ask Elyra Moonroot to restore the memory",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:elyra-moonroot",
+                  "about": [
+                    "restore",
+                    "memory",
+                    "daughter",
+                    "orik",
+                    "loom"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "return",
+          "summary": "Bring the memory home to Orik",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:orik-stonewake"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:the-princess-and-the-engine",
+      "giver_id": "npc:seraphine-valecourt",
+      "steps": [
+        {
+          "id": "summons",
+          "summary": "Hear what Princess Seraphine needs of an Earthborn",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "engine",
+                    "gate",
+                    "help",
+                    "technician",
+                    "earth",
+                    "summons",
+                    "work"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "engine",
+          "summary": "See the royal gate engine in Valecourt",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:valecourt"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "summary": "Tell Seraphine what should become of the engine",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "repair",
+                    "fix",
+                    "mend"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "dismantle",
+                    "destroy",
+                    "tear it down",
+                    "shut it down",
+                    "break it"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "democratize",
+                    "democratise",
+                    "share",
+                    "the people",
+                    "everyone",
+                    "council"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:hollow-meridian",
+      "giver_id": "npc:liora-fen",
+      "steps": [
+        {
+          "id": "key",
+          "summary": "Find what opens the memory-sealed way beneath Moonroot",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "hold",
+                  "subject": "item:moonroot-key"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "descend",
+          "summary": "Descend to the Hollow Meridian",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:hollow-meridian"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "confront",
+          "summary": "Confront Archon Malrec",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:archon-malrec"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "archon",
+          "summary": "Defeat the Hollow Archon",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "defeat",
+                  "subject": "creature:hollow-archon"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choose",
+          "summary": "Choose what becomes of the gate between Earth and Aurelia",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:liora-fen",
+                  "about": [
+                    "close",
+                    "seal",
+                    "shut"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:liora-fen",
+                  "about": [
+                    "open it",
+                    "keep it open",
+                    "permanent",
+                    "throw it open"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:liora-fen",
+                  "about": [
+                    "reciprocal",
+                    "bridge",
+                    "guarded",
+                    "both ways",
+                    "both worlds"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "close",
+                    "seal",
+                    "shut"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "open it",
+                    "keep it open",
+                    "permanent",
+                    "throw it open"
+                  ]
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "reciprocal",
+                    "bridge",
+                    "guarded",
+                    "both ways",
+                    "both worlds"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "bestiary": [
+    {
+      "id": "creature:sky-manta",
+      "stats": {
+        "level": 4,
+        "hp": 26,
+        "defense": 13,
+        "damage_min": 3,
+        "damage_max": 7,
+        "accuracy_bonus": 2,
+        "xp_value": 90
+      },
+      "behaviour": "flees_when_hurt"
+    },
+    {
+      "id": "creature:glass-wight",
+      "stats": {
+        "level": 5,
+        "hp": 32,
+        "defense": 14,
+        "damage_min": 3,
+        "damage_max": 9,
+        "accuracy_bonus": 3,
+        "xp_value": 130
+      },
+      "behaviour": "ambushes"
+    },
+    {
+      "id": "creature:rootbound-knight",
+      "stats": {
+        "level": 6,
+        "hp": 40,
+        "defense": 15,
+        "damage_min": 4,
+        "damage_max": 10,
+        "accuracy_bonus": 4,
+        "xp_value": 170
+      },
+      "behaviour": "guards"
+    },
+    {
+      "id": "creature:hollow-archon",
+      "stats": {
+        "level": 10,
+        "hp": 120,
+        "defense": 16,
+        "damage_min": 6,
+        "damage_max": 14,
+        "accuracy_bonus": 6,
+        "xp_value": 900
+      },
+      "behaviour": "fights"
+    }
   ]
 }

@@ -146,3 +146,23 @@ def test_prices_answer_scarcity_the_roads_trust_and_a_haggle() -> None:
     assert bought.lines[0].startswith("You pay ") and "(the roads choke trade, you are trusted, you haggled)" in bought.lines[0]
     after["environment"] = {"absolute_minutes": 49 * 60}  # the next day: the haggle is spent
     assert "you haggled" not in price_of(after, brindle, potion)[1]
+
+
+def test_goods_are_bought_by_the_count_asked_as_far_as_stock_and_purse_go() -> None:
+    """The playtest: "I buy two Healing Potions" bought one."""
+    def potions(simulation) -> int:
+        return sum(int(item.get("qty") or 0) for item in simulation["player_state"]["inventory_state"]["items"]
+                   if item.get("name") == "Healing Potion")
+
+    campaign = _campaign(purse=1000)
+    outcome = buy(campaign["simulation_state"], "I buy two Healing Potions from Brindle Gearwing.")
+    assert outcome.lines == ["You pay 6 silver to Brindle Gearwing for 2 × Healing Potion. The transaction is complete."]
+    after = _after(campaign, outcome)
+    assert potions(after) == 2 and stock_left(after, OFFERS["npc:brindle"][0]) == 1
+    outcome = buy(campaign["simulation_state"], "I buy five Healing Potions from Brindle Gearwing.")
+    assert potions(_after(campaign, outcome)) == 3 and outcome.lines[-1] == "That is all there is of Healing Potion."
+    poor = _campaign(purse=70)
+    outcome = buy(poor["simulation_state"], "I buy 3 Healing Potions from Brindle Gearwing.")
+    assert potions(_after(poor, outcome)) == 2 and outcome.lines[-1] == "That is all you can afford of Healing Potion."
+    meal = buy(campaign["simulation_state"], "I buy two hot meals from Orik.")  # a meal is one, eaten now
+    assert meal.lines[0] == "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete."

@@ -2,10 +2,11 @@
 
 A deterministic reasonable player plays 500 turns of each world on the pipeline's rules (``scripts/rpg_balance_sim``)
 and the measures stay inside the bands: since the world's pressures raise side quests that pay (RQ-5.4), creatures
-act like themselves (RQ-5.6), and the economy restocks and prices move (RQ-5.5), every one of Aurelia's. One is not
-yet in the starter world, tracked as a strict expected failure: its win rate, early and late, because its bestiary
-has little between the town's rats and bandits (levels 1 and 2) and the northern pass's Icefang Wolves (level 9), so
-a hero who grows wins nearly every fight there is for them.
+act like themselves (RQ-5.6), and the economy restocks and prices move (RQ-5.5), every one of Aurelia's (its author
+wrote its creatures' numbers: the deeper the place, the stronger what lives there). One is not yet in the starter
+world, tracked as a strict expected failure: its win rate, early and late, because its bestiary has little between
+the town's rats and bandits (levels 1 and 2) and the northern pass's Icefang Wolves (level 9), so a hero who grows
+wins nearly every fight there is for them.
 """
 from __future__ import annotations
 

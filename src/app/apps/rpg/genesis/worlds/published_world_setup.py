@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping
 
-from .lore_sections import lore_location_rows, lore_routes, lore_rows
+from .lore_sections import joined_routes, lore_location_rows, lore_routes, lore_rows
 from .world_play_sections import ProviderEconomy, ShopOffer, authorship, parse_play_sections
 
 WORLD_MODEL_SCHEMA = "rpg_session_world_model_v1"
@@ -361,6 +361,7 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
                            "travel_time": _text(route.get("travel_time"))})
     if not routes:  # a world that names no roads: roads by its regions (lore_sections.py)
         routes = lore_routes(locations, lore_rows(canon, "regions"))
+    routes = joined_routes(routes, locations, lore_rows(canon, "regions"), start=start)  # none left unreached
     sections, _findings = parse_play_sections(canon)
     providers: dict[str, dict[str, Any]] = {}
     if sections.providers:

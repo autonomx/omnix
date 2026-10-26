@@ -1,13 +1,19 @@
-"""A world's own economy, routines, knowledge, pressures and bestiary numbers are validated and played (RQ-2.0)."""
+"""A world's own economy, routines, knowledge, pressures, bestiary numbers and quest steps are validated and played
+(RQ-2.0)."""
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from app.apps.rpg.genesis.worlds.published_world_setup import bestiary_mechanics, session_world_model
+from app.apps.rpg.genesis.worlds.published_world_setup import world_quest_row
 from app.apps.rpg.genesis.worlds.world_play_sections import (
+    PlaySectionsDraft,
     authorship,
     parse_play_sections,
     play_section_findings,
+    play_sections_document,
+    unknown_creatures,
+    with_play_sections,
 )
 
 
@@ -81,7 +87,7 @@ def test_a_world_without_play_sections_is_played_from_its_lore() -> None:
 
     assert findings == ()
     assert authorship(sections) == {section: "derived" for section in
-                                    ("economy", "routines", "knowledge", "pressures", "bestiary")}
+                                    ("economy", "routines", "knowledge", "pressures", "bestiary", "quests")}
     model = session_world_model(_revision(_canon()), SimpleNamespace(starting_location_id="loc:hearth"))
     assert model["authorship"]["economy"] == "derived"
     assert model["routines"] == [] and model["pressures"] == []
@@ -93,7 +99,7 @@ def test_a_world_that_writes_its_economy_is_played_as_written() -> None:
     model = session_world_model(_revision(canon), SimpleNamespace(starting_location_id="loc:hearth"))
 
     assert model["authorship"] == {"economy": "authored", "routines": "authored", "knowledge": "authored",
-                                   "pressures": "authored", "bestiary": "derived"}
+                                   "pressures": "authored", "bestiary": "derived", "quests": "derived"}
     provider = model["providers"]["npc:brindle"]
     assert provider["location_id"] == "loc:market"  # where the world puts her, not where her role guesses
     assert provider["buys"] == {"item_types": ["material"], "price_fraction": 0.4}
@@ -199,3 +205,64 @@ def test_a_world_with_creatures_starts_with_a_ticking_clock_and_its_own_pressure
     no_creatures = _canon()
     no_creatures["bestiary"] = []
     assert published_causal_runtime(no_creatures) == {}
+
+
+_QUEST = {"id": "quest:gate", "title": "The Meridian Gate", "objective": "Learn who opened the gate",
+          "locations": ["loc:market"]}
+_QUEST_PLAY = {"id": "quest:gate", "giver_id": "npc:liora", "steps": [
+    {"id": "hunt", "summary": "Drive the echo wolves off the road",
+     "ways": [{"conditions": [{"kind": "defeat", "subject": "monster:echo-wolf", "count": 2}]}]},
+    {"id": "choose", "summary": "Tell Liora whether the gate stays open",
+     "ways": [{"conditions": [{"kind": "talk", "subject": "npc:liora", "about": ["open"]}]},
+              {"conditions": [{"kind": "talk", "subject": "npc:liora", "about": ["close", "seal"]},
+                              {"kind": "hold", "subject": "item:echo-fang"}]}]},
+]}
+
+
+def test_a_quest_s_written_steps_are_kept_beside_its_lore_and_played_by_the_quest_rules() -> None:
+    """The playtest: every one of Aurelia's quests was places only, so the finale was done on arriving."""
+    canon = with_play_sections(_canon(quests=[_QUEST]), PlaySectionsDraft.model_validate({"quests": [_QUEST_PLAY]}))
+    [quest] = canon["quests"]
+    assert (quest["title"], quest["locations"], quest["giver_id"]) == ("The Meridian Gate", ["loc:market"], "npc:liora")
+    hunt, choose = quest["steps"]
+    assert hunt == {"id": "hunt", "summary": "Drive the echo wolves off the road",
+                    "all_of": [{"defeat": "monster:echo-wolf", "count": 2}]}
+    assert choose["any_of"] == [{"talk": "npc:liora", "about": ["open"]},  # one way, one condition: as itself
+                                [{"talk": "npc:liora", "about": ["close", "seal"]}, {"hold": "item:echo-fang"}]]
+    sections, findings = parse_play_sections(canon)
+    assert findings == () and authorship(sections)["quests"] == "authored"
+    assert play_sections_document(canon)["quests"] == [PlaySectionsDraft.model_validate(
+        {"quests": [_QUEST_PLAY]}).model_dump(mode="json", exclude_none=True)["quests"][0]]  # the editor reads it back
+    row = world_quest_row(quest, "loc:hearth")
+    assert row["objective"] == "Drive the echo wolves off the road" and row["giver_id"] == "npc:liora"
+    emptied = with_play_sections(canon, PlaySectionsDraft())  # a section left empty: played from the lore
+    assert emptied["quests"] == [_QUEST]
+
+
+def test_a_quest_step_naming_what_the_world_lacks_is_a_finding() -> None:
+    steps = [{"id": "go", "summary": "Go", "ways": [{"conditions": [
+        {"kind": "reach", "subject": "loc:nowhere"}, {"kind": "talk", "subject": "npc:nobody"},
+        {"kind": "hold", "subject": "item:none"}, {"kind": "defeat", "subject": "monster:none"},
+        {"kind": "check", "subject": "persuade", "target": "npc:ghost"}, {"kind": "check", "subject": "juggle"},
+        {"kind": "companion", "subject": "npc:stranger"}, {"kind": "companion", "subject": "anyone"}]}]}]
+    draft = PlaySectionsDraft.model_validate({"quests": [{"id": "quest:gate", "giver_id": "npc:who", "steps": steps},
+                                                         {"id": "quest:missing"}]})
+    canon = with_play_sections(_canon(quests=[_QUEST]), draft)
+    assert play_section_findings(canon, location_ids={"loc:hearth", "loc:market"}, region_ids={"region:vale"}) == (
+        "play_section_unknown_check:quests:juggle", "play_section_unknown_creature:quests:monster:none",
+        "play_section_unknown_item:quests:item:none", "play_section_unknown_person:quests:npc:ghost",
+        "play_section_unknown_person:quests:npc:nobody", "play_section_unknown_person:quests:npc:stranger",
+        "play_section_unknown_person:quests:npc:who", "play_section_unknown_place:quests:loc:nowhere")
+    assert unknown_creatures(_canon(quests=[_QUEST]), draft) == ("play_section_unknown_quest:quests:quest:missing",)
+
+
+def test_a_world_whose_canon_already_has_steps_reads_them_as_its_quest_section() -> None:
+    """The Market Road wrote its quests' steps in its canon, in the rules' own shape."""
+    rumor = {"id": "quest:rumor", "title": "Tavern rumor", "giver_id": "npc:brindle", "steps": [
+        {"id": "ask", "summary": "Ask which rumor is true", "any_of": [
+            {"talk": "npc:brindle", "about": ["rumor"]}, {"talk": "npc:liora", "about": "story"}]}]}
+    [play] = play_sections_document(_canon(quests=[rumor]))["quests"]
+    assert [way["conditions"][0]["about"] for way in play["steps"][0]["ways"]] == [["rumor"], ["story"]]
+    canon = with_play_sections(_canon(quests=[rumor]), PlaySectionsDraft.model_validate({"quests": [play]}))
+    assert canon["quests"][0]["steps"][0]["any_of"] == [{"talk": "npc:brindle", "about": ["rumor"]},
+                                                        {"talk": "npc:liora", "about": ["story"]}]

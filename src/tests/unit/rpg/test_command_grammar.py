@@ -9,6 +9,7 @@ SCENE = SceneView((
     SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "the relic merchant", "Brindle"), here=True),
     SceneEntity("npc:liora", "person", ("Liora Fen", "my guide", "Liora"), here=True),
     SceneEntity("npc:archon", "person", ("Archon Malrec", "the Archon")),
+    SceneEntity("npc:rhea", "person", ("Rhea Sunward", "the village guard captain", "the captain")),
     SceneEntity("creature:echo-wolf", "creature", ("echo wolf", "the wolf"), here=True),
     SceneEntity("item:potion", "item", ("healing potion", "potion"), here=True),
     SceneEntity("iron_dagger", "item", ("iron dagger", "dagger", "knife"), here=True),
@@ -134,7 +135,14 @@ def test_a_person_is_named_by_the_aliases_their_world_gives_them() -> None:
     ("Liora, I woke up here and remember nothing.", "talk", "npc:liora", None),
     ("Liora, keep watch", "order", "npc:liora", None),
     ("Liora, join my party", "party", "npc:liora", None),
+    # The playtest: "village" named Captain Rhea, the village guard captain, and the invitation went to her.
+    ("Liora, will you come with me to the village?", "party", "npc:liora", None),
+    # The playtest: asked of the one named, it needs no model to say whom (it was read at 0.6 and sent to the model).
+    ("Brindle, tell me about the gate. What do you need from me?", "ask", "npc:brindle", None),
 ])
 def test_a_name_and_a_comma_first_is_said_to_them_or_done_with_them(text, family, target, second) -> None:
+    from app.apps.rpg.session.turn.planning import plan_action
+
     reading = parse_command(text, SCENE)
     assert (reading.family, reading.target_id, reading.second_target_id) == (family, target, second)
+    assert plan_action(reading, fighting=False) is not None  # the game's own rules play it, with no model to read it
