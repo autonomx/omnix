@@ -36,7 +36,7 @@ def test_a_foes_health_may_be_said_as_its_blows_give_it() -> None:
     """The playtest: "the wolf, down to 4 of its 10 health" sent the writer back to write the turn again."""
     fight = "you hit the wolf for 4 (6 of 10 left). the wolf hits you for 2 (98 of 100 left)."
     assert _unsupported_material("The wolf is down to 6 of its 10 health.", fight) == []
-    assert _unsupported_material("Your blow takes 4 health from the wolf.", fight) == []
+    assert _unsupported_material("The blow takes 4 health from the wolf.", fight) == []  # "your" would mark the hero
     assert _unsupported_material("The wolf has 50 health.", fight) == ["50 health"]  # no blow says it
 
 
@@ -57,3 +57,10 @@ def test_a_clause_that_points_at_the_foe_may_give_its_health() -> None:
                  "You strike true; the wolf staggers, down to 5 of its 8 health."):
         assert _unsupported_material(said, fight) == [], said
     assert _unsupported_material("Bleeding, down to 5 health, you press on.", fight) == ["5 health"]
+
+
+def test_your_arm_is_the_heros() -> None:
+    fight = "the wolf hits you for 4 (6 of 10 left). you hit the wolf for 3 (5 of 8 left)."
+    assert _unsupported_material("Your arm bleeds, 5 health left.", fight) == ["5 health"]
+    assert _unsupported_material("Its jaws close on your arm, leaving 5 health.", fight) == ["5 health"]
+    assert _unsupported_material("Your strike leaves the wolf at 5 of its 8 health.", fight) == []

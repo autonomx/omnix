@@ -80,6 +80,7 @@ _HEROS_HEALTH = re.compile(r"\byou\b|\byou're\b|\byour (?:health|wounds?|life|st
 
 _CLAUSE = re.compile(r"[,;:]\s+|\s+(?:and|but|while)\s+")
 _FOE_WORDS = re.compile(r"\b(?:it|its|itself|they|them|their|him|his|her|hers)\b", re.IGNORECASE)
+_HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, in the sentence: "your arm bleeds"
 
 
 def _of_a_foe(clause: str, sentence: str) -> bool:
@@ -87,7 +88,7 @@ def _of_a_foe(clause: str, sentence: str) -> bool:
     at someone else ("you hit the wolf, leaving it at 5 health"; not "bleeding, down to 5 health, you press on")."""
     if _HEROS_HEALTH.search(clause):
         return False
-    return not _HEROS_HEALTH.search(sentence) or _FOE_WORDS.search(clause) is not None
+    return not _HEROS.search(sentence) or _FOE_WORDS.search(clause) is not None
 
 
 def _unsupported_amounts(clause: str, evidence_text: str, *, foes: bool) -> list[str]:

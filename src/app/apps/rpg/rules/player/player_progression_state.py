@@ -34,12 +34,14 @@ _GENRE_SKILLS = {
                "hacking"),
 }
 _GENRE_WORDS = {"fantasy": ("fantasy", "isekai", "myth", "medieval", "sword", "sorcery"),
-                "future": ("cyber", "sci", "future", "space", "tech")}
+                "future": ("cyber", "sci", "future", "space", "tech", "punk")}
 
 
 def genre_kind(genre: str) -> str:
     """The kind of world ``genre`` names ("fantasy" for "fantasy_isekai", "future" for "cyberpunk"); "" for none."""
     lowered = str(genre or "").casefold()
+    if "steam" in lowered:  # neither a world to come nor a sword's: its own
+        return ""
     return next((kind for kind, words in _GENRE_WORDS.items() if any(word in lowered for word in words)), "")
 
 

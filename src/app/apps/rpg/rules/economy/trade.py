@@ -50,7 +50,7 @@ def wanted_count(text: str, label: str) -> int:
     """How many of ``label`` the words ask for: a number or a number's word just before its name ("two Healing
     Potions", "3 lantern bread"), else one; at most ``MOST_AT_ONCE``. A price ("for 15 coppers") is no count."""
     named = [word for word in re.findall(r"[a-z]+", label.casefold()) if word not in {"a", "an", "the", "some", "of"}]
-    words = [re.escape(word) for word in named if word not in _COINS] or [re.escape(word) for word in named]
+    words = [re.escape(word) for word in named if word not in _COINS][-1:] or [re.escape(word) for word in named][-1:]
     if not words:
         return 1
     match = re.search(rf"\b{_COUNT_WORDS}\s+(?:[a-z']+\s+)?(?:{'|'.join(words)})(?:s|es)?\b(?!\s+(?:{_COIN_WORDS})\b)",

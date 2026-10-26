@@ -35,3 +35,10 @@ def test_its_length_reads_as_the_hero_hears_it() -> None:
 def test_tomorrows_time_is_the_next_days() -> None:
     assert wait_minutes("wait until tomorrow morning", 7 * 60) == 25 * 60  # not today's, an hour off
     assert wait_minutes("wait for the night watch to pass", 9 * 60) == A_WHILE  # no time of day waited for
+
+
+def test_tomorrow_whatever_the_hour_and_waiting_for_a_time() -> None:
+    assert wait_minutes("wait until tomorrow morning", 8 * 60) == 24 * 60
+    assert wait_minutes("wait until tomorrow evening", 20 * 60) == 23 * 60
+    assert wait_minutes("I wait for nightfall.", 12 * 60) == 9 * 60
+    assert wait_minutes("wait for dawn", 3 * 60) == 3 * 60

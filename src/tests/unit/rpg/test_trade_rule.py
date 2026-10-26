@@ -187,3 +187,10 @@ def test_a_coin_in_an_offers_name_makes_no_price_a_count() -> None:
     assert wanted_count("buy a copper kettle for 30 copper", "Copper Kettle") == 1
     assert wanted_count("buy two gold rings", "Gold Ring") == 2
     assert wanted_count("buy 3 buses", "Bus") == 3 and wanted_count("buy 3 bushels", "Bus") == 1
+
+
+def test_the_count_goes_with_the_offers_head_word() -> None:
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    assert wanted_count("buy a day pass, good for 3 days", "Day Pass") == 1
+    assert wanted_count("buy 2 day passes", "Day Pass") == 2

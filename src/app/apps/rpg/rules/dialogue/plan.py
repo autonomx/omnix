@@ -341,8 +341,11 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
                                                                                           or hands_out_work))):
             # The speaker's own name is no word of the quest's ("Vael, nice weather" is not about his vow).
             steps = " ".join(_s(_d(step).get("summary")) for step in _l(quest.get("steps")))
-            about = (_stemmed(_words(f"{_s(quest.get('title'))} {_s(quest.get('objective'))} {steps}"))
-                     - _stemmed(_words(name)))
+            # A finale by its name alone ("the Hollow Meridian"): its steps' words are a newcomer's own ("is this
+            # Earth? is there a gate?": the third review).
+            told = (_s(quest.get("title")) if _s(quest.get("tier")) == "finale"
+                    else f"{_s(quest.get('title'))} {_s(quest.get('objective'))} {steps}")
+            about = _stemmed(_words(told)) - _stemmed(_words(name))
             # A finale is the last thing offered for work in general (a newcomer was offered the Hollow Meridian).
             fitting = 0 if _s(quest.get("tier")) == "finale" else 1
             offerable.append((len(about & asked), fitting, len(about & pressing), quest))

@@ -28,14 +28,15 @@ def wait_minutes(text: str, minute_of_day: int) -> int:
     """The minutes a wait lasts: until the time of day it names (tomorrow's, when today's has gone by), or for the
     hours or minutes it names, at most ``LONGEST_WAIT``; else ``A_WHILE``."""
     lowered = text.casefold()
-    until = re.search(r"\b(?:until|till|til)\s+(?:the\s+)?(tomorrow\s+)?(\w+(?:\s\w+)?)", lowered)
+    until = (re.search(r"\b(?:until|till|til)\s+(?:the\s+)?(tomorrow\s+)?(\w+(?:\s\w+)?)", lowered)
+             or re.search(r"\bfor\s+(?:the\s+)?(tomorrow\s+)?(\w+)(?=\s*(?:[.!?,;]|$))", lowered))  # "for dawn."
     if until:
         words = until.group(2)
         for names, at in _UNTIL:
             if any(re.match(rf"{name}\b", words) for name in names):
                 ahead = (at - minute_of_day) % 1440
-                if until.group(1) and at > minute_of_day:  # tomorrow's, not today's still to come
-                    return ahead + 1440
+                if until.group(1):  # tomorrow's, whatever the hour now
+                    return 1440 - minute_of_day + at
                 return A_WHILE if ahead == 0 or ahead > 1440 - ALREADY else ahead  # until it comes, however long
     counted = _FOR.search(lowered)
     if counted:

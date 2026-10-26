@@ -274,3 +274,17 @@ def test_a_finale_asked_about_in_its_own_words_is_offered_and_a_quest_by_its_ste
     assert told["offers_quest"]["quest_id"] == "quest:finale"
     told = build_plan(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
     assert told["offers_quest"]["quest_id"] == "quest:bridge"
+
+
+def test_a_newcomers_first_questions_are_not_asked_after_the_finale() -> None:
+    """The third review: "Is it Earth or Aurelia?" touched the finale's steps' words and offered it."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {"world_model": {
+        "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide"}},
+        "quests": {"quest:finale": {"id": "quest:finale", "title": "The Hollow Meridian", "giver_id": "npc:liora",
+                                    "tier": "finale", "objective": "Find a way to the gate between Earth and Aurelia",
+                                    "steps": [{"summary": "Find a way home to Earth through the gate"}]}}}}
+    for line in ("Can you help me find the way to the village?", "What is this place? Is it Earth or Aurelia?",
+                 "Liora, how do I get back to Earth? Is there a gate?"):
+        assert "offers_quest" not in build_plan(simulation, "npc:liora", line).context(), line
