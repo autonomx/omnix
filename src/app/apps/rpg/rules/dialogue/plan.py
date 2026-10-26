@@ -174,13 +174,19 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
         # Asked about some of them ("what does a room cost"), those; asked what they sell, all of them.
         named = [offer for offer in on_sale if asked & {_stem(word) for word in _words(_s(offer.get("label")))}]
         on_sale = named or on_sale
+    secrets = tuple(_s(secret) for secret in _l(npc.get("secrets")))
+    # What the writer is told leaves out whatever repeats a secret (an author's description or goal may), so the
+    # model never sees one and the line can be shown as it is written (Q-12).
+    goal_texts = dict.fromkeys([*(_s(goal.get("summary")) for goal in goals), *(_s(goal) for goal in _l(npc.get("goals")))])
+    background = " ".join(sentence for sentence in re.split(r"(?<=[.!?])\s+", _s(npc.get("description")))
+                          if not _names_a_secret(sentence, secrets))
     return DialoguePlan(
         speaker_id=speaker_id, speaker_name=name, role=_s(npc.get("role")), stance=stance,
         voice=_s(npc.get("speech_style")), personality=tuple(_s(trait) for trait in _l(npc.get("personality"))),
-        goals=tuple(dict.fromkeys([*(_s(goal.get("summary")) for goal in goals), *(_s(goal) for goal in _l(npc.get("goals")))])),
-        background=_s(npc.get("description")),
+        goals=tuple(goal for goal in goal_texts if goal and not _names_a_secret(goal, secrets)),
+        background=background,
         reveals=tuple(reveals), revealed_ids=tuple(revealed_ids), for_a_price=tuple(priced), held_back=held,
-        secrets=tuple(_s(secret) for secret in _l(npc.get("secrets"))), quest_offer=quest_offer,
+        secrets=secrets, quest_offer=quest_offer,
         wares=tuple(f"{_s(offer.get('label'))} for {_price_text(_d(offer.get('price')))}" for offer in on_sale),
         ware_names=tuple(_s(offer.get("label")) for offer in on_sale),
         player_said=text,
@@ -196,6 +202,18 @@ def plan_changes(plan: DialoguePlan) -> list[StateChange]:
     return changes
 
 
+def _names_a_secret(text: str, secrets: tuple[str, ...]) -> bool:
+    """Whether ``text`` repeats a secret: whole; every word of a short one ("the shrine word is Heronglass" in "keep
+    the shrine word Heronglass"); or most of the words of one with four or more."""
+    lowered, said = text.casefold(), _words(text)
+    for secret in secrets:
+        words = _words(secret)
+        if secret.casefold() in lowered or (words and len(words) < 4 and words <= said) or (
+                len(words) >= 4 and len(words & said) >= max(4, len(words) * 2 // 3)):
+            return True
+    return False
+
+
 def line_keeps_the_plan(plan: DialoguePlan, line: str) -> bool:
     """The written line may be shown: it is not empty, names each ware asked about (by a word of its name: the
     prices are the game's, so a line that leaves one out gives way to the plan's own list), and repeats none of
@@ -204,11 +222,7 @@ def line_keeps_the_plan(plan: DialoguePlan, line: str) -> bool:
     said = {_stem(word) for word in _words(line)}
     if not lowered.strip() or any(not said & {_stem(word) for word in _words(name)} for name in plan.ware_names):
         return False
-    for secret in plan.secrets:
-        words = _words(secret)
-        if secret.casefold() in lowered or (len(words) >= 4 and len(words & _words(line)) >= max(4, len(words) * 2 // 3)):
-            return False
-    return True
+    return not _names_a_secret(line, plan.secrets)
 
 
 __all__ = ["DialoguePlan", "build_plan", "line_keeps_the_plan", "plan_changes"]

@@ -92,7 +92,8 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     for npc_id, npc in people.items():
         name = _s(npc.get("name"))
         role = _s(npc.get("role"))
-        add(npc_id, "person", _names(name, _called(name), f"the {role}" if role and len(role.split()) <= 3 else "",
+        add(npc_id, "person", _names(name, _called(name), *(_s(alias) for alias in _l(npc.get("aliases"))),
+                                     f"the {role}" if role and len(role.split()) <= 3 else "",
                                      *_role_names(role.casefold())), npc_id in present)
     for creature_id, creature in _d(_d(state.get("campaign_mechanics")).get("creatures")).items():
         add(str(creature_id), "creature", _names(_d(creature).get("name"), _label(str(creature_id))), True)

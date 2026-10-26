@@ -84,12 +84,14 @@ id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash,
 engine_version, schema_version, seed, status, created_at, updated_at, metadata,
 {CAMPAIGN_PARTS}
 """
-# The row, its document left out when its revision and hash are the ones this process keeps (four parameters, first).
+# The row, its document left out when its revision, hash and creation are the ones this process keeps (six
+# parameters, first). A campaign deleted and made again under its id is a new row: its parts may not be the kept ones.
+_KEPT_VERSION = "revision = %s AND state_hash = %s AND created_at = %s::timestamptz"
 _CAMPAIGN_COLUMNS_UNLESS_KEPT = f"""
 id, workspace_id, owner_user_id, title, revision,
-CASE WHEN revision = %s AND state_hash = %s THEN NULL ELSE state_jsonb END, state_hash,
+CASE WHEN {_KEPT_VERSION} THEN NULL ELSE state_jsonb END, state_hash,
 engine_version, schema_version, seed, status, created_at, updated_at, metadata,
-CASE WHEN revision = %s AND state_hash = %s THEN NULL ELSE {CAMPAIGN_PARTS} END
+CASE WHEN {_KEPT_VERSION} THEN NULL ELSE {CAMPAIGN_PARTS} END
 """
 
 
@@ -102,6 +104,7 @@ CASE WHEN revision = %s AND state_hash = %s THEN NULL ELSE {CAMPAIGN_PARTS} END
 class _Kept:
     revision: int
     state_hash: str
+    created_at: Any  # the row's creation: the same id made again is another row
     document: dict[str, Any]
     part_hashes: dict[str, str]
     at: float
@@ -130,13 +133,13 @@ def _kept(key: tuple[str, str]) -> _Kept | None:
         return kept
 
 
-def _keep(key: tuple[str, str], revision: int, digest: str, document: dict[str, Any] | None,
+def _keep(key: tuple[str, str], revision: int, digest: str, created_at: Any, document: dict[str, Any] | None,
           part_hashes: Mapping[str, str]) -> None:
     with _KEPT_LOCK:
         if document is None:
             _KEPT.pop(key, None)
             return
-        _KEPT[key] = _Kept(revision, digest, document, dict(part_hashes), time.monotonic())
+        _KEPT[key] = _Kept(revision, digest, created_at, document, dict(part_hashes), time.monotonic())
         _KEPT.move_to_end(key)
         while len(_KEPT) > _MAX_KEPT:
             _KEPT.popitem(last=False)
@@ -285,7 +288,7 @@ class PostgresRpgRepository:
         suffix = " FOR UPDATE" if for_update else ""
         key = (context.workspace_id, campaign_id)
         kept = _kept(key)
-        version = (kept.revision, kept.state_hash) if kept is not None else (-1, "")
+        version = (kept.revision, kept.state_hash, kept.created_at) if kept is not None else (-1, "", None)
         row = self.connection.execute(
             f"SELECT {_CAMPAIGN_COLUMNS_UNLESS_KEPT} FROM omnix_rpg_campaigns "
             f"WHERE id = %s AND workspace_id = %s{suffix}",
@@ -297,7 +300,7 @@ class PostgresRpgRepository:
             return _campaign(row, state=kept.document if read_only else copy_state(kept.document),
                              part_hashes=kept.part_hashes)
         state, part_hashes = assembled(dict(row[5]), row[14])
-        _keep(key, int(row[4]), str(row[6]), state if read_only else copy_state(state), part_hashes)
+        _keep(key, int(row[4]), str(row[6]), row[11], state if read_only else copy_state(state), part_hashes)
         return _campaign(row, state=state, part_hashes=part_hashes)
 
     def lock_campaign(self, context: TenantContext, campaign_id: str) -> bool:
@@ -575,7 +578,7 @@ class PostgresRpgRepository:
             raise RevisionConflict(f"campaign changed while committing turn: {campaign_id}")
         updated_campaign = _campaign(updated, state=next_state, part_hashes=form.part_hashes)
         # The document as now stored, kept for the next turn's reads: what the commit wrote, and the parts it left.
-        _keep((context.workspace_id, campaign_id), resulting_revision, after_hash,
+        _keep((context.workspace_id, campaign_id), resulting_revision, after_hash, updated[11],
               stored_document(form, campaign["state"]), form.part_hashes)
         self.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
 

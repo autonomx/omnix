@@ -42,3 +42,41 @@ def test_a_turn_no_one_follows_writes_the_line_in_one_call(monkeypatch) -> None:
     monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
     monkeypatch.setattr(dialogue, "narration_draft_active", lambda: False)
     assert dialogue._write_line(_plan(), [], "Liora?") == "Stay close."
+
+
+
+def test_what_repeats_a_secret_is_left_out_of_what_the_writer_is_told() -> None:
+    """Review 4: dropping ``must_never_reveal`` left an author's description or goal that repeats a secret in the
+    prompt, now shown as it streams."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {"world_model": {"npcs": {"npc:liora": {
+        "name": "Liora Fen", "role": "gatewarden",
+        "description": "A foxkin gatewarden of the grove. She knows the shrine word is Heronglass. She laughs easily.",
+        "goals": ["keep the shrine word Heronglass from the Synod", "find the lost Earthborn"],
+        "secrets": ["the shrine word is Heronglass"]}}},
+        "present_npc_state": {"present_npc_ids": ["npc:liora"]}}
+    plan = build_plan(simulation, "npc:liora", "Liora, what do you guard?")
+    told = str(plan.context())
+    assert "Heronglass" not in told
+    assert "A foxkin gatewarden of the grove." in plan.background and "She laughs easily." in plan.background
+    assert plan.goals == ("find the lost Earthborn",)
+
+
+def test_the_streamed_line_has_the_lines_own_limits(monkeypatch) -> None:
+    from app.apps.rpg.foundation import llm_app_gateway
+
+    asked: list[dict] = []
+
+    class _Gateway:
+        def generate_stream(self, prompt, **kwargs):
+            asked.append(kwargs)
+            yield {"text": "Stay close."}
+
+    monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
+    monkeypatch.setattr(dialogue, "narration_draft_active", lambda: True)
+    monkeypatch.setattr(dialogue, "publish_narration_draft", lambda text: None)
+    dialogue._write_line(_plan(), [], "Liora?")
+    assert asked[0]["timeout_s"] == dialogue.LINE_TIMEOUT_SECONDS
+    assert asked[0]["provider_options"]["max_tokens"] == 90
+    assert asked[0]["provider_options"]["chat_template_kwargs"] == {"enable_thinking": False}

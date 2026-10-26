@@ -106,3 +106,16 @@ def test_a_question_about_a_deed_is_asked_and_a_request_or_command_is_done(text:
     from app.apps.rpg.rules.intent.grammar import asked_not_done
 
     assert asked_not_done(text) is asked
+
+
+
+def test_a_person_is_named_by_the_aliases_their_world_gives_them() -> None:
+    """The route's intent eval: "ask the barkeep" did not reach Bran, the innkeeper; a world's people may carry
+    aliases (world-author-guide.md)."""
+    from app.apps.rpg.session.command_reading import scene_view
+
+    simulation = {"world_model": {"npcs": {"npc:bran": {"name": "Bran", "role": "innkeeper of the Rusty Flagon",
+                                                        "aliases": ["the barkeep", "the bartender"]}}},
+                  "present_npc_state": {"present_npc_ids": ["npc:bran"]}}
+    reading = parse_command("ask the barkeep about the road north", scene_view(simulation))
+    assert (reading.family, reading.target_id) == ("ask", "npc:bran")

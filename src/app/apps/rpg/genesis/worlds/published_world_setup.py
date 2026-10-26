@@ -349,6 +349,8 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
                 "goals": [_text(goal) for goal in _rows_or_texts(character.get("goals"))],
                 "relationships": dict(_mapping(character.get("relationships"))),
                 "secrets": [_text(secret) for secret in _rows_or_texts(character.get("secrets"))],
+                # What else they are called ("the barkeep"), as the author wrote it: commands may name them so.
+                "aliases": [_text(alias) for alias in _rows_or_texts(character.get("aliases")) if _text(alias)],
             }.items() if value},
         }
     routes: list[dict[str, Any]] = []

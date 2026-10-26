@@ -67,7 +67,6 @@
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:2",
       "model_calls": [
-        "turn_intent",
         "dialogue_line"
       ],
       "narrative": {

@@ -110,3 +110,11 @@ def test_a_gift_leaves_the_pack_for_someone_here_who_trusts_the_hero_more() -> N
     simulation["present_npc_state"] = {"present_npc_ids": ["npc:liora", "npc:orik"]}
     asked = give_item(simulation, "iron_dagger", "", "give away my dagger")
     assert asked.refused and asked.lines == ["To whom do you give the Iron Dagger?"]
+    # Gifts alone win no one's trust (review 4: ten apples one at a time reached the friendly stance).
+    simulation["relationship_state"] = {"npc:liora": {"trust": 23}}
+    simulation["present_npc_state"] = {"present_npc_ids": ["npc:liora"]}
+    nearly = give_item(simulation, "item:bread", "", "give a Lantern Bread")
+    assert [change.delta for change in nearly.changes if change.type == "regard_changed"] == [2]  # up to 25
+    simulation["relationship_state"] = {"npc:liora": {"trust": 25}}
+    assert [change.type for change in give_item(simulation, "item:bread", "", "give a Lantern Bread").changes] == [
+        "item_removed"]

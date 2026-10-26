@@ -81,6 +81,11 @@
      "name": "Bran",
      "species": "human",
      "role": "innkeeper of the Rusty Flagon",
+     "aliases": [
+      "the barkeep",
+      "the bartender",
+      "the tavern keeper"
+     ],
      "location_id": "location:market-road:rusty-flagon",
      "biography": "Bran keeps the Rusty Flagon running, watches debts carefully, and treats rumors as useful only when they come from reliable mouths. He has heard every story the road can tell and believes about a third of them.",
      "personality": [

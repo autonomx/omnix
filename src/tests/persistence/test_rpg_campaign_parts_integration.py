@@ -175,3 +175,40 @@ def test_a_kept_document_is_read_only_while_the_row_still_has_its_revision_and_h
                                 (canonical_json(changed), state_hash(changed), campaign_id))
         assert work.rpg.get_campaign(context, campaign_id)["state"]["state"]["player"]["level"] == 7
         work.rollback()
+
+
+
+def test_a_campaign_made_again_under_its_id_is_read_whole(database) -> None:
+    """Review 4: the kept parts' hashes describe the row this process wrote; the same id, revision and hash made
+    again (deleted, then restored whole) is another row, read whole, and its next turn writes every part."""
+    from app.apps.rpg.foundation.persistence import rpg_repository
+
+    context = ensure_local_identity(database)
+    campaign_id = f"campaign:again-{uuid4().hex}"
+    start = _start(campaign_id)
+    with unit_of_work(database) as work:
+        work.rpg.create_campaign(context, campaign_id=campaign_id, title="Again", state=start, engine_version="test",
+                                 schema_version="test", seed="1")
+        work.commit()
+    with unit_of_work(database) as work:
+        work.rpg.get_campaign(context, campaign_id)  # kept, with its part
+        work.connection.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))
+        work.connection.execute(
+            "INSERT INTO omnix_rpg_campaigns (id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash, "
+            "engine_version, schema_version, seed, created_at) VALUES (%s, %s, %s, 'Again', 0, %s::jsonb, %s, 'test', "
+            "'test', '1', CURRENT_TIMESTAMP + INTERVAL '1 second')",
+            (campaign_id, context.workspace_id, context.user_id, canonical_json(start), state_hash(start)))
+        work.commit()
+    assert rpg_repository._kept((context.workspace_id, campaign_id)) is not None
+    with unit_of_work(database) as work:
+        loaded = work.rpg.get_campaign(context, campaign_id, read_only=True)
+        work.rollback()
+    assert loaded["part_hashes"] == {} and loaded["state"] == start  # the new row, read whole
+    after = copy.deepcopy(start)
+    after["runtime_state"]["state_revision"] = 1
+    _commit(database, context, campaign_id, 1, after)
+    assert set(_parts(database, campaign_id)) == {"/state/player_journal_archive"}
+    with unit_of_work(database) as work:
+        rpg_repository.clear_kept_documents()
+        assert work.rpg.get_campaign(context, campaign_id)["state"] == after
+        work.rollback()

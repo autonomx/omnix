@@ -111,6 +111,8 @@ def stored_form(document: Mapping[str, Any], *, before: Mapping[str, Any] | None
             entry, entry_name = value[entry_key], str(entry_key)
             entry_path = f"{path}/{_token(entry_name)}"
             stored = stored_parts.get(entry_path)
+            # Equal as Python values, as the turn's patch compares them (state_delta): a part whose only change is
+            # 1 becoming 1.0 or True inside it is kept as stored, as the patch keeps it.
             if stored and entry_key in previous and type(previous[entry_key]) is type(entry) \
                     and previous[entry_key] == entry:
                 hashes[entry_path] = part_hashes[entry_path] = stored

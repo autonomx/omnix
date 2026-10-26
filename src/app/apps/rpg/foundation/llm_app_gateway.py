@@ -204,6 +204,7 @@ class AppLLMGateway:
         *,
         context: Optional[Dict[str, Any]] = None,
         timeout_s: Optional[float] = None,
+        provider_options: Optional[Dict[str, Any]] = None,
     ) -> Iterator[Dict[str, Any]]:
         t0 = time.monotonic()
         chunk_count = 0
@@ -227,8 +228,11 @@ class AppLLMGateway:
             timing.get("stage", ""),
         )
         messages = self._build_messages(prompt, context=context)
+        options = dict(provider_options or {})
+        if timeout_s is not None:  # as generate's: the call kind's own limit (RQ-8.8)
+            options.setdefault("request_timeout_seconds", float(timeout_s))
         try:
-            for chunk in self.provider.chat_completion(messages=messages, stream=True):
+            for chunk in self.provider.chat_completion(messages=messages, stream=True, **options):
                 if first_chunk_at is None:
                     first_chunk_at = time.monotonic()
                     logger.info(

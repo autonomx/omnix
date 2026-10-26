@@ -8,6 +8,7 @@ campaign and command fight the same way.
 """
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
@@ -157,7 +158,7 @@ def _person(simulation: Mapping[str, Any], target_ref: str) -> tuple[str, dict[s
     wanted = target_ref.casefold().removeprefix("the ").strip()
     for npc_id in here:
         name = _s(_d(people.get(npc_id)).get("name"))
-        if npc_id in people and wanted and (wanted == npc_id.casefold() or (name and name.casefold() in wanted)):
+        if npc_id in people and wanted and (wanted == npc_id.casefold() or (name and _names(wanted, name))):
             return npc_id, _d(people[npc_id])
     return "", {}
 
@@ -170,9 +171,14 @@ def _known_person(simulation: Mapping[str, Any], target_ref: str) -> str:
         return ""
     for npc_id, record in people.items():
         name = _s(_d(record).get("name"))
-        if wanted == str(npc_id).casefold() or (name and name.casefold() in wanted):
+        if wanted == str(npc_id).casefold() or (name and _names(wanted, name)):
             return name or str(npc_id)
     return ""
+
+
+def _names(text: str, name: str) -> bool:
+    """Whether ``text`` names ``name`` as whole words ("Kit" is not in "the kitten")."""
+    return re.search(rf"(?<![a-z0-9]){re.escape(name.casefold())}(?![a-z0-9])", text) is not None
 
 
 def _person_foe(npc_id: str, person: Mapping[str, Any]) -> dict[str, Any]:

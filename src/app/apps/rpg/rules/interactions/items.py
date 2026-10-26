@@ -29,6 +29,7 @@ from app.apps.rpg.foundation.state import access as _sections
 HEAL_SHARE = 0.30
 MIN_HEAL = 10
 GIFT_REGARD = 5  # a gift warms its receiver a little
+GIFT_TRUST_CEILING = 25  # but gifts alone win no one's trust (dialogue's friendly stance is at 50)
 RELIEF = {"food": ("hunger", -25), "drink": ("thirst", -30)}
 _NUMBERS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "both": 2, "all": 0}
 
@@ -140,9 +141,13 @@ def give_item(simulation: Mapping[str, Any], item_id: str, recipient_id: str, te
         return ItemOutcome(lines=[f"{person} is not here."], refused=True)
     quantity = _quantity(text, _count(item))
     given = f"{quantity} {name}" if quantity > 1 else f"the {name}"
-    return ItemOutcome([ItemRemoved(item_id=_id(item), quantity=quantity),
-                        RegardChanged(npc_id=recipient_id, name=person, delta=GIFT_REGARD, reason=f"gift:{_id(item)}")],
-                       [f"You give {given} to {person}."])
+    relation = _d(_d(simulation.get("relationship_state")).get(recipient_id))
+    trust = int(relation.get("trust") or relation.get("score") or 0)
+    warmed = min(GIFT_REGARD, max(0, GIFT_TRUST_CEILING - trust))
+    changes: list[StateChange] = [ItemRemoved(item_id=_id(item), quantity=quantity)]
+    if warmed:
+        changes.append(RegardChanged(npc_id=recipient_id, name=person, delta=warmed, reason=f"gift:{_id(item)}"))
+    return ItemOutcome(changes, [f"You give {given} to {person}."])
 
 
 def pick_up(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:

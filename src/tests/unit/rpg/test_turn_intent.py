@@ -32,6 +32,8 @@ def test_the_best_is_planned_two_close_ones_are_asked_between_and_none_is_a_free
     assert decide([IntentCandidate(family="talk", target_id="npc:bran", confidence=0.3)]).reading is None
     assert decide([]).reading is None and decide([]).between is None
     assert [command_for(reading, SCENE) for reading in (talk, go)] == ["Talk to Bran", "go to Old Mill"]
+    gift = IntentCandidate(family="give", target_id="item:rope", target_kind="item", confidence=0.8)
+    assert command_for(gift, SCENE) == "I give the Rope"
 
 
 def test_what_the_model_reads_into_a_hypothetical_is_never_done(monkeypatch) -> None:

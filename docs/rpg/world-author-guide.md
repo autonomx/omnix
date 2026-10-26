@@ -35,6 +35,10 @@ Open a world from the library. Its sections:
 | Map Blueprints | The grid maps of places, for fights and moving around |
 | Validation, Releases, Revision History | What publication checked, each certified release, earlier revisions |
 
+A person in the lore may list **aliases**: what else they are called ("the barkeep", "the bartender" for an
+innkeeper). Players can name them by any of these, as by their name or their role ("the innkeeper"). A place's
+aliases work the same way.
+
 A campaign plays from a published, certified release of the world. Editing the world changes its draft, and
 campaigns started later play the new release. Campaigns already under way keep the release they started with.
 

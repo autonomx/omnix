@@ -17,7 +17,8 @@ camp in the wild, restores the hero; a short rest takes the edge off.
 - **Putting down and picking up** (no time): one of a stack, or the number the player says ("two"). What lies on the
   ground stays where it was put down.
 - **Giving** (no time): one of a stack, or the number said, goes to someone here, who trusts the hero a little
-  more for it (regard +5). Unnamed, it goes to the one person here; with more, the game asks to whom. To someone
+  more for it (regard +5, while their regard is under 25: gifts alone win no one's trust, which dialogue's friendly
+  stance needs at 50). Unnamed, it goes to the one person here; with more, the game asks to whom. To someone
   not here, or with nothing like it carried, it is refused. A gift is no sale: nothing is paid for it.
 - **Wearing and wielding** (no time): a weapon is taken up in the main hand (a shield in the off hand), armour,
   a helmet, a cloak or a ring goes on its place, and a tool (a compass, a lantern, a torch) is held to hand, each

@@ -29,6 +29,7 @@ _LINE_PROMPT = prompt_template(
     "recent_exchanges without repeating them. " + WORLD_DATA_RULE + "\nPLAYER: {v0}\nPLAN: ",
 )
 MAX_LINE = 400
+_LINE_OPTIONS = {"temperature": 0.55, "max_tokens": 90, "chat_template_kwargs": {"enable_thinking": False}}
 LINE_TIMEOUT_SECONDS = 20.0  # a person's line: past this the plan's own line answers (RQ-8.8)
 
 
@@ -61,9 +62,7 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
     try:
         if narration_draft_active():  # the play screen follows the turn: the line is shown as it is written (Q-12)
             return _streamed_line(gateway, prompt, plan.speaker_name)
-        raw = gateway.generate(prompt, timeout_s=LINE_TIMEOUT_SECONDS,
-                               provider_options={"temperature": 0.55, "max_tokens": 90,
-                                                 "chat_template_kwargs": {"enable_thinking": False}})
+        raw = gateway.generate(prompt, timeout_s=LINE_TIMEOUT_SECONDS, provider_options=_LINE_OPTIONS)
     except Exception:
         logger.warning("rpg_dialogue_line_failed speaker=%s", plan.speaker_id, exc_info=True)
         return ""
@@ -73,7 +72,7 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
 def _streamed_line(gateway: Any, prompt: str, speaker: str) -> str:
     """The line as the model writes it, published to the turn's draft as it grows; the whole line is returned."""
     parts: list[str] = []
-    for chunk in gateway.generate_stream(prompt, timeout_s=LINE_TIMEOUT_SECONDS):
+    for chunk in gateway.generate_stream(prompt, timeout_s=LINE_TIMEOUT_SECONDS, provider_options=_LINE_OPTIONS):
         parts.append(_s(chunk.get("text")))
         partial = _clean("".join(parts), speaker)
         if partial:
