@@ -48,6 +48,10 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
         waited = planned.ticks * MINUTES_PER_TICK
         how_long = "a while" if waited == A_WHILE else said(waited)
         return [f"You wait {how_long} in {name}; time passes.", *([f"Around you: {', '.join(present)}."] if present else [])]
+    if planned.target_id:  # a close look at one thing: what the world says of it
+        looked = _looked_at(simulation, world, planned.target_id)
+        if looked:
+            return [looked]
     lines = [f"You look around {name}."]
     if present:
         lines.append(f"Here: {', '.join(present)}.")
@@ -57,6 +61,37 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
     if exits:
         lines.append(f"Paths lead to {', '.join(exits)}.")
     return lines
+
+
+def _looked_at(simulation: Mapping[str, Any], world: Mapping[str, Any], target_id: str) -> str:
+    """A close look at one thing: a person, a place, a creature, an offer or something carried, by what the world says
+    of it; "" for something it does not know."""
+    from app.apps.rpg.foundation.safe_values import safe_list as _l
+
+    person = _d(_d(world.get("npcs")).get(target_id))
+    if person:
+        role, about = _s(person.get("role")), _s(person.get("description")).rstrip(".")
+        return (f"You look closely at {_s(person.get('name')) or target_id}" + (f", the {role}" if role else "")
+                + (f": {about}." if about else "."))
+    place = _d(_d(world.get("locations")).get(target_id))
+    if place:
+        return f"You look toward {_s(place.get('name')) or target_id}" + (
+            f": {_s(place.get('description'))}" if _s(place.get("description")) else ".")
+    creature = _d(_d(_d(simulation.get("campaign_mechanics")).get("creatures")).get(target_id))
+    if creature:
+        return f"You study the {_s(creature.get('name')) or target_id}."
+    carried = _sections.inventory_state_of(_d(_sections.player_state_of(simulation)))
+    for item in _l(_d(carried).get("items")):
+        item = _d(item)
+        if target_id in {_s(item.get("item_id")), _s(item.get("id"))}:
+            about = _s(item.get("description")) or _s(_d(item.get("fields")).get("description"))
+            return f"You look over your {_s(item.get('name')) or target_id}" + (f": {about}" if about else ".")
+    for offers in _d(world.get("offers")).values():
+        for offer in _l(offers):
+            offer = _d(offer)
+            if _s(offer.get("offer_id")) == target_id:
+                return f"You look over {_s(offer.get('label')) or target_id}, which is for sale here."
+    return ""
 
 
 __all__ = ["outcome_lines", "resolve"]

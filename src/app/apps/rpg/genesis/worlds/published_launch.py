@@ -238,8 +238,7 @@ def _apply_published_opening_state(
     state = _record(session.get("state"))
     player = _record(state.get("player"))
     if not player.get("starter_gear"):  # the build's default kit, as the world's kind has it (a world to come: no dagger)
-        from app.apps.rpg.rules.player.player_progression_state import genre_kind
-        from app.apps.rpg.session.new_game import gear_of_kind
+        from app.apps.rpg.rules.player.player_progression_state import gear_of_kind, genre_kind
 
         inventory, equipment = gear_of_kind(genre_kind(str(world.get("genre") or "")),
                                             [_record(item) for item in player.get("inventory") or ()],

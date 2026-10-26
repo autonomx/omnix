@@ -114,6 +114,7 @@ modules = [
   "app.apps.rpg.genesis.forge.launch_readiness",
   "app.apps.rpg.genesis.forge.npc_lore_projection",
   "app.apps.rpg.genesis.forge.npc_lore_sync",
+  "app.apps.rpg.genesis.forge.runtime_lore_fallback",
   "app.apps.rpg.genesis.forge.runtime_lore_materialization",
   "app.apps.rpg.genesis.forge.runtime_lore_store",
   "app.apps.rpg.genesis.forge.scene_lore_job",

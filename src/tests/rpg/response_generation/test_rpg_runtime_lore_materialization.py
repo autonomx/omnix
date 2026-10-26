@@ -436,14 +436,11 @@ def test_documents_named_with_entity_id_and_body_still_document_the_target() -> 
 
 
 def test_fallback_lore_names_the_place_not_its_id() -> None:
-    from app.apps.rpg.genesis.forge.runtime_lore_materialization import (
-        SceneLoreTarget,
-        _fallback_entity_bundle,
-        _name_from_id,
-    )
+    from app.apps.rpg.genesis.forge.runtime_lore_fallback import fallback_entity_bundle
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import SceneLoreTarget, _name_from_id
 
     target = SceneLoreTarget(entity_id="npc:bran", kind="npc", name="Bran", location_id="location:loc-tavern")
-    named = _fallback_entity_bundle(target, location_name="The Rusty Flagon Tavern")
+    named = fallback_entity_bundle(target, location_name="The Rusty Flagon Tavern")
     assert named["relationships"][0]["content"] == "Bran was encountered at The Rusty Flagon Tavern."
     assert _name_from_id("location:loc-tavern") == "Tavern"
     assert _name_from_id("location:grayhaven") == "Grayhaven"

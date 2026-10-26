@@ -153,3 +153,32 @@ def test_a_name_first_does_not_take_the_place_of_the_one_the_words_name() -> Non
     scene = SceneView((*SCENE.entities, SceneEntity("npc:juno", "person", ("Juno Rask", "Juno"), here=True)))
     for text in ("Liora, ask Juno to join the party", "Liora, dismiss Juno from the party"):
         assert parse_command(text, scene).target_id == "npc:juno", text
+
+
+def test_a_question_aloud_about_someone_here_is_theirs_to_answer() -> None:
+    """The narration gate: "should I trust the barkeep?" went to the intent call and became a free action."""
+    from app.apps.rpg.session.turn.planning import plan_action
+
+    scene = SceneView((SceneEntity("npc:bran", "person", ("Bran", "the barkeep"), here=True),
+                       SceneEntity("npc:aldric", "person", ("Aldric",))))
+    for text, target in (("should I trust the barkeep?", "npc:bran"), ("what do people say about Bran?", "npc:bran")):
+        reading = parse_command(text, scene)
+        planned = plan_action(reading, fighting=False)
+        assert (reading.target_id, planned.mechanic, planned.target_id) == (target, "talk", target), text
+    # Someone away, asked about aloud: whoever is here answers, about them (the plan tells where they are found).
+    away = parse_command("where can I find Aldric?", scene)
+    assert (away.target_id, plan_action(away, fighting=False).target_id) == ("npc:aldric", "npc:bran")
+
+
+def test_a_question_about_a_thing_is_answered_by_its_seller_or_whoever_is_here_and_a_close_look_is_planned() -> None:
+    """The intent gate: the grammar read these right, and the intent call, asked again, read some wrong."""
+    from app.apps.rpg.session.turn.planning import plan_action
+
+    stew = parse_command("how much is the lantern bread?", SCENE)
+    assert (stew.family, stew.target_id, stew.second_target_id) == ("ask", "npc:brindle:bread", "npc:brindle")
+    assert plan_action(stew, fighting=False).target_id == "npc:brindle"  # its seller answers
+    looked = parse_command("examine the iron dagger", SCENE)
+    planned = plan_action(looked, fighting=False)
+    assert (planned.mechanic, planned.target_id) == ("look", "iron_dagger")
+    no = parse_command("no thanks, Brindle", SCENE)
+    assert plan_action(no, fighting=False).mechanic == "talk"

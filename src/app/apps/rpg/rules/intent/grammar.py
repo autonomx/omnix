@@ -381,7 +381,30 @@ def _ask(words: list[str], scene: SceneView, addressed: _Hit | None) -> IntentCa
     if addressed is not None:
         return _candidate("ask", addressed, 0.85, "asks_someone")
     subject = _first(words, scene, "person", "creature", "place", "item", "offer", "quest", "skill", "group")
+    if subject is not None and subject.entity.kind == "person" and subject.entity.here:
+        # Asked aloud about someone here ("should I trust the barkeep?"): theirs to answer, as if asked by name (the
+        # narration gate: it went to the intent call, which made it a free action, "you do so").
+        return _candidate("ask", subject, 0.85, "asks_about")
+    answerer = _answerer(scene, subject)
+    if subject is not None and answerer:
+        # Asked aloud about a thing (a place, an offer, a quest) with someone here to answer: theirs to answer, the
+        # one the hero talks with, else the seller of what is asked about, else whoever is here (the intent gate:
+        # the grammar read these right and the intent call, asked again, read some wrong).
+        return replace(_candidate("ask", subject, 0.85, "asks_about_thing"), second_target_id=answerer)
     return _candidate("ask", subject, 0.75 if subject else 0.6, "asks")
+
+
+def _answerer(scene: SceneView, subject: _Hit | None) -> str:
+    """Who answers a question said aloud about ``subject``: the one the hero talks with, the offer's seller, or the
+    first person here; "" when no one is."""
+    here = [entity.entity_id for entity in scene.of("person", here=True)]
+    if scene.focus_id in here:
+        return scene.focus_id
+    if subject is not None and subject.entity.kind == "offer":
+        seller = subject.entity.entity_id.rsplit(":", 1)[0]
+        if seller in here:
+            return seller
+    return here[0] if here else ""
 
 
 def _addressed(words: list[str], scene: SceneView) -> _Hit | None:

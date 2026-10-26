@@ -89,6 +89,14 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
         return None
     if reading.family == "look":
         return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)
+    if reading.family == "inspect" and reading.target_id:  # a close look at something here, told by what it is
+        return PlannedAction(mechanic="look", target_id=reading.target_id, reason=reading.reason)
+    if reading.family == "decline":  # "no thanks": said to the one who offered, or to whoever the hero talks with
+        return PlannedAction(mechanic="talk", target_id=reading.target_id if reading.target_kind == "person" else "",
+                             ticks=0, reason=reading.reason)
+    if reading.family == "ask" and reading.reason == "asks_about_thing" and reading.second_target_id:
+        # Asked aloud about a thing: whoever answers it (the grammar's), about it.
+        return PlannedAction(mechanic="talk", target_id=reading.second_target_id, ticks=0, reason=reading.reason)
     if reading.family == "move" and reading.target_kind == "place" and reading.target_id:
         return PlannedAction(mechanic="travel", target_id=reading.target_id, reason=reading.reason)
     if (reading.family in {"use_item", "drop", "take", "equip", "unequip"} and reading.target_kind == "item"

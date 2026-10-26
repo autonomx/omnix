@@ -45,6 +45,32 @@ def genre_kind(genre: str) -> str:
     return next((kind for kind, words in _GENRE_WORDS.items() if any(word in lowered for word in words)), "")
 
 
+# The default kit's things as a hero of a world to come carries them (the playtest: a cyberpunk hero of Vesper-9 set
+# out with a travel cloak and an iron dagger); each fights or wears as the kind its name ends in.
+_FUTURE_GEAR = {
+    "travel_cloak": {"id": "rain_cloak", "name": "Rain Cloak"},
+    "iron_dagger": {"id": "utility_knife", "name": "Utility Knife"},
+    "trail_rations": {"id": "ration_bars", "name": "Ration Bars"},
+    "torch": {"id": "flashlight", "name": "Flashlight"},
+}
+
+
+def gear_of_kind(kind: str, inventory: list[dict[str, Any]], equipment: list[dict[str, Any]]
+                 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The default kit as a world of ``kind`` ("future", "fantasy") has it; gear the player chose is theirs."""
+    if kind != "future":
+        return inventory, equipment
+    names = {_s_name(item.get("name")): _FUTURE_GEAR[str(item.get("id"))]["name"] for item in inventory
+             if str(item.get("id")) in _FUTURE_GEAR}
+    inventory = [{**item, **_FUTURE_GEAR.get(str(item.get("id")), {})} for item in inventory]
+    equipment = [{**row, "name": names.get(_s_name(row.get("name")), row.get("name"))} for row in equipment]
+    return inventory, equipment
+
+
+def _s_name(value: Any) -> str:
+    return str(value or "").casefold()
+
+
 def skills_for_genre(genre: str) -> Dict[str, Any] | None:
     """The starting skills for a world of ``genre`` ("fantasy_isekai", "cyberpunk"); None when it names no kind."""
     kind = genre_kind(genre)

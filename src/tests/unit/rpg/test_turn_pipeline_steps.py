@@ -164,3 +164,18 @@ def test_word_of_a_pressure_turning_reaches_the_hero() -> None:
     assert seen == ["Word comes: Danger in region:a is held in check.", "Word comes: Danger in region:b is held in check."]
     [ticked] = [change for change in changes if change.type == "world_ticked"]
     assert ticked.simulation["causal_world_runtime"]["last_tick"] == 3  # three hours: three moves
+
+
+def test_a_close_look_tells_what_the_world_says_of_the_thing() -> None:
+    from app.apps.rpg.session.turn.planning import PlannedAction
+    from app.apps.rpg.session.turn.resolvers import outcome_lines
+
+    document = {"simulation_state": {
+        "world_model": {"npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide", "description": "A foxkin warden."}},
+                        "locations": {"loc:grove": {"name": "The Grove"}}},
+        "player_state": {"location_id": "loc:grove", "inventory_state": {"items": [
+            {"item_id": "iron_dagger", "name": "Iron Dagger", "description": "Nicked, but sharp."}]}}}}
+    assert outcome_lines(PlannedAction(mechanic="look", target_id="npc:liora"), document) == [
+        "You look closely at Liora Fen, the guide: A foxkin warden."]
+    assert outcome_lines(PlannedAction(mechanic="look", target_id="iron_dagger"), document) == [
+        "You look over your Iron Dagger: Nicked, but sharp."]
