@@ -62,3 +62,32 @@ def test_a_hardcore_campaign_has_no_going_back(launch) -> None:
     assert refused.status_code == 409 and "hardcore" in refused.text and play.revision() == revision
     assert play.client.post(f"/api/rpg/sessions/{play.session_id}/save-points",
                             json={"name": "Never"}).status_code == 409
+
+
+def test_a_moment_that_will_not_upgrade_is_refused_not_a_server_error(launch, monkeypatch) -> None:
+    from pydantic import BaseModel
+
+    from app.apps.rpg.foundation.persistence.rpg_repository import PostgresRpgRepository
+    from app.apps.rpg.session import campaign_state
+
+    class Strict(BaseModel):
+        required: int
+
+    upcast, read = campaign_state.upcast_if_outdated, PostgresRpgRepository.document_at_revision
+
+    def earlier(self, *args, **kwargs):
+        document = read(self, *args, **kwargs)
+        return {**document, "_will_not_upgrade": True} if document is not None else None
+
+    def upgrade(document):
+        if document.get("_will_not_upgrade"):  # as an earlier revision whose upgrade fails validation would
+            Strict.model_validate({})
+        return upcast(document)
+
+    play = launch("aurelia")
+    play.turn("I drop the Lantern Bread.")
+    monkeypatch.setattr(PostgresRpgRepository, "document_at_revision", earlier)
+    monkeypatch.setattr(campaign_state, "upcast_if_outdated", upgrade)
+    refused = _rewind(play)
+    assert refused.status_code == 409, refused.text[:300]
+    assert "can no longer be rebuilt" in refused.text

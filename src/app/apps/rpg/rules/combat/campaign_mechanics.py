@@ -5,6 +5,8 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping
 
+from app.apps.rpg.foundation.state import access as _sections
+
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
@@ -19,7 +21,7 @@ def _slug(value: str) -> str:
 
 
 def campaign_mechanics_catalog(simulation_state: Mapping[str, Any]) -> dict[str, Any]:
-    return _mapping(simulation_state.get("campaign_mechanics"))
+    return _mapping(_sections.campaign_mechanics_of(simulation_state))
 
 
 def campaign_creature_definition(

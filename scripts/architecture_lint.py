@@ -254,6 +254,13 @@ def _root_name(node: ast.AST) -> str:
     return node.id if isinstance(node, ast.Name) else ""
 
 
+def _reads_a_state_section(node: ast.AST) -> bool:
+    """Any key read off a name that holds the simulation or runtime state (``simulation_state["rng_seed"]``,
+    ``runtime_state.get("interaction_seq")``): their fields are named once too (``FIELD_ACCESSORS``)."""
+    receiver = node.value if isinstance(node, ast.Subscript) else getattr(node.func, "value", None)
+    return isinstance(receiver, ast.Name) and receiver.id in {"simulation_state", "runtime_state"}
+
+
 def rpg_turn_path_violations(analysis: SourceAnalysis) -> list[Violation]:
     """AL018-AL020 (RQ-1.5) over ``[rpg_turn_path]``: a campaign is saved only by the commit step (AL018), its
     state is changed only by the reducer (AL019), and its sections are read through the typed view, not by string
@@ -290,7 +297,7 @@ def rpg_turn_path_violations(analysis: SourceAnalysis) -> list[Violation]:
             elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get"
                   and node.args and isinstance(node.args[0], ast.Constant)):
                 key = node.args[0].value
-            if isinstance(key, str) and key in _RPG_SECTION_KEYS:
+            if isinstance(key, str) and (key in _RPG_SECTION_KEYS or _reads_a_state_section(node)):
                 violations.append(Violation("AL020", path, key, getattr(node, "lineno", 1)))
     return violations
 

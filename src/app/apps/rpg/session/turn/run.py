@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+import logging
 from typing import Any, Iterator, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
@@ -40,6 +41,7 @@ _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification",
            "hotbar": "loadout",
            "check": "check", "grow": "progression", "rewind": "meta", "act": "action"}
 SOURCE = "rpg_turn_pipeline_v1"
+logger = logging.getLogger(__name__)
 # Turns in which the hero does nothing in the world: a question back, a rewind, a hotbar slot, a level's choice. What
 # a turn leads to (quests, pressures) and the foes on the grid do not follow them.
 _NOTHING_DONE_IN_THE_WORLD = frozenset({"clarify", "rewind", "hotbar", "grow"})
@@ -63,8 +65,8 @@ def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int,
             "character_identity": _d(state.get("character_identity")),
         },
     )
-    return JournalWritten(calendar=_d(runtime_state.get("campaign_calendar")),
-                          journal=_d(runtime_state.get("player_journal")))
+    return JournalWritten(calendar=_d(_sections.campaign_calendar_of(runtime_state)),
+                          journal=_d(_sections.player_journal_of(runtime_state)))
 
 
 def _reported(changes: list[StateChange]) -> list[dict[str, Any]]:
@@ -378,7 +380,12 @@ def _rewind_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> d
         if earlier is not None:
             from app.apps.rpg.session.campaign_state import upcast_if_outdated
 
-            earlier = upcast_if_outdated(earlier)  # an earlier version's game, in the shape this one plays
+            try:
+                earlier = upcast_if_outdated(earlier)  # an earlier version's game, in the shape this one plays
+            except ValueError:  # it does not upgrade (a pydantic ValidationError): that moment cannot be rebuilt
+                logger.warning("rpg_rewind_revision_not_upgradable session=%s revision=%s", ctx.session_id, target,
+                               exc_info=True)
+                earlier = None
         work.rollback()
     if target is None:
         return refused(f'There is no save point named "{name}".' if name else "There is no turn to undo.")

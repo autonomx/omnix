@@ -19,7 +19,7 @@ from app.apps.rpg.session.combat_intent import (
     ensure_ambient_runtime_state as ensure_ambient_runtime_state, get_effective_world_behavior as get_effective_world_behavior,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
-    _MAX_RECENT_WORLD_EVENT_ROWS as _MAX_RECENT_WORLD_EVENT_ROWS, _has_blocking_player_turn_narration as _has_blocking_player_turn_narration,
+    _MAX_RECENT_WORLD_EVENT_ROWS as _MAX_RECENT_WORLD_EVENT_ROWS,
 )
 from app.apps.rpg.session.player_activity_runtime import (
     _CRITICAL_REACTION_KINDS as _CRITICAL_REACTION_KINDS, _seconds_since_iso as _seconds_since_iso, advance_actor_activities_for_tick as advance_actor_activities_for_tick,
@@ -103,25 +103,6 @@ def _apply_idle_tick_to_session(
         return {"ok": False, "error": replay_time_error}
     if turn_now is None:
         turn_now = _runtime_utc_now()
-
-    if _has_blocking_player_turn_narration(runtime_state):
-        return {
-            "ok": True,
-            "session": session,
-            "updates": [],
-            "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
-            "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
-            "idle_debug_trace": {
-                "idle_suppressed": True,
-                "reason": "blocking_player_turn_narration",
-            },
-            "idle_seconds": _seconds_since_iso(
-                _safe_str(runtime_state.get("last_real_player_activity_at")),
-                now=turn_now,
-            ),
-            "idle_gate_open": False,
-            "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
-        }
 
     _log_interaction_trace(
         "idle_tick_start",

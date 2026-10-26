@@ -41,7 +41,7 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
     session.setdefault("installed_packs", [])
     session.setdefault("simulation_state", {})
     simulation_state = dict(_safe_dict(_sections.simulation_state_of(session)))
-    rng_seed = simulation_state.get("rng_seed")
+    rng_seed = _sections.rng_seed_of(simulation_state)
     if (
         not isinstance(rng_seed, int)
         or isinstance(rng_seed, bool)
@@ -84,8 +84,8 @@ def save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str,
                 or saved_manifest.get("id")
                 or session_id
             )
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         return saved
 
 
@@ -110,7 +110,7 @@ def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str
             ):
                 previous_seed = rng_seed_from_session_id(session_id)
             simulation_state = dict(_safe_dict(_sections.simulation_state_of(session)))
-            submitted_seed = simulation_state.get("rng_seed")
+            submitted_seed = _sections.rng_seed_of(simulation_state)
             if (
                 isinstance(submitted_seed, int)
                 and not isinstance(submitted_seed, bool)
@@ -153,8 +153,8 @@ def load_session(session_id: str) -> dict[str, Any]:
                 or manifest.get("id")
                 or session_id
             )
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         if turn_scoped:
             remember_turn_session(session_id, session)
         return session

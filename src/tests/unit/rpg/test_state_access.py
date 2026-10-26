@@ -25,3 +25,11 @@ def test_there_is_an_accessor_for_every_section_key_the_lint_watches(monkeypatch
     assert spec.loader is not None
     spec.loader.exec_module(lint)
     assert set(ACCESSORS) == set(lint._RPG_SECTION_KEYS)
+
+
+def test_a_field_accessor_returns_its_own_key() -> None:
+    from app.apps.rpg.foundation.state.access import FIELD_ACCESSORS
+
+    for key, accessor in FIELD_ACCESSORS.items():
+        marker = object()
+        assert accessor({key: marker}) is marker and accessor({}) is None and accessor(None) is None

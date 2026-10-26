@@ -25,12 +25,12 @@ FULL_RESTS = frozenset({"sleep", "inn_lodging", "make_camp"})
 
 
 def is_hardcore(simulation_state: dict[str, Any]) -> bool:
-    return safe_dict(simulation_state.get("campaign_rules")).get("hardcore") is True
+    return safe_dict(_sections.campaign_rules_of(simulation_state)).get("hardcore") is True
 
 
 def campaign_ended(simulation_state: dict[str, Any]) -> dict[str, Any]:
     """How the campaign ended ({} while it goes on)."""
-    return safe_dict(simulation_state.get("campaign_end"))
+    return safe_dict(_sections.campaign_end_of(simulation_state))
 
 
 def conditions(actor: dict[str, Any]) -> list[dict[str, Any]]:

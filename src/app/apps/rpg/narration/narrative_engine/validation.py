@@ -67,9 +67,10 @@ _GAINED = re.compile(r"\b(?:receive|receives|received|gain|gains|gained|earn|ear
 # A thing named in a sentence that tells of a gain or loss: "a Crown of Kings", "the Wayfarer Sigil".
 _NAMED = re.compile(r"(?:\b(?:a|an|the|your|his|her|their)\s+|,\s*)((?:[A-Z][\w'-]+)(?:\s+(?:of|the|[A-Z][\w'-]+))*)")
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
-# A fight's lines give health as "hits you for 2 (98 of 100 left)": the blow, what is left, and the most there is.
+# A fight's lines give the hero's health as "hits you for 2 (98 of 100 left)": the blow, what is left, and the most
+# there is. Only a line that hits the hero says the hero's health ("you hit the wolf for 4 (6 of 10 left)" is the wolf's).
 _HEALTH_UNITS = frozenset({"health", "hit points", "hp"})
-_HEALTH_FORMS = (r"\bfor {n} \(", r"\b{n} of \d+ left\b", r"\bof {n} left\b")
+_HEALTH_FORMS = (r"\byou for {n} \(", r"\byou for \d+ \({n} of \d+ left\)", r"\byou for \d+ \(\d+ of {n} left\)")
 
 
 def _unsupported_material(text: str, evidence_text: str) -> list[str]:

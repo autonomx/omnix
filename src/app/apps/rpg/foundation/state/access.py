@@ -78,4 +78,73 @@ ACCESSORS = {
     "party_state": party_state_of,
 }
 
-__all__ = [*sorted(accessor.__name__ for accessor in ACCESSORS.values()), "ACCESSORS"]
+
+# The fields the turn path reads straight off the simulation and the runtime state, named here once as well.
+
+def rng_seed_of(simulation: Any) -> Any:
+    return _kept(simulation, "rng_seed")
+
+
+def campaign_rules_of(simulation: Any) -> Any:
+    return _kept(simulation, "campaign_rules")
+
+
+def campaign_mechanics_of(simulation: Any) -> Any:
+    return _kept(simulation, "campaign_mechanics")
+
+
+def campaign_end_of(simulation: Any) -> Any:
+    return _kept(simulation, "campaign_end")
+
+
+def presentation_state_of(simulation: Any) -> Any:
+    return _kept(simulation, "presentation_state")
+
+
+def memory_state_of(simulation: Any) -> Any:
+    return _kept(simulation, "memory_state")
+
+
+def climate_survival_of(simulation: Any) -> Any:
+    return _kept(simulation, "climate_survival")
+
+
+def needs_of(simulation: Any) -> Any:
+    return _kept(simulation, "needs")
+
+
+def interaction_seq_of(runtime: Any) -> Any:
+    return _kept(runtime, "interaction_seq")
+
+
+def state_revision_of(runtime: Any) -> Any:
+    return _kept(runtime, "state_revision")
+
+
+def campaign_calendar_of(runtime: Any) -> Any:
+    return _kept(runtime, "campaign_calendar")
+
+
+def player_journal_of(runtime: Any) -> Any:
+    return _kept(runtime, "player_journal")
+
+
+def causal_applied_turn_keys_of(runtime: Any) -> Any:
+    return _kept(runtime, "causal_applied_turn_keys")
+
+
+def performance_of(runtime: Any) -> Any:
+    return _kept(runtime, "performance")
+
+
+FIELD_ACCESSORS = {
+    "rng_seed": rng_seed_of, "campaign_rules": campaign_rules_of, "campaign_mechanics": campaign_mechanics_of,
+    "campaign_end": campaign_end_of, "presentation_state": presentation_state_of, "memory_state": memory_state_of,
+    "climate_survival": climate_survival_of, "needs": needs_of, "interaction_seq": interaction_seq_of,
+    "state_revision": state_revision_of, "campaign_calendar": campaign_calendar_of,
+    "player_journal": player_journal_of, "causal_applied_turn_keys": causal_applied_turn_keys_of,
+    "performance": performance_of,
+}
+
+__all__ = [*sorted(accessor.__name__ for table in (ACCESSORS, FIELD_ACCESSORS) for accessor in table.values()),
+           "ACCESSORS", "FIELD_ACCESSORS"]

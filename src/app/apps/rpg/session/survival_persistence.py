@@ -25,12 +25,12 @@ def _has_any_need(value: Mapping[str, Any]) -> bool:
 def _legacy_survival_candidate(simulation_state: Mapping[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     player_state = _safe_dict(_sections.player_state_of(simulation_state))
-    climate = _safe_dict(simulation_state.get("climate_survival"))
+    climate = _safe_dict(_sections.climate_survival_of(simulation_state))
     player_climate = _safe_dict(player_state.get("climate_survival"))
 
     candidates = (
         _safe_dict(_sections.survival_of(climate)),
-        _safe_dict(simulation_state.get("needs")),
+        _safe_dict(_sections.needs_of(simulation_state)),
         _safe_dict(player_state.get("needs")),
         _safe_dict(_sections.survival_of(player_climate)),
     )

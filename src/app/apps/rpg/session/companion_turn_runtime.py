@@ -219,49 +219,6 @@ def _has_narration_artifact_for_turn(runtime_state: dict[str, Any], turn_id: str
     return _narration_artifact_completes_turn(artifact)
 
 
-def _has_active_player_turn_request(runtime_state: dict[str, Any]) -> bool:
-    marker = _safe_dict(_safe_dict(runtime_state).get("active_player_turn_request"))
-    status = _safe_str(marker.get("status")).strip().lower()
-    if status not in {"starting", "applying", "streaming"}:
-        return False
-    return not bool(_safe_str(marker.get("completed_at")).strip())
-
-
-def _has_blocking_player_turn_narration(runtime_state: dict[str, Any]) -> bool:
-    runtime_state = _safe_dict(runtime_state)
-    if _has_active_player_turn_request(runtime_state):
-        return True
-    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
-    artifacts = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
-
-    if not by_turn:
-        jobs = _safe_list(runtime_state.get("narration_jobs"))
-        for job in jobs:
-            turn_id = _safe_str(job.get("turn_id")).strip()
-            raw_job = job
-            job = _safe_dict(raw_job)
-            if (_safe_str(job.get("job_kind")).strip() or "player_turn") != "player_turn":
-                continue
-            status = _safe_str(job.get("status")).strip().lower()
-            if status != "queued":
-                continue
-            artifact = _safe_dict(artifacts.get(turn_id))
-            if not artifact:
-                return True
-    else:
-        for turn_id, raw_job in by_turn.items():
-            job = _safe_dict(raw_job)
-            if (_safe_str(job.get("job_kind")).strip() or "player_turn") != "player_turn":
-                continue
-            status = _safe_str(job.get("status")).strip().lower()
-            if status != "queued":
-                continue
-            artifact = _safe_dict(artifacts.get(turn_id))
-            if not artifact:
-                return True
-    return False
-
-
 def _select_latest_ambient_conversation_beats_per_active_thread(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
@@ -402,8 +359,6 @@ __all__ = [
     "_ensure_ambient_narration_state",
     "_ensure_narration_artifact_state",
     "_get_last_ambient_narrated_tick",
-    "_has_active_player_turn_request",
-    "_has_blocking_player_turn_narration",
     "_has_narration_artifact_for_turn",
     "_maybe_enqueue_latest_ambient_conversation_narration",
     "_narration_artifact_completes_turn",

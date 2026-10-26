@@ -466,7 +466,7 @@ def build_canonical_dialogue_quality_context(
     runtime_state = _dict(_sections.runtime_state_of(session)) or _dict(
         _sections.runtime_state_of(result)
     )
-    performance = _dict(runtime_state.get("performance"))
+    performance = _dict(_sections.performance_of(runtime_state))
     llm_prose_required = bool(
         fast_path
         or result.get("require_llm_dialogue_prose") is True

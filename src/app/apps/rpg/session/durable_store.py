@@ -232,8 +232,8 @@ def save_session_to_disk(
                 or saved_manifest.get("id")
                 or session_id
             )
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         return saved
 
 
@@ -292,8 +292,8 @@ def load_session_from_disk(
         if span is not None:
             runtime_state = _safe_dict(_sections.runtime_state_of(_safe_dict(session)))
             span["result_present"] = session is not None
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         return session
 
 

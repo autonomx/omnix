@@ -59,6 +59,7 @@ CASES = [
     ("AL018", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(session):\n    save_session(session)"}),
     ("AL019", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(simulation_state):\n    simulation_state['tick'] = 1"}),
     ("AL020", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(session):\n    return session.get('simulation_state')"}),
+    ("AL020", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(runtime_state):\n    return runtime_state.get('interaction_seq')"}),
     ("AL021", {APP + "apps/rpg/rules/economy/a.py": "SELLER = 'Bran'"}),
     ("AL016", {APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
 ]

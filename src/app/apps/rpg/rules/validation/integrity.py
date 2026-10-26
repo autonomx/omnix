@@ -49,7 +49,7 @@ def _asset_sort_key(item: Any) -> str:
 
 def validate_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    presentation_state = _safe_dict(_sections.presentation_state_of(simulation_state))
     visual_state = _safe_dict(presentation_state.get("visual_state"))
 
     image_requests = _safe_list(visual_state.get("image_requests"))
@@ -118,7 +118,7 @@ def validate_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 
 def validate_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    memory_state = _safe_dict(_sections.memory_state_of(simulation_state))
 
     actor_memory = _safe_dict(memory_state.get("actor_memory"))
     world_memory = _safe_dict(memory_state.get("world_memory"))

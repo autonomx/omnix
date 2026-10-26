@@ -50,7 +50,7 @@ def causal_tick(session: Mapping[str, Any], *, turn_key: str, turn: int) -> dict
         if not bootstrap:
             return None
         runtime = initialize_causal_runtime(simulation, bootstrap)
-    applied = [str(value) for value in runtime_state.get("causal_applied_turn_keys") or ()]
+    applied = [str(value) for value in _sections.causal_applied_turn_keys_of(runtime_state) or ()]
     if turn_key in applied:
         return {"applied": False, "reason": "turn_already_applied", "turn_key": turn_key,
                 "tick": int(_dict(runtime).get("last_tick") or 0),

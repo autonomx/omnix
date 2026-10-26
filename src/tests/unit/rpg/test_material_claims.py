@@ -22,3 +22,11 @@ def test_a_fights_health_may_be_said_as_its_lines_give_it() -> None:
     assert _unsupported_material("The bite leaves you at 98 of 100 health.", fight) == []
     assert _unsupported_material("You lose 2 health and have 98 health left.", fight) == []
     assert _unsupported_material("You are down to 50 health.", fight) == ["50 health"]
+
+
+def test_only_the_line_that_hits_the_hero_says_the_heros_health() -> None:
+    fight = "you hit the wolf for 4 (6 of 10 left). the wolf hits you for 2 (98 of 100 left)."
+    assert _unsupported_material("You have 98 of 100 health.", fight) == []
+    assert _unsupported_material("You have 6 health.", fight) == ["6 health"]  # the wolf's
+    assert _unsupported_material("You lose 4 health.", fight) == ["4 health"]  # the wolf's wound
+    assert _unsupported_material("You are at 10 hp.", fight) == ["10 hp"]  # the wolf's most
