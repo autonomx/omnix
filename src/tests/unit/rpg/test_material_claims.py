@@ -38,3 +38,13 @@ def test_a_foes_health_may_be_said_as_its_blows_give_it() -> None:
     assert _unsupported_material("The wolf is down to 6 of its 10 health.", fight) == []
     assert _unsupported_material("Your blow takes 4 health from the wolf.", fight) == []
     assert _unsupported_material("The wolf has 50 health.", fight) == ["50 health"]  # no blow says it
+
+
+def test_a_foes_numbers_never_stand_for_the_heros_health() -> None:
+    """The review: "the bite drops you to 5 health" passed on the wolf's "5 of 8 left"."""
+    fight = "the wolf hits you for 4 (6 of 10 left). you hit the wolf for 3 (5 of 8 left)."
+    for said in ("The bite drops you to 5 health.", "Bleeding, down to 5 health, you press on.",
+                 "With 5 health left you grit your teeth.", "Your health falls to 5 health."):
+        assert _unsupported_material(said, fight) == ["5 health"], said
+    assert _unsupported_material("The wolf is down to 6 health.", fight) == ["6 health"]  # the hero's, not the wolf's
+    assert _unsupported_material("The wolf staggers, down to 5 of its 8 health.", fight) == []

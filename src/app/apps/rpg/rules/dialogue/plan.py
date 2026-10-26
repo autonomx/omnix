@@ -154,12 +154,15 @@ def _common_knowledge(world: Mapping[str, Any], text: str, speaker_id: str) -> t
     """What anyone here may know of the places and people the player names: a place's own description and who lives
     there; a person's calling and where they are found (the playtest: Liora, asked about the Moonroot Ruins, knew
     "not much beyond the name"). Never a secret: only what the world states openly."""
-    lowered = f" {text.casefold()} "
     places = _d(world.get("locations"))
     people = _d(world.get("npcs"))
 
-    def named(*names: str) -> bool:
-        return any(len(name) > 3 and f" {name.casefold()}" in lowered for name in names if name)
+    def named(*names: str, as_written: bool = False) -> bool:
+        """Whether the words name one of ``names`` as whole words; ``as_written``: in its capitals (a first name
+        alone: "Will you help?" names no Will, "a miracle" no Mira)."""
+        return any(len(name) > 3 and re.search(
+            (r"(?<![.!?]\s)(?<!^)" if as_written else "") + rf"(?<![\w']){re.escape(name)}(?![\w'])", text.strip(),
+            flags=0 if as_written else re.IGNORECASE) for name in names if name)
 
     known: list[dict[str, Any]] = []
     for place_id, place in places.items():
@@ -172,7 +175,8 @@ def _common_knowledge(world: Mapping[str, Any], text: str, speaker_id: str) -> t
                       **({"who_is_there": living[:4]} if living else {})})
     for person_id, person in people.items():
         person = _d(person)
-        if person_id == speaker_id or not named(_s(person.get("name")), *_s(person.get("name")).split()[:1]):
+        full = _s(person.get("name"))
+        if person_id == speaker_id or not (named(full) or named(*full.split()[:1], as_written=True)):
             continue
         found = _s(_d(places.get(_s(person.get("location_id")))).get("name"))
         known.append({"person": _s(person.get("name")), "is": _s(person.get("role")),
@@ -344,8 +348,12 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
     # own (the playtest: asked what vow he would have witnessed, Vael never offered his): the quest closest to the
     # words, then to the goal they are most after (routines.md), offered.
     on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(row[0] for row in offerable)
-    on_their_quest = any(row[0] and _s(row[3].get("giver_id") or row[3].get("offered_by")) == speaker_id
+    # Two of its own words, at least, and never the finale this way ("Liora, should we head to the village?" touched
+    # the finale's "should" and offered it: the review).
+    on_their_quest = any(row[0] >= 2 and row[1] and _s(row[3].get("giver_id") or row[3].get("offered_by")) == speaker_id
                          for row in offerable)
+    # A finale is offered only when asked about in its own words (two of them), never for work in general.
+    offerable = [row for row in offerable if row[1] or row[0] >= 2]
     if offerable and (_WORK.search(text.casefold()) or on_a_goal or on_their_quest):
         quest = max(offerable, key=lambda row: row[:3])[3]
         quest_id = _s(quest.get("quest_id") or quest.get("id"))

@@ -39332,12 +39332,18 @@
             "type": "array"
           },
           "quests": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/QuestPlay"
-            },
-            "title": "Quests",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QuestPlay"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quests"
           },
           "routines": {
             "default": [],
@@ -39353,8 +39359,7 @@
           "routines",
           "knowledge",
           "pressures",
-          "bestiary",
-          "quests"
+          "bestiary"
         ],
         "title": "PlaySectionsDraft",
         "type": "object"
@@ -43338,7 +43343,7 @@
             "items": {
               "$ref": "#/components/schemas/QuestStep"
             },
-            "maxItems": 12,
+            "maxItems": 30,
             "title": "Steps",
             "type": "array"
           }
@@ -43419,14 +43424,13 @@
         "description": "A stage of a quest, done by any one of its ways (more than one: the quest branches there).",
         "properties": {
           "id": {
-            "maxLength": 80,
-            "minLength": 1,
-            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "default": "",
+            "maxLength": 120,
             "title": "Id",
             "type": "string"
           },
           "summary": {
-            "maxLength": 200,
+            "maxLength": 600,
             "minLength": 1,
             "title": "Summary",
             "type": "string"
@@ -43435,16 +43439,16 @@
             "items": {
               "$ref": "#/components/schemas/QuestWay"
             },
-            "maxItems": 6,
+            "maxItems": 8,
             "minItems": 1,
             "title": "Ways",
             "type": "array"
           }
         },
         "required": [
-          "id",
           "summary",
-          "ways"
+          "ways",
+          "id"
         ],
         "title": "QuestStep",
         "type": "object"

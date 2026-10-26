@@ -258,7 +258,7 @@ const CONDITIONS: PlayRows = {
     { key: 'subject', label: 'Of', kind: 'subject', by: 'kind' },
     { key: 'about', label: 'About (talk: any of these words, comma separated)', kind: 'tags' },
     { key: 'count', label: 'How many (defeat)', kind: 'number', min: 1, max: 50 },
-    { key: 'target', label: 'Against (check)', kind: 'ref', refs: ['people'], optional: 'Whoever is there' },
+    { key: 'target', label: 'Against (check)', kind: 'ref', refs: ['people', 'creatures', 'places', 'items'], optional: 'Whoever is there' },
   ],
   blank: () => ({ kind: 'reach', subject: '', about: [], count: 1, target: '' }),
   title: conditionText,
@@ -290,7 +290,7 @@ const QUESTS: PlayRows = {
   fields: [
     { key: 'id', label: 'Quest', kind: 'ref', refs: ['quests'] },
     { key: 'giver_id', label: 'Given by', kind: 'ref', refs: ['people'], optional: 'No one in particular' },
-    { key: 'deadline_hours', label: 'Deadline in hours (blank: none)', kind: 'number', min: 1, nullable: true },
+    { key: 'deadline_hours', label: 'Deadline in hours (blank: none)', kind: 'number', min: 1, max: 1440, nullable: true },
     { key: 'steps', label: 'Steps, in order', kind: 'list', rows: STEPS },
   ],
   blank: () => ({ id: '', giver_id: '', deadline_hours: null, steps: [] }),
@@ -353,6 +353,7 @@ export function describeFinding(finding: string, name: NameOf): string {
     play_section_unknown_lever: 'is pulled by something the world does not have',
     play_section_unknown_quest: 'names a quest the world does not have',
     play_section_unknown_check: 'asks a check the game does not have',
+    play_section_unknown_target: 'names a target the world does not have',
   };
   const label = section ? section.charAt(0).toUpperCase() + section.slice(1).replace(/\..*$/, '') : 'A section';
   if (what[code]) return `${label} ${what[code]}: ${name(subject)}`;

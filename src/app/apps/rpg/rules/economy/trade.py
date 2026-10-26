@@ -41,12 +41,17 @@ _GENERIC = frozenset({"supplies", "goods", "wares", "something", "anything", "st
 MOST_AT_ONCE = 10  # goods bought in one go (the playtest: "two Healing Potions" bought one)
 _COUNTS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
            "a couple of": 2, "a pair of": 2, "a few": 3, "several": 3}
-_COUNT = re.compile(r"\b(\d+|" + "|".join(sorted(_COUNTS, key=len, reverse=True)) + r")\b(?!\s*(?:gold|silver|copper|coins?)\b)")
+_COUNT_WORDS = r"(\d+|" + "|".join(sorted(_COUNTS, key=len, reverse=True)) + r")"
 
 
-def wanted_count(text: str) -> int:
-    """How many the words ask for: a number or a number's word, else one; at most ``MOST_AT_ONCE``."""
-    match = _COUNT.search(text.casefold())
+def wanted_count(text: str, label: str) -> int:
+    """How many of ``label`` the words ask for: a number or a number's word just before its name ("two Healing
+    Potions", "3 lantern bread"), else one; at most ``MOST_AT_ONCE``. A price ("for 15 coppers") is no count."""
+    words = [re.escape(word.rstrip("s")) for word in re.findall(r"[a-z]+", label.casefold())
+             if word not in {"a", "an", "the", "some", "of"}]
+    if not words:
+        return 1
+    match = re.search(rf"\b{_COUNT_WORDS}\s+(?:[a-z']+\s+)?(?:{'|'.join(words)})", text.casefold())
     if match is None:
         return 1
     word = match.group(1)
@@ -215,8 +220,8 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     kind = _s(offer.get("service_kind"))
     effects = _d(offer.get("effects"))
     # Goods by the count asked, as many as are left and the purse covers; a room, a meal or a drink is one.
-    asked = wanted_count(text) if kind == "shop_goods" else 1
-    count = min(asked, left if left is not None else asked, purse // price)
+    asked = wanted_count(text, label) if kind == "shop_goods" else 1
+    count = min(asked, left if left is not None else asked, purse // price if price else asked)
     what = label if count == 1 else f"{count} × {label}"
     changes: list[StateChange] = [PurseChanged(delta_copper=-price * count, reason=f"bought {what} from {name}")]
     lines = [f"You pay {coins(price * count)} to {name} for {what}" + (f" ({', '.join(why)})" if why else "")

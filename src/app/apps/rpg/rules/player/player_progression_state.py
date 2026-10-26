@@ -37,10 +37,15 @@ _GENRE_WORDS = {"future": ("cyber", "sci", "future", "space", "tech", "punk"),
                 "fantasy": ("fantasy", "isekai", "myth", "medieval", "sword", "sorcery")}
 
 
+def genre_kind(genre: str) -> str:
+    """The kind of world ``genre`` names ("fantasy" for "fantasy_isekai", "future" for "cyberpunk"); "" for none."""
+    lowered = str(genre or "").casefold()
+    return next((kind for kind, words in _GENRE_WORDS.items() if any(word in lowered for word in words)), "")
+
+
 def skills_for_genre(genre: str) -> Dict[str, Any] | None:
     """The starting skills for a world of ``genre`` ("fantasy_isekai", "cyberpunk"); None when it names no kind."""
-    lowered = str(genre or "").casefold()
-    kind = next((kind for kind, words in _GENRE_WORDS.items() if any(word in lowered for word in words)), "")
+    kind = genre_kind(genre)
     if not kind:
         return None
     return {name: {"level": 0, "xp": 0, "xp_to_next": 25} for name in _GENRE_SKILLS[kind]}

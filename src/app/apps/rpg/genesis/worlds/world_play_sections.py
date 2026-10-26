@@ -216,9 +216,9 @@ class QuestWay(_Section):
 class QuestStep(_Section):
     """A stage of a quest, done by any one of its ways (more than one: the quest branches there)."""
 
-    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
-    summary: str = Field(min_length=1, max_length=200)
-    ways: tuple[QuestWay, ...] = Field(min_length=1, max_length=6)
+    id: str = Field(default="", max_length=120)
+    summary: str = Field(min_length=1, max_length=600)
+    ways: tuple[QuestWay, ...] = Field(min_length=1, max_length=8)
 
 
 class QuestPlay(_Section):
@@ -227,7 +227,7 @@ class QuestPlay(_Section):
     id: str = Field(min_length=1)
     giver_id: str = ""
     deadline_hours: float | None = Field(default=None, gt=0, le=24 * 60)
-    steps: tuple[QuestStep, ...] = Field(default=(), max_length=12)
+    steps: tuple[QuestStep, ...] = Field(default=(), max_length=30)
 
 
 class WorldPlaySections(_Section):
@@ -284,7 +284,7 @@ def _step_play(step: Mapping[str, Any]) -> dict[str, Any]:
         elif len(ways) == 1:
             told = str(step.get("told") or "")
         plays.append({"conditions": [_condition_play(_mapping(row)) for row in way], **({"told": told} if told else {})})
-    return {"id": step.get("id"), "summary": step.get("summary"), "ways": plays}
+    return {"id": step.get("id") or "", "summary": step.get("summary"), "ways": plays}
 
 
 def quest_play_of(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -318,6 +318,15 @@ def quest_canon_fields(play: QuestPlay) -> dict[str, Any]:
 
 def _quest_plays(row: Mapping[str, Any]) -> bool:
     return any(row.get(key) for key in _QUEST_PLAY)
+
+
+def _edits_as_a_section(row: Mapping[str, Any]) -> bool:
+    """Whether a canon quest's play fields read as the section (else the editor cannot show them)."""
+    try:
+        QuestPlay.model_validate(quest_play_of(row))
+    except ValidationError:
+        return False
+    return True
 
 
 def _plays(row: Mapping[str, Any]) -> bool:
@@ -427,8 +436,8 @@ def play_section_findings(
                 ids, what = known.get(condition.kind, (None, ""))
                 if ids is not None and condition.subject not in ids:
                     unknown.append(f"play_section_unknown_{what}:quests:{condition.subject}")
-                if condition.target and condition.target not in npc_ids:
-                    unknown.append(f"play_section_unknown_person:quests:{condition.target}")
+                if condition.target and condition.target not in npc_ids | location_ids | item_ids | creature_ids:
+                    unknown.append(f"play_section_unknown_target:quests:{condition.target}")
     return tuple(sorted(set((*findings, *unknown))))
 
 
@@ -459,7 +468,8 @@ class PlaySectionsDraft(_Section):
     knowledge: tuple[NpcKnowledge, ...] = ()
     pressures: tuple[WorldPressure, ...] = ()
     bestiary: tuple[CreaturePlay, ...] = ()
-    quests: tuple[QuestPlay, ...] = ()
+    # None: a draft saved before quests were a section, which leaves the canon's quests as they are.
+    quests: tuple[QuestPlay, ...] | None = None
 
 
 def draft_findings(document: Any) -> tuple[PlaySectionsDraft | None, tuple[str, ...]]:
@@ -526,12 +536,15 @@ def with_play_sections(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> di
             creatures.append({**lore, **({key: value for key, value in _dump(play).items() if key != "id"}
                                          if play is not None else {})})
         canon["bestiary"] = creatures  # a creature the world lacks is left out (unknown_creatures names it)
-    quests = {row.id: row for row in draft.quests}
-    if quests or any(_quest_plays(row) for row in lore_rows(canon, "quests")):
+    quests = {row.id: row for row in draft.quests or ()}
+    if draft.quests is not None and (quests or any(_quest_plays(row) for row in lore_rows(canon, "quests"))):
         rows = []
         for row in lore_rows(canon, "quests"):
-            lore = {key: value for key, value in row.items() if key not in _QUEST_PLAY}
             play = quests.pop(str(row.get("id") or ""), None)
+            if play is None and _quest_plays(row) and not _edits_as_a_section(row):
+                rows.append(row)  # steps the editor cannot show (findings name them) are kept, never dropped
+                continue
+            lore = {key: value for key, value in row.items() if key not in _QUEST_PLAY}
             rows.append({**lore, **(quest_canon_fields(play) if play is not None else {})})
         canon["quests"] = rows  # a quest the world lacks is left out (unknown_creatures names it)
     return canon
@@ -543,7 +556,7 @@ def unknown_creatures(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> tup
     creatures, quests = _ids(canon, "bestiary"), _ids(canon, "quests")
     return tuple(sorted([*(f"play_section_unknown_creature:bestiary:{row.id}" for row in draft.bestiary
                            if row.id not in creatures),
-                         *(f"play_section_unknown_quest:quests:{row.id}" for row in draft.quests
+                         *(f"play_section_unknown_quest:quests:{row.id}" for row in draft.quests or ()
                            if row.id not in quests)]))
 
 

@@ -235,7 +235,8 @@ def test_a_quest_s_written_steps_are_kept_beside_its_lore_and_played_by_the_ques
         {"quests": [_QUEST_PLAY]}).model_dump(mode="json", exclude_none=True)["quests"][0]]  # the editor reads it back
     row = world_quest_row(quest, "loc:hearth")
     assert row["objective"] == "Drive the echo wolves off the road" and row["giver_id"] == "npc:liora"
-    emptied = with_play_sections(canon, PlaySectionsDraft())  # a section left empty: played from the lore
+    emptied = with_play_sections(canon, PlaySectionsDraft(quests=()))  # a section left empty: played from the lore
+    assert with_play_sections(canon, PlaySectionsDraft()) == canon  # a draft from before quests were a section
     assert emptied["quests"] == [_QUEST]
 
 
@@ -250,9 +251,10 @@ def test_a_quest_step_naming_what_the_world_lacks_is_a_finding() -> None:
     canon = with_play_sections(_canon(quests=[_QUEST]), draft)
     assert play_section_findings(canon, location_ids={"loc:hearth", "loc:market"}, region_ids={"region:vale"}) == (
         "play_section_unknown_check:quests:juggle", "play_section_unknown_creature:quests:monster:none",
-        "play_section_unknown_item:quests:item:none", "play_section_unknown_person:quests:npc:ghost",
+        "play_section_unknown_item:quests:item:none",
         "play_section_unknown_person:quests:npc:nobody", "play_section_unknown_person:quests:npc:stranger",
-        "play_section_unknown_person:quests:npc:who", "play_section_unknown_place:quests:loc:nowhere")
+        "play_section_unknown_person:quests:npc:who", "play_section_unknown_place:quests:loc:nowhere",
+        "play_section_unknown_target:quests:npc:ghost")
     assert unknown_creatures(_canon(quests=[_QUEST]), draft) == ("play_section_unknown_quest:quests:quest:missing",)
 
 
@@ -282,3 +284,10 @@ def test_a_ways_telling_is_kept_in_the_canon_and_read_back() -> None:
     assert home == {"id": "home", "summary": "Go home", "all_of": [{"reach": "loc:hearth"}], "told": "You are home."}
     [read] = play_sections_document(canon)["quests"]
     assert read == PlaySectionsDraft.model_validate({"quests": [play]}).model_dump(mode="json", exclude_none=True)["quests"][0]
+
+
+def test_steps_the_editor_cannot_show_are_kept_never_dropped() -> None:
+    """The review: a quest whose steps the section could not read lost them on the next save."""
+    odd = {**_QUEST, "giver_id": "npc:liora", "steps": [{"summary": "Go", "all_of": [{"reach": "loc:market"}]}] * 31}
+    canon = with_play_sections(_canon(quests=[odd]), PlaySectionsDraft(quests=()))
+    assert canon["quests"] == [odd]

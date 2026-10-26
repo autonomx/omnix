@@ -201,3 +201,14 @@ def test_a_second_import_of_a_lore_world_prepares_its_openings(launch) -> None:
         assert play.public()["current_location_name"] == "Black Rain Station"
         assert "Borrowed Night" in play.quests()
     assert first.stored()["manifest"]["scenario_id"] != second.stored()["manifest"]["scenario_id"]
+
+
+def test_a_hero_of_a_world_to_come_sets_out_with_its_kind_of_gear_and_a_purse(launch) -> None:
+    """The third playtest: a cyberpunk hero of Vesper-9 set out with a travel cloak, an iron dagger and no coin."""
+    play = launch("vesper")
+    carried = play.inventory()
+    assert "Utility Knife" in carried and "Rain Cloak" in carried
+    assert "Iron Dagger" not in carried and "Travel Cloak" not in carried
+    assert play.purse() > 0  # the opening names no purse: the build's
+    [opening] = [quest for quest in play.public()["quests"] if quest.get("source") == "published_opening_scenario"]
+    assert opening["objective"]  # what it asks now (its quest showed none)

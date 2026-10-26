@@ -19,7 +19,7 @@ SHOP = {
     "starter": {"route": ["go to the market"], "merchant": "Elara", "ware": "Healing Potion", "price": 100,
                 "buys_back": 50, "elsewhere": "go to the tavern", "back": "go to the market", "food": "Torch"},
     "vesper": {"route": [], "merchant": "a vendor", "ware": "Stim Patch", "price": 10, "buys_back": 5,
-               "elsewhere": "go to Tidebreak Docks", "back": "go to Black Rain Station", "food": "Iron Dagger"},
+               "elsewhere": "go to Tidebreak Docks", "back": "go to Black Rain Station", "food": "Utility Knife"},
 }
 
 
@@ -84,15 +84,16 @@ def test_inventory_round_trip_drop_leave_return_pick_up(launch, world) -> None:
 @pytest.mark.parametrize("world", in_worlds())
 def test_equip_through_loadout_survives_story_turns(launch, world) -> None:
     play = launch(world)
+    blade = "Utility Knife" if world == "vesper" else "Iron Dagger"  # a world to come has its kind of gear
     play.turn("look around")
-    response = play.loadout("equip", "Iron Dagger")
+    response = play.loadout("equip", blade)
     assert response.status_code == 200, response.text[:300]
-    assert "Iron Dagger" in play.facts()["equipment"]
+    assert blade in play.facts()["equipment"]
     play.turn("wait")
-    assert "Iron Dagger" in play.facts()["equipment"]
-    assert play.inventory()["Iron Dagger"] == 1  # equipping keeps one dagger, not two or none
+    assert blade in play.facts()["equipment"]
+    assert play.inventory()[blade] == 1  # equipping keeps one blade, not two or none
     play.turn("look around")
-    assert "Iron Dagger" in play.facts()["equipment"] and play.inventory()["Iron Dagger"] == 1
+    assert blade in play.facts()["equipment"] and play.inventory()[blade] == 1
 
 
 INN = {

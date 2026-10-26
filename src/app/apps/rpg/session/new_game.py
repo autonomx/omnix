@@ -192,6 +192,30 @@ DEFAULT_INVENTORY = [
     {"id": "torch", "name": "Torch", "quantity": 2, "type": "tool"},
 ]
 DEFAULT_EQUIPMENT = [{"slot": "Weapon", "name": "Iron Dagger"}, {"slot": "Cloak", "name": "Travel Cloak"}]
+# The default kit's things as a hero of a world to come carries them (the playtest: a cyberpunk hero of Vesper-9 set
+# out with a travel cloak and an iron dagger); each fights or wears as the kind its name ends in.
+_FUTURE_GEAR = {
+    "travel_cloak": {"id": "rain_cloak", "name": "Rain Cloak"},
+    "iron_dagger": {"id": "utility_knife", "name": "Utility Knife"},
+    "trail_rations": {"id": "ration_bars", "name": "Ration Bars"},
+    "torch": {"id": "flashlight", "name": "Flashlight"},
+}
+
+
+def gear_of_kind(kind: str, inventory: list[dict[str, Any]], equipment: list[dict[str, Any]]
+                 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The default kit as a world of ``kind`` ("future", "fantasy") has it; gear the player chose is theirs."""
+    if kind != "future":
+        return inventory, equipment
+    names = {_s_name(item.get("name")): _FUTURE_GEAR[str(item.get("id"))]["name"] for item in inventory
+             if str(item.get("id")) in _FUTURE_GEAR}
+    inventory = [{**item, **_FUTURE_GEAR.get(str(item.get("id")), {})} for item in inventory]
+    equipment = [{**row, "name": names.get(_s_name(row.get("name")), row.get("name"))} for row in equipment]
+    return inventory, equipment
+
+
+def _s_name(value: Any) -> str:
+    return str(value or "").casefold()
 DEFAULT_CURRENCY = {"gold": 0, "silver": 10, "copper": 0}
 REQUIRED_STARTER_ITEMS = [
     {"id": "water_skin", "name": "Water Skin", "quantity": 1, "type": "drink"},

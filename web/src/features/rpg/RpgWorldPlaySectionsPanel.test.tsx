@@ -123,7 +123,7 @@ describe('RpgWorldPlaySectionsPanel', () => {
     const condition = screen.getByRole('group', { name: 'All of' });
     const asks = within(condition).getByRole('combobox', { name: 'What it asks' }) as HTMLSelectElement;
     fireEvent.change(asks, { target: { value: 'reach' } });  // a place is reached: the places are offered
-    expect(within(condition).getByRole('option', { name: 'The Inn' })).toBeInTheDocument();
+    expect(within(within(condition).getByRole('combobox', { name: 'Of' })).getByRole('option', { name: 'The Inn' })).toBeInTheDocument();
     fireEvent.change(asks, { target: { value: 'companion' } });  // a companion: anyone, or someone named
     expect(within(condition).getByRole('option', { name: 'Anyone' })).toBeInTheDocument();
     fireEvent.change(asks, { target: { value: 'check' } });  // a check names its kind

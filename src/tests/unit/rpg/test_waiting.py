@@ -10,7 +10,11 @@ from app.apps.rpg.rules.waiting import A_WHILE, LONGEST_WAIT, said, wait_minutes
     ("I wait until evening.", 10 * 60, 9 * 60),  # 10:00 to 19:00
     ("wait till dusk", 10 * 60, 8 * 60),
     ("I wait until morning", 20 * 60, LONGEST_WAIT),  # 20:00 to 08:00 is twelve hours, the longest
-    ("wait until noon", 13 * 60, LONGEST_WAIT),  # today's noon has gone by: tomorrow's, past the longest
+    ("wait until noon", 13 * 60, A_WHILE),  # noon came an hour ago: it is noon, a while (the review)
+    ("wait until dawn", 15 * 60, 15 * 60),  # until it comes, however long: 15:00 to 06:00
+    ("I wait until evening", 19 * 60 + 30, A_WHILE),  # evening is here
+    ("wait until tomorrow morning", 20 * 60, 12 * 60),
+    ("wait until tonight", 12 * 60, 9 * 60),
     ("wait until midnight", 23 * 60, 60),
     ("I wait for three hours", 9 * 60, 180),
     ("wait 2 hours", 9 * 60, 180 - 60),

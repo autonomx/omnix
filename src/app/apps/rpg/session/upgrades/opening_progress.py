@@ -67,6 +67,8 @@ def _opening_quest(scenario: Mapping[str, Any], scenario_id: str) -> dict[str, A
         "detail": premise,
         "description": premise,
         "status": "active",
+        # What it asks now, as the log and the dialogue plan read every quest (the playtest: Vesper-9's showed none).
+        "objective": beats[0] if beats else premise,
         "next_step": beats[0] if beats else premise,
         "objectives": objectives,
         "source": "published_opening_scenario",

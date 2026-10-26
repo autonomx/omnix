@@ -162,8 +162,9 @@ def _skill_rank(simulation: Mapping[str, Any], skill: str) -> int:
 
 def _weapon_skill(simulation: Mapping[str, Any]) -> str:
     """The skill the hero's weapon is fought with (the playtest: swordsmanship, chosen twice, counted for nothing)."""
-    worn = _l(project_equipment_stats(dict(simulation), actor_id="player").get("equipped_items"))
-    words = {word for item in worn for word in _s(_d(item).get("name")).casefold().split()}
+    worn = [_d(item) for item in _l(project_equipment_stats(dict(simulation), actor_id="player").get("equipped_items"))
+            if any(slot in _s(_d(item).get("slot")).casefold() for slot in ("weapon", "hand"))]  # not a ring of focus
+    words = {word for item in worn for word in _s(item.get("name")).casefold().split()}
     return next((skill for skill, kinds in _WEAPON_SKILLS if words & kinds), "swordsmanship")
 
 

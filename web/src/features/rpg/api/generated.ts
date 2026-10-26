@@ -5021,11 +5021,8 @@ export interface components {
              * @default []
              */
             pressures: components["schemas"]["WorldPressure"][];
-            /**
-             * Quests
-             * @default []
-             */
-            quests: components["schemas"]["QuestPlay"][];
+            /** Quests */
+            quests?: components["schemas"]["QuestPlay"][] | null;
             /**
              * Routines
              * @default []
@@ -5335,7 +5332,10 @@ export interface components {
          * @description A stage of a quest, done by any one of its ways (more than one: the quest branches there).
          */
         QuestStep: {
-            /** Id */
+            /**
+             * Id
+             * @default
+             */
             id: string;
             /** Summary */
             summary: string;

@@ -14,11 +14,12 @@ _UNTIL = (
     (("afternoon",), 14 * 60),
     (("dusk", "sunset", "sundown"), 18 * 60),
     (("evening",), 19 * 60),
-    (("nightfall", "night", "dark"), 21 * 60),
+    (("nightfall", "night", "tonight", "dark"), 21 * 60),
     (("midnight",), 0),
 )
 _NUMBERS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
             "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "a few": 3, "a couple of": 2, "several": 4, "half an": 0.5}
+ALREADY = 3 * 60  # a time of day come within this long is now ("until evening" at 19:30 is a while, not a day)
 _FOR = re.compile(r"\b(\d+|a few|a couple of|several|half an|an|a|one|two|three|four|five|six|seven|eight|nine|ten|"
                   r"eleven|twelve)\s+(hours?|minutes?)\b")
 
@@ -27,12 +28,13 @@ def wait_minutes(text: str, minute_of_day: int) -> int:
     """The minutes a wait lasts: until the time of day it names (tomorrow's, when today's has gone by), or for the
     hours or minutes it names, at most ``LONGEST_WAIT``; else ``A_WHILE``."""
     lowered = text.casefold()
-    until = re.search(r"\b(?:until|till|til|for)\s+(?:the\s+)?(\w+(?:\s\w+)?)", lowered)
-    if until and not _FOR.search(lowered):
+    until = re.search(r"\b(?:until|till|til|for)\s+(?:the\s+|tomorrow\s+)?(\w+(?:\s\w+)?)", lowered)
+    if until:
         words = until.group(1)
         for names, at in _UNTIL:
             if any(re.match(rf"{name}\b", words) for name in names):
-                return min(LONGEST_WAIT, (at - minute_of_day) % 1440 or 1440)
+                ahead = (at - minute_of_day) % 1440
+                return A_WHILE if ahead == 0 or ahead > 1440 - ALREADY else ahead  # until it comes, however long
     counted = _FOR.search(lowered)
     if counted:
         amount = float(counted.group(1)) if counted.group(1).isdigit() else _NUMBERS[counted.group(1)]

@@ -314,7 +314,7 @@ def _spoken_to(text: str, scene: SceneView, whole: IntentCandidate) -> IntentCan
     if rest.family not in {"look", "talk", "ask", "clarify"} and rest.reason not in {"remark", "looks_without_subject"}:
         if rest.family == "buy" and not rest.second_target_id:
             return replace(rest, second_target_id=person)  # bought from them
-        if rest.family == "party":  # "Liora, join my party"; "Liora, will you come with me to the village?"
+        if rest.family == "party" and not rest.target_id:  # "Liora, join my party"; not "Liora, dismiss Juno"
             return replace(rest, target_id=person, target_kind="person")
         if rest.family == "give" and not rest.second_target_id:
             return replace(rest, second_target_id=person)  # "Liora, I give you my dagger"

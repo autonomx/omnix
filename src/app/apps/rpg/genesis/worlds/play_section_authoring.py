@@ -107,6 +107,8 @@ def _references(revision: WorldRevisionDocument | None) -> dict[str, list[dict[s
 def _view(world: Mapping[str, Any], revision: WorldRevisionDocument | None) -> dict[str, Any]:
     published = _published(revision)
     stored = _stored(world)
+    if stored is not None and "quests" not in stored:  # saved before quests were a section: the published ones
+        stored = {**stored, "quests": published.get("quests") or []}
     document = stored if stored is not None else published
     draft = PlaySectionsDraft.model_validate(document)
     as_published = authorship(parse_play_sections(revision.canon)[0]) if revision is not None else None

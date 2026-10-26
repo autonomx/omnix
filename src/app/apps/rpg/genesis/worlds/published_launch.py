@@ -237,6 +237,14 @@ def _apply_published_opening_state(
     epoch = str(scenario.starting_epoch or "Day 1, 08:00")
     state = _record(session.get("state"))
     player = _record(state.get("player"))
+    if not player.get("starter_gear"):  # the build's default kit, as the world's kind has it (a world to come: no dagger)
+        from app.apps.rpg.rules.player.player_progression_state import genre_kind
+        from app.apps.rpg.session.new_game import gear_of_kind
+
+        inventory, equipment = gear_of_kind(genre_kind(str(world.get("genre") or "")),
+                                            [_record(item) for item in player.get("inventory") or ()],
+                                            [_record(item) for item in player.get("equipment") or ()])
+        player.update(inventory=inventory, equipment=equipment)
     kit = opening_kit(
         revision,
         scenario,
@@ -247,6 +255,9 @@ def _apply_published_opening_state(
         # The player chose their own starting gear and purse: they set out with that, not the opening's kit.
         kit = {**kit, "inventory": [_record(item) for item in player.get("inventory") or ()],
                "currency": dict(_record(player.get("currency")))}
+    elif not _record(_record(scenario.starting_resources).get("currency")):
+        # An opening that names no purse: the build's (the playtest: a hero of Vesper-9 set out with nothing).
+        kit = {**kit, "currency": dict(_record(player.get("currency"))) or kit["currency"]}
     if kit["equipment"]:
         player["equipment"] = kit["equipment"]
     player.update(

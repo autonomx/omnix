@@ -238,3 +238,19 @@ def test_asked_about_their_own_quest_a_giver_offers_it_and_their_name_alone_is_n
     assert offered["offers_quest"]["quest_id"] == "quest:bridge"
     assert build_plan(simulation, "npc:vael", "Is there anything you need of me?").context()["offers_quest"]
     assert "offers_quest" not in build_plan(simulation, "npc:vael", "Vael, nice weather.").context()
+
+
+def test_a_word_in_common_with_a_quest_offers_no_quest_and_the_finale_never_so() -> None:
+    """The review: "Liora, should we head to the village now?" touched the finale's "should" and offered it."""
+    from app.apps.rpg.rules.dialogue.plan import build_plan
+
+    simulation = {"world_model": {
+        "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide"},
+                 "npc:will": {"name": "Will Marsh", "role": "ferryman", "location_id": "loc:quay"}},
+        "locations": {"loc:quay": {"name": "The Quay"}},
+        "quests": {"quest:finale": {"id": "quest:finale", "title": "The Hollow Meridian", "giver_id": "npc:liora",
+                                    "tier": "finale", "objective": "Choose whether the gate should close or open"}}}}
+    for line in ("Liora, should we head to the village now?", "Can you open the door?", "Liora, can you help me?"):
+        assert "offers_quest" not in build_plan(simulation, "npc:liora", line).context(), line
+    assert "common_knowledge" not in build_plan(simulation, "npc:liora", "Will you help me?").context()
+    assert build_plan(simulation, "npc:liora", "Where is Will?").context()["common_knowledge"][0]["person"] == "Will Marsh"

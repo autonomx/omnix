@@ -73,10 +73,9 @@ _HEALTH_UNITS = frozenset({"health", "hit points", "hp"})
 _HEALTH_FORMS = (r"\byou for {n} \(", r"\byou for \d+ \({n} of \d+ left\)", r"\byou for \d+ \(\d+ of {n} left\)")
 # A foe's health, said in a sentence that does not speak of the hero's own: any blow's numbers (the playtest: "the
 # wolf, down to 4 of its 10 health" sent the writer back, every other round, to write the turn again).
-_ANY_HEALTH_FORMS = (r"\bfor {n} \(", r"\bfor \d+ \({n} of \d+ left\)", r"\bfor \d+ \(\d+ of {n} left\)")
-_HEROS_HEALTH = re.compile(r"\b(?:you (?:have|are|stand|sit|remain|stay|keep|lose|lost|take|took|suffer|suffered|"
-                           r"heal|regain)|your (?:health|wounds?)|leaves? you|"
-                           r"leaving you|you(?:'re| are) (?:at|down))\b", re.IGNORECASE)
+_ANY_HEALTH_FORMS = (r"(?<!\byou )\bfor {n} \(", r"(?<!\byou )\bfor \d+ \({n} of \d+ left\)",
+                     r"(?<!\byou )\bfor \d+ \(\d+ of {n} left\)")  # a blow that hit someone not the hero
+_HEROS_HEALTH = re.compile(r"\byou\b|\byou're\b|\byour (?:health|wounds?|life|strength)\b", re.IGNORECASE)
 
 
 def _unsupported_material(text: str, evidence_text: str) -> list[str]:

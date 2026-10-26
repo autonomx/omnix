@@ -146,3 +146,10 @@ def test_a_name_and_a_comma_first_is_said_to_them_or_done_with_them(text, family
     reading = parse_command(text, SCENE)
     assert (reading.family, reading.target_id, reading.second_target_id) == (family, target, second)
     assert plan_action(reading, fighting=False) is not None  # the game's own rules play it, with no model to read it
+
+
+def test_a_name_first_does_not_take_the_place_of_the_one_the_words_name() -> None:
+    """The review: "Liora, dismiss Juno from the party" dismissed Liora."""
+    scene = SceneView((*SCENE.entities, SceneEntity("npc:juno", "person", ("Juno Rask", "Juno"), here=True)))
+    for text in ("Liora, ask Juno to join the party", "Liora, dismiss Juno from the party"):
+        assert parse_command(text, scene).target_id == "npc:juno", text

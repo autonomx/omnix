@@ -166,3 +166,15 @@ def test_goods_are_bought_by_the_count_asked_as_far_as_stock_and_purse_go() -> N
     assert potions(_after(poor, outcome)) == 2 and outcome.lines[-1] == "That is all you can afford of Healing Potion."
     meal = buy(campaign["simulation_state"], "I buy two hot meals from Orik.")  # a meal is one, eaten now
     assert meal.lines[0] == "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete."
+
+
+def test_a_price_or_a_measure_is_no_count() -> None:
+    """The review: "for 15 coppers" bought ten potions."""
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    assert wanted_count("buy a healing potion for 15 coppers", "Healing Potion") == 1
+    assert wanted_count("buy a potion, I have 12 silvers", "Healing Potion") == 1
+    assert wanted_count("buy a potion and a few torches", "Healing Potion") == 1
+    assert wanted_count("buy 50 feet of rope", "Rope") == 1
+    assert wanted_count("I buy two Healing Potions", "Healing Potion") == 2
+    assert wanted_count("buy a few torches", "Torch") == 3
