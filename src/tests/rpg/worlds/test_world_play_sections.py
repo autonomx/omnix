@@ -159,8 +159,9 @@ def test_a_release_with_a_broken_play_section_is_not_launch_ready() -> None:
     payload = parse_world_bundle_archive(module._build_bundle(root)).payload
     revision = WorldRevisionDocument.model_validate(payload.world_revisions[0]["document"])
     release = WorldReleaseDocument.model_validate(payload.world_releases[0]["document"])
-    definitions = {
+    definitions = {  # the revision's own map definitions (each world revision has its own)
         row["map_id"]: GridMapDefinition.model_validate(row["document"]) for row in payload.map_definitions
+        if int(row["document"]["world_revision"]) == revision.revision
     }
 
     assert certify_world_release(revision, release, definitions).certification["launch_ready"] is True

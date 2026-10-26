@@ -199,6 +199,9 @@ def _name_tokens(name: str) -> list[str]:
     return [word for word in _words(_norm(name)) if word not in _FILLER]
 
 
+_WHOLE_NAME = 1.5  # the least a hit naming every word of a name scores (a part of a name scores at most 1.25)
+
+
 def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
     """Entities named in ``words``: every distinctive word of one of its names present, best first."""
     hits: list[_Hit] = []
@@ -313,6 +316,19 @@ _HYPOTHETICAL = re.compile(
 def hypothetical(text: str) -> bool:
     """A question about what would happen ("what if I attacked her?"): it is asked, never done (RQ-3.2)."""
     return bool(_HYPOTHETICAL.search(_norm(text)))
+
+
+# A question that asks for the deed itself ("can I buy the bread?", "Liora, could you heal me?") is a request.
+_REQUESTS = ("can i", "could i", "may i", "can you", "could you", "would you", "will you", "i'd like", "i would like",
+             "let me", "i want")
+
+
+def asked_not_done(text: str) -> bool:
+    """A question about a deed that is no request for it ("what does the bread cost?", "should I trust her?", "would
+    practising help?"): it is asked, never done, as a hypothetical is."""
+    words = _words(_norm(text))
+    request = _starts(words, *_REQUESTS) or _starts(words[1:], *_REQUESTS) or "please" in words  # after a name, too
+    return _question(words, text.strip()) and not request
 
 
 def _question(words: list[str], original: str) -> bool:
@@ -480,8 +496,9 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         return _candidate("equip", _first(words, scene, "item"), 0.85, "equips")
     if _starts(words, "take", "pick up", "grab", "collect", "loot", "snatch", "pocket") or _has(words, "pick up"):
         return _candidate("take", _first(words, scene, "item"), 0.8, "takes")
-    # One of the hero's abilities, by name after a verb ("use Aimed Shot on the wolf") or first ("Aimed Shot").
-    ability = _first(words, scene, "ability")
+    # One of the hero's abilities, by its whole name after a verb ("use Aimed Shot on the wolf") or first ("Aimed
+    # Shot"): a part of a name is too common a word ("I make my way" is no Make Camp).
+    ability = next((hit for hit in _find(words, scene.of("ability")) if hit.score >= _WHOLE_NAME), None)
     if ability and (ability.start == 0 or _starts(words, "use", "cast", "activate", "invoke", "unleash", "perform",
                                                     "trigger", "channel", "fire off", "try")):
         foe = _first(words, scene, "creature", "person", here=True)
@@ -554,4 +571,5 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     )
 
 
-__all__ = ["STATEFUL_FAMILIES", "IntentCandidate", "SceneEntity", "SceneView", "hypothetical", "parse_command"]
+__all__ = ["STATEFUL_FAMILIES", "IntentCandidate", "SceneEntity", "SceneView", "asked_not_done", "hypothetical",
+           "parse_command"]

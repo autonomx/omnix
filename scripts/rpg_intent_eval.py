@@ -114,7 +114,10 @@ class Catalog:
         for prefix in sorted(self.by_id, key=len, reverse=True):
             if ":" in prefix and text.lower().startswith(prefix + ":"):
                 return self.by_id[prefix]
-        normalized = _norm(text.replace("_", " ").replace("-", " "))
+        # An id the catalog does not list is named by its last part ("location:market-road:northern-road" is the
+        # northern road, not "the market" its region's slug happens to spell).
+        named = text.rsplit(":", 1)[-1] if ":" in text else text
+        normalized = _norm(named.replace("_", " ").replace("-", " "))
         for name, key in self.by_name:
             if name == normalized:
                 return key
@@ -249,6 +252,16 @@ def observed_reading(found: list[dict[str, Any]], static: dict[str, Any], sessio
     return {"family": static.get("family"), "target_ref": static.get("target_ref")}
 
 
+# The corpus labels what the pipeline runs as one mechanic apart: inspecting is looking at a thing, and asking and
+# declining are talking to someone (session/turn/intent.py FAMILIES has no inspect, ask or decline). Both a label and
+# a reading are scored by the mechanic they name; the exact label's rate is reported beside it.
+SAME_MECHANIC = {"inspect": "look", "ask": "talk", "decline": "talk"}
+
+
+def same_family(predicted: Any, label: Any) -> bool:
+    return SAME_MECHANIC.get(str(predicted), str(predicted)) == SAME_MECHANIC.get(str(label), str(label))
+
+
 def turn_reading(ran: dict[str, Any]) -> dict[str, Any]:
     """The family and target of the reading a turn ran on; a question back is a clarification."""
     if ran["mechanic"] == "clarify":
@@ -338,7 +351,8 @@ class Worlds:
         prediction["target_entity"] = self.catalog[world].resolve(prediction["target_ref"])
         record["prediction"] = prediction
         record["correct"] = {
-            "family": prediction["family"] == item["action_family"],
+            "family": same_family(prediction["family"], item["action_family"]),
+            "family_exact": prediction["family"] == item["action_family"],
             "target": (prediction["target_entity"] == item["target_entity"]) if item["target_entity"] else None,
             "stateful": prediction["stateful"] == item["stateful"],
         }
@@ -347,6 +361,8 @@ class Worlds:
 
 def metrics(items: list[dict[str, Any]], records: dict[str, dict[str, Any]]) -> dict[str, Any]:
     family_ok = sum(records[item["id"]]["correct"]["family"] for item in items)
+    exact_ok = sum(records[item["id"]]["correct"].get("family_exact", records[item["id"]]["correct"]["family"])
+                   for item in items)
     targeted = [item for item in items if item["target_entity"]]
     target_ok = sum(bool(records[item["id"]]["correct"]["target"]) for item in targeted)
     calm = [item for item in items if not item["stateful"]]
@@ -356,6 +372,7 @@ def metrics(items: list[dict[str, Any]], records: dict[str, dict[str, Any]]) -> 
     gate = sum(records[item["id"]]["static"]["gate"] for item in items)
     return {
         "action_family_accuracy": proportion(family_ok, len(items)),
+        "action_family_exact_label": proportion(exact_ok, len(items)),
         "target_entity_accuracy": proportion(target_ok, len(targeted)),
         "false_stateful_rate": proportion(false_stateful, len(calm)),
         "missed_stateful_rate": proportion(missed, len(stateful)),

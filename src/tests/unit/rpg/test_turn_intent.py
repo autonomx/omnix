@@ -46,3 +46,20 @@ def test_what_the_model_reads_into_a_hypothetical_is_never_done(monkeypatch) -> 
     monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
     read = intent.read_with_model({}, SCENE, "and what would happen if I struck Bran down right now?")
     assert read.reading is not None and read.reading.family == "talk"
+
+
+def test_a_question_about_a_deed_is_asked_not_done_but_a_request_is_done(monkeypatch) -> None:
+    """The route's intent eval: "what does the local news cost?" was read as a purchase, and paid for."""
+    from app.apps.rpg.foundation import llm_app_gateway
+    from app.apps.rpg.session.turn import intent
+
+    class _Gateway:
+        def generate(self, prompt, **_kwargs):
+            return ('{"readings": [{"family": "attack", "target_id": "npc:bran", "confidence": 0.95},'
+                    ' {"family": "talk", "target_id": "npc:bran", "confidence": 0.6}]}')
+
+    monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda: _Gateway())
+    asked = intent.read_with_model({}, SCENE, "should I fight Bran?")
+    assert asked.reading is not None and asked.reading.family == "talk"
+    requested = intent.read_with_model({}, SCENE, "Bran, can you fight me?")
+    assert requested.reading is not None and requested.reading.family == "attack"

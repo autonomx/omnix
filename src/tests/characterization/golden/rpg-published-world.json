@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:7b907d416a944070b9c3f39bfe0ff7179a578b0397ea826844cc1e65bee0edbd",
+    "document_hash": "sha256:808ee7e1f8bdc1d5a1132866d5ad1b3c482d379a683c16f5cfe9c53fe23da5cb",
     "facts": {
       "combat": {
         "active": false,
@@ -88,7 +88,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d5337d6bf4a6754f7a0aa463e00df2ab4d191120e456c23564bef4243e253e25",
+      "document_hash": "sha256:6ec0e5d50c26f5de8e7574d8e8c5580e728302d6738e434b78e7e6fa5f19cde1",
       "facts": {
         "combat": {
           "active": false,
@@ -182,6 +182,7 @@
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/environment",
+        "simulation_state/npc_index",
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
@@ -192,6 +193,7 @@
         "changed_domains": [
           "time",
           "survival",
+          "npcs",
           "world",
           "narrative"
         ],
@@ -201,6 +203,7 @@
           "changed_domains": [
             "time",
             "survival",
+            "npcs",
             "world",
             "narrative"
           ],
@@ -226,7 +229,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:06d80d210d00ed89b08f1db26921e3ceab608087e70549c0358f2f034a1af32f",
+      "document_hash": "sha256:daf2b060be66dbb51c94eae05927af533f583bb02df733917f6bc9b8a1ce55b7",
       "facts": {
         "combat": {
           "active": false,
@@ -376,7 +379,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:30bd0b6f9734d61529d1a64280622c395ed79872b449f5ae0866ac39366356ef",
+      "document_hash": "sha256:71d9a0bec8203250658fe2d5f89c729f2747385aa6691a801a9a551dc5d55fbe",
       "facts": {
         "combat": {
           "active": false,
@@ -472,6 +475,7 @@
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/environment",
+        "simulation_state/npc_index",
         "simulation_state/player_state",
         "simulation_state/survival",
         "simulation_state/tick",
@@ -484,6 +488,7 @@
           "time",
           "party",
           "survival",
+          "npcs",
           "world",
           "narrative"
         ],
@@ -494,6 +499,7 @@
             "time",
             "party",
             "survival",
+            "npcs",
             "world",
             "narrative"
           ],
@@ -522,7 +528,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:194e4265f7e6d0425b3b3608df3b98353caa08d2f816e274078b98fe7a2de221",
+      "document_hash": "sha256:e52fb01deda494d750626f01c41faec464ccbc568d01b256298a4de165f17666",
       "facts": {
         "combat": {
           "active": false,
@@ -672,7 +678,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b0992febd1930cdff11e5716dd5bf624d469eaa0a6b620d5563bff0bc173c671",
+      "document_hash": "sha256:295c7e97b3a64b7efbde56dc580766c564a64478599aa8051d9778cefad6a0f7",
       "facts": {
         "combat": {
           "active": false,
@@ -840,7 +846,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:1c7102436d78be6ef3b9aa1b2ab3bb744eaec30ed307b1a02f8b758976240d5a",
+      "document_hash": "sha256:e62847f625ffe71450c6768dd130144ad30344c164e78bfc0126274aa2c1bbb5",
       "facts": {
         "combat": {
           "active": false,
@@ -1025,7 +1031,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:164aea3790685310b8441585d8568fec496a38fe54c0b7d92fd228298eb7d413",
+      "document_hash": "sha256:37931d426a3a8aec8dc94edcd3714f91561c6ce8c7f706785d78c67c8a59509f",
       "facts": {
         "combat": {
           "active": false,
@@ -1169,7 +1175,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:8669a03b12584a05ab51148676063cd2980733926346392a25f33cb2bdb443f7",
+      "document_hash": "sha256:1e50622e4eadcbe9877c12cecc10fc810915db7c646f2e47c82ee2a0b14db34f",
       "facts": {
         "combat": {
           "active": false,
@@ -1319,7 +1325,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:34889d184df40948ff403c12bffe3d907ce928833cb0088612f6215a640e52d2",
+      "document_hash": "sha256:eec1e3b60e8f3fdc4ebc3a5dfc963c91f2310cf3d0509e79203ddd6aa0820669",
       "facts": {
         "combat": {
           "active": false,
@@ -1468,7 +1474,7 @@
         },
         "purse_copper": -36
       },
-      "document_hash": "sha256:049ef18e82a3b47d1f7fde6f032d5fd0cfc6b58d5fbd3899228b6cb158a68e20",
+      "document_hash": "sha256:2b33601d324ad57915d00fdbd183e751b905070ab91d042ff3c5da24e4bf2891",
       "facts": {
         "combat": {
           "active": false,
@@ -1622,7 +1628,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:e84c95df92b368bc3907c45d69d3e073567e18016b5a76e56e8b4330de796888",
+      "document_hash": "sha256:2a9608f3d66295cf91043941273ce24a185334db9515355254a3c61c8a26e2f7",
       "facts": {
         "combat": {
           "active": false,
@@ -1767,7 +1773,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:e5c86edbb87753be2f5debab6c8775945f12e6e80afd5f60a238c4078a18d4ea",
+      "document_hash": "sha256:d16bab4e16ae5d49424e1d7f867b2cb386b79891c06891d515e8f4ac3574620d",
       "facts": {
         "combat": {
           "active": false,
@@ -1928,7 +1934,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f4d0aa03472d514fa68a93eed059a8d4a1ccff8e01359e7cad22e43130b4520d",
+      "document_hash": "sha256:4ca9476faa8e00632caabde5e7e1ae72ab6146ec1d6cc16f3a159ebb83af7491",
       "facts": {
         "combat": {
           "active": false,
@@ -2106,7 +2112,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3ddf666ec47d12541e729e949ba07b566a439b6414d6a4ab617237acac528dbe",
+      "document_hash": "sha256:09a94ef32ec886395129cf974c15fa7095ebd69173b153b96beb67d42cae18f6",
       "facts": {
         "combat": {
           "active": false,
@@ -2271,7 +2277,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:a9e11d0d0f0f706a6370dca62ec2bc6cefe97d5f9f1cade2a0e3741ea3ab58b0",
+      "document_hash": "sha256:a287ddea75a06e0ffbc014f5e9b70b4eaac6c71dbec2091374ad1c1daaed5d43",
       "facts": {
         "combat": {
           "active": false,
@@ -2439,7 +2445,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:8393612a55e85caa34be138f4dc776be45c68a8d2e43c402ed033f93bd2a6d55",
+      "document_hash": "sha256:2613402f6573bd49a74c0ac137fc96d45fda77efedcc03166174953ca24c9e13",
       "facts": {
         "combat": {
           "active": false,
@@ -2579,7 +2585,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:fef39e587f90353b57093b486497572c988febcd8fd20d8b6e45a7c4ef582291",
+      "document_hash": "sha256:8c0bdda8e619ce142c5351001b0de00b85f8e577ab927f565833bc6abbbc06f8",
       "facts": {
         "combat": {
           "active": false,
@@ -2726,7 +2732,7 @@
       "changes": {
         "purse_copper": -60
       },
-      "document_hash": "sha256:840870304a96a84b3ba32fc467fc25da81ef96571736fe09ecc5c7edd7e6c61c",
+      "document_hash": "sha256:deb2569d85466af4d1322ca58f3045630f5b1e25932701aa29a58e9503dd4067",
       "facts": {
         "combat": {
           "active": false,
@@ -2869,13 +2875,22 @@
     },
     {
       "changes": {
+        "present_npc_ids": {
+          "added": [
+            "npc:miri-kestrel"
+          ],
+          "removed": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward"
+          ]
+        },
         "survival": {
           "fatigue": -15,
           "hunger": 2,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:aefc14d940e195b4e960fd945e40659ff02455ebcab3916315431074725dbf98",
+      "document_hash": "sha256:cad72fec675fbd8d54ef3c89d67fd64b6b1d1bfe9949ad8920d431e62cd2c0b2",
       "facts": {
         "combat": {
           "active": false,
@@ -2898,9 +2913,8 @@
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
           "npc:liora-fen",
+          "npc:miri-kestrel",
           "npc:orik-stonewake"
         ],
         "purse_copper": 259,
@@ -2969,6 +2983,7 @@
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -2983,7 +2998,10 @@
         "simulation_state/economy_state",
         "simulation_state/environment",
         "simulation_state/merchant_state",
+        "simulation_state/npc_index",
         "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
@@ -2998,6 +3016,7 @@
           "survival",
           "economy",
           "player",
+          "npcs",
           "world",
           "narrative"
         ],
@@ -3009,6 +3028,7 @@
             "survival",
             "economy",
             "player",
+            "npcs",
             "world",
             "narrative"
           ],
@@ -3034,7 +3054,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:753066d8a7f7b4cb5ba493fcb94e24dacaf6f16e822302e5decd7e3d8d377a92",
+      "document_hash": "sha256:b023b9a2d9e799b2e78ae5c2dc5a7bdcc1b494dfb6fcf6187486360d2de1f4da",
       "facts": {
         "combat": {
           "active": false,
@@ -3057,9 +3077,8 @@
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
           "npc:liora-fen",
+          "npc:miri-kestrel",
           "npc:orik-stonewake"
         ],
         "purse_copper": 259,
@@ -3184,8 +3203,7 @@
         "present_npc_ids": {
           "added": [],
           "removed": [
-            "npc:brindle-gearwing",
-            "npc:captain-rhea-sunward",
+            "npc:miri-kestrel",
             "npc:orik-stonewake"
           ]
         },
@@ -3195,7 +3213,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:66846e8a43f6725546b05b43e502689e9bbf338460da465bc48c92f850751da0",
+      "document_hash": "sha256:f4c4ff16d3bf703b8719a4aaaf921d0f22ea7a0a163f222727580a2855bdb73a",
       "facts": {
         "combat": {
           "active": true,
@@ -3388,7 +3406,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:65b50f191bb06da4edcf054251072880996e69483b67039a2b060fa04de65258",
+      "document_hash": "sha256:fa214713340767a813992cd46bc43ce51de5b12328b021df03b3f49585b57d8f",
       "facts": {
         "combat": {
           "active": true,
@@ -3537,7 +3555,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:c13db3b73576aba042b0789f672edb6bfeb96d8c2bb73099bea1ad7d0fb023c4",
+      "document_hash": "sha256:c698fa9b1cc52ef5e4e69d7a1f64491f6fe2f2be37c25544b8e59b634b45081a",
       "facts": {
         "combat": {
           "active": true,
@@ -3668,7 +3686,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:64faf2da86de7d5a0a44ff5d9735ed27e2eb14c4a5b6ebc4768d9a9dcd9272f9",
+      "document_hash": "sha256:acc9d11c771d2bbf591d35b4b19b8d68d500d2ec60dcf68f7f94e60fec37c607",
       "facts": {
         "combat": {
           "active": true,
@@ -3828,7 +3846,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0095c58da0adface0f3e121d77908cfcc8c5380abddb3ebc06aae7b3e3109326",
+      "document_hash": "sha256:dc035a1873bd5fd78aa7c8d24edecd40cb320ee26b6cfa136162fe799ce97ff9",
       "facts": {
         "combat": {
           "active": true,
@@ -3989,7 +4007,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0752a6ad60d235b6c36ea940490176b1ce9f33d1b755ba419600e73bea59f54d",
+      "document_hash": "sha256:b8c2cc056078e9a5532c3f6449ecbe8fcd1fb8a24c3dd2f2bf9182e5fd32a049",
       "facts": {
         "combat": {
           "active": false,
@@ -4140,7 +4158,7 @@
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:e69127f6a61f2e210815bb21d3bf7f20e23e622c354a61316d3385da24ea7a0b",
+      "document_hash": "sha256:f7da58d1016ad52838ff8a71169d9133a1d8175216bd7646af278effbd7a080c",
       "facts": {
         "combat": {
           "active": false,
@@ -4290,7 +4308,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:bf3e4d5f1cfecb581196600ce0c1141f8b1399bb9d772fa207b5a2fe95aac5cb",
+      "document_hash": "sha256:32745fbb4d7fa38dbec566948694ca9b64e42dedc7b5e3daa79ac99b2bd9e58d",
       "facts": {
         "combat": {
           "active": false,
@@ -4424,6 +4442,7 @@
           "added": [
             "npc:brindle-gearwing",
             "npc:captain-rhea-sunward",
+            "npc:miri-kestrel",
             "npc:orik-stonewake"
           ],
           "removed": []
@@ -4434,7 +4453,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:6cfcdddab54dfe7043df74cb752928cd3944a8087ba3b9143531d002bdb9c757",
+      "document_hash": "sha256:7258e8cab05f0d9d8241aa53e46f4b72ec1e2eb9e7f86cb7c68f7633e6fcbcbf",
       "facts": {
         "combat": {
           "active": false,
@@ -4463,6 +4482,7 @@
           "npc:brindle-gearwing",
           "npc:captain-rhea-sunward",
           "npc:liora-fen",
+          "npc:miri-kestrel",
           "npc:orik-stonewake"
         ],
         "purse_copper": 259,
@@ -4612,10 +4632,13 @@
         "location_id": "location:aurelia:arrival-grove",
         "location_name": "Starfall Grove",
         "present_npc_ids": {
-          "added": [],
+          "added": [
+            "npc:naia-of-the-open-hand"
+          ],
           "removed": [
             "npc:brindle-gearwing",
             "npc:captain-rhea-sunward",
+            "npc:miri-kestrel",
             "npc:orik-stonewake"
           ]
         },
@@ -4625,7 +4648,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:849c388ec3c24e44379309b8e03cf1cbbe2bc5fe5aebe777b1d479128b30f628",
+      "document_hash": "sha256:f1062ca9a051c47c966d494ba33400916270ea723199dc71f887cf6ab8ed53d7",
       "facts": {
         "combat": {
           "active": false,
@@ -4651,7 +4674,8 @@
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:liora-fen"
+          "npc:liora-fen",
+          "npc:naia-of-the-open-hand"
         ],
         "purse_copper": 259,
         "quests": {
@@ -4795,7 +4819,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7334073a546517edbd8ad11a48c537cf33547b1914ac66f6ab94c05f20edac70",
+      "document_hash": "sha256:580319595e47684ea8ed4f4198487edae7ec79a9ad16239734fc8a72ab6097f5",
       "facts": {
         "combat": {
           "active": false,
@@ -4821,7 +4845,8 @@
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:liora-fen"
+          "npc:liora-fen",
+          "npc:naia-of-the-open-hand"
         ],
         "purse_copper": 259,
         "quests": {

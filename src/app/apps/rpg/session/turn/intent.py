@@ -17,7 +17,7 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_data
-from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, hypothetical
+from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, asked_not_done, hypothetical
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.state import access as _sections
 
@@ -147,7 +147,8 @@ def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str) 
         logger.warning("rpg_turn_intent_failed", exc_info=True)
         return ModelReading(unavailable=True)
     readings = valid_readings(_parse(_s(raw)), scene)
-    if hypothetical(text):  # what would happen if... is asked, never done, whatever the model read
+    # What would happen if..., what it costs, whether to: asked, never done, whatever the model read.
+    if hypothetical(text) or asked_not_done(text):
         readings = [reading for reading in readings if reading.family in {"talk", "look", "status"}]
     return decide(readings)
 

@@ -75,7 +75,8 @@ def test_imported_world_launches_only_after_it_is_adopted(tmp_path, monkeypatch)
         imported = import_world_bundle(_aurelia_bundle(), target_world_id=world_id, database=database)
         assert imported["launch_preparation"] == {"status": "adoption_required"}
         opening = _latest_opening(database, world_id)
-        with pytest.raises(ValueError, match="world_revision_authorship_untrusted"):
+        # Whatever authorship its revisions claim (a bundle's provenance is the exporting install's), it waits.
+        with pytest.raises(ValueError, match="world_adoption_required"):
             load_published_resources(**opening, database=database)
         # Nor can its openings be prepared or repaired into launchable ones before it is adopted.
         with pytest.raises(ValueError, match="world_adoption_required"):

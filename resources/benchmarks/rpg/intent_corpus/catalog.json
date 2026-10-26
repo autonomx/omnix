@@ -525,7 +525,9 @@
   "starter": {
    "entities": {
     "bran_drink_ale": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:bran:mug-of-ale"
+     ],
      "kind": "offer",
      "names": [
       "a mug of ale",
@@ -534,7 +536,9 @@
      ]
     },
     "bran_lodging_common_cot": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:bran:common-room-cot"
+     ],
      "kind": "offer",
      "names": [
       "a cot in the common room",
@@ -543,7 +547,9 @@
      ]
     },
     "bran_lodging_private_room": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:bran:private-room"
+     ],
      "kind": "offer",
      "names": [
       "a private room",
@@ -551,7 +557,9 @@
      ]
     },
     "bran_meal_stew": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:bran:hot-stew"
+     ],
      "kind": "offer",
      "names": [
       "a bowl of stew",
@@ -560,7 +568,9 @@
      ]
     },
     "bran_paid_rumor": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:bran:local-rumor"
+     ],
      "kind": "offer",
      "names": [
       "a rumor",
@@ -584,7 +594,9 @@
      ]
     },
     "elara_basic_repair": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:elara:gear-repair"
+     ],
      "kind": "offer",
      "names": [
       "a gear repair",
@@ -592,7 +604,9 @@
      ]
     },
     "elara_rope": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:elara:rope"
+     ],
      "kind": "offer",
      "names": [
       "some rope",
@@ -601,7 +615,9 @@
      ]
     },
     "elara_torch": {
-     "alias_ids": [],
+     "alias_ids": [
+      "npc:elara:torch"
+     ],
      "kind": "offer",
      "names": [
       "a torch",
@@ -619,7 +635,8 @@
     },
     "location:market": {
      "alias_ids": [
-      "loc_market"
+      "loc_market",
+      "location:market-road:market-square"
      ],
      "kind": "place",
      "names": [
@@ -630,7 +647,8 @@
     },
     "location:nearby_wilderness": {
      "alias_ids": [
-      "loc_forest"
+      "loc_forest",
+      "location:market-road:brushland"
      ],
      "kind": "place",
      "names": [
@@ -639,7 +657,9 @@
      ]
     },
     "location:old_mill": {
-     "alias_ids": [],
+     "alias_ids": [
+      "location:market-road:old-mill"
+     ],
      "kind": "place",
      "names": [
       "the Old Mill",
@@ -647,7 +667,9 @@
      ]
     },
     "location:old_road": {
-     "alias_ids": [],
+     "alias_ids": [
+      "location:market-road:northern-road"
+     ],
      "kind": "place",
      "names": [
       "the Old Road",
@@ -657,7 +679,8 @@
     "location:rusty_flagon": {
      "alias_ids": [
       "loc_tavern",
-      "rusty_flagon_tavern"
+      "rusty_flagon_tavern",
+      "location:market-road:rusty-flagon"
      ],
      "kind": "place",
      "names": [
@@ -810,14 +833,18 @@
      ]
     },
     "torch": {
-     "alias_ids": [],
+     "alias_ids": [
+      "item:torch"
+     ],
      "kind": "item",
      "names": [
       "torch"
      ]
     },
     "trail_rations": {
-     "alias_ids": [],
+     "alias_ids": [
+      "item:trail-rations"
+     ],
      "kind": "item",
      "names": [
       "trail rations",
@@ -853,7 +880,7 @@
       "npc:Elara"
      ],
      "setup": [
-      "go outside"
+      "go to Market Square"
      ]
     },
     "tavern": {

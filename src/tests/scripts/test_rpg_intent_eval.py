@@ -124,3 +124,19 @@ def test_metrics_have_their_own_denominators():
     assert result["false_stateful_rate"]["n"] == 2 and result["false_stateful_rate"]["successes"] == 1
     assert result["missed_stateful_rate"]["successes"] == 1
     assert 0 < result["false_stateful_rate"]["wilson_lower"] < 0.5 < result["false_stateful_rate"]["wilson_upper"]
+
+
+def test_a_family_is_scored_by_the_mechanic_it_names() -> None:
+    assert intent.same_family("look", "inspect") and intent.same_family("talk", "ask")
+    assert intent.same_family("talk", "decline") and intent.same_family("ask", "ask")
+    assert not intent.same_family("buy", "ask") and not intent.same_family("look", "move")
+
+
+def test_an_unlisted_id_is_named_by_its_last_part() -> None:
+    catalog = intent.Catalog({"entities": {
+        "location:market": {"kind": "place", "names": ["the market"], "alias_ids": []},
+        "location:old_road": {"kind": "place", "names": ["the old road"], "alias_ids": []},
+        "npc:juno": {"kind": "person", "names": ["Juno Rask"], "alias_ids": []},
+    }, "scenes": {}})
+    assert catalog.resolve("location:market-road:northern-road") is None  # its region's slug is no market
+    assert catalog.resolve("ent:actors:juno-rask") == "npc:juno"

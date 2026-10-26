@@ -424,8 +424,11 @@ def load_published_resources(
     scenario_revision: int,
     database: Any | None = None,
 ) -> tuple[WorldRevisionDocument, WorldReleaseDocument, ScenarioRevisionDocument]:
+    from .world_adoption import require_adopted_if_shared
+
     context = current_tenant()
     with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
         revision = work.world_scenarios.get_world_revision(
             context, world_id, world_revision
         )
@@ -436,6 +439,10 @@ def load_published_resources(
             context, scenario_id, scenario_revision
         )
         work.rollback()
+    # A world made elsewhere launches once someone here has adopted it, whatever authorship its revisions claim: a
+    # bundle's provenance is the exporting install's, and its human-authorship ledger is not signed.
+    if world is not None:
+        require_adopted_if_shared(world)
     if revision is None:
         raise KeyError(f"world_revision_not_found:{world_id}:{world_revision}")
     if release is None:

@@ -1,6 +1,7 @@
 """How a world plays, written in the world editor and published (RQ-4.1; PostgreSQL).
 
-Aurelia is imported and adopted; its author takes World Forge's draft from the lore, sets a price, and saves it with
+Aurelia (whose people's routines its author wrote) is imported and adopted; its author takes World Forge's draft from
+the lore, sets a price, and saves it with
 the world. Saving names a newer save, refuses a wrongly shaped draft, and shows what the world lacks. Publishing
 republishes the world with the draft and pins its openings to it; the revision they launch from plays the price.
 """
@@ -69,7 +70,9 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
 
     first = read_play_sections(world_id)
     assert not first["saved"] and first["published_revision"] is not None
-    assert set(first["readiness"]["published"].values()) == {"derived"}  # Aurelia plays from its lore today
+    lore = {"economy": "derived", "routines": "authored", "knowledge": "derived", "pressures": "derived",
+            "bestiary": "derived"}
+    assert first["readiness"]["published"] == lore  # Aurelia's author wrote its people's days; the rest is its lore
     assert first["references"]["people"] and first["references"]["places"]
 
     drafted = draft_play_sections_from_lore(world_id)["document"]
@@ -78,7 +81,7 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
     saved = save_play_sections(world_id, expected_content_hash=first["content_hash"], document=drafted)
     assert saved["saved"] and saved["unpublished"] and saved["findings"] == []
     assert set(saved["readiness"]["draft"].values()) == {"authored"}
-    assert set(saved["readiness"]["published"].values()) == {"derived"}  # not published yet
+    assert saved["readiness"]["published"] == lore  # not published yet
 
     with pytest.raises(ValueError, match="world_play_sections_conflict"):  # written over a newer save
         save_play_sections(world_id, expected_content_hash=first["content_hash"], document=drafted)
@@ -106,3 +109,14 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
     priced = next(row for row in played["offers"][provider["provider_id"]]
                   if row["offer_id"] == f"{provider['provider_id']}:{offer['offer_key']}")
     assert priced["price"] == {"gold": 7, "silver": 0, "copper": 0}
+
+    # The world still launches: republishing kept its maps' certified readiness (the blueprints did not change).
+    from app.apps.rpg.genesis.worlds.contracts import WorldReleaseDocument
+    from app.apps.rpg.genesis.worlds.semantic_validation import release_launch_findings
+
+    with unit_of_work() as work:
+        releases = [row for row in work.world_library.list_world_releases(current_tenant(), world_id)
+                    if int(row.get("world_revision") or 0) == revision.revision]
+        work.rollback()
+    release = WorldReleaseDocument.model_validate(max(releases, key=lambda row: int(row["release"]))["document"])
+    assert release_launch_findings(revision, release) == ()

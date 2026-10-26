@@ -83,3 +83,12 @@ def test_a_hypothetical_is_asked_never_done(text: str, target: str | None) -> No
     reading = parse_command(text, SCENE)
     assert (reading.family, reading.target_id, reading.reason) == ("ask", target, "asks_hypothetical")
     assert reading.confidence >= 0.8  # the turn plans it as speech, with no intent call to read it as the deed
+
+
+ABILITY_SCENE = SceneView((*SCENE.entities, SceneEntity("survival_make_camp", "ability", ("Make Camp",), here=True),
+                           SceneEntity("aimed_shot", "ability", ("Aimed Shot",), here=True)))
+
+
+def test_an_ability_is_read_by_its_whole_name_only() -> None:
+    assert parse_command("I make my way to the village", ABILITY_SCENE).family == "move"  # "make" is no Make Camp
+    assert parse_command("use Aimed Shot on the wolf", ABILITY_SCENE).target_id == "aimed_shot"

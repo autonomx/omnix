@@ -1,0 +1,1090 @@
+{
+  "by_family": {
+    "ask": {
+      "action_family_accuracy": {
+        "n": 344,
+        "rate": 0.9012,
+        "successes": 310,
+        "wilson_lower": 0.8651,
+        "wilson_upper": 0.9284
+      },
+      "false_stateful_rate": {
+        "n": 344,
+        "rate": 0.0465,
+        "successes": 16,
+        "wilson_lower": 0.0288,
+        "wilson_upper": 0.0742
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 344,
+      "target_entity_accuracy": {
+        "n": 330,
+        "rate": 0.8273,
+        "successes": 273,
+        "wilson_lower": 0.7828,
+        "wilson_upper": 0.8642
+      }
+    },
+    "attack": {
+      "action_family_accuracy": {
+        "n": 42,
+        "rate": 1.0,
+        "successes": 42,
+        "wilson_lower": 0.9162,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 42,
+        "rate": 0.4524,
+        "successes": 19,
+        "wilson_lower": 0.3122,
+        "wilson_upper": 0.6005
+      },
+      "n": 42,
+      "target_entity_accuracy": {
+        "n": 42,
+        "rate": 0.9286,
+        "successes": 39,
+        "wilson_lower": 0.8099,
+        "wilson_upper": 0.9754
+      }
+    },
+    "buy": {
+      "action_family_accuracy": {
+        "n": 55,
+        "rate": 0.9636,
+        "successes": 53,
+        "wilson_lower": 0.8768,
+        "wilson_upper": 0.99
+      },
+      "false_stateful_rate": {
+        "n": 11,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.2588
+      },
+      "missed_stateful_rate": {
+        "n": 44,
+        "rate": 0.2727,
+        "successes": 12,
+        "wilson_lower": 0.1635,
+        "wilson_upper": 0.4185
+      },
+      "n": 55,
+      "target_entity_accuracy": {
+        "n": 55,
+        "rate": 0.4545,
+        "successes": 25,
+        "wilson_lower": 0.3303,
+        "wilson_upper": 0.5848
+      }
+    },
+    "clarify": {
+      "action_family_accuracy": {
+        "n": 44,
+        "rate": 0.9318,
+        "successes": 41,
+        "wilson_lower": 0.8177,
+        "wilson_upper": 0.9765
+      },
+      "false_stateful_rate": {
+        "n": 44,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0803
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 44,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "decline": {
+      "action_family_accuracy": {
+        "n": 42,
+        "rate": 0.7381,
+        "successes": 31,
+        "wilson_lower": 0.5893,
+        "wilson_upper": 0.847
+      },
+      "false_stateful_rate": {
+        "n": 42,
+        "rate": 0.0238,
+        "successes": 1,
+        "wilson_lower": 0.0042,
+        "wilson_upper": 0.1232
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 42,
+      "target_entity_accuracy": {
+        "n": 14,
+        "rate": 0.8571,
+        "successes": 12,
+        "wilson_lower": 0.6006,
+        "wilson_upper": 0.9599
+      }
+    },
+    "defend": {
+      "action_family_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 4,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.4899
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 4,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "drop": {
+      "action_family_accuracy": {
+        "n": 24,
+        "rate": 1.0,
+        "successes": 24,
+        "wilson_lower": 0.862,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 24,
+        "rate": 0.0417,
+        "successes": 1,
+        "wilson_lower": 0.0074,
+        "wilson_upper": 0.2024
+      },
+      "n": 24,
+      "target_entity_accuracy": {
+        "n": 24,
+        "rate": 0.875,
+        "successes": 21,
+        "wilson_lower": 0.69,
+        "wilson_upper": 0.9566
+      }
+    },
+    "equip": {
+      "action_family_accuracy": {
+        "n": 11,
+        "rate": 1.0,
+        "successes": 11,
+        "wilson_lower": 0.7412,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 11,
+        "rate": 0.1818,
+        "successes": 2,
+        "wilson_lower": 0.0514,
+        "wilson_upper": 0.477
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 11,
+      "target_entity_accuracy": {
+        "n": 11,
+        "rate": 0.8182,
+        "successes": 9,
+        "wilson_lower": 0.523,
+        "wilson_upper": 0.9486
+      }
+    },
+    "flee": {
+      "action_family_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 4,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.4899
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 4,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "give": {
+      "action_family_accuracy": {
+        "n": 21,
+        "rate": 0.9048,
+        "successes": 19,
+        "wilson_lower": 0.7109,
+        "wilson_upper": 0.9735
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 21,
+        "rate": 1.0,
+        "successes": 21,
+        "wilson_lower": 0.8454,
+        "wilson_upper": 1.0
+      },
+      "n": 21,
+      "target_entity_accuracy": {
+        "n": 21,
+        "rate": 1.0,
+        "successes": 21,
+        "wilson_lower": 0.8454,
+        "wilson_upper": 1.0
+      }
+    },
+    "inspect": {
+      "action_family_accuracy": {
+        "n": 99,
+        "rate": 0.3131,
+        "successes": 31,
+        "wilson_lower": 0.2302,
+        "wilson_upper": 0.41
+      },
+      "false_stateful_rate": {
+        "n": 99,
+        "rate": 0.0202,
+        "successes": 2,
+        "wilson_lower": 0.0056,
+        "wilson_upper": 0.0707
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 99,
+      "target_entity_accuracy": {
+        "n": 99,
+        "rate": 0.798,
+        "successes": 79,
+        "wilson_lower": 0.7085,
+        "wilson_upper": 0.8652
+      }
+    },
+    "look": {
+      "action_family_accuracy": {
+        "n": 46,
+        "rate": 1.0,
+        "successes": 46,
+        "wilson_lower": 0.9229,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 46,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0771
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 46,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "manipulate": {
+      "action_family_accuracy": {
+        "n": 6,
+        "rate": 0.8333,
+        "successes": 5,
+        "wilson_lower": 0.4365,
+        "wilson_upper": 0.9699
+      },
+      "false_stateful_rate": {
+        "n": 6,
+        "rate": 0.1667,
+        "successes": 1,
+        "wilson_lower": 0.0301,
+        "wilson_upper": 0.5635
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 6,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "move": {
+      "action_family_accuracy": {
+        "n": 75,
+        "rate": 0.88,
+        "successes": 66,
+        "wilson_lower": 0.7874,
+        "wilson_upper": 0.9356
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 75,
+        "rate": 0.3867,
+        "successes": 29,
+        "wilson_lower": 0.2846,
+        "wilson_upper": 0.4998
+      },
+      "n": 75,
+      "target_entity_accuracy": {
+        "n": 75,
+        "rate": 0.72,
+        "successes": 54,
+        "wilson_lower": 0.6096,
+        "wilson_upper": 0.809
+      }
+    },
+    "party": {
+      "action_family_accuracy": {
+        "n": 3,
+        "rate": 1.0,
+        "successes": 3,
+        "wilson_lower": 0.4385,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 3,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.5615
+      },
+      "n": 3,
+      "target_entity_accuracy": {
+        "n": 3,
+        "rate": 1.0,
+        "successes": 3,
+        "wilson_lower": 0.4385,
+        "wilson_upper": 1.0
+      }
+    },
+    "practice": {
+      "action_family_accuracy": {
+        "n": 38,
+        "rate": 1.0,
+        "successes": 38,
+        "wilson_lower": 0.9082,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 38,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0918
+      },
+      "n": 38,
+      "target_entity_accuracy": {
+        "n": 38,
+        "rate": 1.0,
+        "successes": 38,
+        "wilson_lower": 0.9082,
+        "wilson_upper": 1.0
+      }
+    },
+    "quest": {
+      "action_family_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 4,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.4899
+      },
+      "n": 4,
+      "target_entity_accuracy": {
+        "n": 4,
+        "rate": 1.0,
+        "successes": 4,
+        "wilson_lower": 0.5101,
+        "wilson_upper": 1.0
+      }
+    },
+    "rest": {
+      "action_family_accuracy": {
+        "n": 19,
+        "rate": 1.0,
+        "successes": 19,
+        "wilson_lower": 0.8318,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 19,
+        "rate": 0.1053,
+        "successes": 2,
+        "wilson_lower": 0.0294,
+        "wilson_upper": 0.3139
+      },
+      "n": 19,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "sell": {
+      "action_family_accuracy": {
+        "n": 15,
+        "rate": 1.0,
+        "successes": 15,
+        "wilson_lower": 0.7961,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 10,
+        "rate": 0.2,
+        "successes": 2,
+        "wilson_lower": 0.0567,
+        "wilson_upper": 0.5098
+      },
+      "missed_stateful_rate": {
+        "n": 5,
+        "rate": 0.4,
+        "successes": 2,
+        "wilson_lower": 0.1176,
+        "wilson_upper": 0.7693
+      },
+      "n": 15,
+      "target_entity_accuracy": {
+        "n": 15,
+        "rate": 0.8,
+        "successes": 12,
+        "wilson_lower": 0.5481,
+        "wilson_upper": 0.9295
+      }
+    },
+    "status": {
+      "action_family_accuracy": {
+        "n": 49,
+        "rate": 1.0,
+        "successes": 49,
+        "wilson_lower": 0.9273,
+        "wilson_upper": 1.0
+      },
+      "false_stateful_rate": {
+        "n": 49,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0727
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 49,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    },
+    "talk": {
+      "action_family_accuracy": {
+        "n": 192,
+        "rate": 0.974,
+        "successes": 187,
+        "wilson_lower": 0.9405,
+        "wilson_upper": 0.9888
+      },
+      "false_stateful_rate": {
+        "n": 192,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0196
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 192,
+      "target_entity_accuracy": {
+        "n": 151,
+        "rate": 0.947,
+        "successes": 143,
+        "wilson_lower": 0.8989,
+        "wilson_upper": 0.9729
+      }
+    },
+    "unequip": {
+      "action_family_accuracy": {
+        "n": 13,
+        "rate": 0.9231,
+        "successes": 12,
+        "wilson_lower": 0.6669,
+        "wilson_upper": 0.9863
+      },
+      "false_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "missed_stateful_rate": {
+        "n": 13,
+        "rate": 0.3846,
+        "successes": 5,
+        "wilson_lower": 0.1771,
+        "wilson_upper": 0.6448
+      },
+      "n": 13,
+      "target_entity_accuracy": {
+        "n": 13,
+        "rate": 0.8462,
+        "successes": 11,
+        "wilson_lower": 0.5777,
+        "wilson_upper": 0.9567
+      }
+    },
+    "use_item": {
+      "action_family_accuracy": {
+        "n": 24,
+        "rate": 0.9583,
+        "successes": 23,
+        "wilson_lower": 0.7976,
+        "wilson_upper": 0.9926
+      },
+      "false_stateful_rate": {
+        "n": 14,
+        "rate": 0.1429,
+        "successes": 2,
+        "wilson_lower": 0.0401,
+        "wilson_upper": 0.3994
+      },
+      "missed_stateful_rate": {
+        "n": 10,
+        "rate": 0.1,
+        "successes": 1,
+        "wilson_lower": 0.0179,
+        "wilson_upper": 0.4042
+      },
+      "n": 24,
+      "target_entity_accuracy": {
+        "n": 24,
+        "rate": 0.8333,
+        "successes": 20,
+        "wilson_lower": 0.6415,
+        "wilson_upper": 0.9332
+      }
+    },
+    "wait": {
+      "action_family_accuracy": {
+        "n": 26,
+        "rate": 0.9615,
+        "successes": 25,
+        "wilson_lower": 0.8111,
+        "wilson_upper": 0.9932
+      },
+      "false_stateful_rate": {
+        "n": 26,
+        "rate": 0.0,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.1287
+      },
+      "missed_stateful_rate": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      },
+      "n": 26,
+      "target_entity_accuracy": {
+        "n": 0,
+        "rate": null,
+        "successes": 0,
+        "wilson_lower": 0.0,
+        "wilson_upper": 0.0
+      }
+    }
+  },
+  "by_world": {
+    "aurelia": {
+      "action_family_accuracy": {
+        "n": 401,
+        "rate": 0.8878,
+        "successes": 356,
+        "wilson_lower": 0.8531,
+        "wilson_upper": 0.9151
+      },
+      "false_stateful_rate": {
+        "n": 285,
+        "rate": 0.0456,
+        "successes": 13,
+        "wilson_lower": 0.0268,
+        "wilson_upper": 0.0765
+      },
+      "missed_stateful_rate": {
+        "n": 116,
+        "rate": 0.1552,
+        "successes": 18,
+        "wilson_lower": 0.1005,
+        "wilson_upper": 0.232
+      },
+      "n": 401,
+      "target_entity_accuracy": {
+        "n": 297,
+        "rate": 0.9428,
+        "successes": 280,
+        "wilson_lower": 0.9103,
+        "wilson_upper": 0.964
+      }
+    },
+    "starter": {
+      "action_family_accuracy": {
+        "n": 399,
+        "rate": 0.8872,
+        "successes": 354,
+        "wilson_lower": 0.8524,
+        "wilson_upper": 0.9146
+      },
+      "false_stateful_rate": {
+        "n": 294,
+        "rate": 0.0306,
+        "successes": 9,
+        "wilson_lower": 0.0162,
+        "wilson_upper": 0.0571
+      },
+      "missed_stateful_rate": {
+        "n": 105,
+        "rate": 0.3619,
+        "successes": 38,
+        "wilson_lower": 0.2764,
+        "wilson_upper": 0.4572
+      },
+      "n": 399,
+      "target_entity_accuracy": {
+        "n": 298,
+        "rate": 0.6779,
+        "successes": 202,
+        "wilson_lower": 0.6228,
+        "wilson_upper": 0.7284
+      }
+    },
+    "vesper-9": {
+      "action_family_accuracy": {
+        "n": 400,
+        "rate": 0.88,
+        "successes": 352,
+        "wilson_lower": 0.8445,
+        "wilson_upper": 0.9083
+      },
+      "false_stateful_rate": {
+        "n": 323,
+        "rate": 0.0124,
+        "successes": 4,
+        "wilson_lower": 0.0048,
+        "wilson_upper": 0.0314
+      },
+      "missed_stateful_rate": {
+        "n": 77,
+        "rate": 0.4675,
+        "successes": 36,
+        "wilson_lower": 0.3603,
+        "wilson_upper": 0.5778
+      },
+      "n": 400,
+      "target_entity_accuracy": {
+        "n": 324,
+        "rate": 0.8704,
+        "successes": 282,
+        "wilson_lower": 0.8294,
+        "wilson_upper": 0.9026
+      }
+    }
+  },
+  "database": "omnix_probe_rq",
+  "elapsed_s": 1859.6,
+  "family_confusion": {
+    "ask": {
+      "ask": 310,
+      "buy": 16,
+      "look": 2,
+      "practice": 3,
+      "quest": 1,
+      "sell": 5,
+      "talk": 7
+    },
+    "attack": {
+      "attack": 42
+    },
+    "buy": {
+      "ask": 1,
+      "buy": 53,
+      "clarify": 1
+    },
+    "clarify": {
+      "ask": 2,
+      "clarify": 41,
+      "talk": 1
+    },
+    "decline": {
+      "decline": 31,
+      "talk": 10,
+      "unequip": 1
+    },
+    "defend": {
+      "defend": 4
+    },
+    "drop": {
+      "drop": 24
+    },
+    "equip": {
+      "equip": 11
+    },
+    "flee": {
+      "flee": 4
+    },
+    "give": {
+      "give": 19,
+      "sell": 2
+    },
+    "inspect": {
+      "check": 4,
+      "inspect": 31,
+      "look": 62,
+      "practice": 2
+    },
+    "look": {
+      "look": 46
+    },
+    "manipulate": {
+      "manipulate": 5,
+      "practice": 1
+    },
+    "move": {
+      "ability": 9,
+      "move": 66
+    },
+    "party": {
+      "party": 3
+    },
+    "practice": {
+      "practice": 38
+    },
+    "quest": {
+      "quest": 4
+    },
+    "rest": {
+      "rest": 19
+    },
+    "sell": {
+      "sell": 15
+    },
+    "status": {
+      "status": 49
+    },
+    "talk": {
+      "ask": 1,
+      "look": 4,
+      "talk": 187
+    },
+    "unequip": {
+      "buy": 1,
+      "unequip": 12
+    },
+    "use_item": {
+      "talk": 1,
+      "use_item": 23
+    },
+    "wait": {
+      "order": 1,
+      "wait": 25
+    }
+  },
+  "gates": {
+    "M2 (from RQ-3)": "action family lower >= 0.95, target entity lower >= 0.95, false stateful upper <= 0.010"
+  },
+  "held_out_sha256": "80fec6faa4b5ff71f6e7505bfd3f345a17e91526b8a9b302647eb104b5217811",
+  "items": 1200,
+  "labels": "model-labelled, pending the owner's spot check",
+  "measured_on": "2026-10-25",
+  "measurement": "RPG intent understanding with the intent call (RQ-3, M2)",
+  "metrics": {
+    "action_family_accuracy": {
+      "n": 1200,
+      "rate": 0.885,
+      "successes": 1062,
+      "wilson_lower": 0.8657,
+      "wilson_upper": 0.9018
+    },
+    "false_stateful_rate": {
+      "n": 902,
+      "rate": 0.0288,
+      "successes": 26,
+      "wilson_lower": 0.0197,
+      "wilson_upper": 0.0419
+    },
+    "missed_stateful_rate": {
+      "n": 298,
+      "rate": 0.3087,
+      "successes": 92,
+      "wilson_lower": 0.259,
+      "wilson_upper": 0.3633
+    },
+    "resolved_without_model": {
+      "n": 1200,
+      "rate": 0.1758,
+      "successes": 211,
+      "wilson_lower": 0.1553,
+      "wilson_upper": 0.1984
+    },
+    "target_entity_accuracy": {
+      "n": 919,
+      "rate": 0.8313,
+      "successes": 764,
+      "wilson_lower": 0.8058,
+      "wilson_upper": 0.8542
+    }
+  },
+  "metrics_reached_scenes_only": {
+    "action_family_accuracy": {
+      "n": 1200,
+      "rate": 0.885,
+      "successes": 1062,
+      "wilson_lower": 0.8657,
+      "wilson_upper": 0.9018
+    },
+    "false_stateful_rate": {
+      "n": 902,
+      "rate": 0.0288,
+      "successes": 26,
+      "wilson_lower": 0.0197,
+      "wilson_upper": 0.0419
+    },
+    "missed_stateful_rate": {
+      "n": 298,
+      "rate": 0.3087,
+      "successes": 92,
+      "wilson_lower": 0.259,
+      "wilson_upper": 0.3633
+    },
+    "resolved_without_model": {
+      "n": 1200,
+      "rate": 0.1758,
+      "successes": 211,
+      "wilson_lower": 0.1553,
+      "wilson_upper": 0.1984
+    },
+    "target_entity_accuracy": {
+      "n": 919,
+      "rate": 0.8313,
+      "successes": 764,
+      "wilson_lower": 0.8058,
+      "wilson_upper": 0.8542
+    }
+  },
+  "mode": "play",
+  "model": {
+    "effort": "low",
+    "model": "sonnet",
+    "provider": "claude_cli",
+    "resolved_models": [
+      "claude-sonnet-5-5"
+    ]
+  },
+  "model_calls": 647,
+  "revision": "10fbf595af",
+  "scenes": {
+    "aurelia/grove": {
+      "http": [
+        200
+      ],
+      "location": "location:aurelia:arrival-grove",
+      "reached": true
+    },
+    "aurelia/guild": {
+      "http": [
+        200,
+        200,
+        200
+      ],
+      "location": "location:aurelia:wayfarer-guild",
+      "reached": true
+    },
+    "aurelia/village": {
+      "http": [
+        200,
+        200
+      ],
+      "location": "location:aurelia:starfall-village",
+      "reached": true
+    },
+    "starter/market": {
+      "http": [
+        200,
+        200
+      ],
+      "location": "location:market-road:northern-road",
+      "reached": true
+    },
+    "starter/tavern": {
+      "http": [
+        200
+      ],
+      "location": "location:market-road:rusty-flagon",
+      "reached": true
+    },
+    "vesper-9/docks": {
+      "http": [
+        200
+      ],
+      "location": "ent:places:tidebreak-docks",
+      "reached": true
+    }
+  },
+  "schema_version": 1,
+  "split": "held_out",
+  "static_sources": {
+    "grammar": 1200
+  },
+  "turn_ms_p50": 1965.9,
+  "unreached_scene_items": 0
+}

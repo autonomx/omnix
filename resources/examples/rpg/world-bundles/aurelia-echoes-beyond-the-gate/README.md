@@ -14,9 +14,20 @@ This writes:
 
 `resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
-Bundle SHA-256: `7b4b4d2868af5b96070f3f40a6f27983576dfda50bb5c9d2972424db64e45eb6`
+Bundle SHA-256: `cdfeff43ca8779ac7014b57525f3533d39b82179cacf08390b801e8303841360`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
+
+## How it plays
+
+Aurelia's author wrote its people's days (`play-sections.json`): where each of the ten is, hour by hour, and their goals. By day everyone keeps their place (Liora in the grove, Miri and Seraphine at the guild, Orik, Brindle and Rhea in the village); evenings and nights differ (Liora by the inn's hearth, Brindle pitching at the guild, Rhea checking the pass's barricades, Naia at the grove at dawn). Its economy, knowledge, pressures and bestiary are still played from its lore.
+
+The sections are written in the way a world author writes them, by the world library's own lifecycle: `author_play_sections.py` imports the bundle into a disposable database, saves and publishes the sections (a new world revision, each opening pinned to it), exports the world, and writes its `world.json` into the source parts, the checksum above and this README.
+
+```bash
+OMNIX_DATABASE_URL=postgresql://...@127.0.0.1:16432/<disposable db> \
+    python resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/author_play_sections.py --allow-database <disposable db>
+```
 
 ## Production artwork
 

@@ -1,0 +1,137 @@
+{
+  "routines": [
+    {
+      "npc_id": "npc:liora-fen",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 6, "location_id": "location:aurelia:arrival-grove", "activity": "asleep in a hollow beneath the starfall oaks"},
+        {"from_hour": 6, "to_hour": 19, "location_id": "location:aurelia:arrival-grove", "activity": "patrolling the grove's edge for new arrivals"},
+        {"from_hour": 19, "to_hour": 23, "location_id": "location:aurelia:starfall-village", "activity": "warming herself by the Lantern Below's hearth"},
+        {"from_hour": 23, "to_hour": 24, "location_id": "location:aurelia:arrival-grove", "activity": "walking the last patrol of the night"}
+      ],
+      "goals": [
+        {"goal_id": "liora-fen-goal-1", "summary": "find her missing foster mother", "priority": 3},
+        {"goal_id": "liora-fen-goal-2", "summary": "keep new arrivals alive", "priority": 2},
+        {"goal_id": "liora-fen-goal-3", "summary": "prove foxkin can lead mixed parties", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:seraphine-valecourt",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 7, "location_id": "location:aurelia:valecourt", "activity": "asleep in the palace at Valecourt"},
+        {"from_hour": 7, "to_hour": 19, "location_id": "location:aurelia:wayfarer-guild", "activity": "poring over gatework plans in the guild's back room"},
+        {"from_hour": 19, "to_hour": 24, "location_id": "location:aurelia:valecourt", "activity": "holding court in Valecourt"}
+      ],
+      "goals": [
+        {"goal_id": "seraphine-valecourt-goal-1", "summary": "repair the royal Meridian engine", "priority": 3},
+        {"goal_id": "seraphine-valecourt-goal-2", "summary": "prevent civil war", "priority": 2},
+        {"goal_id": "seraphine-valecourt-goal-3", "summary": "learn why Earthborn arrivals are increasing", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:vael-ardyn",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 7, "location_id": "location:aurelia:hollow-meridian", "activity": "stalking the Glass Synod's sentries"},
+        {"from_hour": 7, "to_hour": 15, "location_id": "location:aurelia:moonroot-ruins", "activity": "hunting cult agents among the ruins"},
+        {"from_hour": 15, "to_hour": 24, "location_id": "location:aurelia:hollow-meridian", "activity": "watching the Hollow Meridian from the dark"}
+      ],
+      "goals": [
+        {"goal_id": "vael-ardyn-goal-1", "summary": "destroy the Hollow Meridian", "priority": 3},
+        {"goal_id": "vael-ardyn-goal-2", "summary": "atone for burned villages", "priority": 2},
+        {"goal_id": "vael-ardyn-goal-3", "summary": "train someone capable of defeating him if he falls", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:miri-kestrel",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 7, "location_id": "location:aurelia:starfall-village", "activity": "asleep in a rented room above the Lantern Below"},
+        {"from_hour": 7, "to_hour": 19, "location_id": "location:aurelia:wayfarer-guild", "activity": "keeping the Earthborn Registry"},
+        {"from_hour": 19, "to_hour": 24, "location_id": "location:aurelia:starfall-village", "activity": "sorting Earth curios at a corner table of the inn"}
+      ],
+      "goals": [
+        {"goal_id": "miri-kestrel-goal-1", "summary": "professionalize the guild", "priority": 3},
+        {"goal_id": "miri-kestrel-goal-2", "summary": "open a cross-world museum", "priority": 2},
+        {"goal_id": "miri-kestrel-goal-3", "summary": "keep Seraphine out of paperwork disasters", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:archon-malrec",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 8, "location_id": "location:aurelia:hollow-meridian", "activity": "communing with the broken Meridian"},
+        {"from_hour": 8, "to_hour": 20, "location_id": "location:aurelia:hollow-meridian", "activity": "presiding over the Glass Synod"},
+        {"from_hour": 20, "to_hour": 24, "location_id": "location:aurelia:hollow-meridian", "activity": "harvesting memories in the deep chambers"}
+      ],
+      "goals": [
+        {"goal_id": "archon-malrec-goal-1", "summary": "open a permanent gate to Earth", "priority": 3},
+        {"goal_id": "archon-malrec-goal-2", "summary": "replace Aurelia's gods with human imagination", "priority": 2},
+        {"goal_id": "archon-malrec-goal-3", "summary": "recruit the protagonist", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:elyra-moonroot",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 6, "location_id": "location:aurelia:moonroot-ruins", "activity": "dreaming within the archive tree"},
+        {"from_hour": 6, "to_hour": 18, "location_id": "location:aurelia:moonroot-ruins", "activity": "tending the memory archive"},
+        {"from_hour": 18, "to_hour": 24, "location_id": "location:aurelia:moonroot-ruins", "activity": "listening to the ruins' echoes"}
+      ],
+      "goals": [
+        {"goal_id": "elyra-moonroot-goal-1", "summary": "stop the Memory Loom from awakening", "priority": 3},
+        {"goal_id": "elyra-moonroot-goal-2", "summary": "free trapped souls", "priority": 2},
+        {"goal_id": "elyra-moonroot-goal-3", "summary": "experience one memory that belongs only to her", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:orik-stonewake",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 5, "location_id": "location:aurelia:starfall-village", "activity": "asleep behind the bar"},
+        {"from_hour": 5, "to_hour": 23, "location_id": "location:aurelia:starfall-village", "activity": "keeping the Lantern Below"},
+        {"from_hour": 23, "to_hour": 24, "location_id": "location:aurelia:starfall-village", "activity": "banking the hearth fire"}
+      ],
+      "goals": [
+        {"goal_id": "orik-stonewake-goal-1", "summary": "protect Starfall Village", "priority": 3},
+        {"goal_id": "orik-stonewake-goal-2", "summary": "recover his daughter's memory from Moonroot", "priority": 2},
+        {"goal_id": "orik-stonewake-goal-3", "summary": "teach honest craft", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:brindle-gearwing",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 8, "location_id": "location:aurelia:starfall-village", "activity": "asleep among half-built gadgets"},
+        {"from_hour": 8, "to_hour": 18, "location_id": "location:aurelia:starfall-village", "activity": "tinkering at his relic stall"},
+        {"from_hour": 18, "to_hour": 22, "location_id": "location:aurelia:wayfarer-guild", "activity": "pitching inventions to the guild"},
+        {"from_hour": 22, "to_hour": 24, "location_id": "location:aurelia:starfall-village", "activity": "testing a rain-predicting kettle by lamplight"}
+      ],
+      "goals": [
+        {"goal_id": "brindle-gearwing-goal-1", "summary": "build a working radio to Earth", "priority": 3},
+        {"goal_id": "brindle-gearwing-goal-2", "summary": "earn a guild rank", "priority": 2},
+        {"goal_id": "brindle-gearwing-goal-3", "summary": "pay off goblin patent collectors", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:captain-rhea-sunward",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 6, "location_id": "location:aurelia:starfall-village", "activity": "keeping the night watch at the village gate"},
+        {"from_hour": 6, "to_hour": 19, "location_id": "location:aurelia:starfall-village", "activity": "drilling the village guard"},
+        {"from_hour": 19, "to_hour": 22, "location_id": "location:aurelia:skybridge-pass", "activity": "checking the pass's new barricades"},
+        {"from_hour": 22, "to_hour": 24, "location_id": "location:aurelia:starfall-village", "activity": "keeping the night watch at the village gate"}
+      ],
+      "goals": [
+        {"goal_id": "captain-rhea-sunward-goal-1", "summary": "fortify Skybridge Pass", "priority": 3},
+        {"goal_id": "captain-rhea-sunward-goal-2", "summary": "expose a traitor in the guard", "priority": 2},
+        {"goal_id": "captain-rhea-sunward-goal-3", "summary": "write a terrible adventure novel", "priority": 1}
+      ]
+    },
+    {
+      "npc_id": "npc:naia-of-the-open-hand",
+      "schedule": [
+        {"from_hour": 0, "to_hour": 5, "location_id": "location:aurelia:cinderhold", "activity": "walking the ash roads of the east"},
+        {"from_hour": 5, "to_hour": 7, "location_id": "location:aurelia:arrival-grove", "activity": "standing barefoot where the old gate flickers"},
+        {"from_hour": 7, "to_hour": 24, "location_id": "location:aurelia:cinderhold", "activity": "walking the ash roads of the east"}
+      ],
+      "goals": [
+        {"goal_id": "naia-of-the-open-hand-goal-1", "summary": "keep worlds from consuming each other", "priority": 3},
+        {"goal_id": "naia-of-the-open-hand-goal-2", "summary": "prepare the next Gatebearer", "priority": 2},
+        {"goal_id": "naia-of-the-open-hand-goal-3", "summary": "remember her original family", "priority": 1}
+      ]
+    }
+  ]
+}

@@ -75,8 +75,11 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
     assert len(payload.topics) == 11
     assert len(payload.topic_history) == 11
     assert len(payload.map_blueprints) == 5
-    assert len(payload.map_definitions) == 5
-    assert len(payload.scenario_revisions) == 3
+    # Three world revisions: as released, as adopted, and with the author's routines (play-sections.json); a map
+    # definition and a scenario revision belong to one world revision.
+    assert [row["revision"] for row in payload.world_revisions] == [1, 2, 3]
+    assert len(payload.map_definitions) == 15
+    assert len(payload.scenario_revisions) == 9
     assert len(manifest["characters"]) == 10
     assert len(manifest["factions"]) == 6
     assert len(revision["adventure_seeds"]) == 5
@@ -91,6 +94,14 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
         "map:aurelia:moonroot-ruins",
     }
     assert all(row["status"] == "ready" for row in payload.map_blueprints)
+    latest = payload.world_revisions[-1]["document"]
+    assert len(latest["canon"]["routines"]) == 10
+    assert {row["simulation_readiness"] for row in latest["blueprint_requirements"]} == {"certified"}
+    newest = {}
+    for row in payload.scenario_revisions:
+        newest[row["document"]["scenario_id"]] = max(newest.get(row["document"]["scenario_id"], 0), row["revision"])
+    assert {row["document"]["world_revision"] for row in payload.scenario_revisions
+            if row["revision"] == newest[row["document"]["scenario_id"]]} == {3}  # every opening plays the routines
     assert payload.world_releases[0]["document"]["certification"]["launch_ready"] is True
     assert all(
         row["document"]["compatible_release"] == 1
