@@ -19,16 +19,6 @@ def ensure_npc_evolution_state(simulation_state: Dict[str, Any]) -> Dict[str, An
     return state
 
 
-def get_npc_evolution(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-) -> Dict[str, Any]:
-    state = ensure_npc_evolution_state(simulation_state)
-    entry = _safe_dict(_safe_dict(state.get("by_npc")).get(_safe_str(npc_id)))
-    return deepcopy(entry)
-
-
 def apply_npc_evolution_event(
     simulation_state: Dict[str, Any],
     *,
@@ -149,41 +139,3 @@ def apply_npc_evolution_event(
         "evolution": deepcopy(entry),
         "source": "deterministic_npc_evolution_runtime",
     }
-
-
-def merged_npc_identity(
-    *,
-    base_profile: Dict[str, Any],
-    evolution: Dict[str, Any],
-) -> Dict[str, Any]:
-    base = _safe_dict(base_profile)
-    evo = _safe_dict(evolution)
-
-    base_personality = _safe_dict(base.get("personality"))
-    modifiers = deepcopy(_safe_list(evo.get("personality_modifiers")))
-    motivations = deepcopy(_safe_list(evo.get("active_motivations")))
-
-    base_role = _safe_str(base.get("base_role") or base.get("role") or base.get("starting_role"))
-    current_role = _safe_str(evo.get("current_role")) or _safe_str(
-        base.get("current_role_hint") or base_role
-    )
-
-    merged = {
-        **deepcopy(base),
-        "base_role": base_role,
-        "starting_role": _safe_str(base.get("starting_role") or base_role),
-        "current_role": current_role,
-        "role": current_role or base_role,
-        "identity_arc": _safe_str(evo.get("identity_arc")),
-        "personality_modifiers": modifiers,
-        "active_motivations": motivations,
-        "party_join_eligibility": deepcopy(_safe_dict(evo.get("party_join_eligibility"))),
-        "npc_evolution": deepcopy(evo),
-        "personality": {
-            **deepcopy(base_personality),
-            "evolution_modifiers": modifiers,
-        },
-        "source": "merged_file_profile_and_evolution_state",
-    }
-
-    return merged

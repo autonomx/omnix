@@ -10,10 +10,10 @@ time, the time inside ``persist_foreground_turn``, the SQL statements the
 process sent and the WAL bytes the database wrote.
 
 The world-tick case (RQ-0.5) measures a catch-up of 24 in-game hours two ways,
-each from the same saved game and restored before every run: the idle resume
-path (``idle_narration_delivery.apply_resume_catchup`` with 24 hours elapsed,
-which today caps the catch-up at ``_MAX_RESUME_CATCHUP_TICKS`` idle ticks), and
-a "wait 24 hours" turn through the turn route. It records the time, the
+each from the same saved game and restored before every run: the player's return
+(``POST /resume`` with 24 hours elapsed: a ``world_tick`` turn, which catches up
+at most ``MAX_WORLD_TICKS`` ticks), and a "wait 24 hours" turn through the turn
+route. It records the time, the
 statements, the ticks the resume reports, and how far each of today's clocks
 moved (the environment's minutes, the campaign calendar, the simulation tick).
 
@@ -124,13 +124,12 @@ def _restore(session_id: str, snapshot: dict[str, Any]) -> None:
 
 
 def measure_world_tick(runs: int) -> dict[str, Any]:
-    """A 24-in-game-hour catch-up: the idle resume path, and a "wait 24 hours" turn."""
+    """A 24-in-game-hour catch-up: the player's return (a world_tick turn), and a "wait 24 hours" turn."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
     from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
-    from app.apps.rpg.session.ambient_builder import _MAX_RESUME_CATCHUP_TICKS
-    from app.apps.rpg.session.idle_narration_delivery import apply_resume_catchup
+    from app.apps.rpg.session.turn.run import MAX_WORLD_TICKS
     from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
     from app.apps.rpg.session.service import load_session
     from tests.support.routers import include_router_registrar
@@ -146,7 +145,7 @@ def measure_world_tick(runs: int) -> dict[str, Any]:
     results: dict[str, Any] = {}
     counter = _StatementCounter()
     try:
-        for case in ("idle_resume_catchup", "wait_turn"):
+        for case in ("resume_turn", "wait_turn"):
             elapsed_ms: list[float] = []
             statements: list[int] = []
             minutes: dict[str, list[int]] = {"environment_minutes": [], "calendar_minutes": [], "simulation_ticks": []}
@@ -157,10 +156,10 @@ def measure_world_tick(runs: int) -> dict[str, Any]:
                 before = _in_game_minutes(load_session(session_id))
                 counter.count = 0
                 started = time.perf_counter()
-                if case == "idle_resume_catchup":
-                    result = apply_resume_catchup(session_id, elapsed_seconds=elapsed_seconds)
-                    ticks.append(int(result.get("ticks_applied") or 0))
-                    statuses.append(200 if result.get("ok") else 500)
+                if case == "resume_turn":
+                    response = client.post(f"/api/rpg/sessions/{session_id}/resume",
+                                           json={"elapsed_seconds": elapsed_seconds})
+                    statuses.append(response.status_code)
                 else:
                     response = client.post(f"/api/rpg/sessions/{session_id}/turn",
                                            json={"command": f"wait {WORLD_TICK_HOURS} hours"})
@@ -184,7 +183,7 @@ def measure_world_tick(runs: int) -> dict[str, Any]:
     return {
         "requested_in_game_hours": WORLD_TICK_HOURS,
         "elapsed_seconds_given_to_resume": elapsed_seconds,
-        "resume_catchup_tick_cap": _MAX_RESUME_CATCHUP_TICKS,
+        "resume_catchup_tick_cap": MAX_WORLD_TICKS,
         "state_bytes": len(json.dumps(snapshot)),
         "cases": results,
         "budget_p95_ms": 500,

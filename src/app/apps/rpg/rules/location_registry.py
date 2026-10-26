@@ -76,42 +76,6 @@ def find_location_by_name(value: str, simulation_state: dict[str, Any] | None = 
     return {}
 
 
-def available_exits(simulation_state: dict[str, Any]) -> dict[str, str]:
-    location = get_location(current_location_id(simulation_state), simulation_state)
-    return dict(_safe_dict(location.get("exits")))
-
-
-def set_current_location(simulation_state: dict[str, Any], location_id: str) -> dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    location_id = _safe_str(location_id) or default_location_id(simulation_state)
-    location = get_location(location_id, simulation_state)
-    if not location:
-        location_id = default_location_id(simulation_state)
-        location = get_location(location_id, simulation_state)
-
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    if not player_state:
-        player_state = {}
-        simulation_state["player_state"] = player_state
-
-    simulation_state["location_id"] = location_id
-    simulation_state["current_location_id"] = location_id
-    simulation_state["location_state"] = {
-        "current_location_id": location_id,
-        "current_location": location,
-        "available_exits": available_exits({**simulation_state, "location_id": location_id, "player_state": {}}),
-    }
-    simulation_state["present_npcs"] = deepcopy(_safe_list(location.get("present_npcs")))
-    player_state["location_id"] = location_id
-    player_state["current_location_id"] = location_id
-    return simulation_state
-
-
 def present_npcs_for_current_location(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     location = get_location(current_location_id(simulation_state), simulation_state)
     return deepcopy(_safe_list(location.get("present_npcs")))
-
-
-def location_allows_service(simulation_state: dict[str, Any], service_kind: str) -> bool:
-    location = get_location(current_location_id(simulation_state), simulation_state)
-    return _safe_str(service_kind) in set(_safe_list(location.get("services")))

@@ -120,24 +120,6 @@ FREQUENCY_TO_CHANCE = {
 }
 
 
-def conversation_settings_from_runtime(runtime_state: Dict[str, Any] | None) -> Dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
-    explicit = _safe_dict(runtime_settings.get("conversation_settings"))
-    living_world = _safe_dict(runtime_settings.get("living_world"))
-    nested = _safe_dict(living_world.get("conversation_settings"))
-
-    settings = deepcopy(DEFAULT_CONVERSATION_SETTINGS)
-    settings.update(nested)
-    settings.update(explicit)
-    result = normalize_conversation_settings(settings)
-    # Pass through npc_profile_generation so companion offer gating can read it.
-    npc_profile_gen = _safe_dict(runtime_settings.get("npc_profile_generation"))
-    if npc_profile_gen:
-        result["npc_profile_generation"] = npc_profile_gen
-    return result
-
-
 def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     settings = deepcopy(_safe_dict(settings))
     merged = deepcopy(DEFAULT_CONVERSATION_SETTINGS)
@@ -302,33 +284,3 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         True,
     )
     return merged
-
-
-def should_attempt_autonomous_conversation(
-    *,
-    tick: int,
-    last_conversation_tick: int,
-    settings: Dict[str, Any],
-    force: bool = False,
-) -> bool:
-    settings = normalize_conversation_settings(settings)
-    if not settings.get("enabled"):
-        return False
-    if force:
-        return True
-    if not settings.get("autonomous_ticks_enabled"):
-        return False
-    min_delta = int(settings.get("min_ticks_between_conversations") or 0)
-    if last_conversation_tick and int(tick or 0) - int(last_conversation_tick) < min_delta:
-        return False
-
-    chance = int(settings.get("conversation_chance_percent") or 0)
-    if chance <= 0:
-        return False
-    if chance >= 100:
-        return True
-
-    # Deterministic pseudo-randomness from tick. This is replay-safe enough for
-    # the current deterministic harness and avoids global RNG.
-    bucket = (int(tick or 0) * 37 + 17) % 100
-    return bucket < chance

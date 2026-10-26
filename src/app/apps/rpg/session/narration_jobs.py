@@ -10,8 +10,9 @@ from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session, save_runtime_session as save_runtime_session,
 )
 from app.apps.rpg.session.state_normalization import (
-    _copy_dict as _copy_dict, _normalize_final_narration_text as _normalize_final_narration_text, _safe_dict as _safe_dict, _safe_list as _safe_list, _safe_str as _safe_str,
+    _copy_dict as _copy_dict, _normalize_final_narration_text as _normalize_final_narration_text, _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
+from app.apps.rpg.foundation.safe_values import safe_list as _safe_list
 from app.apps.rpg.session.companion_turn_runtime import (
     _has_narration_artifact_for_turn as _has_narration_artifact_for_turn,
     _store_narration_artifact as _store_narration_artifact,

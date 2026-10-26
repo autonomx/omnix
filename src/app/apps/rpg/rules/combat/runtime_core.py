@@ -5,9 +5,6 @@ from typing import Any, Dict, List
 from app.apps.rpg.foundation.state import access as _sections
 
 
-SOURCE = "deterministic_combat_runtime"
-
-
 def safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 

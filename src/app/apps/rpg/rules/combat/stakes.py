@@ -21,7 +21,6 @@ WOUNDED = "wounded"
 WOUNDING_SHARE = 0.4  # a blow taking more than this share of max HP in one go wounds
 WOUNDED_PENALTY = 1
 WOUND_RESTS = 2
-FULL_RESTS = frozenset({"sleep", "inn_lodging", "make_camp"})
 
 
 def is_hardcore(simulation_state: dict[str, Any]) -> bool:

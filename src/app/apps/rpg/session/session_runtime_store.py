@@ -4,9 +4,9 @@ from __future__ import annotations
 # RPG session runtime responsibility module.
 from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict,
-    _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
+from app.apps.rpg.foundation.safe_values import safe_list as _safe_list
 import json as json
 import ast as ast
 from app.apps.rpg.session.narration_queue_runtime import (

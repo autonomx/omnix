@@ -51,11 +51,6 @@ class CanonicalWorldMapModel:
     map_bindings: Mapping[str, str]
 
 
-def has_world_map(session: Mapping[str, Any]) -> bool:
-    """Whether the campaign has a world of its own to draw its visual maps from."""
-    return bool(world_graph_source(session))
-
-
 def world_graph_source(session: Mapping[str, Any]) -> dict[str, Any]:
     """The campaign's world graph: the one a generated campaign keeps (``state.world_graph``), else its world
     model's places and roads, where the hero stands and where they have been (a published world's)."""

@@ -4,35 +4,15 @@ from __future__ import annotations
 from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict,
     _safe_dict as _safe_dict,
-    _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
+from app.apps.rpg.foundation.safe_values import safe_list as _safe_list
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
 
 
 # Phase F — quiet-window ticks after player action
-
-_MAX_RECENT_WORLD_EVENT_ROWS = 64
-_MAX_WORLD_RUMORS = 64
-_MAX_WORLD_PRESSURE = 64
-_MAX_LOCATION_CONDITIONS = 64
-_MAX_WORLD_CONSEQUENCES = 128
-_WORLD_RUMOR_DECAY_TICKS = 6
-_WORLD_PRESSURE_DECAY_TICKS = 4
-_LOCATION_CONDITION_DECAY_TICKS = 8
-_WORLD_CONSEQUENCE_DECAY_TICKS = 6
-_MAX_AMBIENT_UPDATES = 64
-_MAX_DIRECTOR_LOG = 24
-_MAX_RECENT_SCENE_BEATS = 32
-_MAX_SEMANTIC_PROPOSALS = 32
-_MAX_ACCEPTED_STATE_CHANGE_EVENTS = 64
-_MAX_APPLIED_PROPOSAL_IDS = 128
-_SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS = 1
-_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS = 8
-_MAX_ACTIVE_INTERACTIONS = 8
-_INTERACTION_STALE_GRACE_TICKS = 1
 
 
 def _ensure_narration_artifact_state(runtime_state: dict[str, Any]) -> dict[str, Any]:

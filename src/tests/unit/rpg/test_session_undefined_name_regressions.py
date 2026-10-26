@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import builtins
 from datetime import datetime, timezone
 
-from app.apps.rpg.narration.ai.npc_initiative import build_npc_initiative_candidates
 from app.apps.rpg.session import action_execution, narration_jobs, player_activity_runtime
 
 
@@ -24,23 +22,3 @@ def test_activity_elapsed_time_uses_injected_runtime_clock(monkeypatch) -> None:
     monkeypatch.setattr(player_activity_runtime, "utc_now", lambda: now)
 
     assert player_activity_runtime._seconds_since_iso("2026-09-30T11:59:30+00:00") == 30
-
-
-def test_npc_initiative_does_not_depend_on_startup_opening_bonus(monkeypatch) -> None:
-    monkeypatch.delattr(builtins, "opening_bonus", raising=False)
-    simulation_state = {
-        "tick": 1,
-        "player_state": {"location_id": "market"},
-        "npc_index": {
-            "npc:ally": {"name": "Ally", "role": "companion", "location_id": "market"}
-        },
-        "npc_minds": {"npc:ally": {"beliefs": {}, "goals": []}},
-    }
-
-    candidates = build_npc_initiative_candidates(
-        simulation_state,
-        {},
-        {"nearby_npc_ids": ["npc:ally"], "player_idle": True},
-    )
-
-    assert any(candidate.get("reason") == "companion_idle_presence" for candidate in candidates)

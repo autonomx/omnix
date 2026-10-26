@@ -4,9 +4,9 @@ from __future__ import annotations
 from app.apps.rpg.session.state_normalization import (
     _normalize_runtime_settings as _normalize_runtime_settings,
     _safe_dict as _safe_dict,
-    _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
+from app.apps.rpg.foundation.safe_values import safe_list as _safe_list
 from app.apps.rpg.genesis.creator.world_player_actions import (
     ESCALATE_CONFLICT as ESCALATE_CONFLICT,
     INTERVENE_THREAD as INTERVENE_THREAD,
@@ -36,96 +36,7 @@ from typing import (
 )
 
 
-def _check_opening_resolution(
-    session: dict[str, Any],
-) -> dict[str, Any]:
-    """Check simple rule-based conditions for opening resolution.
-
-    Returns updated opening_runtime dict.
-    """
-    session = _safe_dict(session)
-    runtime = _safe_dict(session.get("runtime_state"))
-    sim = _safe_dict(session.get("simulation_state"))
-    opening_rt = _safe_dict(runtime.get("opening_runtime"))
-
-    if not opening_rt.get("active") or opening_rt.get("opening_resolved"):
-        return opening_rt
-
-    opening_rt = dict(opening_rt)
-
-    # Rule: player has acted on opening conflict (tick > 3 means some engagement)
-    tick = int(sim.get("tick", 0) or 0)
-    player_turns = len(_safe_list(runtime.get("turn_history")))
-
-    # Simple heuristics for opening resolution
-    resolved = False
-
-    # Player engaged with key opening NPCs (at least 2 turns)
-    if player_turns >= 2:
-        # Check if player interacted with opening NPCs
-        turn_history = _safe_list(runtime.get("turn_history"))
-        opening_npcs = set(_safe_list(opening_rt.get("present_npc_ids")))
-        engaged_opening_npcs = set()
-        for turn in turn_history:
-            turn = _safe_dict(turn)
-            action = _safe_dict(turn.get("action"))
-            target = _safe_str(action.get("target_id") or action.get("npc_id"))
-            if target in opening_npcs:
-                engaged_opening_npcs.add(target)
-        if engaged_opening_npcs:
-            resolved = True
-
-    # Player left opening location
-    player_state = _safe_dict(sim.get("player_state"))
-    player_loc = _safe_str(player_state.get("location_id"))
-    opening_loc = _safe_str(_safe_dict(_safe_dict(session.get("setup_payload")).get("opening")).get("location_id"))
-    if opening_loc and player_loc and player_loc != opening_loc and player_turns >= 1:
-        resolved = True
-
-    # Tick-based fallback: after tick 10, opening bias decays
-    if tick >= 10:
-        resolved = True
-
-    if resolved:
-        opening_rt["opening_resolved"] = True
-        opening_rt["active"] = False
-
-    return opening_rt
-
-
 # ── Known NPC tracking ─────────────────────────────────────────────────────
-
-_MAX_KNOWN_NPC_IDS = 64
-
-def _update_known_npc_ids(runtime_state: dict[str, Any], simulation_state: dict[str, Any]) -> dict[str, Any]:
-    """Update known NPC list from current player presence.
-
-    Adds nearby NPCs to known list (append only, never remove).
-    Maintains hard cap to prevent unbounded growth.
-    Present NPCs are always drawn from current simulation state, not known list.
-    """
-    runtime_state = dict(runtime_state) if isinstance(runtime_state, dict) else {}
-    simulation_state = _safe_dict(simulation_state)
-
-    known = _safe_list(runtime_state.get("known_npc_ids", []))
-    known_set = set(known)
-
-    # Add currently nearby NPCs
-    player = _safe_dict(simulation_state.get("player_state"))
-    nearby = _safe_list(player.get("nearby_npc_ids", []))
-
-    for npc_id in nearby:
-        npc_id = _safe_str(npc_id).strip()
-        if npc_id and npc_id not in known_set:
-            known.append(npc_id)
-            known_set.add(npc_id)
-
-    # Cap to maximum size (keep most recent entries)
-    if len(known) > _MAX_KNOWN_NPC_IDS:
-        known = known[-_MAX_KNOWN_NPC_IDS:]
-
-    runtime_state["known_npc_ids"] = known
-    return runtime_state
 
 
 def build_frontend_bootstrap_payload(session: dict[str, Any]) -> dict[str, Any]:
@@ -263,11 +174,4 @@ def derive_player_action(simulation_state: dict[str, Any], player_input: str) ->
 
     return {}
 
-__all__ = [
-    "_MAX_KNOWN_NPC_IDS",
-    "_check_opening_resolution",
-    "_find_target_by_name",
-    "_update_known_npc_ids",
-    "build_frontend_bootstrap_payload",
-    "derive_player_action",
-]
+__all__ = ["_find_target_by_name", "build_frontend_bootstrap_payload", "derive_player_action"]

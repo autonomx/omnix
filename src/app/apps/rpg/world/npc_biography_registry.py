@@ -88,30 +88,3 @@ def find_npc_biography(npc_id_or_name: Any, simulation_state: Dict[str, Any] | N
         secrets=[{"summary": _safe_str(secret)} for secret in _safe_list(row.get("secrets")) if _safe_str(secret)],
         source="world_npc",
     )
-
-
-def get_npc_biography(npc_id_or_name: Any, simulation_state: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    """The world's biography of the person, or a plain one that claims nothing for someone it does not name."""
-    found = find_npc_biography(npc_id_or_name, simulation_state)
-    if found:
-        return found
-    npc_id = canonical_npc_id(npc_id_or_name, simulation_state)
-    name = npc_id.replace("npc:", "") if npc_id else "Unknown NPC"
-    return _bio(
-        npc_id=npc_id or "npc:Unknown",
-        name=name,
-        role="Local NPC",
-        location_id="",
-        short_bio=f"{name} is a local person. No detailed biography has been registered yet.",
-        personality_traits=["ordinary", "cautious"],
-        speaking_style={"tone": "neutral", "formality": "medium", "verbosity": "medium", "quirks": []},
-        values=["safety"],
-        fears=["trouble"],
-        relationships={"player": "unknown"},
-        knowledge_boundaries={
-            "knows_about": ["immediate surroundings"],
-            "does_not_know_about": ["unbacked claims"],
-            "must_not_claim": list(_MUST_NOT_CLAIM),
-        },
-        source="unregistered_npc",
-    )
