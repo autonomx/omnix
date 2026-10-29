@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 settled 2026-10-29. One new question for the owner (Q-1). Phase 0 has started: the standalone pass is done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
+**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 settled 2026-10-29. One new question for the owner (Q-1). Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -281,7 +281,7 @@ Also try:
 
 **Exit:** go, go with changes (for example, TensorRT is required, or a longer `H₁` with speculative frames to cover it), or no-go, recorded with the numbers.
 
-#### Phase 0 status (2026-10-29): standalone pass done, loaded runs to come
+#### Phase 0 status (2026-10-29): standalone measurements done, loaded runs to come
 
 The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise idle 4090, on the desktop torch base. Results are in `docs/measurements/portrait-spike-2026-10-29.json`.
 
@@ -305,9 +305,43 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
 - **H = 20 with R = 5–8** is the working choice.
 - **The emotion model costs 1.2 GB.** Leaving it out when the emotion is a label is confirmed worthwhile.
 
+**Optimizations (`scripts/portrait_spike.py --optimized`).** Results: `docs/measurements/portrait-spike-optimized-2026-10-29.json`. Three wrapper changes; no upstream file edited:
+- The flow grid is built once per size on the GPU.
+- The timestep frequency table stays on the GPU.
+- Each window's Euler solve is captured as one CUDA graph. Its motion latents are identical to upstream's `odeint` path (difference 0.0).
+
+| Measure | Before | After | Target |
+| --- | --- | --- | --- |
+| One pass, nfe 10 (p50 / p95) | 53 / 63 ms | 33 / 35 ms | ≤ 40 ms p95: **met** |
+| One pass, nfe 7 / nfe 5 (p50) | 33 / 29 ms | 23 / 17 ms | — |
+| Decode per frame, batch 4 / 8 | 5.1 / 4.6 ms | 3.8 / 4.0 ms | — |
+| Peak VRAM streaming, decode batch 4 (allocated / reserved) | 4.09 / 5.27 GB (batch 8) | 2.09 / 2.83 GB | ≤ 4 GB: **met** |
+| Work per second of audio (nfe 10, batch 4) | 0.18 s | 0.14 s | ≤ 0.5 s: met |
+| Estimated extra start hold, TTS at 0.25 / 0.5 / 0.8 real-time factor | 129 / 159 / 195 ms | 80 / 110 / 146 ms | ≤ 150 ms p50: **met** (estimate) |
+
+**Lip-sync (`scripts/portrait_lipsync.py`, SyncNet).** Results: `docs/measurements/portrait-lipsync-2026-10-29.json`. Mean over the four clips:
+
+| Variant | LSE-D (lower is better) | LSE-C (higher is better) | LSE-C vs whole-clip nfe 10 |
+| --- | --- | --- | --- |
+| Whole clip, nfe 10 (upstream) | 8.01 | 6.77 | — |
+| Whole clip, nfe 7 | 7.87 | 6.89 | +1.8% |
+| Streamed R5 H20, nfe 10 | 8.31 | 6.35 | −6.2% |
+| Streamed R8 H20, nfe 10 | 8.29 | 6.40 | −5.5% |
+| **Streamed R5 H20, nfe 7** | 8.20 | 6.47 | **−4.4%** |
+| Streamed R5 H20, nfe 5 | 8.14 | 6.51 | −3.8% |
+| Control: mismatched audio | 14.53 | 1.09 | — |
+
+**What the lip-sync scores show:**
+- **The scores separate sync clearly.** Every synced variant is between 6.3 and 6.9 LSE-C; mismatched audio scores 1.1.
+- **Fewer sampling steps don't hurt lip-sync.** nfe 7 and 5 score slightly better than 10, both whole-clip and streamed.
+- **With nfe 7, streaming is within the 5% target:** LSE-C −4.4%, LSE-D +2.4%. With nfe 10 it is just outside.
+- **The loss is concentrated in short replies.** The 5 s Sofia clip loses 13% of its LSE-C when streamed, while the 15 s sample loses nothing. The likely cause is the short, padded first window, which matters most when it's a larger share of the reply. Phase 3's speculative first frames, and a longer `H₁` where speculation covers it, are the levers. Phase 0's live-call replies will show what typical reply lengths look like.
+- **The −1 or 0 frame offsets aren't from streaming.** They appear in whole-clip and streamed output alike.
+
+**Choice so far:** nfe 7, `R` 5, `H` 20, decode batch 4, the CUDA-graph solve and the cached grid. One pass is 23 ms p50, and work per second of audio is 0.12 s.
+
 **Still to do in Phase 0:**
-- **Lip-sync scores** (SyncNet LSE-C/D) for the streamed and whole-clip outputs, and a rating of the side-by-side videos.
-- **Optimizations, then re-measure:** CUDA graphs or `torch.compile` for FMT, a cached flow grid, `nfe` 7, and a decode batch of 4 for VRAM.
+- **A rating of the side-by-side videos** by eye. The joins, and the rest-pose start, are rated in the loaded runs.
 - **Recorded live-call replies** with their arrival times (N = 40), to replace the estimated start hold. This needs live calls on the gateway.
 - **Paired on/off runs** under real TTS, STT and LLM load: start hold, barge-in time, joins and the speculative share. These are scheduled so they never overlap the RPG session's model gates.
 

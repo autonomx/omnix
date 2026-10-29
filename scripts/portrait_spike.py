@@ -122,6 +122,118 @@ def load_float(upstream: Path, checkpoints: Path, *, with_emotion_model: bool, n
     return model.to("cuda").eval(), opt
 
 
+def install_flow_grid_cache() -> None:
+    """Replace upstream ToFlow.forward with one that builds its sampling grid once per size, on the GPU.
+
+    Upstream rebuilds the grid with NumPy and copies it to the GPU on every call, which makes decoding
+    CPU-bound. The arithmetic is unchanged (the grid is built in float64 and cast, as NumPy's is).
+    """
+    import torch
+    import torch.nn.functional as F
+    from models.float.styledecoder import ToFlow
+
+    grids: dict = {}
+
+    def forward(self, input, style, feat, skip=None):  # noqa: A002 - upstream's signature
+        out = self.conv(input, style)
+        out = out + self.bias
+        size = input.size(2)
+        key = (size, input.device)
+        if key not in grids:
+            line = torch.linspace(-1, 1, size, dtype=torch.float64)
+            grid_x, grid_y = torch.meshgrid(line, line, indexing="xy")
+            grids[key] = torch.stack([grid_x, grid_y], dim=2).float().unsqueeze(0).to(input.device)
+        xs = grids[key].expand(input.size(0), -1, -1, -1)
+        if skip is not None:
+            skip = self.upsample(skip)
+            out = out + skip
+        sampler = torch.tanh(out[:, 0:2, :, :])
+        mask = torch.sigmoid(out[:, 2:3, :, :])
+        flow = sampler.permute(0, 2, 3, 1) + xs
+        feat_warp = F.grid_sample(feat, flow, align_corners=False) * mask
+        return feat_warp, feat_warp + input * (1.0 - mask), out, flow
+
+    ToFlow.forward = forward
+
+
+def install_timestep_frequency_cache() -> None:
+    """Replace upstream TimestepEmbedder.timestep_embedding with one that keeps its frequency table on the GPU.
+
+    Upstream builds the table on the CPU and copies it on every call; that copy is not allowed while a CUDA
+    graph is being captured. Same arithmetic: the table is computed on the CPU once and moved.
+    """
+    import torch
+    from models.float.FMT import TimestepEmbedder
+
+    tables: dict = {}
+
+    def timestep_embedding(t, dim, max_period=10000):
+        half = dim // 2
+        key = (dim, max_period, t.device)
+        if key not in tables:
+            tables[key] = torch.exp(
+                -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+            ).to(device=t.device)
+        args = t[:, None].float() * tables[key][None]
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+        return embedding
+
+    TimestepEmbedder.timestep_embedding = staticmethod(timestep_embedding)
+
+
+class GraphedWindowSolver:
+    """The Euler solve of one window (as torchdiffeq's fixed-grid Euler does it), captured as one CUDA graph.
+
+    FMT is small, so nine eager steps are bound by kernel launches; replaying a captured graph removes that.
+    Inputs are copied into static tensors; the noise is drawn outside the graph from the same seeded generator.
+    """
+
+    def __init__(self, model, opt, portrait: Portrait, nfe: int):
+        import torch
+
+        install_timestep_frequency_cache()
+        self.model, self.opt, self.portrait = model, opt, portrait
+        self.x0 = torch.zeros(1, WINDOW, opt.dim_w, device="cuda")
+        self.wa = torch.zeros(1, WINDOW, opt.dim_w, device="cuda")
+        self.prev_x = torch.zeros(1, CARRY, opt.dim_w, device="cuda")
+        self.prev_wa = torch.zeros(1, CARRY, opt.dim_w, device="cuda")
+        self.times = torch.linspace(0, 1, nfe, device="cuda")
+        self.out = torch.zeros_like(self.x0)
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for _ in range(3):
+                self._run()
+        torch.cuda.current_stream().wait_stream(stream)
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph):
+            self._run()
+
+    def _run(self) -> None:
+        x = self.x0
+        for i in range(self.times.shape[0] - 1):
+            velocity = self.model.fmt.forward_with_cfv(
+                t=self.times[i:i + 1], x=x, wa=self.wa, wr=self.portrait.r_s, we=self.portrait.we,
+                prev_x=self.prev_x, prev_wa=self.prev_wa,
+                a_cfg_scale=self.opt.a_cfg_scale, r_cfg_scale=self.opt.r_cfg_scale, e_cfg_scale=self.opt.e_cfg_scale,
+            )[:, CARRY:]
+            x = x + (self.times[i + 1] - self.times[i]) * velocity
+        self.out.copy_(x)
+
+    def __call__(self, wa_t, prev_x, prev_wa, seed: int):
+        import torch
+
+        g = torch.Generator("cuda").manual_seed(seed)
+        self.x0.copy_(torch.randn(1, WINDOW, self.opt.dim_w, device="cuda", generator=g))
+        self.wa.copy_(wa_t)
+        self.prev_x.copy_(prev_x)
+        self.prev_wa.copy_(prev_wa)
+        self.graph.replay()
+        return self.out.clone()
+
+
 def load_portrait(path: Path):
     import numpy as np
     import torch
@@ -174,9 +286,15 @@ def audio_features(model, audio_norm, frames: int):
     return model.audio_encoder.audio_projection(model.audio_encoder.get_wav2vec2_feature(a, seq_len=frames))
 
 
+GRAPHED: dict[int, GraphedWindowSolver] = {}  # by nfe, when the optimized solver is in use
+
+
 def solve_window(model, opt, portrait: Portrait, wa_t, prev_x, prev_wa, seed: int):
     import torch
     from torchdiffeq import odeint
+
+    if opt.nfe in GRAPHED:
+        return GRAPHED[opt.nfe](wa_t, prev_x, prev_wa, seed)
 
     g = torch.Generator("cuda").manual_seed(seed)
     x0 = torch.randn(1, WINDOW, opt.dim_w, device="cuda", generator=g)
@@ -338,6 +456,94 @@ def percentile(values: list[float], q: float) -> float:
     return ordered[min(len(ordered) - 1, int(round(q * (len(ordered) - 1))))]
 
 
+def first_frame_estimate(pass_ms: float, first_batch_ms: float, h1: int = 8, r: int = 5) -> dict:
+    """When the first frames could be ready against the browser's start, per TTS real-time factor."""
+    estimate = {}
+    for rtf in (0.25, 0.5, 0.8):  # TTS seconds of work per second of audio
+        frame_ready_s = (h1 + r) / FPS * rtf + (pass_ms + first_batch_ms) / 1000
+        playback_start_s = START_BUFFER_S * rtf
+        estimate[f"tts_rtf_{rtf}"] = {
+            "first_frame_ready_ms": round(frame_ready_s * 1000),
+            "browser_start_ms": round(playback_start_s * 1000),
+            "extra_hold_ms": round(max(0.0, frame_ready_s - playback_start_s) * 1000),
+        }
+    return estimate
+
+
+def run_optimized(args, checkpoints: Path) -> dict:
+    """Cached flow grid and CUDA-graph window solve: equivalence to upstream, then timing and VRAM."""
+    import torch
+
+    model, opt = load_float(args.upstream, checkpoints, with_emotion_model=False, nfe=10)
+    portrait = encode_portrait(model, load_portrait(args.image))
+    cfg = StreamConfig(lookahead_frames=5, first_hop=8, min_hop=20, context_frames=50, norm="buffer")
+    clips = [load_audio(path) for path in args.audio]
+    results: dict = {"gpu": torch.cuda.get_device_name(0), "torch": torch.__version__, "stream_config": "R5_H20"}
+
+    # Baselines with upstream's code paths (odeint, NumPy grid).
+    eager = {nfe: [] for nfe in (10, 7, 5)}
+    eager_latents = {}
+    for nfe in eager:
+        opt.nfe = nfe
+        for index, audio in enumerate(clips):
+            latents, passes = streamed_latents(model, opt, portrait, audio, cfg, args.seed)
+            eager[nfe] += [p.features_ms + p.fmt_ms for p in passes[1:]]
+            eager_latents[(nfe, index)] = latents
+    opt.nfe = 10
+    sample = eager_latents[(10, 0)][:, :32]
+    frames_numpy_grid = decode(model, portrait, sample, 8, False)
+    decode_before = {b: time_decode(model, portrait, eager_latents[(10, 0)], b, False) for b in (4, 8)}
+
+    install_flow_grid_cache()
+    frames_cached_grid = decode(model, portrait, sample, 8, False)
+    results["flow_grid_max_abs_diff"] = float((frames_cached_grid - frames_numpy_grid).abs().max())
+    for batch in (1, 4, 8, 16):
+        results[f"decode_ms_per_frame_b{batch}"] = round(time_decode(model, portrait, eager_latents[(10, 0)], batch, False), 2)
+    results["decode_ms_per_frame_before_b4_b8"] = [round(decode_before[4], 2), round(decode_before[8], 2)]
+
+    for nfe in (10, 7, 5):
+        opt.nfe = nfe
+        GRAPHED[nfe] = GraphedWindowSolver(model, opt, portrait, nfe)
+        graphed_ms: list[float] = []
+        fmt_ms: list[float] = []
+        worst = 0.0
+        for index, audio in enumerate(clips):
+            latents, passes = streamed_latents(model, opt, portrait, audio, cfg, args.seed)
+            graphed_ms += [p.features_ms + p.fmt_ms for p in passes[1:]]
+            fmt_ms += [p.fmt_ms for p in passes[1:]]
+            worst = max(worst, float((latents - eager_latents[(nfe, index)]).abs().max()))
+        results[f"nfe{nfe}"] = {
+            "pass_ms_p50_before": round(percentile(eager[nfe], 0.5), 2),
+            "pass_ms_p95_before": round(percentile(eager[nfe], 0.95), 2),
+            "pass_ms_p50": round(percentile(graphed_ms, 0.5), 2),
+            "pass_ms_p95": round(percentile(graphed_ms, 0.95), 2),
+            "fmt_ms_p50": round(percentile(fmt_ms, 0.5), 2),
+            "graphed_vs_eager_max_abs_latent_diff": worst,
+            "passes": len(graphed_ms),
+        }
+
+    # VRAM of the streaming path with decode micro-batches of 4 and 8.
+    opt.nfe = 10
+    for batch in (4, 8):
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        streamed, _ = streamed_latents(model, opt, portrait, clips[0], cfg, args.seed)
+        for start in range(0, streamed.shape[1], batch):
+            decode(model, portrait, streamed[:, start:start + batch], batch, False)
+        results[f"vram_peak_mb_streaming_b{batch}"] = round(torch.cuda.max_memory_allocated() / 2**20)
+        results[f"vram_reserved_mb_streaming_b{batch}"] = round(torch.cuda.max_memory_reserved() / 2**20)
+
+    work_per_audio_second = {}
+    for nfe in (10, 7):
+        passes_per_second = FPS / 20
+        work_per_audio_second[f"nfe{nfe}_b4"] = round(
+            (FPS * results["decode_ms_per_frame_b4"] + passes_per_second * results[f"nfe{nfe}"]["pass_ms_p50"]) / 1000, 3)
+    results["work_s_per_audio_second"] = work_per_audio_second
+    results["first_frame_nfe10_b4"] = first_frame_estimate(results["nfe10"]["pass_ms_p95"], 4 * results["decode_ms_per_frame_b4"])
+    results["first_frame_nfe7_b4"] = first_frame_estimate(results["nfe7"]["pass_ms_p95"], 4 * results["decode_ms_per_frame_b4"])
+    return results
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--upstream", type=Path, required=True, help="clone of deepbrainai-research/float")
@@ -348,6 +554,8 @@ def main() -> int:
     parser.add_argument("--videos", type=int, default=2, help="side-by-side videos to write (first N clips)")
     parser.add_argument("--seed", type=int, default=25)
     parser.add_argument("--allow-busy", action="store_true")
+    parser.add_argument("--optimized", action="store_true",
+                        help="measure the wrapper optimizations (cached flow grid, CUDA-graph solve) instead")
     args = parser.parse_args()
     checkpoints = args.checkpoints or args.upstream / "checkpoints"
     args.out.mkdir(parents=True, exist_ok=True)
@@ -360,6 +568,14 @@ def main() -> int:
         return 2
     lower_priority()
     torch.backends.cudnn.benchmark = True
+    if args.optimized:
+        with torch.no_grad():
+            results = run_optimized(args, checkpoints)
+        out = args.out / "portrait-spike-optimized.json"
+        out.write_text(json.dumps(results, indent=2), encoding="utf-8")
+        print(json.dumps(results, indent=2))
+        print(f"\nwritten {out}")
+        return 0
     results: dict = {"gpu": torch.cuda.get_device_name(0), "torch": torch.__version__, "clips": {}}
 
     with torch.no_grad():
@@ -445,19 +661,8 @@ def main() -> int:
         results["vram_reserved_mb_streaming"] = round(torch.cuda.max_memory_reserved() / 2**20)
 
         # First frame: when frames for the first H1 frames could be ready, against the browser start.
-        h1, r = 8, 5
-        first_pass_ms = percentile(all_pass_ms, 0.95)
-        first_decode_ms = timing["decode_ms_per_frame_b8_fp16"] * 8
-        results["first_frame"] = {}
-        for rtf in (0.25, 0.5, 0.8):  # TTS seconds of work per second of audio
-            audio_ready_s = (h1 + r) / FPS * rtf
-            frame_ready_s = audio_ready_s + (first_pass_ms + first_decode_ms) / 1000
-            playback_start_s = START_BUFFER_S * rtf
-            results["first_frame"][f"tts_rtf_{rtf}"] = {
-                "first_frame_ready_ms": round(frame_ready_s * 1000),
-                "browser_start_ms": round(playback_start_s * 1000),
-                "extra_hold_ms": round(max(0.0, frame_ready_s - playback_start_s) * 1000),
-            }
+        results["first_frame"] = first_frame_estimate(
+            percentile(all_pass_ms, 0.95), timing["decode_ms_per_frame_b8_fp16"] * 8)
 
     out = args.out / "portrait-spike-results.json"
     out.write_text(json.dumps(results, indent=2), encoding="utf-8")

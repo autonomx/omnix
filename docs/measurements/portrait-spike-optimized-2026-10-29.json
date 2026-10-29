@@ -1,0 +1,99 @@
+{
+  "measurement": "live portrait Phase 0: wrapper optimizations (scripts/portrait_spike.py --optimized)",
+  "date": "2026-10-29",
+  "environment": "venv over the rpg-stt env: CPython 3.11, torch 2.6.0+cu124, transformers 4.57.6; GPU otherwise idle, no Omnix services running",
+  "inputs": "portrait: upstream assets/sam_altman_512x512.jpg; audio: upstream aud-sample-vs-1.wav (15.0 s), voice_clones Maya (10.6 s), Morgan (11.7 s), Sofia (5.3 s); emotion neutral",
+  "changes": [
+    "flow grid built once per size on the GPU instead of NumPy per call (ToFlow.forward replaced in the wrapper)",
+    "timestep frequency table kept on the GPU (TimestepEmbedder.timestep_embedding replaced), needed for graph capture",
+    "the window's Euler solve (as torchdiffeq's fixed-grid Euler) captured as one CUDA graph"
+  ],
+  "notes": [
+    "graphed_vs_eager_max_abs_latent_diff is 0.0: the captured solve gives the same motion latents as upstream's odeint path",
+    "flow_grid_max_abs_diff is the largest pixel difference (range -1..1) between cached-grid and NumPy-grid decodes",
+    "pass_ms_p95_before for nfe10 includes cuDNN autotuning on the first clip"
+  ],
+  "results": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "torch": "2.6.0+cu124",
+    "stream_config": "R5_H20",
+    "flow_grid_max_abs_diff": 0.0004822462797164917,
+    "decode_ms_per_frame_b1": 7.87,
+    "decode_ms_per_frame_b4": 3.84,
+    "decode_ms_per_frame_b8": 4.04,
+    "decode_ms_per_frame_b16": 4.18,
+    "decode_ms_per_frame_before_b4_b8": [
+      5.11,
+      4.62
+    ],
+    "nfe10": {
+      "pass_ms_p50_before": 52.65,
+      "pass_ms_p95_before": 450.33,
+      "pass_ms_p50": 32.55,
+      "pass_ms_p95": 35.06,
+      "fmt_ms_p50": 25.46,
+      "graphed_vs_eager_max_abs_latent_diff": 0.0,
+      "passes": 52
+    },
+    "nfe7": {
+      "pass_ms_p50_before": 33.44,
+      "pass_ms_p95_before": 39.67,
+      "pass_ms_p50": 22.74,
+      "pass_ms_p95": 24.93,
+      "fmt_ms_p50": 16.82,
+      "graphed_vs_eager_max_abs_latent_diff": 0.0,
+      "passes": 52
+    },
+    "nfe5": {
+      "pass_ms_p50_before": 29.39,
+      "pass_ms_p95_before": 32.3,
+      "pass_ms_p50": 16.96,
+      "pass_ms_p95": 18.34,
+      "fmt_ms_p50": 11.25,
+      "graphed_vs_eager_max_abs_latent_diff": 0.0,
+      "passes": 52
+    },
+    "vram_peak_mb_streaming_b4": 2087,
+    "vram_reserved_mb_streaming_b4": 2828,
+    "vram_peak_mb_streaming_b8": 2714,
+    "vram_reserved_mb_streaming_b8": 3908,
+    "work_s_per_audio_second": {
+      "nfe10_b4": 0.137,
+      "nfe7_b4": 0.124
+    },
+    "first_frame_nfe10_b4": {
+      "tts_rtf_0.25": {
+        "first_frame_ready_ms": 180,
+        "browser_start_ms": 100,
+        "extra_hold_ms": 80
+      },
+      "tts_rtf_0.5": {
+        "first_frame_ready_ms": 310,
+        "browser_start_ms": 200,
+        "extra_hold_ms": 110
+      },
+      "tts_rtf_0.8": {
+        "first_frame_ready_ms": 466,
+        "browser_start_ms": 320,
+        "extra_hold_ms": 146
+      }
+    },
+    "first_frame_nfe7_b4": {
+      "tts_rtf_0.25": {
+        "first_frame_ready_ms": 170,
+        "browser_start_ms": 100,
+        "extra_hold_ms": 70
+      },
+      "tts_rtf_0.5": {
+        "first_frame_ready_ms": 300,
+        "browser_start_ms": 200,
+        "extra_hold_ms": 100
+      },
+      "tts_rtf_0.8": {
+        "first_frame_ready_ms": 456,
+        "browser_start_ms": 320,
+        "extra_hold_ms": 136
+      }
+    }
+  }
+}
