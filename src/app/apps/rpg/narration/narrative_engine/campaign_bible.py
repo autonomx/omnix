@@ -1,8 +1,10 @@
 """Campaign Bible aggregate contracts and evidence projection."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence, TypeVar
+
+from app.apps.rpg.rules.contracts import public_canon
 
 from .authority import AuthorityClass, EvidenceLifetime, VisibilityClass
 from .contracts import EvidenceRecord
@@ -273,7 +275,10 @@ def _record(
 
 
 def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRecord, ...]:
-    """Project all authorized canon, including lore pages and dossiers, into evidence."""
+    """Project all authorized canon, including lore pages and dossiers, into evidence: from the canon without a
+    sentence of any secret outside the secrets' own fields (rules/secrets.py; the review: a lore world's every fact
+    carried its hidden truth as public evidence)."""
+    snapshot = replace(snapshot, document=public_canon(snapshot.document))
 
     records: list[EvidenceRecord] = []
     index = 0

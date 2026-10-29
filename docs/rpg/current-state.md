@@ -23,7 +23,7 @@ playtests continue to find content and wiring problems, not missing systems
 | A4 Content in code | No world's names in the engine (AL021) | 0 | Met (§11) | A4 part 2 |
 | P1 Persistence | Crash-mid-turn test; versioned, pinned upgrades; newer documents refused | Built, and export/import (stretch) | Met (§11) | RQ-8.5, RQ-1.1, RQ-1.7, RQ-8.6 |
 | M1 Mechanics | Playthrough suite 100% on three worlds; golden matches | Playthrough: 133 pass, 4 strict xfail (below). Golden: matches at `835946e514`. Route autoplay 3 x 150 turns, 0 findings | Open (the xfails) | Playthrough run 2026-10-26 on a working tree with uncommitted RPG changes; `rpg-autoplay-2026-10-26-route.json` |
-| M2 Intent | Family and target lower ≥ 0.95; false stateful upper ≤ 1.0% | Family 0.981 (lower 0.971); target 0.940 (lower 0.923); false stateful upper 2.17% | Target and false stateful not met; most misses are label questions | `rpg-intent-route-2026-10-26.json` (at `e78e10bd9f`); [label review](../measurements/rpg-intent-label-review-2026-10-26.md) |
+| M2 Intent | Family and target lower ≥ 0.95; false stateful upper ≤ 1.0% | Family lower 0.975; target lower 0.943 (39 misses of 919, 11 of them the Mira label question); false stateful upper 2.17% (all 11 label questions) | Family met; target and false stateful not met. The target misses' classes are fixed since (rerun pending) | `rpg-intent-route-2026-10-29.json` (at `9818f0e5e9`); [label review](../measurements/rpg-intent-label-review-2026-10-26.md) |
 | G1 Gameplay depth | RQ-5.1-5.4 and 5.7 built; balance bands; rubric ≥ 4 on stakes, choice, progression | All built (5.5 and 5.6 too); rubric not scored | Waits on owner | [playtest-rq-9.2.md](playtest-rq-9.2.md) is blank |
 | W1 Evolving world | The 200-turn Aurelia run's checks | All pass | Met | `rpg-living-world-2026-10-26.json` |
 | D1 Determinism | AL013 = 0; 1,000-turn replay identical | Both | Met | `rpg-living-world-1000-2026-10-26.json` |
@@ -92,9 +92,17 @@ owner's questions, is [RPG_EVOLUTION_ROADMAP_2026-10-29.md](../RPG_EVOLUTION_ROA
   in its telling and a remembered fact.
 - **Combat depth and pacing.** Abilities by calling, resistances and the lore's weaknesses usable in a fight,
   companion commands, boss phases. The Hollow Archon took some 40 rounds of attack-and-drink.
+- **The model reads every typed line; cards are commands** (EV-9, owner decision 2026-10-29, phase 0). The command
+  grammar turns idioms into actions ("give it a rest" rests the hero; 16 of 32 idioms tried). It is removed. Cards
+  carry their action. Speech takes two calls, in parallel in a conversation under way. With no model, only the cards
+  work.
 - **Steps judged by what was meant.** A talk step matches its `about` words; the reading should propose which step a
-  line addresses, and deterministic code accept it when speaker, place and subject fit.
+  line addresses, and deterministic code accept it when speaker, place and step fit.
 - **People who act on their goals.** A few deterministic goal events a day, told as rumours and written as facts.
 - **Crafting.** Shards and a smith make better gear: loot, purse and progression tied together.
 - **Authoring in the editor.** Forms for an item's gear and for characters with a home; World Forge drafting play
   sections, not only lore.
+- **Sites to discover** (EV-10). Play adds no place, person, kind of creature or item, quest or lore today. The game
+  master prepares hidden sites ahead (a cave, a ruin, a dungeon), exploring finds them by a seeded check, and code
+  builds their rooms, encounters and loot inside the level's budgets. Every invention carries its play data; it joins
+  the campaign's lore at once and the world's only on the author's approval.

@@ -280,3 +280,20 @@ def test_a_count_reaches_past_a_hyphen_and_an_of() -> None:
     assert wanted_count("I'd like two potions", "Potion of Healing") == 2
     assert wanted_count("buy two mugs of ale", "Mug of ale") == 2
     assert wanted_count("buy a buckler for 8 silver", "Ward-glass Buckler") == 1
+
+
+def test_a_companion_spoken_to_is_no_buyer_and_a_names_own_number_no_count() -> None:
+    """The tenth review: "Liora, I'll sell the Aether Shard" was refused as Liora's; "buy 50 feet of rope" bought ten."""
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
+    campaign = _campaign(purse=0, items=items)
+    simulation = campaign["simulation_state"]
+    simulation["world_model"]["npcs"] = {"npc:liora": {"name": "Liora Fen"}, "npc:orik": {"name": "Orik Stonewake"}}
+    simulation["present_npc_state"]["present_npc_ids"].append("npc:liora")
+    for text in ("Liora, I'll sell the Aether Shard", "sell the Aether Shard, Liora"):
+        assert sell(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
+    assert sell(simulation, "Liora, sell the Aether Shard to Orik").lines == ["Orik Stonewake does not buy the Aether Shard."]
+    assert wanted_count("buy 50 feet of rope", "50 Feet of Rope") == 1
+    assert wanted_count("buy ten days of rations", "Ten Days of Rations") == 1
+    assert wanted_count("buy two days of rations", "Ten Days of Rations") == 2

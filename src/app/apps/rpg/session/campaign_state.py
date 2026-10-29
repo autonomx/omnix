@@ -21,7 +21,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 from app.apps.rpg.foundation.state import access as _sections
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -270,6 +270,14 @@ def _to_v10_as_a_turn_reads_it(document: dict[str, Any]) -> dict[str, Any]:
     return retire_pending_narration(hydrate_hero(document))
 
 
+def _to_v11_secrets_kept(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 11 (the ninth review): the world model without a sentence of any secret its canon holds, which a world
+    written as lore kept in its people's and places' descriptions (``upgrades/hidden_truths.py``)."""
+    from app.apps.rpg.session.upgrades.hidden_truths import keep_secrets_to_themselves
+
+    return keep_secrets_to_themselves(document)
+
+
 # (target version, upcaster), in order. Version 5 marks the interaction
 # timeline, which the normalization below keeps for every version.
 UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = (
@@ -279,6 +287,7 @@ UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = 
     (8, _to_v8_one_gear_record),
     (9, _to_v9_given_once),
     (10, _to_v10_as_a_turn_reads_it),
+    (11, _to_v11_secrets_kept),
 )
 
 

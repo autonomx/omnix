@@ -62,6 +62,69 @@ def _kind_names(name: str) -> tuple[str, ...]:
     return (kind, *_KIND_NAMES.get(kind, ()))
 
 
+# What an offer is also called by its service (the intent gate: "the price of supper", "buy a room" named no offer
+# whose label is "A hot meal" or "A night's lodging").
+_SERVICE_NAMES = {
+    "lodging": ("a room", "a bed", "lodging", "a room for the night"),
+    "meal": ("a meal", "supper", "dinner", "breakfast", "lunch"),
+    "drink": ("a drink", "something to drink"),
+    "paid_information": ("news", "a rumor", "a rumour", "rumors", "rumours", "information"),
+    "repair": ("repairs", "repair work"),
+}
+# What a place is also called by its kind ("the club" for a nightclub: the intent gate).
+_PLACE_KIND_NAMES = {
+    "nightclub": ("club",), "club": ("nightclub",), "tavern": ("inn", "pub", "bar"), "inn": ("tavern",),
+    "pub": ("tavern", "bar"), "port": ("docks", "harbor", "harbour"), "docks": ("port", "harbor", "harbour"),
+    "harbor": ("port", "docks"), "clinic": ("hospital",), "hospital": ("clinic",), "chapel": ("church",),
+    "temple": ("shrine",), "market": ("bazaar",), "interchange": ("station",), "station": ("interchange",),
+}
+_PLACE_KIND_ENDS = re.compile(r"\b(?:built|that|which|where|with|between|beneath|under|above|over|near|by|on|in|at|"
+                              r"for|from|of|is|are|was|has|have)\b|[,;:.]")
+# A role that leads (the intent gate: "the union leader" for the Red Knives' elected strike coordinator).
+_LEADS = frozenset({"leader", "coordinator", "chief", "head", "boss", "director", "commander", "captain",
+                    "president", "organizer", "organiser", "chair"})
+_GROUP_NOUNS = frozenset({"union", "guild", "collective", "authority", "order", "company", "corporation",
+                          "syndicate", "gang", "crew", "cult", "council", "league", "network"})
+
+
+def _place_kind_names(description: str) -> tuple[str, ...]:
+    """A place called by what its description says it is: "A nightclub and neutral exchange built around ..." is the
+    nightclub, the club and the exchange."""
+    head = _PLACE_KIND_ENDS.split(description.casefold(), maxsplit=1)[0]
+    head = re.sub(r"^(?:a|an|the)\s+", "", head.strip())
+    words: list[str] = []
+    for part in head.split(" and "):
+        part_words = part.split()
+        # A verb in -s after the noun ends it ("a fortified port moves cargo", "a helix tower combines homes").
+        cut = next((index for index, word in enumerate(part_words) if 0 < index < len(part_words) - 1
+                    and word.endswith("s") and not word.endswith("ss") and len(word) > 3), len(part_words))
+        kept = part_words[:cut]
+        if kept and len(kept) <= 4:
+            words.append(kept[-1])
+    kinds = [kind for word in words for kind in (word, *_PLACE_KIND_NAMES.get(word, ())) if kind.isalpha()]
+    return tuple(f"the {kind}" for kind in dict.fromkeys(kinds))
+
+
+def _leader_names(role: str, groups: Mapping[str, Any]) -> tuple[str, ...]:
+    """Someone whose role leads a group the world names, called its leader ("the union leader", "the Red Knives
+    leader")."""
+    lowered = role.casefold()
+    if not set(re.findall(r"[a-z]+", lowered)) & _LEADS:
+        return ()
+    names: list[str] = []
+    for group in groups.values():
+        words = _s(_d(group).get("name")).split()
+        if not words:
+            continue
+        noun = words[-1].casefold() if words[-1].casefold() in _GROUP_NOUNS else ""
+        proper = " ".join(words[:-1] if noun else words)
+        if proper and proper.casefold().removeprefix("the ") in lowered:
+            names.append(f"the {proper.removeprefix('The ')} leader")
+            if noun:
+                names.append(f"the {noun} leader")
+    return tuple(names)
+
+
 # What a calling is also called (the intent gate: "ask the trader" named no merchant).
 _CALLING_NAMES = {
     "merchant": ("trader", "vendor", "shopkeeper", "seller"), "trader": ("merchant", "vendor"),
@@ -127,6 +190,7 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
         role = _s(npc.get("role"))
         add(npc_id, "person", _names(name, _called(name), *(_s(alias) for alias in _l(npc.get("aliases"))),
                                      *_title_names(name),
+                                     *_leader_names(role, _d(world.get("groups"))),
                                      f"the {role}" if role and len(role.split()) <= 3 else "",
                                      *_role_names(role.casefold())), npc_id in present)
     for creature_id, creature in _d(_d(state.get("campaign_mechanics")).get("creatures")).items():
@@ -152,12 +216,14 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     exits = set(_d(here_location.get("exits")).values())
     for place_id, place in _d(world.get("locations")).items():
         place = _d(place)
-        add(str(place_id), "place", _names(place.get("name"), *_l(place.get("aliases"))), str(place_id) in exits)
+        add(str(place_id), "place", _names(place.get("name"), *_l(place.get("aliases")),
+                                           *_place_kind_names(_s(place.get("description")))), str(place_id) in exits)
     for provider_id, offers in _d(world.get("offers")).items():
         provider = _d(_d(world.get("providers")).get(provider_id))
         for offer in _l(offers):
             offer = _d(offer)
-            add(_s(offer.get("offer_id")), "offer", _names(offer.get("label")),
+            add(_s(offer.get("offer_id")), "offer",
+                _names(offer.get("label"), *_SERVICE_NAMES.get(_s(offer.get("service_kind")), ())),
                 _s(provider.get("location_id")) == location_id)
     for skill_id in _d(_d(_sections.player_state_of(state)).get("skills")):
         add(f"skill:{skill_id}", "skill", _names(str(skill_id).replace("_", " ")), True)

@@ -80,7 +80,8 @@ _LEADING = (
     "i am going to ", "i ", "we ",
 )
 _QUESTION_WORDS = frozenset(
-    "what where who whom whose why how when which is are does do did can could would should will was were".split()
+    "what where who whom whose why how when which is are does do did can could would should will was were remind"
+    .split()  # "remind me what First Night in Aurelia is about" asks (the intent gate)
 )
 
 
@@ -211,6 +212,11 @@ def _owned_word(words: list[str], position: int) -> bool:
 
 def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
     """Entities named in ``words``: every distinctive word of one of its names present, best first."""
+    entities = list(entities)
+    # Words of people's own names: a calling just before one is their title ("Master Stonewake" is no "the master":
+    # the intent gate, once Aurelia had a foundry master).
+    named_words = {token for entity in entities if entity.kind == "person" for name in entity.names
+                   if not name.startswith(("the ", "my ")) for token in _name_tokens(name)}
     hits: list[_Hit] = []
     for entity in entities:
         best: _Hit | None = None
@@ -225,6 +231,11 @@ def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
             matched = [p for p in positions if p is not None]
             if name.startswith("my ") and not all(_owned_word(words, p) for p in matched):
                 continue
+            if (entity.kind == "person" and name.startswith(("the ", "my ")) and len(tokens) == 1 and matched
+                    and matched[0] + 1 < len(words) and words[matched[0] + 1] in named_words):
+                continue
+            if entity.kind == "item" and any(p > 0 and words[p - 1] in _OTHERS for p in matched):
+                continue  # "drop your dagger!" is said of someone else's (the tenth review)
             if len(matched) == len(tokens):
                 score = len(tokens) + 0.5 + (0.25 if entity.here else 0.0)
             elif (len(tokens) >= 2 and matched and any(len(tokens[i]) >= 4 for i, p in enumerate(positions) if p is not None)
@@ -388,14 +399,34 @@ def _question(words: list[str], original: str) -> bool:
     return bool(words) and words[0] in _QUESTION_WORDS and not _starts(words, "what a", "how nice", "how lovely")
 
 
-def _ask(words: list[str], scene: SceneView, addressed: _Hit | None) -> IntentCandidate:
+def _vocative_at_the_end(original: str, scene: SceneView) -> _Hit | None:
+    """Someone here named after a last comma, the whole of what follows it ("what do you sell, Orik?")."""
+    tail = original.rstrip(" ?!.").rsplit(",", 1)
+    if len(tail) != 2:
+        return None
+    named = _words(_norm(tail[1]))
+    hits = _find(named, scene.of("person", here=True)) if 0 < len(named) <= 3 else []
+    return hits[0] if hits and hits[0].score >= _WHOLE_NAME - 0.5 else None
+
+
+def _ask(words: list[str], scene: SceneView, addressed: _Hit | None, original: str = "") -> IntentCandidate:
+    # Said to someone by name at the end, the question is theirs, whoever the hero was talking with (the tenth review:
+    # "what do you sell, Orik?" went to Brindle).
+    addressed = addressed or _vocative_at_the_end(original, scene)
     if addressed is not None:
         return _candidate("ask", addressed, 0.85, "asks_someone")
     subject = _first(words, scene, "person", "creature", "place", "item", "offer", "quest", "skill", "group")
+    if subject is not None and subject.entity.kind == "quest" and words[:1] == ["where"]:
+        # Where a quest and a place share a name, "where is the Hollow Meridian?" asks after the place.
+        place = next((hit for hit in _find(words, scene.of("place")) if hit.start == subject.start), None)
+        subject = place or subject
     if subject is not None and subject.entity.kind == "item" and "my" not in words:
         # A thing asked about where it is on sale is the offer, and so its seller's to answer, even if the hero carries
         # one ("how much is a potion?" went to whoever was here first: the review); "my potion" is the hero's own.
-        subject = _first(words, scene, "offer", here=True) or subject
+        # The same thing on sale: an offer named by the very word that named the item ("is the dagger sharp?" is no
+        # question about an Aether Shard: the tenth review).
+        offer = next((hit for hit in _find(words, scene.of("offer", here=True)) if hit.start == subject.start), None)
+        subject = offer or subject
     focus = next((entity for entity in scene.of("person", here=True) if entity.entity_id == scene.focus_id), None)
     if (subject is not None and subject.entity.kind == "person" and subject.entity.here and focus is not None
             and focus.entity_id != subject.entity.entity_id):
@@ -492,7 +523,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     if question:
         lead = _find(words[:3], scene.of("person"))
         if lead and lead[0].start <= 1:
-            return _ask(words, scene, lead[0])
+            return _ask(words, scene, lead[0], original)
         if _has(words, *_STATUS_QUESTIONS):
             return _candidate("status", None, 0.9, "asks_status")
         if _has(words, *_LOOK_QUESTIONS):
@@ -501,7 +532,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
             hit = _first(words, scene, "person", "creature", "item", "place")
             if hit:
                 return _candidate("inspect", hit, 0.85, "asks_appearance")
-        return _ask(words, scene, _addressed(words, scene))
+        return _ask(words, scene, _addressed(words, scene), original)
 
     if _has(words, "run away", "flee", "escape", "retreat", "get away", "fall back", "run for it"):
         return _candidate("flee", None, 0.9, "flees")
@@ -516,7 +547,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         # "I talk to him" with several people here: the game asks who, rather than a model guessing.
         return _clarify("speech_without_listener")
     if _starts(words, "ask") and addressed is not None:
-        return _ask(words, scene, addressed)
+        return _ask(words, scene, addressed, original)
 
     if _starts(words, "take me to", "bring me to", "lead me to", "guide me to"):
         place = _first(words, scene, "place")
@@ -648,7 +679,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
                           "searches" if _starts(words, "search") else "manipulates")
 
     if _starts(words, "ask"):
-        return _ask(words, scene, addressed)
+        return _ask(words, scene, addressed, original)
     if addressed is not None:
         return _candidate("talk", addressed, 0.85, "talks")
     if words[0] in {"him", "her", "them", "it"} or (_has(words, "him", "her", "them", "it") and len(words) <= 4):

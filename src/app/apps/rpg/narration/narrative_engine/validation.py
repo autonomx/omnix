@@ -84,18 +84,27 @@ _HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, 
 
 
 _THE_NOUN = re.compile(r"\bthe\s+([a-z][a-z'-]{2,})\b", re.IGNORECASE)
+# Who the turn's blows struck, as its fight lines name them ("you hit the echo wolf for 4 (5 of 10 left)").
+_STRUCK = re.compile(r"\bhits? (?:the )?([a-z][a-z' -]*?) for \d+")
+
+
+def _struck(evidence_text: str) -> set[str]:
+    """What the turn's blows struck, by their names' heads ("the wolf" for an echo wolf; not "the echo"), the hero
+    aside."""
+    return {name.split()[-1] for name in _STRUCK.findall(evidence_text) if name.split() and name != "you"}
 
 
 def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:
     """Whether a clause speaks of a foe's health: it names no "you", and its sentence names none or the clause points
-    at someone else, by a pronoun or by a name the turn's evidence holds ("you hit the wolf, leaving it at 5
-    health", "your blade bites, and the wolf staggers at 5 health" where the echo wolf was hit; not "bleeding, down to
-    5 health, you press on")."""
+    at someone else, by a pronoun or by a foe the turn's blows struck ("you hit the wolf, leaving it at 5 health",
+    "your blade bites, and the wolf staggers at 5 health" where the echo wolf was hit; not "bleeding, down to 5
+    health, you press on", nor "the night closing in at 5 health" because the scene names a night)."""
     if _HEROS_HEALTH.search(clause):
         return False
     if not _HEROS.search(sentence) or _FOE_WORDS.search(clause) is not None:
         return True
-    return any(re.search(rf"\b{re.escape(noun.casefold())}\b", evidence_text) for noun in _THE_NOUN.findall(clause))
+    struck = _struck(evidence_text)
+    return any(noun.casefold() in struck for noun in _THE_NOUN.findall(clause))
 
 
 def _unsupported_amounts(clause: str, evidence_text: str, *, foes: bool) -> list[str]:

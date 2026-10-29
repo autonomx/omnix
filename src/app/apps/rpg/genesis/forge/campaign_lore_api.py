@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from app.apps.rpg.genesis.worlds.authoring_presentations import entity_card
+from app.apps.rpg.rules.contracts import public_canon
 
 from .runtime_lore_materialization import canonical_lore_topic_id
 
@@ -41,8 +42,14 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _public_projection(session: Mapping[str, Any]) -> dict[str, Any]:
+    """The campaign's canon as the player may read it: without a sentence of any secret (rules/secrets.py; a campaign
+    begun before its world's canon was projected so keeps the hidden truths in its copy)."""
+    return public_canon(_mapping(session.get("campaign_bible_projection")))
+
+
 def _documents(session: Mapping[str, Any]) -> list[dict[str, Any]]:
-    projection = _mapping(session.get("campaign_bible_projection"))
+    projection = _public_projection(session)
     return [
         dict(row)
         for row in projection.get("documents") or ()
@@ -51,7 +58,7 @@ def _documents(session: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def _entities(session: Mapping[str, Any]) -> list[dict[str, Any]]:
-    projection = _mapping(session.get("campaign_bible_projection"))
+    projection = _public_projection(session)
     return [
         {"id": str(entity_id), **dict(row)}
         for entity_id, row in _mapping(projection.get("entities")).items()

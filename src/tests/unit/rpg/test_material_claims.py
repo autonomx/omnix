@@ -72,3 +72,11 @@ def test_a_clause_naming_the_foe_the_turn_hit_may_give_its_health() -> None:
     for said in ("Your blade bites deep, and the wolf staggers at 5 health.", "Your strike lands; the wolf is down to 5 health."):
         assert _unsupported_material(said, fight) == [], said
     assert _unsupported_material("Your blade bites deep, and the crowd sees you at 5 health.", fight) == ["5 health"]
+
+
+def test_only_a_foe_the_turns_blows_struck_may_own_a_health_figure() -> None:
+    """The tenth review: any "the X" the scene named let a claim of the hero's health pass."""
+    evidence = "the echo wolf hits you for 3 (17 of 20 left). starfall village at night."
+    for said in ("Your knees buckle, the night closing in at 5 health.",
+                 "Your vision swims, the echo of the blow leaving 10 health."):
+        assert _unsupported_material(said, evidence), said

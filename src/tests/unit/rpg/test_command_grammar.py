@@ -240,3 +240,54 @@ def test_a_question_goes_to_the_seller_of_what_is_asked_and_to_whom_the_hero_tal
     asked = parse_command("what do you think of the captain?", talking)
     assert (asked.target_id, asked.second_target_id) == ("npc:rhea", "npc:brindle")
     assert parse_command("what do you think of the captain?", scene).target_id == "npc:rhea"  # no one in focus: hers
+
+
+def test_a_name_at_the_end_is_whom_a_question_is_put_to_and_a_word_is_no_near_thing() -> None:
+    """The tenth review: talking with Brindle, "what do you sell, Orik?" went to Brindle; "is the dagger sharp?"
+    asked about the Aether Shard on sale; "drop your dagger!" dropped the hero's."""
+    scene = SceneView((
+        SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),
+        SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "Brindle"), here=True),
+        SceneEntity("item:dagger", "item", ("Iron Dagger", "my dagger"), here=True),
+        SceneEntity("npc:brindle:shard", "offer", ("Aether Shard",), here=True),
+    ), focus_id="npc:brindle")
+    asked = parse_command("what do you sell, Orik?", scene)
+    assert (asked.family, asked.target_id) == ("ask", "npc:orik")
+    assert parse_command("is the dagger sharp?", scene).target_id == "item:dagger"
+    for text in ("drop your dagger!", "Orik, drop your dagger"):
+        assert parse_command(text, scene).target_id != "item:dagger", text
+
+
+def test_the_real_scene_names_offers_by_service_places_by_kind_and_a_groups_leader() -> None:
+    """The intent gate's target misses at 9818f0e5e9, by class: offers whose labels have no "supper" or "room", "the
+    club" for a nightclub, "the union leader" for the union's elected coordinator, "Master Stonewake" taken for the
+    foundry master, and a place and a quest sharing a name."""
+    from app.apps.rpg.session.command_reading import scene_view
+
+    simulation = {
+        "player_state": {"location_id": "loc:inn"},
+        "present_npc_state": {"present_npc_ids": ["npc:orik", "npc:juno"]},
+        "world_model": {
+            "npcs": {"npc:orik": {"name": "Orik Stonewake", "role": "innkeeper", "location_id": "loc:inn"},
+                     "npc:hollis": {"name": "Hollis Brask", "role": "foundry master and armourer"},
+                     "npc:juno": {"name": "Juno Rask", "role": "crane operator and elected Red Knives strike coordinator"}},
+            "groups": {"g:union": {"name": "Red Knives Union", "summary": "A dock union."}},
+            "providers": {"npc:orik": {"location_id": "loc:inn"}},
+            "offers": {"npc:orik": [
+                {"offer_id": "npc:orik:night", "service_kind": "lodging", "label": "A night's lodging"},
+                {"offer_id": "npc:orik:meal", "service_kind": "meal", "label": "A hot meal"}]},
+            "locations": {
+                "loc:inn": {"name": "The Lantern Below", "description": "A low inn of warm stone."},
+                "loc:club": {"name": "The Undertone", "description": "A nightclub and neutral exchange built around a pump."},
+                "loc:meridian": {"name": "Hollow Meridian", "description": "A ruin."}},
+            "quests": {"quest:meridian": {"title": "The Hollow Meridian"}},
+        },
+    }
+    scene = scene_view(simulation)
+    assert parse_command("what's the price of supper?", scene).target_id == "npc:orik:meal"
+    assert parse_command("buy a room", scene).target_id == "npc:orik:night"
+    assert parse_command("I make my way to the club", scene).target_id == "loc:club"
+    assert parse_command("I ask the union leader for advice", scene).target_id == "npc:juno"
+    assert parse_command("Master Stonewake, who are you?", scene).target_id == "npc:orik"
+    assert parse_command("ask the master about blades", scene).target_id == "npc:hollis"
+    assert parse_command("where is the Hollow Meridian?", scene).target_id == "loc:meridian"

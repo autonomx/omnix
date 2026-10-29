@@ -53,8 +53,9 @@ def wanted_count(text: str, label: str) -> int:
     Potions", "3 lantern bread"), else one; at most ``MOST_AT_ONCE``. A price ("for 15 coppers") is no count."""
     named = [word for word in re.findall(r"[a-z]+", label.casefold()) if word not in {"a", "an", "the", "some", "of"}]
     words = [re.escape(word) for word in named if word not in _COINS][-1:] or [re.escape(word) for word in named][-1:]
-    # "Potion of Healing" is a potion too ("two potions"; the review).
-    words += [re.escape(word) for word in re.findall(r"([a-z]+)\s+of\s", label.casefold())[:1] if word not in _COINS]
+    # "Potion of Healing" is a potion too ("two potions"; the review); "Feet of Rope" is no feet.
+    words += [re.escape(word) for word in re.findall(r"([a-z]+)\s+of\s", label.casefold())[:1]
+              if word not in _COINS and not re.fullmatch(_MEASURE_WORDS, word)]
     if not words:
         return 1
     # Up to two words between the count and the head, a hyphen's halves among them ("two ward-glass bucklers", "two
@@ -64,9 +65,9 @@ def wanted_count(text: str, label: str) -> int:
     between = rf"(?:(?:{own})[\s-]+|(?!(?:{_MEASURE_WORDS}|{_COIN_WORDS})\b)[a-z']+[\s-]+)"
     match = re.search(rf"\b{_COUNT_WORDS}\s+{between}{{0,2}}(?:{'|'.join(words)})(?:s|es)?\b"
                       rf"(?!\s+(?:{_COIN_WORDS})\b)", text.casefold())
-    if match is None:
-        return 1
-    word = match.group(1)
+    word = match.group(1) if match is not None else ""
+    if not word or re.search(rf"\b{re.escape(word)}\b", label.casefold()):
+        return 1  # none asked, or the name's own number ("buy 50 feet of rope" is one "50 Feet of Rope": the review)
     return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
 _KIND_WORDS = {
     "lodging": frozenset({"room", "rent", "lodging", "bed", "stay", "night", "sleep"}),
@@ -299,11 +300,15 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     item = carried[0]
     name = _s(item.get("name"))
     shops = [provider for provider in _providers_here(simulation) if "shop_goods" in _l(provider.get("service_kinds"))]
-    asked = _words(text) - _words(name)  # "sell Brindle's Arc Baton" names the baton, not its maker
-    named = _named(shops, asked, text.casefold().replace(name.casefold(), " "))
-    if not named:
-        # Someone here named who keeps no shop that buys ("sell the bread to Orik"): theirs to refuse, not another's
-        # to buy (the review: the sale went to Brindle).
+    rest = text.casefold().replace(name.casefold(), " ")  # "sell Brindle's Arc Baton" names the baton, not its maker
+    # The buyer is whom it is sold to, when the words say ("Liora, sell the shard to Brindle"); else whoever they name.
+    to = re.search(r"\bto\s+(.+)$", rest)
+    slot = to.group(1) if to else rest
+    asked = _words(slot) - _words(name)
+    named = _named(shops, asked, slot)
+    if not named and to:
+        # Someone here it is sold to who keeps no shop that buys ("sell the bread to Orik"): theirs to refuse, not
+        # another's to buy (the review: the sale went to Brindle); a companion spoken to is no buyer named.
         people = _d(world.get("npcs"))
         present = [_s(npc_id) for npc_id in _l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids"))]
         other = next((_s(_d(people.get(npc_id)).get("name")) for npc_id in present

@@ -21,13 +21,10 @@ from app.apps.rpg.foundation.state.changes import (
 )
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.economy.trade import coins, price_of, stock_left
+from app.apps.rpg.rules.secrets import meaning_words as _words, names_a_secret as _names_a_secret, sayable
 from app.apps.rpg.rules.wording import in_sentence
 from app.apps.rpg.foundation.state import access as _sections
 
-_WORD = re.compile(r"[a-z0-9']+")
-_STOP = frozenset("a an the and or of to in on at for with about from is are was were be you your me my i we "
-                  "what who where when why how do does did can could would will tell ask know heard any some this "
-                  "that there here it its she he his her him hers they them their has have had not no".split())
 _WORK = re.compile(r"\b(work|jobs?|tasks?|help|quests?|errands?|hire|bount(y|ies)|contracts?|need (of|from) me|"
                    r"anything i can do)\b")
 # Someone whose work is handing out work (a guild's registrar, a quartermaster, a bounty clerk): they offer a quest
@@ -99,10 +96,6 @@ class DialoguePlan:
         return f"{self.speaker_name} considers the question and says nothing useful."
 
 
-def _words(text: str) -> set[str]:
-    """The words that carry meaning, a possessive's "'s" aside ("his daughter's memory" is about the daughter)."""
-    words = (re.sub(r"'s?$", "", word) for word in _WORD.findall(text.casefold().replace("’", "'")))
-    return {word for word in words if word not in _STOP and len(word) > 2}
 
 
 def _stem(word: str) -> str:
@@ -415,24 +408,8 @@ def plan_changes(plan: DialoguePlan) -> list[StateChange]:
     return changes
 
 
-def sayable(text: str, secrets: tuple[str, ...]) -> str:
-    """The sentences of ``text`` that repeat none of ``secrets``: what of an author's description may be shown or
-    sent to the model."""
-    return " ".join(sentence for sentence in re.split(r"(?<=[.!?])\s+", text) if not _names_a_secret(sentence, secrets))
 
 
-def _names_a_secret(text: str, secrets: tuple[str, ...]) -> bool:
-    """Whether ``text`` repeats a secret: whole; every word of a short one ("the shrine word is Heronglass" in "keep
-    the shrine word Heronglass"); or most of the words of one with four or more."""
-    lowered, said = text.casefold(), _words(text)
-    for secret in secrets:
-        if not secret.strip():
-            continue
-        words = _words(secret)
-        if secret.casefold() in lowered or (words and len(words) < 4 and words <= said) or (
-                len(words) >= 4 and len(words & said) >= max(4, len(words) * 2 // 3)):
-            return True
-    return False
 
 
 def line_keeps_the_plan(plan: DialoguePlan, line: str) -> bool:
