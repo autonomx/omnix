@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 settled 2026-10-29. One new question for the owner (Q-1). Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
+**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -356,17 +356,18 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
         - a new `ModelKind` value: `portrait`
     - `platform/voice/model_catalog.py`: `requires_acceptance` true for `direct` as well as `huggingface`, so the licence is always shown (D-1).
     - `model_packs._pack_status`: count `direct` models as installed, not only Hugging Face ones.
-- **Six entries, grouped as one desktop bundle, `live-portrait`.** The bundle has a new `capability`, `min_vram_mb` and `min_commit_mb`, and a `portrait` runtime pack of dependencies only:
-    1. `float` (`direct`): `float.pth` from the authors' official Google Drive link. The terms text shows both licence statements: `LICENSE.md` (CC BY-NC 4.0) and the README (CC BY-NC-ND 4.0, "only for research purposes").
-    2. `float-code` (`direct`): the upstream source files at a pinned commit, each with its own SHA-256 (see Upstream code).
-    3. `wav2vec2-base-960h` (Hugging Face, pinned)
-    4. the emotion encoder `r-f/wav2vec-english-speech-emotion-recognition` (Hugging Face, pinned). Needed while the wrapper still builds it; Phase 0 decides.
-    5. `face-alignment-s3fd` (`direct`): the face detector's weights
-    6. `face-alignment-2dfan` (`direct`): the landmark weights. `FaceAlignment(TWO_D)` loads both.
-
-  The service sets `TORCH_HOME` to the catalog folder at startup, so `face_alignment` never downloads anything unpinned on first use.
-- **Install paths.** `install_model` gains the `direct` path. Desktop installs go through `model_packs` as the `live-portrait` bundle. Installing the runtime pack needs `models:runtimes:admin`, as for every runtime pack.
-- **Manual download.** When Drive refuses a scripted download, the job fails with a message naming the folder to put `float.pth` in. The next run checks its SHA-256.
+- **Five entries (done 2026-10-29), to be grouped as one desktop bundle, `live-portrait`, once the runtime pack exists.** The bundle gets a new `capability`, `min_vram_mb` and `min_commit_mb`, and a `portrait` runtime pack of dependencies only:
+    1. `float` (`direct`, folder `float-weights`): `float.pth` from the authors' Google Drive file. `drive.usercontent.google.com/download?...&confirm=t` serves it as a plain, resumable HTTPS download, checked by its SHA-256. The terms text shows both licence statements.
+    2. `float-code` (`direct`, folder `float-code`): the ten upstream source files at commit `3b5b2dfc3e`, each from `raw.githubusercontent.com` with its own SHA-256. The digests are of the bytes GitHub serves; a Windows clone's line endings differ.
+    3. `wav2vec2-base-960h` (Hugging Face, pinned, Apache-2.0)
+    4. `wav2vec-english-speech-emotion-recognition` (Hugging Face, pinned, Apache-2.0). Optional: the spike's wrapper runs FLOAT without it when the emotion is a label, saving 1.2 GB. Only `auto` emotion needs it, so it becomes a bundle option, not a default.
+    5. `s3fd-face-detector` (`direct`, BSD-3-Clause): the S3FD weights. Upstream's crop uses only `face_alignment`'s S3FD detector, never its landmarks. So the service builds `face_alignment.detection.sfd.FaceDetector(path_to_detector=...)` from the catalog file, and nothing is downloaded on first use.
+- **Install paths (done).**
+    - `downloads.download` fetches `direct` files into the same snapshot layout used by the desktop store.
+    - `install_model` fetches them into `resources/models/portrait/<folder>`.
+    - Both use the resuming, digest-checked `packs.download_file`.
+    - Desktop installs go through `model_packs` as the `live-portrait` bundle. Installing the runtime pack needs `models:runtimes:admin`, as for every runtime pack.
+- **Manual download (done).** When a host refuses a scripted download, the error names the URL and the exact path to save the file to. A file already there with the right SHA-256 is used without fetching.
 
 **The service.**
 - **Code:** `src/services/portrait/portrait_server.py` (FastAPI) and `portrait.in`, compiled to Windows and Linux lock files. It gets its own environment unless Phase 0 shows torch **and** transformers both match an existing one.
@@ -587,7 +588,7 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 | Remote links too slow | Stutter | Levels L0–L3, then the fallback renderer |
 | Speculative frames thrown away | Wasted GPU | First pass or two only. Dropped on cache expiry |
 | A second call while one is streaming | No portrait for the second call | Admission refusal, the fallback renderer, and a reason shown |
-| Licence: "research purposes only" wording | Use outside research may not be covered | Q-1 for the owner. Unmodified upstream code is installed, not vendored |
+| Licence: "research purposes only" wording | Use outside research may not be covered | Settled (Q-1): non-commercial is the term that matters. Unmodified upstream code is installed, not vendored |
 
 ## Owner decisions (settled 2026-10-29)
 
@@ -604,13 +605,11 @@ During any of them the renderer holds the last speaking frame. If the gap passes
     - Zero when speculative frames cover the start.
 - **D-6 Clients: both local and remote, from the first release.** The avatar socket is bound to the call by a server-issued token and replica affinity. Adaptive levels down to L3, then the fallback renderer.
 
-## New questions for the owner
-
-- **Q-1 Conflicting licence statements.** Upstream's two licence statements disagree:
+- **Q-1 Conflicting licence statements: settled 2026-10-29.** Upstream's two licence statements disagree:
     - `LICENSE.md` is **CC BY-NC 4.0**: non-commercial, derivatives allowed, no research-only clause.
     - The README says **CC BY-NC-ND 4.0** and that the work "may use it only for research purposes".
 
-  D-1 settled non-commercial use, and we neither modify nor redistribute the code or weights. Is that enough for Omnix, a personal non-commercial companion app, or should we ask the authors (daniel@deepbrain.io) which statement governs before Phase 1? Phase 0 is a research spike either way, so it can go ahead. Phase 1 install waits for the answer.
+  The owner's decision: **the non-commercial term is what matters**, and Omnix is non-commercial, so no further clearance is needed. Phase 1 install goes ahead. The catalog's terms text still shows both statements, and the weights and code are still neither modified nor redistributed.
 
 ## Validation
 

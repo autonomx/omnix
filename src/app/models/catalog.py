@@ -9,11 +9,15 @@ one capability, with a variant per platform naming its models and runtimes.
 
 Models that their own package fetches on first use (``source: "package"``)
 have no pinned files; Voice Studio lists them, and no bundle installs them.
+Models published outside Hugging Face (``source: "direct"``) list each file's
+HTTPS URL beside its SHA-256 and size; their ``revision`` names the upstream
+version the files come from. They install and verify like Hugging Face models.
 """
 from __future__ import annotations
 
 import json
 import platform as _platform
+import re
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -22,6 +26,7 @@ from typing import Any
 
 CATALOG_PATH = Path(__file__).with_name("catalog.json")
 REVISION_LENGTH = 40
+_DIRECT_REVISION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 PLATFORMS = ("windows-x64", "macos-arm64", "macos-x64", "linux-x64")
 RUNTIME_KINDS = ("torch-layer", "overlay", "standalone")
 
@@ -35,6 +40,8 @@ class ModelFile:
     path: str
     sha256: str
     size: int
+    # Where a direct model's file is fetched from; empty for Hugging Face files.
+    url: str = ""
 
 
 @dataclass(frozen=True)
@@ -74,8 +81,8 @@ class ModelEntry:
 
     @property
     def pinned(self) -> bool:
-        """Installable by Omnix: files and a full commit to check them against."""
-        return self.source == "huggingface" and bool(self.files)
+        """Installable by Omnix: files with digests, from a pinned commit or pinned URLs."""
+        return self.source in {"huggingface", "direct"} and bool(self.files)
 
     @property
     def folder_name(self) -> str:
@@ -256,21 +263,32 @@ def _require(raw: Mapping[str, Any], key: str, where: str) -> Any:
 def _model(model_id: str, raw: Mapping[str, Any]) -> ModelEntry:
     where = f"model {model_id}"
     source = str(raw.get("source") or "huggingface")
-    if source not in {"huggingface", "package"}:
-        raise CatalogError(f"{where}: source must be huggingface or package")
+    if source not in {"huggingface", "package", "direct"}:
+        raise CatalogError(f"{where}: source must be huggingface, package or direct")
     revision = str(_require(raw, "revision", where))
     files = tuple(
-        ModelFile(path=name, sha256=str(item["sha256"]), size=int(item["size"]))
+        ModelFile(path=name, sha256=str(item["sha256"]), size=int(item["size"]), url=str(item.get("url") or ""))
         for name, item in sorted(dict(raw.get("files") or {}).items())
     )
-    if source == "huggingface":
-        if len(revision) != REVISION_LENGTH or any(char not in "0123456789abcdef" for char in revision):
-            raise CatalogError(f"{model_id}: revision must be a full commit hash")
+    if source == "huggingface" and (
+            len(revision) != REVISION_LENGTH or any(char not in "0123456789abcdef" for char in revision)):
+        raise CatalogError(f"{model_id}: revision must be a full commit hash")
+    if source == "direct" and not _DIRECT_REVISION.fullmatch(revision):
+        # It is also the snapshot folder's name, so it stays a plain file name.
+        raise CatalogError(f"{model_id}: a direct model names its upstream revision in letters, digits, '.', '_' or '-'")
+    if source in {"huggingface", "direct"}:
         if not files:
             raise CatalogError(f"{model_id}: no files listed")
         bad = [item.path for item in files if len(item.sha256) != 64 or item.size <= 0]
         if bad:
             raise CatalogError(f"{model_id}: files without a SHA-256 and size: {bad}")
+    if source == "direct":
+        unfetchable = [item.path for item in files if not item.url.startswith("https://")]
+        if unfetchable:
+            raise CatalogError(f"{model_id}: direct files need an https URL: {unfetchable}")
+        escaping = [item.path for item in files if item.path.startswith(("/", "\\")) or ".." in Path(item.path).parts]
+        if escaping:
+            raise CatalogError(f"{model_id}: file paths must stay inside the model folder: {escaping}")
     licence = dict(raw.get("licence") or {})
     return ModelEntry(
         id=model_id,

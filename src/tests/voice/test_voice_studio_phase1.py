@@ -41,8 +41,8 @@ def test_the_catalog_names_each_model_once_with_its_licence() -> None:
     ids = [model.id for model in SPEECH_MODELS]
     assert len(ids) == len(set(ids))
     assert all(model.licence and model.licence_url for model in SPEECH_MODELS)
-    # Every Hugging Face model installs only after its terms are accepted (desktop roadmap D-4).
-    assert all(model.requires_acceptance for model in SPEECH_MODELS if model.source == "huggingface")
+    # Every Hugging Face or direct model installs only after its terms are accepted (desktop roadmap D-4).
+    assert all(model.requires_acceptance for model in SPEECH_MODELS if model.source in {"huggingface", "direct"})
     assert not speech_model("htdemucs-ft").requires_acceptance  # its package fetches it; nothing to install
     # Hugging Face models are pinned to a full commit, with the files the service reads.
     for model in SPEECH_MODELS:
@@ -54,7 +54,10 @@ def test_voice_studio_lists_the_same_models_as_before_the_catalogs_merged() -> N
     assert [model.id for model in SPEECH_MODELS] == [
         "qwen3-tts-0.6b-base", "omnivoice", "qwen3-tts-1.7b-voicedesign", "parakeet-tdt-0.6b-v3", "titanet-large",
         "sortformer-4spk-v1", "audioseal-wm-16bits", "mel-band-roformer-vocals", "gtcrn-speech-enhancement",
-        "htdemucs-ft"]
+        "htdemucs-ft",
+        # The live portrait's models (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 1).
+        "float", "float-code", "wav2vec2-base-960h", "wav2vec-english-speech-emotion-recognition",
+        "s3fd-face-detector"]
     # The old app.models id still finds the model.
     assert speech_model("qwen3-tts-12hz-0.6b-base").id == "qwen3-tts-0.6b-base"
 
@@ -118,6 +121,58 @@ def test_package_models_are_not_installed_here(models_dir: Path) -> None:
     with pytest.raises(model_install.ModelInstallError, match="own package"):
         model_install.install_model("htdemucs-ft", hub=_Hub())
     assert model_install.model_status(speech_model("htdemucs-ft"))["status"] == "package"
+
+
+class _Urls:
+    """Stands in for the direct fetcher."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.fetched: list[str] = []
+        self.fail = fail
+
+    def __call__(self, item, target: Path) -> Path:
+        from app.models.downloads import ModelDownloadError
+
+        if self.fail:
+            raise ModelDownloadError("download failed (403)")
+        self.fetched.append(item.path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"weights")
+        return target
+
+
+def test_a_direct_model_needs_its_terms_and_installs_from_its_urls(models_dir: Path) -> None:
+    model = speech_model("float")
+    assert model.requires_acceptance and not model.commercial_use and model.kind == "portrait"
+    with pytest.raises(model_install.ModelInstallError, match="not for commercial use"):
+        model_install.install_model("float", fetch_url=_Urls())
+    urls = _Urls()
+    status = model_install.install_model("float", accept_terms=True, fetch_url=urls)
+    assert urls.fetched == ["float.pth"]
+    assert status["status"] == "installed" and status["installed_revision"] == model.revision
+    assert (models_dir / "portrait" / "float-weights" / "float.pth").is_file()
+
+
+def test_a_direct_file_placed_by_hand_is_used_when_its_digest_matches(tmp_path: Path, monkeypatch) -> None:
+    import hashlib
+
+    from app.models import catalog
+
+    good = b"weights fetched by hand"
+    test_catalog = catalog.parse_catalog({"models": {"float": {
+        "repo": "deepbrainai-research/float", "revision": "abc123", "service": "portrait", "source": "direct",
+        "kind": "portrait", "files": {"float.pth": {"sha256": hashlib.sha256(good).hexdigest(), "size": len(good),
+                                                    "url": "https://example.org/float.pth"}}}}})
+    monkeypatch.setattr(catalog, "load", lambda: test_catalog)
+    monkeypatch.setattr(model_install, "models_root", lambda: tmp_path / "models")
+    folder = tmp_path / "models" / "portrait" / "float-weights"
+    failing = _Urls(fail=True)
+    with pytest.raises(model_install.ModelInstallError, match=r"FLOAT talking portrait \(weights\): download failed"):
+        model_install.install_model("float", accept_terms=True, fetch_url=failing)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "float.pth").write_bytes(good)
+    status = model_install.install_model("float", accept_terms=True, fetch_url=failing)
+    assert status["status"] == "installed"
 
 
 def test_remove_deletes_only_inside_the_models_folder(models_dir: Path) -> None:
