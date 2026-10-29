@@ -54,7 +54,7 @@ from tests.rehearsal.rpg.stats import proportion  # noqa: E402
 CORPUS = ROOT / "resources/benchmarks/rpg/intent_corpus"
 HELD_OUT = CORPUS / "held_out.jsonl"
 # Frozen 2026-10-23 (RQ-0.4). Changing the held-out set is a re-freeze: change this pin in a reviewed commit.
-HELD_OUT_SHA256 = "80fec6faa4b5ff71f6e7505bfd3f345a17e91526b8a9b302647eb104b5217811"
+HELD_OUT_SHA256 = "b6c19c4889ed4e173fcf21d527bf8b7c8e0652b305c9744db0b57c2e29be1d2f"
 STATEFUL_FAMILIES = {"move", "buy", "sell", "attack", "take", "drop", "give", "use_item", "equip", "unequip", "rest",
                      "quest", "practice", "party"}
 

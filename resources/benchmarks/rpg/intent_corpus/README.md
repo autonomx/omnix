@@ -60,7 +60,15 @@ equipment, party, quests, skills, hit points, a fight, or fatigue relieved by re
 waiting, status, declining and clarifying are not stateful. Some labels depend on the scene: buying where nobody
 sells it, or with an empty purse (Vesper-9's opening), is `buy` and not stateful; selling where nobody buys is not
 stateful; re-equipping what is already equipped is not stateful; using a tool that is not used up (the compass) is
-not stateful, eating food is.
+not stateful, eating food is. A question or a talk is stateful when the game's handling of it changes a quest or a
+skill: a question that completes a quest's step (asking after the rumor the tavern quest asks for), a search check
+whose skill rises. Readying something the hero carries and has not equipped is stateful (equipment).
+
+**Re-freeze, 2026-10-29 (owner decision).** Eleven held-out items labelled not stateful name a deed the game does on
+purpose: held-0052, 0254, 0397, 0489, 0752 and 0753 (equip, use, sell) and held-0347, 0597, 0618, 0627 and 0646
+(a search check; a question that completes the tavern quest's rumor step). They are relabelled stateful, their
+`review` is `owner_relabelled_2026-10-29`, and the pinned SHA-256 is the new file's
+([label review](../../../../docs/measurements/rpg-intent-label-review-2026-10-26.md)).
 
 ## Known limits
 

@@ -28,6 +28,10 @@ false-stateful turn in that run is one of these 11:
 items, either mark them stateful, or decide that a quest step done by a question, and a check's skill experience,
 should not count as the player's stateful act (the eval would then exclude them).
 
+**Decided (owner, 2026-10-29):** all eleven are relabelled stateful, and the corpus policy names a question or talk
+that completes a quest step, and a search check whose skill rises, as stateful. The held-out set was re-frozen with
+them (`resources/benchmarks/rpg/intent_corpus/README.md`).
+
 ## "The server" and "the serving girl" for Mira (11 items)
 
 The corpus calls the starter town's Mira "the server" or "the serving girl", as the engine's old copy of the town

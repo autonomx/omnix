@@ -44,7 +44,9 @@ def test_corpus_sizes_mix_and_labels():
         assert item["action_family"] in families
         assert item["scene"] in world["scenes"]
         assert item["target_entity"] is None or item["target_entity"] in world["entities"]
-        assert item["labelled_by"] == "model" and item["review"] == "pending_owner_spot_check"
+        # Labelled by the model, awaiting the owner's spot check, or relabelled by the owner (README, 2026-10-29).
+        assert item["labelled_by"] == "model"
+        assert item["review"] in {"pending_owner_spot_check", "owner_relabelled_2026-10-29"}
     counts = Counter(item["world"] for item in rows)
     assert min(counts.values()) >= 600
     tags = Counter(tag for item in rows for tag in item["tags"])
