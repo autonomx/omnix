@@ -70,14 +70,18 @@ def score(syncnet_dir: Path, video: Path, work: Path, reference: str) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--upstream", type=Path, required=True)
+    parser.add_argument("--upstream", type=Path)
     parser.add_argument("--syncnet", type=Path, required=True, help="clone of joonson/syncnet_python with weights")
-    parser.add_argument("--image", type=Path, required=True)
-    parser.add_argument("--audio", type=Path, nargs="+", required=True)
+    parser.add_argument("--image", type=Path)
+    parser.add_argument("--audio", type=Path, nargs="+")
+    parser.add_argument("--videos", type=Path, nargs="+",
+                        help="score these videos (with their audio) instead of rendering the variants")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=25)
     parser.add_argument("--allow-busy", action="store_true")
     args = parser.parse_args()
+    if not args.videos and not (args.upstream and args.image and args.audio):
+        parser.error("give --videos, or --upstream, --image and --audio")
     args.out.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("OMNIX_FFMPEG", "ffmpeg")
 
@@ -88,6 +92,17 @@ def main() -> int:
         print("Not starting; the machine looks busy:\n  " + "\n  ".join(reasons))
         return 2
     spike.lower_priority()
+
+    if args.videos:
+        scored = {video.name: score(args.syncnet.resolve(), video.resolve(), (args.out / "syncnet-work").resolve(),
+                                    video.stem.replace(" ", "_")) for video in args.videos}
+        rows = [row for row in scored.values() if row.get("tracks")]
+        scored["mean"] = {"lse_d": round(sum(r["lse_d"] for r in rows) / len(rows), 3),
+                          "lse_c": round(sum(r["lse_c"] for r in rows) / len(rows), 3), "clips": len(rows)}
+        out = args.out / "portrait-lipsync-videos.json"
+        out.write_text(json.dumps(scored, indent=2), encoding="utf-8")
+        print(json.dumps(scored, indent=2))
+        return 0
 
     videos: dict[str, dict[str, Path]] = {}
     with torch.no_grad():
