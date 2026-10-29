@@ -52,17 +52,18 @@ def busy_reasons(allow_busy: bool) -> list[str]:
     free, total = torch.cuda.mem_get_info()
     if total - free > BUSY_VRAM_BYTES:
         reasons.append(f"GPU has {(total - free) / 1024**3:.1f} GB in use by other processes")
-    me = os.getpid()
+    # This process and its parent (a venv's python.exe on Windows is a launcher with the same command line).
+    mine = {os.getpid(), os.getppid()}
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             name = (proc.info["name"] or "").lower()
-            if proc.info["pid"] == me or not name.startswith("python"):
+            if proc.info["pid"] in mine or not name.startswith("python"):
                 continue
             cmd = " ".join(proc.info["cmdline"] or []).lower()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
-        if "portrait_spike" in cmd:
-            continue
+        if "scripts/portrait_" in cmd.replace("\\", "/"):
+            continue  # this lane's own scripts
         hits = [m for m in GATE_MARKERS if m in cmd]
         if hits or "services.tts" in cmd or "services.stt" in cmd:
             reasons.append(f"pid {proc.info['pid']} looks like a gate or model service: {cmd[:140]}")

@@ -373,7 +373,23 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
 - **Code:** `src/services/portrait/portrait_server.py` (FastAPI) and `portrait.in`, compiled to Windows and Linux lock files. It gets its own environment unless Phase 0 shows torch **and** transformers both match an existing one.
 - **Launcher:** a `ServiceSpec` with a fixed port (`5501` proposed), an interpreter role, `OMNIX_PORTRAIT_URL`, and an optional-service policy.
 - **Behaviour:** the wrapper and hop scheduler described above, plus admission, the priority pause, micro-batch decoding, and the latent cache keyed by tenant and image hash.
-- **Lifecycle:** helper-model rules apply. Load on `prepare`, refuse to load when VRAM or host commit is short, unload after an idle timeout.
+- **Lifecycle (revised after the runtime check):** the model loads in the background when the service starts, if the models are installed and VRAM and host commit allow, and `/health` reports `warming` until it is ready. Loading takes about 60 s on the 4090, almost all of it cuDNN building plans for each network's one input shape, so it can't happen on the first `prepare` of a call. The model stays resident (about 2 GB peak) and unloads only after a long idle timeout (30 minutes by default) or when VRAM is needed. A call that arrives while it is warming or unloaded gets the fallback renderer with a reason.
+
+**Done so far (2026-10-29):**
+- **The hop scheduler** (`services/portrait/scheduler.py`), with 9 tests against a fake model.
+- **Portrait images** (`services/portrait/portrait_image.py`): limits, decoding and upstream's crop on one 360×640 detection canvas. 8 tests.
+- **The FLOAT runtime** (`services/portrait/float_runtime.py`): Omnix's own model built from upstream's modules, with nothing patched.
+    - wav2vec2 always gets a 100-frame buffer, padded with silence before the audio.
+    - The decoder always gets batches of exactly 4.
+    - Every network is warmed at load.
+    - JPEG is encoded on the CPU.
+- **Checked on the GPU** (`scripts/portrait_runtime_check.py`, `scripts/portrait_latency_probe.py`; results in `docs/measurements/portrait-runtime-2026-10-29.json`):
+    - With float input, the latents equal the spike's.
+    - LSE-C is 6.40, against the spike's streamed 6.47.
+    - Passes take 23.5 ms p50.
+    - torchvision's GPU JPEG encoder corrupted frames, which is why encoding moved to the CPU.
+    - After a few seconds of GPU idle, the first passes take 80–170 ms; 150 ms of GPU work brings them back to 24 ms. In a call, TTS should already have the GPU busy; the loaded Phase 0 runs confirm it. If not, a short wake at `phrase_start` is the fallback.
+- **Still to build in Phase 1:** `portrait_server.py` (health, prepare, cache delete, the stream websocket with admission and lease), `portrait.in` with its lock files, and the launcher entry.
 
 **Tests:**
 - the scheduler against a fake model
