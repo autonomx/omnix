@@ -8,7 +8,7 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.narration.presentation.outcome_facts import Suggestion
 from app.apps.rpg.rules import routines
-from app.apps.rpg.rules.quest.progress import step_ways
+from app.apps.rpg.rules.contracts import step_ways
 from app.apps.rpg.foundation.state import access as _sections
 
 MAX_SUGGESTIONS = 6

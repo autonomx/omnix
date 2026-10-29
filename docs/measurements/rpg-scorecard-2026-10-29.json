@@ -1,0 +1,450 @@
+{
+  "measured_on": "2026-10-29",
+  "metrics": {
+    "broad_excepts": {
+      "by_context": {
+        "edge": 63,
+        "foundation": 23,
+        "genesis": 62,
+        "narration": 52,
+        "rules": 9,
+        "session": 23,
+        "world": 15
+      },
+      "occurrences": 247
+    },
+    "contract_bypass_imports": {
+      "by_context_pair": {
+        "edge->foundation": 27,
+        "edge->genesis": 59,
+        "edge->narration": 23,
+        "edge->rules": 7,
+        "edge->session": 46,
+        "edge->world": 18,
+        "genesis->foundation": 38,
+        "genesis->narration": 6,
+        "genesis->rules": 1,
+        "genesis->world": 20,
+        "narration->foundation": 59,
+        "narration->rules": 3,
+        "narration->world": 1,
+        "rules->foundation": 61,
+        "session->foundation": 116,
+        "session->genesis": 7,
+        "session->narration": 35,
+        "session->rules": 41,
+        "session->world": 17,
+        "world->foundation": 29
+      },
+      "pairs": 614
+    },
+    "deepcopy_calls": {
+      "by_context": {
+        "edge": 18,
+        "foundation": 5,
+        "genesis": 107,
+        "narration": 29,
+        "rules": 19,
+        "session": 37,
+        "world": 28
+      },
+      "occurrences": 243
+    },
+    "dict_str_any": {
+      "by_context": {
+        "edge": 729,
+        "foundation": 323,
+        "genesis": 1324,
+        "narration": 765,
+        "rules": 239,
+        "session": 559,
+        "world": 379
+      },
+      "by_spelling": {
+        "Dict": 904,
+        "dict": 3414
+      },
+      "occurrences": 4318
+    },
+    "nondeterminism": {
+      "by_kind": {
+        "datetime.now": 31,
+        "time.time": 1,
+        "uuid.uuid4": 13
+      },
+      "calls": 45,
+      "sites": [
+        "src/app/apps/rpg/edge/api/feature_routes/rpg_map_routes.py:201:uuid.uuid4",
+        "src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py:206:uuid.uuid4",
+        "src/app/apps/rpg/edge/api/turn_pipeline.py:161:uuid.uuid4",
+        "src/app/apps/rpg/edge/hermes/canonical_submitter.py:36:uuid.uuid4",
+        "src/app/apps/rpg/edge/hermes/execution_ledger.py:64:uuid.uuid4",
+        "src/app/apps/rpg/edge/hermes/execution_ledger.py:65:datetime.now",
+        "src/app/apps/rpg/edge/hermes/sequence_state.py:17:datetime.now",
+        "src/app/apps/rpg/edge/local_live_smoke.py:65:uuid.uuid4",
+        "src/app/apps/rpg/foundation/debug_logging.py:145:uuid.uuid4",
+        "src/app/apps/rpg/foundation/debug_logging.py:353:datetime.now",
+        "src/app/apps/rpg/foundation/debug_logging.py:359:datetime.now",
+        "src/app/apps/rpg/foundation/debug_logging.py:391:datetime.now",
+        "src/app/apps/rpg/foundation/persistence/foreground_submission_repository.py:27:uuid.uuid4",
+        "src/app/apps/rpg/foundation/persistence/package_builder.py:15:datetime.now",
+        "src/app/apps/rpg/genesis/creator/defaults.py:62:uuid.uuid4",
+        "src/app/apps/rpg/genesis/creator/world_snapshot.py:107:time.time",
+        "src/app/apps/rpg/genesis/persistence/rpg_trusted_world_scenario_repository.py:96:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/authorship_audit.py:204:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/authorship_audit.py:231:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/dossier_authoring.py:175:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/entity_authoring.py:371:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_acceptance.py:377:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_authorship_runtime.py:216:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_coordinator.py:193:uuid.uuid4",
+        "src/app/apps/rpg/genesis/worlds/generation_diagnostics.py:150:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_diagnostics.py:47:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_diagnostics.py:76:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_failure_artifact.py:150:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/generation_retry.py:528:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/postgres_service.py:68:uuid.uuid4",
+        "src/app/apps/rpg/genesis/worlds/profile_authoring.py:289:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/revision_authorship.py:158:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/targeted_generation_authorship.py:59:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/topic_authoring.py:225:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/topic_authoring.py:228:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/topic_authoring.py:291:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/world_adoption.py:102:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/world_bundle.py:129:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/world_sharing.py:266:datetime.now",
+        "src/app/apps/rpg/genesis/worlds/world_sharing.py:289:datetime.now",
+        "src/app/apps/rpg/session/jobs/foreground_submission_store.py:51:datetime.now",
+        "src/app/apps/rpg/session/jobs/foreground_submission_store.py:77:uuid.uuid4",
+        "src/app/apps/rpg/session/jobs/foreground_turn.py:55:uuid.uuid4",
+        "src/app/apps/rpg/session/jobs/last10_report.py:135:datetime.now",
+        "src/app/apps/rpg/session/jobs/last10_report_artifacts.py:19:datetime.now"
+      ],
+      "turn_path": 7
+    },
+    "python_files_over_1200_lines": {
+      "files": 0,
+      "list": []
+    },
+    "save_call_sites": {
+      "call_sites": 7,
+      "modules": 6,
+      "sites": [
+        "src/app/apps/rpg/edge/api/feature_routes/rpg_map_routes.py:174",
+        "src/app/apps/rpg/edge/local_dialogue_quality_fixtures.py:85",
+        "src/app/apps/rpg/session/interaction_stages.py:179",
+        "src/app/apps/rpg/session/narration_jobs.py:152",
+        "src/app/apps/rpg/session/new_game.py:639",
+        "src/app/apps/rpg/session/new_game.py:759",
+        "src/app/apps/rpg/session/service.py:227"
+      ]
+    },
+    "state_string_key_reads": {
+      "distinct_keys": 76,
+      "occurrences": 185,
+      "runtime_state": {
+        "distinct_keys": 42,
+        "keys": {
+          "active_npc": 1,
+          "actor_activities": 1,
+          "ambient_narration_state": 3,
+          "ambient_queue": 1,
+          "campaign_calendar": 1,
+          "climate_survival": 1,
+          "climate_survival_runtime": 1,
+          "combat": 1,
+          "combat_state": 2,
+          "conversation_settings": 1,
+          "conversation_world_signals": 9,
+          "current_location_id": 1,
+          "current_scene": 5,
+          "dialogue": 2,
+          "grounded_scene_context": 2,
+          "last_player_action": 2,
+          "last_turn_result": 2,
+          "llm_records": 1,
+          "llm_records_index": 1,
+          "narration_artifacts": 2,
+          "narration_artifacts_by_turn": 3,
+          "nearby_npc_ids": 1,
+          "npc_evolution": 2,
+          "npcs": 4,
+          "opening": 2,
+          "opening_runtime": 1,
+          "performance": 1,
+          "player_context": 1,
+          "player_journal": 1,
+          "recent_turns": 2,
+          "recent_world_event_rows": 2,
+          "runtime_settings": 1,
+          "service": 1,
+          "session_id": 2,
+          "tick": 6,
+          "transaction_menus": 2,
+          "travel": 1,
+          "turns": 1,
+          "world_consequences": 1,
+          "world_entities": 1,
+          "world_pressure": 1,
+          "world_rumors": 1
+        },
+        "occurrences": 78
+      },
+      "simulation_state": {
+        "distinct_keys": 34,
+        "keys": {
+          "active_interactions": 1,
+          "active_rumors": 1,
+          "arc_control": 1,
+          "climate_survival": 1,
+          "combat_state": 2,
+          "companions": 1,
+          "consequences": 2,
+          "current_location_id": 1,
+          "economy_state": 1,
+          "events": 5,
+          "faction_pressure": 1,
+          "factions": 1,
+          "incidents": 1,
+          "location_id": 1,
+          "locations": 3,
+          "narrative_pressure": 1,
+          "nearby_npcs": 1,
+          "npc_evolution_state": 1,
+          "npc_index": 7,
+          "npc_minds": 4,
+          "npc_profile_state": 1,
+          "npc_seeds": 1,
+          "npcs": 1,
+          "player_id": 1,
+          "player_state": 21,
+          "presentation_state": 1,
+          "runtime_state": 2,
+          "sandbox_state": 2,
+          "seed": 1,
+          "snapshots": 1,
+          "social_state": 16,
+          "threads": 3,
+          "tick": 16,
+          "timeline": 3
+        },
+        "occurrences": 107
+      },
+      "turn_path": {
+        "distinct_keys": 0,
+        "occurrences": 0,
+        "runtime_state": {
+          "distinct_keys": 0,
+          "keys": {},
+          "occurrences": 0
+        },
+        "simulation_state": {
+          "distinct_keys": 0,
+          "keys": {},
+          "occurrences": 0
+        }
+      }
+    },
+    "web_files_over_600_lines": {
+      "files": 0,
+      "list": []
+    },
+    "word_list_constants": {
+      "by_context": {
+        "edge": 10,
+        "genesis": 21,
+        "narration": 34,
+        "rules": 12,
+        "world": 2
+      },
+      "constants": 79,
+      "in_session_rules_world_narration": 48,
+      "sites": [
+        "src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py:_PACK_VERBS",
+        "src/app/apps/rpg/edge/hermes/planner_contract.py:_MULTI_COMMAND_MARKERS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:COMBAT_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:INVENTORY_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:NOOP_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:NPC_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:QUEST_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:REPEATED_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_checkpoint_policy.py:TRAVEL_WORDS",
+        "src/app/apps/rpg/edge/hermes/sequence_gate.py:STATEFUL_WORDS",
+        "src/app/apps/rpg/genesis/creator/world_scene_generator.py:_INCIDENT_TYPE_KEYWORDS",
+        "src/app/apps/rpg/genesis/forge/turn_grounding.py:_HOW_LORE_TERMS",
+        "src/app/apps/rpg/genesis/forge/turn_grounding.py:_LORE_QUERY_TERMS",
+        "src/app/apps/rpg/genesis/forge/world_forge_domains.py:_WORLD_BRIEF_STOP_WORDS",
+        "src/app/apps/rpg/genesis/forge/world_forge_lore_quality.py:_STOP_WORDS",
+        "src/app/apps/rpg/genesis/forge/world_forge_semantic_quality.py:_CAUSAL_FIELD_MARKERS",
+        "src/app/apps/rpg/genesis/forge/world_forge_semantic_quality.py:_GENERIC_PHRASES",
+        "src/app/apps/rpg/genesis/forge/world_forge_semantic_quality.py:_OBSERVABLE_FIELD_MARKERS",
+        "src/app/apps/rpg/genesis/forge/world_forge_semantic_quality.py:_OPERATIONAL_FIELD_MARKERS",
+        "src/app/apps/rpg/genesis/forge/world_forge_semantic_quality.py:_STOP_WORDS",
+        "src/app/apps/rpg/genesis/worlds/generation_authorship.py:_BLOCKED_MARKERS",
+        "src/app/apps/rpg/genesis/worlds/generation_authorship_signing.py:_BLOCKED_MARKERS",
+        "src/app/apps/rpg/genesis/worlds/generation_entity_contamination.py:_RELATIONAL_FIELD_MARKERS",
+        "src/app/apps/rpg/genesis/worlds/generation_entity_contamination.py:_RELATIONAL_SECTION_MARKERS",
+        "src/app/apps/rpg/genesis/worlds/generation_entity_contamination.py:_SELF_SUBJECT_VERBS",
+        "src/app/apps/rpg/genesis/worlds/generation_named_claims.py:_OBJECTIVE_SECTION_TERMS",
+        "src/app/apps/rpg/genesis/worlds/generation_named_claims.py:_SUBJECTIVE_SECTION_TERMS",
+        "src/app/apps/rpg/genesis/worlds/generation_naming_portfolio.py:_STOP_TERMS",
+        "src/app/apps/rpg/genesis/worlds/published_world_setup.py:_BEHAVIOUR_WORDS",
+        "src/app/apps/rpg/genesis/worlds/published_world_setup.py:_COMPANION_WORDS",
+        "src/app/apps/rpg/genesis/worlds/published_world_setup.py:_SPEAKING_WORDS",
+        "src/app/apps/rpg/narration/ai/grounding_patterns.py:_NEGATION_MARKERS",
+        "src/app/apps/rpg/narration/ai/memory_narration_grounding.py:_MEMORY_REFERENCE_MARKERS",
+        "src/app/apps/rpg/narration/ai/memory_narration_grounding.py:_TOKEN_STOPWORDS",
+        "src/app/apps/rpg/narration/ai/survival_narration_grounding.py:_CATEGORY_TERMS",
+        "src/app/apps/rpg/narration/ai/survival_narration_grounding.py:_FOOD_TERMS",
+        "src/app/apps/rpg/narration/ai/survival_narration_grounding.py:_HEALING_TERMS",
+        "src/app/apps/rpg/narration/ai/survival_narration_grounding.py:_REST_TERMS",
+        "src/app/apps/rpg/narration/ai/survival_narration_grounding.py:_SUPPLY_TERMS",
+        "src/app/apps/rpg/narration/ai/survival_narration_grounding.py:_WATER_TERMS",
+        "src/app/apps/rpg/narration/narrative_engine/claims.py:_STOPWORDS",
+        "src/app/apps/rpg/narration/narrative_engine/validation.py:_FOE_WORDS",
+        "src/app/apps/rpg/narration/narrative_engine/validation.py:_TRUNCATION_MARKERS",
+        "src/app/apps/rpg/narration/presentation/current_turn_prompt_contract.py:_DOCUMENT_EVIDENCE_TERMS",
+        "src/app/apps/rpg/narration/presentation/current_turn_prompt_contract.py:_EXPLICIT_SERVICE_TERMS",
+        "src/app/apps/rpg/narration/presentation/dialogue_quality.py:TARGET_MAX_WORDS",
+        "src/app/apps/rpg/narration/presentation/dialogue_quality.py:TARGET_MIN_WORDS",
+        "src/app/apps/rpg/narration/presentation/dialogue_quality.py:_GENERIC_PHRASES",
+        "src/app/apps/rpg/narration/presentation/dialogue_quality.py:_HARD_MAX_TOTAL_WORDS",
+        "src/app/apps/rpg/narration/presentation/dialogue_quality.py:_HARD_MIN_LINE_WORDS",
+        "src/app/apps/rpg/narration/presentation/visible_response.py:_GROUNDING_STOPWORDS",
+        "src/app/apps/rpg/narration/response_generation/eligibility.py:_HARD_FAMILY_TERMS",
+        "src/app/apps/rpg/narration/response_generation/eligibility.py:_NUMBER_WORDS",
+        "src/app/apps/rpg/narration/response_generation/forward_motion.py:_SOCIAL_ENTITY_REQUEST_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_ASSERTION_MARKERS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_COMBAT_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_MAGIC_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_QUESTION_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_SOCIAL_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_TECH_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_TRANSACTION_WORDS",
+        "src/app/apps/rpg/narration/response_generation/intent_affordance.py:_TRAVEL_WORDS",
+        "src/app/apps/rpg/narration/response_generation/production_pipeline.py:_HARD_CLAIM_KEYWORDS",
+        "src/app/apps/rpg/narration/response_generation/quality_gate.py:_BANNED_META_PHRASES",
+        "src/app/apps/rpg/narration/response_generation/quality_gate.py:_LOW_VALUE_PHRASES",
+        "src/app/apps/rpg/rules/combat/fight.py:_FIGHTER_WORDS",
+        "src/app/apps/rpg/rules/combat/fight.py:_HARDY_WORDS",
+        "src/app/apps/rpg/rules/economy/trade.py:_COIN_WORDS",
+        "src/app/apps/rpg/rules/economy/trade.py:_COUNT_WORDS",
+        "src/app/apps/rpg/rules/economy/trade.py:_KIND_WORDS",
+        "src/app/apps/rpg/rules/intent/grammar.py:_BARE_VERBS",
+        "src/app/apps/rpg/rules/intent/grammar.py:_COMMAND_WORDS",
+        "src/app/apps/rpg/rules/intent/grammar.py:_QUESTION_WORDS",
+        "src/app/apps/rpg/rules/intent/grammar.py:_STATUS_WORDS",
+        "src/app/apps/rpg/rules/interactions/items.py:_SLOT_WORDS",
+        "src/app/apps/rpg/rules/player/player_progression_state.py:_GENRE_WORDS",
+        "src/app/apps/rpg/rules/player/progression.py:_ATTRIBUTE_WORDS",
+        "src/app/apps/rpg/world/map_living_overlay.py:_MAX_MARKERS",
+        "src/app/apps/rpg/world/social/conversation_beats.py:_STOPWORDS"
+      ]
+    },
+    "world_specific_names": {
+      "by_name": {
+        "Aldric": {
+          "files": 0,
+          "hits": 0
+        },
+        "Bran": {
+          "files": 0,
+          "hits": 0
+        },
+        "Elara": {
+          "files": 0,
+          "hits": 0
+        },
+        "Glimmerdeep": {
+          "files": 0,
+          "hits": 0
+        },
+        "Mira": {
+          "files": 0,
+          "hits": 0
+        },
+        "Rusty Flagon": {
+          "files": 0,
+          "hits": 0
+        },
+        "old_mill": {
+          "files": 0,
+          "hits": 0
+        }
+      },
+      "file_list": [],
+      "files": 0,
+      "hits": 0,
+      "scope": "rules, world, session, narration; fixture modules excluded",
+      "whole_package": {
+        "by_name": {
+          "Aldric": {
+            "files": 2,
+            "hits": 5
+          },
+          "Bran": {
+            "files": 6,
+            "hits": 52
+          },
+          "Elara": {
+            "files": 3,
+            "hits": 7
+          },
+          "Glimmerdeep": {
+            "files": 2,
+            "hits": 2
+          },
+          "Mira": {
+            "files": 3,
+            "hits": 13
+          },
+          "Rusty Flagon": {
+            "files": 7,
+            "hits": 19
+          },
+          "old_mill": {
+            "files": 0,
+            "hits": 0
+          }
+        },
+        "files": 10,
+        "hits": 98
+      }
+    }
+  },
+  "patterns": {
+    "broad_excepts": "an ``except`` clause whose type is ``Exception`` or a tuple containing ``Exception``, and bare ``except:``.",
+    "contract_bypass_imports": "an import (at any scope) from one RPG context into a module of another context that is not that context's ``contracts`` module or package. Contexts come from ``[rpg_contexts]`` with AL017's longest-entry match. Counted as distinct (importing module, imported module) pairs.",
+    "deepcopy_calls": "a call whose callee name is ``deepcopy`` (``deepcopy(...)`` or ``copy.deepcopy(...)``).",
+    "dict_str_any": "regex ``\\b(?:dict|Dict)\\[\\s*str\\s*,\\s*Any\\s*\\]`` over the source text (annotations in strings count too). Both spellings count, so ``Dict`` -> ``dict`` is not a change; each is also reported.",
+    "nondeterminism": "a call to a ``random`` module function (the global, unseeded generator), ``random.Random()`` without a seed, ``uuid4``, ``time.time``, or ``datetime.now``/``datetime.utcnow`` (on ``datetime`` or ``datetime.datetime``). Calls are resolved through the module's imports, so ``from uuid import uuid4`` counts. ``time.perf_counter``/``monotonic`` are durations, not clock reads, and are not counted.",
+    "python_files_over_1200_lines": "RPG Python files with more than 1,200 lines (``str.splitlines``).",
+    "save_call_sites": "a call whose callee name (bare or attribute) is ``save_session`` or ``save_runtime_session``. Definitions are not calls. Reported as call sites and modules.",
+    "state_string_key_reads": "a read of a literal string key from a state section, where the receiver is a name or attribute called ``simulation_state`` or ``runtime_state``: ``<receiver>[\"key\"]`` in load context, or ``<receiver>.get(\"key\", ...)``. Reported as occurrences and distinct keys, per section.",
+    "web_files_over_600_lines": "RPG web files with more than 600 lines.",
+    "word_list_constants": "a module-level assignment to a name ending in ``WORDS``, ``KEYWORDS``, ``VERBS``, ``TERMS``, ``MARKERS`` or ``PHRASES`` (any case of a leading underscore), by context.",
+    "world_specific_names": "regex, case-insensitive, with letters and digits (not ``_``) as the word boundary, so ``npc:Bran``, ``npc_bran`` and ``demo_glimmerdeep_pass`` match and ``Brandon`` does not: ``Rusty Flagon``/``rusty_flagon``, ``Bran``, ``Elara``, ``Aldric``, ``Mira``, ``old_mill``/``old mill``, ``Glimmerdeep``. Scope: the ``rules``, ``world``, ``session`` and ``narration`` contexts, excluding fixture modules (a file name containing ``fixture``). The whole package is reported alongside, for reference."
+  },
+  "ratchets": {
+    "rpg_broad_excepts": 247,
+    "rpg_contract_bypass_imports": 614,
+    "rpg_deepcopy_calls": 243,
+    "rpg_dict_str_any": 4318,
+    "rpg_nondeterminism_calls": 45,
+    "rpg_python_files_over_1200_lines": 0,
+    "rpg_save_call_sites": 7,
+    "rpg_state_string_key_reads": 185,
+    "rpg_web_files_over_600_lines": 0,
+    "rpg_word_list_constants": 79,
+    "rpg_world_specific_names": 0
+  },
+  "revision": "db8fd00287",
+  "schema_version": 1,
+  "scope": {
+    "rpg_python_files": 732,
+    "rpg_python_lines": 159995,
+    "rpg_web_files": 118,
+    "turn_path_modules": 173
+  },
+  "source_digest": "3750276aed299af463a3197a504be607a1b3dc2f43944e470f34cb7d8052506d"
+}

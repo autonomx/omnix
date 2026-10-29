@@ -20,7 +20,7 @@ from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_dat
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, asked_not_done, hypothetical
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.state import access as _sections
-from app.apps.rpg.rules.checks import CHECK_KINDS as _CHECK_KINDS
+from app.apps.rpg.rules.contracts import CHECK_KINDS as _CHECK_KINDS
 
 logger = logging.getLogger(__name__)
 INTENT_TIMEOUT_SECONDS = 10.0

@@ -9,9 +9,26 @@ level 7, the gate made a guarded bridge), the route autoplay runs, and the measu
 
 Section 7 lists the decisions the owner needs to make before any work package starts.
 
+The game master (EV-0) sits above the other packages. A language-model game master directs the story: pacing,
+consequences, events, people, and new content when the story needs it. Deterministic code keeps authority over what
+is true and what it does. The other packages are the game master's tools as much as features of their own.
+
 ## 1. Main weaknesses
 
 Ordered by how much each limits the game. Each names what the campaign showed and what the code does today.
+
+### W-0. No one directs the story
+
+- **Seen:** nothing in the campaign raised the stakes when play stalled, brought an earlier choice back, or answered
+  something the author had not foreseen. The story moved only when the hero reached the next authored step.
+- **In the code:** the model has two jobs: reading what the player means (intent) and phrasing what happened
+  (narration and dialogue). Neither decides what should happen next.
+  - The pieces a director would need exist but are unused for that: narration's typed proposals, folded in by the
+    next turn and recorded so replay applies exactly the same set (production roadmap §4); a seeded event injector
+    and agent scheduler (RQ-4.6); and Aurelia's `gm_guide` lore topic (opening beats, ending choices, tone
+    controls), which nothing reads.
+- **Why it matters:** W-1 and W-4 below are the symptoms. Authored content alone makes a story that is the same
+  every time.
 
 ### W-1. Choices change little afterwards (the largest gap)
 
@@ -90,7 +107,11 @@ The production roadmap's invariants hold for every work package here (AGENTS.md,
 - No world's names in the engine. What a world does is data in its play sections.
 - No unseeded randomness on the turn path.
 
-Two more for this roadmap:
+Three more for this roadmap:
+
+- **The game master proposes; code decides.** The game master chooses what should happen and why. Deterministic code
+  checks that it can happen and works out what it does. The game master never writes state, rolls dice, or sets a
+  reward or a blow directly. Its proposals are recorded, so a campaign replays to the same state (D1).
 
 - **Data over code.** Each new mechanic is something an author writes in a play section, with a sensible derived
   default for a world that writes nothing.
@@ -102,7 +123,103 @@ Two more for this roadmap:
 Each package lists its problem, its design, what changes in the stored state, its gate and its rough size: S (days),
 M (one to two weeks) or L (two weeks or more).
 
+### EV-0. The game master (W-0, and through the others W-1, W-4, W-6) — L, in two parts
+
+**Role.** A language-model game master that directs the campaign:
+
+- **Pacing:** it notices a stall (turns without a meaningful event, a step not advanced) and adds a complication or an
+  opportunity.
+- **Consequences:** it brings a past choice back at the right moment, and decides how the world answers an action no
+  author foresaw.
+- **Events:** it moves people toward their goals, sets encounters, and spreads rumours.
+- **Threads:** it keeps track of open threads (an unkept promise, a spared enemy, a companion's own goal) and gives
+  each a turn in the spotlight.
+- **Invention:** it creates new named people, places, items, creatures and quests when the story needs them
+  (part 2).
+
+**When it runs.** At scene boundaries, while travel resolves, on the daily world tick, and when play stalls; never
+on every turn. A direction call is off the turn's critical path. Its proposals are folded into the next turn, as
+narration's are today. That keeps the F3 target (at most one model call on 80% of turns) and does not add latency.
+
+**What it reads.**
+
+- the campaign's state;
+- the world facts (EV-1);
+- open threads;
+- the people's goals and beats (EV-4);
+- the world's `gm_guide` (opening beats, ending choices, tone controls);
+- the author's play sections, as its palette and its limits.
+
+World text is untrusted data in its prompt, and no speaker's secret is sent to it.
+
+**What it may propose.** A closed set of typed proposals, each with the reason it gives:
+
+- set a fact, or bring a consequence forward;
+- advance a person's goal by a beat, or move a person;
+- start an encounter from the bestiary, sized to the hero's level;
+- spread a rumour, or add a complication to the current scene;
+- offer a quest, from the canon or from templates;
+- (part 2) invent a person, place, item, creature or quest.
+
+**What code checks before a proposal is committed.**
+
+- Every reference exists, and no fact the proposal sets contradicts one that holds.
+- Danger and rewards stay inside the level's budgets.
+- No secret is revealed.
+- The daily limits hold: at most so many events a day, and at most one complication a scene.
+- An invention follows the rules below.
+
+A proposal that fails a check is dropped and logged, and shows in the measures.
+
+**Part 1: direct and improvise** with what the world contains.
+
+**Part 2: invent.** Owner decision (2026-10-29): the game master may invent, and each invention is added to the lore,
+for a permanent record and a consistency review.
+
+- An invention is a typed lore entry: a person, place, item, creature or quest, in the shape the lore topics already
+  use. It carries its provenance: the campaign, the turn, and the game master's reason.
+- **Checks before it is played:**
+  - its id is new and its name does not clash with the canon's;
+  - its references exist;
+  - its numbers sit inside the level's budgets;
+  - it contradicts no established fact;
+  - a place joins the roads like any other.
+- **The record.** On commit, the entry is added to the campaign's lore layer. It is played at once, kept with the
+  campaign, and replays exactly. It is also filed with the world as a lore draft from the game master, which an
+  author reviews.
+- **The review.**
+  - A model consistency check runs first. It compares the entry with the canon and reports its findings as
+    evidence, not as a verdict.
+  - The author then approves the entry into the world's lore, edits it, or rejects it.
+  - An approved entry joins the world's lore for future campaigns, through the world library's publication like any
+    edit.
+  - A rejected one stays in the campaign that met it, and is never offered to another.
+- The world editor gains a review queue for these drafts (with EV-6).
+
+**State and versions.** Part 1 needs no new state beyond EV-1's facts and EV-4's beats; its proposals are a new
+proposal kind. Part 2 adds a campaign lore layer, which is a new document version with its upgrade, and the world's
+review queue, which is a migration.
+
+**Gate.**
+
+- Proposal measures over route autoplay and a judged run:
+  - share of proposals accepted;
+  - contradictions with established facts among accepted proposals: upper bound ≤ 1%;
+  - turns between meaningful events: a ceiling, set from the rubric playtests;
+  - direction calls per hour of play, and their cost.
+- Part 2:
+  - every invention is in the campaign's lore layer and in the review queue;
+  - none clashes with the canon by id or name;
+  - the consistency check's findings are calibrated on labelled examples, as the N1 judge is.
+- The 1,000-turn replay stays identical with the game master on (D1).
+- The owner's playtest rubric for stakes and choice.
+
+**Model.** The direction calls use the reference model at a higher effort than narration's. The cost per hour of play
+is measured and reported.
+
 ### EV-1. Consequences: facts the world remembers and rules read (W-1, W-8) — L
+
+EV-1 is the record the game master writes to and reads from. Authored consequences are its palette.
 
 **Design.**
 
@@ -183,6 +300,9 @@ combat section.
 
 ### EV-4. People who act on their goals (W-4) — L (needs EV-1)
 
+Authored beats are the default, and the game master (EV-0) chooses which to advance and when. With the game master
+off, the seeded daily tick advances them as below.
+
 **Design.**
 
 - A goal in the routines section may hold **beats**: ordered steps toward it, each with a chance per day, a
@@ -221,6 +341,8 @@ than level-2 gear.
   - a quest's rewards and a way's `sets`;
   - the `consequences` section;
   - the bestiary's phases and resistances.
+- A review queue for the game master's inventions (EV-0 part 2). Each shows its provenance and the consistency
+  check's findings, with approve, edit and reject.
 - World Forge drafts every play section from the lore, not only some: quests' steps, knowledge, the economy with
   gear, routines with beats.
 - `lore-additions.json` becomes unnecessary for Aurelia: the same edits go through the editor's entity authoring
@@ -257,9 +379,12 @@ autoplay.
 |------|--------|--------|-----------|
 | 0 | Close the production roadmap: RQ-9.2-9.4, the M2/N1/F1/F2 reruns | — | The final scorecard is written |
 | 1 | EV-1 Consequences | EV-2 Combat | Both gates pass on Aurelia |
-| 2 | EV-4 People's goals (on EV-1) | EV-3 Steps by meaning | Both gates pass; M2 rerun |
-| 3 | EV-6 Authoring | EV-5 Upgrades, EV-7 Latency | A second world authored in the editor plays at Aurelia's depth |
+| 2 | EV-0 part 1: the game master directs and improvises (on EV-1) | EV-3 Steps by meaning | Both gates pass; M2 rerun |
+| 3 | EV-4 People's goals, driven by the game master | EV-0 part 2: invention and the lore record | Both gates pass; the review queue works end to end |
+| 4 | EV-6 Authoring, with the review queue | EV-5 Upgrades, EV-7 Latency | A second world authored in the editor plays at Aurelia's depth |
 | any | EV-8 content | | |
+
+EV-0 comes after EV-1 because a game master with no facts to read or write can only narrate.
 
 As in the production roadmap: two lanes in worktrees, review agents only (no development agents), a review loop
 after each package, and every gate run locally on a scratch database.
@@ -268,6 +393,10 @@ after each package, and every gate run locally on a scratch database.
 
 | Measure | Target | Package |
 |--------|--------|---------|
+| Game master proposals that contradict established facts (accepted only) | upper ≤ 1% | EV-0 |
+| Turns between meaningful events | a ceiling, set at the first rubric playtest | EV-0 |
+| Direction calls per hour of play; cost per hour | measured and reported; F3 still met | EV-0 |
+| Inventions recorded in the campaign's lore and in the review queue | 100% | EV-0 part 2 |
 | Observable differences per decision, in the following 20 turns | ≥ 3 | EV-1 |
 | Fight length, median rounds (ordinary / boss) | 3-5 / 8-12 | EV-2 |
 | Potion turns in a boss fight | < 25% | EV-2 |
@@ -282,6 +411,14 @@ The table above is how we get there.
 
 ## 6. Risks
 
+- **The game master drifts from the world.** Its inventions could pile up and blur the author's world. Mitigation:
+  every invention is a lore entry with provenance; checks run before it is played; a consistency review runs after;
+  and only the author's approval carries it to other campaigns.
+- **The game master overdirects.** Too many events or complications would bury the player's own choices.
+  Mitigation: daily and per-scene limits in code, and the rubric's choice score.
+- **Direction cost.** A higher-effort model call at each scene boundary has a cost. Mitigation: it runs off the
+  critical path, on a call budget per hour, measured from the first run.
+
 - **Facts sprawl.** Many facts with few readers become noise. Mitigation: a fact with no reader is a publication
   finding, as unknown references are today.
 - **Model proposals completing steps wrongly.** Mitigation: deterministic acceptance, and precision gated at 0.98.
@@ -294,7 +431,14 @@ The table above is how we get there.
 
 ## 7. For the owner to decide
 
-1. **Scope and order:** EV-1 and EV-2 first, as in section 4? Or another order?
+Decided (2026-10-29):
+
+- **The game master may invent** new named people, places, items, creatures and quests. Each invention is added to
+  the lore, for a permanent record and a review for lore consistency (EV-0 part 2).
+
+Open:
+
+1. **Scope and order:** EV-1 and EV-2 first, then EV-0, as in section 4? Or another order?
 2. **Group standing on screen:** as a number, or in words ("respected by the Wayfarers")?
 3. **"What has changed":** may the journal list the world's facts, or should the player only feel their effects?
 4. **Boss fights:** is 8-12 rounds the right target? May the hero flee a boss?
@@ -305,3 +449,10 @@ The table above is how we get there.
 7. **Crafting:** upgrades only, or full recipes?
 8. **Timing:** start after the production roadmap's gates close (phase 0), or run phase 1 alongside them?
 9. **Vesper-9:** give it authored play sections, or keep it as the example of a world played from its lore alone?
+10. **Where an invention lives before review:** in the campaign that met it only, until an author approves it into
+    the world's lore (proposed)? Or in the world's lore at once, flagged as unreviewed, so every new campaign sees it?
+11. **The game master's reach:** may it end a person's life, or close a quest for good, without the hero being
+    involved? This is question 6, asked of the game master rather than of authored beats. (Proposed: yes, within
+    the daily limits, and never a quest's giver while the quest is open.)
+12. **Can the player see the game master?** Proposed: no. Its work shows only as the world's events. A developer
+    view lists its proposals, its reasons, and which were dropped.

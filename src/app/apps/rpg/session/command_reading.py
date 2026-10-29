@@ -14,7 +14,7 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneEntity, SceneView, parse_command
 from app.apps.rpg.foundation.state import access as _sections
-from app.apps.rpg.foundation.state.people import called as _called
+from app.apps.rpg.foundation.contracts import called as _called
 
 # Families the game resolves with its own rules, so a confident reading needs no intent model call.
 # Speech (talk, ask) still goes to the dialogue call, which chooses who answers and writes their line;

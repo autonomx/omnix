@@ -29,8 +29,7 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.apps.rpg.rules.checks import CHECK_KINDS
-from app.apps.rpg.rules.quest.progress import ANYONE
+from app.apps.rpg.rules.contracts import ANYONE, CHECK_KINDS
 
 from .lore_sections import lore_rows
 

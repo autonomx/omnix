@@ -11,7 +11,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import LocationChanged, StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.location_registry import current_location_id
-from app.apps.rpg.rules.waiting import A_WHILE, said
+from app.apps.rpg.rules.contracts import A_WHILE, said
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
 from app.apps.rpg.foundation.state import access as _sections

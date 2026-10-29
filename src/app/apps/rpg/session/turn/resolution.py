@@ -21,13 +21,13 @@ from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.rules.interactions.items import drop_item, equip_item, give_item, pick_up, unequip_item, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
 from app.apps.rpg.rules.rest import rest
-from app.apps.rpg.rules.waiting import wait_minutes
+from app.apps.rpg.rules.contracts import wait_minutes
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.trade import resolve_trade
 from app.apps.rpg.session.turn.travel import resolve_travel
 from app.apps.rpg.foundation.state import access as _sections
-from app.apps.rpg.foundation.state.people import called as _called
+from app.apps.rpg.foundation.contracts import called as _called
 
 MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 
