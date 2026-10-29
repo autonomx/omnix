@@ -75,7 +75,8 @@ _HEALTH_FORMS = (r"\byou for {n} \(", r"\byou for \d+ \({n} of \d+ left\)", r"\b
 # wolf, down to 4 of its 10 health" sent the writer back, every other round, to write the turn again).
 _ANY_HEALTH_FORMS = (r"(?<!\byou )\bfor {n} \(", r"(?<!\byou )\bfor \d+ \({n} of \d+ left\)",
                      r"(?<!\byou )\bfor \d+ \(\d+ of {n} left\)")  # a blow that hit someone not the hero
-_HEROS_HEALTH = re.compile(r"\byou\b|\byou're\b|\byour (?:health|wounds?|life|strength)\b", re.IGNORECASE)
+_HEROS_HEALTH = re.compile(r"\byou\b|\byou're\b|\byour (?:health|wounds?|life|strength|body|veins|chest|blood)\b",
+                           re.IGNORECASE)
 
 
 _CLAUSE = re.compile(r"[,;:]\s+|\s+(?:and|but|while)\s+")

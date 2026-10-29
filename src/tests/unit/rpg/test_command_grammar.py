@@ -395,3 +395,21 @@ def test_the_thirteenth_reviews_readings() -> None:
     then = parse_command("what happened then, Orik?", scene)
     assert (then.target_id, then.second_target_id) == ("npc:orik", None)
     assert parse_command("who sells broth?", scene).target_id == "npc:marta:broth"
+
+
+def test_the_fourteenth_reviews_readings() -> None:
+    """A listener after a semicolon's clause; who sells a thing, however asked; news of a name only by its last word."""
+    scene = SceneView((
+        SceneEntity("npc:rhea", "person", ("Rhea Sunward", "Rhea"), here=True),
+        SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "Brindle"), here=True),
+        SceneEntity("npc:naia", "person", ("Naia of the Open Hand", "Naia")),
+        SceneEntity("loc:ruins", "place", ("Moonroot Ruins",)),
+        SceneEntity("npc:brindle:news", "offer", ("Local news", "news"), here=True),
+        SceneEntity("npc:marta:broth", "offer", ("Hot broth",)),
+    ), focus_id="npc:brindle")
+    put = parse_command("I'm new here; who are you, Rhea?", scene)
+    assert (put.target_id, put.second_target_id) == ("npc:rhea", None)
+    for text in ("where can I get broth?", "does anyone sell broth?"):
+        assert parse_command(text, scene).target_id == "npc:marta:broth", text
+    assert parse_command("any news of the ruins?", scene).target_id == "loc:ruins"
+    assert parse_command("any news about the open road?", scene).target_id != "npc:naia"

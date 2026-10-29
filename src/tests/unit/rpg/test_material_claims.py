@@ -102,3 +102,9 @@ def test_a_person_struck_is_owned_by_any_word_of_their_name() -> None:
     """The thirteenth review: people are struck by name, bare, so "the captain" is the captain's."""
     fight = "you hit captain rhea sunward for 4 (6 of 10 left)."
     assert _unsupported_material("Your blow lands, and the captain staggers back at 6 health.", fight) == []
+
+
+def test_your_body_is_the_heros() -> None:
+    """The fourteenth review: "the captain's blade leaving 6 health in your body" is the hero's health."""
+    fight = "you hit captain rhea sunward for 4 (6 of 10 left). captain rhea sunward hits you for 3 (17 of 20 left)."
+    assert _unsupported_material("You reel, the captain's blade leaving 6 health in your body.", fight) == ["6 health"]

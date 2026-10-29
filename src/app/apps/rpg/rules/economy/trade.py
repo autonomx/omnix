@@ -331,7 +331,7 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
         return " ".join(after[start:start + 1])
 
     # After the selling: "go to Rhea and sell the shard to Brindle" sells to Brindle (the thirteenth review).
-    verb = re.search(r"\b(?:sell|selling|sold)\b", rest)
+    verb = re.search(r"\b(?:sell|selling|sold|pawn|pawned|offload|trade|traded|hawk)\b", rest)
     slot = next((buyer_after(to) for to in re.finditer(r"\bto\s+", rest)
                  if (verb is None or to.start() > verb.start())
                  and someone_in(_words(buyer_after(to)) - _words(name), buyer_after(to))), "")

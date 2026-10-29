@@ -203,6 +203,17 @@ _WHOLE_NAME = 1.5  # the least a hit naming every word of a name scores (a part 
 _OTHERS = frozenset({"your", "his", "her", "their", "its"})
 
 
+def _ends_a_name(hit: _Hit, words: list[str]) -> bool:
+    """Whether a name named in part is named by its last word ("the ruins" of Moonroot Ruins; not "the open road" for
+    Naia of the Open Hand, nor "the rain" for Black Rain Station: the fourteenth review)."""
+    said = words[hit.start] if hit.start < len(words) else ""
+    for name in hit.entity.names:
+        tokens = [token for token in _name_tokens(name) if not token.isdigit()]
+        if tokens and _name_word_matches(said, tokens[-1]):
+            return True
+    return False
+
+
 def _asked_after(words: list[str], position: int) -> bool:
     """Whether the word at ``position`` is what something is asked about: "of Malrec", "about the old mill"."""
     before = [word for word in words[max(0, position - 2):position]
@@ -252,7 +263,9 @@ def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
             if entity.kind == "item" and any(p > 0 and words[p - 1] in _OTHERS for p in matched):
                 continue  # "drop your dagger!" is said of someone else's (the tenth review)
             if (entity.kind == "offer" and not entity.here and len(matched) != len(tokens)
-                    and not _has(words, "who sells", "who sell", "where can i buy", "where do i buy", "who has")):
+                    and not (set(words) & {"sell", "sells", "selling", "buy"}
+                             or _has(words, "who has", "where can i get", "where can i find", "where do i get",
+                                     "where do i find"))):
                 continue  # sold elsewhere: named in full or not at all ("any news?" is no question about the ruins')
             if len(matched) == len(tokens):
                 score = len(tokens) + 0.5 + (0.25 if entity.here else 0.0)
@@ -331,7 +344,8 @@ def _parse_text(text: str, scene: SceneView) -> IntentCandidate:
     # The first clause's raw words (commas kept, for a name at the end): in "how much is the stew? then come along, Mira"
     # the name ends the second clause, not the question (the twelfth review); "what happened then, Orik?" is one
     # clause put to Orik (the thirteenth: the normalized text, without its commas, splits at that "then").
-    raw_first = re.split(r",? (?:and then|then|and afterwards|after that) |; ", text, flags=re.IGNORECASE)[0]
+    # Not at ";": normalizing makes it a space, so "I'm new here; who are you, Rhea?" is one clause (the fourteenth).
+    raw_first = re.split(r",? (?:and then|then|and afterwards|after that) ", text, flags=re.IGNORECASE)[0]
     candidate = _parse_clause(first, scene, original=normalized, raw=raw_first)
     if len(clauses) > 1:
         candidate = IntentCandidate(**{**candidate.__dict__, "clauses": clauses})
@@ -449,7 +463,8 @@ def _ask(words: list[str], scene: SceneView, addressed: _Hit | None, raw: str = 
         # Elyra?"): what is asked about is them (the eleventh review); a word of a name elsewhere in a price question is
         # not ("how much is a potion for the trip to the ruins?": the twelfth).
         later = next((hit for hit in _find(words, scene.of("person", "place", "creature", "group", "quest"))
-                      if hit.start > subject.start and _asked_after(words, hit.start)), None)
+                      if hit.start > subject.start and _asked_after(words, hit.start)
+                      and (hit.score >= _WHOLE_NAME or _ends_a_name(hit, words))), None)
         subject = later or subject
     if subject is not None and subject.entity.kind == "quest" and words[:1] == ["where"]:
         # Where a quest and a place share a name, "where is the Hollow Meridian?" asks after the place.
