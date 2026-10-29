@@ -80,3 +80,11 @@ def test_only_a_foe_the_turns_blows_struck_may_own_a_health_figure() -> None:
     for said in ("Your knees buckle, the night closing in at 5 health.",
                  "Your vision swims, the echo of the blow leaving 10 health."):
         assert _unsupported_material(said, evidence), said
+
+
+def test_a_foe_named_whole_may_own_its_health() -> None:
+    """The eleventh review: only the struck name's last word counted, so "the echo wolf staggers" failed."""
+    fight = "you hit the echo wolf for 4 (5 of 10 left)."
+    assert _unsupported_material("You slash, and the echo wolf staggers at 5 health.", fight) == []
+    assert _unsupported_material("You strike; the rust-golem 7 sags at 5 health.",
+                                 "you hit the rust-golem 7 for 4 (5 of 10 left).") == []

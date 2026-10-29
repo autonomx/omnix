@@ -297,3 +297,18 @@ def test_a_companion_spoken_to_is_no_buyer_and_a_names_own_number_no_count() -> 
     assert wanted_count("buy 50 feet of rope", "50 Feet of Rope") == 1
     assert wanted_count("buy ten days of rations", "Ten Days of Rations") == 1
     assert wanted_count("buy two days of rations", "Ten Days of Rations") == 2
+
+
+def test_the_buyer_named_first_buys_and_counts_keep_their_plurals() -> None:
+    """The eleventh review: "Rhea, I want to sell the Iron Dagger" read "sell the Iron Dagger" as the buyer slot."""
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    items = [{"item_id": "iron_dagger", "name": "Iron Dagger", "qty": 1, "category": "weapon"}]
+    campaign = _with_armoury(_campaign(purse=0, items=items))
+    simulation = campaign["simulation_state"]
+    simulation["world_model"]["npcs"] = {"npc:rhea": {"name": "Captain Rhea"}, "npc:brindle": {"name": "Brindle Gearwing"}}
+    for text in ("Rhea, I want to sell the Iron Dagger", "sell the Iron Dagger, Rhea, to pay for supper"):
+        assert sell(simulation, text).lines == ["You sell the Iron Dagger to Captain Rhea for 5 copper."], text
+    assert wanted_count("buy two pounds of salt", "Pound of Salt") == 2
+    assert wanted_count("buy three potions", "Potion of the Three Moons") == 3
+    assert wanted_count("buy 50 feet of rope", "50 Feet of Rope") == 1

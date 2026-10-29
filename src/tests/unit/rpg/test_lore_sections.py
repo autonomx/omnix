@@ -87,7 +87,9 @@ def test_a_lore_entitys_hidden_truth_stays_out_of_what_anyone_may_see() -> None:
         "a:oren": {"id": "a:oren", "kind": "actor", "name": "Oren Pike", "description": told,
                    "hidden_truth": "He once served Kestrel intelligence and still draws a pension through a dead medic."},
         "p:station": {"id": "p:station", "kind": "place", "name": "Black Rain Station", "short_summary": "An interchange.",
-                      "description": "An interchange of dark water. Platform Zero receives a wartime train.",
+                      # A world written as lore holds the truth in the description in its own words.
+                      "description": "An interchange of dark water. Platform Zero receives a driverless wartime train "
+                                     "on irregular nights.",
                       "hidden_truth": "Platform Zero receives a driverless wartime train on irregular nights."},
     }}
     [oren] = lore_rows(canon, "characters")

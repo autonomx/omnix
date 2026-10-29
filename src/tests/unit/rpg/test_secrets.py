@@ -37,6 +37,7 @@ def test_version_11_takes_the_secrets_out_of_a_campaigns_world_model() -> None:
     place = "An interchange of dark water. Platform Zero receives a driverless wartime train on irregular nights."
     document = {
         "campaign_bible_projection": {"entities": {"p:station": {
+            "id": "p:station", "name": "Black Rain Station",
             "hidden_truth": "Platform Zero receives a driverless wartime train on irregular nights."}}},
         "simulation_state": {"world_model": {
             "locations": {"p:station": {"name": "Black Rain Station", "description": place}},
@@ -46,3 +47,25 @@ def test_version_11_takes_the_secrets_out_of_a_campaigns_world_model() -> None:
     world = keep_secrets_to_themselves(document)["simulation_state"]["world_model"]
     assert world["locations"]["p:station"]["description"] == "An interchange of dark water."
     assert world["npcs"]["npc:mara"]["description"] == "A courier." and world["npcs"]["npc:mara"]["secrets"] == [TRUTH]
+
+
+def test_an_authors_sentence_that_shares_nouns_with_a_secret_tells_none_of_it() -> None:
+    """The eleventh review: the starter town's quest objective and a public patrol fact share nouns with the
+    innkeeper's secrets, and the filter blanked them."""
+    canon = {
+        "characters": [{"id": "npc:bran", "name": "Bran", "secrets": [
+            "The sealed crates come from the old quarry, and Bran is paid to keep them out of the ledger.",
+            "He abandoned his post at the Northern Watch the night the beacon went dark."]}],
+        "quests": [{"id": "quest:quarry", "objective":
+                    "Find the source of the pale light in the old quarry, and what the sealed crates carry."}],
+        "knowledge": [{"text": "A patrol went up to the Northern Watch ten days ago."}],
+        "documents": [{"id": "doc:bran", "full_text":
+                       "Bran keeps the inn.\nHe abandoned his post at the Northern Watch the night the beacon went dark."}],
+        # A search index's "secrets" entry is a list of card ids, no secret.
+        "indexes": {"lexical": {"secrets": ["card:fact:roles:004"], "name": ["card:fact:roles:004"]}},
+        "retrieval_cards": [{"id": "card:fact:roles:004", "title": "fact:roles archetypes:004"}],
+    }
+    public = public_canon(canon)
+    assert public["quests"] == canon["quests"] and public["knowledge"] == canon["knowledge"]
+    assert public["documents"][0]["full_text"] == "Bran keeps the inn."  # a line break ends a sentence
+    assert public["retrieval_cards"] == canon["retrieval_cards"]

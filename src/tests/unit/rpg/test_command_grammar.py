@@ -320,3 +320,36 @@ def test_a_question_put_to_someone_by_name_first_is_theirs_to_answer() -> None:
     for text in ("Mira, can you tell me about the road north?", "Mira, have you heard of the road north?"):
         asked = parse_command(text, scene)
         assert (asked.target_id, asked.second_target_id, asked.reason) == ("npc:mira", None, "asks_someone"), text
+
+
+def test_the_eleventh_reviews_readings() -> None:
+    """A name at the end is whom a question is put to; "remind" orders unless it asks; a bare title, not "the
+    captain", is someone's; news of someone is about them."""
+    scene = SceneView((
+        SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),
+        SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "Brindle"), here=True),
+        SceneEntity("npc:liora", "person", ("Liora Fen", "Liora"), here=True),
+        SceneEntity("npc:rhea", "person", ("Rhea Sunward", "the captain"), here=True),
+        SceneEntity("npc:malrec", "person", ("Archon Malrec", "Malrec")),
+        SceneEntity("npc:orik:news", "offer", ("Local news", "news"), here=True),
+        SceneEntity("quest:first", "quest", ("First Night in Aurelia",), here=True),
+    ), focus_id="npc:brindle")
+    sold = parse_command("what do you sell, Orik?", scene)
+    assert (sold.target_id, sold.second_target_id, sold.reason) == ("npc:orik", None, "asks_someone")
+    assert parse_command("remind Liora to keep watch", scene).family == "order"
+    assert parse_command("remind me what First Night in Aurelia is about", scene).family == "ask"
+    assert parse_command("tell the captain Brindle is cheating", scene).target_id == "npc:rhea"
+    assert parse_command("any news of Malrec?", scene).target_id == "npc:malrec"
+
+
+def test_a_place_is_called_by_its_kind_only_when_its_description_says_so() -> None:
+    from app.apps.rpg.session.command_reading import _leader_names, _place_kind_names
+
+    assert _place_kind_names("A nightclub and neutral exchange built around a pump.") == (
+        "the nightclub", "the club", "the exchange")
+    assert _place_kind_names("The mountain winds howl over the pass.") == ()
+    assert _place_kind_names("Valecourt, in the Meridian Heartland.") == ()
+    groups = {"g:order": {"name": "The Order"}, "g:ash": {"name": "Ash Guild"}, "g:knives": {"name": "Red Knives Union"}}
+    assert _leader_names("captain of the town watch, sworn to the order", groups) == ()
+    assert _leader_names("head of the Ashen Remnant", groups) == ()
+    assert _leader_names("elected Red Knives strike coordinator", groups) == ("the Red Knives leader", "the union leader")

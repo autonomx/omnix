@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from app.apps.rpg.rules.contracts import sayable
+from app.apps.rpg.rules.contracts import without_secrets
 
 _KINDS = {
     "characters": frozenset({"npc", "actor", "person", "character"}),
@@ -51,7 +51,7 @@ def public_text(entity: Mapping[str, Any]) -> str:
     """What anyone may know of a lore entity: its description without the sentences that tell its hidden truth (the
     review: Vesper-9's lore keeps each one's truth inside the description, and a close look printed it), else its
     short summary."""
-    return sayable(_text(entity.get("description")), _hidden(entity)) or _text(entity.get("short_summary"))
+    return without_secrets(_text(entity.get("description")), _hidden(entity)) or _text(entity.get("short_summary"))
 
 
 def _entities(canon: Mapping[str, Any]) -> list[dict[str, Any]]:

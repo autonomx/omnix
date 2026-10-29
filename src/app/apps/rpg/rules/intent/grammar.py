@@ -80,8 +80,7 @@ _LEADING = (
     "i am going to ", "i ", "we ",
 )
 _QUESTION_WORDS = frozenset(
-    "what where who whom whose why how when which is are does do did can could would should will was were remind"
-    .split()  # "remind me what First Night in Aurelia is about" asks (the intent gate)
+    "what where who whom whose why how when which is are does do did can could would should will was were".split()
 )
 
 
@@ -237,8 +236,11 @@ def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
             matched = [p for p in positions if p is not None]
             if name.startswith("my ") and not all(_owned_word(words, p) for p in matched):
                 continue
+            # A bare title before a name ("Master Stonewake"); "the captain, Brindle" and "tell the captain Brindle is
+            # cheating" keep the captain (the eleventh review).
             if (entity.kind == "person" and name.startswith(("the ", "my ")) and len(tokens) == 1 and matched
-                    and matched[0] + 1 < len(words) and words[matched[0] + 1] in named_words):
+                    and matched[0] + 1 < len(words) and words[matched[0] + 1] in named_words
+                    and (matched[0] == 0 or words[matched[0] - 1] not in {"the", "my", "a", "an", "your", "our"})):
                 continue
             if entity.kind == "item" and any(p > 0 and words[p - 1] in _OTHERS for p in matched):
                 continue  # "drop your dagger!" is said of someone else's (the tenth review)
@@ -316,7 +318,7 @@ def _parse_text(text: str, scene: SceneView) -> IntentCandidate:
     normalized = _norm(text)
     clauses = _clauses(normalized)
     first = _strip_leading(clauses[0] if clauses else normalized)
-    candidate = _parse_clause(first, scene, original=normalized)
+    candidate = _parse_clause(first, scene, original=normalized, raw=text)
     if len(clauses) > 1:
         candidate = IntentCandidate(**{**candidate.__dict__, "clauses": clauses})
     return candidate
@@ -406,6 +408,8 @@ def asked_not_done(text: str) -> bool:
 def _question(words: list[str], original: str) -> bool:
     if original.endswith("?") or re.match(r"[^.!?]*\?", original):  # "Liora, where am I? I woke up here."
         return True
+    if words[:2] == ["remind", "me"] and len(words) > 2 and words[2] in _QUESTION_WORDS:
+        return True  # "remind me what First Night in Aurelia is about" asks; "remind Liora to keep watch" orders
     return bool(words) and words[0] in _QUESTION_WORDS and not _starts(words, "what a", "how nice", "how lovely")
 
 
@@ -419,13 +423,19 @@ def _vocative_at_the_end(original: str, scene: SceneView) -> _Hit | None:
     return hits[0] if hits and hits[0].score >= _WHOLE_NAME - 0.5 else None
 
 
-def _ask(words: list[str], scene: SceneView, addressed: _Hit | None, original: str = "") -> IntentCandidate:
+def _ask(words: list[str], scene: SceneView, addressed: _Hit | None, raw: str = "") -> IntentCandidate:
     # Said to someone by name at the end, the question is theirs, whoever the hero was talking with (the tenth review:
     # "what do you sell, Orik?" went to Brindle).
-    addressed = addressed or _vocative_at_the_end(original, scene)
+    addressed = addressed or _vocative_at_the_end(raw, scene)  # the raw text: normalizing drops commas
     if addressed is not None:
         return _candidate("ask", addressed, 0.85, "asks_someone")
     subject = _first(words, scene, "person", "creature", "place", "item", "offer", "quest", "skill", "group")
+    if subject is not None and subject.entity.kind == "offer":
+        # Asked about someone or somewhere after a thing on sale ("any news of Malrec?", "any rumors about Elyra?"):
+        # what is asked about is them (the eleventh review).
+        later = next((hit for hit in _find(words, scene.of("person", "place", "creature", "group", "quest"))
+                      if hit.start > subject.start), None)
+        subject = later or subject
     if subject is not None and subject.entity.kind == "quest" and words[:1] == ["where"]:
         # Where a quest and a place share a name, "where is the Hollow Meridian?" asks after the place.
         place = next((hit for hit in _find(words, scene.of("place")) if hit.start == subject.start), None)
@@ -486,7 +496,9 @@ def _addressed(words: list[str], scene: SceneView) -> _Hit | None:
     return None
 
 
-def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandidate:  # noqa: C901 - one rule table
+def _parse_clause(  # noqa: C901 - one rule table
+    text: str, scene: SceneView, *, original: str, raw: str = ""
+) -> IntentCandidate:
     words = _words(text)
     if not words:
         return _clarify("empty")
@@ -533,7 +545,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     if question:
         lead = _find(words[:3], scene.of("person"))
         if lead and lead[0].start <= 1:
-            return _ask(words, scene, lead[0], original)
+            return _ask(words, scene, lead[0], raw or original)
         if _has(words, *_STATUS_QUESTIONS):
             return _candidate("status", None, 0.9, "asks_status")
         if _has(words, *_LOOK_QUESTIONS):
@@ -542,7 +554,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
             hit = _first(words, scene, "person", "creature", "item", "place")
             if hit and _seen(hit):
                 return _candidate("inspect", hit, 0.85, "asks_appearance")
-        return _ask(words, scene, _addressed(words, scene), original)
+        return _ask(words, scene, _addressed(words, scene), raw or original)
 
     if _has(words, "run away", "flee", "escape", "retreat", "get away", "fall back", "run for it"):
         return _candidate("flee", None, 0.9, "flees")
@@ -557,7 +569,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         # "I talk to him" with several people here: the game asks who, rather than a model guessing.
         return _clarify("speech_without_listener")
     if _starts(words, "ask") and addressed is not None:
-        return _ask(words, scene, addressed, original)
+        return _ask(words, scene, addressed, raw or original)
 
     if _starts(words, "take me to", "bring me to", "lead me to", "guide me to"):
         place = _first(words, scene, "place")
@@ -691,7 +703,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
                           "searches" if _starts(words, "search") else "manipulates")
 
     if _starts(words, "ask"):
-        return _ask(words, scene, addressed, original)
+        return _ask(words, scene, addressed, raw or original)
     if addressed is not None:
         return _candidate("talk", addressed, 0.85, "talks")
     if words[0] in {"him", "her", "them", "it"} or (_has(words, "him", "her", "them", "it") and len(words) <= 4):

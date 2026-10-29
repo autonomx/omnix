@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence, TypeVar
 
 from app.apps.rpg.rules.contracts import public_canon
+from app.caching.bounded_cache import bounded_lru_cache
 
 from .authority import AuthorityClass, EvidenceLifetime, VisibilityClass
 from .contracts import EvidenceRecord
@@ -274,11 +275,38 @@ def _record(
     )
 
 
+@dataclass(frozen=True, eq=False)
+class _Canon:
+    """A campaign canon known by its content hash, which names its content: the key of the filtered copy."""
+
+    content_hash: str
+    document: Mapping[str, Any]
+
+    def __hash__(self) -> int:
+        return hash(self.content_hash)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Canon) and other.content_hash == self.content_hash
+
+
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
+def _public_of(canon: _Canon) -> dict[str, Any]:
+    return public_canon(canon.document)
+
+
+def _public_document(snapshot: CampaignBibleSnapshot) -> Mapping[str, Any]:
+    """The snapshot's canon without its secrets' sentences, filtered once per content (the review: some 45 ms a time
+    on Vesper-9's canon, one to three times a narrated turn). The copy is shared: evidence only reads it."""
+    if not snapshot.content_hash:
+        return public_canon(snapshot.document)
+    return _public_of(_Canon(snapshot.content_hash, snapshot.document))
+
+
 def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRecord, ...]:
     """Project all authorized canon, including lore pages and dossiers, into evidence: from the canon without a
     sentence of any secret outside the secrets' own fields (rules/secrets.py; the review: a lore world's every fact
     carried its hidden truth as public evidence)."""
-    snapshot = replace(snapshot, document=public_canon(snapshot.document))
+    snapshot = replace(snapshot, document=_public_document(snapshot))
 
     records: list[EvidenceRecord] = []
     index = 0

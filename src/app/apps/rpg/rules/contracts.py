@@ -10,8 +10,8 @@ from __future__ import annotations
 from app.apps.rpg.rules.checks import CHECK_KINDS
 from app.apps.rpg.rules.player.player_progression_state import gear_of_kind, genre_kind
 from app.apps.rpg.rules.quest.progress import ANYONE, step_ways
-from app.apps.rpg.rules.secrets import public_canon, sayable
+from app.apps.rpg.rules.secrets import public_canon, sayable, secrets_held, without_secrets
 from app.apps.rpg.rules.waiting import A_WHILE, said, wait_minutes
 
-__all__ = ["ANYONE", "A_WHILE", "CHECK_KINDS", "gear_of_kind", "genre_kind", "public_canon", "said", "sayable",
-           "step_ways", "wait_minutes"]
+__all__ = ["A_WHILE", "ANYONE", "CHECK_KINDS", "gear_of_kind", "genre_kind", "public_canon", "said", "sayable",
+           "secrets_held", "step_ways", "wait_minutes", "without_secrets"]

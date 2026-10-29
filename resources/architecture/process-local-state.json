@@ -10,6 +10,15 @@
       "invalidation": "default_agent_budget_manager.cache_clear"
     },
     {
+      "path": "src/app/apps/rpg/narration/narrative_engine/campaign_bible.py",
+      "symbol": "_public_of.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation; keyed by the canon's content hash, which names its content.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_public_of.cache_clear"
+    },
+    {
       "path": "src/app/platform/agent_runtime/pi_runtime.py",
       "symbol": "_LAST_PROVIDER_FAILURE",
       "category": "cache",

@@ -88,10 +88,13 @@ _GROUP_NOUNS = frozenset({"union", "guild", "collective", "authority", "order", 
 
 
 def _place_kind_names(description: str) -> tuple[str, ...]:
-    """A place called by what its description says it is: "A nightclub and neutral exchange built around ..." is the
-    nightclub, the club and the exchange."""
-    head = _PLACE_KIND_ENDS.split(description.casefold(), maxsplit=1)[0]
-    head = re.sub(r"^(?:a|an|the)\s+", "", head.strip())
+    """A place called by what its description says it is, when it opens by saying so: "A nightclub and neutral
+    exchange built around ..." is the nightclub, the club and the exchange. "The mountain winds howl" or "Valecourt,
+    in the Heartland" say no kind (the eleventh review: "the mountain" took a look at the mountains for the pass)."""
+    opening = re.match(r"\s*(?:a|an)\s+(.*)", description.casefold(), flags=re.DOTALL)
+    if opening is None:
+        return ()
+    head = _PLACE_KIND_ENDS.split(opening.group(1), maxsplit=1)[0].strip()
     words: list[str] = []
     for part in head.split(" and "):
         part_words = part.split()
@@ -113,13 +116,15 @@ def _leader_names(role: str, groups: Mapping[str, Any]) -> tuple[str, ...]:
         return ()
     names: list[str] = []
     for group in groups.values():
-        words = _s(_d(group).get("name")).split()
+        words = [word for word in _s(_d(group).get("name")).split() if word.casefold() != "the"]
         if not words:
             continue
         noun = words[-1].casefold() if words[-1].casefold() in _GROUP_NOUNS else ""
         proper = " ".join(words[:-1] if noun else words)
-        if proper and proper.casefold().removeprefix("the ") in lowered:
-            names.append(f"the {proper.removeprefix('The ')} leader")
+        # By the group's own name, whole words ("Red Knives" in "elected Red Knives strike coordinator"); a group named
+        # only by its noun ("The Order") names no one's leadership (the eleventh review).
+        if proper and re.search(rf"\b{re.escape(proper.casefold())}\b", lowered):
+            names.append(f"the {proper} leader")
             if noun:
                 names.append(f"the {noun} leader")
     return tuple(names)
@@ -220,11 +225,13 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
                                            *_place_kind_names(_s(place.get("description")))), str(place_id) in exits)
     for provider_id, offers in _d(world.get("offers")).items():
         provider = _d(_d(world.get("providers")).get(provider_id))
+        here = _s(provider.get("location_id")) == location_id
         for offer in _l(offers):
             offer = _d(offer)
-            add(_s(offer.get("offer_id")), "offer",
-                _names(offer.get("label"), *_SERVICE_NAMES.get(_s(offer.get("service_kind")), ())),
-                _s(provider.get("location_id")) == location_id)
+            # By its service only where it is sold ("any news of Malrec?" in the village is no question about the
+            # news Elyra sells at the ruins: the eleventh review).
+            service = _SERVICE_NAMES.get(_s(offer.get("service_kind")), ()) if here else ()
+            add(_s(offer.get("offer_id")), "offer", _names(offer.get("label"), *service), here)
     for skill_id in _d(_d(_sections.player_state_of(state)).get("skills")):
         add(f"skill:{skill_id}", "skill", _names(str(skill_id).replace("_", " ")), True)
     for quest in _l(_d(_sections.quest_state_of(state)).get("quests")):

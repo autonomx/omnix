@@ -85,13 +85,13 @@ _HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, 
 
 _THE_NOUN = re.compile(r"\bthe\s+([a-z][a-z'-]{2,})\b", re.IGNORECASE)
 # Who the turn's blows struck, as its fight lines name them ("you hit the echo wolf for 4 (5 of 10 left)").
-_STRUCK = re.compile(r"\bhits? (?:the )?([a-z][a-z' -]*?) for \d+")
+_STRUCK = re.compile(r"\bhits? (?:the )?([a-z0-9][a-z0-9' -]*?) for \d+")
 
 
 def _struck(evidence_text: str) -> set[str]:
-    """What the turn's blows struck, by their names' heads ("the wolf" for an echo wolf; not "the echo"), the hero
-    aside."""
-    return {name.split()[-1] for name in _STRUCK.findall(evidence_text) if name.split() and name != "you"}
+    """What the turn's blows struck, by any word of their names ("the wolf" or "the echo wolf" for an echo wolf; the
+    eleventh review: its last word alone failed the whole name), the hero aside."""
+    return {word for name in _STRUCK.findall(evidence_text) if name != "you" for word in name.split() if len(word) > 2}
 
 
 def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:

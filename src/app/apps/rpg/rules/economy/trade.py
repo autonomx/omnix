@@ -62,12 +62,18 @@ def wanted_count(text: str, label: str) -> int:
     # half-plates", "two mugs of ale": the review).
     # Never past a measure or a coin, unless the name has it ("50 feet of rope" is one rope; "two gold rings" two).
     own = "|".join(re.escape(word) for word in named) or "(?!)"
-    between = rf"(?:(?:{own})[\s-]+|(?!(?:{_MEASURE_WORDS}|{_COIN_WORDS})\b)[a-z']+[\s-]+)"
+    between = rf"(?:(?:{own})(?:s|es)?[\s-]+|(?!(?:{_MEASURE_WORDS}|{_COIN_WORDS})\b)[a-z']+[\s-]+)"
     match = re.search(rf"\b{_COUNT_WORDS}\s+{between}{{0,2}}(?:{'|'.join(words)})(?:s|es)?\b"
                       rf"(?!\s+(?:{_COIN_WORDS})\b)", text.casefold())
-    word = match.group(1) if match is not None else ""
-    if not word or re.search(rf"\b{re.escape(word)}\b", label.casefold()):
-        return 1  # none asked, or the name's own number ("buy 50 feet of rope" is one "50 Feet of Rope": the review)
+    if match is None:
+        return 1
+    word = match.group(1)
+    # The name's own number, said with the word it goes with ("buy 50 feet of rope" is one "50 Feet of Rope"; "buy
+    # three potions" is three of the "Potion of the Three Moons": the reviews).
+    own_number = re.search(rf"\b{re.escape(word)}\s+([a-z']+)", label.casefold())
+    said_next = re.match(r"\s*([a-z']+)", match.group(0)[len(word):])
+    if own_number and said_next and said_next.group(1).rstrip("s") == own_number.group(1).rstrip("s"):
+        return 1
     return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
 _KIND_WORDS = {
     "lodging": frozenset({"room", "rent", "lodging", "bed", "stay", "night", "sleep"}),
@@ -301,18 +307,23 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     name = _s(item.get("name"))
     shops = [provider for provider in _providers_here(simulation) if "shop_goods" in _l(provider.get("service_kinds"))]
     rest = text.casefold().replace(name.casefold(), " ")  # "sell Brindle's Arc Baton" names the baton, not its maker
-    # The buyer is whom it is sold to, when the words say ("Liora, sell the shard to Brindle"); else whoever they name.
-    to = re.search(r"\bto\s+(.+)$", rest)
-    slot = to.group(1) if to else rest
-    asked = _words(slot) - _words(name)
-    named = _named(shops, asked, slot)
-    if not named and to:
+    people = _d(world.get("npcs"))
+    present = [_s(_d(people.get(npc_id)).get("name"))
+               for npc_id in _l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids"))]
+
+    def someone_in(words: set[str], said: str) -> bool:
+        return bool(_named(shops, words, said)) or any(words & _name_words(person) for person in present)
+
+    # The buyer is whom it is sold to: after the last "to" that names someone here ("Liora, sell the shard to Brindle");
+    # else whoever the words name ("Rhea, I want to sell the dagger": the first "to" is no buyer, the eleventh review).
+    slot = next((rest[to.end():] for to in reversed(list(re.finditer(r"\bto\s+", rest)))
+                 if someone_in(_words(rest[to.end():]) - _words(name), rest[to.end():])), "")
+    asked = _words(slot or rest) - _words(name)
+    named = _named(shops, asked, slot or rest)
+    if not named and slot:
         # Someone here it is sold to who keeps no shop that buys ("sell the bread to Orik"): theirs to refuse, not
         # another's to buy (the review: the sale went to Brindle); a companion spoken to is no buyer named.
-        people = _d(world.get("npcs"))
-        present = [_s(npc_id) for npc_id in _l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids"))]
-        other = next((_s(_d(people.get(npc_id)).get("name")) for npc_id in present
-                      if asked & _name_words(_s(_d(people.get(npc_id)).get("name")))), "")
+        other = next((person for person in present if asked & _name_words(person)), "")
         if other:
             return TradeOutcome(lines=[f"{other} does not buy the {name}."], refused=True, kind="refused")
     if len(named) == 1 and not _buys(simulation, named[0], item):
