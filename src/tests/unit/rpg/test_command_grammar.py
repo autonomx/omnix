@@ -291,3 +291,32 @@ def test_the_real_scene_names_offers_by_service_places_by_kind_and_a_groups_lead
     assert parse_command("Master Stonewake, who are you?", scene).target_id == "npc:orik"
     assert parse_command("ask the master about blades", scene).target_id == "npc:hollis"
     assert parse_command("where is the Hollow Meridian?", scene).target_id == "loc:meridian"
+
+
+def test_someone_not_here_is_no_one_to_look_at_closely() -> None:
+    """The narration gate: "examine Dr. Kade" from the docks, planned as a close look, asked the scene's lore for
+    someone not in it, and the turn failed."""
+    scene = SceneView((
+        SceneEntity("npc:juno", "person", ("Juno Rask", "Juno"), here=True),
+        SceneEntity("npc:kade", "person", ("Dr. Selene Kade", "Kade")),
+        SceneEntity("loc:clinic", "place", ("Halcyon Memory Clinic", "the clinic")),
+    ))
+    away = parse_command("examine Dr. Selene Kade", scene)
+    assert away.confidence < 0.7 and away.reason == "inspects_someone_away"  # the model reads what is meant
+    looks = parse_command("what does Dr. Selene Kade look like?", scene)
+    assert looks.family == "ask"  # a question about her, for whoever is here
+    assert parse_command("examine Juno", scene).family == "inspect"
+    assert parse_command("look at the clinic", scene).family == "inspect"
+
+
+def test_a_question_put_to_someone_by_name_first_is_theirs_to_answer() -> None:
+    """The narration gate: talking with Bran, "Mira, can you tell me about the road north?" was answered by Bran (the
+    words after the name kept the answerer a question to no one would have)."""
+    scene = SceneView((
+        SceneEntity("npc:bran", "person", ("Bran", "the barkeep"), here=True),
+        SceneEntity("npc:mira", "person", ("Mira",), here=True),
+        SceneEntity("loc:road", "place", ("the road north",)),
+    ), focus_id="npc:bran")
+    for text in ("Mira, can you tell me about the road north?", "Mira, have you heard of the road north?"):
+        asked = parse_command(text, scene)
+        assert (asked.target_id, asked.second_target_id, asked.reason) == ("npc:mira", None, "asks_someone"), text

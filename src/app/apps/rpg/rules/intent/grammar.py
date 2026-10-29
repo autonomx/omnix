@@ -204,6 +204,12 @@ _WHOLE_NAME = 1.5  # the least a hit naming every word of a name scores (a part 
 _OTHERS = frozenset({"your", "his", "her", "their", "its"})
 
 
+def _seen(hit: _Hit) -> bool:
+    """Whether the hero can look closely at it: a person or creature here, or any thing or place (the narration
+    gate: "examine Dr. Kade" from the docks, planned as a close look, asked the scene's lore for someone not in it)."""
+    return hit.entity.kind not in {"person", "creature"} or hit.entity.here
+
+
 def _owned_word(words: list[str], position: int) -> bool:
     """Whether the word at ``position`` can name a thing of the hero's own by its kind ("my knife"): not the command's
     verb ("drink some water" is no Healing Potion), nor a word after another's ("drop your weapon": the review)."""
@@ -342,7 +348,11 @@ def _spoken_to(text: str, scene: SceneView, whole: IntentCandidate) -> IntentCan
             return replace(rest, second_target_id=person)  # "Liora, I give you my dagger"
         return rest
     if rest.family == "ask":  # asked of them, as the words ask it (a hypothetical stays one), and sure of whom
-        return replace(rest, target_id=person, target_kind="person", confidence=max(rest.confidence, 0.85))
+        # They answer it, not whoever would answer a question put to no one (the narration gate: "Orik Stonewake, how
+        # do I get to Valecourt?" was answered by the one the hero had been talking with).
+        reason = "asks_someone" if rest.reason == "asks_about_thing" else rest.reason
+        return replace(rest, target_id=person, target_kind="person", second_target_id=None, reason=reason,
+                       confidence=max(rest.confidence, 0.85))
     asked = _question(_words(_norm(match.group(2))), match.group(2).strip())
     return _candidate("ask" if asked else "talk", named[0], 0.85, "asks_someone" if asked else "talks")
 
@@ -530,7 +540,7 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
             return _candidate("look", None, 0.85, "asks_surroundings")
         if _has(words, "look like") or (_starts(words, "what is this", "what is that") and _has(words, "for")):
             hit = _first(words, scene, "person", "creature", "item", "place")
-            if hit:
+            if hit and _seen(hit):
                 return _candidate("inspect", hit, 0.85, "asks_appearance")
         return _ask(words, scene, _addressed(words, scene), original)
 
@@ -668,6 +678,8 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
                "look closely", "size up", "watch", "eye", "observe", "peer at", "stare at") or _has(
             words, "look at", "look over", "examine", "inspect", "size up", "over in my hands"):
         hit = _first(words, scene, "item", "person", "creature", "place", "offer")
+        if hit and not _seen(hit):  # someone not here is no one to look at closely: the model reads what is meant
+            return _candidate("inspect", hit, 0.6, "inspects_someone_away")
         if hit:
             return _candidate("inspect", hit, 0.85, "inspects")
         return _candidate("look", None, 0.75, "looks_without_subject")
