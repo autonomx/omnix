@@ -353,3 +353,28 @@ def test_a_place_is_called_by_its_kind_only_when_its_description_says_so() -> No
     assert _leader_names("captain of the town watch, sworn to the order", groups) == ()
     assert _leader_names("head of the Ashen Remnant", groups) == ()
     assert _leader_names("elected Red Knives strike coordinator", groups) == ("the Red Knives leader", "the union leader")
+
+
+def test_the_twelfth_reviews_readings() -> None:
+    """A price question keeps its seller; a name ending a later clause is not the first's listener; an offer sold
+    elsewhere is named in full or not at all; "The main interchange" is a place's kind."""
+    from app.apps.rpg.session.command_reading import _place_kind_names
+
+    scene = SceneView((
+        SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),
+        SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "Brindle"), here=True),
+        SceneEntity("npc:liora", "person", ("Liora Fen", "Liora"), here=True),
+        SceneEntity("npc:malrec", "person", ("Archon Malrec", "Malrec")),
+        SceneEntity("loc:ruins", "place", ("Moonroot Ruins", "the ruins")),
+        SceneEntity("npc:brindle:potion", "offer", ("Healing Potion",), here=True),
+        SceneEntity("npc:elyra:news", "offer", ("Local news",)),
+        SceneEntity("npc:orik:news", "offer", ("A rumor", "news"), here=True),
+    ))
+    priced = parse_command("how much is a healing potion for the trip to the ruins?", scene)
+    assert (priced.target_id, priced.second_target_id) == ("npc:brindle:potion", "npc:brindle")
+    assert parse_command("any news of Malrec?", scene).target_id == "npc:malrec"
+    assert parse_command("how much is a healing potion? then wait here, Liora", scene).target_id != "npc:liora"
+    assert parse_command("what is the local news?", scene).target_id == "npc:elyra:news"  # named in full
+    assert parse_command("any news?", scene).target_id in {None, "npc:orik:news"}  # never the ruins' news
+    assert _place_kind_names("The main interchange between the Glassline and Sumps.") == ("the interchange", "the station")
+    assert _place_kind_names("The mountain winds howl over the pass.") == ()

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.rules.contracts import for_the_model, secrets_held
 
 from .campaign_lore_store import _mapping, _rows, _text, current_location_identity
 from .world_forge_dossiers import (
@@ -452,11 +453,13 @@ def _context(bible: Mapping[str, Any], target: SceneLoreTarget) -> dict[str, Any
         if len(visible_documents) >= 10:
             break
     entities = _mapping(bible.get("entities"))
-    return {
+    # What the model reads of the world: no secret field, and no sentence telling one of the canon's secrets (the
+    # twelfth review: the place went whole, its hidden truth with it).
+    return for_the_model({
         "target": target.as_dict(),
         "location": _mapping(entities.get(target.location_id)),
         "known_world_lore": visible_documents,
-    }
+    }, secrets_held(bible))
 
 
 def _parse_json(value: str) -> dict[str, Any]:

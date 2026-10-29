@@ -203,6 +203,12 @@ _WHOLE_NAME = 1.5  # the least a hit naming every word of a name scores (a part 
 _OTHERS = frozenset({"your", "his", "her", "their", "its"})
 
 
+def _asked_after(words: list[str], position: int) -> bool:
+    """Whether the word at ``position`` is what something is asked about: "of Malrec", "about the old mill"."""
+    before = [word for word in words[max(0, position - 2):position] if word not in {"the", "a", "an"}]
+    return bool(before) and before[-1] in {"of", "about", "on", "regarding"}
+
+
 def _seen(hit: _Hit) -> bool:
     """Whether the hero can look closely at it: a person or creature here, or any thing or place (the narration
     gate: "examine Dr. Kade" from the docks, planned as a close look, asked the scene's lore for someone not in it)."""
@@ -244,6 +250,8 @@ def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
                 continue
             if entity.kind == "item" and any(p > 0 and words[p - 1] in _OTHERS for p in matched):
                 continue  # "drop your dagger!" is said of someone else's (the tenth review)
+            if entity.kind == "offer" and not entity.here and len(matched) != len(tokens):
+                continue  # sold elsewhere: named in full or not at all ("any news?" is no question about the ruins')
             if len(matched) == len(tokens):
                 score = len(tokens) + 0.5 + (0.25 if entity.here else 0.0)
             elif (len(tokens) >= 2 and matched and any(len(tokens[i]) >= 4 for i, p in enumerate(positions) if p is not None)
@@ -318,7 +326,9 @@ def _parse_text(text: str, scene: SceneView) -> IntentCandidate:
     normalized = _norm(text)
     clauses = _clauses(normalized)
     first = _strip_leading(clauses[0] if clauses else normalized)
-    candidate = _parse_clause(first, scene, original=normalized, raw=text)
+    # The raw words (commas kept, for a name at the end) only when the clause is all there is: in "how much is the stew?
+    # then come along, Mira" the name ends the second clause, not the question (the twelfth review).
+    candidate = _parse_clause(first, scene, original=normalized, raw=text if len(clauses) <= 1 else "")
     if len(clauses) > 1:
         candidate = IntentCandidate(**{**candidate.__dict__, "clauses": clauses})
     return candidate
@@ -431,10 +441,12 @@ def _ask(words: list[str], scene: SceneView, addressed: _Hit | None, raw: str = 
         return _candidate("ask", addressed, 0.85, "asks_someone")
     subject = _first(words, scene, "person", "creature", "place", "item", "offer", "quest", "skill", "group")
     if subject is not None and subject.entity.kind == "offer":
-        # Asked about someone or somewhere after a thing on sale ("any news of Malrec?", "any rumors about Elyra?"):
-        # what is asked about is them (the eleventh review).
+        # Asked about someone or somewhere by name, after a thing on sale ("any news of Malrec?", "any rumors about
+        # Elyra?"): what is asked about is them (the eleventh review); a word of a name elsewhere in a price question is
+        # not ("how much is a potion for the trip to the ruins?": the twelfth).
         later = next((hit for hit in _find(words, scene.of("person", "place", "creature", "group", "quest"))
-                      if hit.start > subject.start), None)
+                      if hit.start > subject.start and hit.score >= _WHOLE_NAME
+                      and _asked_after(words, hit.start)), None)
         subject = later or subject
     if subject is not None and subject.entity.kind == "quest" and words[:1] == ["where"]:
         # Where a quest and a place share a name, "where is the Hollow Meridian?" asks after the place.

@@ -69,3 +69,14 @@ def test_an_authors_sentence_that_shares_nouns_with_a_secret_tells_none_of_it() 
     assert public["quests"] == canon["quests"] and public["knowledge"] == canon["knowledge"]
     assert public["documents"][0]["full_text"] == "Bran keeps the inn."  # a line break ends a sentence
     assert public["retrieval_cards"] == canon["retrieval_cards"]
+
+
+def test_what_a_model_reads_of_the_world_has_no_secret_field_or_sentence() -> None:
+    """The twelfth review: scene lore sent a place's whole entity, its hidden truth with it."""
+    from app.apps.rpg.rules.secrets import for_the_model
+
+    truth = "Platform Zero receives a driverless wartime train on irregular nights."
+    place = {"id": "p:station", "name": "Black Rain Station", "hidden_truth": truth,
+             "description": f"An interchange of dark water. {truth}"}
+    assert for_the_model({"location": place}, [truth]) == {"location": {
+        "id": "p:station", "name": "Black Rain Station", "description": "An interchange of dark water."}}

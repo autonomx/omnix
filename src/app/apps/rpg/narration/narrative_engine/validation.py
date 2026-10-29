@@ -83,15 +83,20 @@ _FOE_WORDS = re.compile(r"\b(?:it|its|itself|they|them|their|him|his|her|hers)\b
 _HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, in the sentence: "your arm bleeds"
 
 
-_THE_NOUN = re.compile(r"\bthe\s+([a-z][a-z'-]{2,})\b", re.IGNORECASE)
 # Who the turn's blows struck, as its fight lines name them ("you hit the echo wolf for 4 (5 of 10 left)").
 _STRUCK = re.compile(r"\bhits? (?:the )?([a-z0-9][a-z0-9' -]*?) for \d+")
 
 
 def _struck(evidence_text: str) -> set[str]:
-    """What the turn's blows struck, by any word of their names ("the wolf" or "the echo wolf" for an echo wolf; the
-    eleventh review: its last word alone failed the whole name), the hero aside."""
-    return {word for name in _STRUCK.findall(evidence_text) if name != "you" for word in name.split() if len(word) > 2}
+    """What the turn's blows struck, as a clause may name it after "the": the whole name or a part ending in its last
+    word ("the echo wolf", "the wolf"; never "the echo", which a scene says of anything: the twelfth review), the
+    hero aside."""
+    tails = set()
+    for name in _STRUCK.findall(evidence_text):
+        words = name.split()
+        if words and name != "you":
+            tails.update(" ".join(words[start:]) for start in range(len(words)))
+    return tails
 
 
 def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:
@@ -103,8 +108,8 @@ def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:
         return False
     if not _HEROS.search(sentence) or _FOE_WORDS.search(clause) is not None:
         return True
-    struck = _struck(evidence_text)
-    return any(noun.casefold() in struck for noun in _THE_NOUN.findall(clause))
+    lowered = clause.casefold()
+    return any(re.search(r"\bthe " + re.escape(tail) + r"\b", lowered) for tail in _struck(evidence_text))
 
 
 def _unsupported_amounts(clause: str, evidence_text: str, *, foes: bool) -> list[str]:

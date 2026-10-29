@@ -88,3 +88,11 @@ def test_a_foe_named_whole_may_own_its_health() -> None:
     assert _unsupported_material("You slash, and the echo wolf staggers at 5 health.", fight) == []
     assert _unsupported_material("You strike; the rust-golem 7 sags at 5 health.",
                                  "you hit the rust-golem 7 for 4 (5 of 10 left).") == []
+
+
+def test_a_word_a_foes_name_shares_with_the_scene_owns_no_health() -> None:
+    """The twelfth review: "the sky" or "the echo" of a struck Sky Manta or Echo Wolf let the hero's health claim pass."""
+    fight = "you hit the sky manta for 4 (5 of 10 left). you hit the echo wolf for 2 (9 of 10 left)."
+    assert _unsupported_material("Your head rings, the sky spinning at 9 health.", fight) == ["9 health"]
+    assert _unsupported_material("Your vision swims, the echo of the blow leaving 5 health.", fight) == ["5 health"]
+    assert _unsupported_material("Your blade bites, and the manta reels at 5 health.", fight) == []

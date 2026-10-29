@@ -58,6 +58,11 @@ def wanted_count(text: str, label: str) -> int:
               if word not in _COINS and not re.fullmatch(_MEASURE_WORDS, word)]
     if not words:
         return 1
+    # Some of them: "two of the three health potions" is two (the twelfth review).
+    some_of = re.search(rf"\b{_COUNT_WORDS}\s+of\s+(?:the|those|these|your|his|her|their)\b", text.casefold())
+    if some_of is not None:
+        word = some_of.group(1)
+        return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
     # Up to two words between the count and the head, a hyphen's halves among them ("two ward-glass bucklers", "two
     # half-plates", "two mugs of ale": the review).
     # Never past a measure or a coin, unless the name has it ("50 feet of rope" is one rope; "two gold rings" two).
@@ -314,10 +319,17 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     def someone_in(words: set[str], said: str) -> bool:
         return bool(_named(shops, words, said)) or any(words & _name_words(person) for person in present)
 
-    # The buyer is whom it is sold to: after the last "to" that names someone here ("Liora, sell the shard to Brindle");
-    # else whoever the words name ("Rhea, I want to sell the dagger": the first "to" is no buyer, the eleventh review).
-    slot = next((rest[to.end():] for to in reversed(list(re.finditer(r"\bto\s+", rest)))
-                 if someone_in(_words(rest[to.end():]) - _words(name), rest[to.end():])), "")
+    # The buyer is whom it is sold to: the first "to" followed by someone here ("Liora, sell the shard to Brindle"),
+    # its next few words only; else whoever the words name ("Rhea, I want to sell the dagger": "to sell" is no buyer,
+    # the eleventh review; "sell the shard to Brindle to pay Liora back" is Brindle's, the twelfth).
+    def buyer_after(to: re.Match[str]) -> str:
+        """The name a "to" is followed by, its first word a name's (past "the"): "to pay Liora" names no buyer."""
+        after = rest[to.end():].split()
+        start = 1 if after[:1] == ["the"] else 0
+        return " ".join(after[start:start + 1])
+
+    slot = next((buyer_after(to) for to in re.finditer(r"\bto\s+", rest)
+                 if someone_in(_words(buyer_after(to)) - _words(name), buyer_after(to))), "")
     asked = _words(slot or rest) - _words(name)
     named = _named(shops, asked, slot or rest)
     if not named and slot:

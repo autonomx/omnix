@@ -78,6 +78,13 @@ _PLACE_KIND_NAMES = {
     "harbor": ("port", "docks"), "clinic": ("hospital",), "hospital": ("clinic",), "chapel": ("church",),
     "temple": ("shrine",), "market": ("bazaar",), "interchange": ("station",), "station": ("interchange",),
 }
+# Words that name a kind of place, for a description that opens with "The ...".
+_PLACE_NOUNS = frozenset(set(_PLACE_KIND_NAMES) | {
+    "square", "hall", "gate", "bridge", "fort", "fortress", "keep", "camp", "village", "town", "city", "ruin",
+    "ruins", "cave", "cavern", "mine", "quarry", "mill", "farm", "plaza", "shrine", "library", "archive", "guild",
+    "forge", "foundry", "tower", "palace", "castle", "manor", "crossroads", "outpost", "garrison", "barracks",
+    "warehouse", "workshop", "laboratory", "substation", "arena", "theatre", "theater", "cathedral", "monastery",
+    "grove", "pass", "harbour", "dock", "wharf", "pier", "bazaar"})
 _PLACE_KIND_ENDS = re.compile(r"\b(?:built|that|which|where|with|between|beneath|under|above|over|near|by|on|in|at|"
                               r"for|from|of|is|are|was|has|have)\b|[,;:.]")
 # A role that leads (the intent gate: "the union leader" for the Red Knives' elected strike coordinator).
@@ -91,10 +98,11 @@ def _place_kind_names(description: str) -> tuple[str, ...]:
     """A place called by what its description says it is, when it opens by saying so: "A nightclub and neutral
     exchange built around ..." is the nightclub, the club and the exchange. "The mountain winds howl" or "Valecourt,
     in the Heartland" say no kind (the eleventh review: "the mountain" took a look at the mountains for the pass)."""
-    opening = re.match(r"\s*(?:a|an)\s+(.*)", description.casefold(), flags=re.DOTALL)
+    opening = re.match(r"\s*(a|an|the)\s+(.*)", description.casefold(), flags=re.DOTALL)
     if opening is None:
         return ()
-    head = _PLACE_KIND_ENDS.split(opening.group(1), maxsplit=1)[0].strip()
+    definite = opening.group(1) == "the"
+    head = _PLACE_KIND_ENDS.split(opening.group(2), maxsplit=1)[0].strip()
     words: list[str] = []
     for part in head.split(" and "):
         part_words = part.split()
@@ -102,7 +110,9 @@ def _place_kind_names(description: str) -> tuple[str, ...]:
         cut = next((index for index, word in enumerate(part_words) if 0 < index < len(part_words) - 1
                     and word.endswith("s") and not word.endswith("ss") and len(word) > 3), len(part_words))
         kept = part_words[:cut]
-        if kept and len(kept) <= 4:
+        # "The main interchange between ..." names its kind when it is a place's ("The mountain winds howl" does not:
+        # the twelfth review).
+        if kept and len(kept) <= 4 and (not definite or kept[-1] in _PLACE_NOUNS):
             words.append(kept[-1])
     kinds = [kind for word in words for kind in (word, *_PLACE_KIND_NAMES.get(word, ())) if kind.isalpha()]
     return tuple(f"the {kind}" for kind in dict.fromkeys(kinds))

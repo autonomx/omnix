@@ -44,7 +44,8 @@ def _tokens(text: str) -> list[str]:
 
 def _secret_sentences(secrets: Iterable[str]) -> list[str]:
     """Each secret, a sentence at a time: a description may tell one sentence of a longer truth."""
-    return [part.strip() for secret in secrets for part in _SENTENCE_BREAK.split(str(secret or ""))[::2] if part.strip()]
+    return [part.strip() for secret in secrets
+            for part in _SENTENCE_BREAK.split(str(secret or ""))[::2] if part.strip()]
 
 
 def _without(text: str, told: Any) -> str:
@@ -63,7 +64,8 @@ class _Secrets:
     """Secrets indexed by their words, so a sentence is checked against hundreds of them at once (a model's line)."""
 
     def __init__(self, secrets: Iterable[str]) -> None:
-        self._rows = [(secret.casefold(), meaning_words(secret)) for secret in dict.fromkeys(_secret_sentences(secrets))]
+        self._rows = [(secret.casefold(), meaning_words(secret))
+                      for secret in dict.fromkeys(_secret_sentences(secrets))]
         self._by_word: dict[str, list[int]] = {}
         for index, (_, words) in enumerate(self._rows):
             for word in words:
@@ -160,22 +162,25 @@ def public_canon(canon: Mapping[str, Any]) -> dict[str, Any]:
     lore panel and the narrator's evidence showed it). The secrets stay in their own fields, for the rules that keep
     them."""
     told = _Told(secrets_held(canon))
-    if not told:
-        return dict(canon)
-
-    def clean(value: Any, key: str = "") -> Any:
-        if key in SECRET_FIELDS:
-            return value
-        if isinstance(value, str):
-            return told.without(value)
-        if isinstance(value, Mapping):
-            return {name: clean(item, str(name)) for name, item in value.items()}
-        if isinstance(value, list):
-            return [clean(item) for item in value]
-        return value
-
-    return clean(dict(canon))
+    return _cleaned(canon, told, keep_fields=True) if told else dict(canon)
 
 
-__all__ = ["SECRET_FIELDS", "meaning_words", "names_a_secret", "public_canon", "sayable", "secrets_held",
-           "without_secrets"]
+def for_the_model(value: Any, secrets: Iterable[str]) -> Any:
+    """``value`` as a model may read it: no secret field at all, and no sentence telling one of ``secrets`` (the
+    twelfth review: scene lore sent a place's whole entity, its hidden truth with it)."""
+    return _cleaned(value, _Told(secrets), keep_fields=False)
+
+
+def _cleaned(value: Any, told: _Told, *, keep_fields: bool) -> Any:
+    if isinstance(value, str):
+        return told.without(value) if told else value
+    if isinstance(value, Mapping):
+        return {name: (item if str(name) in SECRET_FIELDS else _cleaned(item, told, keep_fields=keep_fields))
+                for name, item in value.items() if keep_fields or str(name) not in SECRET_FIELDS}
+    if isinstance(value, list):
+        return [_cleaned(item, told, keep_fields=keep_fields) for item in value]
+    return value
+
+
+__all__ = ["SECRET_FIELDS", "for_the_model", "meaning_words", "names_a_secret", "public_canon", "sayable",
+           "secrets_held", "without_secrets"]

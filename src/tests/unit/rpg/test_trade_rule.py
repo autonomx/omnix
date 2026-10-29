@@ -312,3 +312,18 @@ def test_the_buyer_named_first_buys_and_counts_keep_their_plurals() -> None:
     assert wanted_count("buy two pounds of salt", "Pound of Salt") == 2
     assert wanted_count("buy three potions", "Potion of the Three Moons") == 3
     assert wanted_count("buy 50 feet of rope", "50 Feet of Rope") == 1
+
+
+def test_a_purpose_after_the_buyer_names_no_buyer_and_some_of_them_is_a_count() -> None:
+    """The twelfth review: "sell the Aether Shard to Brindle to pay Liora back" was refused as Liora's; "two of the
+    three potions" bought three."""
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
+    campaign = _campaign(purse=0, items=items)
+    simulation = campaign["simulation_state"]
+    simulation["world_model"]["npcs"] = {"npc:liora": {"name": "Liora Fen"}, "npc:brindle": {"name": "Brindle Gearwing"}}
+    simulation["present_npc_state"]["present_npc_ids"].append("npc:liora")
+    for text in ("sell the Aether Shard to Brindle to pay Liora back", "sell the Aether Shard to pay Liora back"):
+        assert sell(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
+    assert wanted_count("buy two of the three health potions", "Health Potion") == 2

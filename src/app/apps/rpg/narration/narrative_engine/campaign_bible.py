@@ -1,6 +1,8 @@
 """Campaign Bible aggregate contracts and evidence projection."""
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence, TypeVar
 
@@ -275,31 +277,22 @@ def _record(
     )
 
 
-@dataclass(frozen=True, eq=False)
-class _Canon:
-    """A campaign canon known by its content hash, which names its content: the key of the filtered copy."""
-
-    content_hash: str
-    document: Mapping[str, Any]
-
-    def __hash__(self) -> int:
-        return hash(self.content_hash)
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, _Canon) and other.content_hash == self.content_hash
-
-
 @bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
-def _public_of(canon: _Canon) -> dict[str, Any]:
-    return public_canon(canon.document)
+def _public_slot(digest: str) -> dict[str, Any]:
+    """A holder for one canon content's filtered copy, by its digest; empty until it is first filtered."""
+    return {}
 
 
 def _public_document(snapshot: CampaignBibleSnapshot) -> Mapping[str, Any]:
     """The snapshot's canon without its secrets' sentences, filtered once per content (the review: some 45 ms a time
-    on Vesper-9's canon, one to three times a narrated turn). The copy is shared: evidence only reads it."""
-    if not snapshot.content_hash:
-        return public_canon(snapshot.document)
-    return _public_of(_Canon(snapshot.content_hash, snapshot.document))
+    on Vesper-9's canon, one to three times a narrated turn). Known by a digest of the whole document, never by its
+    stored hash: a discovery's change or an offline save leaves that hash as it was (the twelfth review). The copy is
+    shared: evidence only reads it."""
+    digest = hashlib.sha256(json.dumps(snapshot.document, default=str, separators=(",", ":")).encode()).hexdigest()
+    slot = _public_slot(digest)
+    if "public" not in slot:
+        slot["public"] = public_canon(snapshot.document)
+    return slot["public"]
 
 
 def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRecord, ...]:
