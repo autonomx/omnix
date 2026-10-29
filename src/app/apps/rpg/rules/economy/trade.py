@@ -59,7 +59,9 @@ def wanted_count(text: str, label: str) -> int:
     if not words:
         return 1
     # Some of them: "two of the three health potions" is two (the twelfth review).
-    some_of = re.search(rf"\b{_COUNT_WORDS}\s+of\s+(?:the|those|these|your|his|her|their)\b", text.casefold())
+    # Only of the goods themselves: "a torch for two of the miners" is one torch (the thirteenth review).
+    some_of = re.search(rf"\b{_COUNT_WORDS}\s+of\s+(?:the|those|these|your|his|her|their)\s+"
+                        rf"(?:[a-z0-9'-]+\s+){{0,3}}?(?:{'|'.join(words)})(?:s|es)?\b", text.casefold())
     if some_of is not None:
         word = some_of.group(1)
         return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
@@ -328,8 +330,11 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
         start = 1 if after[:1] == ["the"] else 0
         return " ".join(after[start:start + 1])
 
+    # After the selling: "go to Rhea and sell the shard to Brindle" sells to Brindle (the thirteenth review).
+    verb = re.search(r"\b(?:sell|selling|sold)\b", rest)
     slot = next((buyer_after(to) for to in re.finditer(r"\bto\s+", rest)
-                 if someone_in(_words(buyer_after(to)) - _words(name), buyer_after(to))), "")
+                 if (verb is None or to.start() > verb.start())
+                 and someone_in(_words(buyer_after(to)) - _words(name), buyer_after(to))), "")
     asked = _words(slot or rest) - _words(name)
     named = _named(shops, asked, slot or rest)
     if not named and slot:

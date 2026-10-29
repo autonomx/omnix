@@ -327,3 +327,17 @@ def test_a_purpose_after_the_buyer_names_no_buyer_and_some_of_them_is_a_count() 
     for text in ("sell the Aether Shard to Brindle to pay Liora back", "sell the Aether Shard to pay Liora back"):
         assert sell(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
     assert wanted_count("buy two of the three health potions", "Health Potion") == 2
+
+
+def test_the_thirteenth_reviews_sales_and_counts() -> None:
+    """"two of the miners" is no count of torches; a "to" before the selling is where the hero goes, not the buyer."""
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    assert wanted_count("buy three healing potions for two of the guards", "Healing Potion") == 3
+    assert wanted_count("buy a torch for two of the miners", "Torch") == 1
+    assert wanted_count("buy two of the three health potions", "Health Potion") == 2
+    items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
+    simulation = _with_armoury(_campaign(purse=0, items=items))["simulation_state"]
+    simulation["world_model"]["npcs"] = {"npc:rhea": {"name": "Captain Rhea"}, "npc:brindle": {"name": "Brindle Gearwing"}}
+    assert sell(simulation, "go to Rhea and sell the Aether Shard to Brindle").lines[0].startswith(
+        "You sell the Aether Shard to Brindle Gearwing")

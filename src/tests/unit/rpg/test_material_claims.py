@@ -96,3 +96,9 @@ def test_a_word_a_foes_name_shares_with_the_scene_owns_no_health() -> None:
     assert _unsupported_material("Your head rings, the sky spinning at 9 health.", fight) == ["9 health"]
     assert _unsupported_material("Your vision swims, the echo of the blow leaving 5 health.", fight) == ["5 health"]
     assert _unsupported_material("Your blade bites, and the manta reels at 5 health.", fight) == []
+
+
+def test_a_person_struck_is_owned_by_any_word_of_their_name() -> None:
+    """The thirteenth review: people are struck by name, bare, so "the captain" is the captain's."""
+    fight = "you hit captain rhea sunward for 4 (6 of 10 left)."
+    assert _unsupported_material("Your blow lands, and the captain staggers back at 6 health.", fight) == []

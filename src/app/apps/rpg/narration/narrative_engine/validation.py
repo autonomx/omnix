@@ -84,19 +84,24 @@ _HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, 
 
 
 # Who the turn's blows struck, as its fight lines name them ("you hit the echo wolf for 4 (5 of 10 left)").
-_STRUCK = re.compile(r"\bhits? (?:the )?([a-z0-9][a-z0-9' -]*?) for \d+")
+_STRUCK = re.compile(r"\bhits? (the )?([a-z0-9][a-z0-9' -]*?) for \d+")
 
 
 def _struck(evidence_text: str) -> set[str]:
-    """What the turn's blows struck, as a clause may name it after "the": the whole name or a part ending in its last
-    word ("the echo wolf", "the wolf"; never "the echo", which a scene says of anything: the twelfth review), the
-    hero aside."""
-    tails = set()
-    for name in _STRUCK.findall(evidence_text):
+    """What the turn's blows struck, as a clause may name it after "the". A creature (its line says "the"): the whole
+    name or a part ending in its last word ("the echo wolf", "the wolf"; never "the echo", which a scene says of
+    anything: the twelfth review). A person (named bare, "you hit Captain Rhea Sunward"): any word of the name, a
+    title too ("the captain": the thirteenth). The hero aside."""
+    names = set()
+    for article, name in _STRUCK.findall(evidence_text):
         words = name.split()
-        if words and name != "you":
-            tails.update(" ".join(words[start:]) for start in range(len(words)))
-    return tails
+        if not words or name == "you":
+            continue
+        if article:
+            names.update(" ".join(words[start:]) for start in range(len(words)))
+        else:
+            names.update(word for word in words if len(word) > 2)
+    return names
 
 
 def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:

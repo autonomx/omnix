@@ -378,3 +378,20 @@ def test_the_twelfth_reviews_readings() -> None:
     assert parse_command("any news?", scene).target_id in {None, "npc:orik:news"}  # never the ruins' news
     assert _place_kind_names("The main interchange between the Glassline and Sumps.") == ("the interchange", "the station")
     assert _place_kind_names("The mountain winds howl over the pass.") == ()
+
+
+def test_the_thirteenth_reviews_readings() -> None:
+    """News of a place or someone named in part is about them; a name after "then," is the listener; who sells a
+    thing sold elsewhere is asked of that thing."""
+    scene = SceneView((
+        SceneEntity("npc:miri", "person", ("Miri Kestrel", "Miri"), here=True),
+        SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),
+        SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "Brindle"), here=True),
+        SceneEntity("loc:ruins", "place", ("Moonroot Ruins", "the ruins")),
+        SceneEntity("npc:miri:news", "offer", ("Local news", "news"), here=True),
+        SceneEntity("npc:marta:broth", "offer", ("Hot broth",)),
+    ), focus_id="npc:brindle")
+    assert parse_command("any news of the ruins?", scene).target_id == "loc:ruins"
+    then = parse_command("what happened then, Orik?", scene)
+    assert (then.target_id, then.second_target_id) == ("npc:orik", None)
+    assert parse_command("who sells broth?", scene).target_id == "npc:marta:broth"
