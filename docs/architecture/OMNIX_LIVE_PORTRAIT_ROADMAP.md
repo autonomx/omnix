@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 settled 2026-10-29. One new question for the owner (Q-1). Nothing is implemented. Phase 0 decides whether the rest goes ahead.
+**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 settled 2026-10-29. One new question for the owner (Q-1). Phase 0 has started: the standalone pass is done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -280,6 +280,36 @@ Also try:
 - TensorRT for the decoder only if fp16 eager misses the targets
 
 **Exit:** go, go with changes (for example, TensorRT is required, or a longer `H₁` with speculative frames to cover it), or no-go, recorded with the numbers.
+
+#### Phase 0 status (2026-10-29): standalone pass done, loaded runs to come
+
+The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise idle 4090, on the desktop torch base. Results are in `docs/measurements/portrait-spike-2026-10-29.json`.
+
+| Measure | Result | Target |
+| --- | --- | --- |
+| Runs on CPython 3.11, torch 2.6, transformers 4.57 | Yes, with one wrapper change: upstream's wav2vec2 needs `attn_implementation="eager"` | Required |
+| Weights in VRAM | 1.15 GB without the emotion model, 2.36 GB with it | — |
+| Peak VRAM, streaming path (one stream, decode batch 8, fp32) | 4.09 GB allocated, 5.27 GB reserved | ≤ 4 GB: marginal; a decode batch of 4 should bring it under |
+| Work per second of audio (H = 20) | about 0.18 s (25 frames × 4.6 ms decode, plus 1.25 passes × 54 ms) | ≤ 0.5 s: met |
+| One pass (wav2vec2 + FMT), nfe 10 | 54 ms p50, 63 ms p95. FMT is 47 ms of it; wav2vec2 is 7 ms | ≤ 40 ms p95: missed |
+| One pass, nfe 7 / nfe 5 | 40 ms / 28 ms p50 | — |
+| Decode per frame, batch 1 / 4 / 8 / 16 (fp32) | 10.9 / 5.1 / 4.6 / 4.6 ms | — |
+| fp16 decode | No faster; PSNR 74 dB against fp32 | — |
+| Estimated extra start hold, TTS at 0.25 / 0.5 / 0.8 real-time factor | 129 / 159 / 195 ms | ≤ 150 ms p50: near, before speculative frames |
+| Streamed vs whole-clip motion | H = 20 best on all four clips. Within or below the seed-to-seed noise floor (0.59–0.79) | Lip-sync needs LSE-C/D (to come) |
+| Per-buffer vs running audio normalization | Identical to 4 decimal places | Per-buffer chosen |
+
+**What it shows:**
+- **FMT is launch-bound.** Nine Euler steps of a small 60-position transformer take 47 ms. The likely fixes are CUDA graphs or `torch.compile` in the wrapper, and `nfe = 7` if lip-sync scores hold at it.
+- **Decode is CPU-bound.** fp16 doesn't help, and batches past 8 don't either. Upstream's `ToFlow` builds a NumPy grid and copies it to the GPU on every call; caching that grid in the wrapper is the obvious first fix.
+- **H = 20 with R = 5–8** is the working choice.
+- **The emotion model costs 1.2 GB.** Leaving it out when the emotion is a label is confirmed worthwhile.
+
+**Still to do in Phase 0:**
+- **Lip-sync scores** (SyncNet LSE-C/D) for the streamed and whole-clip outputs, and a rating of the side-by-side videos.
+- **Optimizations, then re-measure:** CUDA graphs or `torch.compile` for FMT, a cached flow grid, `nfe` 7, and a decode batch of 4 for VRAM.
+- **Recorded live-call replies** with their arrival times (N = 40), to replace the estimated start hold. This needs live calls on the gateway.
+- **Paired on/off runs** under real TTS, STT and LLM load: start hold, barge-in time, joins and the speculative share. These are scheduled so they never overlap the RPG session's model gates.
 
 ### Phase 1: catalog, install and the portrait service
 
