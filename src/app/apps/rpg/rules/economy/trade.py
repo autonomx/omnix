@@ -44,6 +44,8 @@ _COUNTS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "ei
 _COUNT_WORDS = r"(\d+|" + "|".join(sorted(_COUNTS, key=len, reverse=True)) + r")"
 _COINS = frozenset({"gold", "silver", "copper", "coin", "coins", "crown", "crowns", "credit", "credits"})
 _COIN_WORDS = "|".join(sorted(_COINS))
+_MEASURE_WORDS = ("feet|foot|yards?|met(?:er|re)s?|inch(?:es)?|pounds?|lbs|ounces?|miles?|hours?|days?|minutes?|"
+                  "lit(?:er|re)s?|gallons?")
 
 
 def wanted_count(text: str, label: str) -> int:
@@ -51,10 +53,17 @@ def wanted_count(text: str, label: str) -> int:
     Potions", "3 lantern bread"), else one; at most ``MOST_AT_ONCE``. A price ("for 15 coppers") is no count."""
     named = [word for word in re.findall(r"[a-z]+", label.casefold()) if word not in {"a", "an", "the", "some", "of"}]
     words = [re.escape(word) for word in named if word not in _COINS][-1:] or [re.escape(word) for word in named][-1:]
+    # "Potion of Healing" is a potion too ("two potions"; the review).
+    words += [re.escape(word) for word in re.findall(r"([a-z]+)\s+of\s", label.casefold())[:1] if word not in _COINS]
     if not words:
         return 1
-    match = re.search(rf"\b{_COUNT_WORDS}\s+(?:[a-z']+\s+)?(?:{'|'.join(words)})(?:s|es)?\b(?!\s+(?:{_COIN_WORDS})\b)",
-                      text.casefold())
+    # Up to two words between the count and the head, a hyphen's halves among them ("two ward-glass bucklers", "two
+    # half-plates", "two mugs of ale": the review).
+    # Never past a measure or a coin, unless the name has it ("50 feet of rope" is one rope; "two gold rings" two).
+    own = "|".join(re.escape(word) for word in named) or "(?!)"
+    between = rf"(?:(?:{own})[\s-]+|(?!(?:{_MEASURE_WORDS}|{_COIN_WORDS})\b)[a-z']+[\s-]+)"
+    match = re.search(rf"\b{_COUNT_WORDS}\s+{between}{{0,2}}(?:{'|'.join(words)})(?:s|es)?\b"
+                      rf"(?!\s+(?:{_COIN_WORDS})\b)", text.casefold())
     if match is None:
         return 1
     word = match.group(1)
@@ -104,11 +113,23 @@ def sellers_here(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [provider for provider in _providers_here(simulation) if _offers(simulation, provider)]
 
 
+# Words of a name that say rank, not who ("Captain Rhea Sunward" is Rhea).
+_TITLES = frozenset({"captain", "lord", "lady", "sir", "dame", "dr", "doctor", "princess", "prince", "king", "queen",
+                     "saint", "inspector", "archon", "master", "mistress", "father", "mother", "brother", "sister"})
+
+
+def _name_words(name: str) -> set[str]:
+    return {word for word in _words(name) if len(word) >= 3 and word not in _TITLES}
+
+
 def _named(providers: list[dict[str, Any]], words: set[str], text: str) -> list[dict[str, Any]]:
+    """The providers ``words`` name: by their whole name, a one-word alias, or a word of their name that is not a
+    title (the review: "sell it to Rhea" never named Captain Rhea Sunward, whose first word is her rank)."""
     lowered = text.casefold()
     return [provider for provider in providers
             if _s(provider.get("provider_name")).casefold() in lowered
-            or words & {_s(alias).casefold() for alias in _l(provider.get("aliases")) if " " not in _s(alias)}]
+            or words & {_s(alias).casefold() for alias in _l(provider.get("aliases")) if " " not in _s(alias)}
+            or words & _name_words(_s(provider.get("provider_name")))]
 
 
 def _offers(simulation: Mapping[str, Any], provider: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -278,7 +299,17 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     item = carried[0]
     name = _s(item.get("name"))
     shops = [provider for provider in _providers_here(simulation) if "shop_goods" in _l(provider.get("service_kinds"))]
-    named = _named(shops, _words(text), text)
+    asked = _words(text) - _words(name)  # "sell Brindle's Arc Baton" names the baton, not its maker
+    named = _named(shops, asked, text.casefold().replace(name.casefold(), " "))
+    if not named:
+        # Someone here named who keeps no shop that buys ("sell the bread to Orik"): theirs to refuse, not another's
+        # to buy (the review: the sale went to Brindle).
+        people = _d(world.get("npcs"))
+        present = [_s(npc_id) for npc_id in _l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids"))]
+        other = next((_s(_d(people.get(npc_id)).get("name")) for npc_id in present
+                      if asked & _name_words(_s(_d(people.get(npc_id)).get("name")))), "")
+        if other:
+            return TradeOutcome(lines=[f"{other} does not buy the {name}."], refused=True, kind="refused")
     if len(named) == 1 and not _buys(simulation, named[0], item):
         return TradeOutcome(lines=[f"{_s(named[0].get('provider_name'))} does not buy the {name}."], refused=True,
                             kind="refused")

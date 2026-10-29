@@ -64,3 +64,11 @@ def test_your_arm_is_the_heros() -> None:
     assert _unsupported_material("Your arm bleeds, 5 health left.", fight) == ["5 health"]
     assert _unsupported_material("Its jaws close on your arm, leaving 5 health.", fight) == ["5 health"]
     assert _unsupported_material("Your strike leaves the wolf at 5 of its 8 health.", fight) == []
+
+
+def test_a_clause_naming_the_foe_the_turn_hit_may_give_its_health() -> None:
+    """The review: "your" elsewhere in the sentence made the wolf's own health the hero's claim."""
+    fight = "you hit the echo wolf for 4 (5 of 10 left)."
+    for said in ("Your blade bites deep, and the wolf staggers at 5 health.", "Your strike lands; the wolf is down to 5 health."):
+        assert _unsupported_material(said, fight) == [], said
+    assert _unsupported_material("Your blade bites deep, and the crowd sees you at 5 health.", fight) == ["5 health"]

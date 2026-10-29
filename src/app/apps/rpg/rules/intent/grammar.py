@@ -200,6 +200,13 @@ def _name_tokens(name: str) -> list[str]:
 
 
 _WHOLE_NAME = 1.5  # the least a hit naming every word of a name scores (a part of a name scores at most 1.25)
+_OTHERS = frozenset({"your", "his", "her", "their", "its"})
+
+
+def _owned_word(words: list[str], position: int) -> bool:
+    """Whether the word at ``position`` can name a thing of the hero's own by its kind ("my knife"): not the command's
+    verb ("drink some water" is no Healing Potion), nor a word after another's ("drop your weapon": the review)."""
+    return position > 0 and words[position - 1] not in _OTHERS
 
 
 def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
@@ -216,6 +223,8 @@ def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
                 found = next((i for i, word in enumerate(words) if _name_word_matches(word, token)), None)
                 positions.append(found)
             matched = [p for p in positions if p is not None]
+            if name.startswith("my ") and not all(_owned_word(words, p) for p in matched):
+                continue
             if len(matched) == len(tokens):
                 score = len(tokens) + 0.5 + (0.25 if entity.here else 0.0)
             elif (len(tokens) >= 2 and matched and any(len(tokens[i]) >= 4 for i, p in enumerate(positions) if p is not None)
@@ -383,6 +392,16 @@ def _ask(words: list[str], scene: SceneView, addressed: _Hit | None) -> IntentCa
     if addressed is not None:
         return _candidate("ask", addressed, 0.85, "asks_someone")
     subject = _first(words, scene, "person", "creature", "place", "item", "offer", "quest", "skill", "group")
+    if subject is not None and subject.entity.kind == "item" and "my" not in words:
+        # A thing asked about where it is on sale is the offer, and so its seller's to answer, even if the hero carries
+        # one ("how much is a potion?" went to whoever was here first: the review); "my potion" is the hero's own.
+        subject = _first(words, scene, "offer", here=True) or subject
+    focus = next((entity for entity in scene.of("person", here=True) if entity.entity_id == scene.focus_id), None)
+    if (subject is not None and subject.entity.kind == "person" and subject.entity.here and focus is not None
+            and focus.entity_id != subject.entity.entity_id):
+        # Asked of the one the hero talks with, about someone else here ("what do you think of the captain?" to
+        # Brindle): Brindle's to answer, not the captain's (the review).
+        return replace(_candidate("ask", subject, 0.85, "asks_about_thing"), second_target_id=focus.entity_id)
     if subject is not None and subject.entity.kind == "person" and subject.entity.here:
         # Asked aloud about someone here ("should I trust the barkeep?"): theirs to answer, as if asked by name (the
         # narration gate: it went to the intent call, which made it a free action, "you do so").

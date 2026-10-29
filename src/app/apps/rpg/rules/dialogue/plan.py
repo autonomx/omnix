@@ -388,8 +388,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
     # What the writer is told leaves out whatever repeats a secret (an author's description or goal may), so the
     # model never sees one and the line can be shown as it is written (Q-12).
     goal_texts = dict.fromkeys([*(_s(goal.get("summary")) for goal in goals), *(_s(goal) for goal in _l(npc.get("goals")))])
-    background = " ".join(sentence for sentence in re.split(r"(?<=[.!?])\s+", _s(npc.get("description")))
-                          if not _names_a_secret(sentence, secrets))
+    background = sayable(_s(npc.get("description")), secrets)
     return DialoguePlan(
         speaker_id=speaker_id, speaker_name=name, role=_s(npc.get("role")), stance=stance,
         voice=_s(npc.get("speech_style")), personality=tuple(_s(trait) for trait in _l(npc.get("personality"))),
@@ -414,6 +413,12 @@ def plan_changes(plan: DialoguePlan) -> list[StateChange]:
         changes.append(QuestOffered(quest_id=quest_id, npc_id=plan.speaker_id,
                                     quest=dict(plan.offered_rows.get(quest_id) or {})))
     return changes
+
+
+def sayable(text: str, secrets: tuple[str, ...]) -> str:
+    """The sentences of ``text`` that repeat none of ``secrets``: what of an author's description may be shown or
+    sent to the model."""
+    return " ".join(sentence for sentence in re.split(r"(?<=[.!?])\s+", text) if not _names_a_secret(sentence, secrets))
 
 
 def _names_a_secret(text: str, secrets: tuple[str, ...]) -> bool:

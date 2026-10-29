@@ -208,8 +208,10 @@ RHEA = {"npc:rhea": {"provider_id": "npc:rhea", "provider_name": "Captain Rhea",
 
 
 def _with_armoury(campaign):
+    from copy import deepcopy
+
     world = campaign["simulation_state"]["world_model"]
-    world["offers"], world["providers"] = {**OFFERS, **ARMOURY}, {**PROVIDERS, **RHEA}
+    world["offers"], world["providers"] = deepcopy({**OFFERS, **ARMOURY}), deepcopy({**PROVIDERS, **RHEA})
     campaign["simulation_state"]["present_npc_state"]["present_npc_ids"].append("npc:rhea")
     return campaign
 
@@ -252,3 +254,29 @@ def test_a_shop_buys_back_only_the_kinds_of_things_it_names() -> None:
     # Brindle buys his own goods back, and the materials he names; the captain neither.
     assert sell(simulation, "I sell my Healing Potion.").lines[0].startswith("You sell the Healing Potion to Brindle")
     assert sell(simulation, "I sell my Aether Shard.").lines == ["You sell the Aether Shard to Brindle Gearwing for 5 copper."]
+
+
+def test_a_buyer_is_named_by_any_word_of_their_name_and_one_who_buys_nothing_refuses() -> None:
+    """The review: "sell the shard to Rhea" sold to Brindle, and so did "sell the bread to Orik"."""
+    items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 2, "category": "material"}]
+    campaign = _with_armoury(_campaign(purse=0, items=items))
+    world = campaign["simulation_state"]["world_model"]
+    world["providers"]["npc:rhea"]["provider_name"] = "Captain Rhea Sunward"
+    world["providers"]["npc:rhea"]["aliases"] = ["captain"]
+    world["npcs"] = {"npc:orik": {"name": "Orik Stonewake"}, "npc:brindle": {"name": "Brindle Gearwing"},
+                     "npc:rhea": {"name": "Captain Rhea Sunward"}}
+    simulation = campaign["simulation_state"]
+    assert sell(simulation, "sell the Aether Shard to Rhea").lines == [
+        "You sell the Aether Shard to Captain Rhea Sunward for 5 copper."]
+    assert sell(simulation, "sell the Aether Shard to Orik").lines == ["Orik Stonewake does not buy the Aether Shard."]
+
+
+def test_a_count_reaches_past_a_hyphen_and_an_of() -> None:
+    from app.apps.rpg.rules.economy.trade import wanted_count
+
+    assert wanted_count("buy two ward-glass bucklers", "Ward-glass Buckler") == 2
+    assert wanted_count("buy two half-plates", "Foundry Half-plate") == 2
+    assert wanted_count("buy two potions of healing", "Potion of Healing") == 2
+    assert wanted_count("I'd like two potions", "Potion of Healing") == 2
+    assert wanted_count("buy two mugs of ale", "Mug of ale") == 2
+    assert wanted_count("buy a buckler for 8 silver", "Ward-glass Buckler") == 1

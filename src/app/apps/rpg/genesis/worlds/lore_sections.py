@@ -10,6 +10,7 @@ place joined to them (``joined_routes``). Pure: it reads the canon and returns r
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable, Mapping
 
 _KINDS = {
@@ -38,6 +39,37 @@ def _texts(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value.strip()] if value.strip() else []
     return [_text(item) for item in value or () if _text(item)]
+
+
+def _hidden(entity: Mapping[str, Any]) -> list[str]:
+    return _texts(entity.get("secrets") or entity.get("hidden_truth"))
+
+
+def _sentences(text: str) -> list[str]:
+    return [sentence for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
+
+
+def _tells(sentence: str, hidden: str) -> bool:
+    """Whether a sentence of a description tells the hidden truth: holds it, or most of the words of one of its
+    sentences (four or more)."""
+    if hidden.casefold() in sentence.casefold():
+        return True
+    said = set(re.findall(r"[a-z0-9']+", sentence.casefold()))
+    for part in _sentences(hidden):
+        words = set(re.findall(r"[a-z0-9']+", part.casefold()))
+        if len(words) >= 4 and len(words & said) >= max(4, len(words) * 2 // 3):
+            return True
+    return False
+
+
+def public_text(entity: Mapping[str, Any]) -> str:
+    """What anyone may know of a lore entity: its description without the sentences that tell its hidden truth (the
+    review: Vesper-9's lore keeps each one's truth inside the description, and a close look printed it), else its
+    short summary."""
+    hidden = _hidden(entity)
+    kept = [sentence for sentence in _sentences(_text(entity.get("description")))
+            if not any(_tells(sentence, truth) for truth in hidden)]
+    return " ".join(kept) or _text(entity.get("short_summary"))
 
 
 def _entities(canon: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -81,10 +113,10 @@ def _role(entity: Mapping[str, Any]) -> str:
 def _character(entity: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": _text(entity.get("id")), "name": _text(entity.get("name")), "role": _role(entity),
-        "biography": _text(entity.get("description") or entity.get("short_summary")),
+        "biography": public_text(entity),
         "location_id": _text(entity.get("location_id")), "speech_style": _text(entity.get("speech_style")),
         "goals": _texts(entity.get("goals") or entity.get("goal")),
-        "secrets": _texts(entity.get("secrets") or entity.get("hidden_truth")),
+        "secrets": _hidden(entity),
         "personality": _texts(entity.get("personality")),
     }
 
@@ -142,7 +174,7 @@ def lore_location_rows(canon: Mapping[str, Any], topology: Mapping[str, Any]) ->
         entity = places.get(_text(row.get("id")), {})
         filled = {key: value for key, value in {
             "name": _text(entity.get("name")), "region_id": _text(entity.get("region_id")),
-            "description": _text(entity.get("description") or entity.get("short_summary")),
+            "description": public_text(entity),
         }.items() if value and not _text(row.get(key))}
         if _text(row.get("id")):
             rows.append({**row, **filled})

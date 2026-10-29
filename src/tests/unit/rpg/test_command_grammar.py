@@ -209,3 +209,34 @@ def test_a_title_names_a_calling_and_a_group_is_asked_about() -> None:
     assert parse_command("ask the doctor about the docks", scene).target_id == "npc:kade"
     union = parse_command("what is the union?", scene)
     assert (union.family, union.target_id) == ("ask", "ent:groups:union")
+
+
+def test_a_thing_of_the_heros_by_its_kind_is_never_a_verb_or_anothers() -> None:
+    """The review: "drink some water" drank a Healing Potion, and "drop your weapon!" dropped the hero's dagger."""
+    scene = SceneView((
+        SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),
+        SceneEntity("item:potion", "item", ("Healing Potion", "my potion"), here=True),
+        SceneEntity("item:dagger", "item", ("Iron Dagger", "my dagger", "my knife", "my weapon"), here=True),
+    ))
+    assert parse_command("drop my weapon", scene).target_id == "item:dagger"
+    for text in ("Orik, drop your weapon", "put down your weapon!"):
+        assert parse_command(text, scene).target_id != "item:dagger", text
+    assert parse_command("use my knife to cut the rope", scene).target_id == "item:dagger"
+
+
+def test_a_question_goes_to_the_seller_of_what_is_asked_and_to_whom_the_hero_talks_with() -> None:
+    """The review: "how much is a potion?" went to whoever was here first, and a question put to Brindle about the
+    captain went to the captain."""
+    scene = SceneView((
+        SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),
+        SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "Brindle"), here=True),
+        SceneEntity("npc:rhea", "person", ("Captain Rhea Sunward", "the captain"), here=True),
+        SceneEntity("item:healing-potion", "item", ("Healing Potion", "potion")),
+        SceneEntity("npc:brindle:healing-potion", "offer", ("Healing Potion",), here=True),
+    ))
+    priced = parse_command("how much is a potion?", scene)
+    assert (priced.reason, priced.second_target_id) == ("asks_about_thing", "npc:brindle")
+    talking = SceneView(scene.entities, focus_id="npc:brindle")
+    asked = parse_command("what do you think of the captain?", talking)
+    assert (asked.target_id, asked.second_target_id) == ("npc:rhea", "npc:brindle")
+    assert parse_command("what do you think of the captain?", scene).target_id == "npc:rhea"  # no one in focus: hers

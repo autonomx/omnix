@@ -11,7 +11,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import LocationChanged, StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.location_registry import current_location_id
-from app.apps.rpg.rules.contracts import A_WHILE, said
+from app.apps.rpg.rules.contracts import A_WHILE, said, sayable
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
 from app.apps.rpg.foundation.state import access as _sections
@@ -70,7 +70,8 @@ def _looked_at(simulation: Mapping[str, Any], world: Mapping[str, Any], target_i
 
     person = _d(_d(world.get("npcs")).get(target_id))
     if person:
-        role, about = _s(person.get("role")), _s(person.get("description")).rstrip(".")
+        secrets = tuple(_s(secret) for secret in _l(person.get("secrets")))
+        role, about = _s(person.get("role")), sayable(_s(person.get("description")), secrets).rstrip(".")
         return (f"You look closely at {_s(person.get('name')) or target_id}" + (f", the {role}" if role else "")
                 + (f": {about}." if about else "."))
     place = _d(_d(world.get("locations")).get(target_id))

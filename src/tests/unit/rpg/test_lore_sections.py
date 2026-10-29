@@ -78,3 +78,19 @@ def test_a_lore_worlds_groups_are_its_own() -> None:
                            "short_summary": "The dock workers' union."}]}
     assert lore_rows(canon, "groups") == [{"id": "ent:groups:union", "name": "Red Knives Union",
                                            "summary": "The dock workers' union."}]
+
+
+def test_a_lore_entitys_hidden_truth_stays_out_of_what_anyone_may_see() -> None:
+    """The review: Vesper-9's lore keeps each one's hidden truth inside the description, and a close look printed it."""
+    told = "A fixer at a booth. He once served Kestrel intelligence and draws a dead medic's pension. He keeps three lists."
+    canon = {"entities": {
+        "a:oren": {"id": "a:oren", "kind": "actor", "name": "Oren Pike", "description": told,
+                   "hidden_truth": "He once served Kestrel intelligence and still draws a pension through a dead medic."},
+        "p:station": {"id": "p:station", "kind": "place", "name": "Black Rain Station", "short_summary": "An interchange.",
+                      "description": "An interchange of dark water. Platform Zero receives a wartime train.",
+                      "hidden_truth": "Platform Zero receives a driverless wartime train on irregular nights."},
+    }}
+    [oren] = lore_rows(canon, "characters")
+    assert oren["biography"] == "A fixer at a booth. He keeps three lists." and oren["secrets"]
+    [station] = lore_location_rows(canon, {})
+    assert station["description"] == "An interchange of dark water."

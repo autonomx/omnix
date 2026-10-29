@@ -83,12 +83,19 @@ _FOE_WORDS = re.compile(r"\b(?:it|its|itself|they|them|their|him|his|her|hers)\b
 _HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, in the sentence: "your arm bleeds"
 
 
-def _of_a_foe(clause: str, sentence: str) -> bool:
+_THE_NOUN = re.compile(r"\bthe\s+([a-z][a-z'-]{2,})\b", re.IGNORECASE)
+
+
+def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:
     """Whether a clause speaks of a foe's health: it names no "you", and its sentence names none or the clause points
-    at someone else ("you hit the wolf, leaving it at 5 health"; not "bleeding, down to 5 health, you press on")."""
+    at someone else, by a pronoun or by a name the turn's evidence holds ("you hit the wolf, leaving it at 5
+    health", "your blade bites, and the wolf staggers at 5 health" where the echo wolf was hit; not "bleeding, down to
+    5 health, you press on")."""
     if _HEROS_HEALTH.search(clause):
         return False
-    return not _HEROS.search(sentence) or _FOE_WORDS.search(clause) is not None
+    if not _HEROS.search(sentence) or _FOE_WORDS.search(clause) is not None:
+        return True
+    return any(re.search(rf"\b{re.escape(noun.casefold())}\b", evidence_text) for noun in _THE_NOUN.findall(clause))
 
 
 def _unsupported_amounts(clause: str, evidence_text: str, *, foes: bool) -> list[str]:
@@ -111,7 +118,7 @@ def _unsupported_material(text: str, evidence_text: str) -> list[str]:
     said: list[str] = []
     for sentence in _SENTENCE.split(text):
         for clause in _CLAUSE.split(sentence):
-            said += _unsupported_amounts(clause, evidence_text, foes=_of_a_foe(clause, sentence))
+            said += _unsupported_amounts(clause, evidence_text, foes=_of_a_foe(clause, sentence, evidence_text))
     for level in _LEVEL.findall(text):
         if not re.search(rf"\blevel\s+{level}\b", evidence_text):
             said.append(f"level {level}")

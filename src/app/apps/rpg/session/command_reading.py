@@ -50,7 +50,7 @@ _KIND_NAMES = {
     "dagger": ("knife", "blade", "weapon"), "knife": ("dagger", "blade", "weapon"), "sword": ("blade", "weapon"),
     "monoblade": ("blade", "weapon"), "axe": ("weapon",), "bow": ("weapon",), "staff": ("weapon",),
     "pistol": ("gun", "weapon"), "rifle": ("gun", "weapon"), "cloak": ("coat",), "coat": ("cloak",),
-    "jacket": ("coat",), "bread": ("food",), "rations": ("food",), "bars": ("food",), "potion": ("drink",),
+    "jacket": ("coat",), "bread": ("food",), "rations": ("food",), "bars": ("food",),
 }
 
 
@@ -135,7 +135,9 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     for item in _l(inventory.get("items")):
         item = _d(item)
         item_id = _s(item.get("item_id") or item.get("id"))
-        add(item_id, "item", _names(item.get("name"), _label(item_id), *_kind_names(_s(item.get("name")))), True)
+        # By its kind only as the hero's own ("my knife"): never another's ("drop your weapon!": the review).
+        add(item_id, "item", _names(item.get("name"), _label(item_id),
+                                    *(f"my {kind}" for kind in _kind_names(_s(item.get("name"))))), True)
     for item in _l(_d(_d(state.get("world_items")).get("by_location")).get(location_id)):
         item = _d(item)  # lying where the hero stands, to pick up
         item_id = _s(item.get("item_id") or item.get("id"))
