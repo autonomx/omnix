@@ -53,3 +53,17 @@ def test_the_memory_is_bounded(monkeypatch) -> None:
     for index in range(5):
         store._remember_covered("w", f"c{index}", _covered("h", {"x": "x"}))
     assert list(store._COVERED) == [("w", "c2"), ("w", "c3"), ("w", "c4")]
+
+
+def test_a_covered_bibles_stored_row_makes_the_snapshot_a_read_would() -> None:
+    """F2: a covered turn's narration builds its snapshot from the row kept with the coverage, not a second read."""
+    from app.apps.rpg.genesis.forge.campaign_bible_runtime import postgres_snapshot_of
+
+    row = {"campaign_id": "c1", "revision": 4, "content_hash": "hash-a", "document": {"entities": {}},
+           "provenance": {"last_source": "runtime_scene_materialization_v1"}, "consistency_report": {},
+           "completeness": {}}
+    covered = store._Covered(4, "hash-a", "world-a", {"x": "x"}, row["document"], row)
+    snapshot = postgres_snapshot_of(covered.record)
+    assert (snapshot.revision, snapshot.content_hash, snapshot.document) == (4, "hash-a", {"entities": {}})
+    assert snapshot.provenance["runtime_source"] == "postgresql"  # as the read it replaces says
+    assert store._Covered(4, "hash-a", "world-a", {}, {}).record is None  # kept only where a row was at hand

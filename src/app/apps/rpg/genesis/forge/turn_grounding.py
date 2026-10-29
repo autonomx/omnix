@@ -11,7 +11,7 @@ from app.apps.rpg.narration.narrative_engine import (
 )
 from app.apps.rpg.narration.narrative_engine.shadow import runtime_evidence
 
-from .campaign_bible_runtime import load_campaign_bible_snapshot
+from .campaign_bible_runtime import load_campaign_bible_snapshot, postgres_snapshot_of
 from .hermes_campaign_research import CampaignResearchPacket, research_campaign_turn
 from .npc_lore_sync import sync_encountered_npc_lore
 from .runtime_lore_store import ensure_turn_scene_lore
@@ -250,7 +250,12 @@ def build_turn_grounding_packet(
     portable_snapshot = _portable_materialized_snapshot(session, campaign_id)
     prefer_postgresql = scene_lore.get("postgresql_persisted") is not False
     loaded_snapshot = None
-    if not runtime_only:
+    stored_record = scene_lore.get("stored_record")
+    if not runtime_only and prefer_postgresql and isinstance(stored_record, Mapping):
+        # The bible this turn's lore check just found current: its stored row, kept with the check, is the authority
+        # (F2: a second read of the same row cost a statement a narrated turn).
+        loaded_snapshot = postgres_snapshot_of(stored_record)
+    elif not runtime_only:
         loaded_snapshot = load_campaign_bible_snapshot(
             campaign_id,
             session=session,

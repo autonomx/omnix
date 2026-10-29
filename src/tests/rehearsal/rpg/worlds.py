@@ -12,6 +12,7 @@ Nothing here is used by the application; it is test and measurement support.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -303,7 +304,9 @@ def launch_published(world: str, *, player_name: str = "Wren", scenario_hint: st
     from app.persistence.unit_of_work import unit_of_work
     from app.runtime.tenant_context import current_tenant
 
-    prefix = f"world:{world}-harness-"
+    bundle = world_bundle(world)
+    # One import per bundle content: a world whose bundle changed is imported again, not played stale.
+    prefix = f"world:{world}-harness-{hashlib.sha256(bundle).hexdigest()[:8]}-"
     with unit_of_work() as work:
         # Scenario ids are unique across worlds, so a world whose openings are prepared at launch (Vesper-9) is
         # imported once per database and reused.
@@ -312,7 +315,7 @@ def launch_published(world: str, *, player_name: str = "Wren", scenario_hint: st
         work.rollback()
     world_id = reusable or f"{prefix}{uuid.uuid4().hex[:10]}"
     if not reusable:
-        imported = import_world_bundle(world_bundle(world), target_world_id=world_id)
+        imported = import_world_bundle(bundle, target_world_id=world_id)
         adopt_shared_world(world_id, bundle_sha256=imported["bundle_sha256"])
     with unit_of_work() as work:
         has_scenarios = any(True for _ in work.world_library.iter_scenarios(current_tenant(), world_id=world_id))

@@ -288,12 +288,15 @@ _COVERED_TTL_SECONDS = 3600.0
 
 
 class _Covered:
-    __slots__ = ("revision", "content_hash", "binding", "resolved", "document", "at")
+    __slots__ = ("revision", "content_hash", "binding", "resolved", "document", "record", "at")
 
     def __init__(self, revision: int, content_hash: str, binding: str, resolved: Mapping[str, str],
-                 document: Mapping[str, Any]) -> None:
+                 document: Mapping[str, Any], record: Mapping[str, Any] | None = None) -> None:
         self.revision, self.content_hash, self.binding = revision, content_hash, binding
         self.resolved, self.document = dict(resolved), document
+        # The stored row as written (its provenance, consistency report and completeness beside the document): a
+        # covered turn's narration builds its snapshot from it rather than reading the row again (F2).
+        self.record = dict(record) if record is not None else None
         self.at = time.monotonic()
 
 
@@ -382,6 +385,7 @@ def ensure_turn_scene_lore(
                 "persisted": True,
                 "changed": False,
                 "already_materialized": True,
+                **({"stored_record": covered.record} if covered.record is not None else {}),
                 "campaign_id": campaign_id,
                 "revision": covered.revision,
                 "content_hash": covered.content_hash,
@@ -491,7 +495,7 @@ def ensure_turn_scene_lore(
                 work.rollback()
             if version is not None and version[1] == str(stored["content_hash"]):
                 _remember_covered(str(context.workspace_id), campaign_id, _Covered(
-                    int(stored["revision"]), version[1], version[2], resolved, stored["document"]))
+                    int(stored["revision"]), version[1], version[2], resolved, stored["document"], stored))
         previous_hash = _text(
             _mapping(session.get("campaign_bible_projection")).get("content_hash")
         )

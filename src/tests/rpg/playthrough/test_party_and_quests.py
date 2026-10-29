@@ -7,14 +7,12 @@ from tests.rpg.playthrough.campaigns import POSTGRES, copper, in_worlds
 
 pytestmark = POSTGRES
 
-NO_WORLD_MODEL = ("RQ-2.0: no one in a lore-only world (Vesper-9) is written as one who would join the hero "
-                  "(a companion, guide, protector or ally)")
 COMPANION = {"aurelia": ("Liora Fen", "npc:liora-fen", "go to Starfall Village"),
              "starter": ("Mira", "npc:mira", "go outside"),
-             "vesper": ("Ines Vale", "npc:ines-vale", "go to Tidebreak Docks")}
+             "vesper": ("Ines Okoro", "ent:actors:ines-okoro", "go to Tidebreak Docks")}
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
+@pytest.mark.parametrize("world", in_worlds())
 def test_companion_joins_and_follows(launch, world) -> None:
     play = launch(world)
     name, npc_id, travel = COMPANION[world]

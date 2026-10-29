@@ -7,9 +7,6 @@ from tests.rpg.playthrough.campaigns import POSTGRES, in_worlds
 
 pytestmark = POSTGRES
 
-NO_SHOPS = ("RQ-2.0: a lore-only world (Vesper-9) writes no economy, and its people's roles infer no shop or inn "
-            "(only news and repairs)")
-
 # Where each world's shop is, what it sells, and what the hero carries to drop. Aurelia's roads choke its trade from
 # the start (trade access 30), so its prices carry the roads' fifth (economy.md); a shop buys back at its list price.
 SHOP = {
@@ -18,12 +15,12 @@ SHOP = {
                 "food": "Lantern Bread"},
     "starter": {"route": ["go to the market"], "merchant": "Elara", "ware": "Healing Potion", "price": 100,
                 "buys_back": 50, "elsewhere": "go to the tavern", "back": "go to the market", "food": "Torch"},
-    "vesper": {"route": [], "merchant": "a vendor", "ware": "Stim Patch", "price": 10, "buys_back": 5,
+    "vesper": {"route": [], "merchant": "Pell Sato", "ware": "Stim Patch", "price": 10, "buys_back": 5,
                "elsewhere": "go to Tidebreak Docks", "back": "go to Black Rain Station", "food": "Utility Knife"},
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_SHOPS))
+@pytest.mark.parametrize("world", in_worlds())
 def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
     play, shop = launch(world), SHOP[world]
     for step in shop["route"]:
@@ -99,11 +96,11 @@ def test_equip_through_loadout_survives_story_turns(launch, world) -> None:
 INN = {
     "aurelia": {"route": ["go to Starfall Village"], "keeper": "Orik Stonewake", "room": 60, "meal": 10},
     "starter": {"route": [], "keeper": "Bran", "room": 50, "meal": 15},
-    "vesper": {"route": [], "keeper": "the bartender", "room": 10, "meal": 5},
+    "vesper": {"route": [], "keeper": "Dex Marlowe", "room": 20, "meal": 6},
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_SHOPS))
+@pytest.mark.parametrize("world", in_worlds())
 def test_lodging_and_needs_over_a_night(launch, world) -> None:
     play, inn = launch(world), INN[world]
     for step in inn["route"]:
