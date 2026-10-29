@@ -235,7 +235,8 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
         item = _d(item)
         changes.append(ItemAdded(item_id=_s(item.get("item_id")), name=_s(item.get("name")) or label,
                                  quantity=max(1, int(item.get("quantity") or 1)) * count, category=_s(item.get("type")),
-                                 fields={"description": _s(item.get("description"))} if item.get("description") else {}))
+                                 fields={**({"description": _s(item.get("description"))} if item.get("description") else {}),
+                                         **({"equipment": _d(item.get("equipment"))} if _d(item.get("equipment")) else {})}))
     if kind in RELIEF:
         need, delta = RELIEF[kind]
         changes.append(NeedsChanged(**{need: delta}))
@@ -249,6 +250,17 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     changes.append(TradeRemembered(provider_id=_s(provider.get("provider_id")), provider_name=name, deal="bought",
                                    what=what, copper=price * count))
     return TradeOutcome(changes=changes, lines=lines, kind="bought")
+
+
+def _deals_in(simulation: Mapping[str, Any], shop: Mapping[str, Any], name: str) -> bool:
+    return any(_s(offer.get("label")).casefold() == name.casefold() for offer in _offers(simulation, shop))
+
+
+def _buys(simulation: Mapping[str, Any], shop: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
+    """A shop buys back what it sells, and the kinds of things its buy-back names; anything, where it names none."""
+    kinds = {_s(kind).casefold() for kind in _l(_d(shop.get("buys")).get("item_types")) if _s(kind)}
+    return (not kinds or _deals_in(simulation, shop, _s(item.get("name")))
+            or _s(item.get("category") or item.get("type")).casefold() in kinds)
 
 
 def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
@@ -266,8 +278,18 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     item = carried[0]
     name = _s(item.get("name"))
     shops = [provider for provider in _providers_here(simulation) if "shop_goods" in _l(provider.get("service_kinds"))]
-    shops = _named(shops, _words(text), text) or shops
-    if len(shops) != 1:
+    named = _named(shops, _words(text), text)
+    if len(named) == 1 and not _buys(simulation, named[0], item):
+        return TradeOutcome(lines=[f"{_s(named[0].get('provider_name'))} does not buy the {name}."], refused=True,
+                            kind="refused")
+    shops = [shop for shop in shops if _buys(simulation, shop, item)]
+    # Unnamed, the one shop here that deals in it (Brindle buys back his shards; the guard captain does not).
+    dealing = [shop for shop in shops if _deals_in(simulation, shop, name)]
+    shops = named or (dealing if len(dealing) == 1 else shops)
+    if len(shops) > 1:
+        buyers = " or ".join(_s(shop.get("provider_name")) for shop in shops)
+        return TradeOutcome(lines=[f"To whom do you sell the {name}: {buyers}?"], refused=True, kind="refused")
+    if not shops:
         return TradeOutcome(lines=[f"No one here trades in goods to buy the {name}."], refused=True, kind="refused")
     shop = shops[0]
     buyer = _s(shop.get("provider_name"))

@@ -80,7 +80,7 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
     assert [row["revision"] for row in payload.world_revisions] == [1, 2, 3]
     assert len(payload.map_definitions) == 15
     assert len(payload.scenario_revisions) == 9
-    assert len(manifest["characters"]) == 10
+    assert len(manifest["characters"]) == 12  # with Valecourt's foundry master and engine warden (lore-additions.json)
     assert len(manifest["factions"]) == 6
     assert len(revision["adventure_seeds"]) == 5
     assert len(quest_topic["content"]["quests"]) == 6
@@ -95,7 +95,8 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
     }
     assert all(row["status"] == "ready" for row in payload.map_blueprints)
     latest = payload.world_revisions[-1]["document"]
-    assert len(latest["canon"]["routines"]) == 10
+    assert len(latest["canon"]["routines"]) == 12  # a day for each of its twelve people
+    assert len(latest["canon"]["economy"]["providers"]) == 6  # its shops, Valecourt's forge among them
     assert {row["simulation_readiness"] for row in latest["blueprint_requirements"]} == {"certified"}
     newest = {}
     for row in payload.scenario_revisions:

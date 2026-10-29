@@ -117,13 +117,31 @@ Found and fixed:
 
 Noted, not changed:
 
-- Valecourt, a capital, has no one in it by day (its princess holds court there only from 19:00); its lore names no one
+- (Since added, below.) Valecourt, a capital, has no one in it by day (its princess holds court there only from 19:00); its lore names no one
   else there. A place someone's day brings them to is still wild, or the pass, where Captain Rhea checks the barricades
   by night, would have no wolves.
 - Aurelia sells no weapons or armour: its lore has six items, its one weapon Vael's legendary Oathblade. Gear does not
   grow with the hero there; a world's author would write its shops' goods.
 - Elyra could not name the voice from Earth: the world's lore never does.
 - Orik's inn gives "new arrivals one free night", in its lore; the economy charges six silver.
+
+### Content added afterwards (2026-10-29)
+
+The first three were content, and Aurelia's author files now write them (`lore-additions.json`, `play-sections.json`):
+
+- Gear. Aurelia has an authored economy now, keeping every offer launch used to infer. Captain Rhea sells the watch's
+  spare Gatewarden Shortswords, Watch Leathers and Ward-glass Bucklers. Brindle sells his Arc Baton. In Valecourt,
+  Hollis Brask, foundry master, sells an Aether-forged Longsword and Foundry Half-plate. Each item says its slot and
+  numbers. The Ashen Oathblade (5-10, +3) is now the reward for the Bridge of One Thousand Promises. Echoes drop
+  Aether Shards, which Brindle and Hollis buy back, so fights pay for the better gear.
+- Valecourt by day. Hollis Brask works his forge there from 06:00 to 20:00. Cassia Venn, warden of the royal gate
+  engine, keeps its hall. Seeing the engine is now a talk with her, not just arriving in the city.
+- The voice. Elyra names it as the hero's own: the call they were making when the blackout took them, caught in the
+  Memory Loom. She calls it the Unfinished Call. Brindle's radio catches it in storms, from Moonroot.
+
+The engine changed to carry this. A world item's `equipment` now reaches the pack whether it is bought, given as a
+reward or looted, and the pack honours its slot. A seller's buy-back types are now enforced (they were saved but never
+read). An unnamed sale goes to the one seller who deals in the thing, or the hero is asked which seller.
 
 ## A short Vesper-9 session (turns 1-5)
 

@@ -47,6 +47,19 @@ def test_a_fact_asked_about_is_shared_once_and_made_known() -> None:
     assert again is not None and again.reveals and plan_changes(again) == []
 
 
+
+def test_the_speakers_own_name_asks_about_none_of_what_they_know() -> None:
+    simulation = _simulation()
+    simulation["world_model"]["knowledge"][0]["facts"].append(
+        {"fact_id": "fact:kettle", "text": "Orik's kettle predicts the rain.", "topics": ["kettle"]})
+    plan = build_plan(simulation, ORIK, "I ask Orik Stonewake what the stew costs.")
+    assert plan is not None and plan.reveals == ()
+    asked = build_plan(simulation, ORIK, "Orik, what about your kettle?")
+    assert asked is not None and asked.reveals == ("Orik's kettle predicts the rain.",)
+    simulation["world_model"]["offers"][ORIK].append({"label": "Orik's Own Ale", "price": {"copper": 9}})
+    priced = build_plan(simulation, ORIK, "I ask Orik what the stew costs.")
+    assert priced is not None and priced.wares == ("Stew for 5 copper",)  # not his ale, for his name
+
 def test_a_trusted_fact_waits_for_trust_and_a_priced_one_names_its_price() -> None:
     wary = build_plan(_simulation(trust=10), ORIK, "What about the tower and the caves?")
     assert wary is not None and wary.reveals == () and wary.held_back == 1

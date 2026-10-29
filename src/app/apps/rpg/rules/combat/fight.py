@@ -429,7 +429,8 @@ def _spoils(simulation: Mapping[str, Any], combat: Mapping[str, Any]) -> tuple[l
             quantity = max(1, int(drop.get("quantity") or 1))
             changes.append(ItemAdded(item_id=item_id, name=name, quantity=quantity, category=_s(item.get("type")) or "misc",
                                      fields={"description": _s(item.get("effect")), "rarity": _s(item.get("rarity")),
-                                             "source": "loot"}))
+                                             "source": "loot",
+                                             **({"equipment": _d(item.get("equipment"))} if _d(item.get("equipment")) else {})}))
             lines.append(f"You take {name}{f' x{quantity}' if quantity > 1 else ''} from {_s(row.get('name')) or 'the fallen'}.")
     return changes, lines
 

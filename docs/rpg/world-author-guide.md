@@ -62,7 +62,14 @@ cannot be published until that is fixed.
 Each **seller** is a person of the world, at a place (by default, where they are found). Each **offer** has a name,
 a service (goods, lodging, a meal, a drink, repair or information), a price in gold, silver and copper (never free),
 and optionally a stock and how many it restocks each day. Goods name the item sold. **Buys back** lists the item
-types the seller buys and the share of the price paid (0.5 is half).
+types the seller buys (a seller always buys back what they sell; one that lists none buys anything) and the share of
+the price paid (0.5 is half). A sale that names no buyer goes to the one seller there who deals in the thing; with
+two who would buy it, the hero is asked which.
+
+Gear a world sells or gives is gear the hero can wear and fight with when its item says how: an item's `equipment`
+holds its `slot` (`main_hand`, `off_hand`, `body`, `head`, `cloak`, `ring`) and its `stats` (`damage_min`,
+`damage_max`, `accuracy_bonus`, `armor`). Armour takes its value off each blow, so a little goes a long way. An item
+without it is worn by what its name or type says (a "dagger", "armor"), at the engine's numbers for that kind.
 
 ### Routines
 
@@ -135,7 +142,9 @@ capital, by a road of three hours.
 
 A hand-written source carries the same sections in its canon: `economy.providers`, `routines`, `knowledge`,
 `pressures`, and `bestiary` rows with `stats`, `behaviour` and `loot` beside their lore, using the same fields as the
-editor's forms. Publication checks them; `the-market-road/world.source.json` uses every one of them.
+editor's forms. Publication checks them; `the-market-road/world.source.json` uses every one of them. Aurelia's bundle
+shows the same for a shared world: `lore-additions.json` (its gear, the Valecourt people, a quest's reward) and
+`play-sections.json` are written in by `author_play_sections.py`, through the world library's own publication.
 
 ## Sharing
 

@@ -1,0 +1,101 @@
+{
+  "items": [
+    {
+      "id": "item:healing-potion",
+      "name": "Healing Potion",
+      "type": "potion",
+      "rarity": "common",
+      "effect": "restores health; brewed from moonroot sap"
+    },
+    {
+      "id": "item:aether-shard",
+      "name": "Aether Shard",
+      "type": "material",
+      "rarity": "common",
+      "effect": "a sliver of crystallized aether shed by unstable Echoes; tinkerers and foundries pay for it"
+    },
+    {
+      "id": "item:gatewarden-shortsword",
+      "name": "Gatewarden Shortsword",
+      "type": "weapon",
+      "rarity": "common",
+      "effect": "a short blade of grove-forged steel, issued to the Starfall watch",
+      "equipment": {"slot": "main_hand", "stats": {"damage_min": 2, "damage_max": 6, "accuracy_bonus": 1}}
+    },
+    {
+      "id": "item:watch-leathers",
+      "name": "Watch Leathers",
+      "type": "armor",
+      "rarity": "common",
+      "effect": "boiled leather stitched with ward-thread against mind-affecting magic",
+      "equipment": {"slot": "body", "stats": {"armor": 1}}
+    },
+    {
+      "id": "item:ward-glass-buckler",
+      "name": "Ward-glass Buckler",
+      "type": "shield",
+      "rarity": "common",
+      "effect": "a small round shield faced with unpolished iron and ward-glass",
+      "equipment": {"slot": "off_hand", "stats": {"armor": 1}}
+    },
+    {
+      "id": "item:arc-baton",
+      "name": "Brindle's Arc Baton",
+      "type": "weapon",
+      "rarity": "uncommon",
+      "effect": "a rebuilt Earth flashlight that throws a crackling arc of aether; it also still works as a flashlight",
+      "equipment": {"slot": "main_hand", "stats": {"damage_min": 3, "damage_max": 7, "accuracy_bonus": 1}}
+    },
+    {
+      "id": "item:aether-forged-longsword",
+      "name": "Aether-forged Longsword",
+      "type": "weapon",
+      "rarity": "rare",
+      "effect": "a long blade quenched in liquid aether at the Valecourt foundries; it hums before a blow lands",
+      "equipment": {"slot": "main_hand", "stats": {"damage_min": 4, "damage_max": 9, "accuracy_bonus": 2}}
+    },
+    {
+      "id": "item:foundry-half-plate",
+      "name": "Foundry Half-plate",
+      "type": "armor",
+      "rarity": "rare",
+      "effect": "plate over the chest and shoulders, riveted on Valecourt's foundry row",
+      "equipment": {"slot": "body", "stats": {"armor": 2}}
+    }
+  ],
+  "item_changes": {
+    "item:ashen-oathblade": {
+      "equipment": {"slot": "main_hand", "stats": {"damage_min": 5, "damage_max": 10, "accuracy_bonus": 3}}
+    }
+  },
+  "quest_rewards": {
+    "quest:bridge-of-one-thousand-promises": ["item:ashen-oathblade"]
+  },
+  "characters": [
+    {
+      "id": "npc:hollis-brask",
+      "name": "Hollis Brask",
+      "role": "foundry master and armourer",
+      "species": "human",
+      "location_id": "location:aurelia:valecourt",
+      "biography": "Hollis runs the oldest forge on Valecourt's foundry row, where aether is poured like molten glass. He arms the royal guard by contract and any Wayfarer who can pay, and buys every aether shard brought back from the ruins.",
+      "goals": ["keep the foundry fires lit through the shard shortage", "forge a blade worthy of the Ashen Oathblade", "outlive the crown's contracts"],
+      "personality": ["blunt", "proud of his craft", "fair in a bargain", "suspicious of Earth gadgets"],
+      "relationships": {"npc:brindle-gearwing": "a rival tinkerer he secretly admires", "npc:seraphine-valecourt": "the patron who keeps his forge in contracts"},
+      "speech_style": "short sentences, smith's measures, the heat of the forge in every comparison"
+    },
+    {
+      "id": "npc:cassia-venn",
+      "name": "Cassia Venn",
+      "role": "warden of the royal gate engine",
+      "species": "elf",
+      "location_id": "location:aurelia:valecourt",
+      "biography": "Cassia has kept the royal gate engine running in its hall at Valecourt for twelve years. She has never been allowed inside its sealed core, and she has stopped pretending she cannot hear it at night.",
+      "goals": ["keep the engine from stalling again", "learn what powers the sealed core", "protect Princess Seraphine from her own court"],
+      "personality": ["meticulous", "dryly funny", "loyal", "quietly haunted"],
+      "relationships": {"npc:seraphine-valecourt": "sworn to her house", "npc:archon-malrec": "fears his name"},
+      "secrets": ["she has heard her own childhood voice inside the engine's core"],
+      "speech_style": "precise, a little formal, punctuated by the engine's readings"
+    }
+  ]
+}

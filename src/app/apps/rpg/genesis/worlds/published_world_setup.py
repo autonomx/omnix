@@ -280,7 +280,9 @@ def _authored_offer(canon: Mapping[str, Any], provider: Mapping[str, Any], offer
         item = next((row for row in lore_rows(canon, "items") if _text(row.get("id")) == offer.item_id), {})
         effects = {"items_added": [{"item_id": offer.item_id, "name": offer.name, "quantity": 1,
                                     "type": _text(item.get("type")).casefold() or "goods",
-                                    "description": _text(item.get("effect") or item.get("description"))}]}
+                                    "description": _text(item.get("effect") or item.get("description")),
+                                    **({"equipment": dict(_mapping(item.get("equipment")))}
+                                       if _mapping(item.get("equipment")) else {})}]}
     priced = {"gold": offer.price.gold, "silver": offer.price.silver, "copper": offer.price.copper}
     built = _offer(provider, offer.service, offer.offer_key, offer.name, offer.description or offer.name,
                    priced, effects, stock=offer.stock)
@@ -421,7 +423,10 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         "providers": providers,
         "items": [
             {"id": _text(item.get("id")), "name": _text(item.get("name")), "type": _text(item.get("type")),
-             "effect": _text(item.get("effect") or item.get("description"))}
+             "effect": _text(item.get("effect") or item.get("description")),
+             # How it is worn or wielded and fights, as the world wrote it (a slot and its numbers): a world's own
+             # gear, not only the kinds the engine knows by name.
+             **({"equipment": dict(_mapping(item.get("equipment")))} if _mapping(item.get("equipment")) else {})}
             for item in lore_rows(canon, "items")  # as authored, else the lore's (a world written as lore)
             if _text(item.get("id"))
         ],

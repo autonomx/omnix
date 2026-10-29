@@ -1,4 +1,278 @@
 {
+  "economy": {
+    "providers": [
+      {
+        "provider_id": "npc:orik-stonewake",
+        "location_id": "location:aurelia:starfall-village",
+        "sells": [
+          {
+            "offer_key": "night",
+            "service": "lodging",
+            "name": "A night's lodging",
+            "description": "A bed at the Lantern Below.",
+            "price": {
+              "silver": 5,
+              "copper": 0
+            },
+            "stock": 6,
+            "restock_per_day": 6
+          },
+          {
+            "offer_key": "meal",
+            "service": "meal",
+            "name": "A hot meal",
+            "description": "A hot meal of the house.",
+            "price": {
+              "silver": 0,
+              "copper": 8
+            }
+          },
+          {
+            "offer_key": "drink",
+            "service": "drink",
+            "name": "A drink",
+            "description": "A drink of the house.",
+            "price": {
+              "silver": 0,
+              "copper": 8
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:brindle-gearwing",
+        "location_id": "location:aurelia:starfall-village",
+        "sells": [
+          {
+            "offer_key": "lantern-bread",
+            "service": "shop_goods",
+            "name": "Lantern Bread",
+            "item_id": "item:lantern-bread",
+            "price": {
+              "silver": 0,
+              "copper": 8
+            },
+            "stock": 5,
+            "restock_per_day": 5
+          },
+          {
+            "offer_key": "healing-potion",
+            "service": "shop_goods",
+            "name": "Healing Potion",
+            "item_id": "item:healing-potion",
+            "price": {
+              "silver": 3,
+              "copper": 0
+            },
+            "stock": 3,
+            "restock_per_day": 2
+          },
+          {
+            "offer_key": "aether-shard",
+            "service": "shop_goods",
+            "name": "Aether Shard",
+            "item_id": "item:aether-shard",
+            "price": {
+              "silver": 4,
+              "copper": 0
+            },
+            "stock": 4,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "arc-baton",
+            "service": "shop_goods",
+            "name": "Brindle's Arc Baton",
+            "item_id": "item:arc-baton",
+            "price": {
+              "silver": 25,
+              "copper": 0
+            },
+            "stock": 1,
+            "restock_per_day": 0
+          },
+          {
+            "offer_key": "repair",
+            "service": "repair",
+            "name": "Gear repair",
+            "description": "Repair work on worn equipment.",
+            "price": {
+              "silver": 4,
+              "copper": 0
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:captain-rhea-sunward",
+        "location_id": "location:aurelia:starfall-village",
+        "sells": [
+          {
+            "offer_key": "shortsword",
+            "service": "shop_goods",
+            "name": "Gatewarden Shortsword",
+            "item_id": "item:gatewarden-shortsword",
+            "price": {
+              "silver": 12,
+              "copper": 0
+            },
+            "description": "The watch's spare blades, for a Wayfarer going past the grove.",
+            "stock": 2,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "leathers",
+            "service": "shop_goods",
+            "name": "Watch Leathers",
+            "item_id": "item:watch-leathers",
+            "price": {
+              "silver": 10,
+              "copper": 0
+            },
+            "stock": 2,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "buckler",
+            "service": "shop_goods",
+            "name": "Ward-glass Buckler",
+            "item_id": "item:ward-glass-buckler",
+            "price": {
+              "silver": 8,
+              "copper": 0
+            },
+            "stock": 2,
+            "restock_per_day": 1
+          }
+        ],
+        "buys": {
+          "item_types": [
+            "weapon",
+            "armor",
+            "shield"
+          ],
+          "price_fraction": 0.5
+        }
+      },
+      {
+        "provider_id": "npc:miri-kestrel",
+        "location_id": "location:aurelia:wayfarer-guild",
+        "sells": [
+          {
+            "offer_key": "information",
+            "service": "paid_information",
+            "name": "Local news",
+            "description": "What is going on around here.",
+            "price": {
+              "silver": 1,
+              "copper": 0
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:elyra-moonroot",
+        "location_id": "location:aurelia:moonroot-ruins",
+        "sells": [
+          {
+            "offer_key": "information",
+            "service": "paid_information",
+            "name": "Local news",
+            "description": "What is going on around here.",
+            "price": {
+              "silver": 1,
+              "copper": 0
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:hollis-brask",
+        "location_id": "location:aurelia:valecourt",
+        "sells": [
+          {
+            "offer_key": "longsword",
+            "service": "shop_goods",
+            "name": "Aether-forged Longsword",
+            "item_id": "item:aether-forged-longsword",
+            "price": {
+              "silver": 45,
+              "copper": 0
+            },
+            "stock": 1,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "half-plate",
+            "service": "shop_goods",
+            "name": "Foundry Half-plate",
+            "item_id": "item:foundry-half-plate",
+            "price": {
+              "silver": 50,
+              "copper": 0
+            },
+            "stock": 1,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "shortsword",
+            "service": "shop_goods",
+            "name": "Gatewarden Shortsword",
+            "item_id": "item:gatewarden-shortsword",
+            "price": {
+              "silver": 12,
+              "copper": 0
+            },
+            "stock": 3,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "aether-shard",
+            "service": "shop_goods",
+            "name": "Aether Shard",
+            "item_id": "item:aether-shard",
+            "price": {
+              "silver": 4,
+              "copper": 0
+            },
+            "stock": 6,
+            "restock_per_day": 2
+          },
+          {
+            "offer_key": "healing-potion",
+            "service": "shop_goods",
+            "name": "Healing Potion",
+            "item_id": "item:healing-potion",
+            "price": {
+              "silver": 3,
+              "copper": 0
+            },
+            "stock": 4,
+            "restock_per_day": 2
+          },
+          {
+            "offer_key": "repair",
+            "service": "repair",
+            "name": "Forge repair",
+            "description": "Hollis's forge sets worn gear right.",
+            "price": {
+              "silver": 3,
+              "copper": 0
+            }
+          }
+        ],
+        "buys": {
+          "item_types": [
+            "weapon",
+            "armor",
+            "shield",
+            "material"
+          ],
+          "price_fraction": 0.5
+        }
+      }
+    ]
+  },
   "routines": [
     {
       "npc_id": "npc:liora-fen",
@@ -417,6 +691,191 @@
           "priority": 1
         }
       ]
+    },
+    {
+      "npc_id": "npc:hollis-brask",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 6,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "asleep in the loft above his forge"
+        },
+        {
+          "from_hour": 6,
+          "to_hour": 20,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "pouring aether at his forge on the foundry row"
+        },
+        {
+          "from_hour": 20,
+          "to_hour": 24,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "drinking with the foundry crews"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "hollis-brask-goal-1",
+          "summary": "keep the foundry fires lit through the shard shortage",
+          "priority": 3
+        },
+        {
+          "goal_id": "hollis-brask-goal-2",
+          "summary": "forge a blade worthy of the Ashen Oathblade",
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:cassia-venn",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 8,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "asleep in the warden's cell beside the engine hall"
+        },
+        {
+          "from_hour": 8,
+          "to_hour": 22,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "tending the royal gate engine in its hall"
+        },
+        {
+          "from_hour": 22,
+          "to_hour": 24,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "walking the engine hall's last round"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "cassia-venn-goal-1",
+          "summary": "keep the engine from stalling again",
+          "priority": 3
+        },
+        {
+          "goal_id": "cassia-venn-goal-2",
+          "summary": "learn what powers the sealed core",
+          "priority": 2
+        }
+      ]
+    }
+  ],
+  "knowledge": [
+    {
+      "npc_id": "npc:elyra-moonroot",
+      "facts": [
+        {
+          "fact_id": "unfinished-call",
+          "text": "The voice in the phone is the hero's own: the last call they made as the blackout took them, torn loose at the crossing and caught in the Memory Loom beneath Moonroot, which plays it back toward Earth. Elyra calls it the Unfinished Call; while it rings, someone on Earth is still listening for the hero.",
+          "topics": [
+            "voice",
+            "phone",
+            "call",
+            "earth",
+            "loom"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:brindle-gearwing",
+      "facts": [
+        {
+          "fact_id": "radio-storms",
+          "text": "Brindle's Impossible Radio catches the same voice as the phone, only in storms and only when it points toward the Moonroot Ruins.",
+          "topics": [
+            "radio",
+            "voice",
+            "phone",
+            "storm",
+            "moonroot"
+          ]
+        },
+        {
+          "fact_id": "shards",
+          "text": "Brindle buys aether shards; unstable Echoes shed them when they fall.",
+          "topics": [
+            "shard",
+            "aether",
+            "echo",
+            "sell"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:captain-rhea-sunward",
+      "facts": [
+        {
+          "fact_id": "watch-gear",
+          "text": "Captain Rhea sells the watch's spare blades, leathers and bucklers to any Wayfarer going past the grove.",
+          "topics": [
+            "gear",
+            "weapon",
+            "sword",
+            "armor",
+            "armour",
+            "shield"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:hollis-brask",
+      "facts": [
+        {
+          "fact_id": "foundry-gear",
+          "text": "Hollis forges the best blades and plate in the Heartland on Valecourt's foundry row, and pays for every aether shard a Wayfarer brings back from the ruins.",
+          "topics": [
+            "forge",
+            "foundry",
+            "sword",
+            "armor",
+            "armour",
+            "plate",
+            "shard"
+          ]
+        },
+        {
+          "fact_id": "oathblade",
+          "text": "The Ashen Oathblade was forged to be carried across Skybridge Pass by someone keeping a vow; the gale spirit there gives it to whoever does.",
+          "topics": [
+            "oathblade",
+            "blade",
+            "skybridge",
+            "vow"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:cassia-venn",
+      "facts": [
+        {
+          "fact_id": "engine-stalls",
+          "text": "The royal gate engine has stalled three times this season, and each time a new Earthborn came through at Starfall the same night.",
+          "topics": [
+            "engine",
+            "gate",
+            "stall",
+            "earthborn"
+          ]
+        },
+        {
+          "fact_id": "sealed-core",
+          "text": "The engine's core is sealed by royal order. At night Cassia hears voices inside it, like a crowd remembering.",
+          "shares": "when_trusted",
+          "trust_needed": 30,
+          "topics": [
+            "core",
+            "engine",
+            "voices"
+          ]
+        }
+      ]
     }
   ],
   "pressures": [
@@ -532,6 +991,93 @@
           "action": "defeat:creature:sky-manta",
           "effect": "lower",
           "amount": 6.0
+        }
+      ]
+    }
+  ],
+  "bestiary": [
+    {
+      "id": "creature:sky-manta",
+      "stats": {
+        "level": 4,
+        "hp": 26,
+        "defense": 13,
+        "damage_min": 3,
+        "damage_max": 7,
+        "accuracy_bonus": 2,
+        "xp_value": 90
+      },
+      "behaviour": "flees_when_hurt",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.5
+        }
+      ]
+    },
+    {
+      "id": "creature:glass-wight",
+      "stats": {
+        "level": 5,
+        "hp": 32,
+        "defense": 14,
+        "damage_min": 3,
+        "damage_max": 9,
+        "accuracy_bonus": 3,
+        "xp_value": 130
+      },
+      "behaviour": "ambushes",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.7,
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "id": "creature:rootbound-knight",
+      "stats": {
+        "level": 6,
+        "hp": 40,
+        "defense": 15,
+        "damage_min": 4,
+        "damage_max": 10,
+        "accuracy_bonus": 4,
+        "xp_value": 170
+      },
+      "behaviour": "guards",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.8,
+          "quantity": 2
+        },
+        {
+          "item_id": "item:healing-potion",
+          "chance": 0.3
+        }
+      ]
+    },
+    {
+      "id": "creature:hollow-archon",
+      "stats": {
+        "level": 10,
+        "hp": 120,
+        "defense": 16,
+        "damage_min": 6,
+        "damage_max": 14,
+        "accuracy_bonus": 6,
+        "xp_value": 900
+      },
+      "behaviour": "fights"
+    },
+    {
+      "id": "creature:echo-wolf",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.4
         }
       ]
     }
@@ -655,7 +1201,8 @@
                     "who"
                   ]
                 }
-              ]
+              ],
+              "told": "Elyra listens to the phone and goes still. \"It is your own voice,\" she says: the call you were making when the blackout took you, caught in the Memory Loom and played back toward Earth. She calls it the Unfinished Call."
             }
           ]
         }
@@ -880,15 +1427,25 @@
         },
         {
           "id": "engine",
-          "summary": "See the royal gate engine in Valecourt",
+          "summary": "See the royal gate engine in Valecourt with its warden, Cassia Venn",
           "ways": [
             {
               "conditions": [
                 {
-                  "kind": "reach",
-                  "subject": "location:aurelia:valecourt"
+                  "kind": "talk",
+                  "subject": "npc:cassia-venn",
+                  "about": [
+                    "engine",
+                    "gate",
+                    "core",
+                    "hall",
+                    "machine",
+                    "stall",
+                    "seraphine"
+                  ]
                 }
-              ]
+              ],
+              "told": "Cassia walks you through the engine hall: a cathedral of aether coils, stalled and humming, its core sealed by royal order."
             }
           ]
         },
@@ -1104,60 +1661,6 @@
           ]
         }
       ]
-    }
-  ],
-  "bestiary": [
-    {
-      "id": "creature:sky-manta",
-      "stats": {
-        "level": 4,
-        "hp": 26,
-        "defense": 13,
-        "damage_min": 3,
-        "damage_max": 7,
-        "accuracy_bonus": 2,
-        "xp_value": 90
-      },
-      "behaviour": "flees_when_hurt"
-    },
-    {
-      "id": "creature:glass-wight",
-      "stats": {
-        "level": 5,
-        "hp": 32,
-        "defense": 14,
-        "damage_min": 3,
-        "damage_max": 9,
-        "accuracy_bonus": 3,
-        "xp_value": 130
-      },
-      "behaviour": "ambushes"
-    },
-    {
-      "id": "creature:rootbound-knight",
-      "stats": {
-        "level": 6,
-        "hp": 40,
-        "defense": 15,
-        "damage_min": 4,
-        "damage_max": 10,
-        "accuracy_bonus": 4,
-        "xp_value": 170
-      },
-      "behaviour": "guards"
-    },
-    {
-      "id": "creature:hollow-archon",
-      "stats": {
-        "level": 10,
-        "hp": 120,
-        "defense": 16,
-        "damage_min": 6,
-        "damage_max": 14,
-        "accuracy_bonus": 6,
-        "xp_value": 900
-      },
-      "behaviour": "fights"
     }
   ]
 }

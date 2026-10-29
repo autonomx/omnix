@@ -194,3 +194,61 @@ def test_the_count_goes_with_the_offers_head_word() -> None:
 
     assert wanted_count("buy a day pass, good for 3 days", "Day Pass") == 1
     assert wanted_count("buy 2 day passes", "Day Pass") == 2
+
+
+SWORD = {"slot": "main_hand", "stats": {"damage_min": 2, "damage_max": 6, "accuracy_bonus": 1}}
+ARMOURY = {
+    "npc:rhea": [{"offer_id": "npc:rhea:sword", "service_kind": "shop_goods", "label": "Gatewarden Shortsword",
+                  "price": {"silver": 12}, "stock": 2,
+                  "effects": {"items_added": [{"item_id": "item:sword", "name": "Gatewarden Shortsword", "quantity": 1,
+                                               "type": "weapon", "equipment": SWORD}]}}],
+}
+RHEA = {"npc:rhea": {"provider_id": "npc:rhea", "provider_name": "Captain Rhea", "aliases": ["rhea"],
+                     "location_id": "loc:village", "service_kinds": ["shop_goods"]}}
+
+
+def _with_armoury(campaign):
+    world = campaign["simulation_state"]["world_model"]
+    world["offers"], world["providers"] = {**OFFERS, **ARMOURY}, {**PROVIDERS, **RHEA}
+    campaign["simulation_state"]["present_npc_state"]["present_npc_ids"].append("npc:rhea")
+    return campaign
+
+
+def test_a_worlds_gear_keeps_how_it_is_worn_and_fights_from_the_shop_to_the_fight() -> None:
+    from app.apps.rpg.rules.interactions.equipment_runtime import project_equipment_stats
+    from app.apps.rpg.rules.interactions.items import equip_item
+
+    campaign = _with_armoury(_campaign(purse=200))
+    bought = buy(campaign["simulation_state"], "I buy a Gatewarden Shortsword from Rhea.")
+    document, _ = reduce(campaign, bought.changes)
+    [sword] = document["simulation_state"]["player_state"]["inventory_state"]["items"]
+    assert sword["equipment"] == SWORD  # the world's numbers, not a guess from "shortsword"
+    wielded = equip_item(document["simulation_state"], "item:sword", "wield the shortsword")  # as the grammar reads it
+    assert wielded.lines == ["You take up the Gatewarden Shortsword."]
+    document, _ = reduce(document, wielded.changes)
+    stats = project_equipment_stats(document["simulation_state"])["stats"]
+    assert (stats["damage_min"], stats["damage_max"], stats["accuracy_bonus"]) == (2, 7, 1)  # on a bare hand's 0-1
+
+
+def test_an_unnamed_sale_goes_to_the_one_shop_here_that_deals_in_it() -> None:
+    items = [{"item_id": "healing_potion", "name": "Healing Potion", "qty": 1},
+             {"item_id": "iron_dagger", "name": "Iron Dagger", "qty": 1}]
+    simulation = _with_armoury(_campaign(purse=0, items=items))["simulation_state"]
+    assert sell(simulation, "I sell my Healing Potion.").lines == [
+        "You sell the Healing Potion to Brindle Gearwing for 1 silver, 5 copper."]
+    assert sell(simulation, "I sell my Iron Dagger.").lines == [
+        "To whom do you sell the Iron Dagger: Brindle Gearwing or Captain Rhea?"]
+    assert sell(simulation, "I sell my Iron Dagger to Rhea.").lines == ["You sell the Iron Dagger to Captain Rhea for 5 copper."]
+
+
+def test_a_shop_buys_back_only_the_kinds_of_things_it_names() -> None:
+    items = [{"item_id": "healing_potion", "name": "Healing Potion", "qty": 1, "category": "potion"},
+             {"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
+    campaign = _with_armoury(_campaign(purse=0, items=items))
+    campaign["simulation_state"]["world_model"]["providers"]["npc:rhea"]["buys"] = {"item_types": ["weapon", "armor"]}
+    campaign["simulation_state"]["world_model"]["providers"]["npc:brindle"]["buys"] = {"item_types": ["material"]}
+    simulation = campaign["simulation_state"]
+    assert sell(simulation, "I sell my Healing Potion to Rhea.").lines == ["Captain Rhea does not buy the Healing Potion."]
+    # Brindle buys his own goods back, and the materials he names; the captain neither.
+    assert sell(simulation, "I sell my Healing Potion.").lines[0].startswith("You sell the Healing Potion to Brindle")
+    assert sell(simulation, "I sell my Aether Shard.").lines == ["You sell the Aether Shard to Brindle Gearwing for 5 copper."]

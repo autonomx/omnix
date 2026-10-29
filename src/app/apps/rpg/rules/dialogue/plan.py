@@ -313,8 +313,11 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
     asked = _words(text) | {_stem(word) for word in _words(text)}
     known = set(_l(_d(_d(simulation.get("dialogue")).get("known_facts")).get(speaker_id)))
     reveals, revealed_ids, priced, held = [], [], [], 0
+    # The speaker's own name asks about none of what they know ("Brindle, what does a potion cost?" is not about
+    # "Brindle's Impossible Radio": the golden, once Aurelia's people knew things).
+    named = _words(name) | {_stem(word) for word in _words(name)}
     for fact in _facts(world, speaker_id):
-        topics = {topic.casefold() for topic in _l(fact.get("topics"))} | _words(_s(fact.get("text")))
+        topics = ({topic.casefold() for topic in _l(fact.get("topics"))} | _words(_s(fact.get("text")))) - named
         if not asked & topics:
             continue
         shares = _s(fact.get("shares")) or "freely"
@@ -377,8 +380,10 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
         on_sale = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
                    if _s(_d(offer).get("label")) and stock_left(simulation, _d(offer)) != 0]
         # Asked about some of them ("what does a room cost"), those; asked what they sell, all of them.
-        named = [offer for offer in on_sale if asked & {_stem(word) for word in _words(_s(offer.get("label")))}]
-        on_sale = named or on_sale
+        # Not by the speaker's own name: asking Brindle a price is not asking for "Brindle's Arc Baton".
+        wanted = [offer for offer in on_sale
+                  if asked & ({_stem(word) for word in _words(_s(offer.get("label")))} - named)]
+        on_sale = wanted or on_sale
     secrets = tuple(_s(secret) for secret in _l(npc.get("secrets")) if _s(secret).strip())
     # What the writer is told leaves out whatever repeats a secret (an author's description or goal may), so the
     # model never sees one and the line can be shown as it is written (Q-12).

@@ -70,9 +70,10 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
 
     first = read_play_sections(world_id)
     assert not first["saved"] and first["published_revision"] is not None
-    lore = {"economy": "derived", "routines": "authored", "knowledge": "derived", "pressures": "authored",
+    lore = {"economy": "authored", "routines": "authored", "knowledge": "authored", "pressures": "authored",
             "bestiary": "authored", "quests": "authored"}
-    # Aurelia's author wrote its people's days, its pressures, its creatures' numbers and its quests' steps.
+    # Aurelia's author wrote every section: its shops, its people's days and what they know, its pressures, its
+    # creatures' numbers and its quests' steps.
     assert first["readiness"]["published"] == lore
     assert first["references"]["people"] and first["references"]["places"]
 

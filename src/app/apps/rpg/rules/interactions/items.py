@@ -175,6 +175,9 @@ _SLOT_WORDS = (
 
 
 def _slot(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
+    own = _s(_d(item.get("equipment")).get("slot"))
+    if own:  # where the world says it is worn or wielded
+        return own
     kind = _kind(simulation, item)
     if kind == "potion" or kind in RELIEF:  # eaten or drunk, never worn (Lantern Bread is no lantern)
         return ""

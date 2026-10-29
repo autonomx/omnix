@@ -11,8 +11,9 @@ haggling (a persuade check) shaves a price.
 - Stock decreases on purchase and restocks by `restock_per_day` (authored, RQ-2.0) per in-game day.
 - Price modifiers: scarcity (stock ≤ 20% of authored stock: +25%), a pressure on the region's `trade_access` below
   40 (+20%), relationship trusted (−10%), a successful haggle (−10%, once per offer per day).
-- Selling: authored `buys.price_fraction` (default 0.5) of the shop's price for kinds it sells; quest items are not
-  for sale.
+- Selling: authored `buys.price_fraction` (default 0.5) of the shop's price for kinds it sells, a token for others;
+  quest items are not for sale. A shop with `buys.item_types` buys only those types and its own goods. Unnamed, a
+  sale goes to the one shop here that sells the thing, else to the one that would buy it; with two, the hero is asked.
 - Sinks are sized so the balance simulation's purse stays within its band (README).
 
 ## State it changes

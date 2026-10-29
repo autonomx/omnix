@@ -37,7 +37,8 @@ def _reward_items(rewards: list[str], world_items: Mapping[str, Mapping[str, Any
         item = _d(world_items.get(reward))
         items.append(ItemAdded(item_id=reward, name=_s(item.get("name")) or reward.rsplit(":", 1)[-1].replace("-", " ").title(),
                                category=_s(item.get("type")) or "misc",
-                               fields={"description": _s(item.get("effect") or item.get("description"))}))
+                               fields={"description": _s(item.get("effect") or item.get("description")),
+                                       **({"equipment": _d(item.get("equipment"))} if _d(item.get("equipment")) else {})}))
     return items
 
 
