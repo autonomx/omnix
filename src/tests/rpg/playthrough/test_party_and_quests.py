@@ -74,16 +74,17 @@ def test_quest_from_offer_to_reward(launch, world) -> None:
     assert play.purse() == purse + 200
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-2.2: no one offers a quest in conversation: asking Miri Kestrel for work is a line of dialogue, and no "
-    "quest becomes offered (there is no DialoguePlan or QuestOffered change)")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_an_npc_offers_a_quest_in_conversation(launch, world) -> None:
     play = launch(world)
     play.turn("go to Starfall Village")
     play.turn("go to Wayfarers' Guild")
-    before = {title: quest["status"] for title, quest in play.quests().items()}
-    play.turn("I ask Miri Kestrel if she has any work for me.")
-    after = {title: quest["status"] for title, quest in play.quests().items()}
-    offered = [title for title in after if before.get(title) != after[title] or title not in before]
+    before = {title: quest.get("offered_by") for title, quest in play.quests().items()}
+    body = play.turn("I ask Miri Kestrel if she has any work for me.")
+    # An offer names who made it; the quest waits, available, for the hero to take it (quests.md).
+    after = {title: quest.get("offered_by") for title, quest in play.quests().items()}
+    offered = [title for title, offerer in after.items() if offerer and offerer != before.get(title)]
     assert offered, after
-    assert "offer" in play.model.told().lower()
+    # The outcome card says so, whatever the line (the model may phrase the offer as it likes), and a card takes it.
+    facts = [fact["text"] for fact in body["outcome"]["presentation"]["facts"]]
+    assert f"Offered: {offered[0]}" in facts, facts
