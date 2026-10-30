@@ -8,9 +8,15 @@ export type PortraitFrameHeader = {
   output_id: string;
   epoch: number;
   segment_id: string;
-  /** The frame's position in its segment (phrase), in that phrase's own TTS samples. */
+  /** The frame's position in its segment (phrase), in that phrase's own TTS samples; in the idle loop, its index. */
   offset: number;
+  /** The idle loop's frames only: how many there are and their period. */
+  count?: number;
+  frame_ms?: number;
 };
+
+/** The idle loop's frames carry this output id (and segment id). */
+export const IDLE_OUTPUT_ID = 'idle';
 
 export type PortraitFrameMessage = {
   header: PortraitFrameHeader;

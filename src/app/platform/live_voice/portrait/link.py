@@ -80,7 +80,8 @@ class PortraitLink:
 
     @classmethod
     async def open(cls, base_url: str, *, call_key: str, principal: str, session: str, latent_key: str,
-                   emotion: str, on_frame: FrameHandler, connect: Callable[..., Any] | None = None) -> PortraitLink:
+                   emotion: str, on_frame: FrameHandler, level: int = 0,
+                   connect: Callable[..., Any] | None = None) -> PortraitLink:
         """Connect, send ``open`` and wait for ``ready``; a refusal raises PortraitUnavailable."""
         from app.security.service_token import service_headers
 
@@ -93,7 +94,8 @@ class PortraitLink:
             websocket = await asyncio.wait_for(
                 connect(url, additional_headers=service_headers(), max_size=None), OPEN_TIMEOUT_SECONDS)
             await websocket.send(json.dumps({"type": "open", "call_key": call_key, "principal": principal,
-                                             "session": session, "latent_key": latent_key, "emotion": emotion}))
+                                             "session": session, "latent_key": latent_key, "emotion": emotion,
+                                             "level": level}))
             reply = json.loads(await asyncio.wait_for(websocket.recv(), OPEN_TIMEOUT_SECONDS))
         except (OSError, asyncio.TimeoutError, ValueError) as exc:
             raise PortraitUnavailable("service_unreachable", "The portrait stream could not be opened") from exc

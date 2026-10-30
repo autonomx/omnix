@@ -7,6 +7,12 @@ Binary messages carry audio in and frames out, each as a header and a payload:
 
 Audio in: header ``{"segment_id": str, "offset": int}`` (the offset in the segment's own samples) and
 16-bit little-endian mono PCM. Frames out: header ``{"output_id", "epoch", "segment_id", "offset"}`` and a JPEG.
+The idle loop's frames are stamped ``output_id`` and ``segment_id`` ``"idle"``, with the frame's index in the loop
+as ``offset``, the loop's length as ``count`` and its frame period as ``frame_ms``.
+
+Remote quality levels (roadmap Phase 3, "Remote quality"): the service encodes only the level the call's client is
+on, set by the gateway's ``quality`` message; ``QUALITY_LEVELS[level]`` is (frame size, frame step, JPEG quality),
+a frame step of 2 sending every other frame (12.5 frames a second).
 """
 from __future__ import annotations
 
@@ -15,6 +21,7 @@ import struct
 from typing import Any
 
 MAX_HEADER_BYTES = 1_024
+QUALITY_LEVELS: tuple[tuple[int, int, int], ...] = ((512, 1, 85), (512, 1, 70), (384, 1, 70), (384, 2, 70))
 _LENGTH = struct.Struct(">I")
 
 
@@ -44,4 +51,4 @@ def unpack(message: bytes) -> tuple[dict[str, Any], bytes]:
     return header, message[_LENGTH.size + length:]
 
 
-__all__ = ["MAX_HEADER_BYTES", "PortraitMessageError", "pack", "unpack"]
+__all__ = ["MAX_HEADER_BYTES", "PortraitMessageError", "QUALITY_LEVELS", "pack", "unpack"]

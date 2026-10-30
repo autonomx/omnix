@@ -57,6 +57,7 @@ function createHarness() {
     sampleRate: 24_000,
     audioContext: {} as AudioContext,
     setPortraitClock: vi.fn(),
+    portraitFramesReady: vi.fn(),
     sendOutputEnd: vi.fn(),
     enqueuePhrase: vi.fn(async () => undefined),
     enqueueOutputPhrase,

@@ -24,6 +24,8 @@ const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
 const WEBSOCKET_OPEN = 1;
+// The longest a turn's start waits for its first portrait frames (D-5).
+const PORTRAIT_START_HOLD_SECONDS = 0.25;
 
 export type LiveOutputOwnership = {
   outputId: string;
@@ -137,8 +139,10 @@ export type LiveVoicePcmSession = {
   readonly sampleRate: number;
   /** The playback context: the portrait reads its time and output latency. */
   readonly audioContext: AudioContext;
-  /** Turn the worklet's 20 ms portrait clock on or off. */
+  /** Turn the portrait on or off in the worklet: its 20 ms clock and the start hold (D-5, at most 250 ms). */
   setPortraitClock: (enabled: boolean) => void;
+  /** A segment's first portrait frames are here: a start held for them can go. */
+  portraitFramesReady: (segmentId: string) => void;
   /** The turn's last phrase is queued: the portrait commits its held frames. */
   sendOutputEnd: (outputId: string, generationEpoch: number) => void;
   enqueuePhrase: (
@@ -1046,11 +1050,15 @@ function portraitControls(
   node: AudioWorkletNode,
   socket: WebSocket,
   isClosed: () => boolean,
-): Pick<LiveVoicePcmSession, 'audioContext' | 'setPortraitClock' | 'sendOutputEnd'> {
+): Pick<LiveVoicePcmSession, 'audioContext' | 'setPortraitClock' | 'portraitFramesReady' | 'sendOutputEnd'> {
+  const startHoldSamples = Math.round(audioContext.sampleRate * PORTRAIT_START_HOLD_SECONDS);
   return {
     audioContext,
     setPortraitClock: (enabled) => {
-      if (!isClosed()) node.port.postMessage({ type: 'set_portrait_clock', enabled });
+      if (!isClosed()) node.port.postMessage({ type: 'set_portrait_clock', enabled, startHoldSamples });
+    },
+    portraitFramesReady: (segmentId) => {
+      if (!isClosed()) node.port.postMessage({ type: 'portrait_frames_ready', segmentId });
     },
     sendOutputEnd: (outputId, generationEpoch) => {
       if (isClosed() || socket.readyState !== WEBSOCKET_OPEN) return;

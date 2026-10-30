@@ -23,7 +23,7 @@ export function LiveCallVisual({ voiceMode, thinking }: { voiceMode: string; thi
   const avatar = useLiveAvatar();
   const portraitState = useSyncExternalStore(livePortrait.subscribe, livePortrait.getSnapshot, livePortrait.getSnapshot);
   const runtime = avatar.runtime;
-  const portraitUnavailable = portraitState.status === 'unavailable';
+  const portraitUnavailable = portraitState.status === 'unavailable' || portraitState.status === 'degraded';
   const pack = useMemo(() => drawnAvatarPack(runtime?.avatar_pack, portraitUnavailable), [runtime?.avatar_pack, portraitUnavailable]);
   const portrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
   const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);

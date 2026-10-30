@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
+from app.conversation.portrait_stream_contract import pack
 from app.platform.characters.avatar_models import CharacterAvatarPack
 from app.platform.live_voice.portrait.link import PortraitUnavailable
 from app.platform.live_voice.transport import avatar_websocket
@@ -39,7 +40,7 @@ class FakeLink:
 def portrait(monkeypatch):
     """The portrait service and the session's avatar, replaced for the route under test."""
     opened: list[dict[str, Any]] = []
-    state: dict[str, Any] = {"pack": PORTRAIT, "prepare_error": None}
+    state: dict[str, Any] = {"pack": PORTRAIT, "prepare_error": None, "frames": [b"frame-0"]}
 
     async def prepare(base_url: str, tenant: str, image: bytes) -> str:
         if state["prepare_error"]:
@@ -53,7 +54,8 @@ def portrait(monkeypatch):
 
         async def first_frame() -> None:
             await asyncio.sleep(0.05)
-            await link.on_frame(b"frame-0")
+            for frame in state["frames"]:
+                await link.on_frame(frame)
 
         asyncio.get_running_loop().create_task(first_frame())
         return link
@@ -103,11 +105,12 @@ def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monk
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
         hello = tts.receive_json()
         with client.websocket_connect(_avatar_url(hello["avatar_token"])) as avatar:
-            assert avatar.receive_json() == {"type": "ready", "fallback_renderer": "sprite"}
+            # The test client is not a loopback address, so it starts one level down.
+            assert avatar.receive_json() == {"type": "ready", "fallback_renderer": "sprite", "level": 1}
             assert avatar.receive_bytes() == b"frame-0"
             opened = portrait.opened[0]
-            assert (opened["call_key"], opened["latent_key"], opened["emotion"]) == (
-                hello["call_key"], "latent-key", "happy")
+            assert (opened["call_key"], opened["latent_key"], opened["emotion"], opened["level"]) == (
+                hello["call_key"], "latent-key", "happy", 1)
             tts.send_json({**_request("Hello there.", 0), "output_id": "out", "generation_epoch": 1,
                            "segment_id": "seg"})
             tts.receive_json()
@@ -123,3 +126,24 @@ def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monk
     copied = [item for item in link.sent if isinstance(item, tuple)]
     assert copied == [("pcm", "seg", 0)]
     assert {"type": "play_position", "segment_id": "seg", "offset": 960, "round_trip_seconds": 0.0} in link.sent
+
+
+def test_a_backlog_of_speech_frames_steps_the_quality_down(monkeypatch, portrait) -> None:
+    speech = [pack({"output_id": "turn-1", "epoch": 1, "segment_id": "seg", "offset": index * 960}, b"jpeg")
+              for index in range(20)]
+    idle = [pack({"output_id": "idle", "epoch": 0, "segment_id": "idle", "offset": index, "count": 40}, b"jpeg")
+            for index in range(40)]
+    portrait.state["frames"] = idle + speech
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        hello = tts.receive_json()
+        with client.websocket_connect(_avatar_url(hello["avatar_token"])) as avatar:
+            assert avatar.receive_json()["level"] == 1
+            for _ in range(60):
+                avatar.receive_bytes()
+            # The idle loop's burst is not in flight; 20 speech frames sent and 4 received are.
+            avatar.send_json({"type": "frame_ack", "segment_id": "seg", "offset": 0, "received": 4, "late": 0,
+                              "decode_ms": 4.0})
+            assert avatar.receive_json() == {"type": "quality", "level": 2}
+            link = portrait.opened[0]["link"]
+    assert {"type": "quality", "level": 2} in link.sent

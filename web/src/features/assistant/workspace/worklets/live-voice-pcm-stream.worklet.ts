@@ -43,6 +43,7 @@ type PcmStreamMessage = {
   notBeforeRenderSample?: unknown;
   reason?: unknown;
   enabled?: unknown;
+  startHoldSamples?: unknown;
 };
 
 function integer(value: unknown): number | undefined {
@@ -87,6 +88,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   // The live portrait's clock: the active segment's played samples every 20 ms, while a portrait shows.
   portraitClockIntervalSamples = 0;
   portraitClockSamples = 0;
+  // The portrait's start hold (D-5): an output's start waits for its first frames, at most this long.
+  startHoldSamples = 0;
+  startHoldSince: number | null = null;
+  lastHeldEpoch: number | null = null;
+  portraitReadySegments = new Set<string>();
 
   constructor(options: ProcessorOptions) {
     super();
@@ -191,6 +197,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     if (message.type === 'set_portrait_clock') {
       this.portraitClockIntervalSamples = message.enabled ? Math.max(128, Math.round(sampleRate * 0.02)) : 0;
       this.portraitClockSamples = 0;
+      this.startHoldSamples = message.enabled ? Math.max(0, Math.round(Number(message.startHoldSamples) || 0)) : 0;
+      this.maybeStartOrResume();
+      return;
+    }
+    if (message.type === 'portrait_frames_ready') {
+      this.portraitReadySegments.add(String(message.segmentId || ''));
+      if (this.portraitReadySegments.size > 64) {
+        this.portraitReadySegments.delete(this.portraitReadySegments.values().next().value as string);
+      }
+      this.maybeStartOrResume();
       return;
     }
     if (message.type === 'set_start_policy') {
@@ -388,6 +404,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     const speechReady = this.bufferedSpeechSamples >= this.startPolicy.minimumBufferedSpeechSamples;
     const finalShortInputReady = this.inputEnded && this.bufferedSpeechSamples > 0;
     if (!this.started && onsetReady && (speechReady || finalShortInputReady)) {
+      if (this.holdingStartForPortrait()) return;
       this.started = true;
       this.waitingForBuffer = false;
       this.beginFadeIn();
@@ -411,6 +428,30 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         underrun_count: this.underrunCount,
       });
     }
+  }
+
+  /** Whether the start waits for the portrait: its first speech has no frames yet, and the cap has not passed. */
+  holdingStartForPortrait(): boolean {
+    const head = this.queue.find((segment) => segment.segmentKind === 'speech');
+    // Only a turn's start: audio is never paused mid-reply to wait for video.
+    if (!this.startHoldSamples || !head || this.queue[0] !== head || head.generationEpoch === this.lastHeldEpoch) {
+      return false;
+    }
+    const ready = this.portraitReadySegments.has(head.segmentId);
+    this.startHoldSince ??= this.renderClockSamples;
+    const held = this.renderClockSamples - this.startHoldSince;
+    if (!ready && held < this.startHoldSamples) return true;
+    this.startHoldSince = null;
+    this.lastHeldEpoch = head.generationEpoch;
+    this.emit('start_hold', {
+      segment_id: head.segmentId,
+      output_id: head.outputId || undefined,
+      generation_epoch: head.generationEpoch,
+      held_samples: held,
+      held_ms: held * 1000 / sampleRate,
+      released_by: ready ? 'frames' : 'cap',
+    });
+    return false;
   }
 
   followingSpeechReady(segment: QueuedSegment): boolean {

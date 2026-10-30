@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     stop: vi.fn(async (_reason?: string) => undefined),
     isClosed: vi.fn(() => false),
     setPortraitClock: vi.fn((_enabled: boolean) => undefined),
+    portraitFramesReady: vi.fn((_segmentId: string) => undefined),
     sendOutputEnd: vi.fn((_outputId: string, _generationEpoch: number) => undefined),
   };
   const recordSpy = vi.fn();

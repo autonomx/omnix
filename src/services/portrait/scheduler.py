@@ -70,11 +70,13 @@ class PassPlan:
 class MotionSession(Protocol):
     """What the scheduler needs from the model, for one output."""
 
+    level: int  # the call's quality level (``QUALITY_LEVELS``), which ``decode`` encodes at
+
     def run_pass(self, audio: np.ndarray, plan: PassPlan, seed: int) -> None:
         """Generate the window from ``audio`` (16 kHz, the plan's buffer) and commit its first frames."""
 
-    def decode(self, start: int, stop: int) -> list[bytes]:
-        """JPEG frames for committed frames [start, stop)."""
+    def decode(self, start: int, stop: int) -> list[bytes | None]:
+        """JPEG frames for committed frames [start, stop); None for a frame the quality level does not send."""
 
     def reset(self) -> None:
         """Forget the output's frames; the next output starts from the rest pose."""
@@ -402,6 +404,8 @@ class PortraitStream:
             stop = min(output.committed, output.decoded + self.settings.decode_batch)
             jpegs = self.session.decode(output.decoded, stop)
             for index, jpeg in enumerate(jpegs):
+                if jpeg is None:
+                    continue
                 segment_id, offset = output.stamp(output.decoded + index)
                 self.emit(Frame(output.output_id, output.epoch, segment_id, offset, jpeg))
                 sent += 1

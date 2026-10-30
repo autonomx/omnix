@@ -15,7 +15,7 @@ export type HeardPosition = {
   playedSamples: number;
 };
 
-type Transition = { at: number; segmentId: string | null };
+type Transition = { at: number; segmentId: string | null; underrun?: boolean };
 type Count = { at: number; played: number };
 
 const MAX_EXTRAPOLATION_SECONDS = 0.02;
@@ -55,7 +55,7 @@ export class PortraitPlaybackClock {
         this.transition(at, null);
       }
     } else if (type === 'underrun' || type === 'idle' || type === 'stopped') {
-      this.transition(at, null);
+      this.transition(at, null, type === 'underrun');
     } else if (type === 'resumed' && this.active) {
       // Playback resumes in the segment the underrun interrupted.
       this.transition(at, this.active);
@@ -79,12 +79,17 @@ export class PortraitPlaybackClock {
     return { segmentId, playedSamples: Math.max(0, count.played + delta * this.contextRate) };
   }
 
+  /** Whether what is heard at `now` is an underrun (playback waiting for audio mid-segment). */
+  underrunAt(now: number, outputLatency: number): boolean {
+    return this.transitionAt(now - Math.max(0, outputLatency))?.underrun === true;
+  }
+
   get rate(): number {
     return this.contextRate;
   }
 
-  private transition(at: number, segmentId: string | null): void {
-    this.transitions.push({ at, segmentId });
+  private transition(at: number, segmentId: string | null, underrun = false): void {
+    this.transitions.push({ at, segmentId, underrun });
     if (this.transitions.length > MAX_HISTORY) this.transitions.splice(0, this.transitions.length - MAX_HISTORY);
   }
 

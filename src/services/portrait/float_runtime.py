@@ -15,6 +15,9 @@ is Omnix's own module tree built from upstream's classes, with three of its part
 Each window's Euler solve (torchdiffeq's fixed-grid Euler, as upstream uses it) runs as one captured CUDA
 graph. Phase 0 measured these: the same motion latents as upstream's eager path, 23 ms per pass at nfe 7.
 The emotion is a label (no speech-to-emotion model is loaded).
+
+Each portrait also gets an idle loop (``idle_frames``): about 12 s of silence rendered from the rest pose, cut to
+the loop ``services.portrait.idle_loop`` chooses, rendered once per quality level and kept with the portrait.
 """
 from __future__ import annotations
 
@@ -24,7 +27,7 @@ import logging
 import math
 import sys
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +37,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from services.helper_models import HelperUnavailable
+from app.conversation.portrait_stream_contract import QUALITY_LEVELS
 from services.portrait.scheduler import SAMPLES_PER_FRAME, PassPlan
 
 logger = logging.getLogger(__name__)
@@ -45,7 +49,8 @@ DETECTOR_MODEL = "s3fd-face-detector"
 REQUIRED_MODELS = (CODE_MODEL, WEIGHTS_MODEL, AUDIO_MODEL, DETECTOR_MODEL)
 EMOTIONS = ("angry", "disgust", "fear", "happy", "neutral", "sad", "surprise")
 DEFAULT_NFE = 7
-JPEG_QUALITY = 85
+FRAME_SIZE = 512
+IDLE_SEED = 7_919
 
 
 class PortraitModelMissing(HelperUnavailable):
@@ -248,6 +253,9 @@ class Portrait:
     s_r: torch.Tensor
     s_r_feats: list[torch.Tensor]
     r_s: torch.Tensor
+    # The idle loop's motion latents, and its JPEG frames by quality level (made on first use).
+    idle: torch.Tensor | None = None
+    idle_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
 
 
 def emotion_vector(label: str) -> torch.Tensor:
@@ -328,7 +336,10 @@ class FloatRuntime:
         self.features(np.zeros(max(self.buffer_frames, 1) * SAMPLES_PER_FRAME, dtype=np.float32))
         self.resample(np.zeros(2_400, dtype=np.float32), 24_000)  # the TTS rate: builds the sinc kernel once
         blank = self.encode("warm-up", np.zeros((512, 512, 3), dtype=np.uint8))
-        self.render(blank, torch.zeros(self.decode_batch, self.opt.dim_w, device="cuda"))
+        zeros = torch.zeros(self.decode_batch, self.opt.dim_w, device="cuda")
+        for level, (size, _, _) in enumerate(QUALITY_LEVELS):  # each frame size once
+            if all(item[0] != size for item in QUALITY_LEVELS[:level]):
+                self.render(blank, zeros, level)
         self.forget("warm-up")
         from services.portrait.portrait_image import DETECT_HEIGHT, DETECT_WIDTH
 
@@ -354,16 +365,52 @@ class FloatRuntime:
         return self.model.audio_encoder(tensor, len(padded) // SAMPLES_PER_FRAME)[:, -frames:]
 
     @torch.no_grad()
-    def render(self, portrait: Portrait, latents: torch.Tensor) -> list[bytes]:
-        """JPEG frames for motion latents (frames x dim).
+    def render(self, portrait: Portrait, latents: torch.Tensor, level: int = 0) -> list[bytes]:
+        """JPEG frames for motion latents (frames x dim), at a quality level's size and JPEG quality.
 
         Encoded on the CPU (libjpeg-turbo, about 2 ms a frame): torchvision's GPU encoder returned noise for
         some frames of a batch in the Phase 1 runtime check (2026-10-29), which SyncNet scored as lost sync.
         """
         from torchvision.io import encode_jpeg
 
-        pixels = self.render_pixels(portrait, latents).cpu()
-        return [bytes(encode_jpeg(frame, quality=JPEG_QUALITY).numpy()) for frame in pixels]
+        size, _, quality = QUALITY_LEVELS[level]
+        pixels = self.render_pixels(portrait, latents)
+        if size != FRAME_SIZE:
+            pixels = F.interpolate(pixels.float(), size=(size, size), mode="bilinear", antialias=True,
+                                   align_corners=False).round().clamp(0, 255).to(torch.uint8)
+        return [bytes(encode_jpeg(frame, quality=quality).numpy()) for frame in pixels.cpu()]
+
+    @torch.no_grad()
+    def idle_latents(self, portrait: Portrait) -> torch.Tensor:
+        """The portrait's idle loop: silence rendered window after window from the rest pose, then cut."""
+        from services.portrait.idle_loop import IDLE_RENDER_FRAMES, choose_loop
+
+        if portrait.idle is not None:
+            return portrait.idle
+        carry, dim = self.solver.carry, self.opt.dim_w
+        silence = self.features(np.zeros(self.buffer_frames * SAMPLES_PER_FRAME, dtype=np.float32))[0, -self.window:]
+        neutral = emotion_vector("neutral")
+        prev_x = torch.zeros(carry, dim, device="cuda")  # the rest pose: the source portrait itself
+        prev_wa = torch.zeros(carry, dim, device="cuda")
+        windows = []
+        for index in range(math.ceil(IDLE_RENDER_FRAMES / self.window)):
+            sample = self.solver(silence[None], prev_x[None], prev_wa[None], portrait.r_s, neutral,
+                                 IDLE_SEED + index)[0]
+            windows.append(sample)
+            prev_x, prev_wa = sample[-carry:], silence[-carry:]
+        latents = torch.cat(windows)
+        start, stop = choose_loop(latents.cpu().numpy())
+        portrait.idle = latents[start:stop].clone()
+        return portrait.idle
+
+    def idle_frames(self, portrait: Portrait, level: int = 0) -> list[bytes]:
+        """The idle loop's JPEG frames at a quality level (rendered once per portrait and level)."""
+        from services.portrait.idle_loop import idle_frame_step
+
+        if level not in portrait.idle_jpegs:
+            step = idle_frame_step(level)
+            portrait.idle_jpegs[level] = self.render(portrait, self.idle_latents(portrait)[::step], level)
+        return portrait.idle_jpegs[level]
 
     @torch.no_grad()
     def render_pixels(self, portrait: Portrait, latents: torch.Tensor) -> torch.Tensor:
@@ -411,6 +458,7 @@ class FloatSession:
         dim = runtime.opt.dim_w
         self.latents = torch.zeros(0, dim, device="cuda")
         self.feats = torch.zeros(0, dim, device="cuda")
+        self.level = 0  # the call's quality level (the service's ``quality`` message sets it)
 
     @torch.no_grad()
     def run_pass(self, audio: np.ndarray, plan: PassPlan, seed: int) -> None:
@@ -427,8 +475,14 @@ class FloatSession:
         self.latents = torch.cat([self.latents[:plan.start], sample[:plan.commit]])
         self.feats = torch.cat([self.feats[:plan.start], wa[:plan.commit]])
 
-    def decode(self, start: int, stop: int) -> list[bytes]:
-        return self.runtime.render(self.portrait, self.latents[start:stop])
+    def decode(self, start: int, stop: int) -> list[bytes | None]:
+        """JPEG frames for [start, stop); at a level that sends every other frame, None for the others."""
+        step = QUALITY_LEVELS[self.level][1]
+        kept = [index for index in range(start, stop) if index % step == 0]
+        if not kept:
+            return [None] * (stop - start)
+        jpegs = iter(self.runtime.render(self.portrait, self.latents[kept], self.level))
+        return [next(jpegs) if index % step == 0 else None for index in range(start, stop)]
 
     def reset(self) -> None:
         self.latents = self.latents[:0]

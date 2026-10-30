@@ -1,8 +1,9 @@
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from '../../../../events/bus';
 import type { LiveVoicePcmSession, LiveVoicePortraitHooks } from '../../workspace/live-voice-pcm-session';
 import { PortraitPlaybackClock } from './clock';
+import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { PortraitFrameBuffer } from './frameBuffer';
-import { parsePortraitFrame } from './protocol';
+import { IDLE_OUTPUT_ID, parsePortraitFrame, type PortraitFrameHeader } from './protocol';
 
 /**
  * The live call's portrait (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 3).
@@ -10,12 +11,18 @@ import { parsePortraitFrame } from './protocol';
  * When the call's avatar pack is a portrait, the live audio session asks the TTS websocket for a hello; its
  * avatar token opens the avatar websocket, whose frames are decoded into a buffer and drawn by what the
  * worklet's clock says is heard. Every 250 ms the play position goes back (`frame_ack`) so the service can
- * commit a phrase's last frames in time. Anything that stops the portrait (no hello, a refusal, a lost
+ * commit a phrase's last frames in time. The service also sends the portrait's idle loop, which the compositor
+ * shows before the first speech and through long gaps. Anything that stops the portrait (no hello, a refusal, a lost
  * stream) leaves the status `unavailable` and the call shows the pack's fallback renderer.
+ *
+ * Each `frame_ack` also says how many speech frames have arrived, how many came too late to draw and how long
+ * decoding took; the gateway steps the call's quality level from them (`quality` messages). When frames are still
+ * late at the lowest level, the turn shows the fallback (`degraded`) and the next turn tries again.
  */
 
 export type PortraitFallbackRenderer = 'sprite' | 'live2d' | 'orb';
-export type LivePortraitStatus = 'off' | 'connecting' | 'ready' | 'unavailable';
+// `degraded`: frames still come too late at the lowest quality level, so this turn shows the fallback.
+export type LivePortraitStatus = 'off' | 'connecting' | 'ready' | 'degraded' | 'unavailable';
 export type LivePortraitSnapshot = {
   status: LivePortraitStatus;
   fallbackRenderer: PortraitFallbackRenderer;
@@ -28,6 +35,8 @@ type ImageDecoder = (jpeg: Uint8Array<ArrayBuffer>) => Promise<ImageBitmap>;
 const AVATAR_WEBSOCKET_PATH = '/api/tts/live-call/avatar-websocket';
 const HELLO_TIMEOUT_MS = 1_000;
 const FRAME_ACK_INTERVAL_MS = 250;
+const LOWEST_LEVEL = 3;
+const LATE_FRAMES_TO_DEGRADE = 3;
 const OFF: LivePortraitSnapshot = { status: 'off', fallbackRenderer: 'orb', reason: null };
 
 const decodeJpeg: ImageDecoder = (jpeg) => createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
@@ -41,6 +50,16 @@ export class LivePortrait {
   private socket: WebSocket | null = null;
   private clock: PortraitPlaybackClock | null = null;
   private buffer = new PortraitFrameBuffer<ImageBitmap>((image) => image.close());
+  private readonly compositor = new PortraitCompositor<ImageBitmap>();
+  private idleFrames: ImageBitmap[] = [];
+  private idleReceived = 0;
+  private readySegments = new Set<string>();
+  private level = 0;
+  private received = 0;
+  private late = 0;
+  private decodeMs = 0;
+  private decoded = 0;
+  private degradedEpoch: number | null = null;
   private helloTimer: ReturnType<typeof setTimeout> | null = null;
   private ackTimer: ReturnType<typeof setInterval> | null = null;
   private generation = 0;
@@ -77,8 +96,10 @@ export class LivePortrait {
       onWorkletEvent: (event) => {
         if (generation !== this.generation) return;
         this.clock?.observe(event);
-        if (event.type === 'segment_cancelled' && typeof event.generation_epoch === 'number') {
+        if ((event.type === 'segment_cancelled' || event.type === 'segment_interrupted')
+          && typeof event.generation_epoch === 'number') {
           this.buffer.cancelEpoch(event.generation_epoch);
+          this.compositor.interrupt(performance.now());
         }
       },
       onSegmentRate: (segmentId, sampleRate) => {
@@ -91,13 +112,21 @@ export class LivePortrait {
   attachSession(session: LiveVoicePcmSession): void {
     this.session = session;
     this.clock = new PortraitPlaybackClock(session.audioContext.sampleRate);
-    session.setPortraitClock(true);
+    if (this.snapshot.status !== 'unavailable') session.setPortraitClock(true);
   }
 
   /** The frame for what is heard now, or null (keep the last one up, or show the idle portrait). */
   currentFrame(): ImageBitmap | null {
     const position = this.heard();
     return position && this.clock ? this.buffer.frameAt(position, this.clock.rate) : null;
+  }
+
+  /** What to draw at `now` (performance time, ms): speech, the held frame, or the idle loop, with crossfades. */
+  picture(now: number): PortraitPicture<ImageBitmap> {
+    const speech = this.currentFrame();
+    const context = this.session?.audioContext;
+    const stalled = Boolean(context && this.clock?.underrunAt(context.currentTime, outputLatency(context)));
+    return this.compositor.picture(now, speech, stalled);
   }
 
   end(): void {
@@ -111,6 +140,14 @@ export class LivePortrait {
     this.session = null;
     this.clock = null;
     this.buffer.clear();
+    this.compositor.reset();
+    for (const image of this.idleFrames) image?.close();
+    this.idleFrames = [];
+    this.idleReceived = 0;
+    this.readySegments.clear();
+    this.level = 0;
+    this.received = this.late = this.decoded = this.decodeMs = 0;
+    this.degradedEpoch = null;
     if (this.snapshot.status !== 'off') this.publish(OFF);
   }
 
@@ -135,9 +172,11 @@ export class LivePortrait {
       }
       const frame = parsePortraitFrame(event.data);
       if (!frame) return;
+      const began = performance.now();
       void this.decode(frame.jpeg).then((image) => {
-        if (generation === this.generation) this.buffer.add(frame.header, image);
-        else image.close();
+        if (generation !== this.generation) image.close();
+        else if (frame.header.output_id === IDLE_OUTPUT_ID) this.addIdleFrame(frame.header, image);
+        else this.addSpeechFrame(frame.header, image, performance.now() - began);
       }).catch(() => undefined);
     });
     socket.addEventListener('close', () => {
@@ -149,39 +188,85 @@ export class LivePortrait {
   }
 
   private control(raw: string, generation: number): void {
-    let message: { type?: string; code?: string; fallback_renderer?: PortraitFallbackRenderer };
+    let message: { type?: string; code?: string; level?: number; fallback_renderer?: PortraitFallbackRenderer };
     try {
       message = JSON.parse(raw) as typeof message;
     } catch {
       return;
     }
     if (message.type === 'ready') {
+      this.level = message.level ?? 0;
       this.publish({ status: 'ready', fallbackRenderer: message.fallback_renderer ?? this.snapshot.fallbackRenderer, reason: null });
       this.ackTimer = setInterval(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
+    } else if (message.type === 'quality' && typeof message.level === 'number') {
+      this.level = message.level;
     } else if (message.type === 'unavailable') {
       this.unavailable(message.code ?? 'unavailable', generation);
     }
+  }
+
+  private addSpeechFrame(header: PortraitFrameHeader, image: ImageBitmap, decodeMs: number): void {
+    this.received += 1;
+    this.decoded += 1;
+    this.decodeMs += decodeMs;
+    const late = Boolean(this.clock && this.buffer.isLate(header, this.heard(), this.clock.rate));
+    if (late) this.late += 1;
+    if (!this.buffer.add(header, image)) return;
+    this.framesReady(header.segment_id);
+    // A new turn whose frames keep up gets the portrait back.
+    if (this.snapshot.status === 'degraded' && !late && header.epoch !== this.degradedEpoch) {
+      this.degradedEpoch = null;
+      this.publish({ ...this.snapshot, status: 'ready', reason: null });
+    }
+  }
+
+  /** A segment's first frame is here: a turn's start held for it can play (sent once per segment). */
+  private framesReady(segmentId: string): void {
+    if (this.readySegments.has(segmentId)) return;
+    this.readySegments.add(segmentId);
+    if (this.readySegments.size > 64) this.readySegments.delete(this.readySegments.values().next().value as string);
+    this.session?.portraitFramesReady(segmentId);
+  }
+
+  private addIdleFrame(header: PortraitFrameHeader, image: ImageBitmap): void {
+    const count = header.count ?? 0;
+    if (count <= 0 || header.offset >= count || this.idleFrames[header.offset]) {
+      image.close();
+      return;
+    }
+    this.idleFrames[header.offset] = image;
+    this.idleReceived += 1;
+    if (this.idleReceived === count) this.compositor.setIdleLoop(this.idleFrames.slice(0, count), performance.now(), header.frame_ms);
   }
 
   private acknowledge(): void {
     const position = this.heard();
     const socket = this.socket;
     if (!position || !this.clock || !socket || socket.readyState !== WebSocket.OPEN) return;
+    const late = this.late;
     // The service counts the phrase's own TTS samples.
     socket.send(JSON.stringify({ type: 'frame_ack', segment_id: position.segmentId,
-      offset: Math.round(this.buffer.sourceOffset(position, this.clock.rate)) }));
+      offset: Math.round(this.buffer.sourceOffset(position, this.clock.rate)), received: this.received, late,
+      decode_ms: this.decoded ? Math.round(this.decodeMs / this.decoded * 10) / 10 : 0 }));
+    this.late = 0;
+    this.decodeMs = 0;
+    this.decoded = 0;
+    if (this.snapshot.status === 'ready' && this.level >= LOWEST_LEVEL && late >= LATE_FRAMES_TO_DEGRADE) {
+      this.degradedEpoch = this.buffer.epochAt(position);
+      this.publish({ ...this.snapshot, status: 'degraded', reason: 'frames_late' });
+    }
   }
 
   private heard() {
     const context = this.session?.audioContext;
     if (!context || !this.clock) return null;
-    const latency = (context as AudioContext & { outputLatency?: number }).outputLatency ?? context.baseLatency ?? 0;
-    return this.clock.heardPosition(context.currentTime, latency);
+    return this.clock.heardPosition(context.currentTime, outputLatency(context));
   }
 
   private unavailable(reason: string, generation: number): void {
     if (generation !== this.generation) return;
     this.clearHelloTimer();
+    this.session?.setPortraitClock(false); // no frames will come: never hold a start for them
     this.publish({ status: 'unavailable', fallbackRenderer: this.snapshot.fallbackRenderer, reason });
   }
 
@@ -194,6 +279,10 @@ export class LivePortrait {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener();
   }
+}
+
+function outputLatency(context: AudioContext): number {
+  return (context as AudioContext & { outputLatency?: number }).outputLatency ?? context.baseLatency ?? 0;
 }
 
 /** The page's one live portrait (a call at a time). */

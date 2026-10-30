@@ -179,6 +179,40 @@ describe('live voice PCM worklet state machine', () => {
     expect(events(processor, 'portrait_clock').at(-1)?.audio_context_time_seconds).toBeCloseTo(2 + 128 / 24_000, 9);
   });
 
+  it('holds a turn start for its first portrait frames, at most the cap, and never mid-reply', () => {
+    const processor = createProcessor();
+    send(processor, { type: 'set_portrait_clock', enabled: true, startHoldSamples: 512 });
+    const speech = (segmentId: string, generationEpoch: number) => {
+      send(processor, {
+        type: 'push_segment_samples', segmentId, segmentKind: 'speech', phraseIndex: 0, outputId: segmentId,
+        generationEpoch, samples: new Float32Array(256).fill(0.2),
+      });
+      send(processor, { type: 'segment_end', segmentId });
+    };
+    speech('speech-0', 1);
+    render(processor);
+    render(processor);
+    expect(events(processor, 'started')).toHaveLength(0);
+    send(processor, { type: 'portrait_frames_ready', segmentId: 'speech-0' });
+    expect(events(processor, 'started')).toHaveLength(1);
+    expect(events(processor, 'start_hold')).toEqual([
+      expect.objectContaining({ segment_id: 'speech-0', held_samples: 256, released_by: 'frames' }),
+    ]);
+
+    // Drained and idle, the same turn's next phrase starts at once: no hold mid-reply.
+    for (let quantum = 0; quantum < 4; quantum += 1) render(processor);
+    speech('speech-1', 1);
+    expect(events(processor, 'started')).toHaveLength(2);
+
+    // A new turn without frames waits only up to the cap.
+    for (let quantum = 0; quantum < 4; quantum += 1) render(processor);
+    speech('speech-2', 2);
+    for (let quantum = 0; quantum < 5; quantum += 1) render(processor);
+    expect(events(processor, 'start_hold').at(-1)).toEqual(
+      expect.objectContaining({ segment_id: 'speech-2', held_samples: 512, released_by: 'cap' }));
+    expect(events(processor, 'started')).toHaveLength(3);
+  });
+
   it('waits before a planned pause until following canonical speech is buffered', () => {
     const processor = createProcessor();
     send(processor, {

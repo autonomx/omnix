@@ -23,6 +23,8 @@ export type LiveVoiceDeliveryLedger = {
   activePhraseIndex: number | null;
   visualDeliveredTextEnd: number;
   contextDeliveredTextEnd: number;
+  /** How long the turn's start waited for its first portrait frames (D-5); null without a portrait. */
+  startHoldMs: number | null;
 };
 
 export function createLiveVoiceDeliveryLedger(
@@ -39,6 +41,7 @@ export function createLiveVoiceDeliveryLedger(
     activePhraseIndex: null,
     visualDeliveredTextEnd: 0,
     contextDeliveredTextEnd: 0,
+    startHoldMs: null,
   };
 }
 
@@ -90,6 +93,7 @@ export function handleDeliveryDiagnostic(
     return advanceDeliveryLedger(ledger, ledger.semanticSpeechSamples);
   }
   if (!event.startsWith('worklet_')) return false;
+  if (event === 'worklet_start_hold') ledger.startHoldMs = finiteNumber(details.held_ms, 0);
   const semanticSamples = finiteNumber(
     details.semantic_speech_samples,
     finiteNumber(details.played_samples, ledger.semanticSpeechSamples),

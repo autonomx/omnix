@@ -55,7 +55,7 @@ function frameMessage(header: Record<string, unknown>, id: number): ArrayBuffer 
 function fakeSession(context: { currentTime: number }) {
   const audioContext = Object.assign(context, { sampleRate: CONTEXT_RATE, outputLatency: 0 });
   return {
-    session: { audioContext, setPortraitClock: vi.fn() } as unknown as LiveVoicePcmSession,
+    session: { audioContext, setPortraitClock: vi.fn(), portraitFramesReady: vi.fn() } as unknown as LiveVoicePcmSession,
     audioContext,
   };
 }
@@ -135,6 +135,9 @@ describe('the live portrait client', () => {
     }
     await flush();
     expect(portrait.currentFrame()).toBeNull();
+    // The first frame of the segment lets a start held for it go, once.
+    expect(session.portraitFramesReady).toHaveBeenCalledTimes(1);
+    expect(session.portraitFramesReady).toHaveBeenCalledWith('seg-1');
 
     hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 10 });
     // 50 ms at 48 kHz is 1200 source samples at 24 kHz: the second frame (offset 960).
@@ -144,7 +147,9 @@ describe('the live portrait client', () => {
     expect(images[0].closed).toBe(true);
 
     vi.advanceTimersByTime(250);
-    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toEqual({ type: 'frame_ack', segment_id: 'seg-1', offset: 1_200 });
+    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toEqual({
+      type: 'frame_ack', segment_id: 'seg-1', offset: 1_200, received: 3, late: 0, decode_ms: expect.any(Number),
+    });
   });
 
   it('never draws a cancelled turn, even frames that arrive after the cancel', async () => {
@@ -163,6 +168,65 @@ describe('the live portrait client', () => {
     hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-a', audio_context_time_seconds: 5.1 });
     context.currentTime = 5.2;
     expect(portrait.currentFrame()).toBeNull();
+  });
+
+  it('shows the idle loop once all of it has arrived, and cuts back to it when a turn is interrupted', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 1 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    const idle = (offset: number, id: number) => frameMessage(
+      { output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 }, id);
+    sockets[0].message(idle(1, 21));
+    await flush();
+    expect(portrait.picture(performance.now()).under).toBeNull();
+    sockets[0].message(idle(0, 20));
+    await flush();
+    expect((portrait.picture(performance.now()).under as unknown as FakeImage).id).toBe(20);
+
+    sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
+    context.currentTime = 1.01;
+    expect((portrait.picture(performance.now()).over as unknown as FakeImage).id).toBe(5);
+    hooks.onWorkletEvent({ type: 'segment_interrupted', segment_id: 'seg-1', generation_epoch: 1, audio_context_time_seconds: 1.01 });
+    const after = portrait.picture(performance.now());
+    expect(after.over).toBeNull();
+    expect([20, 21]).toContain((after.under as unknown as FakeImage).id);
+    expect(images.find((image) => image.id === 5)?.closed).toBe(true);
+
+    portrait.end();
+    expect(images.filter((image) => image.id >= 20).every((image) => image.closed)).toBe(true);
+  });
+
+  it('shows the fallback for a turn whose frames are late even at the lowest level, then tries the next', async () => {
+    const { portrait, sockets } = setup();
+    const context = { currentTime: 20 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    const socket = sockets[0];
+    socket.message(JSON.stringify({ type: 'ready', level: 2 }));
+    socket.message(JSON.stringify({ type: 'quality', level: 3 }));
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 20 });
+    hooks.onWorkletEvent({ type: 'portrait_clock', segment_id: 'seg-1', segment_played_samples: 48_000, audio_context_time_seconds: 21 });
+    context.currentTime = 21;
+    // A second into the phrase, frames for its first 120 ms arrive: all late.
+    for (const offset of [0, 960, 1_920]) {
+      socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, offset / 960));
+    }
+    await flush();
+    vi.advanceTimersByTime(250);
+    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toMatchObject({ received: 3, late: 3 });
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'degraded', reason: 'frames_late' });
+
+    hooks.onSegmentRate('seg-2', 24_000);
+    socket.message(frameMessage({ output_id: 'turn-2', epoch: 2, segment_id: 'seg-2', offset: 0 }, 9));
+    await flush();
+    expect(portrait.getSnapshot().status).toBe('ready');
   });
 
   it('falls back when the service refuses or the stream is lost', () => {

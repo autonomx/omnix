@@ -9,9 +9,10 @@ this service only; the browser never does. Routes:
   encodes the portrait once per (tenant, image digest, FLOAT revision) and returns its ``latent_key``.
 - ``DELETE /portrait/cache/{tenant}/{image_sha256}``: forget that encoding (its pack was deleted).
 - ``WS /portrait/stream``: one call's stream. The first message is ``open`` (``call_key``, ``principal``,
-  ``session``, ``latent_key``, ``emotion``); then ``phrase_start``, PCM (binary, see
+  ``session``, ``latent_key``, ``emotion``, ``level``); then ``phrase_start``, PCM (binary, see
   ``app.conversation.portrait_stream_contract``), ``phrase_done``, ``output_end``, ``cancel``,
-  ``tts_priority``, ``play_position`` and ``heartbeat``. Frames come back as binary JPEG messages.
+  ``tts_priority``, ``play_position``, ``quality`` and ``heartbeat``. Frames come back as binary JPEG
+  messages: after ``ready``, the portrait's idle loop at the opening level, then the call's speech.
 
 Loading takes about a minute (cuDNN builds its plans for each network's one input shape), so the model loads
 in the background when the service starts and stays resident until it has been idle for a long while. One
@@ -22,6 +23,7 @@ gateway acts on travel as ``{"ok": false, "code", "message"}`` (the middleware r
 from __future__ import annotations
 
 import asyncio
+import collections
 import contextlib
 import hashlib
 import json
@@ -39,7 +41,7 @@ import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
 from app.config.env import env_int
-from app.conversation.portrait_stream_contract import PortraitMessageError, pack, unpack
+from app.conversation.portrait_stream_contract import QUALITY_LEVELS, PortraitMessageError, pack, unpack
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
 
@@ -293,6 +295,8 @@ class StreamWorker:
         elif kind == "play_position":
             stream.play_position(str(message["segment_id"]), int(message["offset"]),
                                  float(message.get("round_trip_seconds") or 0.0))
+        elif kind == "quality":
+            stream.session.level = quality_level(message.get("level"))
 
     def step(self) -> None:
         """Take every queued message, then run the passes they allow (and any deadline that came)."""
@@ -308,6 +312,14 @@ class StreamWorker:
         except Exception as exc:  # noqa: BLE001 - surfaced to the websocket handler
             logger.exception("Portrait stream failed")
             self.failed = exc
+
+
+def quality_level(value: Any) -> int:
+    """A quality level from a message, clamped to the known levels (0, the best, when absent)."""
+    try:
+        return min(max(int(value or 0), 0), len(QUALITY_LEVELS) - 1)
+    except (TypeError, ValueError):
+        return 0
 
 
 def create_app(*, load: Callable[[], Any] = _default_load,
@@ -412,17 +424,42 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                       "offset": frame.offset}
             loop.call_soon_threadsafe(queue_frame, pack(header, frame.jpeg))
 
-        portrait_stream = PortraitStream(runtime.session(portrait, str(opened.get("emotion") or "neutral")), emit,
-                                         resample=runtime.resample)
+        session = runtime.session(portrait, str(opened.get("emotion") or "neutral"))
+        session.level = quality_level(opened.get("level"))
+        portrait_stream = PortraitStream(session, emit, resample=runtime.resample)
         worker = StreamWorker(portrait_stream)
         host.attach(worker)
 
+        idle_box: collections.deque[bytes] = collections.deque()
+
         async def send_frames() -> None:
+            # Speech first; the idle loop goes out only while no speech frame is waiting.
             while True:
-                await websocket.send_bytes(await outbox.get())
+                if outbox.empty() and idle_box:
+                    await websocket.send_bytes(idle_box.popleft())
+                    continue
+                message = await outbox.get()
+                if message:  # an empty message only wakes this loop for the idle loop
+                    await websocket.send_bytes(message)
+
+        async def send_idle_loop() -> None:
+            from services.portrait.idle_loop import IDLE_OUTPUT_ID, IDLE_SEGMENT_ID, idle_frame_step
+
+            level = session.level
+            try:
+                frames = await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, level))
+            except Exception:  # noqa: BLE001 - the call goes on; the browser holds the last frame instead
+                logger.warning("Portrait idle loop failed for %s", call_key, exc_info=True)
+                return
+            frame_ms = 40 * idle_frame_step(level)
+            for index, jpeg in enumerate(frames):
+                idle_box.append(pack({"output_id": IDLE_OUTPUT_ID, "epoch": 0, "segment_id": IDLE_SEGMENT_ID,
+                                      "offset": index, "count": len(frames), "frame_ms": frame_ms}, jpeg))
+            queue_frame(b"")
 
         sender = asyncio.create_task(send_frames())
         await websocket.send_json({"type": "ready"})
+        idle_sender = asyncio.create_task(send_idle_loop())
         try:
             while worker.failed is None:
                 message = await websocket.receive()
@@ -442,7 +479,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                     portrait_stream.cancel(str(control["output_id"]), int(control["epoch"]))
                 elif kind == "tts_priority":
                     (portrait_stream.priority.set if control.get("on") else portrait_stream.priority.clear)()
-                elif kind in {"phrase_start", "phrase_done", "output_end", "play_position"}:
+                elif kind in {"phrase_start", "phrase_done", "output_end", "play_position", "quality"}:
                     worker.inbox.put((kind, control, None))
         except WebSocketDisconnect:
             pass
@@ -453,6 +490,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             portrait_stream.priority.clear()
             host.detach(worker)
             sender.cancel()
+            idle_sender.cancel()
             admission.release(lease)
             if dropped:
                 logger.info("Portrait stream %s dropped %d late frames", call_key, dropped)
@@ -497,4 +535,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["Admission", "Lease", "RuntimeHost", "StreamWorker", "Unavailable", "app", "create_app", "main"]
+__all__ = ["Admission", "Lease", "RuntimeHost", "StreamWorker", "Unavailable", "app", "create_app", "main", "quality_level"]

@@ -10,6 +10,7 @@ import type { PortraitFrameHeader } from './protocol';
  */
 
 const DEFAULT_SOURCE_RATE = 24_000;
+const FRAMES_PER_SECOND = 25;
 const MAX_SEGMENTS = 12;
 
 type Stored<T> = { offset: number; epoch: number; image: T };
@@ -66,6 +67,13 @@ export class PortraitFrameBuffer<T> {
     return position.playedSamples * rate / contextRate;
   }
 
+  /** Whether a frame arrived after its time: its segment is heard more than a frame-time past it. */
+  isLate(header: PortraitFrameHeader, position: HeardPosition | null, contextRate: number): boolean {
+    if (!position || position.segmentId !== header.segment_id) return false;
+    const rate = this.sourceRates.get(header.segment_id) ?? DEFAULT_SOURCE_RATE;
+    return this.sourceOffset(position, contextRate) > header.offset + rate / FRAMES_PER_SECOND;
+  }
+
   /** The frame for what is heard, or null when its segment has none yet (a silence, a cue, a late frame). */
   frameAt(position: HeardPosition, contextRate: number): T | null {
     const segment = this.segments.get(position.segmentId);
@@ -78,6 +86,11 @@ export class PortraitFrameBuffer<T> {
     if (chosen < 0) return null;
     for (const stale of segment.frames.splice(0, chosen)) this.release(stale.image);
     return segment.frames[0].image;
+  }
+
+  /** The turn (epoch) of the segment heard, from its frames; null when it has none. */
+  epochAt(position: HeardPosition): number | null {
+    return this.segments.get(position.segmentId)?.frames[0]?.epoch ?? null;
   }
 
   clear(): void {

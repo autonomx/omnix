@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PortraitPlaybackClock } from './clock';
+import { PortraitCompositor } from './compositor';
 import { PortraitFrameBuffer } from './frameBuffer';
 import { parsePortraitFrame, type PortraitFrameHeader } from './protocol';
 
@@ -106,5 +107,58 @@ describe('the portrait frame buffer', () => {
     expect(buffer.add(header('seg', 960, 4), 'late')).toBe(false);
     expect(released).toEqual(['old', 'late']);
     expect(buffer.frameCount).toBe(1);
+  });
+});
+
+describe('the portrait compositor', () => {
+  it('plays the idle loop before speech, then crossfades into the speech frame', () => {
+    const compositor = new PortraitCompositor<string>();
+    expect(compositor.picture(0, null, false)).toEqual({ under: null, over: null, alpha: 0 });
+    compositor.setIdleLoop(['i0', 'i1', 'i2'], 1_000);
+    expect(compositor.picture(1_000, null, false).under).toBe('i0');
+    expect(compositor.picture(1_085, null, false).under).toBe('i2');
+    expect(compositor.picture(1_125, null, false).under).toBe('i0');
+    expect(compositor.picture(2_000, 's1', false)).toEqual({ under: 'i1', over: 's1', alpha: 0 });
+    expect(compositor.picture(2_040, 's1', false)).toMatchObject({ over: 's1', alpha: 0.5 });
+    expect(compositor.picture(2_080, 's2', false)).toEqual({ under: 's2', over: null, alpha: 0 });
+  });
+
+  it('holds the last frame through short gaps and underruns, then fades to idle after 250 ms', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.setIdleLoop(['i0', 'i1'], 0);
+    compositor.picture(0, 's1', false);
+    compositor.picture(100, 's1', false);
+    expect(compositor.picture(200, null, false).under).toBe('s1');
+    expect(compositor.picture(449, null, false).under).toBe('s1');
+    expect(compositor.picture(460, 's2', false).under).toBe('s2'); // speech came back in time: no idle
+    expect(compositor.picture(500, null, true).under).toBe('s2');
+    expect(compositor.picture(1_000, null, true).under).toBe('s2'); // an underrun freezes, however long
+    expect(compositor.picture(1_100, null, false)).toEqual({ under: 's2', over: 'i0', alpha: 0 });
+    expect(compositor.picture(1_140, null, false)).toEqual({ under: 's2', over: 'i1', alpha: 0.5 });
+    expect(compositor.picture(1_180, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+  });
+
+  it('cuts to the idle loop when a turn is interrupted, and holds speech when there is no loop', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.picture(0, 's1', false);
+    expect(compositor.picture(1_000, null, false).under).toBe('s1');
+    compositor.setIdleLoop(['i0'], 1_000);
+    compositor.interrupt(1_010);
+    expect(compositor.picture(1_020, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    compositor.reset();
+    expect(compositor.picture(1_030, null, false).under).toBeNull();
+  });
+});
+
+describe('the clock during an underrun', () => {
+  it('says when what is heard is an underrun, until playback resumes', () => {
+    const clock = new PortraitPlaybackClock(CONTEXT_RATE);
+    clock.observe({ type: 'segment_started', segment_id: 'a', audio_context_time_seconds: 1 });
+    clock.observe({ type: 'underrun', audio_context_time_seconds: 2 });
+    clock.observe({ type: 'resumed', audio_context_time_seconds: 3 });
+    expect(clock.underrunAt(1.5, 0)).toBe(false);
+    expect(clock.underrunAt(2.5, 0)).toBe(true);
+    expect(clock.underrunAt(3.05, 0.1)).toBe(true);
+    expect(clock.underrunAt(3.2, 0.1)).toBe(false);
   });
 });
