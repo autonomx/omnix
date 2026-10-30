@@ -475,6 +475,8 @@ def main() -> int:
     parser.add_argument("--app-path", default="/chatbot",
                         help="Where the call starts (a session whose character has a portrait pack)")
     parser.add_argument("--repeat", type=int, default=1, help="Play the five interactions this many times")
+    parser.add_argument("--video-dir", type=Path, default=None,
+                        help="Record the browser here (the portrait's ghosting rating; never for a gated run)")
     args = parser.parse_args()
 
     audio_paths = [args.audio_dir / f"interaction-{index}.wav" for index in range(1, 6)]
@@ -521,6 +523,7 @@ def main() -> int:
     env["OMNIX_LIVE_VOICE_BENCHMARK_SCENARIO"] = args.scenario
     env["OMNIX_LIVE_VOICE_BENCHMARK_PATH"] = args.app_path
     env["OMNIX_LIVE_VOICE_BENCHMARK_REPEAT"] = str(max(1, args.repeat))
+    env["OMNIX_LIVE_VOICE_BENCHMARK_VIDEO_DIR"] = str(args.video_dir.resolve()) if args.video_dir else ""
 
     command = [
         sys.executable,

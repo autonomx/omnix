@@ -4,7 +4,9 @@ This test is intentionally local/self-hosted only. It replaces getUserMedia's
 microphone track with a programmable WebAudio MediaStream, then feeds the
 committed resources/examples/voice/interaction-1.wav ... interaction-5.wav one at a time.
 Each next utterance waits for the preceding assistant response stream and audio
-playback to finish before the next WAV is injected.
+playback to finish before the next WAV is injected. In the ``hard-stop`` scenario
+the microphone says "Stop." (interrupt-stop.wav) shortly after each reply starts
+playing, and the reply's end is its stop.
 
 Use scripts/run_live_voice_performance_benchmark.py instead of invoking this
 file directly; the runner performs service preflight and analyzes resources/logs.
@@ -29,6 +31,9 @@ DEFAULT_AUDIO_DIR = ROOT_DIR / "resources" / "examples" / "voice"
 EXPECTED_PROVIDER = os.environ.get("OMNIX_LIVE_VOICE_EXPECTED_PROVIDER", "cerebras").strip().casefold()
 _RESPONSE_TIMEOUT_MS = 90_000
 _STABLE_LISTENING_MS = 1_200
+_HARD_STOP_SCENARIO = "hard-stop"
+_INTERRUPT_WAV = "interrupt-stop.wav"
+_INTERRUPT_AFTER_MS = 700
 
 _PROGRAMMABLE_MIC_INIT = r"""
 (() => {
@@ -92,7 +97,7 @@ _PROGRAMMABLE_MIC_INIT = r"""
     },
   };
 
-  const benchmarkEvents = { finals: [], perfFinals: [], turnFinished: [] };
+  const benchmarkEvents = { finals: [], perfFinals: [], turnFinished: [], turnStopped: [] };
   window.__omnixBenchmarkEvents = benchmarkEvents;
   window.addEventListener('omnix:live-stt-speculation-final', (event) => {
     const detail = event?.detail ?? {};
@@ -112,8 +117,8 @@ _PROGRAMMABLE_MIC_INIT = r"""
   });
   window.addEventListener('omnix:live-call-diagnostic', (event) => {
     const detail = event?.detail ?? {};
-    if (detail.event !== 'turn_finished') return;
-    benchmarkEvents.turnFinished.push({ trace_id: String(detail.traceId ?? '') });
+    if (detail.event === 'turn_finished') benchmarkEvents.turnFinished.push({ trace_id: String(detail.traceId ?? '') });
+    if (detail.event === 'turn_stopped') benchmarkEvents.turnStopped.push({ trace_id: String(detail.traceId ?? '') });
   });
 })();
 """
@@ -142,10 +147,24 @@ def _audio_paths() -> list[Path]:
     return paths * repeat
 
 
+def _scenario() -> str:
+    return os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_SCENARIO", "").strip()
+
+
+def _interrupt_audio() -> Path | None:
+    """The spoken stop of the hard-stop scenario, beside the interactions; None in any other scenario."""
+    if _scenario() != _HARD_STOP_SCENARIO:
+        return None
+    path = _audio_paths()[0].parent / _INTERRUPT_WAV
+    if not path.is_file():
+        pytest.fail(f"Missing the hard-stop scenario's audio: {path}")
+    return path
+
+
 def _benchmark_storage_script() -> str:
     """Browser settings for this run: the release scenario label and whether the live portrait shows."""
     settings = {}
-    scenario = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_SCENARIO", "").strip()
+    scenario = _scenario()
     if scenario:
         settings["omnix.liveCall.releaseScenario"] = scenario
     portrait = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_PORTRAIT", "").strip()
@@ -259,6 +278,8 @@ def test_five_turn_live_voice_hardware_performance(
     )
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     audio_paths = _audio_paths()
+    interrupt_path = _interrupt_audio()
+    interrupt_encoded = base64.b64encode(interrupt_path.read_bytes()).decode("ascii") if interrupt_path else ""
     parsed_app_url = urlparse(app_base_url)
     app_origin = f"{parsed_app_url.scheme}://{parsed_app_url.netloc}"
 
@@ -266,7 +287,11 @@ def test_five_turn_live_voice_hardware_performance(
         headless=not _headed_mode(request),
         args=["--autoplay-policy=no-user-gesture-required"],
     )
-    context = browser.new_context()
+    # A recorded run (the portrait's ghosting rating) loads the browser more: never record a gated run.
+    video_dir = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_VIDEO_DIR", "").strip()
+    context = browser.new_context(
+        **({"record_video_dir": video_dir, "record_video_size": {"width": 1280, "height": 800}} if video_dir else {})
+    )
     context.grant_permissions(["microphone"], origin=app_origin)
     page = context.new_page()
     page.add_init_script(_PROGRAMMABLE_MIC_INIT)
@@ -308,6 +333,7 @@ def test_five_turn_live_voice_hardware_performance(
                   finals: window.__omnixBenchmarkEvents.finals.length,
                   perfFinals: window.__omnixBenchmarkEvents.perfFinals.length,
                   turnFinished: window.__omnixBenchmarkEvents.turnFinished.length,
+                  turnStopped: window.__omnixBenchmarkEvents.turnStopped.length,
                 })"""
             )
             manifest["active_interaction_index"] = index
@@ -323,8 +349,18 @@ def test_five_turn_live_voice_hardware_performance(
             # before accepting an idle window. This works for both canonical chat
             # requests and speculative streams promoted without a second request.
             _wait_for_speaking(page)
+            interrupt = None
+            if interrupt_encoded:
+                page.wait_for_timeout(_INTERRUPT_AFTER_MS)
+                interrupt = page.evaluate(
+                    "(encoded) => window.__omnixBenchmarkMic.playWavBase64(encoded)",
+                    interrupt_encoded,
+                )
             page.wait_for_function(
-                "counts => window.__omnixBenchmarkEvents.turnFinished.length > counts.turnFinished",
+                """counts => (
+                  window.__omnixBenchmarkEvents.turnFinished.length > counts.turnFinished
+                  || window.__omnixBenchmarkEvents.turnStopped.length > counts.turnStopped
+                )""",
                 arg=event_counts,
                 timeout=_RESPONSE_TIMEOUT_MS,
             )
@@ -357,6 +393,7 @@ def test_five_turn_live_voice_hardware_performance(
                     "interaction_completed_at_utc": _utc_now(),
                     "wall_elapsed_ms": round((time.perf_counter() - wall_started) * 1000, 3),
                     "microphone_playback": playback,
+                    "interrupt_playback": interrupt,
                     "transcript": transcript,
                     "live_voice_turn_id": turn_id,
                 }
