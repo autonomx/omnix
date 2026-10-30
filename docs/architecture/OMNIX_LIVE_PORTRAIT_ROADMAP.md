@@ -35,6 +35,21 @@ We don't adopt fast-float. We build FLOAT into the stack live calls already run 
 - recording or exporting call video
 - a WebRTC or LiveKit stack
 
+## Where it stands (2026-10-30)
+
+Phases 1–5 are built, with their tests, on branch `live-portrait`; Phase 0's standalone measurements passed. What
+remains are the measurements that need the whole live stack (gateway, STT, TTS, an LLM and a browser) running on
+the 4090 together with the portrait, in a slot that does not overlap the RPG roadmap's gates:
+
+| Run | Phase | How |
+| --- | --- | --- |
+| Loaded runs: live calls with TTS, STT and the LLM, portrait off and on | 0 | The benchmark below, `character-normal` |
+| Ghosting of the idle crossfades on 10 replies | 3 | Watch 10 replies of an on run; the fallback is service-rendered transition frames |
+| The paired gate over the required scenarios, 40 replies each | 5 | `scripts/run_live_voice_performance_benchmark.py --scenario <name> --portrait off --app-path <session> --repeat 8`, the same with `--portrait on`, then `python -m app.platform.live_voice.release_gate_cli --portrait-pairing` |
+| Remote clients over 20, 8 and 3 Mbit/s links with 80 ms RTT | 5 | The on run from a second machine behind a throttled link; record the level each settles at |
+
+Until then the portrait is opt-in by its avatar pack, and every way it can fail shows the pack's fallback.
+
 ## Why not fast-float
 
 fast-float wraps FLOAT in a FastAPI server with a studio UI and WebSocket, WebRTC and LiveKit outputs. Its inference code (`fast_float/core/inference_optimized.py`) shows these limits for a live call:
@@ -405,9 +420,9 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
     - **Model load:** 80 s.
     - **First frame:** 399 ms after the first audio. That's about 265 ms past the browser's start, just over the 250 ms cap; most of the excess is likely the GPU waking from idle. The loaded runs measure it with TTS active, and Phase 3's speculative frames remove the wait.
     - **Fixed on the way:** the first runs found `httpx` and `torchdiffeq` missing from the lock, and a load check that could kill the service. All three are fixed, and the check now reports `failed` in `/health`.
-- **Still to do in Phase 1:**
-    - the Linux lock
-    - the desktop `live-portrait` bundle and its `portrait` runtime pack, which need the desktop release tooling to build the pack's file list
+- **Finished 2026-10-30:**
+    - **Linux lock:** `portrait.linux.lock.txt`, compiled with uv for x86_64 manylinux (CPython 3.11) with every pin shared with the Windows lock held at its Windows version, as the macOS locks are compiled. Not in a Docker container: torch work there hung Docker Desktop and the live database before. `setup.sh` and `setup.bat` build the `omnix-portrait` environment when `OMNIX_SETUP_PORTRAIT=1`.
+    - **Desktop bundle:** the catalog's `portrait-windows-x64` runtime pack (an overlay on the shared Torch layer, derived from the service lock; 56 wheels, 0.2 GB past the layer) and the `live-portrait` bundle (2.5 GB VRAM, 6 GB commit). The Torch layer's lock only gains a header line, which its fingerprint ignores, so installed packs stay current. `desktop_locks.py check` passes. The supervisor runs the service from the pack, the shell persists its port (an install from before gets one without its other ports moving), and the capabilities route answers `live_portrait`.
 
 **Tests:**
 - the scheduler against a fake model
@@ -484,9 +499,9 @@ Otherwise it records why it fell back.
 - **The avatar pack contract:** `renderer: "portrait"`, `fallback_renderer` (sprite, live2d or orb) and `portrait_emotion`. Gateway OpenAPI and the web's generated types are regenerated.
 - **Capabilities:** `/api/tts/live-call/capabilities` advertises `portrait_available`, the `hello` query and the avatar websocket path.
 - **Tests:** 9 gateway portrait tests (the copy, the binding and the avatar route), 6 pack tests and a capability test. The existing TTS websocket, live-voice, character and feature-matrix suites pass. The architecture lint adds nothing.
-- **Left:**
-    - Speculative TTS's copy, drop and bind hooks move to Phase 3, where the browser uses them.
-    - The `LiveSpeechLease` still uses `id(websocket)` rather than the call key.
+- **Finished later:**
+    - Speculative TTS's copy, drop and bind hooks: Phase 3.
+    - The `LiveSpeechLease` is held under the call key, now issued for every live call (2026-10-30).
     - Prewarm happens when the avatar websocket opens, at the start of the call. The idle-GPU first pass still has to be measured in the loaded runs.
 
 ### Phase 3: idle loop, renderer, sync, speculative frames, remote quality
@@ -588,44 +603,19 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - the crossfades
 - level stepping driven by acks
 
-**Phase 3 progress (2026-10-30): the renderer, the clock and the fallback are done; the idle loop, the start hold, speculative frames and remote quality are open.**
+**Phase 3 status (2026-10-30): built and tested against fakes and, for the service, the real model; the ratings that need live calls (ghosting on 10 replies, the hold's distribution) run in the paired gate.**
 - **The client** (`web/src/features/assistant/chat/portrait/livePortrait.ts`; the plan called it `livePortraitRenderer.ts`). One per page, following the call runtime's avatar pack.
     - For a portrait pack the live audio session asks for the `hello` (`?portrait=1`). Its token opens the avatar websocket.
-    - JPEGs are decoded with `createImageBitmap` into a frame buffer keyed by segment. Frames of a cancelled turn are released and never drawn, including any that arrive after the cancel.
-    - Every 250 ms it sends `frame_ack` with the heard position in the segment's own TTS samples.
-    - The status becomes `unavailable` (with the reason) when:
-        - no hello comes within 1 s
-        - the service refuses (`unavailable` with its code)
-        - the avatar socket closes before `ready` or after it
-- **The clock** (`portrait/clock.ts`), as planned:
-    - The worklet posts `portrait_clock` every 20 ms, only while a portrait shows. It goes to the portrait and never to the diagnostics log.
-    - Each count is stamped at the end of the quantum it includes, not at `currentTime` (the quantum's start).
-    - The heard segment is looked up in the transition history at `now − outputLatency`.
-    - The estimate runs at most 20 ms past the last count, and backwards too, since the latest count is usually newer than what is heard. It stalls during an underrun.
-    - Offsets convert through each phrase's source rate, from the TTS websocket's `start`/`format`.
-- **The end of a turn:** once every phrase of a turn is synthesized, the unified audio controller sends `output_end` for the turn's last output.
-- **The visual** (`LiveCallVisual.tsx`, `portrait/LivePortraitCanvas.tsx`):
-    - A portrait pack draws a 512×512 canvas, one frame per animation frame.
-    - Between frames (silences, cues, late frames) the last one stays up.
-    - Before the first frame it shows the pack's image.
-    - When the portrait is unavailable, `drawnAvatarPack` draws the pack's fallback: sprite, Live2D, or the orb.
-- **Tests:**
-    - 9 for the frame protocol, the clock and the buffer
-    - 10 for the client and the visual: hello timeout, ready, frames drawn by the heard position, `frame_ack` in source samples, cancelled turns, refusal and loss, ended calls, fallbacks
-    - 2 for the PCM session's hello, rates and clock
-    - 1 for the worklet's clock
-    - an `output_end` assertion in the controller test
-    - The assistant web suite (820 tests), the typecheck and lint pass. `createLiveVoicePcmSession` stays within its line ratchet.
-- **Known gaps:**
-    - **First frame:** before it, the image shown is the full source picture, not the service's 512 px face crop, so the first frame jumps. The idle loop replaces it.
-    - **Live2D fallback lip sync:** a portrait pack falling back to Live2D lip-syncs from arrival-time PCM, not the worklet's envelope, because the avatar bridge keys that on the pack's own renderer.
-    - **Not yet seen end to end:** none of this has been run in a real browser against the service. That needs a GPU slot clear of RPG gates.
-- **Left in Phase 3:**
-    - rest pose and idle loop (`/portrait/idle`), with the crossfades and the 250 ms gap rule
-    - the start hold
-    - speculative TTS's copy, drop and bind hooks
-    - remote quality levels
-
+    - JPEGs are decoded with `createImageBitmap` into a frame buffer keyed by segment. Frames of a cancelled or interrupted turn are released and never drawn, including any that arrive later.
+    - Every 250 ms `frame_ack` reports the heard position (in the segment's own TTS samples), the speech frames received, how many came late and the average decode time.
+    - The status becomes `unavailable` (with the reason) when no hello comes within 1 s, the service refuses, or the avatar socket closes.
+- **The clock** (`portrait/clock.ts`), as planned. The worklet posts `portrait_clock` every 20 ms while a portrait shows, stamped at the end of the quantum it counts; it goes to the portrait and never to the diagnostics log. The heard segment is looked up at `now − outputLatency`; the estimate runs at most 20 ms past the last count, and backwards too; it stalls during an underrun.
+- **Idle loop** (`services/portrait/idle_loop.py`, `FloatRuntime.idle_frames`). About 12 s of silence rendered window after window from the rest pose (motion latent zero, the source portrait), the least-moving 150-frame span kept, the loop cut between its two closest latents (at least 4 s), rendered once per portrait and level and kept with the encoding. It goes out after `ready`, at half its level's frame rate, behind any speech frame. The plan's "asset per latent" became this: the service keeps it with the portrait, so `DELETE /portrait/cache` forgets both.
+- **The compositor** (`portrait/compositor.ts`). The idle loop before the first speech; the speech frame for what is heard; the last frame held through gaps under 250 ms and frozen during an underrun; an 80 ms crossfade into the idle loop after that, and back at the next speech; a cut to idle when a turn is cancelled or interrupted (its frames are already gone). Before the idle loop arrives the pack's image shows.
+- **Start hold (D-5).** The worklet holds a turn's start until the first frames of its first speech segment have arrived (`portrait_frames_ready`), at most 250 ms, never mid-reply; each hold is a `start_hold` worklet event and the delivery ledger's `startHoldMs`. A portrait that becomes unavailable turns the hold off.
+- **Speculative frames.** As planned: the prefetch request carries the call key (403 for another principal's call), only that call's phrases claim the entry, and the prefetch thread copies each chunk under the entry's condition through a bounded count of pending sends to the call's loop. Every drop path sends `spec_drop`. The service renders each speculation's first two passes on its own motion session and holds the frames; `spec_bind` (sent right after the phrase's `phrase_start`) relabels them and sends them at once; the phrase's own copy skips the replayed audio, and `spec_prefix_end` (at the first chunk without a copy) fits the segment: cut, or silence where a copy was lost. A later phrase of a reply already under way joins the reply's own motion instead.
+- **Remote quality (D-6).** Levels L0–L3 in the stream contract; the service encodes only the call's level (384 px resized on the GPU, every other frame at L3). The gateway (`portrait/quality.py`) counts speech frames relayed minus received as in flight: more than 12, any late frame, or decoding over 30 ms steps down at once, then 1 s to settle; 5 s healthy steps up. Loopback starts at L0, remote at L1. Still late at L3, the browser shows the fallback for that turn (`degraded`) and tries the next.
+- **Tests:** the clock, buffer, compositor and protocol; the client (hello, ready, frames by the heard position, acks, cancels and interrupts, the idle loop, degrading, fallbacks); the worklet's clock and hold; the session's hello and controls; the idle-loop choice; the service's idle loop, levels and speculative path; the gateway's level stepping, binding, prefix handling, copy, drops, claims and route.
 ### Phase 4: setup, emotion, cleanup
 
 - **Setup.** The avatar packs panel (`web/src/features/setup/AvatarPacksPanel.tsx`) gets a "Portrait" option.
@@ -635,6 +625,12 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - **Model status.** The panel shows whether the `live-portrait` bundle is installed and links to the Models tool when it isn't (D-4).
 - **Emotion.** `portrait_emotion` sets FLOAT's label for the whole call. The per-character `LiveCallSpeechStyle.emotion` is the default where it names one of the seven labels. `auto` (speech-to-emotion) is offered only if Phase 0 shows its cost is acceptable.
 - **Cleanup.** Deleting a pack or replacing its portrait removes the idle-loop asset once no pack uses the image, and calls `DELETE /portrait/cache/...` once no pack in the tenant uses it.
+
+**Phase 4 status (2026-10-30): done.**
+- **Setup** is a Live portrait tab in the character's avatar panel (`CharacterAvatarPanel.tsx`, `portrait/PortraitAvatarSetup.tsx`): pick or upload an image, preview it, choose the emotion and the fallback (the image, the character's Live2D rig, or the orb), save. The preview route (`POST /api/tts/live-call/portrait-preview`) reads the image on the server, has the service prepare it (refusals come back by code: `no_face`, `image_too_large`, ...), speaks a sample line with the live call's TTS, and has the service render it through the same scheduler a call uses (`POST /portrait/preview`, refused while a call streams). The browser plays the audio and draws the frames by its clock. No likeness consent is asked (D-3).
+- **Model status:** the tab shows the `live_portrait` capability notice, which links to the Models tool (D-4).
+- **Emotion:** `portrait_emotion` gains `character`, the new default: the character's speech-style emotion when it names one of the seven labels, neutral otherwise. `auto` (speech-to-emotion) is not offered.
+- **Cleanup:** when no portrait pack in the tenant shows an image any more, the characters module tells `PORTRAIT_IMAGE_OBSERVERS`, and live voice asks the service to forget it. The idle loop lives with the encoding, so that covers both.
 
 ### Phase 5: hardening
 
@@ -658,6 +654,12 @@ During any of them the renderer holds the last speaking frame. If the gap passes
     - Rerun on a remote client with throttled links: 20, 8 and 3 Mbit/s, each with 80 ms RTT. Record the level each settles at, how often it degrades, and the gateway's event-loop lag.
     - If L3 isn't enough, H.264 through NVENC, decoded in the browser with WebCodecs, is the later option.
 - **Operations:** a diagnostics page entry, and the portrait service's startup, admission and failure modes in `OPERATIONS.md`.
+
+**Phase 5 status (2026-10-30): the gate, its metrics, the harness and the operations notes are done; the paired runs and the throttled remote runs need a slot with the whole stack (see "What is left").**
+- **Metrics,** recorded by the browser and tagged with whether the call shows a portrait: `first_audible_ms` (first playback plus the output latency, now reported with each segment start), `start_hold_ms`, `underrun_count` per reply, `llm_tokens_per_second` (about four characters a token), `av_offset_ms` (each drawn frame against what is heard, batched) and the `portrait_degrade_count` and `portrait_admission_refused` counters.
+- **Gate:** `python -m app.platform.live_voice.release_gate_cli --portrait-pairing` (`portrait_gate.py`) applies the thresholds above to the off and on runs in the live-call log, with bootstrap 95% intervals (fixed seed).
+- **Harness:** `scripts/run_live_voice_performance_benchmark.py --scenario <name> --portrait off|on --app-path <session> --repeat 8` runs a scenario's 40 replies with the portrait switched off (the same character's fallback, `omnix.livePortrait.enabled`) or on.
+- **Operations:** the diagnostics page lists the portrait service with the model services; `OPERATIONS.md` and `VOICE_MODEL_SERVICES.md` describe its startup, residency, admission and failure modes.
 
 ## Files expected to change
 
