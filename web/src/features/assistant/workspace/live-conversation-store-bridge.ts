@@ -1,5 +1,10 @@
  
-import { readEffectiveLiveConversationProfile, type LiveConversationProfile } from '../chat/liveConversationProfileClient';
+import {
+  liveConversationProfileClient,
+  mirrorProfileForLegacyRuntime,
+  readEffectiveLiveConversationProfile,
+  type LiveConversationProfile,
+} from '../chat/liveConversationProfileClient';
 import { readLatestLiveVoiceCalibration, type LiveVoiceCalibrationRecord } from './live-voice-calibration';
 import { liveConversationStore } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
@@ -21,10 +26,23 @@ export function initializeLiveConversationStoreBridge(): () => void {
   if (profile) liveConversationStore.dispatch({ type: 'profile', profile });
   applyCalibration(readLatestLiveVoiceCalibration());
 
+  // The selected session's profile (duplex mode, interruption, pace, ...) is the call's, whichever view is open:
+  // before, only the Live view's settings panel loaded it, and a call started from Chats ran on whatever profile
+  // was stored last. The newest selection wins; a failed load keeps the stored profile.
+  let profileSessionId: string | null = null;
+  const loadSessionProfile = (sessionId: string) => {
+    if (sessionId === profileSessionId) return;
+    profileSessionId = sessionId;
+    void liveConversationProfileClient.get(sessionId).then((envelope) => {
+      if (profileSessionId === sessionId) mirrorProfileForLegacyRuntime(envelope.effective);
+    }).catch(() => undefined);
+  };
+
   const handleSession = (event: Event) => {
     const detail = detailOf(event);
     const sessionId = stringValue(detail.sessionId) || stringValue(detail.session_id);
     liveConversationStore.dispatch({ type: 'session', sessionId: sessionId || null });
+    if (sessionId) loadSessionProfile(sessionId);
     const characterId = stringValue(detail.characterId) || stringValue(detail.character_id);
     const displayName = stringValue(detail.characterName)
       || stringValue(detail.displayName)
