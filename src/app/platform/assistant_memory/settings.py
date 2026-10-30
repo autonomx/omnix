@@ -201,7 +201,13 @@ def default_memory_settings_store():
 def load_memory_runtime_settings() -> AssistantMemoryRuntimeSettings:
     loader = _RUNTIME_SETTINGS_LOADER.get()
     if loader is not None:
-        return loader()
+        # A bound loader (the live prompt's cache) falls back to this function on a miss: while it runs, this
+        # reads the stored settings instead of calling it again.
+        token = _RUNTIME_SETTINGS_LOADER.set(None)
+        try:
+            return loader()
+        finally:
+            _RUNTIME_SETTINGS_LOADER.reset(token)
     return load_memory_runtime_status().settings
 
 

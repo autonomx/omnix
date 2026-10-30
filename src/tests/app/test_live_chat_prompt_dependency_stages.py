@@ -18,6 +18,31 @@ def _use_test_settings(monkeypatch, loader):
     )
 
 
+def test_cached_settings_scope_loads_the_stored_settings_on_a_cold_cache(monkeypatch):
+    # The real original loader, not a stand-in: on a miss the cache falls back to load_memory_runtime_settings,
+    # which must read the stored settings, not call the bound cache again (it recursed until the stack ran out).
+    from app.platform.assistant_memory import settings as memory_settings
+
+    dependency_stages._reset_live_prompt_dependency_state_for_tests()
+    stored = AssistantMemoryRuntimeSettings(compaction_enabled=False)
+    calls = 0
+
+    def stored_status():
+        nonlocal calls
+        calls += 1
+        return memory_settings.AssistantMemoryRuntimeStatus(settings=stored, settings_source="test")
+
+    monkeypatch.setattr(memory_settings, "load_memory_runtime_status", stored_status)
+
+    with dependency_stages.use_cached_memory_runtime_settings():
+        first = memory_settings.load_memory_runtime_settings()
+        second = memory_settings.load_memory_runtime_settings()
+
+    assert first.compaction_enabled is False and second.compaction_enabled is False
+    assert calls == 1
+    dependency_stages._reset_live_prompt_dependency_state_for_tests()
+
+
 def test_settings_cache_reuses_service_value_and_invalidates_after_update(monkeypatch):
     state = {"settings": AssistantMemoryRuntimeSettings(compaction_enabled=False)}
     calls = 0
