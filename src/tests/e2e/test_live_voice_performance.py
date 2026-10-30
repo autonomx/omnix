@@ -155,9 +155,13 @@ def _benchmark_storage_script() -> str:
         "window.localStorage.setItem(key, value); })();" % json.dumps(settings)
 
 
+# The call's mode: on the voice orb, or on the character's avatar when the call shows one (a live portrait).
+_VOICE_MODE_SELECTOR = ".assistant-voice-orb, .assistant-live-character-avatar[data-voice-mode]"
+
+
 def _voice_mode(page) -> str:
     return str(
-        page.locator(".assistant-voice-orb").first.get_attribute("data-voice-mode") or ""
+        page.locator(_VOICE_MODE_SELECTOR).first.get_attribute("data-voice-mode") or ""
     ).strip()
 
 
@@ -192,7 +196,7 @@ def _assert_expected_provider(context, app_base_url: str) -> None:
 
 def _wait_for_speaking(page, *, timeout_ms: int = _RESPONSE_TIMEOUT_MS) -> None:
     page.wait_for_function(
-        """() => document.querySelector('.assistant-voice-orb')?.dataset.voiceMode === 'speaking'""",
+        f"""() => document.querySelector({json.dumps(_VOICE_MODE_SELECTOR)})?.dataset.voiceMode === 'speaking'""",
         timeout=timeout_ms,
     )
 

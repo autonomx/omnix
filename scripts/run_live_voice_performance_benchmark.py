@@ -268,14 +268,16 @@ def _analyze(
     expect_tts_speculation: str,
     max_median_ms: float | None,
     max_p95_ms: float | None,
+    repeat: int = 1,
 ) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
     interactions = list(manifest.get("interactions") or [])
     turns = _release_turns(live_records)
-    if len(interactions) != 5:
-        failures.append(f"expected 5 driven interactions, observed {len(interactions)}")
-    if len(turns) != 5:
-        failures.append(f"expected 5 completed release-metric turns, observed {len(turns)}")
+    expected_turns = 5 * max(1, repeat)
+    if len(interactions) != expected_turns:
+        failures.append(f"expected {expected_turns} driven interactions, observed {len(interactions)}")
+    if len(turns) != expected_turns:
+        failures.append(f"expected {expected_turns} completed release-metric turns, observed {len(turns)}")
 
     metric_summaries: dict[str, Any] = {}
     for metric in (*METRICS, "speech_end_to_final_ms"):
@@ -587,6 +589,7 @@ def main() -> int:
         expect_tts_speculation=args.expect_tts_speculation,
         max_median_ms=args.max_median_ms,
         max_p95_ms=args.max_p95_ms,
+        repeat=args.repeat,
     )
     report.update(
         {
