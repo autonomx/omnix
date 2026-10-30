@@ -70,6 +70,8 @@ class CharacterAvatarRepository:
                 active_outfit=request.active_outfit,
                 active_background=request.active_background,
                 mouth_anchor=dict(request.mouth_anchor),
+                fallback_renderer=request.fallback_renderer,
+                portrait_emotion=request.portrait_emotion,
                 created_at=current.created_at if current else now,
                 updated_at=now,
             )

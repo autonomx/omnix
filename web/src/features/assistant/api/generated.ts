@@ -9303,6 +9303,12 @@ export interface components {
             expression_frames?: {
                 [key: string]: string;
             };
+            /**
+             * Fallback Renderer
+             * @default orb
+             * @enum {string}
+             */
+            fallback_renderer?: "sprite" | "live2d" | "orb";
             /** Mouth Anchor */
             mouth_anchor?: {
                 [key: string]: number;
@@ -9316,6 +9322,12 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Portrait Emotion
+             * @default neutral
+             * @enum {string}
+             */
+            portrait_emotion?: "angry" | "disgust" | "fear" | "happy" | "neutral" | "sad" | "surprise";
+            /**
              * Render Mode
              * @default audio_envelope
              * @enum {string}
@@ -9326,7 +9338,7 @@ export interface components {
              * @default sprite
              * @enum {string}
              */
-            renderer?: "sprite" | "live2d" | "rive";
+            renderer?: "sprite" | "live2d" | "rive" | "portrait";
             /** Rig Asset Id */
             rig_asset_id?: string | null;
         };

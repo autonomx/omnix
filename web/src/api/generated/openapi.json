@@ -8016,6 +8016,16 @@
             "title": "Expression Frames",
             "type": "object"
           },
+          "fallback_renderer": {
+            "default": "orb",
+            "enum": [
+              "sprite",
+              "live2d",
+              "orb"
+            ],
+            "title": "Fallback Renderer",
+            "type": "string"
+          },
           "mouth_anchor": {
             "additionalProperties": {
               "type": "number"
@@ -8037,6 +8047,20 @@
             "title": "Outfit Frames",
             "type": "object"
           },
+          "portrait_emotion": {
+            "default": "neutral",
+            "enum": [
+              "angry",
+              "disgust",
+              "fear",
+              "happy",
+              "neutral",
+              "sad",
+              "surprise"
+            ],
+            "title": "Portrait Emotion",
+            "type": "string"
+          },
           "render_mode": {
             "default": "audio_envelope",
             "enum": [
@@ -8052,7 +8076,8 @@
             "enum": [
               "sprite",
               "live2d",
-              "rive"
+              "rive",
+              "portrait"
             ],
             "title": "Renderer",
             "type": "string"
@@ -8096,7 +8121,9 @@
           "background_asset_ids",
           "active_outfit",
           "active_background",
-          "mouth_anchor"
+          "mouth_anchor",
+          "fallback_renderer",
+          "portrait_emotion"
         ],
         "title": "CharacterAvatarPack",
         "type": "object"
@@ -66415,6 +66442,16 @@
             "title": "Expression Frames",
             "type": "object"
           },
+          "fallback_renderer": {
+            "default": "orb",
+            "enum": [
+              "sprite",
+              "live2d",
+              "orb"
+            ],
+            "title": "Fallback Renderer",
+            "type": "string"
+          },
           "mouth_anchor": {
             "additionalProperties": {
               "type": "number"
@@ -66436,6 +66473,20 @@
             "title": "Outfit Frames",
             "type": "object"
           },
+          "portrait_emotion": {
+            "default": "neutral",
+            "enum": [
+              "angry",
+              "disgust",
+              "fear",
+              "happy",
+              "neutral",
+              "sad",
+              "surprise"
+            ],
+            "title": "Portrait Emotion",
+            "type": "string"
+          },
           "render_mode": {
             "default": "audio_envelope",
             "enum": [
@@ -66451,7 +66502,8 @@
             "enum": [
               "sprite",
               "live2d",
-              "rive"
+              "rive",
+              "portrait"
             ],
             "title": "Renderer",
             "type": "string"
