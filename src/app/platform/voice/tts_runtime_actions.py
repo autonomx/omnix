@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-
+import sys
 import time
 from typing import Any
 
@@ -123,9 +123,11 @@ def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
                 raise RuntimeError(str(result.get("error") or "the TTS engine did not synthesize"))
             sample_rate, timing, samples = result.get("sample_rate"), None, None
         try:
-            import torch
-
-            if torch.cuda.is_available():
+            # Only when the engine ran on this process's GPU. A service-hosted engine (the gateway talks to
+            # tts-server over HTTP) leaves CUDA untouched here, and synchronizing then only created an empty
+            # context: 0.3 GB of VRAM and about 2.5 GB of host commit in each gateway process.
+            torch = sys.modules.get("torch")
+            if torch is not None and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         except Exception:
             logger.debug("suppressed error in %s", "warm_tts_runtime", exc_info=True)

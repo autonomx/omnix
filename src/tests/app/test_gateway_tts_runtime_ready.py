@@ -80,6 +80,39 @@ def test_warmup_loads_model_and_executes_fast_stream_chunk(monkeypatch) -> None:
     assert provider.stream_calls[0]["chunk_size"] == 8
 
 
+class _FakeCuda:
+    def __init__(self, initialized: bool) -> None:
+        self.initialized = initialized
+        self.synchronized = 0
+
+    def is_initialized(self) -> bool:
+        return self.initialized
+
+    def synchronize(self) -> None:
+        self.synchronized += 1
+
+
+def test_warmup_synchronizes_cuda_only_when_the_engine_ran_in_this_process(monkeypatch) -> None:
+    # A service-hosted engine leaves CUDA untouched in the gateway: synchronizing then only created an empty
+    # context (0.3 GB of VRAM, about 2.5 GB of host commit per gateway process).
+    import sys
+    import types
+
+    monkeypatch.setattr(tts_runtime_actions, "get_tts_provider", FakeProvider)
+    monkeypatch.setattr(tts_runtime_actions, "selected_tts_provider_id", lambda: "faster-qwen3-tts")
+    monkeypatch.setattr(tts_runtime_actions, "stream_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tts_runtime_actions, "configured_speaker", lambda: None)
+    for initialized, expected in ((False, 0), (True, 1)):
+        reset_state()
+        cuda = _FakeCuda(initialized)
+        monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(cuda=cuda))
+        assert tts_runtime_actions.warm_tts_runtime("test")["status"] == "ready"
+        assert cuda.synchronized == expected
+    reset_state()
+    monkeypatch.delitem(sys.modules, "torch")
+    assert tts_runtime_actions.warm_tts_runtime("test")["status"] == "ready"  # torch never imported for it
+
+
 def test_warmup_renders_one_whole_utterance_on_an_engine_that_does_not_stream(monkeypatch) -> None:
     reset_state()
 
