@@ -77,11 +77,20 @@ the night's: STT finalize +31-40%, first token -> first audio +14-15%, speech en
 +19% (fails the 110% bound; the night's +7.7% passed). LLM speed with the portrait off was lower too (84-98 tokens/s,
 126 at night) and the GPU's clocks and power limit read normal. Open: why this boot's GPU sharing costs more.
 
-Interruption runs do not interrupt yet: the `hard-stop` driver plays a spoken "Stop." 700 ms into each reply, but
-no overlap was classified in 80 replies, in the default duplex mode (half duplex mutes the microphone while the
-character speaks) and with the session set to echo-aware. The speech is dropped before STT; finding where needs
-the call's state watched in the browser. The 10 recorded replies for the ghosting rating are taken (`video/` of
-the run folder), not yet rated.
+Interruption runs (2026-10-30 afternoon). A spoken "stop" never interrupted a reply, for three reasons outside the
+portrait, now fixed: a call ran on the stored conversation profile, not its session's, unless the Live view's panel
+was open (`d77ae2eda4`; the session's echo-aware duplex never applied, and half duplex mutes the microphone while the
+character speaks); a one-word stop paused before its first partial, and the overlap was classified only in the
+overlap_candidate floor state, the final's hard_stop only suppressing the text (`6de7d25fcb`); and the release
+observer dropped the interrupted turn's turn_stopped (`b3327ec302`). Two more found on the way: the gateway cancelled
+the older of the browser's two kept LLM hypotheses, losing a reply when the final matched it (`441fab1ba1`), and the
+driver asserted five interactions on repeated runs (`10fee4002f`). The `hard-stop` off run then gave 40 interactions,
+29 interruptions, interruption -> silence p50 13.6 ms, p95 17.6 ms (bound 500 ms). Its on run, and a `character-normal`
+on run in echo-aware duplex, stalled after one reply: STT's authoritative preview decodes (Parakeet-TDT, normally
+0.4-0.5 s) took 2.9-7.9 s, the final 20 s, at the start of every portrait call (smoke and on runs; once in 40 off
+replies), while GPU memory grew 2.5 GB with the GPU mostly idle. With the microphone open during replies, STT decodes
+while the portrait renders. Open: which process stalls which (per-process GPU counters during a stall), then the
+portrait yielding to STT or a cheaper preview. The 10 recorded replies for the ghosting rating are taken, not rated.
 
 Still open:
 
