@@ -68,6 +68,21 @@ cache; and STT's live models used NeMo's CUDA-graph decoder, so another model lo
 process (the timed Parakeet-TDT helper, five minutes after the gateway warmed it) ended the CUDA context. The last
 two break live calls on `main` too.
 
+**Rerun after the reboot (2026-10-30 day, commits `bd36dcfe2d` and `534b65356e`).** The TTS accept now leaves at
+the final transcript (median -0.4 ms after it, was 15.8 ms), and with the portrait on, response open -> first
+token fell from 19.5 to 4.2 ms (final -> first token 23.9 ms on, 20.0 off). The portrait load is capped at 4 GB
+(uncapped, its face detector's warm-up took 15 GB and ran from host memory); its render passes time the same under
+4 and 12 GB caps. But two replicate pairs on this boot put the portrait's cost on the other services higher than
+the night's: STT finalize +31-40%, first token -> first audio +14-15%, speech end -> first playback +12.6% and
++19% (fails the 110% bound; the night's +7.7% passed). LLM speed with the portrait off was lower too (84-98 tokens/s,
+126 at night) and the GPU's clocks and power limit read normal. Open: why this boot's GPU sharing costs more.
+
+Interruption runs do not interrupt yet: the `hard-stop` driver plays a spoken "Stop." 700 ms into each reply, but
+no overlap was classified in 80 replies, in the default duplex mode (half duplex mutes the microphone while the
+character speaks) and with the session set to echo-aware. The speech is dropped before STT; finding where needs
+the call's state watched in the browser. The 10 recorded replies for the ghosting rating are taken (`video/` of
+the run folder), not yet rated.
+
 Still open:
 
 | Run | Phase | How |
