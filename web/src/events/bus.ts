@@ -113,9 +113,22 @@ export class OmnixEvent<K extends OmnixEventName = OmnixEventName> extends Event
 /** The detail argument: optional for events whose detail may be empty. */
 type DetailArgs<K extends OmnixEventName> = null extends OmnixEventMap[K] ? [detail?: OmnixEventMap[K]] : [detail: OmnixEventMap[K]];
 
+/**
+ * Events whose latest detail stays readable: a listener installed after one was emitted (the chat runtime loads
+ * its pieces one import at a time, and the page can select its session first) still learns the current value.
+ */
+const REMEMBERED_EVENTS: ReadonlySet<OmnixEventName> = new Set([CHAT_SESSION_SELECTED_EVENT]);
+const latestDetails = new Map<OmnixEventName, unknown>();
+
 export function emitOmnixEvent<K extends OmnixEventName>(type: K, ...[detail]: DetailArgs<K>): void {
   if (typeof window === 'undefined') return;
+  if (REMEMBERED_EVENTS.has(type)) latestDetails.set(type, detail ?? null);
   window.dispatchEvent(new OmnixEvent(type, (detail ?? null) as OmnixEventMap[K]));
+}
+
+/** The detail of the latest emitted event of a remembered type, or undefined when none was emitted yet. */
+export function latestOmnixEventDetail<K extends OmnixEventName>(type: K): OmnixEventMap[K] | undefined {
+  return latestDetails.get(type) as OmnixEventMap[K] | undefined;
 }
 
 /** Calls `handler` with each event's detail until the returned function is called. */

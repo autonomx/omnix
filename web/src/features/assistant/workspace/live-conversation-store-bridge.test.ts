@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { emitOmnixEvent } from '../../../events/bus';
 import { initializeLiveConversationStoreBridge } from './live-conversation-store-bridge';
 import { liveConversationStore } from './live-conversation-store';
 
@@ -24,6 +25,16 @@ describe('live conversation store bridge', () => {
     }));
 
     expect(liveConversationStore.getState().sessionId).toBe('chat:new-call');
+  });
+
+  it('takes the chat session selected before the bridge was installed', () => {
+    dispose?.();
+    liveConversationStore.reset();
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: 'chat:early', session: undefined });
+    dispose = initializeLiveConversationStoreBridge();
+
+    expect(liveConversationStore.getState().sessionId).toBe('chat:early');
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: null, session: undefined });
   });
 
   it('projects call, speech, transcript, playback, and interruption events', () => {

@@ -3,7 +3,7 @@ import { readEffectiveLiveConversationProfile, type LiveConversationProfile } fr
 import { readLatestLiveVoiceCalibration, type LiveVoiceCalibrationRecord } from './live-voice-calibration';
 import { liveConversationStore } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
-import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, CHAT_SESSION_SELECTED_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, LIVE_VOICE_CALIBRATION_UPDATED_EVENT } from '../../../events/bus';
+import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, CHAT_SESSION_SELECTED_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, LIVE_VOICE_CALIBRATION_UPDATED_EVENT, latestOmnixEventDetail } from '../../../events/bus';
 
 let liveConversationStoreBridgeInstalled = false;
 
@@ -143,6 +143,11 @@ export function initializeLiveConversationStoreBridge(): () => void {
     [ASSISTANT_VOICE_PERF_EVENT, handlePerf],
   ];
   for (const [name, listener] of listeners) window.addEventListener(name, listener);
+  // The chat may have selected its session before this bridge loaded.
+  const selected = latestOmnixEventDetail(CHAT_SESSION_SELECTED_EVENT);
+  if (selected && !liveConversationStore.getState().sessionId) {
+    handleSession(new CustomEvent(CHAT_SESSION_SELECTED_EVENT, { detail: selected }));
+  }
 
   return () => {
     for (const [name, listener] of listeners) window.removeEventListener(name, listener);
