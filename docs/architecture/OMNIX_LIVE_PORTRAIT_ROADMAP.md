@@ -50,7 +50,8 @@ the 4090 together with the portrait, in a slot that does not overlap the RPG roa
 
 Owner's answers (2026-10-30): the runs wait for a slot the owner names; they use a scratch database (a fresh
 migrated one in the 16432 test container, with one character and portrait pack set up for them), never the live
-one; and the configured cerebras provider for the LLM.
+one; and the configured cerebras provider for the LLM. The scratch database is ready: `omnix_portrait_runs` in the
+`omnix-architecture-test` container, migrated from this branch (2026-10-30).
 
 Until then the portrait is opt-in by its avatar pack, and every way it can fail shows the pack's fallback.
 
