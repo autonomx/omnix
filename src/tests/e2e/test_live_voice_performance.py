@@ -407,7 +407,7 @@ def test_five_turn_live_voice_hardware_performance(
         manifest["completed"] = True
         _persist_manifest(manifest_path, manifest)
 
-        assert len(interactions) == 5
+        assert len(interactions) == len(audio_paths)
         assert all(str(item.get("transcript") or "").strip() for item in interactions), (
             "Every benchmark WAV must produce a non-empty submitted transcript"
         )
