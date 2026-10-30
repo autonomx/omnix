@@ -438,4 +438,39 @@ describe('live voice release observer', () => {
     expect(silence).toEqual([expect.objectContaining({ valueMs: 15 })]);
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
+
+  it('measures the playback of a reply still in its start hold when the user starts speaking again', () => {
+    const observations: LiveVoiceReleaseObservation[] = [];
+    const listener = (event: Event) => observations.push(
+      (event as CustomEvent<LiveVoiceReleaseObservation>).detail,
+    );
+    window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:reply');
+    now = 300;
+    perf('stt_final_received', 'voice-turn:reply', { sttFinalizeMs: 200 });
+    diagnostic('turn_intercepted', 'live-call:voice-turn:reply');
+    now = 500;
+    diagnostic('chat_response_opened', 'live-call:voice-turn:reply', 'chatbot_workspace');
+    now = 800;
+    diagnostic('llm_text_chunk_received', 'live-call:voice-turn:reply');
+    now = 1_000;
+    diagnostic('phrase_first_frame_received', 'live-call:chat:s1:audio-session:a1', 'pcm_session',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech' });
+    // The user barges in while the reply is still buffering: a new turn starts before its playback.
+    now = 1_500;
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-turn-timeline', {
+      detail: { turnId: 'voice-turn:stop', event: 'speech_ended', atMs: 1_500 },
+    }));
+    now = 1_700;
+    diagnostic('worklet_segment_started', 'live-call:chat:s1:audio-session:a1', 'audio_worklet',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech' });
+
+    const values = Object.fromEntries(observations
+      .filter((item): item is Extract<LiveVoiceReleaseObservation, { kind: 'latency' }> => item.kind === 'latency')
+      .map((item) => [item.metricName, item.valueMs]));
+    expect(values).toMatchObject({ final_to_first_playback_ms: 1_400, first_pcm_to_first_playback_ms: 700 });
+    window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+  });
 });

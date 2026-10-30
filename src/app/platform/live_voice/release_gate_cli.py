@@ -30,13 +30,16 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Compare the live portrait's off and on runs (live portrait roadmap, Phase 5).")
     parser.add_argument("--minimum-replies", type=int, default=40,
                         help="With --portrait-pairing: replies needed per scenario in each run.")
+    parser.add_argument("--minimum-interruptions", type=int, default=30,
+                        help="With --portrait-pairing: interruptions needed per interruption scenario in each run.")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.portrait_pairing:
-        limits = PortraitGateThresholds(minimum_replies=args.minimum_replies)
+        limits = PortraitGateThresholds(minimum_replies=args.minimum_replies,
+                                        minimum_interruptions=args.minimum_interruptions)
         if args.scenarios:
             limits = limits.model_copy(update={"required_scenarios": tuple(args.scenarios)})
         paired = evaluate_portrait_pairing(read_live_voice_log(args.log, hours=args.hours), limits)

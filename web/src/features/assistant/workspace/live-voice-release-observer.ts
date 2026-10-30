@@ -91,6 +91,9 @@ let state: ReleaseState = emptyState();
 // An interruption spans two turns: the user's speech that interrupts starts a new turn before the interrupted
 // reply's turn reports it stopped. So it is kept apart from the turn state and ends at the next turn_stopped.
 let interruptionAt: number | null = null;
+// A reply still in its start hold when the user starts speaking again (a barge-in) keeps its turn state here, so
+// its first playback is still measured: the new turn's speech resets the turn state before that playback starts.
+let awaitingPlayback: ReleaseState | null = null;
 // Whether the call shows a live portrait: every release metric says so, for the paired (off/on) gate.
 let portraitActive = false;
 
@@ -149,13 +152,20 @@ export function recordLiveVoiceReleaseQuality(
 export function resetLiveVoiceReleaseObserver(): void {
   state = emptyState();
   interruptionAt = null;
+  awaitingPlayback = null;
+}
+
+/** A new turn's state; a reply of the old turn that has audio but has not started playing is kept to finish. */
+function startTurn(next: ReleaseState): void {
+  if (state.firstPcmAt !== null && state.firstPlaybackAt === null) awaitingPlayback = state;
+  state = next;
 }
 
 function handleTurnTimeline(event: Event): void {
   const detail = (event as CustomEvent<LiveVoiceTurnTimelineDetail>).detail;
   if (!detail?.turnId || detail.event !== 'speech_ended') return;
   if (state.turnId !== null && state.turnId !== detail.turnId) {
-    state = { ...emptyState(), turnId: detail.turnId };
+    startTurn({ ...emptyState(), turnId: detail.turnId });
   } else {
     state.turnId = detail.turnId;
   }
@@ -184,12 +194,12 @@ function handlePerfEvent(event: Event): void {
       && state.turnId === incomingTurnId
       ? state.speechEndedAt
       : null;
-    state = {
+    startTurn({
       ...emptyState(),
       speechEndedAt: preserveSpeechEnd,
       sttRequestedAt: now,
       turnId: incomingTurnId,
-    };
+    });
     return;
   }
   if (stage === 'stt_final_received') {
@@ -205,7 +215,7 @@ function handlePerfEvent(event: Event): void {
         reason: 'empty_final_transcript',
         incoming_turn_id: incomingTurnId,
       }, 'release_observer');
-      state = emptyState();
+      startTurn(emptyState());
       return;
     }
 
@@ -216,7 +226,7 @@ function handlePerfEvent(event: Event): void {
     const explicitFinalizeMs = finiteNonnegative(detail.sttFinalizeMs);
 
     if (incomingTurnId !== null && incomingTurnId !== requestedTurnId) {
-      state = { ...emptyState(), turnId: incomingTurnId };
+      startTurn({ ...emptyState(), turnId: incomingTurnId });
     } else if (incomingTurnId !== null) {
       state.turnId = incomingTurnId;
     }
@@ -256,6 +266,16 @@ function handleDiagnosticEvent(event: Event): void {
   if (diagnosticEvent === 'turn_stopped' && interruptionAt !== null) {
     recordLatency('interruption_to_silence_ms', elapsed(interruptionAt, now));
     interruptionAt = null;
+    return;
+  }
+  if (
+    diagnosticEvent === 'worklet_segment_started'
+    && awaitingPlayback !== null
+    && isSpeechPlayback(detail)
+    && playbackMatchesFirstPcm(detail, awaitingPlayback)
+  ) {
+    recordFirstPlayback(awaitingPlayback, detail, now);
+    awaitingPlayback = null;
     return;
   }
 
@@ -315,22 +335,7 @@ function handleDiagnosticEvent(event: Event): void {
     && isSpeechPlayback(detail)
     && playbackMatchesFirstPcm(detail)
   ) {
-    const renderedAt = finiteNonnegative(
-      detail.details?.playback_performance_time_ms,
-    );
-    const playbackAt = Math.max(
-      state.firstPcmAt,
-      Math.min(now, renderedAt ?? now),
-    );
-    state.firstPlaybackAt = playbackAt;
-    recordLatency('speech_end_to_first_playback_ms', elapsed(state.speechEndedAt, playbackAt));
-    const heardAfter = finiteNonnegative(detail.details?.output_latency_ms) ?? 0;
-    const audible = elapsed(state.speechEndedAt, playbackAt);
-    recordLatency('first_audible_ms', audible === null ? null : audible + heardAfter);
-    recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, playbackAt));
-    recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, playbackAt));
-    recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, playbackAt));
-    recordLatency('stt_request_to_first_playback_ms', elapsed(state.sttRequestedAt, playbackAt));
+    recordFirstPlayback(state, detail, now);
     return;
   }
 }
@@ -379,16 +384,31 @@ function isSpeechPlayback(detail: DiagnosticDetail): boolean {
   return kind === null || kind === 'speech';
 }
 
-function playbackMatchesFirstPcm(detail: DiagnosticDetail): boolean {
+function playbackMatchesFirstPcm(detail: DiagnosticDetail, turn: ReleaseState = state): boolean {
   const outputId = diagnosticString(detail, 'output_id');
   const segmentId = diagnosticString(detail, 'segment_id');
-  if (state.firstPcmOutputId !== null && outputId !== null) {
-    return state.firstPcmOutputId === outputId;
+  if (turn.firstPcmOutputId !== null && outputId !== null) {
+    return turn.firstPcmOutputId === outputId;
   }
-  if (state.firstPcmSegmentId !== null && segmentId !== null) {
-    return state.firstPcmSegmentId === segmentId;
+  if (turn.firstPcmSegmentId !== null && segmentId !== null) {
+    return turn.firstPcmSegmentId === segmentId;
   }
-  return state.firstPcmOutputId === null && state.firstPcmSegmentId === null;
+  return turn.firstPcmOutputId === null && turn.firstPcmSegmentId === null;
+}
+
+function recordFirstPlayback(turn: ReleaseState, detail: DiagnosticDetail, now: number): void {
+  const firstPcmAt = turn.firstPcmAt ?? now;
+  const renderedAt = finiteNonnegative(detail.details?.playback_performance_time_ms);
+  const playbackAt = Math.max(firstPcmAt, Math.min(now, renderedAt ?? now));
+  turn.firstPlaybackAt = playbackAt;
+  recordLatency('speech_end_to_first_playback_ms', elapsed(turn.speechEndedAt, playbackAt));
+  const heardAfter = finiteNonnegative(detail.details?.output_latency_ms) ?? 0;
+  const audible = elapsed(turn.speechEndedAt, playbackAt);
+  recordLatency('first_audible_ms', audible === null ? null : audible + heardAfter);
+  recordLatency('first_pcm_to_first_playback_ms', elapsed(turn.firstPcmAt, playbackAt));
+  recordLatency('first_token_to_first_playback_ms', elapsed(turn.firstTokenAt, playbackAt));
+  recordLatency('final_to_first_playback_ms', elapsed(turn.sttFinalAt, playbackAt));
+  recordLatency('stt_request_to_first_playback_ms', elapsed(turn.sttRequestedAt, playbackAt));
 }
 
 function handleInterruption(): void {

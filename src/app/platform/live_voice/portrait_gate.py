@@ -5,10 +5,13 @@ The same scenarios run twice, with the portrait off and on; every release metric
 
 - ``start_hold_ms`` p50 at most 150 ms on the on run (D-5; the 250 ms cap holds by design, p95 is reported);
 - ``av_offset_ms`` (each drawn frame against what is heard) within ±40 ms at p95;
-- every latency metric, ``first_audible_ms`` among them, has its on-run p50 within 10% of the off run's, and
+- every latency metric, ``first_audible_ms`` among them, has its on-run p50 within 10% of the off run's or within
+  20 ms of it (a ratio of a few milliseconds is noise, below what a listener hears; owner decision 2026-10-30), and
   ``llm_tokens_per_second`` its p50 at least 90% of the off run's, each with a bootstrap 95% interval of the ratio;
 - ``underrun_count`` per reply no higher on than off;
-- at least ``minimum_replies`` replies per required scenario in each run.
+- at least ``minimum_replies`` replies that played per required scenario in each run; an interruption scenario
+  needs ``minimum_interruptions`` measured interruptions instead (some short replies end before the interruption,
+  and its replies are the ones that were interrupted; owner decision 2026-10-30).
 
 The portrait's fallbacks and refusals are counted and reported. Nothing here is random at run time: the bootstrap
 uses a fixed seed.
@@ -34,8 +37,11 @@ PAIRED_LATENCY_METRICS = (
     "first_audible_ms",
     "interruption_to_silence_ms",
 )
-# The reply count per scenario: one first-audible measurement per reply.
+# The reply count per scenario: one first-audible measurement per reply that played, interrupted or not.
 REPLY_METRIC = "first_audible_ms"
+INTERRUPTION_METRIC = "interruption_to_silence_ms"
+# Scenarios whose replies are interrupted: counted by the interruptions measured.
+INTERRUPTION_SCENARIOS = frozenset({"hard-stop", "rapid-interruption-soak"})
 PORTRAIT_SCENARIOS = (
     "character-normal",
     "hard-stop",
@@ -54,10 +60,12 @@ class PortraitGateThresholds(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     minimum_replies: int = Field(default=40, ge=1, le=100_000)
+    minimum_interruptions: int = Field(default=30, ge=1, le=100_000)
     required_scenarios: tuple[str, ...] = PORTRAIT_SCENARIOS
     start_hold_p50_ms: float = Field(default=150.0, gt=0)
     av_offset_p95_ms: float = Field(default=40.0, gt=0)
     latency_p50_ratio: float = Field(default=1.10, gt=1)
+    latency_p50_allowance_ms: float = Field(default=20.0, ge=0)
     tokens_p50_ratio: float = Field(default=0.90, gt=0, lt=1)
 
 
@@ -107,6 +115,7 @@ def evaluate_portrait_pairing(events: Iterable[dict[str, Any]],
     limits = thresholds or PortraitGateThresholds()
     samples: dict[tuple[bool, str], list[float]] = defaultdict(list)
     replies: dict[bool, dict[str, int]] = {False: defaultdict(int), True: defaultdict(int)}
+    interruptions: dict[bool, dict[str, int]] = {False: defaultdict(int), True: defaultdict(int)}
     counters: dict[str, int] = defaultdict(int)
     for event in events:
         kind = event.get("event")
@@ -118,6 +127,8 @@ def evaluate_portrait_pairing(events: Iterable[dict[str, Any]],
                 samples[(portrait, name)].append(value)
                 if name == REPLY_METRIC:
                     replies[portrait][str(event.get("scenario") or "unlabeled")] += 1
+                elif name == INTERRUPTION_METRIC:
+                    interruptions[portrait][str(event.get("scenario") or "unlabeled")] += 1
         elif kind == "release_metric_batch" and isinstance(event.get("values"), list):
             samples[(portrait, name)].extend(float(value) for value in event["values"]
                                              if isinstance(value, (int, float)) and math.isfinite(value))
@@ -131,6 +142,12 @@ def evaluate_portrait_pairing(events: Iterable[dict[str, Any]],
 
     for scenario in limits.required_scenarios:
         for portrait, label in ((False, "off"), (True, "on")):
+            if scenario in INTERRUPTION_SCENARIOS:
+                count = interruptions[portrait].get(scenario, 0)
+                if count < limits.minimum_interruptions:
+                    add(f"interruptions:{scenario}:{label}", "insufficient",
+                        f"{count}/{limits.minimum_interruptions} interruptions")
+                continue
             count = replies[portrait].get(scenario, 0)
             if count < limits.minimum_replies:
                 add(f"replies:{scenario}:{label}", "insufficient", f"{count}/{limits.minimum_replies} replies")
@@ -164,8 +181,10 @@ def evaluate_portrait_pairing(events: Iterable[dict[str, Any]],
             ok = on_p50 >= off_p50 * limits.tokens_p50_ratio
             detail = f"on p50 {on_p50:.1f}/s, off {off_p50:.1f}/s (at least {limits.tokens_p50_ratio:.0%})"
         else:
-            ok = on_p50 <= off_p50 * limits.latency_p50_ratio
-            detail = f"on p50 {on_p50:.1f} ms, off {off_p50:.1f} ms (at most {limits.latency_p50_ratio:.0%})"
+            ok = (on_p50 <= off_p50 * limits.latency_p50_ratio
+                  or on_p50 - off_p50 <= limits.latency_p50_allowance_ms)
+            detail = (f"on p50 {on_p50:.1f} ms, off {off_p50:.1f} ms (at most {limits.latency_p50_ratio:.0%} "
+                      f"or +{limits.latency_p50_allowance_ms:.0f} ms)")
         add(name, "pass" if ok else "fail", detail, off=off_p50, on=on_p50, interval=interval)
 
     off_runs, on_runs = samples[(False, "underrun_count")], samples[(True, "underrun_count")]

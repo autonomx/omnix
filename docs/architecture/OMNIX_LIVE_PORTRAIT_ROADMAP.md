@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
+**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -788,6 +788,13 @@ During any of them the renderer holds the last speaking frame. If the gap passes
     - The README says **CC BY-NC-ND 4.0** and that the work "may use it only for research purposes".
 
   The owner's decision: **the non-commercial term is what matters**, and Omnix is non-commercial, so no further clearance is needed. Phase 1 install goes ahead. The catalog's terms text still shows both statements, and the weights and code are still neither modified nor redistributed.
+
+- **D-7 The paired gate's latency bound: 110% or 20 ms (settled 2026-10-30).** A latency check passes when the on run's
+  p50 is within 110% of the off run's *or* within 20 ms of it. A ratio of a few milliseconds (interruption to silence,
+  final to first token) is noise and below what a listener hears; those metrics keep their absolute bounds.
+- **D-8 Interruption scenarios count interruptions (settled 2026-10-30).** `hard-stop` and `rapid-interruption-soak`
+  need at least 30 measured interruptions a side instead of 40 completed replies: their replies are the interrupted
+  ones, and some short replies end before the interruption. A reply counts once it has played, interrupted or not.
 
 ## Validation
 

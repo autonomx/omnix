@@ -28,7 +28,7 @@ def _run(portrait: bool, *, latency: float, tokens: float, underruns: int = 0, r
 
 
 def _limits() -> PortraitGateThresholds:
-    return PortraitGateThresholds(minimum_replies=3, required_scenarios=SCENARIOS)
+    return PortraitGateThresholds(minimum_replies=3, minimum_interruptions=3, required_scenarios=SCENARIOS)
 
 
 def test_a_portrait_that_costs_nothing_passes() -> None:
@@ -59,7 +59,9 @@ def test_too_few_replies_or_a_late_picture_are_reported() -> None:
     events.append({"event": "release_counter", "portrait": True, "counter_name": "portrait_degrade_count"})
     report = evaluate_portrait_pairing(events, _limits())
     statuses = {check.name: check.status for check in report.checks}
-    assert statuses["replies:hard-stop:off"] == "insufficient" and statuses["av_offset_ms"] == "fail"
+    assert statuses["replies:character-normal:off"] == "insufficient" and statuses["av_offset_ms"] == "fail"
+    # An interruption scenario is counted by its interruptions, not its replies.
+    assert statuses["interruptions:hard-stop:off"] == "insufficient" and "replies:hard-stop:off" not in statuses
     assert report.counters == {"portrait_degrade_count": 1}
 
 
@@ -69,5 +71,21 @@ def test_the_cli_compares_the_runs_in_the_live_call_log(tmp_path, capsys) -> Non
                              _run(False, latency=500, tokens=80) + _run(True, latency=510, tokens=79)),
                    encoding="utf-8")
     code = main(["--log", str(log), "--portrait-pairing", "--minimum-replies", "3",
-                 "--scenario", "character-normal", "--scenario", "hard-stop"])
+                 "--scenario", "character-normal"])
     assert code == 0 and json.loads(capsys.readouterr().out)["status"] == "pass"
+
+
+def test_a_latency_a_few_milliseconds_slower_passes_whatever_its_ratio() -> None:
+    # 18.7 ms against 14.2 ms is 132%, but 4.5 ms: below what a listener hears (owner decision 2026-10-30).
+    events = []
+    for portrait, value in ((False, 14.2), (True, 18.7)):
+        for reply in range(3):
+            events.append({"event": "release_metric", "portrait": portrait, "scenario": "hard-stop",
+                           "metric_name": "interruption_to_silence_ms", "value_ms": value})
+    report = evaluate_portrait_pairing(events, _limits())
+    check = next(check for check in report.checks if check.name == "interruption_to_silence_ms")
+    assert check.status == "pass" and "+20 ms" in check.detail
+    slower = [dict(event, value_ms=event["value_ms"] + 30) if event["portrait"] else event for event in events]
+    assert next(check for check in evaluate_portrait_pairing(slower, _limits()).checks
+                if check.name == "interruption_to_silence_ms").status == "fail"
+
