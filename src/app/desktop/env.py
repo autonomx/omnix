@@ -54,7 +54,7 @@ DB_NAME = "omnix"
 SANDBOX_IMAGE = "omnix-desktop-agent-sandbox:pi-0.85.1"
 SANDBOX_NETWORK = "omnix-desktop-agent-sandbox"
 SANDBOX_RELAY = "omnix-desktop-agent-relay"
-MODEL_SERVICES = ("stt", "tts", "image")
+MODEL_SERVICES = ("stt", "tts", "image", "portrait")
 
 
 @dataclass(frozen=True)
@@ -200,6 +200,8 @@ def child_environment(config: LaunchConfig, inherited: Mapping[str, str] | None 
         "OMNIX_STT_URL": service_url.get("stt", ""),
         "OMNIX_IMAGE_ENABLED": "1" if "image" in service_url else "0",
         "OMNIX_IMAGE_URL": service_url.get("image", ""),
+        # The live portrait service (FLOAT), when the shell gave it a port; without one calls show the fallback.
+        "OMNIX_PORTRAIT_URL": service_url.get("portrait", ""),
         "OMNIX_AUDIO_ENABLED": "0",
         # Desktop notifications go to the shell's loopback listener (S-6).
         "OMNIX_TRADING_DESKTOP_NOTIFY_URL": f"http://127.0.0.1:{config.notify_port}/notify",
@@ -268,6 +270,8 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
         # Image models load when the image view asks for one, after a memory check (OMNIX_MODEL_LOAD_COMMIT_MB).
         env.update({"OMNIX_IMAGE_PORT": port, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1",
                     "OMNIX_IMAGE_URL": ""})
+    elif service == "portrait":
+        env["OMNIX_PORTRAIT_PORT"] = port
     else:
         raise ValueError(f"unknown model service {service!r}")
     return env

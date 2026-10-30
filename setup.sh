@@ -410,6 +410,22 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
+echo "============================================="
+echo "Live portrait (optional)"
+echo "============================================="
+# FLOAT's talking portrait for live calls (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md). Its models are
+# installed from Settings, Models; this only builds its environment, and only when asked.
+if [ "${OMNIX_SETUP_PORTRAIT:-0}" != "1" ]; then
+    echo "Skipping: set OMNIX_SETUP_PORTRAIT=1 to build the omnix-portrait environment."
+else
+    OMNIX_PORTRAIT_PYTHON="$CONDA_ROOT/envs/omnix-portrait/bin/python"
+    [ -x "$OMNIX_PORTRAIT_PYTHON" ] || "$CONDA_EXE" create -n omnix-portrait python=3.11 -y || error
+    "$OMNIX_PORTRAIT_PYTHON" -m pip install --no-cache-dir --require-hashes \
+        -r src/services/portrait/portrait.linux.lock.txt || error
+    "$OMNIX_PORTRAIT_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); from services.portrait import portrait_server; print('portrait_server app OK')" || error
+fi
+
+echo ""
 echo "[PostgreSQL] Local database (docker-compose.postgres.yml)"
 OMNIX_POSTGRES_PORT="${OMNIX_POSTGRES_PORT:-5432}"
 if "$RPG_FLUX_PYTHON" -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0 if s.connect_ex(('127.0.0.1', int('$OMNIX_POSTGRES_PORT'))) == 0 else 1)"; then

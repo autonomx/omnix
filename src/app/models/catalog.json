@@ -72,6 +72,22 @@
         "Apache-2.0 (diffusers)"
       ]
     },
+    "portrait-windows-x64": {
+      "label": "Live portrait runtime (FLOAT)",
+      "kind": "overlay",
+      "base": "torch-windows-x64",
+      "platform": "windows-x64",
+      "accelerator": "cuda",
+      "service": "portrait",
+      "source_lock": "src/services/portrait/portrait.lock.txt",
+      "lock": "requirements/desktop/portrait.windows-x64.lock.txt",
+      "files": "requirements/desktop/packs/portrait-windows-x64.json",
+      "licences": [
+        "BSD-3-Clause (torchvision)",
+        "BSD-3-Clause (face-alignment)",
+        "Apache-2.0 (transformers)"
+      ]
+    },
     "torch-macos-arm64": {
       "label": "GPU runtime (PyTorch 2.6, Apple Metal)",
       "kind": "torch-layer",
@@ -249,6 +265,30 @@
               "note": "Tongyi's fast photoreal model; runs with CPU offload (its memory needs are not measured yet)."
             }
           ]
+        }
+      ]
+    },
+    "live-portrait": {
+      "label": "Live portrait",
+      "capability": "live_portrait",
+      "description": "A character's portrait that talks in live calls (FLOAT, non-commercial licence).",
+      "recommended_rank": 5,
+      "variants": [
+        {
+          "platform": "windows-x64",
+          "accelerator": "cuda",
+          "models": [
+            "float",
+            "float-code",
+            "wav2vec2-base-960h",
+            "s3fd-face-detector"
+          ],
+          "runtimes": [
+            "portrait-windows-x64"
+          ],
+          "min_vram_mb": 2560,
+          "min_commit_mb": 6144,
+          "note": "Shares the GPU with live speech: one call's portrait at a time."
         }
       ]
     }

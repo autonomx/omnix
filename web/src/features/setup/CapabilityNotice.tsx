@@ -4,7 +4,7 @@ import { CAPABILITIES_QUERY_KEY, modelPacksClient, type CapabilitiesResponse } f
 import './setup.css';
 
 /** The bundle capabilities a workspace can ask about (catalog v2 bundles). */
-export type ModelCapability = 'live_stt' | 'tts' | 'stt_batch' | 'image';
+export type ModelCapability = 'live_stt' | 'tts' | 'stt_batch' | 'image' | 'live_portrait';
 
 /**
  * Whether a capability's models are installed. Outside the desktop app (or before the answer arrives) it counts as

@@ -70,7 +70,10 @@ export class BackendSupervisor extends EventEmitter {
       metrics_port: this.settings.metricsPort,
       notify_port: this.settings.notifyPort,
       // The model services' ports, chosen once: never a developer Omnix's 5101/5201/5301 (desktop roadmap §4.2).
-      service_ports: { stt: this.settings.sttPort, tts: this.settings.ttsPort, image: this.settings.imagePort },
+      service_ports: {
+        stt: this.settings.sttPort, tts: this.settings.ttsPort, image: this.settings.imagePort,
+        portrait: this.settings.portraitPort,
+      },
       postgres_bin: this.paths.postgresBin,
       ...(this.paths.ffmpeg ? { ffmpeg: this.paths.ffmpeg } : {}),
       packs_dir: packsFolder(this.paths, this.settings.packsDir),

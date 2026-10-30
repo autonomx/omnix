@@ -1,6 +1,6 @@
 """Start a model service in its runtime pack (desktop roadmap §4.2, §4.3).
 
-    python -S -m app.desktop.service_boot stt|tts|image|stt-mlx
+    python -S -m app.desktop.service_boot stt|tts|image|stt-mlx|portrait
 
 The supervisor starts every model service on the bundled interpreter with
 ``-S``, so the interpreter's own ``site-packages`` (the gateway's packages) is
@@ -38,6 +38,7 @@ ENTRY_MODULES = {
     "stt": "services.stt.parakeet_stt_server",
     "tts": "services.tts.tts_server",
     "stt-mlx": "services.stt.parakeet_mlx_server",
+    "portrait": "services.portrait.portrait_server",
     # OmniVoice runs as the TTS service's child, in its own overlay (transformers 5), when it is the engine.
     "omnivoice": "services.omnivoice.omnivoice_server",
 }
@@ -144,7 +145,7 @@ def run(service: str, arguments: list[str] | None = None) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if not args:
-        sys.stderr.write("usage: python -S -m app.desktop.service_boot stt|tts|image|stt-mlx|omnivoice [args]\n")
+        sys.stderr.write("usage: python -S -m app.desktop.service_boot stt|tts|image|stt-mlx|omnivoice|portrait [args]\n")
         return 2
     try:
         run(args[0], args[1:])
