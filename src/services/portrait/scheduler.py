@@ -16,6 +16,7 @@ decodes, so the planning here is tested without a GPU.
 """
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
@@ -24,6 +25,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 FPS = 25
 SAMPLE_RATE = 16_000
@@ -170,6 +173,7 @@ class Output:
         self.decoded = 0
         self.ended = False
         self.cancelled = False
+        self.first_audio_at: float | None = None
         self.start_buffered_at: float | None = None
         self.opened_at = opened_at
         # (output seconds, wall time) of the latest play-position report.
@@ -191,6 +195,8 @@ class Output:
         if segment is None or segment.done:
             return
         segment.add(offset, block)
+        if self.first_audio_at is None:
+            self.first_audio_at = now
         self._restack()
         if self.start_buffered_at is None and self.samples_16k >= self.settings.start_buffer_seconds * SAMPLE_RATE:
             self.start_buffered_at = now
@@ -369,11 +375,20 @@ class PortraitStream:
             self._wait_for_priority(output)
             if output.cancelled:
                 break
+            began = time.perf_counter()
             audio = output.audio(plan.buffer_start, max(plan.buffer_end, plan.start + 1))
             self.session.run_pass(audio, plan, self.seed + self.passes)
             self.passes += 1
             output.committed = plan.start + plan.commit
+            if output.decoded == 0:
+                logger.info("portrait %s: first pass %.0f ms after its first audio, took %.1f ms",
+                            output.output_id, (self.clock() - (output.first_audio_at or self.clock())) * 1000,
+                            (time.perf_counter() - began) * 1000)
+            first_frame = output.decoded == 0
             sent += self._decode_committed(output)
+            if first_frame and output.decoded:
+                logger.info("portrait %s: first frames out %.0f ms after its first audio", output.output_id,
+                            (self.clock() - (output.first_audio_at or self.clock())) * 1000)
             if output.ended and output.committed >= output.total_frames:
                 break
         return sent

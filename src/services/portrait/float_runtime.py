@@ -326,6 +326,7 @@ class FloatRuntime:
     def _warm(self) -> None:
         """Run every network once at the one input shape it will see (each new shape costs seconds once)."""
         self.features(np.zeros(max(self.buffer_frames, 1) * SAMPLES_PER_FRAME, dtype=np.float32))
+        self.resample(np.zeros(2_400, dtype=np.float32), 24_000)  # the TTS rate: builds the sinc kernel once
         blank = self.encode("warm-up", np.zeros((512, 512, 3), dtype=np.uint8))
         self.render(blank, torch.zeros(self.decode_batch, self.opt.dim_w, device="cuda"))
         self.forget("warm-up")
