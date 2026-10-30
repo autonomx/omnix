@@ -615,6 +615,19 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - **Start hold (D-5).** The worklet holds a turn's start until the first frames of its first speech segment have arrived (`portrait_frames_ready`), at most 250 ms, never mid-reply; each hold is a `start_hold` worklet event and the delivery ledger's `startHoldMs`. A portrait that becomes unavailable turns the hold off.
 - **Speculative frames.** As planned: the prefetch request carries the call key (403 for another principal's call), only that call's phrases claim the entry, and the prefetch thread copies each chunk under the entry's condition through a bounded count of pending sends to the call's loop. Every drop path sends `spec_drop`. The service renders each speculation's first two passes on its own motion session and holds the frames; `spec_bind` (sent right after the phrase's `phrase_start`) relabels them and sends them at once; the phrase's own copy skips the replayed audio, and `spec_prefix_end` (at the first chunk without a copy) fits the segment: cut, or silence where a copy was lost. A later phrase of a reply already under way joins the reply's own motion instead.
 - **Remote quality (D-6).** Levels L0–L3 in the stream contract; the service encodes only the call's level (384 px resized on the GPU, every other frame at L3). The gateway (`portrait/quality.py`) counts speech frames relayed minus received as in flight: more than 12, any late frame, or decoding over 30 ms steps down at once, then 1 s to settle; 5 s healthy steps up. Loopback starts at L0, remote at L1. Still late at L3, the browser shows the fallback for that turn (`degraded`) and tries the next.
+- **On the real model** (`scripts/portrait_phase3_check.py`, `docs/measurements/portrait-phase3-check-2026-10-30.json`, the service alone, after the review fixes): all of them passed.
+    - **Idle loop:** 54 frames at 80 ms (4.3 s), there 0.43 s after `ready`. Its seam (last frame back to first) changes about 3× as many pixels as a normal step, so a small jump shows every 4.3 s.
+    - **Levels:** L0 gave all 266 frames of a 10.6 s clip at 512 px, the first 252 ms after the reply's first audio; L3 gave 133 at 384 px.
+    - **Speculative bind:** the 28 frames rendered from 2 s of speculative audio went out within 16 ms of the bind, then the rest; all 266 were sent once, in order.
+    - **Preview:** 100 frames for 4 s of audio in 786 ms.
+- **Review (2026-10-30):** an agent review found seven defects, all fixed with tests (`52bc99a3a6`):
+    - a late hello left the clock off
+    - speculative offsets were counted before the transport's leading-silence trim
+    - a phrase that failed partway stopped the reply's frames
+    - quality stepped down on bursts rendered ahead of playback
+    - play positions were timed late
+    - the idle loop went out as one burst to remote clients
+    - `output_end` was lost when the LLM stream failed
 - **Tests:** the clock, buffer, compositor and protocol; the client (hello, ready, frames by the heard position, acks, cancels and interrupts, the idle loop, degrading, fallbacks); the worklet's clock and hold; the session's hello and controls; the idle-loop choice; the service's idle loop, levels and speculative path; the gateway's level stepping, binding, prefix handling, copy, drops, claims and route.
 ### Phase 4: setup, emotion, cleanup
 
