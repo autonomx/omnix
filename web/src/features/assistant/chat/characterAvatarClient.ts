@@ -27,6 +27,12 @@ export type Live2DModelCatalogResponse = components['schemas']['Live2DModelCatal
 
 export type Live2DAvatarActionResponse = components['schemas']['Live2DAvatarActionResponse'];
 
+export type UpsertCharacterAvatarPackRequest = components['schemas']['UpsertCharacterAvatarPackRequest'];
+
+export type PortraitPreviewRequest = components['schemas']['PortraitPreviewRequest'];
+
+export type PortraitPreviewResponse = components['schemas']['PortraitPreviewResponse'];
+
 // The gateway's detail, or the raw body when it is not JSON.
 function avatar<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
   return unwrapAs(call, (error) => error.detail || `Avatar request failed with status ${error.status}.`);
@@ -69,6 +75,13 @@ export const characterAvatarClient = {
   },
   disableLive2d(characterId: string): Promise<Live2DAvatarActionResponse> {
     return avatar(api.POST('/api/characters/{character_id}/live2d-avatar/disable', { params: { path: characterPath(characterId) } }));
+  },
+  savePack(characterId: string, input: UpsertCharacterAvatarPackRequest): Promise<CharacterAvatarPack> {
+    return avatar(api.PUT('/api/characters/{character_id}/avatar-pack', { params: { path: characterPath(characterId) }, body: input }));
+  },
+  /** A portrait speaking a sample line (live portrait setup): its audio and frames, or why it cannot. */
+  previewPortrait(input: PortraitPreviewRequest): Promise<PortraitPreviewResponse> {
+    return avatar(api.POST('/api/tts/live-call/portrait-preview', { body: input }));
   },
   backfillClonedVoices(input: components['schemas']['BackfillClonedVoiceCharactersRequest']): Promise<ClonedVoiceBackfillResponse> {
     return avatar(api.POST('/api/characters/backfill-cloned-voices', { body: input }));

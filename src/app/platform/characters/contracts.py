@@ -4,6 +4,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
+from app.platform.characters.avatar_service import PORTRAIT_IMAGE_OBSERVERS, PortraitImageObserver
 from app.platform.characters.interaction import (
     InteractionSelection,
     character_mode_enabled,
@@ -25,6 +26,8 @@ from app.platform.characters.session_models import SetSessionInteractionRequest
 
 __all__ = [
     "CHARACTER_SNAPSHOT_OBSERVERS",
+    "PORTRAIT_IMAGE_OBSERVERS",
+    "PortraitImageObserver",
     "CharacterSnapshotObserver",
     "InteractionSelection",
     "LiveConversationProfile",
@@ -44,6 +47,7 @@ _LAZY_EXPORTS = {
     "CharacterLiveCallRuntime": "live_call",
     "resolve_live_call_runtime": "live_call",
     "default_character_avatar_service": "avatar_service",
+    "portrait_emotion_label": "avatar_models",
     "LiveConversationProfileEnvelope": "live_conversation_profile",
     "LiveConversationProfileUpdate": "live_conversation_profile",
     "CharacterDataActionRequest": "management",

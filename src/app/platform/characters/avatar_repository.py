@@ -82,6 +82,12 @@ class CharacterAvatarRepository:
         with self._state.lock:
             return self._state.packs.pop(character_id, None) is not None
 
+    def portrait_uses(self, asset_id: str) -> bool:
+        """Whether any portrait pack shows this image."""
+        with self._state.lock:
+            return any(pack.renderer == "portrait" and pack.base_asset_id == asset_id
+                       for pack in self._state.packs.values())
+
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()

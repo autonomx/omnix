@@ -63,7 +63,8 @@ def portrait(monkeypatch):
     monkeypatch.setattr(avatar_websocket, "portrait_url", lambda: "http://portrait.test")
     monkeypatch.setattr(avatar_websocket, "_load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
     monkeypatch.setattr(avatar_websocket, "resolve_live_call_runtime",
-                        lambda session: SimpleNamespace(avatar_pack=state["pack"]))
+                        lambda session: SimpleNamespace(avatar_pack=state["pack"],
+                                                        speech_style=SimpleNamespace(emotion="sad")))
     monkeypatch.setattr(avatar_websocket, "default_character_avatar_service",
                         lambda: SimpleNamespace(portrait_image=lambda pack, max_bytes: b"portrait bytes"))
     monkeypatch.setattr(avatar_websocket, "prepare_portrait", prepare)

@@ -67,6 +67,32 @@ async def prepare_portrait(base_url: str, tenant: str, image: bytes, *, client: 
     return str(body["latent_key"])
 
 
+async def preview_portrait(base_url: str, latent_key: str, emotion: str, pcm: bytes, sample_rate: int, *,
+                           client: Any = None) -> list[str]:
+    """A prepared portrait speaking ``pcm``: its frames (base64 JPEGs, 25 a second)."""
+    import httpx
+
+    from app.security.service_token import service_headers
+
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=60.0, follow_redirects=False)
+    try:
+        response = await client.post(f"{base_url}/portrait/preview", headers=service_headers(),
+                                     data={"latent_key": latent_key, "emotion": emotion, "sample_rate": str(sample_rate)},
+                                     files={"file": ("audio.pcm", pcm)})
+    except httpx.HTTPError as exc:
+        raise PortraitUnavailable("service_unreachable", "The portrait service did not answer") from exc
+    finally:
+        if owned:
+            await client.aclose()
+    if response.status_code != 200:
+        raise PortraitUnavailable("service_error", f"The portrait service refused the preview ({response.status_code})")
+    body = response.json()
+    if not body.get("ok"):
+        raise PortraitUnavailable(str(body.get("code") or "service_error"), str(body.get("message") or ""))
+    return [str(frame) for frame in body.get("frames") or []]
+
+
 class PortraitLink:
     """One call's stream to the portrait service."""
 
@@ -163,4 +189,4 @@ class PortraitLink:
             await self._websocket.close()
 
 
-__all__ = ["PortraitLink", "PortraitUnavailable", "portrait_url", "prepare_portrait"]
+__all__ = ["PortraitLink", "PortraitUnavailable", "portrait_url", "prepare_portrait", "preview_portrait"]

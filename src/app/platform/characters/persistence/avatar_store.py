@@ -102,6 +102,15 @@ class PostgresCharacterAvatarRepositoryAdapter:
                 self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=character_id,
             )
 
+    def portrait_uses(self, asset_id: str) -> bool:
+        """Whether any portrait pack in the tenant shows this image."""
+        with self.database.connection() as connection:
+            payloads = PostgresModuleRecordRepository(connection).payloads_where(
+                self.context, module=_MODULE, record_type=_RECORD_TYPE, field="base_asset_id", value=asset_id,
+                newest_first_by="updated_at",
+            )
+        return any(payload.get("renderer") == "portrait" for payload in payloads)
+
     def _locked_get(self, connection: Any, character_id: str) -> CharacterAvatarPack | None:
         payload = PostgresModuleRecordRepository(connection).payload(
             self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=character_id, lock=True,

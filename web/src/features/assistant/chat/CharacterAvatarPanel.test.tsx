@@ -119,3 +119,52 @@ describe('CharacterAvatarPanel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Use this Live2D avatar' })).toBeInTheDocument());
   });
 });
+
+describe('the live portrait tab', () => {
+  const portraitPack = {
+    character_id: 'maya', version: 2, render_mode: 'static', renderer: 'portrait', rig_asset_id: 'rig:maya',
+    base_asset_id: 'image:maya-face', mouth_frames: {}, blink_frames: {}, expression_frames: {}, outfit_frames: {},
+    background_asset_ids: {}, mouth_anchor: {}, fallback_renderer: 'sprite', portrait_emotion: 'character',
+    created_at: '2026-10-30T00:00:00Z', updated_at: '2026-10-30T00:00:00Z',
+  };
+
+  function stubGateway(preview: Record<string, unknown>) {
+    const calls: { path: string; body: unknown }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString(), 'http://localhost');
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : null;
+      calls.push({ path: url.pathname, body });
+      if (url.pathname.endsWith('/avatar-pack/optional')) return Response.json(portraitPack);
+      if (url.pathname.endsWith('/live2d-models')) return Response.json({ models: [], runtime_installed: false });
+      if (url.pathname.endsWith('/portrait-preview')) return Response.json(preview);
+      if (url.pathname.endsWith('/avatar-pack') && init?.method === 'PUT') {
+        return Response.json({ ...portraitPack, ...(body as object), version: 3 });
+      }
+      if (url.pathname.endsWith('/model-packs/capabilities')) return Response.json({ desktop: false, capabilities: {} });
+      return new Response('not found', { status: 404 });
+    }));
+    return calls;
+  }
+
+  it('opens on a portrait pack, explains a refused preview and saves the chosen emotion and fallback', async () => {
+    const calls = stubGateway({ ok: false, code: 'no_face', message: '', sample_rate: 0, audio: '', fps: 25, frames: [] });
+    renderPanel();
+    expect(await screen.findByRole('tab', { name: 'Live portrait', selected: true })).toBeTruthy();
+    expect(screen.getByAltText('Maya portrait').getAttribute('src')).toBe('/api/assets/image%3Amaya-face/file');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(await screen.findByText(/No face was found in this image/)).toBeTruthy();
+    expect(calls.find((call) => call.path.endsWith('/portrait-preview'))?.body).toMatchObject({
+      asset_id: 'image:maya-face', emotion: 'neutral',
+    });
+
+    fireEvent.change(screen.getByLabelText('Portrait emotion'), { target: { value: 'happy' } });
+    fireEvent.change(screen.getByLabelText('Portrait fallback'), { target: { value: 'live2d' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save the portrait' }));
+    await waitFor(() => expect(screen.getByText(/The live portrait is saved/)).toBeTruthy());
+    expect(calls.find((call) => call.path.endsWith('/avatar-pack') && call.body)?.body).toMatchObject({
+      expected_version: 2, renderer: 'portrait', base_asset_id: 'image:maya-face', fallback_renderer: 'live2d',
+      rig_asset_id: 'rig:maya', portrait_emotion: 'happy',
+    });
+  });
+});

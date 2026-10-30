@@ -1777,10 +1777,10 @@ export interface components {
             };
             /**
              * Portrait Emotion
-             * @default neutral
+             * @default character
              * @enum {string}
              */
-            portrait_emotion: "angry" | "disgust" | "fear" | "happy" | "neutral" | "sad" | "surprise";
+            portrait_emotion: "character" | "angry" | "disgust" | "fear" | "happy" | "neutral" | "sad" | "surprise";
             /**
              * Render Mode
              * @default audio_envelope

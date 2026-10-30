@@ -2550,6 +2550,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tts/live-call/portrait-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Portrait Preview */
+        post: operations["portrait_preview_api_tts_live_call_portrait_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tts/live-call/presence-presets": {
         parameters: {
             query?: never;
@@ -7837,6 +7854,56 @@ export interface components {
         PlanningSubmitRequest: {
             plan: components["schemas"]["ImplementationPlanSubmission"];
         };
+        /** PortraitPreviewRequest */
+        PortraitPreviewRequest: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Emotion
+             * @default neutral
+             * @enum {string}
+             */
+            emotion?: "angry" | "disgust" | "fear" | "happy" | "neutral" | "sad" | "surprise";
+            /** Speaker */
+            speaker?: string | null;
+            /**
+             * Text
+             * @default Hello! This is how I will look when we talk.
+             */
+            text?: string;
+        };
+        /** PortraitPreviewResponse */
+        PortraitPreviewResponse: {
+            /**
+             * Audio
+             * @default
+             */
+            audio: string;
+            /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
+             * Fps
+             * @default 25
+             */
+            fps: number;
+            /** Frames */
+            frames: string[];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Sample Rate
+             * @default 0
+             */
+            sample_rate: number;
+        };
         /** PresencePolicyValues */
         PresencePolicyValues: {
             /** Initiative Cooldown Ms */
@@ -9325,10 +9392,10 @@ export interface components {
             };
             /**
              * Portrait Emotion
-             * @default neutral
+             * @default character
              * @enum {string}
              */
-            portrait_emotion?: "angry" | "disgust" | "fear" | "happy" | "neutral" | "sad" | "surprise";
+            portrait_emotion?: "character" | "angry" | "disgust" | "fear" | "happy" | "neutral" | "sad" | "surprise";
             /**
              * Render Mode
              * @default audio_envelope
@@ -15378,6 +15445,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VoiceSessionEvaluationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portrait_preview_api_tts_live_call_portrait_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortraitPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortraitPreviewResponse"];
                 };
             };
             /** @description Validation Error */

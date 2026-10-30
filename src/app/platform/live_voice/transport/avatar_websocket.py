@@ -29,7 +29,11 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.conversation.portrait_stream_contract import PortraitMessageError, unpack
 
-from app.platform.characters.contracts import default_character_avatar_service, resolve_live_call_runtime
+from app.platform.characters.contracts import (
+    default_character_avatar_service,
+    portrait_emotion_label,
+    resolve_live_call_runtime,
+)
 from app.platform.live_voice.portrait.calls import PortraitCalls, principal_id
 from app.platform.live_voice.portrait.link import PortraitLink, PortraitUnavailable, portrait_url, prepare_portrait
 from app.platform.live_voice.portrait.quality import QualityController, starting_level
@@ -103,7 +107,9 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
                 await websocket.send_bytes(message)
 
             link = await PortraitLink.open(base_url, call_key=call.call_key, principal=principal, session=session_id,
-                                           latent_key=latent_key, emotion=pack.portrait_emotion, on_frame=relay,
+                                           latent_key=latent_key,
+                                           emotion=portrait_emotion_label(pack, runtime.speech_style.emotion),
+                                           on_frame=relay,
                                            level=quality.level)
         except PortraitUnavailable as exc:
             await _unavailable(websocket, exc.code, str(exc) or "The portrait is not available")

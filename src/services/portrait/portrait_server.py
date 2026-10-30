@@ -7,7 +7,10 @@ this service only; the browser never does. Routes:
   use, free VRAM and host commit.
 - ``POST /portrait/prepare``: form fields ``tenant`` and ``image_sha256`` and the image file. Crops and
   encodes the portrait once per (tenant, image digest, FLOAT revision) and returns its ``latent_key``.
-- ``DELETE /portrait/cache/{tenant}/{image_sha256}``: forget that encoding (its pack was deleted).
+- ``DELETE /portrait/cache/{tenant}/{image_sha256}``: forget that encoding and its idle loop (no pack shows it).
+- ``POST /portrait/preview``: form fields ``latent_key``, ``emotion``, ``sample_rate`` and up to 8 s of 16-bit PCM:
+  the frames for that audio, rendered as a call's would be (base64 JPEGs, 25 a second), for the setup preview.
+  Refused with ``portrait_busy`` while a call streams.
 - ``WS /portrait/stream``: one call's stream. The first message is ``open`` (``call_key``, ``principal``,
   ``session``, ``latent_key``, ``emotion``, ``level``); then ``phrase_start``, PCM (binary, see
   ``app.conversation.portrait_stream_contract``), ``phrase_done``, ``output_end``, ``cancel``,
@@ -53,6 +56,7 @@ LOAD_COMMIT_BYTES = 6 * 1024**3
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 OPEN_TIMEOUT_SECONDS = 5.0
 OUTBOX_FRAMES = 256
+MAX_PREVIEW_SECONDS = 8
 # Control messages a stream applies in order on the GPU thread (``cancel`` and ``tts_priority`` act at once).
 STREAM_MESSAGES = frozenset({"phrase_start", "phrase_done", "output_end", "play_position", "quality", "spec_start",
                              "spec_drop", "spec_bind", "spec_prefix_end"})
@@ -329,6 +333,21 @@ class StreamWorker:
             self.failed = exc
 
 
+def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, sample_rate: int) -> list[bytes]:
+    """Every frame for a short clip, through the same scheduler a call uses (so the GPU sees the same shapes)."""
+    from services.portrait.scheduler import PortraitStream
+
+    frames: list[bytes] = []
+    stream = PortraitStream(runtime.session(portrait, emotion), lambda frame: frames.append(frame.jpeg),
+                            resample=runtime.resample)
+    stream.phrase_start("preview", 0, "preview", sample_rate)
+    stream.pcm("preview", 0, pcm)
+    stream.phrase_done("preview")
+    stream.output_end("preview", 0)
+    stream.pump()
+    return frames
+
+
 def quality_level(value: Any) -> int:
     """A quality level from a message, clamped to the known levels (0, the best, when absent)."""
     try:
@@ -384,6 +403,29 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         except PortraitImageError as exc:
             return {"ok": False, "code": exc.code, "message": str(exc)}
         return {"ok": True, "latent_key": key}
+
+    @app.post("/portrait/preview")
+    async def preview(latent_key: str = Form(..., min_length=1, max_length=200),  # noqa: B008
+                      emotion: str = Form("neutral", max_length=40),  # noqa: B008
+                      sample_rate: int = Form(..., ge=8_000, le=48_000),  # noqa: B008
+                      file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+        import base64
+
+        payload = await file.read(MAX_PREVIEW_SECONDS * 48_000 * 2 + 1)
+        if not payload or len(payload) > MAX_PREVIEW_SECONDS * sample_rate * 2 or len(payload) % 2:
+            raise HTTPException(status_code=413 if payload else 400, detail="invalid_audio")
+        try:
+            runtime = host.get()
+        except Unavailable as exc:
+            return {"ok": False, "code": exc.code, "message": str(exc)}
+        if admission.active >= admission.max_streams:
+            return {"ok": False, "code": "portrait_busy", "message": "A call is using the portrait"}
+        portrait = runtime.portrait(latent_key)
+        if portrait is None:
+            return {"ok": False, "code": "portrait_not_prepared", "message": "Prepare the portrait first"}
+        pcm = np.frombuffer(payload, dtype="<i2")
+        frames = await asyncio.wrap_future(host.submit(render_preview, runtime, portrait, emotion, pcm, sample_rate))
+        return {"ok": True, "fps": 25, "frames": [base64.b64encode(frame).decode("ascii") for frame in frames]}
 
     @app.delete("/portrait/cache/{tenant}/{image_sha256}")
     def forget(tenant: str, image_sha256: str) -> dict[str, Any]:
@@ -550,4 +592,5 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["Admission", "Lease", "RuntimeHost", "StreamWorker", "Unavailable", "app", "create_app", "main", "quality_level"]
+__all__ = ["Admission", "Lease", "RuntimeHost", "StreamWorker", "Unavailable", "app", "create_app", "main", "quality_level",
+           "render_preview"]

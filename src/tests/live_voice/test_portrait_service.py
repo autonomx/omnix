@@ -257,3 +257,25 @@ def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
         time.sleep(0.01)
     assert not host.unload_if_idle(0.0, active_streams=1)
     assert host.unload_if_idle(0.0, active_streams=0) and host.status == "unloaded"
+
+
+def test_a_preview_renders_a_short_clip_and_is_refused_while_a_call_streams(token: str) -> None:
+    import base64
+
+    client = _client(_ready_app(FakeRuntime()), token)
+    latent_key = _prepare(client)["latent_key"]
+    pcm = (np.sin(np.arange(24_000) / 5.0) * 9000).astype("<i2").tobytes()
+
+    def preview(audio: bytes = pcm) -> dict:
+        return client.post("/portrait/preview", data={"latent_key": latent_key, "emotion": "happy",
+                                                      "sample_rate": "24000"},
+                           files={"file": ("audio.pcm", io.BytesIO(audio))}).json()
+
+    body = preview()
+    assert body["ok"] and body["fps"] == 25
+    assert [base64.b64decode(frame) for frame in body["frames"]] == [f"jpeg-{index}-l0".encode() for index in range(25)]
+    assert client.post("/portrait/preview", data={"latent_key": latent_key, "sample_rate": "24000"},
+                       files={"file": ("a.pcm", io.BytesIO(b"\x00" * (9 * 24_000 * 2)))}).status_code == 413
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, latent_key)["type"] == "ready"
+        assert preview()["code"] == "portrait_busy"

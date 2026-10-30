@@ -10,7 +10,9 @@ AvatarRenderMode = Literal["audio_envelope", "viseme", "static"]
 AvatarRenderer = Literal["sprite", "live2d", "rive", "portrait"]
 # What a portrait pack shows when the portrait is not available (Rive is not drawn in live calls).
 PortraitFallbackRenderer = Literal["sprite", "live2d", "orb"]
-PortraitEmotion = Literal["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+# FLOAT's emotion label for the whole call; "character" follows the character's speech style where it names one.
+PortraitEmotion = Literal["character", "angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+PORTRAIT_EMOTION_LABELS = ("angry", "disgust", "fear", "happy", "neutral", "sad", "surprise")
 AvatarMouthFrame = Literal["closed", "small", "medium", "wide"]
 
 
@@ -51,7 +53,7 @@ class CharacterAvatarPack(BaseModel):
     active_background: str | None = Field(default=None, max_length=120)
     mouth_anchor: dict[str, float] = Field(default_factory=dict)
     fallback_renderer: PortraitFallbackRenderer = "orb"
-    portrait_emotion: PortraitEmotion = "neutral"
+    portrait_emotion: PortraitEmotion = "character"
     created_at: str
     updated_at: str
 
@@ -90,7 +92,15 @@ class UpsertCharacterAvatarPackRequest(BaseModel):
     active_background: str | None = Field(default=None, max_length=120)
     mouth_anchor: dict[str, float] = Field(default_factory=dict)
     fallback_renderer: PortraitFallbackRenderer = "orb"
-    portrait_emotion: PortraitEmotion = "neutral"
+    portrait_emotion: PortraitEmotion = "character"
+
+
+def portrait_emotion_label(pack: CharacterAvatarPack, speech_emotion: str | None) -> str:
+    """The emotion label the portrait renders a call with (roadmap Phase 4, "Emotion")."""
+    if pack.portrait_emotion != "character":
+        return pack.portrait_emotion
+    label = (speech_emotion or "").strip().lower()
+    return label if label in PORTRAIT_EMOTION_LABELS else "neutral"
 
 
 class DeleteCharacterAvatarPackResponse(BaseModel):
@@ -99,10 +109,12 @@ class DeleteCharacterAvatarPackResponse(BaseModel):
 
 
 __all__ = [
+    "PORTRAIT_EMOTION_LABELS",
     "AvatarMouthFrame",
     "AvatarRenderMode",
     "AvatarRenderer",
     "CharacterAvatarPack",
     "DeleteCharacterAvatarPackResponse",
     "UpsertCharacterAvatarPackRequest",
+    "portrait_emotion_label",
 ]

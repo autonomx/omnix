@@ -8048,8 +8048,9 @@
             "type": "object"
           },
           "portrait_emotion": {
-            "default": "neutral",
+            "default": "character",
             "enum": [
+              "character",
               "angry",
               "disgust",
               "fear",
@@ -38160,6 +38161,105 @@
         "title": "PortfolioScore",
         "type": "object"
       },
+      "PortraitPreviewRequest": {
+        "properties": {
+          "asset_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "emotion": {
+            "default": "neutral",
+            "enum": [
+              "angry",
+              "disgust",
+              "fear",
+              "happy",
+              "neutral",
+              "sad",
+              "surprise"
+            ],
+            "title": "Emotion",
+            "type": "string"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "default": "Hello! This is how I will look when we talk.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "PortraitPreviewRequest",
+        "type": "object"
+      },
+      "PortraitPreviewResponse": {
+        "properties": {
+          "audio": {
+            "default": "",
+            "title": "Audio",
+            "type": "string"
+          },
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
+          "fps": {
+            "default": 25,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "sample_rate": {
+            "default": 0,
+            "title": "Sample Rate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "code",
+          "message",
+          "sample_rate",
+          "audio",
+          "fps",
+          "frames"
+        ],
+        "title": "PortraitPreviewResponse",
+        "type": "object"
+      },
       "PostcloseRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -66486,8 +66586,9 @@
             "type": "object"
           },
           "portrait_emotion": {
-            "default": "neutral",
+            "default": "character",
             "enum": [
+              "character",
               "angry",
               "disgust",
               "fear",
@@ -102568,6 +102669,47 @@
           }
         },
         "summary": "Get Voice Session Evaluation"
+      }
+    },
+    "/api/tts/live-call/portrait-preview": {
+      "post": {
+        "operationId": "portrait_preview_api_tts_live_call_portrait_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortraitPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortraitPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portrait Preview",
+        "tags": [
+          "live-voice"
+        ]
       }
     },
     "/api/tts/live-call/presence-presets": {
