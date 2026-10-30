@@ -29,6 +29,8 @@ from app.observability.tts_stream_diagnostics import stream_log
 
 _CLIENT_GENERATION_ID = re.compile(r"^spec-client-[A-Za-z0-9_-]{8,80}$")
 _SPECULATION_BLOCKED_PROVIDER_IDS = frozenset({"cerebras"})
+# Live hypotheses kept per utterance, the newest first: the browser's own budget (MAX_ACTIVE_HYPOTHESES).
+MAX_INLINE_HYPOTHESES_PER_UTTERANCE = 2
 
 
 def _effective_speculation_route(
@@ -246,18 +248,28 @@ def register_live_chat_speculation_inline_stream_routes(router: APIRouter,
 
 
 def _supersede_prior_generations_locked(pending: Any) -> list[str]:
-    """Cancel older inline hypotheses for the exact same utterance identity."""
+    """Cancel the inline hypotheses for the same utterance past the newest ``MAX_INLINE_HYPOTHESES_PER_UTTERANCE``.
 
+    The browser keeps the previous hypothesis beside the newest one, for a final that matches either exactly.
+    Cancelling every older one here made the browser reuse a generation that was already dead when the final
+    matched the older text, and that reply was lost.
+    """
+
+    same_utterance = sorted(
+        (
+            (existing.created_at, generation_id)
+            for generation_id, existing in speculation_runtime._SPECULATIONS.items()
+            if generation_id != pending.generation_id
+            and not existing.completed
+            and existing.session_id == pending.session_id
+            and existing.segment_id == pending.segment_id
+            and existing.source_sequence == pending.source_sequence
+        ),
+        reverse=True,
+    )
     superseded: list[str] = []
-    for generation_id, existing in tuple(speculation_runtime._SPECULATIONS.items()):
-        if generation_id == pending.generation_id or existing.completed:
-            continue
-        if (
-            existing.session_id != pending.session_id
-            or existing.segment_id != pending.segment_id
-            or existing.source_sequence != pending.source_sequence
-        ):
-            continue
+    for _created_at, generation_id in same_utterance[MAX_INLINE_HYPOTHESES_PER_UTTERANCE - 1:]:
+        existing = speculation_runtime._SPECULATIONS[generation_id]
         generation = handshake_runtime._HANDSHAKE_GENERATIONS.get(generation_id)
         if generation is None:
             continue

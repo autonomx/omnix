@@ -295,31 +295,33 @@ def test_inline_stream_honors_a_valid_client_generation_id(monkeypatch) -> None:
     assert payloads[0]["client_allocated"] is True
 
 
-def test_inline_stream_supersedes_older_hypothesis_for_same_utterance(monkeypatch) -> None:
+def test_inline_stream_keeps_the_newest_two_hypotheses_for_an_utterance(monkeypatch) -> None:
+    """The browser keeps the previous hypothesis for a final that matches it: only older ones are superseded."""
     speculation.clear_live_speculation_session_cache()
     handshake.clear_live_speculation_handshake_state()
     store = _FakeStore()
     provider = _FakeProvider()
     client = _client(store, provider, monkeypatch)
-    old_id = "spec-client-oldhypothesis123"
-    old_pending = speculation._Speculation(
-        generation_id=old_id,
-        session_id=store.session.id,
-        candidate_text="Tell me a",
-        provider_id="fake-provider",
-        model_id="fake-model",
-        segment_id="segment-supersede",
-        source_sequence=12,
-        created_at=speculation.time.time(),
-        execution_lane="session",
-    )
-    old_generation = handshake._HandshakeGeneration(
-        store=store,
-        session=store.session,
-    )
-    with speculation._SPECULATION_LOCK:
-        speculation._SPECULATIONS[old_id] = old_pending
-        handshake._HANDSHAKE_GENERATIONS[old_id] = old_generation
+    older: dict[str, tuple] = {}
+    for offset, (generation_id, text) in enumerate(
+        (("spec-client-oldesthypothesis1", "Tell me"), ("spec-client-previoushypothesis2", "Tell me a"))
+    ):
+        pending = speculation._Speculation(
+            generation_id=generation_id,
+            session_id=store.session.id,
+            candidate_text=text,
+            provider_id="fake-provider",
+            model_id="fake-model",
+            segment_id="segment-supersede",
+            source_sequence=12,
+            created_at=speculation.time.time() - 1.0 + offset * 0.1,
+            execution_lane="session",
+        )
+        generation = handshake._HandshakeGeneration(store=store, session=store.session)
+        older[generation_id] = (pending, generation)
+        with speculation._SPECULATION_LOCK:
+            speculation._SPECULATIONS[generation_id] = pending
+            handshake._HANDSHAKE_GENERATIONS[generation_id] = generation
 
     streamed = client.post(
         "/api/live/speculation/sessions/session-inline/start-stream",
@@ -332,9 +334,12 @@ def test_inline_stream_supersedes_older_hypothesis_for_same_utterance(monkeypatc
     )
 
     assert streamed.status_code == 200
-    assert old_generation.cancel_event.is_set()
-    assert old_pending.completed is True
-    assert old_pending.error == "speculation_superseded"
+    oldest, oldest_generation = older["spec-client-oldesthypothesis1"]
+    assert oldest_generation.cancel_event.is_set()
+    assert oldest.completed is True and oldest.error == "speculation_superseded"
+    previous, previous_generation = older["spec-client-previoushypothesis2"]
+    assert not previous_generation.cancel_event.is_set()
+    assert previous.error is None
 
 
 def test_inline_stream_rejects_an_invalid_client_generation_id(monkeypatch) -> None:
