@@ -77,7 +77,6 @@ type ReleaseState = {
   firstPcmOutputId: string | null;
   firstPcmSegmentId: string | null;
   firstPlaybackAt: number | null;
-  interruptionAt: number | null;
   turnId: string | null;
   activeTraceId: string | null;
   llmChars: number;
@@ -89,6 +88,9 @@ const reporter = typeof window === 'undefined'
   : createLiveCallDiagnosticsReporter('live-call:release-observer');
 let initialized = false;
 let state: ReleaseState = emptyState();
+// An interruption spans two turns: the user's speech that interrupts starts a new turn before the interrupted
+// reply's turn reports it stopped. So it is kept apart from the turn state and ends at the next turn_stopped.
+let interruptionAt: number | null = null;
 // Whether the call shows a live portrait: every release metric says so, for the paired (off/on) gate.
 let portraitActive = false;
 
@@ -146,6 +148,7 @@ export function recordLiveVoiceReleaseQuality(
 
 export function resetLiveVoiceReleaseObserver(): void {
   state = emptyState();
+  interruptionAt = null;
 }
 
 function handleTurnTimeline(event: Event): void {
@@ -250,6 +253,11 @@ function handleDiagnosticEvent(event: Event): void {
     recordLatency('start_hold_ms', finiteNonnegative(detail.details?.held_ms));
     return;
   }
+  if (diagnosticEvent === 'turn_stopped' && interruptionAt !== null) {
+    recordLatency('interruption_to_silence_ms', elapsed(interruptionAt, now));
+    interruptionAt = null;
+    return;
+  }
 
   if (diagnosticEvent === 'turn_intercepted') {
     if (!traceMatchesCurrentVoiceTurn(traceId)) return;
@@ -325,10 +333,6 @@ function handleDiagnosticEvent(event: Event): void {
     recordLatency('stt_request_to_first_playback_ms', elapsed(state.sttRequestedAt, playbackAt));
     return;
   }
-  if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
-    recordLatency('interruption_to_silence_ms', elapsed(state.interruptionAt, now));
-    state.interruptionAt = null;
-  }
 }
 
 function diagnosticBelongsToActiveTurn(
@@ -388,7 +392,7 @@ function playbackMatchesFirstPcm(detail: DiagnosticDetail): boolean {
 }
 
 function handleInterruption(): void {
-  state.interruptionAt = performance.now();
+  interruptionAt = performance.now();
 }
 
 function handleQualityEvent(event: Event): void {
@@ -474,7 +478,6 @@ function emptyState(): ReleaseState {
     firstPcmOutputId: null,
     firstPcmSegmentId: null,
     firstPlaybackAt: null,
-    interruptionAt: null,
     turnId: null,
     activeTraceId: null,
     llmChars: 0,

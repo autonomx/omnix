@@ -413,4 +413,29 @@ describe('live voice release observer', () => {
         'release_observer'],
     ]);
   });
+
+  it('measures an interruption to the interrupted reply stopping, though the interrupting speech began a new turn', () => {
+    const observations: LiveVoiceReleaseObservation[] = [];
+    const listener = (event: Event) => observations.push(
+      (event as CustomEvent<LiveVoiceReleaseObservation>).detail,
+    );
+    window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:reply');
+    now = 2_000;
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-turn-timeline', {
+      detail: { turnId: 'voice-turn:stop', event: 'speech_ended', atMs: 2_000 },
+    }));
+    now = 2_400;
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt', { detail: { intent: 'hard_stop' } }));
+    now = 2_415;
+    diagnostic('turn_stopped', 'live-call:voice-turn:reply');
+
+    const silence = observations.filter(
+      (item) => item.kind === 'latency' && item.metricName === 'interruption_to_silence_ms',
+    );
+    expect(silence).toEqual([expect.objectContaining({ valueMs: 15 })]);
+    window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+  });
 });
