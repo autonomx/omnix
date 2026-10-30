@@ -162,3 +162,13 @@ describe('the clock during an underrun', () => {
     expect(clock.underrunAt(3.2, 0.1)).toBe(false);
   });
 });
+
+describe('the idle loop wrap', () => {
+  it('blends the last frame into the first as the loop wraps', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.setIdleLoop(['i0', 'i1', 'i2'], 0, 40);
+    expect(compositor.picture(50, null, false)).toEqual({ under: 'i1', over: null, alpha: 0 });
+    expect(compositor.picture(90, null, false)).toEqual({ under: 'i2', over: 'i0', alpha: 0.25 });
+    expect(compositor.picture(120, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+  });
+});

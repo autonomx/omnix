@@ -5,7 +5,8 @@
  * phrase, a cue, a late frame) the last speaking frame is held; once the gap passes 250 ms it crossfades (80 ms)
  * into the idle loop, and the next speech crossfades back from it. During an underrun the frame freezes until
  * playback resumes. Before the first speech the idle loop plays. A cancelled or interrupted turn cuts to the idle
- * loop: its frames are already released, so there is nothing to fade from.
+ * loop: its frames are already released, so there is nothing to fade from. The loop's last frame blends into its
+ * first as it wraps (its seam moves about three times as much as a normal step).
  */
 
 export const GAP_TO_IDLE_MS = 250;
@@ -69,7 +70,17 @@ export class PortraitCompositor<T> {
     const idleFrame = this.idleFrame(now);
     const alpha = this.fade(now);
     if (alpha < 1 && this.lastSpeech) return { under: this.lastSpeech, over: idleFrame, alpha };
-    return { under: idleFrame ?? this.lastSpeech, over: null, alpha: 0 };
+    if (idleFrame === null) return { under: this.lastSpeech, over: null, alpha: 0 };
+    return this.wrapping(now) ?? { under: idleFrame, over: null, alpha: 0 };
+  }
+
+  /** On the loop's last frame: the first one over it, more of it as the wrap nears. */
+  private wrapping(now: number): PortraitPicture<T> | null {
+    if (this.idle.length < 2) return null;
+    const position = Math.max(0, now - this.idleSince) / this.idleFrameMs;
+    const index = Math.floor(position) % this.idle.length;
+    if (index !== this.idle.length - 1) return null;
+    return { under: this.idle[index], over: this.idle[0], alpha: position - Math.floor(position) };
   }
 
   private fade(now: number): number {
