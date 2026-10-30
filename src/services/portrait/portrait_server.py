@@ -51,8 +51,8 @@ from app.security.model_service import ModelServiceMiddleware
 
 logger = logging.getLogger(__name__)
 
-LOAD_VRAM_GB = 2.5
-LOAD_COMMIT_BYTES = 6 * 1024**3
+LOAD_VRAM_GB = 4.0  # the runtime's allocator cap (float_runtime.VRAM_CAP_MB); the load peaks at 3.5 GB
+LOAD_COMMIT_BYTES = 8 * 1024**3  # the load's process commit peaks at 6.4-6.7 GB
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 OPEN_TIMEOUT_SECONDS = 5.0
 OUTBOX_FRAMES = 256

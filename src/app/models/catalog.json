@@ -286,8 +286,8 @@
           "runtimes": [
             "portrait-windows-x64"
           ],
-          "min_vram_mb": 2560,
-          "min_commit_mb": 6144,
+          "min_vram_mb": 4096,
+          "min_commit_mb": 8192,
           "note": "Shares the GPU with live speech: one call's portrait at a time."
         }
       ]

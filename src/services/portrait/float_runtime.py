@@ -51,6 +51,11 @@ EMOTIONS = ("angry", "disgust", "fear", "happy", "neutral", "sad", "surprise")
 DEFAULT_NFE = 7
 FRAME_SIZE = 512
 IDLE_SEED = 7_919
+# The allocator's ceiling (OMNIX_PORTRAIT_VRAM_CAP_MB). On Windows the driver backs VRAM past the card with host
+# memory instead of failing, and cuDNN sizes a convolution's workspace from the free VRAM PyTorch reports. Uncapped,
+# the face detector's warm-up once took 15 GB of VRAM and ran from host memory, its process unkillable (2026-10-30).
+# Capped, cuDNN's large-workspace algorithms fail to allocate and it picks another; the load peaks at 3.5 GB.
+VRAM_CAP_MB = 4096
 
 
 class PortraitModelMissing(HelperUnavailable):
@@ -68,6 +73,16 @@ def model_folder(model_id: str) -> Path | None:
         return snapshot
     folder = resources_models_root() / "portrait" / load().model(model_id).folder_name
     return folder if folder.is_dir() else None
+
+
+def cap_vram() -> int:
+    """Cap this process's CUDA allocator before anything is allocated; returns the cap in MB."""
+    from app.config.env import env_int
+
+    cap_mb = env_int("OMNIX_PORTRAIT_VRAM_CAP_MB", VRAM_CAP_MB, minimum=1024, maximum=65_536)
+    total = torch.cuda.get_device_properties(0).total_memory
+    torch.cuda.set_per_process_memory_fraction(min(1.0, cap_mb * 2**20 / total))
+    return cap_mb
 
 
 def required_folders() -> dict[str, Path]:
@@ -271,6 +286,7 @@ class FloatRuntime:
         # The longest buffer a pass uses: 50 frames of context before the window and the 50-frame window.
         self.buffer_frames = buffer_frames
         self.decode_batch = decode_batch
+        self.vram_cap_mb = cap_vram()
         verify_code(folders[CODE_MODEL])
         upstream = _import_upstream(folders[CODE_MODEL])
         self.opt = upstream["BaseOptions"]().initialize(argparse.ArgumentParser()).parse_args([])

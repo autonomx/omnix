@@ -552,4 +552,4 @@ def test_the_live_portrait_service_runs_from_its_pack_and_the_gateway_finds_it(t
     plan = plans(config, catalog, runtimes, models)["portrait"]
     assert plan.runtime == "portrait-windows-x64" and plan.bundles == ["live-portrait"]
     assert plan.site_dirs == [config.packs / "portrait-windows-x64", config.packs / "torch-windows-x64"]
-    assert plan.needed_bytes == 6144 * 2**20
+    assert plan.needed_bytes == 8192 * 2**20
