@@ -27,6 +27,7 @@ from app.platform.live_voice.speech.startup_frame_policy import (
     stream_live_call_pcm16_blocks,
 )
 
+from app.platform.live_voice.portrait.calls import PortraitCall, PortraitCalls, principal_id
 from app.platform.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
 from app.platform.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
 from app.observability.tts_stream_diagnostics import (
@@ -78,6 +79,8 @@ class ConnectionState:
     active_frames: asyncio.Queue[FrameMessage] | None = None
     active_output: ActiveOutput | None = None
     cancelled_outputs: set[tuple[str, int]] = field(default_factory=set)
+    # The call's portrait, when the client asked for one (``?portrait=1``); a no-op until a link attaches.
+    portrait: PortraitCall | None = None
 
 
 def _connection_details(websocket: WebSocket) -> dict[str, Any]:
@@ -219,10 +222,18 @@ async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> Non
                     **(details if isinstance(details, dict) else {}),
                 )
                 continue
+            if message_type == "output_end":
+                # The turn's last phrase is queued; the portrait commits its held frames.
+                if state.portrait is not None:
+                    output_id, generation_epoch, _segment_id = _output_identity(payload)
+                    state.portrait.output_end(output_id, generation_epoch)
+                continue
             if message_type == "cancel":
                 output_id, generation_epoch, segment_id = _output_identity(payload)
                 key = (output_id, generation_epoch)
                 state.cancelled_outputs.add(key)
+                if state.portrait is not None:
+                    state.portrait.cancel(output_id, generation_epoch)
                 active = state.active_output
                 generated_through_frame = -1
                 if active and (active.output_id, active.generation_epoch) == key:
@@ -429,6 +440,9 @@ async def _stream_phrase(
         loop = asyncio.get_running_loop()
         frames: asyncio.Queue[FrameMessage] = asyncio.Queue()
         state.active_frames = frames
+        portrait = state.portrait
+        if portrait is not None:
+            portrait.tts_priority(True)  # the portrait gives way until this phrase's first chunk is out
 
         def stopped() -> bool:
             return state.stop_event.is_set() or phrase_stop.is_set() or key in state.cancelled_outputs
@@ -738,6 +752,8 @@ async def _stream_phrase(
                                 "performance_controls_ignored": ignored_controls,
                             }
                         )
+                        if portrait is not None:
+                            portrait.phrase_start(output_id, generation_epoch, segment_id, current_sample_rate)
                         if first_start_control:
                             stream_log(
                                 stream_id,
@@ -753,6 +769,11 @@ async def _stream_phrase(
                         started = True
                     first_pcm_frame = sent_frames == 0
                     await websocket.send_bytes(pcm_bytes)
+                    if portrait is not None:
+                        # A copy of exactly what the browser plays; queued, never awaited.
+                        portrait.pcm(segment_id, pcm_bytes)
+                        if first_pcm_frame:
+                            portrait.tts_priority(False)
                     if first_pcm_frame:
                         now = time.perf_counter()
                         stream_log(
@@ -780,6 +801,8 @@ async def _stream_phrase(
                 sent_samples += frame_samples
                 continue
             if message_type == "done":
+                if portrait is not None:
+                    portrait.phrase_done(segment_id)
                 await websocket.send_json(
                     {
                         "type": "done",
@@ -819,6 +842,8 @@ async def _stream_phrase(
             return
     finally:
         phrase_stop.set()
+        if state.portrait is not None:
+            state.portrait.tts_priority(False)  # also on an error or a cancel before the first chunk
         if state.active_frames is not None:
             state.active_frames = None
         if state.active_output is active_output:
@@ -852,16 +877,26 @@ async def _stream_phrase(
             )
 
 
+def portrait_call_registry(state: Any) -> PortraitCalls:
+    """The live calls a portrait may attach to: one registry per gateway process, on the feature's state."""
+    calls = getattr(state, "live_portrait_calls", None)
+    if calls is None:
+        calls = PortraitCalls()
+        state.live_portrait_calls = calls
+    return calls
+
+
 def register_tts_live_call_websocket(
     router: APIRouter,
     state: Any,
     *,
     provider_resolver: TTSProviderResolver,
 ) -> None:
+    """Register one reusable websocket per Live session."""
     if getattr(state, _ROUTE_SENTINEL, False):
         return
     setattr(state, _ROUTE_SENTINEL, True)
-    """Register one reusable websocket per Live session."""
+    portrait_calls = portrait_call_registry(state)
 
     @router.websocket(TTS_LIVE_CALL_WEBSOCKET_PATH)
     async def tts_live_call_websocket(websocket: WebSocket) -> None:
@@ -886,6 +921,11 @@ def register_tts_live_call_websocket(
                 stop_event=threading.Event(),
                 requests=asyncio.Queue(),
             )
+            if websocket.query_params.get("portrait") == "1":
+                # A client that can show a portrait asks for the call key and avatar token first.
+                state.portrait = portrait_calls.issue(principal_id(websocket.scope))
+                await websocket.send_json({"type": "hello", "call_key": state.portrait.call_key,
+                                           "avatar_token": state.portrait.token})
             receiver = asyncio.create_task(_receive_messages(websocket, state))
             try:
                 while not state.stop_event.is_set():
@@ -920,6 +960,10 @@ def register_tts_live_call_websocket(
                 receiver.cancel()
                 with suppress(asyncio.CancelledError):
                     await receiver
+                if state.portrait is not None:
+                    portrait_calls.remove(state.portrait)
+                    if state.portrait.link is not None:  # the call is over: so is its portrait
+                        await state.portrait.link.close()
                 with suppress(Exception):
                     await websocket.close()
         finally:
