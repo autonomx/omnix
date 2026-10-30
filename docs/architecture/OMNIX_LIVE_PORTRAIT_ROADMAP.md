@@ -37,21 +37,50 @@ We don't adopt fast-float. We build FLOAT into the stack live calls already run 
 
 ## Where it stands (2026-10-30)
 
-Phases 1–5 are built, with their tests, on branch `live-portrait`; Phase 0's standalone measurements passed. What
-remains are the measurements that need the whole live stack (gateway, STT, TTS, an LLM and a browser) running on
-the 4090 together with the portrait, in a slot that does not overlap the RPG roadmap's gates:
+Phases 1–5 are built, with their tests, on branch `live-portrait`; Phase 0's standalone measurements passed.
+
+**Loaded runs and the paired gate, `character-normal` (2026-10-30).** The whole stack on the 4090 (STT, TTS, the
+portrait, the gateway, the web app and LM Studio's `liquid/lfm2.5-1.2b` on the same card), scratch database
+`omnix_portrait_runs`, 40 replies a side ([measurements](../measurements/portrait-loaded-runs-2026-10-30.json)):
+
+| Check | Off | On | Result |
+| --- | ---: | ---: | --- |
+| Speech end → first playback, p50 | 1940 ms | 2089 ms | pass (+7.7%, bound 110%) |
+| First audible, p50 | 1993 ms | 2142 ms | pass |
+| Final → first playback, p50 | 1262 ms | 1362 ms | pass |
+| First token → first audio, p50 | 557 ms | 578 ms | pass |
+| STT finalize, p50 | 191 ms | 185 ms | pass |
+| LLM tokens/s, p50 | 126 | 155 | pass |
+| Underruns per reply | 1.475 | 1.475 | pass (equal) |
+| Start hold | — | p50 0 ms, p95 251 ms (the cap) | pass (p50 limit 150 ms) |
+| A/V offset, p95 over 4005 frames | — | 19.7 ms | pass (limit 40 ms) |
+| Final → first token, p50 | 21.9 ms | 38.0 ms | **fail** (+16 ms; ratio interval 1.36–1.99) |
+| Interruption → silence | — | — | no samples (the benchmark does not interrupt) |
+
+Both sides underrun at the same rate: this machine's TTS, sharing the GPU with LM Studio, generates slower than
+real time; the portrait adds none. The one failing check is 16 ms before the first token, under the bound's ratio
+but small in absolute terms; it is open, not waived.
+
+Getting there took five fixes outside the portrait, each with a regression test: a call missed a chat session
+selected before its runtime loaded; direct-to-gateway live chat lacked `X-Omnix-Client`; playback held a finished
+phrase tail shorter than the rebuffer target forever; the live prompt's memory-settings cache recursed on a cold
+cache; and STT's live models used NeMo's CUDA-graph decoder, so another model loading or unloading in the STT
+process (the timed Parakeet-TDT helper, five minutes after the gateway warmed it) ended the CUDA context. The last
+two break live calls on `main` too.
+
+Still open:
 
 | Run | Phase | How |
 | --- | --- | --- |
-| Loaded runs: live calls with TTS, STT and the LLM, portrait off and on | 0 | The benchmark below, `character-normal` |
+| The paired gate's other required scenarios, 40 replies each | 5 | `scripts/run_live_voice_performance_benchmark.py --scenario <name> --portrait off --repeat 8`, the same with `--portrait on`, then `python -m app.platform.live_voice.release_gate_cli --portrait-pairing` |
+| Interruption → silence with the portrait on | 5 | A scenario that interrupts replies |
 | Ghosting of the idle crossfades on 10 replies | 3 | Watch 10 replies of an on run; the fallback is service-rendered transition frames |
-| The paired gate over the required scenarios, 40 replies each | 5 | `scripts/run_live_voice_performance_benchmark.py --scenario <name> --portrait off --app-path <session> --repeat 8`, the same with `--portrait on`, then `python -m app.platform.live_voice.release_gate_cli --portrait-pairing` |
 | Remote clients over 20, 8 and 3 Mbit/s links with 80 ms RTT | 5 | The on run from a second machine behind a throttled link; record the level each settles at |
 
-Owner's answers (2026-10-30): the runs wait for a slot the owner names; they use a scratch database (a fresh
-migrated one in the 16432 test container, with one character and portrait pack set up for them), never the live
-one; and the configured cerebras provider for the LLM. The scratch database is ready: `omnix_portrait_runs` in the
-`omnix-architecture-test` container, migrated from this branch (2026-10-30).
+Owner's answers (2026-10-30): the runs use a scratch database (a fresh migrated one in the 16432 test container,
+with one character and portrait pack set up for them), never the live one. The LLM was to be the configured
+cerebras provider; the owner then chose LM Studio's `liquid/lfm2.5-1.2b` for the full runs. The scratch database
+is `omnix_portrait_runs` in the `omnix-architecture-test` container, migrated from this branch.
 
 Until then the portrait is opt-in by its avatar pack, and every way it can fail shows the pack's fallback.
 
