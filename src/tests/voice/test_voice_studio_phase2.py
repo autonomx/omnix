@@ -334,6 +334,43 @@ def test_the_service_route_reports_a_missing_model_in_an_envelope(monkeypatch) -
                        data={"speakers": "12"}).status_code == 400
 
 
+class _FakeAsr:
+    def __init__(self, loaded: bool = False) -> None:
+        self.loaded = loaded
+        self.loads = 0
+
+    def get(self) -> None:
+        self.loads += 1
+        self.loaded = True
+
+
+def _warm_service(monkeypatch, *, live: bool, loaded: bool = False) -> tuple[Any, _FakeAsr]:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    asr = _FakeAsr(loaded)
+    monkeypatch.setattr(timed, "ASR", asr)
+    app = FastAPI()
+    timed.install_timed_transcription_routes(app, decode=lambda payload, name: (payload, 0.0), live_active=lambda: live)
+    return TestClient(app), asr
+
+
+def test_the_warm_up_does_not_load_the_batch_engine_during_a_live_call(monkeypatch) -> None:
+    # Loading holds the GIL for up to a minute; the live decode stalled behind it (20 s finals).
+    client, asr = _warm_service(monkeypatch, live=True)
+    response = client.post("/transcribe/timed/warm")
+    assert response.json()["code"] == "live_call_active"
+    assert asr.loads == 0 and not asr.loaded
+
+
+def test_the_warm_up_loads_the_batch_engine_between_calls_and_is_free_once_loaded(monkeypatch) -> None:
+    client, asr = _warm_service(monkeypatch, live=False)
+    assert client.post("/transcribe/timed/warm").json() == {"ok": True, "loaded": True}
+    assert asr.loads == 1
+    client, asr = _warm_service(monkeypatch, live=True, loaded=True)
+    assert client.post("/transcribe/timed/warm").json() == {"ok": True, "loaded": True}
+
+
 # --- Transcript documents and exports -----------------------------------------------------
 
 
