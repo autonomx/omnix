@@ -117,6 +117,9 @@ describe('the live portrait client', () => {
     expect(sockets[0].url).toContain('/api/tts/live-call/avatar-websocket?token=tok%20en&session_id=chat%3Amaya');
     sockets[0].message(JSON.stringify({ type: 'ready', fallback_renderer: 'orb' }));
     expect(portrait.getSnapshot()).toEqual({ status: 'ready', fallbackRenderer: 'orb', reason: null });
+    expect(portrait.callKey()).toBe('call-1'); // speculative TTS for this call carries it
+    portrait.end();
+    expect(portrait.callKey()).toBeNull();
   });
 
   it('draws the frame for what is heard and reports the play position in source samples', async () => {

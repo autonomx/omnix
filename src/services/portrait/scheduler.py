@@ -11,6 +11,15 @@ Every committed frame is decoded in micro-batches and stamped with the segment (
 offset in that segment's own samples, which is what the browser's audio clock counts. Between micro-batches
 the stream checks for cancellation and the TTS priority pause.
 
+Speculative frames (roadmap Phase 3, "Keeping the hold near zero"): while the LLM's reply is still being decided,
+the gateway copies speculative TTS audio in under its generation id (``spec_start``, PCM for segment
+``spec:<generation_id>``). Each speculative output renders only its first two passes, on its own motion session,
+and keeps the frames. When a reply's phrase replays that audio, ``spec_bind`` relabels the output with the
+phrase's output, epoch and segment, and its frames go out at once; ``spec_prefix_end`` says how many samples the
+replay was, and the phrase's fresh audio continues from there. A prefix shorter than what arrived is cut, a longer
+one is filled with silence (its copy was dropped on the way), so the timeline stays the browser's. ``spec_drop``
+forgets an output that will never be claimed.
+
 This module holds no model: a ``MotionSession`` (``services.portrait.float_runtime``) runs the passes and
 decodes, so the planning here is tested without a GPU.
 """
@@ -31,6 +40,8 @@ logger = logging.getLogger(__name__)
 FPS = 25
 SAMPLE_RATE = 16_000
 SAMPLES_PER_FRAME = SAMPLE_RATE // FPS  # 640
+SPEC_PREFIX = "spec:"
+MAX_SPECULATIVE_OUTPUTS = 4
 
 
 @dataclass(frozen=True)
@@ -71,6 +82,9 @@ class MotionSession(Protocol):
     """What the scheduler needs from the model, for one output."""
 
     level: int  # the call's quality level (``QUALITY_LEVELS``), which ``decode`` encodes at
+
+    def spawn(self) -> MotionSession:
+        """A fresh session for the same portrait, emotion and level (a speculative output's own motion)."""
 
     def run_pass(self, audio: np.ndarray, plan: PassPlan, seed: int) -> None:
         """Generate the window from ``audio`` (16 kHz, the plan's buffer) and commit its first frames."""
@@ -148,6 +162,15 @@ class _Segment:
     def length_16k(self) -> int:
         return int(round(self.samples * SAMPLE_RATE / self.sample_rate))
 
+    def fit(self, samples: int) -> None:
+        """Make the segment exactly ``samples`` long from offset 0: cut what is past it, fill a gap with silence."""
+        audio = self.source()[:samples]
+        if len(audio) < samples:
+            audio = np.concatenate([audio, np.zeros(samples - len(audio), dtype=np.float32)])
+        self.blocks = {0: audio.astype(np.float32, copy=False)} if samples else {}
+        self.samples = samples
+        self.resampled = None
+
 
 Resampler = Callable[[np.ndarray, int], np.ndarray]
 
@@ -180,6 +203,8 @@ class Output:
         self.opened_at = opened_at
         # (output seconds, wall time) of the latest play-position report.
         self.play_anchor: tuple[float, float] | None = None
+        # A speculative output keeps its frames (frame index, JPEG) until a phrase claims it.
+        self.held: list[tuple[int, bytes]] | None = None
 
     def segment(self, segment_id: str) -> _Segment | None:
         return next((item for item in self.segments if item.segment_id == segment_id), None)
@@ -199,7 +224,7 @@ class Output:
         segment.add(offset, block)
         if self.first_audio_at is None:
             self.first_audio_at = now
-        self._restack()
+        self.restack()
         if self.start_buffered_at is None and self.samples_16k >= self.settings.start_buffer_seconds * SAMPLE_RATE:
             self.start_buffered_at = now
 
@@ -208,7 +233,7 @@ class Output:
         if segment is not None:
             segment.done = True
 
-    def _restack(self) -> None:
+    def restack(self) -> None:
         cursor = 0
         for segment in self.segments:
             segment.start_16k = cursor
@@ -286,6 +311,8 @@ class Output:
         """
         if self.ended:
             return self.total_frames
+        if self.held is not None:  # speculative: nothing plays until a phrase claims it
+            return None
         held_from = self.committed
         if held_from >= self.available_frames:
             return None
@@ -319,6 +346,10 @@ class PortraitStream:
         self.round_trip_seconds = 0.0
         self.priority = threading.Event()  # set while accepted TTS has not produced its first chunk
         self.cancel_requested: dict[tuple[str, int], None] = {}  # oldest first
+        # Speculative outputs by generation id (oldest first), each with its own session.
+        self.speculative: dict[str, tuple[Output, MotionSession]] = {}
+        # Bound generations: the segment their speculative audio continues into, until the prefix ends.
+        self.bound: dict[str, str] = {}
 
     # --- messages ------------------------------------------------------------------------------------
 
@@ -331,9 +362,85 @@ class PortraitStream:
         self.output.start_segment(segment_id, int(sample_rate))
 
     def pcm(self, segment_id: str, offset: int, samples: np.ndarray) -> None:
+        block = samples.astype(np.float32) / 32768.0 if samples.dtype == np.int16 else samples.astype(np.float32)
+        if segment_id.startswith(SPEC_PREFIX):
+            generation_id = segment_id[len(SPEC_PREFIX):]
+            if generation_id in self.bound and self.output is not None:
+                self.output.add_pcm(self.bound[generation_id], int(offset), block, self.clock())
+            elif generation_id in self.speculative:
+                self.speculative[generation_id][0].add_pcm(segment_id, int(offset), block, self.clock())
+            return
         if self.output is not None:
-            block = samples.astype(np.float32) / 32768.0 if samples.dtype == np.int16 else samples.astype(np.float32)
             self.output.add_pcm(segment_id, int(offset), block, self.clock())
+
+    # --- speculation ---------------------------------------------------------------------------------
+
+    def spec_start(self, generation_id: str, sample_rate: int) -> None:
+        if generation_id in self.speculative or generation_id in self.bound:
+            return
+        output = Output(SPEC_PREFIX + generation_id, -1, self.settings, self.resample, self.clock())
+        output.start_segment(SPEC_PREFIX + generation_id, int(sample_rate))
+        output.held = []
+        self.speculative[generation_id] = (output, self.session.spawn())
+        while len(self.speculative) > MAX_SPECULATIVE_OUTPUTS:
+            self.speculative.pop(next(iter(self.speculative)))
+
+    def spec_drop(self, generation_id: str) -> None:
+        self.speculative.pop(generation_id, None)
+
+    def spec_bind(self, generation_id: str, output_id: str, epoch: int, segment_id: str) -> None:
+        """A phrase replays this speculation: its output becomes the phrase's, and its frames go out now.
+
+        A generation this stream never received (its copy was dropped, or never made) leaves the phrase as it
+        is; ``spec_prefix_end`` then fills the replayed stretch with silence.
+        """
+        if (output_id, epoch) in self.cancel_requested:
+            return
+        claimed = self.speculative.pop(generation_id, None)
+        if claimed is None:
+            return
+        output, session = claimed
+        current = self.output
+        same_output = current is not None and (current.output_id, current.epoch) == (output_id, epoch)
+        if same_output and current is not None and any(
+                item.segment_id != segment_id and item.samples for item in current.segments):
+            # A later phrase of a reply already under way: its audio joins the reply's own motion; the
+            # speculative frames, made from the rest pose, would not continue it.
+            target = current.segment(segment_id)
+            if target is not None:
+                for offset, block in sorted(output.segments[0].blocks.items()):
+                    current.add_pcm(segment_id, offset, block, self.clock())
+            self.bound[generation_id] = segment_id
+            return
+        existing = current.segment(segment_id) if same_output and current is not None else None
+        output.output_id, output.epoch = output_id, epoch
+        output.segments[0].segment_id = segment_id
+        if existing is not None:
+            output.segments[0].sample_rate = existing.sample_rate
+        held, output.held = output.held or [], None
+        # Its audio starts playing now (the replay goes to the browser at once).
+        now = self.clock()
+        output.first_audio_at = now
+        threshold = self.settings.start_buffer_seconds * SAMPLE_RATE
+        output.start_buffered_at = now if output.samples_16k >= threshold else None
+        self.output, self.session = output, session
+        self.bound[generation_id] = segment_id
+        for index, jpeg in held:
+            stamp_segment, offset = output.stamp(index)
+            self.emit(Frame(output_id, epoch, stamp_segment, offset, jpeg))
+
+    def spec_prefix_end(self, generation_id: str, segment_id: str, samples: int) -> None:
+        """The replayed prefix was ``samples`` long: fit the segment to it; fresh audio follows from there."""
+        self.bound.pop(generation_id, None)
+        segment = self.output.segment(segment_id) if self.output is not None else None
+        if segment is None:
+            return
+        if segment.samples != samples:
+            logger.info("portrait: speculative prefix %s was %d samples, %d arrived", generation_id, samples,
+                        segment.samples)
+        segment.fit(int(samples))
+        assert self.output is not None
+        self.output.restack()
 
     def phrase_done(self, segment_id: str) -> None:
         if self.output is not None:
@@ -364,12 +471,28 @@ class PortraitStream:
     # --- work ----------------------------------------------------------------------------------------
 
     def pump(self) -> int:
-        """Run every pass the audio allows now and send its frames; returns the frames sent."""
+        """Run every pass the audio allows now and send its frames; returns the frames sent.
+
+        Speculative outputs get their first passes only when the call's own output has nothing to do.
+        """
         output = self.output
         if output is None or output.cancelled:
+            self._pump_speculative()
             return 0
+        sent = self._pump_output(output, self.session)
+        if not sent:
+            self._pump_speculative()
+        return sent
+
+    def _pump_speculative(self) -> None:
+        limit = self.settings.first_hop + self.settings.hop
+        for output, session in list(self.speculative.values()):
+            if output.committed < limit:
+                self._pump_output(output, session, limit=limit)
+
+    def _pump_output(self, output: Output, session: MotionSession, limit: int | None = None) -> int:
         sent = 0
-        while not output.cancelled:
+        while not output.cancelled and (limit is None or output.committed < limit):
             flush_to = output.flush_target(self.clock(), self.round_trip_seconds)
             plan = plan_pass(self.settings, output.committed, output.available_frames, flush_to)
             if plan is None:
@@ -379,7 +502,7 @@ class PortraitStream:
                 break
             began = time.perf_counter()
             audio = output.audio(plan.buffer_start, max(plan.buffer_end, plan.start + 1))
-            self.session.run_pass(audio, plan, self.seed + self.passes)
+            session.run_pass(audio, plan, self.seed + self.passes)
             self.passes += 1
             output.committed = plan.start + plan.commit
             if output.decoded == 0:
@@ -387,7 +510,7 @@ class PortraitStream:
                             output.output_id, (self.clock() - (output.first_audio_at or self.clock())) * 1000,
                             (time.perf_counter() - began) * 1000)
             first_frame = output.decoded == 0
-            sent += self._decode_committed(output)
+            sent += self._decode_committed(output, session)
             if first_frame and output.decoded:
                 logger.info("portrait %s: first frames out %.0f ms after its first audio", output.output_id,
                             (self.clock() - (output.first_audio_at or self.clock())) * 1000)
@@ -395,16 +518,19 @@ class PortraitStream:
                 break
         return sent
 
-    def _decode_committed(self, output: Output) -> int:
+    def _decode_committed(self, output: Output, session: MotionSession) -> int:
         sent = 0
         while output.decoded < output.committed:
             self._wait_for_priority(output)
             if output.cancelled:
                 return sent
             stop = min(output.committed, output.decoded + self.settings.decode_batch)
-            jpegs = self.session.decode(output.decoded, stop)
+            jpegs = session.decode(output.decoded, stop)
             for index, jpeg in enumerate(jpegs):
                 if jpeg is None:
+                    continue
+                if output.held is not None:  # speculative: kept until a phrase claims it
+                    output.held.append((output.decoded + index, jpeg))
                     continue
                 segment_id, offset = output.stamp(output.decoded + index)
                 self.emit(Frame(output.output_id, output.epoch, segment_id, offset, jpeg))
@@ -421,6 +547,7 @@ class PortraitStream:
     def _open(self, output_id: str, epoch: int) -> None:
         self.output = Output(output_id, epoch, self.settings, self.resample, self.clock())
         self.session.reset()
+        self.bound.clear()
 
     @property
     def finished(self) -> bool:
@@ -434,6 +561,6 @@ class PortraitStream:
 
 
 __all__ = [
-    "FPS", "Frame", "MotionSession", "Output", "PassPlan", "PortraitStream", "SAMPLES_PER_FRAME", "SAMPLE_RATE",
-    "StreamSettings", "linear_resample", "plan_pass",
+    "FPS", "Frame", "MAX_SPECULATIVE_OUTPUTS", "MotionSession", "Output", "PassPlan", "PortraitStream",
+    "SAMPLES_PER_FRAME", "SAMPLE_RATE", "SPEC_PREFIX", "StreamSettings", "linear_resample", "plan_pass",
 ]

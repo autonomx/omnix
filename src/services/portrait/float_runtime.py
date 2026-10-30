@@ -488,6 +488,11 @@ class FloatSession:
         self.latents = self.latents[:0]
         self.feats = self.feats[:0]
 
+    def spawn(self) -> FloatSession:
+        session = FloatSession(self.runtime, self.portrait, self.we)
+        session.level = self.level
+        return session
+
 
 __all__ = [
     "CODE_MODEL", "DEFAULT_NFE", "EMOTIONS", "FloatRuntime", "FloatSession", "Portrait", "PortraitModelMissing",

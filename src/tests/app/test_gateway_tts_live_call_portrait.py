@@ -94,3 +94,47 @@ def test_pcm_offsets_count_each_phrases_own_samples() -> None:
         call.pcm("seg", b"\x00\x00" * 960)
     call.phrase_done("seg")
     assert [item[2] for item in link.sent if isinstance(item, tuple)] == [0, 960, 1920]
+
+
+class ReplayingTtsProvider(FakeTtsProvider):
+    """Replays two cached chunks the portrait already has a copy of, then synthesizes one fresh chunk."""
+
+    def generate_audio_stream(self, **kwargs: Any):
+        self.calls.append(kwargs)
+        cached = {"speculative_tts_cache": True, "speculation_generation_id": "gen-1",
+                  "speculation_portrait_copy": True}
+        yield [0.25, -0.25] * 1_200, 24_000, cached
+        yield [0.25, -0.25] * 1_200, 24_000, cached
+        yield [0.1, -0.1] * 1_200, 24_000, {"chunk_index": 2}
+
+
+def test_a_phrase_replaying_copied_speculation_binds_it_and_copies_only_its_fresh_audio(monkeypatch) -> None:
+    provider = ReplayingTtsProvider()
+    client, _logs = _configure_gateway(monkeypatch, provider)
+    calls = client.app.state.live_portrait_calls
+    link = FakeLink()
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
+        hello = websocket.receive_json()
+        call = calls.claim(hello["avatar_token"], "local")
+        call.attach(link)
+        websocket.send_json(_owned_request("Already spoken in speculation.", 0))
+        assert websocket.receive_json()["type"] == "start"
+        played = 0  # samples the browser gets, the last block padded to the frame size
+        while True:
+            message = websocket.receive()
+            if message.get("bytes"):
+                played += len(message["bytes"]) // 2
+            if message.get("text") and '"done"' in message["text"]:
+                break
+        websocket.send_json({"type": "close", "reason": "finished"})
+    # The live lane's proxy took the call key (claims stay in the call) and did not pass it on to the provider.
+    assert "portrait_call_key" not in provider.calls[0]
+    kinds = [item["type"] if isinstance(item, dict) else item[0] for item in link.sent]
+    assert kinds.index("spec_bind") == kinds.index("phrase_start") + 1
+    assert {"type": "spec_bind", "generation_id": "gen-1", "output_id": "turn-2", "epoch": 2,
+            "segment_id": "seg-0"} in link.sent
+    assert {"type": "spec_prefix_end", "generation_id": "gen-1", "segment_id": "seg-0", "samples": 4_800} in link.sent
+    copied = [item for item in link.sent if isinstance(item, tuple)]
+    # Only what follows the replayed prefix is copied, from its end on.
+    assert copied and copied[0][2] == 4_800
+    assert sum(item[3] for item in copied) // 2 == played - 4_800

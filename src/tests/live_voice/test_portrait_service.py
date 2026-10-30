@@ -35,6 +35,9 @@ class FakeSession:
     def reset(self) -> None:
         pass
 
+    def spawn(self) -> FakeSession:
+        return FakeSession()
+
 
 class FakeRuntime:
     resample = staticmethod(linear_resample)

@@ -11,8 +11,9 @@ this service only; the browser never does. Routes:
 - ``WS /portrait/stream``: one call's stream. The first message is ``open`` (``call_key``, ``principal``,
   ``session``, ``latent_key``, ``emotion``, ``level``); then ``phrase_start``, PCM (binary, see
   ``app.conversation.portrait_stream_contract``), ``phrase_done``, ``output_end``, ``cancel``,
-  ``tts_priority``, ``play_position``, ``quality`` and ``heartbeat``. Frames come back as binary JPEG
-  messages: after ``ready``, the portrait's idle loop at the opening level, then the call's speech.
+  ``tts_priority``, ``play_position``, ``quality``, the speculation messages (``spec_start``, ``spec_drop``,
+  ``spec_bind``, ``spec_prefix_end``, see ``services.portrait.scheduler``) and ``heartbeat``. Frames come back as
+  binary JPEG messages: after ``ready``, the portrait's idle loop at the opening level, then the call's speech.
 
 Loading takes about a minute (cuDNN builds its plans for each network's one input shape), so the model loads
 in the background when the service starts and stays resident until it has been idle for a long while. One
@@ -52,6 +53,9 @@ LOAD_COMMIT_BYTES = 6 * 1024**3
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 OPEN_TIMEOUT_SECONDS = 5.0
 OUTBOX_FRAMES = 256
+# Control messages a stream applies in order on the GPU thread (``cancel`` and ``tts_priority`` act at once).
+STREAM_MESSAGES = frozenset({"phrase_start", "phrase_done", "output_end", "play_position", "quality", "spec_start",
+                             "spec_drop", "spec_bind", "spec_prefix_end"})
 
 
 class Unavailable(RuntimeError):
@@ -297,6 +301,17 @@ class StreamWorker:
                                  float(message.get("round_trip_seconds") or 0.0))
         elif kind == "quality":
             stream.session.level = quality_level(message.get("level"))
+            for _output, session in stream.speculative.values():
+                session.level = stream.session.level
+        elif kind == "spec_start":
+            stream.spec_start(str(message["generation_id"]), int(message["sample_rate"]))
+        elif kind == "spec_drop":
+            stream.spec_drop(str(message["generation_id"]))
+        elif kind == "spec_bind":
+            stream.spec_bind(str(message["generation_id"]), str(message["output_id"]), int(message["epoch"]),
+                             str(message["segment_id"]))
+        elif kind == "spec_prefix_end":
+            stream.spec_prefix_end(str(message["generation_id"]), str(message["segment_id"]), int(message["samples"]))
 
     def step(self) -> None:
         """Take every queued message, then run the passes they allow (and any deadline that came)."""
@@ -479,7 +494,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                     portrait_stream.cancel(str(control["output_id"]), int(control["epoch"]))
                 elif kind == "tts_priority":
                     (portrait_stream.priority.set if control.get("on") else portrait_stream.priority.clear)()
-                elif kind in {"phrase_start", "phrase_done", "output_end", "play_position", "quality"}:
+                elif kind in STREAM_MESSAGES:
                     worker.inbox.put((kind, control, None))
         except WebSocketDisconnect:
             pass

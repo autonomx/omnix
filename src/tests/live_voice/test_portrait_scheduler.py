@@ -23,6 +23,8 @@ class FakeSession:
         self.plans: list[PassPlan] = []
         self.audio_lengths: list[int] = []
         self.resets = 0
+        self.level = 0
+        self.children: list[FakeSession] = []
 
     def run_pass(self, audio: np.ndarray, plan: PassPlan, seed: int) -> None:
         self.plans.append(plan)
@@ -33,6 +35,11 @@ class FakeSession:
 
     def reset(self) -> None:
         self.resets += 1
+
+    def spawn(self) -> FakeSession:
+        child = FakeSession()
+        self.children.append(child)
+        return child
 
 
 class Clock:
@@ -205,3 +212,72 @@ def test_the_tts_priority_pause_holds_work_until_released() -> None:
     releaser.start()
     stream.pump()
     assert time.monotonic() - started >= 0.04 and frames
+
+
+def _speculate(stream: PortraitStream, generation_id: str, seconds: float, rate: int = 24_000) -> np.ndarray:
+    audio = _pcm(seconds, rate)
+    stream.spec_start(generation_id, rate)
+    _feed(stream, f"spec:{generation_id}", audio, 4_800)
+    return audio
+
+
+def test_speculative_audio_renders_its_first_passes_and_keeps_the_frames() -> None:
+    stream, session, frames = _stream()
+    _speculate(stream, "gen-1", 2.0)
+    child = session.children[0]
+    assert [plan.commit for plan in child.plans] == [8, 20]  # the first two passes only
+    assert session.plans == [] and frames == []
+
+
+def test_a_bound_speculation_sends_its_frames_at_once_and_the_phrase_continues_after_the_prefix() -> None:
+    stream, session, frames = _stream()
+    _speculate(stream, "gen-1", 2.0)
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    stream.spec_bind("gen-1", "turn-1", 1, "seg-a")
+    assert [(frame.output_id, frame.segment_id) for frame in frames] == [("turn-1", "seg-a")] * 28
+    assert [frame.offset for frame in frames[:3]] == [0, 960, 1_920]
+    stream.spec_prefix_end("gen-1", "seg-a", 48_000)
+    _feed(stream, "seg-a", np.concatenate([np.zeros(48_000, np.int16), _pcm(1.0, 24_000)]), 4_800)
+    stream.phrase_done("seg-a")
+    stream.output_end("turn-1", 1)
+    stream.pump()
+    assert [frame.offset for frame in frames] == [index * 960 for index in range(75)]  # each frame once
+    assert stream.session is session.children[0]  # the speculation's motion goes on
+
+
+def test_a_prefix_longer_than_its_copy_is_filled_with_silence_and_a_shorter_one_cut() -> None:
+    stream, _session, frames = _stream()
+    _speculate(stream, "gen-1", 1.0)
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    stream.spec_bind("gen-1", "turn-1", 1, "seg-a")
+    stream.spec_prefix_end("gen-1", "seg-a", 36_000)  # half a second of the copy was dropped on the way
+    assert stream.output is not None and stream.output.segment("seg-a").samples == 36_000
+    stream.spec_prefix_end("gen-1", "seg-a", 12_000)
+    assert stream.output.segment("seg-a").samples == 12_000
+
+
+def test_unknown_dropped_or_cancelled_speculation_changes_nothing() -> None:
+    stream, _session, frames = _stream()
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    stream.spec_bind("never-copied", "turn-1", 1, "seg-a")
+    assert stream.output is not None and stream.output.output_id == "turn-1" and frames == []
+    _speculate(stream, "gen-2", 2.0)
+    stream.spec_drop("gen-2")
+    assert stream.speculative == {}
+    _speculate(stream, "gen-3", 2.0)
+    stream.cancel("turn-2", 2)
+    stream.spec_bind("gen-3", "turn-2", 2, "seg-b")
+    assert frames == [] and "gen-3" in stream.speculative
+
+
+def test_a_later_phrase_claiming_speculation_joins_the_replys_own_motion() -> None:
+    stream, session, frames = _stream()
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    _feed(stream, "seg-a", _pcm(1.0, 24_000), 4_800)
+    stream.phrase_done("seg-a")
+    sent_before = len(frames)
+    _speculate(stream, "gen-1", 1.0)
+    stream.phrase_start("turn-1", 1, "seg-b", 24_000)
+    stream.spec_bind("gen-1", "turn-1", 1, "seg-b")
+    assert len(frames) == sent_before and stream.session is session  # no speculative frames: they start at rest
+    assert stream.output is not None and stream.output.segment("seg-b").samples == 24_000

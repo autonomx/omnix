@@ -57156,6 +57156,18 @@
       },
       "SpeculativeTtsPrefetchRequest": {
         "properties": {
+          "call_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Key"
+          },
           "generation_id": {
             "maxLength": 160,
             "minLength": 1,

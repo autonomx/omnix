@@ -2,6 +2,7 @@
 import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
+import { livePortrait } from '../chat/portrait/livePortrait';
 import { speculationEventSchema } from './live-voice-messages';
 import { parseJson } from '../../../api/schemas/streams';
 import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../../events/bus';
@@ -690,6 +691,8 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           generation_id: active.generationId,
+          // A portrait call's speculation is copied to its portrait, and only this call can claim it.
+          ...(livePortrait.callKey() ? { call_key: livePortrait.callKey() } : {}),
           request: {
             text: clause,
             speaker: selectedVoiceId(),

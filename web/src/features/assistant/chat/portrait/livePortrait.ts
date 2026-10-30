@@ -46,6 +46,7 @@ export class LivePortrait {
   private readonly listeners = new Set<() => void>();
   private pack: RuntimePack = null;
   private sessionId = '';
+  private liveCallKey: string | null = null;
   private session: LiveVoicePcmSession | null = null;
   private socket: WebSocket | null = null;
   private clock: PortraitPlaybackClock | null = null;
@@ -88,8 +89,9 @@ export class LivePortrait {
     this.publish({ status: 'connecting', fallbackRenderer: this.pack?.fallback_renderer ?? 'orb', reason: null });
     this.helloTimer = setTimeout(() => this.unavailable('no_hello', generation), HELLO_TIMEOUT_MS);
     return {
-      onHello: ({ avatarToken }) => {
+      onHello: ({ callKey, avatarToken }) => {
         if (generation !== this.generation) return;
+        this.liveCallKey = callKey;
         this.clearHelloTimer();
         this.connect(avatarToken, generation);
       },
@@ -145,10 +147,16 @@ export class LivePortrait {
     this.idleFrames = [];
     this.idleReceived = 0;
     this.readySegments.clear();
+    this.liveCallKey = null;
     this.level = 0;
     this.received = this.late = this.decoded = this.decodeMs = 0;
     this.degradedEpoch = null;
     if (this.snapshot.status !== 'off') this.publish(OFF);
+  }
+
+  /** The live call's key while a portrait call is open: speculative TTS for it carries the key. */
+  callKey(): string | null {
+    return this.snapshot.status === 'off' ? null : this.liveCallKey;
   }
 
   subscribe = (listener: () => void): (() => void) => {

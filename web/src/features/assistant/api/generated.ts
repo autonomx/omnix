@@ -8509,6 +8509,8 @@ export interface components {
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
         /** SpeculativeTtsPrefetchRequest */
         SpeculativeTtsPrefetchRequest: {
+            /** Call Key */
+            call_key?: string | null;
             /** Generation Id */
             generation_id: string;
             request: components["schemas"]["TtsStreamRequest"];

@@ -27,7 +27,7 @@ from app.platform.live_voice.speech.startup_frame_policy import (
     stream_live_call_pcm16_blocks,
 )
 
-from app.platform.live_voice.portrait.calls import PortraitCall, PortraitCalls, principal_id
+from app.platform.live_voice.portrait.calls import PortraitCall, portrait_call_registry, principal_id
 from app.platform.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
 from app.platform.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
 from app.observability.tts_stream_diagnostics import (
@@ -155,6 +155,21 @@ def _first_raw_timing_details(timing: Any) -> dict[str, Any]:
 
 def _is_speculative_cache_frame(timing: Any) -> bool:
     return isinstance(timing, dict) and timing.get("speculative_tts_cache") is True
+
+
+def _advance_portrait_replay(replay: tuple[str, int, bool] | None, timing: Any,
+                             samples: int) -> tuple[str, int, bool] | None:
+    """(generation id, samples replayed, replay over) for a phrase replaying a speculation its portrait copied.
+
+    The replay is the leading run of cached chunks the portrait has a copy of; the first other chunk ends it.
+    """
+    copied = isinstance(timing, dict) and timing.get("speculation_portrait_copy") is True
+    if replay is None:
+        return (str(timing["speculation_generation_id"]), samples, False) if copied else None
+    generation_id, replayed, over = replay
+    if over:
+        return replay
+    return (generation_id, replayed + samples, False) if copied else (generation_id, replayed, True)
 
 
 def _ownership_fields(
@@ -461,6 +476,7 @@ async def _stream_phrase(
             frame_handoff_timeout_count = 0
             max_frame_handoff_wait_ms = 0.0
             speculative_startup_burst_frames = 0
+            portrait_replay: tuple[str, int, bool] | None = None
             stream_log(
                 stream_id,
                 "provider",
@@ -485,9 +501,12 @@ async def _stream_phrase(
                 if request.parity_mode is not None:
                     stream_kwargs["parity_mode"] = request.parity_mode
                 stream_kwargs.update(performance_application.provider_kwargs)
+                if portrait is not None and getattr(provider, "claims_by_call_key", False):
+                    # Speculation made for this call only (its portrait has a copy of it).
+                    stream_kwargs["portrait_call_key"] = portrait.call_key
 
                 def raw_chunks():
-                    nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count
+                    nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count, portrait_replay
                     provider_stream = provider.generate_audio_stream(
                         text=text,
                         speaker=request.speaker,
@@ -507,6 +526,7 @@ async def _stream_phrase(
                         raw_chunk_count += 1
                         produced_samples += sample_count
                         last_raw_chunk_at = raw_chunk_ready_at
+                        portrait_replay = _advance_portrait_replay(portrait_replay, timing, sample_count)
                         stream_log(
                             stream_id,
                             "provider",
@@ -576,6 +596,8 @@ async def _stream_phrase(
                         "output_id": output_id,
                         "generation_epoch": generation_epoch,
                         "segment_id": segment_id,
+                        # Raw chunks run ahead of blocks, so this already covers the block's samples.
+                        "portrait_replay": portrait_replay,
                     }
                     queued_frame_count += 1
                     emit(
@@ -754,6 +776,9 @@ async def _stream_phrase(
                         )
                         if portrait is not None:
                             portrait.phrase_start(output_id, generation_epoch, segment_id, current_sample_rate)
+                            replay = metadata.get("portrait_replay")
+                            if first_start_control and replay is not None:
+                                portrait.bind(replay[0], generation_epoch, segment_id)
                         if first_start_control:
                             stream_log(
                                 stream_id,
@@ -771,7 +796,7 @@ async def _stream_phrase(
                     await websocket.send_bytes(pcm_bytes)
                     if portrait is not None:
                         # A copy of exactly what the browser plays; queued, never awaited.
-                        portrait.pcm(segment_id, pcm_bytes)
+                        portrait.pcm(segment_id, pcm_bytes, metadata.get("portrait_replay"))
                         if first_pcm_frame:
                             portrait.tts_priority(False)
                     if first_pcm_frame:
@@ -875,15 +900,6 @@ async def _stream_phrase(
                 output_id=output_id,
                 generation_epoch=generation_epoch,
             )
-
-
-def portrait_call_registry(state: Any) -> PortraitCalls:
-    """The live calls a portrait may attach to: one registry per gateway process, on the feature's state."""
-    calls = getattr(state, "live_portrait_calls", None)
-    if calls is None:
-        calls = PortraitCalls()
-        state.live_portrait_calls = calls
-    return calls
 
 
 def register_tts_live_call_websocket(
