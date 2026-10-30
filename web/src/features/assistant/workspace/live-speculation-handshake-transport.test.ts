@@ -5,6 +5,7 @@ import {
   liveChatDirectGatewayEnabled,
   resolveDirectLiveChatUrl,
   resolveDirectSpeculationUrl,
+  withDirectGatewayClientHeader,
   withLiveVoiceCallAffinity,
 } from './live-speculation-direct-gateway-transport';
 import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handshake-transport';
@@ -99,6 +100,16 @@ describe('live speculation direct gateway transport', () => {
       viteLocation,
       { VITE_LIVE_CHAT_DIRECT_GATEWAY: 'false' },
     )).toBeNull();
+  });
+
+  it('marks a direct gateway call with the client header the request guard requires', () => {
+    const init = { method: 'POST', body: liveChatBody(), headers: { 'Content-Type': 'application/json' } };
+    const direct = withDirectGatewayClientHeader(init);
+    expect(new Headers(direct.headers).get('X-Omnix-Client')).toBe('web');
+    expect(new Headers(direct.headers).get('Content-Type')).toBe('application/json');
+    expect(direct.body).toBe(init.body);
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(new Headers(withDirectGatewayClientHeader().headers).get('X-Omnix-Client')).toBe('web');
   });
 
   it('fails closed outside local Vite and honors the explicit opt-out', () => {
