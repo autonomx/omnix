@@ -63,9 +63,10 @@ def test_a_portrait_call_gets_a_hello_and_its_audio_is_copied_with_offsets(monke
         assert websocket.receive_json()["type"] == "cancel_accepted"
         websocket.send_json({"type": "close", "reason": "finished"})
 
+    # The portrait's output is the turn (its generation), whatever each phrase's own output id is.
     phrase = [
         {"type": "tts_priority", "on": True},
-        {"type": "phrase_start", "output_id": "out-1", "epoch": 2, "segment_id": "seg-0", "sample_rate": 24_000},
+        {"type": "phrase_start", "output_id": "turn-2", "epoch": 2, "segment_id": "seg-0", "sample_rate": 24_000},
         ("pcm", "seg-0", 0, len(frame)),
         {"type": "tts_priority", "on": False},
         {"type": "phrase_done", "segment_id": "seg-0"},
@@ -76,8 +77,8 @@ def test_a_portrait_call_gets_a_hello_and_its_audio_is_copied_with_offsets(monke
                                ("pcm", "seg-1", 0, len(frame)),
                                {"type": "tts_priority", "on": False},
                                {"type": "phrase_done", "segment_id": "seg-1"}]
-    assert link.sent[10:] == [{"type": "output_end", "output_id": "out-1", "epoch": 2},
-                              {"type": "cancel", "output_id": "out-1", "epoch": 2}]
+    assert link.sent[10:] == [{"type": "output_end", "output_id": "turn-2", "epoch": 2},
+                              {"type": "cancel", "output_id": "turn-2", "epoch": 2}]
     # The call is over: it leaves the registry and its portrait link is closed.
     assert len(calls) == 0 and link.closed
 

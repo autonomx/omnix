@@ -139,11 +139,12 @@ def test_a_call_streams_its_portrait_end_to_end(monkeypatch, portrait_service) -
             reader = threading.Thread(target=read_frames, daemon=True)
             reader.start()
             outputs: dict[str, dict[str, Any]] = {}
-            for output_id in ("out-1", "out-2"):  # two replies on one call: the second shows the warm path
+            for epoch in (1, 2):  # two replies (turns) on one call: the second shows the warm path
+                output_id = f"turn-{epoch}"  # the portrait names a reply after its turn
                 sent = 0
                 for index in range(2):
-                    tts.send_json({**_request(f"half {index}", index), "output_id": output_id, "generation_epoch": 1,
-                                   "segment_id": f"{output_id}-seg-{index}"})
+                    tts.send_json({**_request(f"half {index}", index), "output_id": f"conversation-g{epoch}-p{index}",
+                                   "generation_epoch": epoch, "segment_id": f"{output_id}-seg-{index}"})
                     assert tts.receive_json()["type"] == "start"
                     while True:
                         message = tts.receive()
@@ -153,7 +154,7 @@ def test_a_call_streams_its_portrait_end_to_end(monkeypatch, portrait_service) -
                             continue
                         if json.loads(message["text"])["type"] == "done":
                             break
-                tts.send_json({"type": "output_end", "output_id": output_id, "generation_epoch": 1})
+                tts.send_json({"type": "output_end", "output_id": f"conversation-g{epoch}-p1", "generation_epoch": epoch})
                 # Frames cover the audio the browser got (16 kHz, 640 samples a frame, the last one partial).
                 outputs[output_id]["expected"] = -(-(sent * 16_000 // RATE) // 640)
                 deadline = time.monotonic() + 30

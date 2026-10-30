@@ -8,6 +8,11 @@ per-connection state only: an entry exists exactly as long as its TTS connection
 
 ``PortraitCall`` is what the TTS route calls as it streams: every method is a no-op until an avatar websocket
 has attached a ``PortraitLink``, so calls without a portrait behave exactly as before.
+
+The browser gives every phrase its own output id and the turn's generation as its epoch; a reply is a turn.
+The portrait's output is the turn (``turn-<epoch>``), so a reply's phrases are one motion stream across their
+clause gaps, and cancelling any of a turn's phrases ends the turn's portrait (a barge-in). Segments stay per
+phrase: the browser's audio clock counts in them.
 """
 from __future__ import annotations
 
@@ -19,6 +24,11 @@ from dataclasses import dataclass, field
 from .link import PortraitLink
 
 LOCAL_PRINCIPAL = "local"
+
+
+def turn_output(epoch: int) -> str:
+    """The portrait output of the turn whose generation is ``epoch``."""
+    return f"turn-{epoch}"
 
 
 @dataclass
@@ -46,8 +56,8 @@ class PortraitCall:
 
     def phrase_start(self, output_id: str, epoch: int, segment_id: str, sample_rate: int) -> None:
         self._offsets.setdefault(segment_id, 0)
-        self._send({"type": "phrase_start", "output_id": output_id, "epoch": epoch, "segment_id": segment_id,
-                    "sample_rate": sample_rate})
+        self._send({"type": "phrase_start", "output_id": turn_output(epoch), "epoch": epoch,
+                    "segment_id": segment_id, "sample_rate": sample_rate})
 
     def pcm(self, segment_id: str, pcm: bytes) -> None:
         offset = self._offsets.get(segment_id, 0)
@@ -60,10 +70,10 @@ class PortraitCall:
         self._offsets.pop(segment_id, None)
 
     def output_end(self, output_id: str, epoch: int) -> None:
-        self._send({"type": "output_end", "output_id": output_id, "epoch": epoch})
+        self._send({"type": "output_end", "output_id": turn_output(epoch), "epoch": epoch})
 
     def cancel(self, output_id: str, epoch: int) -> None:
-        self._send({"type": "cancel", "output_id": output_id, "epoch": epoch})
+        self._send({"type": "cancel", "output_id": turn_output(epoch), "epoch": epoch})
 
     def play_position(self, segment_id: str, offset: int, round_trip_seconds: float = 0.0) -> None:
         self._send({"type": "play_position", "segment_id": segment_id, "offset": offset,
