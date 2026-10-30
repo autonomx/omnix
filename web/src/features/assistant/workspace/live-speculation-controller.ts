@@ -107,6 +107,7 @@ type ActiveSpeculation = {
   prefetchedClause: string | null;
   prefetchStarted: boolean;
   prefetchPromise: Promise<void> | null;
+  prefetchSettled: boolean;
   prefetchAcceptPromise: Promise<void> | null;
 };
 
@@ -556,6 +557,7 @@ function createSpeculation(
     prefetchedClause: null,
     prefetchStarted: false,
     prefetchPromise: null,
+    prefetchSettled: false,
     prefetchAcceptPromise: null,
   };
 }
@@ -683,7 +685,7 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
   });
   const startedAt = performance.now();
   const priorOperation = active.prefetchPromise ?? Promise.resolve();
-  active.prefetchPromise = priorOperation
+  setPrefetchOperation(active, priorOperation
     .catch(() => undefined)
     .then(async () => {
       const response = await fetchImpl('/api/live/speculation/tts-prefetch', {
@@ -731,29 +733,50 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
         generationId: active.generationId,
         error: error instanceof Error ? error.message : String(error),
       });
-    });
+    }));
   if (active.finalText) acceptSpeculativeTts(active);
+}
+
+function setPrefetchOperation(active: ActiveSpeculation, operation: Promise<void>): void {
+  active.prefetchPromise = operation;
+  active.prefetchSettled = false;
+  const settle = (): void => {
+    if (active.prefetchPromise === operation) active.prefetchSettled = true;
+  };
+  void operation.then(settle, settle);
+}
+
+/**
+ * Sends after the speculation's prefetch request (start or cancel) has settled. It usually has long before the final
+ * transcript, and then the send leaves in this task: its round trip overlaps the page's work on the final instead of
+ * following it, and a reused reply's first chunk waits for the accept.
+ */
+export function afterPrefetchOperation(
+  active: Pick<ActiveSpeculation, 'prefetchPromise' | 'prefetchSettled'>,
+  send: () => Promise<void>,
+): Promise<void> {
+  if (!active.prefetchPromise || active.prefetchSettled) return send();
+  return active.prefetchPromise.then(send);
 }
 
 function acceptSpeculativeTts(active: ActiveSpeculation): void {
   if (!active.prefetchStarted || !active.generationId || active.prefetchAcceptPromise) return;
   const fetchImpl = ownFetch;
-  active.prefetchAcceptPromise = (active.prefetchPromise ?? Promise.resolve())
-    .then(async () => {
-      const response = await fetchImpl(
-        `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId as string)}/accept`,
-        { method: 'POST', headers: { Accept: 'application/json' } },
-      );
-      if (!response.ok) throw new Error(`Speculative TTS accept failed with status ${response.status}.`);
-      const payload = await response.json() as { buffered_chunk_count?: number; completed?: boolean };
-      dispatchPerformance('tts_speculative_prefetch_accepted', {
-        sessionId: active.sessionId,
-        segmentId: active.segmentId,
-        generationId: active.generationId,
-        bufferedChunks: payload.buffered_chunk_count ?? 0,
-        completed: payload.completed ?? false,
-      });
-    })
+  active.prefetchAcceptPromise = afterPrefetchOperation(active, async () => {
+    const response = await fetchImpl(
+      `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId as string)}/accept`,
+      { method: 'POST', headers: { Accept: 'application/json' } },
+    );
+    if (!response.ok) throw new Error(`Speculative TTS accept failed with status ${response.status}.`);
+    const payload = await response.json() as { buffered_chunk_count?: number; completed?: boolean };
+    dispatchPerformance('tts_speculative_prefetch_accepted', {
+      sessionId: active.sessionId,
+      segmentId: active.segmentId,
+      generationId: active.generationId,
+      bufferedChunks: payload.buffered_chunk_count ?? 0,
+      completed: payload.completed ?? false,
+    });
+  })
     .catch((error: unknown) => {
       dispatchPerformance('tts_speculative_prefetch_accept_failed', {
         sessionId: active.sessionId,
@@ -770,7 +793,7 @@ function cancelSpeculativeTts(active: ActiveSpeculation, reason: string): void {
   active.prefetchAcceptPromise = null;
   const fetchImpl = ownFetch;
   const priorOperation = active.prefetchPromise ?? Promise.resolve();
-  active.prefetchPromise = priorOperation
+  setPrefetchOperation(active, priorOperation
     .catch(() => undefined)
     .then(async () => {
       await fetchImpl(
@@ -783,7 +806,7 @@ function cancelSpeculativeTts(active: ActiveSpeculation, reason: string): void {
         generationId: active.generationId,
         reason,
       });
-    });
+    }));
 }
 
 function createAcceptedSpeculationResponse(

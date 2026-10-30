@@ -8,7 +8,10 @@ import {
   withDirectGatewayClientHeader,
   withLiveVoiceCallAffinity,
 } from './live-speculation-direct-gateway-transport';
-import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handshake-transport';
+import {
+  bridgeLiveSpeculationHandshakeRequest,
+  liveSpeculationHandshakeMiddleware,
+} from './live-speculation-handshake-transport';
 
 function startBody(segmentId = 'segment-test', sourceSequence = 4): string {
   return JSON.stringify({
@@ -331,5 +334,16 @@ describe('live speculation handshake transport', () => {
 
     expect(bridged).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('passes any other request on in the same task', () => {
+    const response = Promise.resolve(new Response('{}'));
+    const next = vi.fn(() => response);
+    const init = { method: 'POST', body: '{}' };
+
+    const result = liveSpeculationHandshakeMiddleware('/api/live/speculation/tts-prefetch/gen-1/accept', init, next);
+
+    expect(next).toHaveBeenCalledWith('/api/live/speculation/tts-prefetch/gen-1/accept', init);
+    expect(result).toBe(response);
   });
 });

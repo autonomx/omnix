@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  afterPrefetchOperation,
   normalizeSpeculationWords,
   shouldStartExtendedHypothesis,
   speculationCandidateCanStart,
@@ -88,5 +89,21 @@ describe('live speculation hypothesis policy', () => {
     expect(speculativeTtsPrefetchEnabled('true')).toBe(true);
     expect(speculativeTtsPrefetchEnabled('FALSE')).toBe(false);
     expect(speculativeTtsPrefetchEnabled(' false ')).toBe(false);
+  });
+
+  it('sends the speculative TTS accept in the same task once its prefetch request has settled', async () => {
+    const send = vi.fn(() => Promise.resolve());
+    void afterPrefetchOperation({ prefetchPromise: Promise.resolve(), prefetchSettled: true }, send);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    let finishPrefetch: () => void = () => undefined;
+    const prefetchPromise = new Promise<void>((resolve) => { finishPrefetch = resolve; });
+    const waiting = vi.fn(() => Promise.resolve());
+    const accepted = afterPrefetchOperation({ prefetchPromise, prefetchSettled: false }, waiting);
+    await Promise.resolve();
+    expect(waiting).not.toHaveBeenCalled();
+    finishPrefetch();
+    await accepted;
+    expect(waiting).toHaveBeenCalledTimes(1);
   });
 });
