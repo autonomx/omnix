@@ -111,6 +111,16 @@ def test_a_short_gpu_is_reported_and_not_loaded(token: str) -> None:
     assert app.state.host.status == "short"
 
 
+def test_a_failing_load_check_is_reported_not_fatal(token: str) -> None:
+    def broken() -> tuple[bool, str]:
+        raise ModuleNotFoundError("httpx")
+
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=broken, preload=True)
+    with _client(app, token) as client:  # runs the startup hook, which starts loading
+        health = client.get("/health").json()
+    assert health["status"] == "failed" and "ModuleNotFoundError" in health["message"]
+
+
 def test_prepare_needs_the_service_token_and_the_images_digest(token: str) -> None:
     app = _ready_app(FakeRuntime())
     assert _client(app, None).post("/portrait/prepare", data={"tenant": "t", "image_sha256": IMAGE_SHA},

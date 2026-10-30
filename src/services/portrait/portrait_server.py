@@ -30,7 +30,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -99,7 +99,12 @@ def _default_installed() -> tuple[bool, str]:
 
 
 class RuntimeHost:
-    """The loaded model and its state; loads on a background thread, unloads after a long idle."""
+    """The loaded model and its state, and the one thread that does all of its GPU work.
+
+    Loading, the warm-up, every ``prepare`` and every stream's passes run on the same long-lived thread:
+    cuDNN's per-shape setup (about a minute in all) is kept per thread, so work on any other thread would
+    pay it again. Streams are stepped in turn between tasks. Unloads after a long idle.
+    """
 
     def __init__(self, load: Callable[[], Any], installed: Callable[[], tuple[bool, str]],
                  resources: Callable[[], tuple[bool, str]]) -> None:
@@ -109,21 +114,71 @@ class RuntimeHost:
         self.message = ""
         self.last_used = time.monotonic()
         self._lock = threading.Lock()
+        self._tasks: queue.Queue[tuple[Callable[..., Any], tuple[Any, ...], Future[Any]]] = queue.Queue()
+        self._workers: list[StreamWorker] = []
+        self._thread: threading.Thread | None = None
+
+    def submit(self, function: Callable[..., Any], *args: Any) -> Future[Any]:
+        """Run ``function`` on the GPU thread."""
+        future: Future[Any] = Future()
+        self._tasks.put((function, args, future))
+        self._start_thread()
+        return future
+
+    def attach(self, worker: StreamWorker) -> None:
+        with self._lock:
+            self._workers.append(worker)
+        self._start_thread()
+
+    def detach(self, worker: StreamWorker) -> None:
+        with self._lock:
+            if worker in self._workers:
+                self._workers.remove(worker)
+
+    def _start_thread(self) -> None:
+        with self._lock:
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._gpu_loop, name="omnix-portrait-gpu", daemon=True)
+                self._thread.start()
+
+    def _gpu_loop(self) -> None:
+        while True:
+            with self._lock:
+                streaming = bool(self._workers)
+            try:
+                function, args, future = self._tasks.get(timeout=0.005 if streaming else 0.05)
+            except queue.Empty:
+                pass
+            else:
+                if future.set_running_or_notify_cancel():
+                    try:
+                        future.set_result(function(*args))
+                    except BaseException as exc:  # noqa: BLE001 - handed to whoever submitted it
+                        future.set_exception(exc)
+            with self._lock:
+                workers = list(self._workers)
+            for worker in workers:
+                worker.step()
 
     def ensure_loading(self) -> None:
         with self._lock:
             if self.status in {"warming", "ready"}:
                 return
-            installed, why = self._installed()
+            try:
+                installed, why = self._installed()
+                fits, short = self._resources() if installed else (True, "")
+            except Exception as exc:  # noqa: BLE001 - a broken check is reported, never fatal to the service
+                logger.exception("Portrait load check failed")
+                self.status, self.message = "failed", f"The portrait load check failed ({type(exc).__name__})"
+                return
             if not installed:
                 self.status, self.message = "missing", why
                 return
-            fits, why = self._resources()
             if not fits:
-                self.status, self.message = "short", why
+                self.status, self.message = "short", short
                 return
             self.status, self.message = "warming", "The portrait model is loading"
-        threading.Thread(target=self._load_now, name="omnix-portrait-load", daemon=True).start()
+        self.submit(self._load_now)
 
     def _load_now(self) -> None:
         started = time.monotonic()
@@ -217,19 +272,12 @@ class Admission:
 
 
 class StreamWorker:
-    """Runs one call's PortraitStream on its own thread; messages in through ``inbox``, frames out by ``emit``."""
+    """One call's PortraitStream, stepped by the GPU thread; messages in through ``inbox``, frames out by ``emit``."""
 
     def __init__(self, stream: Any) -> None:
         self.stream = stream
-        self.inbox: queue.Queue[tuple[str, dict[str, Any], Any] | None] = queue.Queue()
-        self.thread = threading.Thread(target=self._run, name="omnix-portrait-stream", daemon=True)
+        self.inbox: queue.Queue[tuple[str, dict[str, Any], Any]] = queue.Queue()
         self.failed: BaseException | None = None
-
-    def start(self) -> None:
-        self.thread.start()
-
-    def stop(self) -> None:
-        self.inbox.put(None)
 
     def _apply(self, kind: str, message: dict[str, Any], payload: Any) -> None:
         stream = self.stream
@@ -246,27 +294,18 @@ class StreamWorker:
             stream.play_position(str(message["segment_id"]), int(message["offset"]),
                                  float(message.get("round_trip_seconds") or 0.0))
 
-    def _run(self) -> None:
+    def step(self) -> None:
+        """Take every queued message, then run the passes they allow (and any deadline that came)."""
+        if self.failed is not None:
+            return
         try:
             while True:
                 try:
-                    item = self.inbox.get(timeout=0.02)
+                    self._apply(*self.inbox.get_nowait())
                 except queue.Empty:
-                    item = ("", {}, None)  # no message: still check deadlines
-                if item is None:
-                    return
-                if item[0]:
-                    self._apply(*item)
-                    while True:  # take everything already queued before working
-                        try:
-                            queued = self.inbox.get_nowait()
-                        except queue.Empty:
-                            break
-                        if queued is None:
-                            return
-                        self._apply(*queued)
-                self.stream.pump()
-        except BaseException as exc:  # noqa: BLE001 - surfaced to the websocket handler
+                    break
+            self.stream.pump()
+        except Exception as exc:  # noqa: BLE001 - surfaced to the websocket handler
             logger.exception("Portrait stream failed")
             self.failed = exc
 
@@ -284,7 +323,6 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                           lease_seconds)
     idle_seconds = idle_unload_seconds if idle_unload_seconds is not None else float(
         env_int("OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS", 1800, minimum=60, maximum=86_400))
-    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="omnix-portrait-prepare")
     app = FastAPI(title="Omnix live portrait", version="1.0.0")
     app.add_middleware(ModelServiceMiddleware)
     app.state.host, app.state.admission = host, admission
@@ -315,7 +353,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             return {"ok": False, "code": exc.code, "message": str(exc)}
         key = portrait_key(tenant, image_sha256.lower())
         try:
-            await asyncio.get_running_loop().run_in_executor(executor, runtime.prepare, key, payload)
+            await asyncio.wrap_future(host.submit(runtime.prepare, key, payload))
         except PortraitImageError as exc:
             return {"ok": False, "code": exc.code, "message": str(exc)}
         return {"ok": True, "latent_key": key}
@@ -377,7 +415,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         portrait_stream = PortraitStream(runtime.session(portrait, str(opened.get("emotion") or "neutral")), emit,
                                          resample=runtime.resample)
         worker = StreamWorker(portrait_stream)
-        worker.start()
+        host.attach(worker)
 
         async def send_frames() -> None:
             while True:
@@ -413,7 +451,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                 await websocket.close(code=1003, reason="bad_message")
         finally:
             portrait_stream.priority.clear()
-            worker.stop()
+            host.detach(worker)
             sender.cancel()
             admission.release(lease)
             if dropped:

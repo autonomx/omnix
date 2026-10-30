@@ -399,10 +399,15 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
 - **Environment:** `services/portrait/portrait.in` and a hashed Windows lock, `portrait.lock.txt` (pip-compile; torch 2.6 cu124, transformers 4.57.6, timm 1.0.30, face-alignment 1.4.1). The lock pins the versions the GPU checks ran on.
 - **Launcher:** interpreter role `portrait` (`OMNIX_PORTRAIT_PYTHON`, conda env `omnix-portrait`), and an optional `ServiceSpec` on port 5501. It auto-starts when that interpreter exists and sets `OMNIX_PORTRAIT_URL`. 2 launcher tests.
 - **Architecture lint:** the branch adds no violations. `main` already reports 28 outside this work, the same list on both.
+- **One GPU thread** (found 2026-10-30, `scripts/portrait_thread_probe.py`). cuDNN keeps its one-off setup per thread: the first decode on a new thread took 49 s. So loading, the warm-up, every `prepare` and every stream's passes run on one long-lived thread owned by the runtime host, which steps the streams in turn between tasks.
+- **The service process, end to end** (`scripts/portrait_service_smoke.py`, 2026-10-30), run with the `omnix-portrait` environment built from the hashed lock:
+    - **Checks passed:** all 266 frames for a 10.6 s clip arrived in order and decoded as 512 px JPEGs; `prepare` on an uncropped photo took 289 ms; the stream kept up with audio at 3× real time.
+    - **Model load:** 80 s.
+    - **First frame:** 399 ms after the first audio. That's about 265 ms past the browser's start, just over the 250 ms cap; most of the excess is likely the GPU waking from idle. The loaded runs measure it with TTS active, and Phase 3's speculative frames remove the wait.
+    - **Fixed on the way:** the first runs found `httpx` and `torchdiffeq` missing from the lock, and a load check that could kill the service. All three are fixed, and the check now reports `failed` in `/health`.
 - **Still to do in Phase 1:**
     - the Linux lock
     - the desktop `live-portrait` bundle and its `portrait` runtime pack, which need the desktop release tooling to build the pack's file list
-    - creating the `omnix-portrait` environment from the lock, then a smoke test of the service process itself on the GPU
 
 **Tests:**
 - the scheduler against a fake model

@@ -114,5 +114,81 @@
       "A new decoder batch size costs 10.4 s of cuDNN plan building once; with cuDNN off there is no setup but a batch of 4 takes 101 ms instead of 15.7 ms, too slow for 25 fps. cuDNN stays on with fixed shapes, warmed at load (about 60 s in all).",
       "After 3 s of GPU idle the first passes took 104 and 78 ms before returning to 24 ms; one tiny kernel did not wake the GPU (173 ms after it), 150 ms of busy GPU did (27 ms). In a call, TTS on the same GPU should already have the clocks up before FLOAT's first pass; the loaded Phase 0 runs check this."
     ]
+  },
+  "thread_probe": {
+    "script": "scripts/portrait_thread_probe.py",
+    "decode_ms_batch_4": {
+      "warmed_thread": [
+        29.5,
+        16.3
+      ],
+      "new_thread_1": [
+        49193.1,
+        26.7
+      ],
+      "new_thread_2": [
+        49103.2,
+        28.8
+      ]
+    },
+    "finding": "cuDNN's one-off setup is kept per thread: the first decode on a new thread took 49 s. The service runs all GPU work (load, warm-up, prepare, every stream) on one long-lived thread."
+  },
+  "service_smoke": {
+    "date": "2026-10-30",
+    "script": "scripts/portrait_service_smoke.py",
+    "environment": "omnix-portrait conda env built from services/portrait/portrait.lock.txt (--require-hashes); service process started on a free local port with a fresh service token",
+    "inputs": "photo upstream sam_altman.webp (uncropped); audio voice_clones/Maya.wav (10.64 s, 16-bit) sent in 80 ms blocks at 3x real time",
+    "results": {
+      "ready_after_s": 84.5,
+      "health": {
+        "ok": true,
+        "status": "ready",
+        "message": "",
+        "streams": {
+          "active": 0,
+          "max": 1
+        },
+        "gpu": {
+          "vram_free_bytes": 22460497920
+        },
+        "host": {
+          "commit_free_bytes": 24746889216
+        }
+      },
+      "prepare": {
+        "ok": true,
+        "latent_key": "03a07c3194cf8d2b9f0b85959c6c2a502035b435312b79a2d2b528ef8d40bc7b",
+        "ms": 289
+      },
+      "stream": {
+        "frames": 266,
+        "expected": 266,
+        "in_order": true,
+        "decodable_512": 266,
+        "first_frame_after_first_audio_ms": 399,
+        "stream_seconds": 3.73,
+        "audio_seconds": 10.64
+      },
+      "health_after": {
+        "ok": true,
+        "status": "ready",
+        "message": "",
+        "streams": {
+          "active": 0,
+          "max": 1
+        },
+        "gpu": {
+          "vram_free_bytes": 21223178240
+        },
+        "host": {
+          "commit_free_bytes": 23548616704
+        }
+      },
+      "ok": true
+    },
+    "notes": [
+      "The first runs found two packages missing from the lock (httpx, imported by app.providers; torchdiffeq, imported by upstream FMT) and a load check that could kill the service; all three fixed.",
+      "First frame 399 ms after the first audio: about 175 ms of waiting for 13 frames of audio at 3x, about 40 ms of pass, decode and JPEG, and the rest most likely the GPU waking from idle after prepare (see latency_probe). Against the browser's start at 0.4 s of audio that is about 265 ms of hold; the loaded Phase 0 runs (TTS keeping the GPU busy) and Phase 3's speculative frames address it."
+    ]
   }
 }

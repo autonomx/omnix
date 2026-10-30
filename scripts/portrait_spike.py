@@ -41,17 +41,33 @@ GATE_MARKERS = ("pytest", "release_gate", "benchmark", "playthrough", "eval", "l
 # --------------------------------------------------------------------------- guard
 
 
+def gpu_memory_used_bytes() -> int | None:
+    """GPU memory in use, from torch when it is installed, else from nvidia-smi."""
+    try:
+        import torch
+
+        free, total = torch.cuda.mem_get_info()
+        return total - free
+    except ImportError:
+        pass
+    try:
+        output = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+                                capture_output=True, text=True, check=True, timeout=10).stdout
+        return int(output.splitlines()[0].strip()) * 1024**2
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
 def busy_reasons(allow_busy: bool) -> list[str]:
     """Why running now could disturb another session's measurements."""
     if allow_busy:
         return []
     import psutil
-    import torch
 
     reasons: list[str] = []
-    free, total = torch.cuda.mem_get_info()
-    if total - free > BUSY_VRAM_BYTES:
-        reasons.append(f"GPU has {(total - free) / 1024**3:.1f} GB in use by other processes")
+    used = gpu_memory_used_bytes()
+    if used is not None and used > BUSY_VRAM_BYTES:
+        reasons.append(f"GPU has {used / 1024**3:.1f} GB in use by other processes")
     # This process and its parent (a venv's python.exe on Windows is a launcher with the same command line).
     mine = {os.getpid(), os.getppid()}
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
