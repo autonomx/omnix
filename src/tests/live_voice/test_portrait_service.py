@@ -1,0 +1,201 @@
+"""The live portrait service's contract, with a fake model (roadmap: docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md)."""
+from __future__ import annotations
+
+import hashlib
+import io
+import secrets
+import time
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
+from app.conversation.portrait_stream_contract import pack, unpack
+from services.portrait import portrait_server
+from services.portrait.portrait_image import PortraitImageError
+from services.portrait.scheduler import PassPlan, linear_resample
+
+IMAGE = b"portrait image bytes"
+IMAGE_SHA = hashlib.sha256(IMAGE).hexdigest()
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.passes: list[PassPlan] = []
+
+    def run_pass(self, audio, plan: PassPlan, seed: int) -> None:
+        self.passes.append(plan)
+
+    def decode(self, start: int, stop: int) -> list[bytes]:
+        return [f"jpeg-{index}".encode() for index in range(start, stop)]
+
+    def reset(self) -> None:
+        pass
+
+
+class FakeRuntime:
+    resample = staticmethod(linear_resample)
+
+    def __init__(self) -> None:
+        self.portraits: dict[str, object] = {}
+        self.sessions: list[FakeSession] = []
+
+    def prepare(self, key: str, payload: bytes) -> object:
+        if payload == b"no face here":
+            raise PortraitImageError("no_face", "No face was found in the portrait image")
+        self.portraits[key] = object()
+        return self.portraits[key]
+
+    def portrait(self, key: str) -> object | None:
+        return self.portraits.get(key)
+
+    def forget(self, key: str) -> None:
+        self.portraits.pop(key, None)
+
+    def session(self, portrait: object, emotion: str) -> FakeSession:
+        self.sessions.append(FakeSession())
+        return self.sessions[-1]
+
+
+@pytest.fixture
+def token(monkeypatch) -> str:
+    value = secrets.token_urlsafe(32)
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", value)
+    return value
+
+
+def _client(app, token: str | None) -> TestClient:
+    headers = {"X-Omnix-Client": "test", **({"X-Omnix-Service-Token": token} if token else {})}
+    return TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), headers=headers)
+
+
+def _ready_app(runtime: FakeRuntime, **options):
+    app = portrait_server.create_app(load=lambda: runtime, installed=lambda: (True, ""),
+                                     resources=lambda: (True, ""), preload=False, **options)
+    app.state.host.ensure_loading()
+    for _ in range(200):
+        if app.state.host.status == "ready":
+            return app
+        time.sleep(0.01)
+    raise AssertionError("the fake runtime did not load")
+
+
+def _prepare(client: TestClient, tenant: str = "tenant-a", image: bytes = IMAGE) -> dict:
+    return client.post("/portrait/prepare", data={"tenant": tenant, "image_sha256": hashlib.sha256(image).hexdigest()},
+                       files={"file": ("portrait.png", io.BytesIO(image))}).json()
+
+
+def _open(websocket, latent_key: str, call_key: str = "call-1", principal: str = "user-1", session: str = "s-1") -> dict:
+    websocket.send_json({"type": "open", "call_key": call_key, "principal": principal, "session": session,
+                         "latent_key": latent_key, "emotion": "neutral"})
+    return websocket.receive_json()
+
+
+def test_health_is_public_and_says_why_the_model_is_not_ready(token: str) -> None:
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (False, "Install float"),
+                                     resources=lambda: (True, ""), preload=False)
+    client = _client(app, None)
+    assert client.get("/health").json()["status"] == "unloaded"
+    authed = _client(app, token)
+    assert authed.post("/portrait/prepare", data={"tenant": "t", "image_sha256": IMAGE_SHA},
+                       files={"file": ("p.png", io.BytesIO(IMAGE))}).json() == {
+        "ok": False, "code": "model_missing", "message": "Install float"}
+    assert client.get("/health").json()["status"] == "missing"
+
+
+def test_a_short_gpu_is_reported_and_not_loaded(token: str) -> None:
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""),
+                                     resources=lambda: (False, "needs 2.5 GB"), preload=False)
+    assert _prepare(_client(app, token))["code"] == "model_busy"
+    assert app.state.host.status == "short"
+
+
+def test_prepare_needs_the_service_token_and_the_images_digest(token: str) -> None:
+    app = _ready_app(FakeRuntime())
+    assert _client(app, None).post("/portrait/prepare", data={"tenant": "t", "image_sha256": IMAGE_SHA},
+                                   files={"file": ("p.png", io.BytesIO(IMAGE))}).status_code == 401
+    client = _client(app, token)
+    assert client.post("/portrait/prepare", data={"tenant": "t", "image_sha256": "0" * 64},
+                       files={"file": ("p.png", io.BytesIO(IMAGE))}).status_code == 400
+
+
+def test_an_encoding_is_keyed_by_tenant_and_image_and_can_be_forgotten(token: str) -> None:
+    runtime = FakeRuntime()
+    client = _client(_ready_app(runtime), token)
+    first = _prepare(client)
+    assert first["ok"] and len(first["latent_key"]) == 64
+    assert _prepare(client)["latent_key"] == first["latent_key"]
+    assert _prepare(client, tenant="tenant-b")["latent_key"] != first["latent_key"]
+    assert _prepare(client, image=b"no face here") == {
+        "ok": False, "code": "no_face", "message": "No face was found in the portrait image"}
+    assert client.delete(f"/portrait/cache/tenant-a/{IMAGE_SHA}").json() == {"ok": True}
+    assert first["latent_key"] not in runtime.portraits
+
+
+def test_the_stream_needs_the_service_token(token: str) -> None:
+    client = _client(_ready_app(FakeRuntime()), None)
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+            websocket.receive_json()
+
+
+def test_a_stream_for_an_unprepared_portrait_is_refused(token: str) -> None:
+    client = _client(_ready_app(FakeRuntime()), token)
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, "f" * 64)["code"] == "portrait_not_prepared"
+
+
+def test_audio_in_frames_out_stamped_by_segment_and_offset(token: str) -> None:
+    runtime = FakeRuntime()
+    client = _client(_ready_app(runtime), token)
+    latent_key = _prepare(client)["latent_key"]
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, latent_key) == {"type": "ready"}
+        websocket.send_json({"type": "phrase_start", "output_id": "out-1", "epoch": 3, "segment_id": "seg-a",
+                             "sample_rate": 24_000})
+        pcm = (np.sin(np.arange(24_000) / 5.0) * 9000).astype("<i2")
+        for offset in range(0, len(pcm), 4_800):
+            websocket.send_bytes(pack({"segment_id": "seg-a", "offset": offset}, pcm[offset:offset + 4_800].tobytes()))
+        websocket.send_json({"type": "phrase_done", "segment_id": "seg-a"})
+        websocket.send_json({"type": "output_end", "output_id": "out-1", "epoch": 3})
+        frames = [unpack(websocket.receive_bytes()) for _ in range(25)]
+    headers = [header for header, _jpeg in frames]
+    assert [jpeg for _header, jpeg in frames] == [f"jpeg-{index}".encode() for index in range(25)]
+    assert {(header["output_id"], header["epoch"], header["segment_id"]) for header in headers} == {("out-1", 3, "seg-a")}
+    assert [header["offset"] for header in headers[:3]] == [0, 960, 1920]
+
+
+def test_one_stream_per_gpu_and_a_reload_replaces_its_own_stream(token: str) -> None:
+    client = _client(_ready_app(FakeRuntime()), token)
+    latent_key = _prepare(client)["latent_key"]
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as first:
+        assert _open(first, latent_key)["type"] == "ready"
+        with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as other_call:
+            refused = _open(other_call, latent_key, call_key="call-2", principal="user-2", session="s-2")
+            assert refused["code"] == "portrait_busy"
+        with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as reloaded:
+            assert _open(reloaded, latent_key, call_key="call-3")["type"] == "ready"
+            with pytest.raises(WebSocketDisconnect) as closed:
+                first.receive_json()
+            assert closed.value.code == 4000
+
+
+def test_leases_expire_without_heartbeats() -> None:
+    admission = portrait_server.Admission(max_streams=1, timeout_seconds=0.05)
+    first = portrait_server.Lease("call-1", "user-1", "s-1", websocket=None)  # type: ignore[arg-type]
+    assert admission.admit(first) == (True, [])
+    assert admission.admit(portrait_server.Lease("call-2", "user-2", "s-2", websocket=None))[0] is False  # type: ignore[arg-type]
+    time.sleep(0.08)
+    assert admission.expired() == [first] and admission.active == 0
+
+
+def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
+    host = portrait_server.RuntimeHost(FakeRuntime, lambda: (True, ""), lambda: (True, ""))
+    host.ensure_loading()
+    for _ in range(200):
+        if host.status == "ready":
+            break
+        time.sleep(0.01)
+    assert not host.unload_if_idle(0.0, active_streams=1)
+    assert host.unload_if_idle(0.0, active_streams=0) and host.status == "unloaded"

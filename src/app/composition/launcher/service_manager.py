@@ -520,6 +520,10 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     # The audio service starts when its environment exists (it is optional).
     audio_enabled = _env_flag("OMNIX_AUDIO_ENABLED", "1")
     audio_auto_start = audio_enabled and Path(audio_python).is_file()
+    portrait_python = launcher.python("portrait")
+    # The live portrait service is optional too; it loads its model in the background once started.
+    portrait_enabled = _env_flag("OMNIX_PORTRAIT_ENABLED", "1")
+    portrait_auto_start = portrait_enabled and Path(portrait_python).is_file()
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")
     image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")
@@ -535,6 +539,8 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         "OMNIX_TTS_URL": environment().get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
         "OMNIX_STT_URL": environment().get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
         "OMNIX_AUDIO_URL": environment().get("OMNIX_AUDIO_URL", "http://127.0.0.1:5401") if audio_enabled else "",
+        "OMNIX_PORTRAIT_URL": (environment().get("OMNIX_PORTRAIT_URL", "http://127.0.0.1:5501")
+                               if portrait_enabled else ""),
         "OMNIX_IMAGE_ENABLED": environment().get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
         "OMNIX_CHARACTER_MODE_ENABLED": environment().get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
@@ -653,6 +659,19 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             auto_start=audio_auto_start,
             startup_critical=False,
             description="Voice Studio audio tools (vocal isolation, enhancement, watermarks) on 127.0.0.1:5401.",
+        ),
+        ServiceSpec(
+            service_id="portrait",
+            label="Live Portrait",
+            command=[portrait_python, "-m", "services.portrait.portrait_server"],
+            cwd=root,
+            env=common,
+            ports=(5501,),
+            optional=True,
+            enabled=portrait_enabled,
+            auto_start=portrait_auto_start,
+            startup_critical=False,
+            description="Live call talking portraits (FLOAT) on 127.0.0.1:5501.",
         ),
         ServiceSpec(
             service_id="image",

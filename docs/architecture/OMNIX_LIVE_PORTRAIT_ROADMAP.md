@@ -389,7 +389,20 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
     - Passes take 23.5 ms p50.
     - torchvision's GPU JPEG encoder corrupted frames, which is why encoding moved to the CPU.
     - After a few seconds of GPU idle, the first passes take 80–170 ms; 150 ms of GPU work brings them back to 24 ms. In a call, TTS should already have the GPU busy; the loaded Phase 0 runs confirm it. If not, a short wake at `phrase_start` is the fallback.
-- **Still to build in Phase 1:** `portrait_server.py` (health, prepare, cache delete, the stream websocket with admission and lease), `portrait.in` with its lock files, and the launcher entry.
+- **The service** (`services/portrait/portrait_server.py`), built by a `create_app(...)` factory with an injectable loader. 10 contract tests run it against a fake model, without torch.
+    - `GET /health` reports `missing`, `short`, `warming`, `ready` or `failed`, plus streams, VRAM and host commit.
+    - `POST /portrait/prepare` checks the image digest; cache keys are tenant, image SHA-256 and FLOAT revision.
+    - `DELETE /portrait/cache/...` forgets an encoding.
+    - `WS /portrait/stream` runs the scheduler on its own worker thread. `cancel` and `tts_priority` take effect between micro-batches. Admission is one lease per GPU: a reload by the same principal and session replaces the old stream, another call gets `portrait_busy`, and a lease expires after 6 s without a message.
+    - The model loads in the background at start and unloads after 30 idle minutes with no stream open.
+- **Binary messages** (`app/conversation/portrait_stream_contract.py`): a length-prefixed JSON header, then the payload (PCM in, JPEG out). Phase 2's gateway uses the same module.
+- **Environment:** `services/portrait/portrait.in` and a hashed Windows lock, `portrait.lock.txt` (pip-compile; torch 2.6 cu124, transformers 4.57.6, timm 1.0.30, face-alignment 1.4.1). The lock pins the versions the GPU checks ran on.
+- **Launcher:** interpreter role `portrait` (`OMNIX_PORTRAIT_PYTHON`, conda env `omnix-portrait`), and an optional `ServiceSpec` on port 5501. It auto-starts when that interpreter exists and sets `OMNIX_PORTRAIT_URL`. 2 launcher tests.
+- **Architecture lint:** the branch adds no violations. `main` already reports 28 outside this work, the same list on both.
+- **Still to do in Phase 1:**
+    - the Linux lock
+    - the desktop `live-portrait` bundle and its `portrait` runtime pack, which need the desktop release tooling to build the pack's file list
+    - creating the `omnix-portrait` environment from the lock, then a smoke test of the service process itself on the GPU
 
 **Tests:**
 - the scheduler against a fake model

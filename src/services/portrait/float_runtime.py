@@ -19,7 +19,6 @@ The emotion is a label (no speech-to-emotion model is loaded).
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib
 import logging
 import math
@@ -204,6 +203,7 @@ class WindowSolver:
         self.we = torch.zeros(1, 1, len(EMOTIONS), device="cuda")
         self.times = torch.linspace(0, 1, nfe, device="cuda")
         self.out = torch.zeros_like(self.x0)
+        self.lock = threading.Lock()
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(stream):
@@ -227,12 +227,14 @@ class WindowSolver:
 
     def __call__(self, wa: torch.Tensor, prev_x: torch.Tensor, prev_wa: torch.Tensor, wr: torch.Tensor,
                  we: torch.Tensor, seed: int) -> torch.Tensor:
-        generator = torch.Generator("cuda").manual_seed(seed)
-        self.x0.copy_(torch.randn(1, self.window, self.opt.dim_w, device="cuda", generator=generator))
-        for static, value in ((self.wa, wa), (self.prev_x, prev_x), (self.prev_wa, prev_wa), (self.wr, wr), (self.we, we)):
-            static.copy_(value)
-        self.graph.replay()
-        return self.out.clone()
+        with self.lock:  # one set of static inputs: streams take turns
+            generator = torch.Generator("cuda").manual_seed(seed)
+            self.x0.copy_(torch.randn(1, self.window, self.opt.dim_w, device="cuda", generator=generator))
+            for static, value in ((self.wa, wa), (self.prev_x, prev_x), (self.prev_wa, prev_wa), (self.wr, wr),
+                                  (self.we, we)):
+                static.copy_(value)
+            self.graph.replay()
+            return self.out.clone()
 
 
 # --- the runtime -------------------------------------------------------------------------------------
@@ -384,6 +386,21 @@ class FloatRuntime:
     def session(self, portrait: Portrait, emotion: str = "neutral") -> FloatSession:
         return FloatSession(self, portrait, emotion_vector(emotion))
 
+    def portrait(self, key: str) -> Portrait | None:
+        with self.lock:
+            return self.portraits.get(key)
+
+    @staticmethod
+    def resample(audio: np.ndarray, rate: int) -> np.ndarray:
+        """16 kHz audio for the scheduler, band-limited (torchaudio's sinc resampler, on the CPU)."""
+        from services.portrait.scheduler import SAMPLE_RATE
+
+        if rate == SAMPLE_RATE or len(audio) == 0:
+            return audio.astype(np.float32, copy=False)
+        import torchaudio.functional as audio_functional
+
+        return audio_functional.resample(torch.from_numpy(audio.astype(np.float32)), rate, SAMPLE_RATE).numpy()
+
 
 class FloatSession:
     """The scheduler's MotionSession for one portrait: committed latents and audio features, frame by frame."""
@@ -417,15 +434,7 @@ class FloatSession:
         self.feats = self.feats[:0]
 
 
-def portrait_key(tenant: str, image_sha256: str) -> str:
-    """The cache key: the tenant, the image's digest and the FLOAT code revision it was encoded with."""
-    from app.models.catalog import load
-
-    revision = load().model(CODE_MODEL).revision
-    return hashlib.sha256(f"{tenant}\x00{image_sha256}\x00{revision}".encode()).hexdigest()
-
-
 __all__ = [
-    "DEFAULT_NFE", "EMOTIONS", "FloatRuntime", "FloatSession", "Portrait", "PortraitModelMissing", "REQUIRED_MODELS",
-    "model_folder", "portrait_key", "required_folders", "verify_code",
+    "CODE_MODEL", "DEFAULT_NFE", "EMOTIONS", "FloatRuntime", "FloatSession", "Portrait", "PortraitModelMissing",
+    "REQUIRED_MODELS", "model_folder", "required_folders", "verify_code",
 ]
