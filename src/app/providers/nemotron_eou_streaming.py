@@ -10,6 +10,7 @@ import logging
 
 from app.config.env import environment
 
+import contextlib
 import json
 import os
 import tempfile
@@ -131,6 +132,28 @@ def _configure_streaming_context(model: Any, right_context: int) -> None:
         setup = getattr(encoder, "setup_streaming_params", None)
         if callable(setup):
             setup()
+
+
+def _disable_cuda_graph_decoding(model: Any) -> None:
+    """Decode without NeMo's CUDA-graph greedy decoder.
+
+    Its captured graph points into memory the caching allocator treats as free: another model in this process
+    (the timed Parakeet-TDT helper) loading, decoding or being unloaded made the next decode an illegal memory
+    access, which ends the CUDA context and every live call after it (2026-10-30, reproduced standalone). The
+    plain decoder measured the same warm latency (Nemotron, about 56 ms for a short utterance).
+    """
+    decoding = getattr(getattr(model, "cfg", None), "decoding", None)
+    greedy = getattr(decoding, "greedy", None)
+    change = getattr(model, "change_decoding_strategy", None)
+    if greedy is None or not callable(change):
+        return
+    try:
+        from omegaconf import open_dict
+    except ImportError:  # a test double, not a NeMo config
+        open_dict = contextlib.nullcontext
+    with open_dict(decoding):
+        greedy.use_cuda_graph_decoder = False
+    change(decoding, verbose=False)
 
 
 @dataclass(frozen=True)
@@ -293,11 +316,13 @@ class NemotronEouModelManager:
             self.nemotron_model.to(self.nemotron_device)
             self.nemotron_model.eval()
             _configure_streaming_context(self.nemotron_model, self.nemotron_right_context)
+            _disable_cuda_graph_decoding(self.nemotron_model)
             logger.info(f"[STT] Loading Parakeet Realtime EOU model {eou_name} on {self.eou_device}")
             self.eou_model = ASRModel.from_pretrained(model_name=eou_name)
             self.eou_model.to(self.eou_device)
             self.eou_model.eval()
             _configure_streaming_context(self.eou_model, self.eou_right_context)
+            _disable_cuda_graph_decoding(self.eou_model)
             logger.info("[STT] Hybrid streaming ready: "
                 f"Nemotron right_context={self.nemotron_right_context}, "
                 f"EOU right_context={self.eou_right_context}, feed_chunk_ms={self.feed_chunk_ms}")

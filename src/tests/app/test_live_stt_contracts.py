@@ -29,6 +29,7 @@ from app.providers.nemotron_eou_streaming import (
     HybridStream,
     NemotronEouModelManager,
     StreamingUpdate,
+    _disable_cuda_graph_decoding,
     _normalize_streaming_hypotheses,
     has_eou_token,
     has_meaningful_transcript,
@@ -65,6 +66,23 @@ def test_hybrid_stt_negotiation_separates_transcript_and_eou_authority() -> None
     assert CAP_PARTIAL_TRANSCRIPTS in HYBRID_NEGOTIATION.capabilities
     assert CAP_AUTHORITATIVE_EOU in HYBRID_NEGOTIATION.capabilities
     assert CAP_AUTHORITATIVE_PREVIEW in HYBRID_NEGOTIATION.capabilities
+
+
+def test_streaming_models_decode_without_cuda_graphs() -> None:
+    # Another model in the STT process (the timed Parakeet-TDT helper) loading or unloading made a CUDA-graph
+    # decode an illegal memory access that ended the CUDA context; the live models use the plain decoder.
+    applied = []
+    model = SimpleNamespace(
+        cfg=SimpleNamespace(decoding=SimpleNamespace(strategy="greedy_batch",
+                                                     greedy=SimpleNamespace(use_cuda_graph_decoder=True))),
+        change_decoding_strategy=lambda decoding, verbose=True: applied.append((decoding, verbose)),
+    )
+
+    _disable_cuda_graph_decoding(model)
+
+    assert model.cfg.decoding.greedy.use_cuda_graph_decoder is False
+    assert applied == [(model.cfg.decoding, False)]
+    _disable_cuda_graph_decoding(SimpleNamespace(cfg=SimpleNamespace()))  # no decoding config: nothing to change
 
 
 def test_eou_control_tokens_never_enter_authoritative_transcript() -> None:
