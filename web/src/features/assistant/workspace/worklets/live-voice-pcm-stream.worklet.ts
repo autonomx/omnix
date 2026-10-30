@@ -42,6 +42,7 @@ type PcmStreamMessage = {
   minimumBufferedSpeechSamples?: unknown;
   notBeforeRenderSample?: unknown;
   reason?: unknown;
+  enabled?: unknown;
 };
 
 function integer(value: unknown): number | undefined {
@@ -83,6 +84,9 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   lastProgressSamples = 0;
   activeSegment: ActiveSegment | null = null;
   activeSegmentPlayedSamples = 0;
+  // The live portrait's clock: the active segment's played samples every 20 ms, while a portrait shows.
+  portraitClockIntervalSamples = 0;
+  portraitClockSamples = 0;
 
   constructor(options: ProcessorOptions) {
     super();
@@ -154,7 +158,21 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     });
   }
 
+  reportPortraitClock(renderedSamples: number): void {
+    if (!this.portraitClockIntervalSamples || !this.activeSegment) return;
+    this.portraitClockSamples += Math.max(0, Number(renderedSamples) || 0);
+    if (this.portraitClockSamples < this.portraitClockIntervalSamples) return;
+    this.portraitClockSamples = 0;
+    // The count includes this quantum, so it holds at the quantum's end, not at `currentTime` (its start);
+    // the render clock has already counted it.
+    const at = typeof currentTime === 'number'
+      ? currentTime + Math.max(0, Number(renderedSamples) || 0) / sampleRate
+      : this.renderClockSamples / sampleRate;
+    this.emit('portrait_clock', { ...this.segmentFields(), audio_context_time_seconds: at });
+  }
+
   reportAvatarPlayback(renderedSamples: number, speechSquareSum: number): void {
+    this.reportPortraitClock(renderedSamples);
     this.avatarEnvelopeSamples += Math.max(0, Number(renderedSamples) || 0);
     this.avatarEnvelopeSquareSum += Math.max(0, Number(speechSquareSum) || 0);
     if (this.avatarEnvelopeSamples < this.avatarEnvelopeIntervalSamples) return;
@@ -170,6 +188,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   }
 
   handleMessage(message: PcmStreamMessage): void {
+    if (message.type === 'set_portrait_clock') {
+      this.portraitClockIntervalSamples = message.enabled ? Math.max(128, Math.round(sampleRate * 0.02)) : 0;
+      this.portraitClockSamples = 0;
+      return;
+    }
     if (message.type === 'set_start_policy') {
       this.startPolicy = {
         notBeforeRenderSample: Math.max(0, Number(message.notBeforeRenderSample) || 0),

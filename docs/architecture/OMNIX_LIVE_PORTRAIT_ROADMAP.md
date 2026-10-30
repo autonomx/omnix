@@ -588,6 +588,44 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - the crossfades
 - level stepping driven by acks
 
+**Phase 3 progress (2026-10-30): the renderer, the clock and the fallback are done; the idle loop, the start hold, speculative frames and remote quality are open.**
+- **The client** (`web/src/features/assistant/chat/portrait/livePortrait.ts`; the plan called it `livePortraitRenderer.ts`). One per page, following the call runtime's avatar pack.
+    - For a portrait pack the live audio session asks for the `hello` (`?portrait=1`). Its token opens the avatar websocket.
+    - JPEGs are decoded with `createImageBitmap` into a frame buffer keyed by segment. Frames of a cancelled turn are released and never drawn, including any that arrive after the cancel.
+    - Every 250 ms it sends `frame_ack` with the heard position in the segment's own TTS samples.
+    - The status becomes `unavailable` (with the reason) when:
+        - no hello comes within 1 s
+        - the service refuses (`unavailable` with its code)
+        - the avatar socket closes before `ready` or after it
+- **The clock** (`portrait/clock.ts`), as planned:
+    - The worklet posts `portrait_clock` every 20 ms, only while a portrait shows. It goes to the portrait and never to the diagnostics log.
+    - Each count is stamped at the end of the quantum it includes, not at `currentTime` (the quantum's start).
+    - The heard segment is looked up in the transition history at `now − outputLatency`.
+    - The estimate runs at most 20 ms past the last count, and backwards too, since the latest count is usually newer than what is heard. It stalls during an underrun.
+    - Offsets convert through each phrase's source rate, from the TTS websocket's `start`/`format`.
+- **The end of a turn:** once every phrase of a turn is synthesized, the unified audio controller sends `output_end` for the turn's last output.
+- **The visual** (`LiveCallVisual.tsx`, `portrait/LivePortraitCanvas.tsx`):
+    - A portrait pack draws a 512×512 canvas, one frame per animation frame.
+    - Between frames (silences, cues, late frames) the last one stays up.
+    - Before the first frame it shows the pack's image.
+    - When the portrait is unavailable, `drawnAvatarPack` draws the pack's fallback: sprite, Live2D, or the orb.
+- **Tests:**
+    - 9 for the frame protocol, the clock and the buffer
+    - 10 for the client and the visual: hello timeout, ready, frames drawn by the heard position, `frame_ack` in source samples, cancelled turns, refusal and loss, ended calls, fallbacks
+    - 2 for the PCM session's hello, rates and clock
+    - 1 for the worklet's clock
+    - an `output_end` assertion in the controller test
+    - The assistant web suite (820 tests), the typecheck and lint pass. `createLiveVoicePcmSession` stays within its line ratchet.
+- **Known gaps:**
+    - **First frame:** before it, the image shown is the full source picture, not the service's 512 px face crop, so the first frame jumps. The idle loop replaces it.
+    - **Live2D fallback lip sync:** a portrait pack falling back to Live2D lip-syncs from arrival-time PCM, not the worklet's envelope, because the avatar bridge keys that on the pack's own renderer.
+    - **Not yet seen end to end:** none of this has been run in a real browser against the service. That needs a GPU slot clear of RPG gates.
+- **Left in Phase 3:**
+    - rest pose and idle loop (`/portrait/idle`), with the crossfades and the 250 ms gap rule
+    - the start hold
+    - speculative TTS's copy, drop and bind hooks
+    - remote quality levels
+
 ### Phase 4: setup, emotion, cleanup
 
 - **Setup.** The avatar packs panel (`web/src/features/setup/AvatarPacksPanel.tsx`) gets a "Portrait" option.

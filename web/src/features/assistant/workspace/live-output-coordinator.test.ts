@@ -55,6 +55,9 @@ function createHarness() {
   const stop = vi.fn(async () => undefined);
   const pcm: LiveVoicePcmSession = {
     sampleRate: 24_000,
+    audioContext: {} as AudioContext,
+    setPortraitClock: vi.fn(),
+    sendOutputEnd: vi.fn(),
     enqueuePhrase: vi.fn(async () => undefined),
     enqueueOutputPhrase,
     enqueueSilence: vi.fn(async () => undefined),

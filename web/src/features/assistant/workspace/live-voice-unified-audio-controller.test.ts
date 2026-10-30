@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
     finish: vi.fn(async () => undefined),
     stop: vi.fn(async (_reason?: string) => undefined),
     isClosed: vi.fn(() => false),
+    setPortraitClock: vi.fn((_enabled: boolean) => undefined),
+    sendOutputEnd: vi.fn((_outputId: string, _generationEpoch: number) => undefined),
   };
   const recordSpy = vi.fn();
   const reporter = {
@@ -243,6 +245,10 @@ describe('live voice unified audio controller', () => {
       'controller',
     );
     await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(3));
+    // The turn's last output is ended once every phrase is synthesized (a live portrait commits its frames).
+    const lastOwnership = mocks.session.enqueueOutputPhrase.mock.calls[2][2];
+    expect(mocks.session.sendOutputEnd).toHaveBeenCalledTimes(1);
+    expect(mocks.session.sendOutputEnd).toHaveBeenCalledWith(lastOwnership.outputId, lastOwnership.generationEpoch);
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
       expect.objectContaining({ phrases: 3, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),

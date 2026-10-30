@@ -1,6 +1,7 @@
  
 import { activeFetchMiddlewares, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
+import { livePortrait } from '../chat/portrait/livePortrait';
 import {
   createLiveCallDiagnosticsReporter,
   createLiveCallTraceId,
@@ -439,6 +440,9 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   if (session) {
     try {
       const generationResults = await Promise.allSettled(turn.audioTasks);
+      const lastOutput = turn.outputOwnerships[turn.outputOwnerships.length - 1];
+      // Every phrase of the turn is synthesized: a live portrait commits the turn's last frames now.
+      if (lastOutput) session.sendOutputEnd(lastOutput.outputId, lastOutput.generationEpoch);
       const rejected = generationResults.find((result) => result.status === 'rejected');
       if (rejected?.status === 'rejected') throw rejected.reason;
       await withTimeout(
@@ -675,9 +679,12 @@ async function ensureSharedAudioSession(
     voice_id: voiceId,
     websocket_scope: 'live_session',
   }, 'controller');
+  // A portrait avatar asks the TTS websocket for a hello and follows the call's playback.
+  const portraitHooks = livePortrait.wanted() ? livePortrait.begin(sessionId) : undefined;
   const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
     sessionScoped: true,
     affinityKey: sessionId,
+    portrait: portraitHooks,
   });
   const state: SharedLiveAudioSession = {
     sessionId,
@@ -692,7 +699,9 @@ async function ensureSharedAudioSession(
   sharedAudioSession = state;
   void sessionPromise.then((session) => {
     state.session = session;
+    if (portraitHooks) livePortrait.attachSession(session);
   }).catch(async (error: unknown) => {
+    if (portraitHooks) livePortrait.end();
     if (sharedAudioSession === state) sharedAudioSession = null;
     await reporter.close('live_audio_session_failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -705,6 +714,7 @@ async function stopSharedAudioSession(reason: string): Promise<void> {
   const state = sharedAudioSession;
   sharedAudioSession = null;
   if (!state) return;
+  livePortrait.end();
   const session = state.session ?? await state.sessionPromise.catch(() => null);
   if (session && !session.isClosed()) await session.stop(reason);
   await state.reporter.close('live_audio_session_closed', {

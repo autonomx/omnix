@@ -31,10 +31,22 @@ export type LiveOutputOwnership = {
   outputOrder: number;
 };
 
+/** A live portrait's view of the session (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 3). */
+export type LiveVoicePortraitHooks = {
+  /** The TTS websocket's hello: the call key and the token the avatar websocket presents. */
+  onHello: (hello: { callKey: string; avatarToken: string }) => void;
+  /** Every worklet event, including `portrait_clock` (which is not recorded in diagnostics). */
+  onWorkletEvent: (event: Record<string, unknown>) => void;
+  /** A phrase's TTS sample rate: frame offsets count its samples. */
+  onSegmentRate: (segmentId: string, sampleRate: number) => void;
+};
+
 export type LiveVoicePcmSessionOptions = {
   sessionScoped?: boolean;
   affinityKey?: string;
   onWorkletEvent?: (event: Record<string, unknown>) => void;
+  /** Ask the gateway for a portrait (`?portrait=1`): a hello, then the hooks see the call's playback. */
+  portrait?: LiveVoicePortraitHooks;
 };
 
 type StreamingAudioWindow = Window & typeof globalThis & {
@@ -60,6 +72,8 @@ export type PcmControlEvent = {
   last_frame_index?: number;
   generated_through_frame?: number;
   reason?: string;
+  call_key?: string;
+  avatar_token?: string;
 };
 
 type WorkletEvent = {
@@ -121,6 +135,12 @@ type QueuedOutput = {
 
 export type LiveVoicePcmSession = {
   readonly sampleRate: number;
+  /** The playback context: the portrait reads its time and output latency. */
+  readonly audioContext: AudioContext;
+  /** Turn the worklet's 20 ms portrait clock on or off. */
+  setPortraitClock: (enabled: boolean) => void;
+  /** The turn's last phrase is queued: the portrait commits its held frames. */
+  sendOutputEnd: (outputId: string, generationEpoch: number) => void;
   enqueuePhrase: (
     text: string,
     phraseIndex: number,
@@ -286,7 +306,7 @@ export async function createLiveVoicePcmSession(
   });
 
   node.port.onmessage = (event: MessageEvent<WorkletEvent>) => {
-    if (closed) return;
+    if (closed || forwardToPortrait(options.portrait, event.data, audioContext.sampleRate)) return;
     const eventType = event.data?.type ?? 'unknown';
     if (eventType === 'underrun') underruns += 1;
     if (eventType === 'resumed') resumes += 1;
@@ -339,7 +359,7 @@ export async function createLiveVoicePcmSession(
     socketReadyResolve = resolve;
     socketReadyReject = reject;
   });
-  const socket = new WebSocketCtor(ttsWebSocketUrl());
+  const socket = new WebSocketCtor(ttsWebSocketUrl(Boolean(options.portrait)));
   socket.binaryType = 'arraybuffer';
   reporter.record('session_websocket_created', {
     websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
@@ -490,6 +510,7 @@ export async function createLiveVoicePcmSession(
     if (message.type === 'start' || message.type === 'format') {
       if (typeof message.sample_rate === 'number' && message.sample_rate > 0) {
         phrase.stats.sampleRate = message.sample_rate;
+        options.portrait?.onSegmentRate(phrase.segmentId, message.sample_rate);
       }
       return;
     }
@@ -577,7 +598,7 @@ export async function createLiveVoicePcmSession(
       return;
     }
     const message = parseControlEvent(event.data);
-    if (message) handleControlMessage(message);
+    if (message && !forwardPortraitHello(options.portrait, message)) handleControlMessage(message);
   });
 
   socket.addEventListener('error', () => {
@@ -984,6 +1005,7 @@ export async function createLiveVoicePcmSession(
 
   return {
     sampleRate: audioContext.sampleRate,
+    ...portraitControls(audioContext, node, socket, () => closed),
     enqueuePhrase,
     enqueueOutputPhrase,
     enqueueSilence,
@@ -999,9 +1021,47 @@ export async function createLiveVoicePcmSession(
   };
 }
 
-function ttsWebSocketUrl(): string {
+/** Worklet events for the portrait; true for its 20 ms clock, which goes nowhere else (not the diagnostics log). */
+function forwardToPortrait(
+  portrait: LiveVoicePortraitHooks | undefined,
+  data: WorkletEvent | undefined,
+  contextRate: number,
+): boolean {
+  if (!data) return false;
+  portrait?.onWorkletEvent({ ...data, sample_rate: data.sample_rate ?? contextRate });
+  return data.type === 'portrait_clock';
+}
+
+/** The TTS websocket's hello (sent only when a portrait asked for it); true when the message was one. */
+function forwardPortraitHello(portrait: LiveVoicePortraitHooks | undefined, message: PcmControlEvent): boolean {
+  if (message.type !== 'hello') return false;
+  if (message.call_key && message.avatar_token) {
+    portrait?.onHello({ callKey: message.call_key, avatarToken: message.avatar_token });
+  }
+  return true;
+}
+
+function portraitControls(
+  audioContext: AudioContext,
+  node: AudioWorkletNode,
+  socket: WebSocket,
+  isClosed: () => boolean,
+): Pick<LiveVoicePcmSession, 'audioContext' | 'setPortraitClock' | 'sendOutputEnd'> {
+  return {
+    audioContext,
+    setPortraitClock: (enabled) => {
+      if (!isClosed()) node.port.postMessage({ type: 'set_portrait_clock', enabled });
+    },
+    sendOutputEnd: (outputId, generationEpoch) => {
+      if (isClosed() || socket.readyState !== WEBSOCKET_OPEN) return;
+      socket.send(JSON.stringify({ type: 'output_end', output_id: outputId, generation_epoch: generationEpoch }));
+    },
+  };
+}
+
+function ttsWebSocketUrl(portrait = false): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}${TTS_LIVE_CALL_WEBSOCKET_PATH}`;
+  return `${protocol}//${window.location.host}${TTS_LIVE_CALL_WEBSOCKET_PATH}${portrait ? '?portrait=1' : ''}`;
 }
 
 function setCallAffinityCookie(affinityKey: string | undefined): string | null {

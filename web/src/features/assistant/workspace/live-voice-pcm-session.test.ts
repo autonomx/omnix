@@ -388,6 +388,36 @@ describe('live voice PCM session', () => {
     expect(workletWasQueuedAtAvatarDispatch).toBe(true);
   });
 
+  it('asks for a portrait, hands it the hello, phrase rates and the worklet clock', async () => {
+    const portrait = { onHello: vi.fn(), onWorkletEvent: vi.fn(), onSegmentRate: vi.fn() };
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter, { portrait });
+    const socket = FakeWebSocket.instances[0] as unknown as { url: string; emit(type: string, event: unknown): void };
+    expect(socket.url).toContain('/api/tts/live-call/websocket?portrait=1');
+    socket.emit('message', { data: JSON.stringify({ type: 'hello', call_key: 'call-1', avatar_token: 'token-1' }) });
+    expect(portrait.onHello).toHaveBeenCalledWith({ callKey: 'call-1', avatarToken: 'token-1' });
+
+    await session.enqueuePhrase('First phrase.', 0);
+    expect(portrait.onSegmentRate).toHaveBeenCalledWith('speech-live-call-s1-test-p0', 24_000);
+
+    session.setPortraitClock(true);
+    const port = FakeAudioWorkletNode.instances[0].port;
+    expect(port.messages).toContainEqual({ type: 'set_portrait_clock', enabled: true });
+    reporter.record.mockClear();
+    port.onmessage?.({ data: { type: 'portrait_clock', segment_id: 'seg', segment_played_samples: 480, audio_context_time_seconds: 1 } } as MessageEvent);
+    expect(portrait.onWorkletEvent).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'portrait_clock', sample_rate: 24_000 }));
+    expect(reporter.record).not.toHaveBeenCalled();
+    await session.finish();
+  });
+
+  it('opens a plain websocket and ignores a hello when no portrait is asked for', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    const socket = FakeWebSocket.instances[0] as unknown as { url: string; emit(type: string, event: unknown): void };
+    expect(socket.url).not.toContain('portrait');
+    socket.emit('message', { data: JSON.stringify({ type: 'hello', call_key: 'call-1', avatar_token: 'token-1' }) });
+    expect(reporter.record).not.toHaveBeenCalledWith('unexpected_control_message', expect.anything(), 'pcm_session');
+    await session.stop('test-cleanup');
+  });
+
   it('closes the turn websocket and sends a cancellation reason to the worklet', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const phrase = session.enqueuePhrase('Interrupt this phrase.', 0);

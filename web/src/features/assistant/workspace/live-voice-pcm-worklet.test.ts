@@ -143,6 +143,42 @@ describe('live voice PCM worklet state machine', () => {
     ]);
   });
 
+  it('reports the active segment every 20 ms while the portrait clock is on', () => {
+    const processor = createProcessor();
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-0',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array(2_048).fill(0.2),
+    });
+    render(processor);
+    expect(events(processor, 'portrait_clock')).toHaveLength(0);
+
+    send(processor, { type: 'set_portrait_clock', enabled: true });
+    // 20 ms at 24 kHz is 480 samples: the fourth 128-sample quantum crosses it.
+    for (let quantum = 0; quantum < 4; quantum += 1) render(processor);
+    expect(events(processor, 'portrait_clock')).toEqual([
+      expect.objectContaining({
+        segment_id: 'speech-0',
+        segment_played_samples: 640,
+        sample_rate: 24_000,
+        // The fifth quantum's end: 640 samples of render clock.
+        audio_context_time_seconds: 640 / 24_000,
+      }),
+    ]);
+
+    send(processor, { type: 'set_portrait_clock', enabled: false });
+    for (let quantum = 0; quantum < 4; quantum += 1) render(processor);
+    expect(events(processor, 'portrait_clock')).toHaveLength(1);
+
+    // A browser's `currentTime` is the quantum's start: the count holds one quantum later.
+    vi.stubGlobal('currentTime', 2);
+    send(processor, { type: 'set_portrait_clock', enabled: true });
+    for (let quantum = 0; quantum < 4; quantum += 1) render(processor);
+    expect(events(processor, 'portrait_clock').at(-1)?.audio_context_time_seconds).toBeCloseTo(2 + 128 / 24_000, 9);
+  });
+
   it('waits before a planned pause until following canonical speech is buffered', () => {
     const processor = createProcessor();
     send(processor, {

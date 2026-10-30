@@ -102,7 +102,8 @@
     pointer-events: none;
   }
 
-  .assistant-live-character-avatar img {
+  .assistant-live-character-avatar img,
+  .assistant-live-character-avatar canvas {
     position: absolute;
     inset: 0;
     z-index: 0;
@@ -116,6 +117,10 @@
     pointer-events: none;
     transition: opacity 34ms linear;
     will-change: opacity;
+  }
+
+  .assistant-live-character-avatar canvas[hidden] {
+    display: none;
   }
 
   .assistant-live-character-avatar img[data-avatar-layer='previous'] {

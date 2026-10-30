@@ -191,6 +191,18 @@ export function avatarPresentationState(
   return 'idle';
 }
 
+/**
+ * The pack as the call draws it: a portrait pack whose portrait is unavailable draws its fallback renderer
+ * (null for the orb); any other pack draws itself.
+ */
+export function drawnAvatarPack(
+  pack: CharacterAvatarPack | null | undefined,
+  portraitUnavailable: boolean,
+): CharacterAvatarPack | null {
+  if (!pack || pack.renderer !== 'portrait' || !portraitUnavailable) return pack ?? null;
+  return pack.fallback_renderer === 'orb' ? null : { ...pack, renderer: pack.fallback_renderer };
+}
+
 /** The sprite frame to show: blink, open mouth, the state's expression, the outfit, then the closed mouth. */
 export function avatarFrameAsset(
   pack: CharacterAvatarPack | null | undefined,
