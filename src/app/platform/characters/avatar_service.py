@@ -68,6 +68,12 @@ class CharacterAvatarService:
         self._validate_assets(request)
         return self.repository.upsert(character_id, request)
 
+    def portrait_image(self, pack: CharacterAvatarPack, *, max_bytes: int) -> bytes:
+        """The portrait pack's image, read on the server (it never comes from the browser)."""
+        if pack.renderer != "portrait" or not pack.base_asset_id:
+            raise CharacterAvatarAssetError("this avatar pack is not a portrait")
+        return self.asset_store_factory().read_asset_bytes(pack.base_asset_id, max_bytes=max_bytes)
+
     def delete(self, character_id: str) -> bool:
         self._require_owner(character_id)
         return self.repository.delete(character_id)
@@ -98,7 +104,11 @@ class CharacterAvatarService:
                 )
             _require_file(asset, "avatar image")
 
-        if request.renderer != "sprite":
+        if request.renderer == "portrait" and not request.base_asset_id:
+            raise CharacterAvatarAssetError("portrait avatar pack requires its portrait image")
+        # A rigged renderer draws its rig; a portrait pack does only when its fallback is Live2D.
+        if request.renderer in {"live2d", "rive"} or (
+                request.renderer == "portrait" and request.fallback_renderer == "live2d"):
             rig_asset_id = request.rig_asset_id
             if not rig_asset_id:
                 raise CharacterAvatarAssetError("rigged avatar pack requires a rig asset")

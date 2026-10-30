@@ -141,7 +141,7 @@ class PortraitLink:
                 if isinstance(message, bytes):
                     await self._on_frame(message)
         except Exception:  # noqa: BLE001 - the link ends; the call falls back
-            pass
+            logger.info("Portrait link closed", exc_info=True)
         finally:
             self.closed = True
 

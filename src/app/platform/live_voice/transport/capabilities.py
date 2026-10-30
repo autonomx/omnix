@@ -5,6 +5,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from app.platform.live_voice.portrait.link import portrait_url
+from app.platform.live_voice.transport.avatar_websocket import AVATAR_WEBSOCKET_PATH
 from app.providers.service import get_tts_provider
 
 _ROUTE_SENTINEL = "_omnix_tts_live_capabilities_registered"
@@ -46,6 +48,11 @@ def live_tts_capabilities_payload() -> dict[str, Any]:
         "cancellation_generations": True,
         "adaptive_playback_buffer": True,
         "fallback_mode": "persistent_incremental_clause_stream",
+        # The live portrait (roadmap Phase 2): connect with ?portrait=1 for a hello carrying the avatar token,
+        # then open the avatar websocket with it.
+        "portrait_available": bool(portrait_url()),
+        "portrait_hello_query": "portrait=1",
+        "avatar_websocket_path": AVATAR_WEBSOCKET_PATH,
         "provider_available": provider_available,
         "provider_name": getattr(provider, "provider_name", None) if provider else None,
     }

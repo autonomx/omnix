@@ -19,8 +19,9 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
     from .speech.speculative_tts import register_live_voice_execution_lane_routes
     from .transport.capabilities import register_tts_live_capability_routes
     from .transport.cue_asset_routes import register_live_voice_cue_asset_routes
+    from .transport.avatar_websocket import register_live_call_avatar_websocket
     from .transport.diagnostics_routes import register_live_voice_diagnostics_routes
-    from .transport.websocket import register_tts_live_call_websocket
+    from .transport.websocket import portrait_call_registry, register_tts_live_call_websocket
 
     router = APIRouter()
     state = context.runtime_state
@@ -35,6 +36,9 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
         state,
         provider_resolver=provider_resolver,
     )
+    # The call's portrait (live portrait roadmap, Phase 2): it attaches to the TTS websocket's call.
+    register_live_call_avatar_websocket(router, portrait_call_registry(state),
+                                        chat_store_factory=lambda: context.services.chat)
     register_live_voice_execution_lane_routes(router, state)
     register_live_voice_diagnostics_routes(router, state)
     register_live_voice_cue_asset_routes(router, state)

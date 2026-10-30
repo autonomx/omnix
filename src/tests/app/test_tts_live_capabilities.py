@@ -38,3 +38,14 @@ def test_native_incremental_provider_enables_text_append(monkeypatch) -> None:
     assert payload["native_decoder_text_append"] is True
     assert payload["stateful_text_append"] is True
     assert payload["prosody_continuous_decoder"] is True
+
+
+def test_the_portrait_is_advertised_only_when_its_service_is_set_up(monkeypatch) -> None:
+    monkeypatch.setattr(tts_live_capabilities, "get_tts_provider", lambda: _PhraseProvider())
+    monkeypatch.delenv("OMNIX_PORTRAIT_URL", raising=False)
+    payload = tts_live_capabilities.live_tts_capabilities_payload()
+    assert payload["portrait_available"] is False
+    assert payload["portrait_hello_query"] == "portrait=1"
+    assert payload["avatar_websocket_path"] == "/api/tts/live-call/avatar-websocket"
+    monkeypatch.setenv("OMNIX_PORTRAIT_URL", "http://127.0.0.1:5501")
+    assert tts_live_capabilities.live_tts_capabilities_payload()["portrait_available"] is True

@@ -463,6 +463,32 @@ Otherwise it records why it fell back.
 - `tts_priority{off}` is sent on error and on cancel
 - `output_end` is sent when the LLM stream errors or aborts
 
+**Phase 2 status (2026-10-30): done, except the speculation hooks (Phase 3) and the lease's call key.**
+- **The link** (`platform/live_voice/portrait/link.py`): one websocket per call to the portrait service.
+    - Sends never wait: a bounded queue; when it's full the copy is dropped and the link marked degraded.
+    - Heartbeats keep the service's lease.
+    - Frames come back through a callback.
+    - `prepare_portrait` posts the image the gateway read itself.
+- **The call registry** (`portrait/calls.py`, held on the feature's runtime state): one entry per open TTS connection, with a random call key and a token only the same principal can claim.
+- **The TTS websocket:** a client asks with `?portrait=1` and gets a `hello` first; old clients and tests see no change.
+    - Once a link is attached, it copies each phrase as the browser gets it: `phrase_start` at the phrase's rate, every PCM block with its offset in the phrase, then `phrase_done`.
+    - It forwards `cancel` and the new `output_end`.
+    - It sets `tts_priority` until each phrase's first chunk is out, and clears it on errors and cancels too.
+    - Closing the call removes it and closes its link.
+- **The avatar websocket** (`transport/avatar_websocket.py`, `/api/tts/live-call/avatar-websocket?token&session_id`).
+    - It checks the token's principal and loads the session as that tenant.
+    - It resolves the character's portrait pack and reads the image server-side, with a 12 MB cap.
+    - It prepares the portrait, opens and attaches the link, then relays frames to the browser.
+    - The browser's `frame_ack` messages become `play_position`.
+    - Every refusal is an `unavailable` message with a code: `portrait_not_configured`, `session_unavailable`, `not_a_portrait`, `warming`, `portrait_busy`, `portrait_lost` and so on.
+- **The avatar pack contract:** `renderer: "portrait"`, `fallback_renderer` (sprite, live2d or orb) and `portrait_emotion`. Gateway OpenAPI and the web's generated types are regenerated.
+- **Capabilities:** `/api/tts/live-call/capabilities` advertises `portrait_available`, the `hello` query and the avatar websocket path.
+- **Tests:** 9 gateway portrait tests (the copy, the binding and the avatar route), 6 pack tests and a capability test. The existing TTS websocket, live-voice, character and feature-matrix suites pass. The architecture lint adds nothing.
+- **Left:**
+    - Speculative TTS's copy, drop and bind hooks move to Phase 3, where the browser uses them.
+    - The `LiveSpeechLease` still uses `id(websocket)` rather than the call key.
+    - Prewarm happens when the avatar websocket opens, at the start of the call. The idle-GPU first pass still has to be measured in the loaded runs.
+
 ### Phase 3: idle loop, renderer, sync, speculative frames, remote quality
 
 **Rest pose and idle loop.** This comes first: the hold cap and the degrade path both need it.
