@@ -198,8 +198,8 @@ class PortraitCalls:
         self._calls: dict[str, PortraitCall] = {}
         self._lock = threading.Lock()
 
-    def issue(self, principal: str) -> PortraitCall:
-        call = PortraitCall(call_key=secrets.token_urlsafe(18), token=secrets.token_urlsafe(32), principal=principal)
+    def issue(self, principal: str, call_key: str | None = None) -> PortraitCall:
+        call = PortraitCall(call_key=call_key or new_call_key(), token=secrets.token_urlsafe(32), principal=principal)
         with self._lock:
             self._calls[call.call_key] = call
         return call
@@ -228,6 +228,11 @@ class PortraitCalls:
             return len(self._calls)
 
 
+def new_call_key() -> str:
+    """A live call's key: its speech lease's holder, its portrait's binding and its speculation's owner."""
+    return secrets.token_urlsafe(18)
+
+
 def portrait_call_registry(state: Any) -> PortraitCalls:
     """The live calls a portrait may attach to: one registry per gateway process, on the feature's state."""
     calls = getattr(state, "live_portrait_calls", None)
@@ -246,5 +251,5 @@ def principal_id(scope: dict) -> str:
     return str(user_id) if user_id else LOCAL_PRINCIPAL
 
 
-__all__ = ["LOCAL_PRINCIPAL", "PortraitCall", "PortraitCalls", "SpeculativeCopy", "portrait_call_registry",
-           "principal_id"]
+__all__ = ["LOCAL_PRINCIPAL", "PortraitCall", "PortraitCalls", "SpeculativeCopy", "new_call_key",
+           "portrait_call_registry", "principal_id"]

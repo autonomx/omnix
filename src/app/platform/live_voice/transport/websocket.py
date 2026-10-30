@@ -27,7 +27,7 @@ from app.platform.live_voice.speech.startup_frame_policy import (
     stream_live_call_pcm16_blocks,
 )
 
-from app.platform.live_voice.portrait.calls import PortraitCall, portrait_call_registry, principal_id
+from app.platform.live_voice.portrait.calls import PortraitCall, new_call_key, portrait_call_registry, principal_id
 from app.platform.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
 from app.platform.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
 from app.observability.tts_stream_diagnostics import (
@@ -927,10 +927,12 @@ def register_tts_live_call_websocket(
             )
             return
 
-        # A durable live-speech lease for the whole call: GPU engine swaps wait while it exists.
+        # A durable live-speech lease for the whole call, held under its call key: GPU engine swaps wait while
+        # it exists. The key is the call's for its whole life (an object id can be reused once it is freed).
         from app.persistence.tts_swap import LiveSpeechLease
 
-        live_lease = await asyncio.to_thread(LiveSpeechLease("live_call", f"live-call:{id(websocket)}").start)
+        call_key = new_call_key()
+        live_lease = await asyncio.to_thread(LiveSpeechLease("live_call", f"live-call:{call_key}").start)
         try:
             await websocket.accept()
             state = ConnectionState(
@@ -939,7 +941,7 @@ def register_tts_live_call_websocket(
             )
             if websocket.query_params.get("portrait") == "1":
                 # A client that can show a portrait asks for the call key and avatar token first.
-                state.portrait = portrait_calls.issue(principal_id(websocket.scope))
+                state.portrait = portrait_calls.issue(principal_id(websocket.scope), call_key=call_key)
                 await websocket.send_json({"type": "hello", "call_key": state.portrait.call_key,
                                            "avatar_token": state.portrait.token})
             receiver = asyncio.create_task(_receive_messages(websocket, state))

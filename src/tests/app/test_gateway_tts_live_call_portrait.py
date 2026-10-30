@@ -138,3 +138,25 @@ def test_a_phrase_replaying_copied_speculation_binds_it_and_copies_only_its_fres
     # Only what follows the replayed prefix is copied, from its end on.
     assert copied and copied[0][2] == 4_800
     assert sum(item[3] for item in copied) // 2 == played - 4_800
+
+
+def test_the_calls_speech_lease_is_held_under_its_call_key(monkeypatch) -> None:
+    from app.persistence import tts_swap
+
+    holders: list[tuple[str, str]] = []
+
+    class RecordingLease:
+        def __init__(self, kind: str, holder_id: str, **_kwargs: Any) -> None:
+            holders.append((kind, holder_id))
+
+        def start(self) -> RecordingLease:
+            return self
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(tts_swap, "LiveSpeechLease", RecordingLease)
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
+        hello = websocket.receive_json()
+    assert holders == [("live_call", f"live-call:{hello['call_key']}")]
