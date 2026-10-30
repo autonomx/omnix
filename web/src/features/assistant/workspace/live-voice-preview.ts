@@ -1,6 +1,6 @@
 /** Authoritative transcript previews during a pause, and barge-in assessment while the assistant speaks. */
 import { liveConversationStore } from './live-conversation-store';
-import { type OverlapIntent, classifyOverlap, shouldConfirmInterruption } from './live-voice-overlap-classifier';
+import { type OverlapAssessment, type OverlapIntent, classifyOverlap, shouldConfirmInterruption } from './live-voice-overlap-classifier';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { AUTHORITATIVE_PREVIEW_PAUSE_MS, LiveVoiceSession, controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent } from './live-voice-controller-state';
 import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../../events/bus';
@@ -113,6 +113,28 @@ export function assessOverlapCandidate(session: LiveVoiceSession): void {
     session.interruptionDispatched = true;
     dispatchAssistantVoiceInterrupt(session.card, assessment.intent, assessment.confidence);
   }
+}
+
+/**
+ * A turn that began over the assistant's speech and has not interrupted it. It is assessed on every transcript, in
+ * any floor state: a one-word "stop" has paused before its first partial arrives.
+ */
+export function overlapAwaitsInterruption(
+  session: Pick<LiveVoiceSession, 'overlapIntent' | 'interruptionDispatched'>,
+): boolean {
+  return session.overlapIntent !== null && !session.interruptionDispatched;
+}
+
+/** A final transcript that confirms an interruption the partials did not: the assistant still speaking stops. */
+export function interruptOnFinalOverlap(
+  session: Pick<LiveVoiceSession, 'card' | 'interruptionDispatched'>,
+  assessment: OverlapAssessment | null,
+  assistantSpeaking: boolean,
+): void {
+  if (!assessment || !assistantSpeaking || session.interruptionDispatched) return;
+  if (!shouldConfirmInterruption(assessment)) return;
+  session.interruptionDispatched = true;
+  dispatchAssistantVoiceInterrupt(session.card, assessment.intent, assessment.confidence);
 }
 
 export function dispatchAssistantVoiceInterrupt(
