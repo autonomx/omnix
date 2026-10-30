@@ -18,7 +18,9 @@ and keeps the frames. When a reply's phrase replays that audio, ``spec_bind`` re
 phrase's output, epoch and segment, and its frames go out at once; ``spec_prefix_end`` says how many samples the
 replay was, and the phrase's fresh audio continues from there. A prefix shorter than what arrived is cut, a longer
 one is filled with silence (its copy was dropped on the way), so the timeline stays the browser's. ``spec_drop``
-forgets an output that will never be claimed.
+forgets an output that will never be claimed. The bound segment keeps the speculation's timeline, which starts
+``trim`` samples (leading silence the browser never got) before the browser's: frames are stamped ``trim`` earlier,
+and frames in that silence are not sent.
 
 This module holds no model: a ``MotionSession`` (``services.portrait.float_runtime``) runs the passes and
 decodes, so the planning here is tested without a GPU.
@@ -140,6 +142,8 @@ class _Segment:
     done: bool = False
     start_16k: int = 0  # where the segment starts on the output's 16 kHz timeline
     resampled: np.ndarray | None = None
+    # Source samples at the segment's start that the browser never got: its offsets count from here.
+    origin: int = 0
 
     def add(self, offset: int, block: np.ndarray) -> None:
         if offset < self.samples or offset in self.blocks:
@@ -273,7 +277,10 @@ class Output:
         return clip.astype(np.float32, copy=False)
 
     def stamp(self, frame: int) -> tuple[str, int]:
-        """The segment a frame starts in, and its offset in that segment's own samples."""
+        """The segment a frame starts in, and its offset in the browser's samples of that segment.
+
+        Negative for a frame in leading silence the browser never got (a bound speculation's trim).
+        """
         at = frame * SAMPLES_PER_FRAME
         chosen = self.segments[-1]
         for segment in self.segments:
@@ -281,13 +288,13 @@ class Output:
                 chosen = segment
                 break
         offset = max(0, at - chosen.start_16k)
-        return chosen.segment_id, int(round(offset * chosen.sample_rate / SAMPLE_RATE))
+        return chosen.segment_id, int(round(offset * chosen.sample_rate / SAMPLE_RATE)) - chosen.origin
 
     def output_seconds(self, segment_id: str, offset: int) -> float | None:
         segment = self.segment(segment_id)
         if segment is None:
             return None
-        return segment.start_16k / SAMPLE_RATE + offset / segment.sample_rate
+        return segment.start_16k / SAMPLE_RATE + (offset + segment.origin) / segment.sample_rate
 
     def play_time(self, frame: int) -> float | None:
         """When a frame is expected to be heard, from the latest play-position report.
@@ -388,7 +395,7 @@ class PortraitStream:
     def spec_drop(self, generation_id: str) -> None:
         self.speculative.pop(generation_id, None)
 
-    def spec_bind(self, generation_id: str, output_id: str, epoch: int, segment_id: str) -> None:
+    def spec_bind(self, generation_id: str, output_id: str, epoch: int, segment_id: str, trim: int = 0) -> None:
         """A phrase replays this speculation: its output becomes the phrase's, and its frames go out now.
 
         A generation this stream never received (its copy was dropped, or never made) leaves the phrase as it
@@ -408,6 +415,7 @@ class PortraitStream:
             # speculative frames, made from the rest pose, would not continue it.
             target = current.segment(segment_id)
             if target is not None:
+                target.origin = max(0, int(trim))
                 for offset, block in sorted(output.segments[0].blocks.items()):
                     current.add_pcm(segment_id, offset, block, self.clock())
             self.bound[generation_id] = segment_id
@@ -415,6 +423,7 @@ class PortraitStream:
         existing = current.segment(segment_id) if same_output and current is not None else None
         output.output_id, output.epoch = output_id, epoch
         output.segments[0].segment_id = segment_id
+        output.segments[0].origin = max(0, int(trim))
         if existing is not None:
             output.segments[0].sample_rate = existing.sample_rate
         held, output.held = output.held or [], None
@@ -427,7 +436,8 @@ class PortraitStream:
         self.bound[generation_id] = segment_id
         for index, jpeg in held:
             stamp_segment, offset = output.stamp(index)
-            self.emit(Frame(output_id, epoch, stamp_segment, offset, jpeg))
+            if offset >= 0:
+                self.emit(Frame(output_id, epoch, stamp_segment, offset, jpeg))
 
     def spec_prefix_end(self, generation_id: str, segment_id: str, samples: int) -> None:
         """The replayed prefix was ``samples`` long: fit the segment to it; fresh audio follows from there."""
@@ -459,14 +469,19 @@ class PortraitStream:
         if self.output is not None and (self.output.output_id, self.output.epoch) == (output_id, epoch):
             self.output.cancelled = True
 
-    def play_position(self, segment_id: str, offset: int, round_trip_seconds: float = 0.0) -> None:
-        """The browser heard ``offset`` of ``segment_id`` (reported now, give or take the round trip)."""
+    def play_position(self, segment_id: str, offset: int, round_trip_seconds: float = 0.0,
+                      received_at: float | None = None) -> None:
+        """The browser heard ``offset`` of ``segment_id`` (reported at ``received_at``, give or take the round trip).
+
+        ``received_at`` is when the report arrived; it may be applied later, after the passes queued before it.
+        """
         self.round_trip_seconds = max(0.0, float(round_trip_seconds))
         if self.output is None:
             return
         seconds = self.output.output_seconds(segment_id, int(offset))
         if seconds is not None:
-            self.output.play_anchor = (seconds, self.clock() - self.round_trip_seconds / 2)
+            arrived = received_at if received_at is not None else self.clock()
+            self.output.play_anchor = (seconds, arrived - self.round_trip_seconds / 2)
 
     # --- work ----------------------------------------------------------------------------------------
 
@@ -533,6 +548,8 @@ class PortraitStream:
                     output.held.append((output.decoded + index, jpeg))
                     continue
                 segment_id, offset = output.stamp(output.decoded + index)
+                if offset < 0:
+                    continue  # leading silence the browser never got
                 self.emit(Frame(output.output_id, output.epoch, segment_id, offset, jpeg))
                 sent += 1
             output.decoded = stop

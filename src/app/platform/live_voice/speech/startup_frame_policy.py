@@ -54,6 +54,7 @@ def stream_live_call_pcm16_blocks(
     *,
     streamer: Callable[..., Iterator[tuple[bytes, int, Any]]],
     block_samples: int,
+    stats: dict[str, int] | None = None,
 ) -> Iterator[tuple[bytes, int, Any]]:
     """Apply the first-chunk onset window before packing transport frames."""
     chunk_iter = iter(chunks)
@@ -71,4 +72,5 @@ def stream_live_call_pcm16_blocks(
             first_pcm,
             first_rate,
         ),
+        **({"stats": stats} if stats is not None else {}),
     )

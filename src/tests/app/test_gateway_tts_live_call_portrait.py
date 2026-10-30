@@ -132,7 +132,7 @@ def test_a_phrase_replaying_copied_speculation_binds_it_and_copies_only_its_fres
     kinds = [item["type"] if isinstance(item, dict) else item[0] for item in link.sent]
     assert kinds.index("spec_bind") == kinds.index("phrase_start") + 1
     assert {"type": "spec_bind", "generation_id": "gen-1", "output_id": "turn-2", "epoch": 2,
-            "segment_id": "seg-0"} in link.sent
+            "segment_id": "seg-0", "trim": 0} in link.sent
     assert {"type": "spec_prefix_end", "generation_id": "gen-1", "segment_id": "seg-0", "samples": 4_800} in link.sent
     copied = [item for item in link.sent if isinstance(item, tuple)]
     # Only what follows the replayed prefix is copied, from its end on.
@@ -160,3 +160,26 @@ def test_the_calls_speech_lease_is_held_under_its_call_key(monkeypatch) -> None:
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
         hello = websocket.receive_json()
     assert holders == [("live_call", f"live-call:{hello['call_key']}")]
+
+
+class FailingTtsProvider(FakeTtsProvider):
+    def generate_audio_stream(self, **kwargs: Any):
+        self.calls.append(kwargs)
+        yield [0.25, -0.25] * 2_400, 24_000, {"chunk_index": 0}
+        raise RuntimeError("the TTS engine stopped")
+
+
+def test_a_phrase_that_fails_after_some_audio_still_ends_for_the_portrait(monkeypatch) -> None:
+    client, _logs = _configure_gateway(monkeypatch, FailingTtsProvider())
+    calls = client.app.state.live_portrait_calls
+    link = FakeLink()
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
+        call = calls.claim(websocket.receive_json()["avatar_token"], "local")
+        call.attach(link)
+        websocket.send_json(_owned_request("This phrase will fail.", 0))
+        while True:
+            message = websocket.receive()
+            if message.get("text") and '"error"' in message["text"]:
+                break
+        websocket.send_json({"type": "close", "reason": "finished"})
+    assert {"type": "phrase_done", "segment_id": "seg-0"} in link.sent

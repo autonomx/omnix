@@ -113,12 +113,28 @@ describe('the live portrait client', () => {
     expect(portrait.wanted()).toBe(false);
   });
 
-  it('gives up when the TTS websocket sends no hello in time', () => {
+  it('gives up when the TTS websocket sends no hello within a second of the session opening', () => {
     const { portrait } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
     portrait.begin('chat:maya');
+    vi.advanceTimersByTime(5_000); // opening the session can wait on the browser's audio: no timeout yet
     expect(portrait.getSnapshot()).toMatchObject({ status: 'connecting', fallbackRenderer: 'sprite' });
+    portrait.attachSession(session);
     vi.advanceTimersByTime(1_000);
     expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'no_hello', fallbackRenderer: 'sprite' });
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a hello after the timeout still brings the portrait back, with its clock', () => {
+    const { portrait, sockets } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    vi.advanceTimersByTime(1_200);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    expect(portrait.getSnapshot().status).toBe('ready');
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
   });
 
   it('opens the avatar websocket with the hello token and becomes ready', () => {
@@ -336,6 +352,7 @@ describe('the call visual for a portrait pack', () => {
 
     act(() => {
       livePortrait.begin('chat:maya');
+      livePortrait.attachSession(fakeSession({ currentTime: 0 }).session);
       vi.advanceTimersByTime(1_000);
     });
     expect(view.container.querySelector('figure')?.dataset.renderer).toBe('sprite');
@@ -349,6 +366,7 @@ describe('the call visual for a portrait pack', () => {
     livePortrait.setPack(pack);
     act(() => {
       livePortrait.begin('chat:maya');
+      livePortrait.attachSession(fakeSession({ currentTime: 0 }).session);
       vi.advanceTimersByTime(1_000);
     });
     const view = render(<LiveCallVisual voiceMode="idle" thinking={false} />);

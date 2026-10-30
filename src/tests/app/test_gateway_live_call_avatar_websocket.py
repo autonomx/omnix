@@ -142,9 +142,10 @@ def test_a_backlog_of_speech_frames_steps_the_quality_down(monkeypatch, portrait
             assert avatar.receive_json()["level"] == 1
             for _ in range(60):
                 avatar.receive_bytes()
-            # The idle loop's burst is not in flight; 20 speech frames sent and 4 received are.
-            avatar.send_json({"type": "frame_ack", "segment_id": "seg", "offset": 0, "received": 4, "late": 0,
-                              "decode_ms": 4.0})
+            # The idle loop's burst is not in flight; 20 speech frames sent and 4 received are, ack after ack.
+            for _ in range(3):
+                avatar.send_json({"type": "frame_ack", "segment_id": "seg", "offset": 0, "received": 4, "late": 0,
+                                  "decode_ms": 4.0})
             assert avatar.receive_json() == {"type": "quality", "level": 2}
             link = portrait.opened[0]["link"]
     assert {"type": "quality", "level": 2} in link.sent

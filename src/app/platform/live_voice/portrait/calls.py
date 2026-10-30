@@ -21,6 +21,10 @@ count of pending sends (past it the copy is dropped and the entry is no longer u
 phrase replays a copied entry, ``bind`` sends ``spec_bind`` and the phrase's own copy skips the replayed audio
 (the prefetch thread already sent it); once the replay's length is known, ``spec_prefix_end`` and the phrase's
 fresh audio after it follow. Every way an entry is dropped sends ``spec_drop``.
+
+The copy counts the provider's samples from its first; the browser gets them less the leading silence the
+transport drops (``trim``). So a bound phrase stays on the copy's timeline: ``spec_bind`` names the trim, the
+phrase's later audio goes at its offset plus the trim, and the service stamps frames back onto the browser's.
 """
 from __future__ import annotations
 
@@ -57,8 +61,11 @@ class PortraitCall:
     # Source samples sent per segment (phrase): each PCM block's offset in its phrase.
     _offsets: dict[str, int] = field(default_factory=dict)
     _priority: bool = False
-    # Phrases replaying a copied speculation, by segment: the generation id.
+    # Phrases replaying a copied speculation, by segment: the generation id, the provider samples replayed so far,
+    # and the leading samples the transport dropped (the bound phrase's offsets are shifted by it).
     _replaying: dict[str, str] = field(default_factory=dict)
+    _replayed: dict[str, int] = field(default_factory=dict)
+    _trim: dict[str, int] = field(default_factory=dict)
     loop: asyncio.AbstractEventLoop | None = None
 
     def attach(self, link: PortraitLink) -> None:
@@ -67,6 +74,8 @@ class PortraitCall:
             self.loop = asyncio.get_running_loop()
         self._offsets.clear()
         self._replaying.clear()
+        self._replayed.clear()
+        self._trim.clear()
 
     def detach(self, link: PortraitLink) -> None:
         if self.link is link:
@@ -90,29 +99,43 @@ class PortraitCall:
         offset = self._offsets.get(segment_id, 0)
         samples = len(pcm) // 2
         self._offsets[segment_id] = offset + samples
+        trim = self._trim.get(segment_id, 0)
         if segment_id in self._replaying:
+            if replay is not None:
+                self._replayed[segment_id] = replay[1]
             if replay is None or not replay[2]:
                 return  # all replay so far: the prefetch thread copied it
-            prefix = replay[1]
+            prefix = replay[1]  # in the provider's samples; the browser's is ``prefix - trim``
             self._end_replay(segment_id, prefix)
-            if offset + samples <= prefix:
+            if offset + samples <= prefix - trim:
                 return
-            start = max(offset, prefix)
+            start = max(offset, prefix - trim)
             pcm, offset = pcm[(start - offset) * 2:], start
         if self.link is not None and not self.link.closed:
-            self.link.send_pcm(segment_id, offset, pcm)
+            self.link.send_pcm(segment_id, offset + trim, pcm)
 
     def phrase_done(self, segment_id: str) -> None:
         if segment_id in self._replaying:  # the phrase was all replay
-            self._end_replay(segment_id, self._offsets.get(segment_id, 0))
+            self._end_replay(segment_id, self._replayed.get(segment_id, 0))
         self._send({"type": "phrase_done", "segment_id": segment_id})
         self._offsets.pop(segment_id, None)
+        self._replayed.pop(segment_id, None)
+        self._trim.pop(segment_id, None)
 
-    def bind(self, generation_id: str, epoch: int, segment_id: str) -> None:
-        """This phrase replays a speculation the portrait already has: its frames become the phrase's."""
+    def close_phrase(self, segment_id: str) -> None:
+        """End a phrase that started and was not ended (it failed or was stopped): its audio stops here."""
+        if segment_id in self._offsets:
+            self.phrase_done(segment_id)
+
+    def bind(self, generation_id: str, epoch: int, segment_id: str, trim: int = 0) -> None:
+        """This phrase replays a speculation the portrait already has: its frames become the phrase's.
+
+        ``trim`` is how many of the speculation's first samples the browser never got (leading silence).
+        """
         self._replaying[segment_id] = generation_id
+        self._trim[segment_id] = max(0, int(trim))
         self._send({"type": "spec_bind", "generation_id": generation_id, "output_id": turn_output(epoch),
-                    "epoch": epoch, "segment_id": segment_id})
+                    "epoch": epoch, "segment_id": segment_id, "trim": max(0, int(trim))})
 
     def _end_replay(self, segment_id: str, samples: int) -> None:
         generation_id = self._replaying.pop(segment_id)

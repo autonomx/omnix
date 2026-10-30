@@ -598,6 +598,8 @@ async def _stream_phrase(
                         "segment_id": segment_id,
                         # Raw chunks run ahead of blocks, so this already covers the block's samples.
                         "portrait_replay": portrait_replay,
+                        # Provider samples dropped before the first one sent (leading silence).
+                        "portrait_trim": block_stats.get("leading_dropped_samples", 0),
                     }
                     queued_frame_count += 1
                     emit(
@@ -643,10 +645,12 @@ async def _stream_phrase(
                         )
                     return not stopped()
 
+                block_stats: dict[str, int] = {}
                 transport_frames = stream_live_call_pcm16_blocks(
                     raw_chunks(),
                     streamer=_measured_pcm_block_streamer,
                     block_samples=TTS_PCM_FRAME_SAMPLES,
+                    stats=block_stats,
                 )
                 deferred_frame: tuple[bytes, int, Any] | None = None
                 first_frame = next(transport_frames, None)
@@ -778,7 +782,8 @@ async def _stream_phrase(
                             portrait.phrase_start(output_id, generation_epoch, segment_id, current_sample_rate)
                             replay = metadata.get("portrait_replay")
                             if first_start_control and replay is not None:
-                                portrait.bind(replay[0], generation_epoch, segment_id)
+                                portrait.bind(replay[0], generation_epoch, segment_id,
+                                              trim=int(metadata.get("portrait_trim") or 0))
                         if first_start_control:
                             stream_log(
                                 stream_id,
@@ -869,6 +874,8 @@ async def _stream_phrase(
         phrase_stop.set()
         if state.portrait is not None:
             state.portrait.tts_priority(False)  # also on an error or a cancel before the first chunk
+            # A phrase that failed after some audio still ends: the reply's later phrases follow it.
+            state.portrait.close_phrase(segment_id)
         if state.active_frames is not None:
             state.active_frames = None
         if state.active_output is active_output:

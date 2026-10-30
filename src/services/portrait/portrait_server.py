@@ -302,7 +302,7 @@ class StreamWorker:
             stream.output_end(str(message["output_id"]), int(message["epoch"]))
         elif kind == "play_position":
             stream.play_position(str(message["segment_id"]), int(message["offset"]),
-                                 float(message.get("round_trip_seconds") or 0.0))
+                                 float(message.get("round_trip_seconds") or 0.0), message.get("received_at"))
         elif kind == "quality":
             stream.session.level = quality_level(message.get("level"))
             for _output, session in stream.speculative.values():
@@ -313,7 +313,7 @@ class StreamWorker:
             stream.spec_drop(str(message["generation_id"]))
         elif kind == "spec_bind":
             stream.spec_bind(str(message["generation_id"]), str(message["output_id"]), int(message["epoch"]),
-                             str(message["segment_id"]))
+                             str(message["segment_id"]), int(message.get("trim") or 0))
         elif kind == "spec_prefix_end":
             stream.spec_prefix_end(str(message["generation_id"]), str(message["segment_id"]), int(message["samples"]))
 
@@ -488,14 +488,25 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         host.attach(worker)
 
         idle_box: collections.deque[bytes] = collections.deque()
+        # Remote calls get the idle loop at its own frame rate, so a reply's first frames never queue behind
+        # seconds of it in the socket; a loopback call (level 0) gets it at once.
+        idle_pace = {"gap": 0.0, "next": 0.0}
 
         async def send_frames() -> None:
             # Speech first; the idle loop goes out only while no speech frame is waiting.
             while True:
                 if outbox.empty() and idle_box:
-                    await websocket.send_bytes(idle_box.popleft())
-                    continue
-                message = await outbox.get()
+                    wait = idle_pace["next"] - loop.time()
+                    if wait <= 0:
+                        await websocket.send_bytes(idle_box.popleft())
+                        idle_pace["next"] = loop.time() + idle_pace["gap"]
+                        continue
+                    try:
+                        message = await asyncio.wait_for(outbox.get(), wait)
+                    except asyncio.TimeoutError:
+                        continue
+                else:
+                    message = await outbox.get()
                 if message:  # an empty message only wakes this loop for the idle loop
                     await websocket.send_bytes(message)
 
@@ -509,6 +520,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                 logger.warning("Portrait idle loop failed for %s", call_key, exc_info=True)
                 return
             frame_ms = 40 * idle_frame_step(level)
+            idle_pace["gap"] = frame_ms / 1000 if level > 0 else 0.0
             for index, jpeg in enumerate(frames):
                 idle_box.append(pack({"output_id": IDLE_OUTPUT_ID, "epoch": 0, "segment_id": IDLE_SEGMENT_ID,
                                       "offset": index, "count": len(frames), "frame_ms": frame_ms}, jpeg))
@@ -537,6 +549,8 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                 elif kind == "tts_priority":
                     (portrait_stream.priority.set if control.get("on") else portrait_stream.priority.clear)()
                 elif kind in STREAM_MESSAGES:
+                    if kind == "play_position":  # its time is when it came, not when the GPU thread gets to it
+                        control["received_at"] = time.monotonic()
                     worker.inbox.put((kind, control, None))
         except WebSocketDisconnect:
             pass

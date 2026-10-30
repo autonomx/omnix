@@ -345,6 +345,14 @@ function cancelGreetingStartup(reason: string, preserveUserSpoke = false): void 
   if (!preserveUserSpoke) greetingStartup = null;
 }
 
+/** Once every phrase of the turn is synthesized, tell a live portrait the turn's last output has ended. */
+async function endTurnOutput(turn: ActiveLiveTurn): Promise<void> {
+  await Promise.allSettled(turn.audioTasks);
+  const lastOutput = turn.outputOwnerships[turn.outputOwnerships.length - 1];
+  const session = await turn.sessionPromise.catch(() => null);
+  if (lastOutput && session) session.sendOutputEnd(lastOutput.outputId, lastOutput.generationEpoch);
+}
+
 async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: ActiveLiveTurn): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -421,6 +429,8 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     else if (fallbackText.trim()) queuePhrase(fallbackText, turn, 'stream-end');
   } finally {
     clearDeadlineTimer();
+    // Whether the stream finished or failed, the portrait commits the turn's last frames once its phrases are made.
+    void endTurnOutput(turn).catch(() => undefined);
   }
 
   turn.reporter.record('llm_stream_finished', {
@@ -440,9 +450,6 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   if (session) {
     try {
       const generationResults = await Promise.allSettled(turn.audioTasks);
-      const lastOutput = turn.outputOwnerships[turn.outputOwnerships.length - 1];
-      // Every phrase of the turn is synthesized: a live portrait commits the turn's last frames now.
-      if (lastOutput) session.sendOutputEnd(lastOutput.outputId, lastOutput.generationEpoch);
       const rejected = generationResults.find((result) => result.status === 'rejected');
       if (rejected?.status === 'rejected') throw rejected.reason;
       await withTimeout(

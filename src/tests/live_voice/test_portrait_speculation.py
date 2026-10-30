@@ -77,7 +77,7 @@ def test_a_replayed_phrase_skips_what_the_prefetch_copied_and_sends_the_rest_aft
     call.pcm("seg", b"\x00\x00" * 960, ("gen-1", 1_400, True))  # the replay ended inside this block
     call.pcm("seg", b"\x00\x00" * 960, ("gen-1", 1_400, True))
     assert link.sent[1] == {"type": "spec_bind", "generation_id": "gen-1", "output_id": "turn-4", "epoch": 4,
-                            "segment_id": "seg"}
+                            "segment_id": "seg", "trim": 0}
     assert link.sent[2:] == [
         {"type": "spec_prefix_end", "generation_id": "gen-1", "segment_id": "seg", "samples": 1_400},
         ("pcm", "seg", 1_400, 520),
@@ -207,3 +207,54 @@ def test_spec_segment_frames_unpack() -> None:
 
     assert SPEC_PREFIX == SPEC_SEGMENT_PREFIX
     assert unpack(b"\x00\x00\x00\x02{}") == ({}, b"")
+
+
+def test_the_transport_reports_the_leading_silence_it_drops() -> None:
+    import numpy as np
+
+    from app.conversation.tts_stream_contract import stream_pcm16_blocks
+
+    silence = np.zeros(4_800, dtype="<i2").tobytes()  # 200 ms at 24 kHz
+    speech = (np.sin(np.arange(9_600) / 3.0) * 12_000).astype("<i2").tobytes()
+    stats: dict[str, int] = {}
+    blocks = list(stream_pcm16_blocks(iter([(silence, 24_000, {}), (speech, 24_000, {})]), block_samples=960,
+                                      stats=stats))
+    sent = b"".join(block for block, _rate, _timing in blocks)
+    dropped = stats["leading_dropped_samples"]
+    assert 0 < dropped < 4_800  # the silence less the 40 ms preroll
+    assert sent[: len(silence + speech) - dropped * 2] == (silence + speech)[dropped * 2:]
+
+
+def test_a_bound_phrase_with_trimmed_silence_stays_on_the_copys_timeline() -> None:
+    call, link = _call()
+    call.phrase_start("out", 4, "seg", 24_000)
+    call.bind("gen-1", 4, "seg", trim=600)
+    # The browser's offsets start 600 samples into the copy: its 960-sample block ends the replay at copy 1,400.
+    call.pcm("seg", b"\x00\x00" * 960, ("gen-1", 1_400, True))
+    call.pcm("seg", b"\x00\x00" * 960, ("gen-1", 1_400, True))
+    assert link.sent[1]["trim"] == 600
+    assert link.sent[2:] == [
+        {"type": "spec_prefix_end", "generation_id": "gen-1", "segment_id": "seg", "samples": 1_400},
+        ("pcm", "seg", 1_400, 160),  # browser 800-959, copy 1,400-1,559
+        ("pcm", "seg", 1_560, 960),
+    ]
+
+
+def test_an_all_replay_phrase_ends_its_prefix_at_the_copys_length_not_the_padded_one() -> None:
+    call, link = _call()
+    call.phrase_start("out", 4, "seg", 24_000)
+    call.bind("gen-1", 4, "seg", trim=300)
+    call.pcm("seg", b"\x00\x00" * 960, ("gen-1", 1_100, False))
+    call.pcm("seg", b"\x00\x00" * 960, ("gen-1", 1_100, False))  # the last block is padded
+    call.phrase_done("seg")
+    assert {"type": "spec_prefix_end", "generation_id": "gen-1", "segment_id": "seg", "samples": 1_100} in link.sent
+
+
+def test_a_phrase_that_failed_midway_is_still_ended() -> None:
+    call, link = _call()
+    call.phrase_start("out", 4, "seg", 24_000)
+    call.pcm("seg", b"\x00\x00" * 960)
+    call.close_phrase("seg")
+    call.close_phrase("seg")  # once only
+    assert [item for item in link.sent if isinstance(item, dict) and item["type"] == "phrase_done"] == [
+        {"type": "phrase_done", "segment_id": "seg"}]

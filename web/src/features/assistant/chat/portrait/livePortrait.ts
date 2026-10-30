@@ -99,7 +99,6 @@ export class LivePortrait {
     setLiveVoiceReleasePortrait(true);
     this.buffer = new PortraitFrameBuffer<ImageBitmap>((image) => image.close());
     this.publish({ status: 'connecting', fallbackRenderer: this.pack?.fallback_renderer ?? 'orb', reason: null });
-    this.helloTimer = setTimeout(() => this.unavailable('no_hello', generation), HELLO_TIMEOUT_MS);
     return {
       onHello: ({ callKey, avatarToken }) => {
         if (generation !== this.generation) return;
@@ -127,6 +126,11 @@ export class LivePortrait {
     this.session = session;
     this.clock = new PortraitPlaybackClock(session.audioContext.sampleRate);
     if (this.snapshot.status !== 'unavailable') session.setPortraitClock(true);
+    // The session is open: its hello is due now (opening it can wait on the browser's audio and the gateway).
+    const generation = this.generation;
+    if (this.liveCallKey === null && !this.socket) {
+      this.helloTimer = setTimeout(() => this.unavailable('no_hello', generation), HELLO_TIMEOUT_MS);
+    }
   }
 
   /** The frame for what is heard now, or null (keep the last one up, or show the idle portrait). */
@@ -220,6 +224,8 @@ export class LivePortrait {
     }
     if (message.type === 'ready') {
       this.level = message.level ?? 0;
+      // A late hello may have come after the portrait was given up on: the worklet's clock is needed again.
+      this.session?.setPortraitClock(true);
       this.publish({ status: 'ready', fallbackRenderer: message.fallback_renderer ?? this.snapshot.fallbackRenderer, reason: null });
       this.ackTimer = setInterval(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
     } else if (message.type === 'quality' && typeof message.level === 'number') {

@@ -5,9 +5,12 @@
 level. Starlette cannot report a socket's send backlog, so the gateway works out the frames in flight from what it
 relayed and what the browser says it has received. Every ``frame_ack`` (each 250 ms) is a health sample:
 
-- unhealthy when more than ``MAX_IN_FLIGHT`` frames are in flight, any frame came too late to draw, or decoding
-  averaged over ``MAX_DECODE_MS``: the level steps down at once (and the healthy run restarts), then waits
-  ``SETTLE_SECONDS`` before stepping again, while the frames already sent at the old level drain;
+- unhealthy when any frame came too late to draw, or when more than ``MAX_IN_FLIGHT`` frames stay in flight for
+  ``BACKLOG_ACKS`` acks in a row: the level steps down at once (and the healthy run restarts), then waits
+  ``SETTLE_SECONDS`` before stepping again, while the frames already sent at the old level drain. A burst alone is
+  not congestion: the service renders ahead of playback whenever TTS runs faster than real time (and a bound
+  speculation sends its frames at once), and a link that keeps up drains it within an ack or two. The browser's
+  decode time is reported, not stepped on: it is timed from arrival, so a burst's decodes queue behind each other;
 - after ``STEP_UP_SECONDS`` of healthy acks it steps back up, one level at a time.
 
 Loopback clients start at L0, remote ones at L1.
@@ -19,7 +22,7 @@ from dataclasses import dataclass
 from app.conversation.portrait_stream_contract import QUALITY_LEVELS
 
 MAX_IN_FLIGHT = 12  # about half a second of frames at 25 a second
-MAX_DECODE_MS = 30.0
+BACKLOG_ACKS = 3
 STEP_UP_SECONDS = 5.0
 SETTLE_SECONDS = 1.0
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -35,6 +38,7 @@ class QualityController:
     sent: int = 0
     healthy_since: float | None = None
     stepped_down_at: float | None = None
+    backlog: int = 0  # acks in a row with too many frames in flight
 
     @property
     def lowest(self) -> bool:
@@ -47,7 +51,8 @@ class QualityController:
     def observe(self, now: float, *, received: int, late: int, decode_ms: float) -> int | None:
         """A frame_ack's health; the new level when it changes, else None."""
         in_flight = max(0, self.sent - max(0, received))
-        if in_flight > MAX_IN_FLIGHT or late > 0 or decode_ms > MAX_DECODE_MS:
+        self.backlog = self.backlog + 1 if in_flight > MAX_IN_FLIGHT else 0
+        if late > 0 or self.backlog >= BACKLOG_ACKS:
             self.healthy_since = None
             settling = self.stepped_down_at is not None and now - self.stepped_down_at < SETTLE_SECONDS
             if self.lowest or settling:
@@ -65,4 +70,4 @@ class QualityController:
         return None
 
 
-__all__ = ["MAX_DECODE_MS", "MAX_IN_FLIGHT", "QualityController", "SETTLE_SECONDS", "STEP_UP_SECONDS", "starting_level"]
+__all__ = ["BACKLOG_ACKS", "MAX_IN_FLIGHT", "QualityController", "SETTLE_SECONDS", "STEP_UP_SECONDS", "starting_level"]

@@ -281,3 +281,25 @@ def test_a_later_phrase_claiming_speculation_joins_the_replys_own_motion() -> No
     stream.spec_bind("gen-1", "turn-1", 1, "seg-b")
     assert len(frames) == sent_before and stream.session is session  # no speculative frames: they start at rest
     assert stream.output is not None and stream.output.segment("seg-b").samples == 24_000
+
+
+def test_a_bound_speculation_with_trimmed_silence_stamps_frames_on_the_browsers_timeline() -> None:
+    stream, _session, frames = _stream()
+    _speculate(stream, "gen-1", 2.0)
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    stream.spec_bind("gen-1", "turn-1", 1, "seg-a", trim=1_000)
+    # Frames 0 and 1 (copy samples 0 and 960) are in silence the browser never got; frame 2 is browser 920.
+    assert [frame.offset for frame in frames[:2]] == [1_920 - 1_000, 2_880 - 1_000]
+    assert len(frames) == 26
+    assert stream.output is not None
+    assert stream.output.output_seconds("seg-a", 0) == 1_000 / 24_000
+
+
+def test_a_play_position_counts_from_when_it_arrived() -> None:
+    clock = Clock()
+    stream, _session, _frames = _stream(clock)
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    _feed(stream, "seg-a", _pcm(1.0, 24_000), 4_800)
+    clock.now = 105.0
+    stream.play_position("seg-a", 2_400, received_at=104.5)
+    assert stream.output is not None and stream.output.play_anchor == (0.1, 104.5)
