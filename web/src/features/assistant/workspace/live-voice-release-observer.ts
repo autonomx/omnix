@@ -17,7 +17,18 @@ export type LiveVoiceLatencyMetric =
   | 'first_token_to_first_playback_ms'
   | 'final_to_first_playback_ms'
   | 'stt_request_to_first_playback_ms'
-  | 'interruption_to_silence_ms';
+  | 'interruption_to_silence_ms'
+  // The live portrait's paired gate (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 5); not all are ms.
+  | 'first_audible_ms'
+  | 'start_hold_ms'
+  | 'underrun_count'
+  | 'llm_tokens_per_second';
+
+/** Metrics recorded as many samples at once (the portrait's per-frame A/V offset). */
+export type LiveVoiceSampledMetric = 'av_offset_ms';
+
+/** Events counted per run (the portrait falling back, or refused for another call). */
+export type LiveVoiceReleaseCounter = 'portrait_degrade_count' | 'portrait_admission_refused';
 
 export type LiveVoiceQualityMetric =
   | 'false_interruption'
@@ -69,6 +80,8 @@ type ReleaseState = {
   interruptionAt: number | null;
   turnId: string | null;
   activeTraceId: string | null;
+  llmChars: number;
+  underruns: number;
 };
 
 const reporter = typeof window === 'undefined'
@@ -76,6 +89,29 @@ const reporter = typeof window === 'undefined'
   : createLiveCallDiagnosticsReporter('live-call:release-observer');
 let initialized = false;
 let state: ReleaseState = emptyState();
+// Whether the call shows a live portrait: every release metric says so, for the paired (off/on) gate.
+let portraitActive = false;
+
+export function setLiveVoiceReleasePortrait(active: boolean): void {
+  portraitActive = active;
+}
+
+/** Many samples of one metric at once (a portrait's A/V offsets, a few seconds of frames at a time). */
+export function recordLiveVoiceReleaseSamples(metricName: LiveVoiceSampledMetric, values: number[]): void {
+  if (!values.length) return;
+  reporter?.record('release_metric_batch', {
+    metric_name: metricName,
+    values: values.map((value) => Math.round(value * 10) / 10),
+    scenario: currentScenario(),
+    portrait: portraitActive,
+  }, 'release_observer');
+}
+
+export function recordLiveVoiceReleaseCounter(counterName: LiveVoiceReleaseCounter, details: Record<string, unknown> = {}): void {
+  reporter?.record('release_counter', {
+    ...details, counter_name: counterName, scenario: currentScenario(), portrait: portraitActive,
+  }, 'release_observer');
+}
 
 export function initializeLiveVoiceReleaseObserver(): () => void {
   if (initialized || typeof window === 'undefined') return () => undefined;
@@ -205,6 +241,15 @@ function handleDiagnosticEvent(event: Event): void {
   const traceId = typeof detail.traceId === 'string' ? detail.traceId : null;
   if (!traceId || traceId === 'live-call:release-observer') return;
   const now = performance.now();
+  // The audio session's own events: they belong to whichever turn is playing.
+  if (diagnosticEvent === 'worklet_underrun') {
+    state.underruns += 1;
+    return;
+  }
+  if (diagnosticEvent === 'worklet_start_hold') {
+    recordLatency('start_hold_ms', finiteNonnegative(detail.details?.held_ms));
+    return;
+  }
 
   if (diagnosticEvent === 'turn_intercepted') {
     if (!traceMatchesCurrentVoiceTurn(traceId)) return;
@@ -213,7 +258,17 @@ function handleDiagnosticEvent(event: Event): void {
   }
   if (!diagnosticBelongsToActiveTurn(detail, diagnosticEvent, traceId)) return;
   if (diagnosticEvent === 'turn_finished') {
+    if (state.firstPlaybackAt !== null) recordLatency('underrun_count', state.underruns);
     state = emptyState();
+    return;
+  }
+  if (diagnosticEvent === 'llm_text_chunk_received') {
+    state.llmChars += finiteNonnegative(detail.details?.text_length) ?? 0;
+  }
+  if (diagnosticEvent === 'llm_stream_finished' && state.firstTokenAt !== null && state.llmChars > 0) {
+    // About four characters a token: the same estimate for the portrait's on and off runs.
+    const seconds = (now - state.firstTokenAt) / 1000;
+    if (seconds > 0.05) recordLatency('llm_tokens_per_second', state.llmChars / 4 / seconds);
     return;
   }
   if (diagnosticEvent === 'chat_response_opened' && state.responseOpenedAt === null) {
@@ -261,6 +316,9 @@ function handleDiagnosticEvent(event: Event): void {
     );
     state.firstPlaybackAt = playbackAt;
     recordLatency('speech_end_to_first_playback_ms', elapsed(state.speechEndedAt, playbackAt));
+    const heardAfter = finiteNonnegative(detail.details?.output_latency_ms) ?? 0;
+    const audible = elapsed(state.speechEndedAt, playbackAt);
+    recordLatency('first_audible_ms', audible === null ? null : audible + heardAfter);
     recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, playbackAt));
     recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, playbackAt));
     recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, playbackAt));
@@ -352,6 +410,7 @@ function recordLatency(metricName: LiveVoiceLatencyMetric, valueMs: number | nul
     metric_name: metricName,
     value_ms: rounded,
     scenario,
+    portrait: portraitActive,
     turn_id: state.turnId,
     observed_trace_id: state.activeTraceId,
   }, 'release_observer');
@@ -418,5 +477,7 @@ function emptyState(): ReleaseState {
     interruptionAt: null,
     turnId: null,
     activeTraceId: null,
+    llmChars: 0,
+    underruns: 0,
   };
 }

@@ -1,4 +1,9 @@
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from '../../../../events/bus';
+import {
+  recordLiveVoiceReleaseCounter,
+  recordLiveVoiceReleaseSamples,
+  setLiveVoiceReleasePortrait,
+} from '../../workspace/live-voice-release-observer';
 import type { LiveVoicePcmSession, LiveVoicePortraitHooks } from '../../workspace/live-voice-pcm-session';
 import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
@@ -36,6 +41,9 @@ const AVATAR_WEBSOCKET_PATH = '/api/tts/live-call/avatar-websocket';
 const HELLO_TIMEOUT_MS = 1_000;
 const FRAME_ACK_INTERVAL_MS = 250;
 const LOWEST_LEVEL = 3;
+const PORTRAIT_ENABLED_KEY = 'omnix.livePortrait.enabled';
+// A/V offsets go to the release gate a couple of seconds at a time.
+const AV_OFFSET_FLUSH_ACKS = 8;
 const LATE_FRAMES_TO_DEGRADE = 3;
 const OFF: LivePortraitSnapshot = { status: 'off', fallbackRenderer: 'orb', reason: null };
 
@@ -61,6 +69,9 @@ export class LivePortrait {
   private decodeMs = 0;
   private decoded = 0;
   private degradedEpoch: number | null = null;
+  private avOffsets: number[] = [];
+  private lastMeasured: ImageBitmap | null = null;
+  private acks = 0;
   private helloTimer: ReturnType<typeof setTimeout> | null = null;
   private ackTimer: ReturnType<typeof setInterval> | null = null;
   private generation = 0;
@@ -75,9 +86,9 @@ export class LivePortrait {
     this.pack = pack;
   }
 
-  /** Whether the call's avatar is a portrait (the audio session then asks for a hello). */
+  /** Whether the call's avatar is a portrait (the audio session then asks for a hello), unless switched off. */
   wanted(): boolean {
-    return this.pack?.renderer === 'portrait';
+    return this.pack?.renderer === 'portrait' && portraitEnabled();
   }
 
   /** Start for a call: the hooks go to the live audio session it opens. */
@@ -85,6 +96,7 @@ export class LivePortrait {
     this.end();
     const generation = ++this.generation;
     this.sessionId = sessionId;
+    setLiveVoiceReleasePortrait(true);
     this.buffer = new PortraitFrameBuffer<ImageBitmap>((image) => image.close());
     this.publish({ status: 'connecting', fallbackRenderer: this.pack?.fallback_renderer ?? 'orb', reason: null });
     this.helloTimer = setTimeout(() => this.unavailable('no_hello', generation), HELLO_TIMEOUT_MS);
@@ -126,6 +138,7 @@ export class LivePortrait {
   /** What to draw at `now` (performance time, ms): speech, the held frame, or the idle loop, with crossfades. */
   picture(now: number): PortraitPicture<ImageBitmap> {
     const speech = this.currentFrame();
+    if (speech && speech !== this.lastMeasured) this.measureOffset(speech);
     const context = this.session?.audioContext;
     const stalled = Boolean(context && this.clock?.underrunAt(context.currentTime, outputLatency(context)));
     return this.compositor.picture(now, speech, stalled);
@@ -133,6 +146,9 @@ export class LivePortrait {
 
   end(): void {
     this.generation += 1;
+    this.flushOffsets();
+    this.lastMeasured = null;
+    setLiveVoiceReleasePortrait(false);
     this.clearHelloTimer();
     if (this.ackTimer) clearInterval(this.ackTimer);
     this.ackTimer = null;
@@ -213,6 +229,25 @@ export class LivePortrait {
     }
   }
 
+  /**
+   * The drawn frame against what is heard, once per frame: the heard position less the frame's middle, in ms
+   * (0 is a frame centred on the sound; positive, a frame behind it).
+   */
+  private measureOffset(frame: ImageBitmap): void {
+    this.lastMeasured = frame;
+    const position = this.heard();
+    const offset = this.buffer.lastOffset;
+    if (!position || offset === null || !this.clock) return;
+    const rate = this.buffer.sourceRate(position.segmentId);
+    const heard = this.buffer.sourceOffset(position, this.clock.rate);
+    this.avOffsets.push(((heard - offset) / rate) * 1000 - 20);
+  }
+
+  private flushOffsets(): void {
+    recordLiveVoiceReleaseSamples('av_offset_ms', this.avOffsets);
+    this.avOffsets = [];
+  }
+
   private addSpeechFrame(header: PortraitFrameHeader, image: ImageBitmap, decodeMs: number): void {
     this.received += 1;
     this.decoded += 1;
@@ -259,9 +294,12 @@ export class LivePortrait {
     this.late = 0;
     this.decodeMs = 0;
     this.decoded = 0;
+    this.acks += 1;
+    if (this.acks % AV_OFFSET_FLUSH_ACKS === 0) this.flushOffsets();
     if (this.snapshot.status === 'ready' && this.level >= LOWEST_LEVEL && late >= LATE_FRAMES_TO_DEGRADE) {
       this.degradedEpoch = this.buffer.epochAt(position);
       this.publish({ ...this.snapshot, status: 'degraded', reason: 'frames_late' });
+      recordLiveVoiceReleaseCounter('portrait_degrade_count', { reason: 'frames_late' });
     }
   }
 
@@ -275,6 +313,8 @@ export class LivePortrait {
     if (generation !== this.generation) return;
     this.clearHelloTimer();
     this.session?.setPortraitClock(false); // no frames will come: never hold a start for them
+    if (reason === 'portrait_busy') recordLiveVoiceReleaseCounter('portrait_admission_refused');
+    else recordLiveVoiceReleaseCounter('portrait_degrade_count', { reason });
     this.publish({ status: 'unavailable', fallbackRenderer: this.snapshot.fallbackRenderer, reason });
   }
 
@@ -286,6 +326,15 @@ export class LivePortrait {
   private publish(snapshot: LivePortraitSnapshot): void {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener();
+  }
+}
+
+/** `omnix.livePortrait.enabled` = '0' shows the pack's fallback instead (the release gate's portrait-off run). */
+export function portraitEnabled(): boolean {
+  try {
+    return window.localStorage.getItem(PORTRAIT_ENABLED_KEY) !== '0';
+  } catch {
+    return true;
   }
 }
 

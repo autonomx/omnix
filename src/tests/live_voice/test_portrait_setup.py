@@ -84,3 +84,13 @@ def test_a_released_portrait_is_forgotten_by_its_tenant_and_image_digest(monkeyp
     monkeypatch.setattr(cleanup, "portrait_url", lambda: "")
     cleaner.on_portrait_released("image:maya")
     assert len(forgotten) == 1
+
+
+def test_the_portrait_service_is_listed_with_the_gateways_model_services() -> None:
+    from app.runtime.worker_health import discover_worker_specs
+
+    specs = discover_worker_specs({"OMNIX_STT_URL": "http://127.0.0.1:5201",
+                                   "OMNIX_PORTRAIT_URL": "http://127.0.0.1:5501/"})
+    portrait = next(spec for spec in specs if spec.id == "portrait")
+    assert portrait.url == "http://127.0.0.1:5501" and portrait.source_env == "OMNIX_PORTRAIT_URL"
+    assert all(spec.id != "portrait" for spec in discover_worker_specs({"OMNIX_STT_URL": "http://127.0.0.1:5201"}))

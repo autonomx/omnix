@@ -105,6 +105,12 @@
 <td>Feature-dependent</td>
 </tr>
 <tr>
+<td>Live portrait</td>
+<td>http://127.0.0.1:5501</td>
+<td>FLOAT talking portraits for live calls (<code>OMNIX_PORTRAIT_URL</code>)</td>
+<td>Optional</td>
+</tr>
+<tr>
 <td>Hermes</td>
 <td>http://127.0.0.1:8642</td>
 <td>Optional out-of-process agent proposals</td>
@@ -443,6 +449,18 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 <li>confirm the provider supports transcription;</li>
 <li>check language/automatic-detection settings;</li>
 <li>inspect the stt.transcribe job and transcript asset.</li>
+</ul>
+<p>For a live call&#x27;s portrait (<code>docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md</code>):</p>
+<ul>
+<li>a call with a portrait character shows the pack&#x27;s fallback (its image, its Live2D rig or the orb) whenever the</li>
+<p>portrait cannot serve; the call itself goes on. The browser&#x27;s live-call diagnostics name the reason (<code>portrait_not_configured</code>, <code>portrait_busy</code>, <code>warming</code>, <code>portrait_lost</code>, <code>frames_late</code>, ...);</p>
+<li>check <code>GET 127.0.0.1:5501/health</code>: <code>status</code> is <code>missing</code> (install the live-portrait bundle in Settings, Models),</li>
+<p><code>short</code> (less than 2.5 GB of free VRAM or 6 GB of commit headroom: close something), <code>warming</code> (cuDNN builds its plans; about a minute after start), <code>ready</code>, or <code>failed</code> (its <code>message</code> says why);</p>
+<li><code>streams.active</code> against <code>streams.max</code>: one call&#x27;s portrait per GPU. Another call is refused with <code>portrait_busy</code>;</li>
+<p>the same user and session reloading replaces its own stream. A stream whose heartbeats stop is closed after 6 s;</p>
+<li>the model unloads after 30 idle minutes with no stream open (<code>OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS</code>) and loads again</li>
+<p>on the next call&#x27;s prepare, which then reports <code>warming</code>;</p>
+<li>the diagnostics page lists the service with the other model services when <code>OMNIX_PORTRAIT_URL</code> is set.</li>
 </ul>
 <h3 id="8-an-agent-proposes-but-does-not-execute">8. An agent proposes but does not execute</h3>
 <p>This can be an expected governance result. Inspect:</p>

@@ -7,6 +7,13 @@ import { LiveCallVisual } from '../LiveCallVisual';
 import { fixture } from '../../../../test/fixture';
 import { LivePortrait, livePortrait } from './livePortrait';
 
+const release = vi.hoisted(() => ({ samples: vi.fn(), counter: vi.fn(), portrait: vi.fn() }));
+vi.mock('../../workspace/live-voice-release-observer', () => ({
+  recordLiveVoiceReleaseSamples: release.samples,
+  recordLiveVoiceReleaseCounter: release.counter,
+  setLiveVoiceReleasePortrait: release.portrait,
+}));
+
 const CONTEXT_RATE = 48_000;
 
 class FakeSocket {
@@ -83,6 +90,8 @@ const flush = () => act(async () => { await Promise.resolve(); await Promise.res
 
 beforeEach(() => {
   vi.useFakeTimers();
+  release.samples.mockReset();
+  release.counter.mockReset();
 });
 
 afterEach(() => {
@@ -97,6 +106,9 @@ describe('the live portrait client', () => {
   it('is wanted only for a portrait pack', () => {
     const { portrait } = setup();
     expect(portrait.wanted()).toBe(true);
+    window.localStorage.setItem('omnix.livePortrait.enabled', '0'); // the paired gate's portrait-off run
+    expect(portrait.wanted()).toBe(false);
+    window.localStorage.removeItem('omnix.livePortrait.enabled');
     portrait.setPack({ renderer: 'sprite' });
     expect(portrait.wanted()).toBe(false);
   });
@@ -153,6 +165,11 @@ describe('the live portrait client', () => {
     expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toEqual({
       type: 'frame_ack', segment_id: 'seg-1', offset: 1_200, received: 3, late: 0, decode_ms: expect.any(Number),
     });
+    // The drawn frame (960) against what is heard (1200 of 24 kHz), less half a frame: -10 ms.
+    portrait.picture(performance.now());
+    portrait.end();
+    expect(release.samples).toHaveBeenCalledWith('av_offset_ms', [-10]);
+    expect(release.portrait).toHaveBeenLastCalledWith(false);
   });
 
   it('never draws a cancelled turn, even frames that arrive after the cancel', async () => {
@@ -237,6 +254,7 @@ describe('the live portrait client', () => {
     portrait.begin('chat:maya').onHello({ callKey: 'call-1', avatarToken: 'token' });
     sockets[0].message(JSON.stringify({ type: 'unavailable', code: 'portrait_busy' }));
     expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_busy' });
+    expect(release.counter).toHaveBeenLastCalledWith('portrait_admission_refused');
 
     portrait.begin('chat:maya').onHello({ callKey: 'call-2', avatarToken: 'token' });
     sockets[1].emit('close', {});
@@ -246,6 +264,7 @@ describe('the live portrait client', () => {
     sockets[2].message(JSON.stringify({ type: 'ready' }));
     sockets[2].emit('close', {});
     expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_lost' });
+    expect(release.counter).toHaveBeenLastCalledWith('portrait_degrade_count', { reason: 'portrait_lost' });
   });
 
   it('ignores a previous call once it has ended', () => {

@@ -464,6 +464,15 @@ def main() -> int:
     parser.add_argument("--max-median-ms", type=float, default=None)
     parser.add_argument("--max-p95-ms", type=float, default=None)
     parser.add_argument("--skip-preflight", action="store_true")
+    # The live portrait's paired gate (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 5): run a scenario
+    # with --portrait off, then on, with --repeat 8 (40 replies), then compare the two runs with
+    # python -m app.platform.live_voice.release_gate_cli --portrait-pairing.
+    parser.add_argument("--portrait", choices=("off", "on"), default=None,
+                        help="Show the call's live portrait (on) or its fallback (off)")
+    parser.add_argument("--scenario", default="", help="The release scenario label for this run")
+    parser.add_argument("--app-path", default="/chatbot",
+                        help="Where the call starts (a session whose character has a portrait pack)")
+    parser.add_argument("--repeat", type=int, default=1, help="Play the five interactions this many times")
     args = parser.parse_args()
 
     audio_paths = [args.audio_dir / f"interaction-{index}.wav" for index in range(1, 6)]
@@ -506,6 +515,10 @@ def main() -> int:
     env["OMNIX_LIVE_VOICE_EXPECTED_PROVIDER"] = args.expected_provider
     env["OMNIX_LIVE_VOICE_BENCHMARK_AUDIO_DIR"] = str(args.audio_dir.resolve())
     env["OMNIX_LIVE_VOICE_BENCHMARK_MANIFEST"] = str(manifest_path.resolve())
+    env["OMNIX_LIVE_VOICE_BENCHMARK_PORTRAIT"] = args.portrait or ""
+    env["OMNIX_LIVE_VOICE_BENCHMARK_SCENARIO"] = args.scenario
+    env["OMNIX_LIVE_VOICE_BENCHMARK_PATH"] = args.app_path
+    env["OMNIX_LIVE_VOICE_BENCHMARK_REPEAT"] = str(max(1, args.repeat))
 
     command = [
         sys.executable,

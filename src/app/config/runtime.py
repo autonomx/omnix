@@ -277,7 +277,8 @@ class RuntimeConfig:
             build_revision=env.get("OMNIX_SOFTWARE_REVISION", "unversioned"),
             worker_environment=tuple(sorted((key, value) for key, value in env.items()
                                      if key.startswith('OMNIX_WORKER_') or key in {
-                                         'OMNIX_GATEWAY_WORKERS', 'OMNIX_GATEWAY_MOCK_WORKERS', 'OMNIX_GATEWAY_MOCK_WORKERS_LIST'})),
+                                         'OMNIX_GATEWAY_WORKERS', 'OMNIX_GATEWAY_MOCK_WORKERS', 'OMNIX_GATEWAY_MOCK_WORKERS_LIST',
+                                         'OMNIX_PORTRAIT_URL'})),
             enabled_features=tuple(
                 value.strip()
                 for value in env.get("OMNIX_FEATURES", "all").split(",")

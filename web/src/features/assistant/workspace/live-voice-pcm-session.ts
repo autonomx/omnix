@@ -211,6 +211,16 @@ export function resolveWorkletPlaybackPerformanceTimeMs(
   }
 }
 
+/** When a segment's playback began (performance time), and the output latency before it is heard. */
+function segmentStartTiming(event: WorkletEvent, audioContext: AudioContext): Record<string, number> {
+  const playbackPerformanceTimeMs = resolveWorkletPlaybackPerformanceTimeMs(event, audioContext);
+  const latency = (audioContext as AudioContext & { outputLatency?: number }).outputLatency ?? audioContext.baseLatency;
+  return {
+    ...(playbackPerformanceTimeMs === null ? {} : { playback_performance_time_ms: playbackPerformanceTimeMs }),
+    ...(typeof latency === 'number' && Number.isFinite(latency) ? { output_latency_ms: latency * 1000 } : {}),
+  };
+}
+
 export async function createLiveVoicePcmSession(
   traceId: string,
   voiceId: string | null,
@@ -314,14 +324,9 @@ export async function createLiveVoicePcmSession(
     const eventType = event.data?.type ?? 'unknown';
     if (eventType === 'underrun') underruns += 1;
     if (eventType === 'resumed') resumes += 1;
-    const playbackPerformanceTimeMs = eventType === 'segment_started'
-      ? resolveWorkletPlaybackPerformanceTimeMs(event.data, audioContext)
-      : null;
     const details = {
       ...event.data,
-      ...(playbackPerformanceTimeMs === null
-        ? {}
-        : { playback_performance_time_ms: playbackPerformanceTimeMs }),
+      ...(eventType === 'segment_started' ? segmentStartTiming(event.data, audioContext) : {}),
       sample_rate: event.data?.sample_rate ?? audioContext.sampleRate,
       audio_context_state: audioContext.state,
       total_frames: totalFrames,

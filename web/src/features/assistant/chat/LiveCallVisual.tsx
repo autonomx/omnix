@@ -10,7 +10,7 @@ import {
 } from './liveCharacterAvatarBridge';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
 import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
-import { livePortrait } from './portrait/livePortrait';
+import { livePortrait, portraitEnabled } from './portrait/livePortrait';
 import { CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 
@@ -23,7 +23,8 @@ export function LiveCallVisual({ voiceMode, thinking }: { voiceMode: string; thi
   const avatar = useLiveAvatar();
   const portraitState = useSyncExternalStore(livePortrait.subscribe, livePortrait.getSnapshot, livePortrait.getSnapshot);
   const runtime = avatar.runtime;
-  const portraitUnavailable = portraitState.status === 'unavailable' || portraitState.status === 'degraded';
+  const portraitUnavailable = portraitState.status === 'unavailable' || portraitState.status === 'degraded'
+    || !portraitEnabled();
   const pack = useMemo(() => drawnAvatarPack(runtime?.avatar_pack, portraitUnavailable), [runtime?.avatar_pack, portraitUnavailable]);
   const portrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
   const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);

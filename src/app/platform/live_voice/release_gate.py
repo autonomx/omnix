@@ -219,8 +219,17 @@ def evaluate_live_voice_log(
     thresholds: LiveVoiceReleaseThresholds | None = None,
     max_records: int = 50_000,
 ) -> LiveVoiceReleaseGateReport:
-    log_path = Path(path)
     window_start = datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 24 * 30)))
+    records = read_live_voice_log(path, max_records=max_records)
+    return evaluate_live_voice_release_gate(records, thresholds=thresholds, window_start=window_start)
+
+
+def read_live_voice_log(path: str | Path, *, hours: int | None = None,
+                        max_records: int = 50_000) -> list[dict[str, Any]]:
+    """The live-call stream log's JSON records, oldest rotation first (within ``hours`` when given)."""
+    log_path = Path(path)
+    window_start = (datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 24 * 30)))
+                    if hours is not None else None)
     records: list[dict[str, Any]] = []
     paths = [log_path, *[Path(f"{log_path}.{index}") for index in range(1, 5)]]
     for candidate in reversed(paths):
@@ -237,11 +246,15 @@ def evaluate_live_voice_log(
                 payload = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(payload, dict):
-                records.append(payload)
+            if not isinstance(payload, dict):
+                continue
+            stamp = _parse_datetime(str(payload.get("timestamp_utc") or "")) if window_start else None
+            if window_start is not None and stamp is not None and stamp < window_start:
+                continue
+            records.append(payload)
         if len(records) >= max_records:
             break
-    return evaluate_live_voice_release_gate(records, thresholds=thresholds, window_start=window_start)
+    return records
 
 
 def _percentile(values: list[float], quantile: float) -> float:

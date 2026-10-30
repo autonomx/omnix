@@ -137,7 +137,22 @@ def _audio_paths() -> list[Path]:
     missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         pytest.fail(f"Missing benchmark audio files: {missing}")
-    return paths
+    # The live portrait's paired gate needs 40 replies a scenario: the five interactions, repeated.
+    repeat = max(1, int(os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_REPEAT", "1") or "1"))
+    return paths * repeat
+
+
+def _benchmark_storage_script() -> str:
+    """Browser settings for this run: the release scenario label and whether the live portrait shows."""
+    settings = {}
+    scenario = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_SCENARIO", "").strip()
+    if scenario:
+        settings["omnix.liveCall.releaseScenario"] = scenario
+    portrait = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_PORTRAIT", "").strip()
+    if portrait in {"on", "off"}:
+        settings["omnix.livePortrait.enabled"] = "1" if portrait == "on" else "0"
+    return "(() => { const items = %s; for (const [key, value] of Object.entries(items)) " \
+        "window.localStorage.setItem(key, value); })();" % json.dumps(settings)
 
 
 def _voice_mode(page) -> str:
@@ -251,6 +266,8 @@ def test_five_turn_live_voice_hardware_performance(
     context.grant_permissions(["microphone"], origin=app_origin)
     page = context.new_page()
     page.add_init_script(_PROGRAMMABLE_MIC_INIT)
+    page.add_init_script(_benchmark_storage_script())
+    app_path = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_PATH", "/chatbot").strip() or "/chatbot"
 
     interactions: list[dict[str, object]] = []
     manifest: dict[str, object] = {
@@ -264,7 +281,7 @@ def test_five_turn_live_voice_hardware_performance(
     _persist_manifest(manifest_path, manifest)
 
     try:
-        page.goto(f"{app_base_url}/chatbot", wait_until="domcontentloaded", timeout=30_000)
+        page.goto(f"{app_base_url}{app_path}", wait_until="domcontentloaded", timeout=30_000)
         live_card = page.locator(".assistant-live-card")
         expect(live_card).to_be_visible(timeout=30_000)
         _assert_expected_provider(context, app_base_url)

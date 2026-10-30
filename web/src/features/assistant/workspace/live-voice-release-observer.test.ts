@@ -15,7 +15,7 @@ vi.mock('./live-call-diagnostics-client', () => ({
   }),
 }));
 
-import { initializeLiveVoiceReleaseObserver, recordLiveVoiceReleaseQuality, resetLiveVoiceReleaseObserver, type LiveVoiceReleaseObservation } from './live-voice-release-observer';
+import { initializeLiveVoiceReleaseObserver, recordLiveVoiceReleaseCounter, recordLiveVoiceReleaseQuality, recordLiveVoiceReleaseSamples, resetLiveVoiceReleaseObserver, setLiveVoiceReleasePortrait, type LiveVoiceReleaseObservation } from './live-voice-release-observer';
 import { LIVE_VOICE_RELEASE_OBSERVATION_EVENT } from '../../../events/bus';
 
 function perf(stage: string, turnId = 'voice-turn:1', extra = {}): void {
@@ -366,5 +366,51 @@ describe('live voice release observer', () => {
       occurred: false,
       scenario: 'system-noise',
     }, 'release_observer');
+  });
+  it('records the portrait gate metrics: audible start, hold, underruns, LLM rate, and the portrait flag', () => {
+    const metrics = () => Object.fromEntries(mocks.record.mock.calls
+      .filter(([event]) => event === 'release_metric')
+      .map(([, details]) => [(details as { metric_name: string }).metric_name, details as Record<string, unknown>]));
+    setLiveVoiceReleasePortrait(true);
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-turn-timeline', { detail: { turnId: 'voice-turn:1', event: 'speech_ended', atMs: 50 } }));
+    now = 100;
+    perf('stt_final_requested');
+    now = 300;
+    perf('stt_final_received', 'voice-turn:1', { sttFinalizeMs: 200 });
+    diagnostic('turn_intercepted');
+    now = 500;
+    diagnostic('chat_response_opened', 'live-call:voice-turn:1', 'chatbot_workspace');
+    now = 800;
+    diagnostic('llm_text_chunk_received', 'live-call:voice-turn:1', 'controller', { text_length: 40 });
+    now = 1_000;
+    diagnostic('phrase_first_frame_received', 'live-call:chat:s1:audio-session:a1', 'pcm_session',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech' });
+    diagnostic('worklet_start_hold', 'live-call:chat:s1:audio-session:a1', 'audio_worklet', { held_ms: 37 });
+    now = 1_100;
+    diagnostic('worklet_segment_started', 'live-call:chat:s1:audio-session:a1', 'audio_worklet',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech', output_latency_ms: 30 });
+    diagnostic('worklet_underrun', 'live-call:chat:s1:audio-session:a1', 'audio_worklet');
+    now = 1_800;
+    diagnostic('llm_text_chunk_received', 'live-call:voice-turn:1', 'controller', { text_length: 160 });
+    diagnostic('llm_stream_finished');
+    diagnostic('turn_finished');
+    const recorded = metrics();
+    expect(recorded.start_hold_ms).toMatchObject({ value_ms: 37, portrait: true });
+    expect(recorded.first_audible_ms.value_ms).toBe(1_100 - 50 + 30);
+    expect(recorded.llm_tokens_per_second.value_ms).toBe(50); // 200 characters, 4 a token, over one second
+    expect(recorded.underrun_count.value_ms).toBe(1);
+    setLiveVoiceReleasePortrait(false);
+  });
+
+  it('records portrait A/V offsets as one batch and counts fallbacks', () => {
+    recordLiveVoiceReleaseSamples('av_offset_ms', [1.234, -12.56]);
+    recordLiveVoiceReleaseSamples('av_offset_ms', []);
+    recordLiveVoiceReleaseCounter('portrait_admission_refused');
+    expect(mocks.record.mock.calls).toEqual([
+      ['release_metric_batch', { metric_name: 'av_offset_ms', values: [1.2, -12.6], scenario: 'unlabeled', portrait: false },
+        'release_observer'],
+      ['release_counter', { counter_name: 'portrait_admission_refused', scenario: 'unlabeled', portrait: false },
+        'release_observer'],
+    ]);
   });
 });

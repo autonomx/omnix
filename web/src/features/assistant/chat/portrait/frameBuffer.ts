@@ -21,6 +21,8 @@ export class PortraitFrameBuffer<T> {
   private readonly sourceRates = new Map<string, number>();
   private readonly cancelledEpochs = new Set<number>();
   private readonly release: (image: T) => void;
+  /** The offset of the frame ``frameAt`` last returned (the A/V offset is measured against it). */
+  lastOffset: number | null = null;
 
   constructor(release: (image: T) => void = () => undefined) {
     this.release = release;
@@ -67,6 +69,10 @@ export class PortraitFrameBuffer<T> {
     return position.playedSamples * rate / contextRate;
   }
 
+  sourceRate(segmentId: string): number {
+    return this.sourceRates.get(segmentId) ?? DEFAULT_SOURCE_RATE;
+  }
+
   /** Whether a frame arrived after its time: its segment is heard more than a frame-time past it. */
   isLate(header: PortraitFrameHeader, position: HeardPosition | null, contextRate: number): boolean {
     if (!position || position.segmentId !== header.segment_id) return false;
@@ -85,6 +91,7 @@ export class PortraitFrameBuffer<T> {
     }
     if (chosen < 0) return null;
     for (const stale of segment.frames.splice(0, chosen)) this.release(stale.image);
+    this.lastOffset = segment.frames[0].offset;
     return segment.frames[0].image;
   }
 

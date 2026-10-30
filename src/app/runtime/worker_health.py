@@ -119,6 +119,8 @@ def _configured_worker_specs(env: Mapping[str, str]) -> list[WorkerSpec]:
         "stt": "OMNIX_STT_URL",
         "image": "OMNIX_IMAGE_URL",
         "audio": "OMNIX_AUDIO_URL",
+        # The live portrait service (FLOAT): reached by the gateway's live calls, shown with the other services.
+        "portrait": "OMNIX_PORTRAIT_URL",
     }
     for worker_id, env_key in compatibility_envs.items():
         if worker_id in seen:
