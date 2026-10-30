@@ -48,6 +48,10 @@ the 4090 together with the portrait, in a slot that does not overlap the RPG roa
 | The paired gate over the required scenarios, 40 replies each | 5 | `scripts/run_live_voice_performance_benchmark.py --scenario <name> --portrait off --app-path <session> --repeat 8`, the same with `--portrait on`, then `python -m app.platform.live_voice.release_gate_cli --portrait-pairing` |
 | Remote clients over 20, 8 and 3 Mbit/s links with 80 ms RTT | 5 | The on run from a second machine behind a throttled link; record the level each settles at |
 
+Owner's answers (2026-10-30): the runs wait for a slot the owner names; they use a scratch database (a fresh
+migrated one in the 16432 test container, with one character and portrait pack set up for them), never the live
+one; and the configured cerebras provider for the LLM.
+
 Until then the portrait is opt-in by its avatar pack, and every way it can fail shows the pack's fallback.
 
 ## Why not fast-float
