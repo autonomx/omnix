@@ -330,6 +330,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       const segmentId = String(message.segmentId || '');
       if (segmentId && !this.terminalSegments.has(segmentId)) this.endedSegments.add(segmentId);
       this.maybeCompleteActiveSegment();
+      this.maybeStartOrResume();
       return;
     }
     if (message.type === 'phrase_end' && integer(message.phraseIndex) !== undefined) {
@@ -402,7 +403,10 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   maybeStartOrResume(): void {
     const onsetReady = this.renderClockSamples >= this.startPolicy.notBeforeRenderSample;
     const speechReady = this.bufferedSpeechSamples >= this.startPolicy.minimumBufferedSpeechSamples;
-    const finalShortInputReady = this.inputEnded && this.bufferedSpeechSamples > 0;
+    // No more audio is coming for what is queued: the input ended, or (a call's shared session, whose input never
+    // ends between turns) every queued segment has. Waiting for a buffer target would then hold it forever.
+    const queueComplete = this.inputEnded || this.queuedSegmentsEnded();
+    const finalShortInputReady = queueComplete && this.bufferedSpeechSamples > 0;
     if (!this.started && onsetReady && (speechReady || finalShortInputReady)) {
       if (this.holdingStartForPortrait()) return;
       this.started = true;
@@ -417,7 +421,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     if (
       this.started
       && this.waitingForBuffer
-      && (this.bufferedSpeechSamples >= this.currentRebufferSamples || this.inputEnded)
+      && (this.bufferedSpeechSamples >= this.currentRebufferSamples || queueComplete)
     ) {
       this.waitingForBuffer = false;
       this.beginFadeIn();
@@ -428,6 +432,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         underrun_count: this.underrunCount,
       });
     }
+  }
+
+  /** Whether every queued segment has all its audio (a silence segment always has). */
+  queuedSegmentsEnded(): boolean {
+    return this.queue.length > 0 && this.queue.every((segment) => this.endedSegments.has(segment.segmentId));
   }
 
   /** Whether the start waits for the portrait: its first speech has no frames yet, and the cap has not passed. */
