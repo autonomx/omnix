@@ -108,7 +108,8 @@ def test_a_call_streams_its_portrait_end_to_end(monkeypatch, portrait_service) -
                                created_at="2026-10-30T00:00:00+00:00", updated_at="2026-10-30T00:00:00+00:00")
     photo = PHOTO.read_bytes()
     monkeypatch.setattr(avatar_websocket, "_load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
-    monkeypatch.setattr(avatar_websocket, "resolve_live_call_runtime", lambda session: SimpleNamespace(avatar_pack=pack))
+    monkeypatch.setattr(avatar_websocket, "resolve_live_call_runtime", lambda session: SimpleNamespace(
+        avatar_pack=pack, speech_style=SimpleNamespace(emotion="neutral")))
     monkeypatch.setattr(avatar_websocket, "default_character_avatar_service",
                         lambda: SimpleNamespace(portrait_image=lambda pack, max_bytes: photo))
     clip = _clip_24k()
