@@ -679,7 +679,7 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - **The compositor** (`portrait/compositor.ts`). The idle loop before the first speech; the speech frame for what is heard; the last frame held through gaps under 250 ms and frozen during an underrun; an 80 ms crossfade into the idle loop after that, and back at the next speech; a cut to idle when a turn is cancelled or interrupted (its frames are already gone). Before the idle loop arrives the pack's image shows.
 - **Start hold (D-5).** The worklet holds a turn's start until the first frames of its first speech segment have arrived (`portrait_frames_ready`), at most 250 ms, never mid-reply; each hold is a `start_hold` worklet event and the delivery ledger's `startHoldMs`. A portrait that becomes unavailable turns the hold off.
 - **Speculative frames.** As planned: the prefetch request carries the call key (403 for another principal's call), only that call's phrases claim the entry, and the prefetch thread copies each chunk under the entry's condition through a bounded count of pending sends to the call's loop. Every drop path sends `spec_drop`. The service renders each speculation's first two passes on its own motion session and holds the frames; `spec_bind` (sent right after the phrase's `phrase_start`) relabels them and sends them at once; the phrase's own copy skips the replayed audio, and `spec_prefix_end` (at the first chunk without a copy) fits the segment: cut, or silence where a copy was lost. A later phrase of a reply already under way joins the reply's own motion instead.
-- **Remote quality (D-6).** Levels L0–L3 in the stream contract; the service encodes only the call's level (384 px resized on the GPU, every other frame at L3). The gateway (`portrait/quality.py`) counts speech frames relayed minus received as in flight: more than 12, any late frame, or decoding over 30 ms steps down at once, then 1 s to settle; 5 s healthy steps up. Loopback starts at L0, remote at L1. Still late at L3, the browser shows the fallback for that turn (`degraded`) and tries the next.
+- **Remote quality (D-6).** Levels L0–L3 in the stream contract; the service encodes only the call's level (384 px resized on the GPU, every other frame at L3). The gateway (`portrait/quality.py`) counts speech frames relayed minus received as in flight: any late frame, or more than 12 in flight for 3 acks in a row, steps down at once, then 1 s to settle; 5 s healthy steps up. The browser's decode time is reported, not stepped on: it is timed from arrival, so a burst's decodes queue behind each other and would read as slow decoding (revised in Phase 3; the earlier text stepped down on decoding over 30 ms). Loopback starts at L0, remote at L1. Still late at L3, the browser shows the fallback for that turn (`degraded`) and tries the next.
 - **On the real model** (`scripts/portrait_phase3_check.py`, `docs/measurements/portrait-phase3-check-2026-10-30.json`, the service alone, after the review fixes): all of them passed.
     - **Idle loop:** 54 frames at 80 ms (4.3 s), there 0.43 s after `ready`. Its seam (last frame back to first) changes about 3× as many pixels as a normal step, so the compositor blends the loop's last frame into its first as it wraps.
     - **Levels:** L0 gave all 266 frames of a 10.6 s clip at 512 px, the first 252 ms after the reply's first audio; L3 gave 133 at 384 px.
@@ -876,3 +876,15 @@ During any of them the renderer holds the last speaking frame. If the gap passes
     - `output_end` is sent from `finally`, with a test
     - D-5's wording matches Phase 5
     - a Phase 0 rating for clause-silence joins that used lookahead
+- **Code review (2026-10-31).** Three independent reviewers (the portrait service and its lifecycle, the gateway, the
+  web client) read the branch against `origin/main`; 26 findings, all fixed with a regression test each, in
+  `5db914806d` (gateway), `afe83675c8` (service and lifecycle) and `503a6e7664` (web client). The ones that mattered:
+    - a call that ended while its portrait loaded left a link holding the service's one stream slot
+    - the light process took a CUDA context through its own load check (now NVML), and a failed load kept one
+    - stream setup ran outside its cleanup (a worker, its tasks and the lease leaked)
+    - the desktop supervisor asked the full 8 GiB of a load before starting the light service
+    - a cancelled turn's stale start-hold time skipped the next turn's hold
+    - encoded portraits were never capped on the GPU (now 8, least recently used first)
+    - frames made from a cut speculative prefix stayed (the output now rewinds and the browser replaces them)
+  Two text mismatches were settled: the decode-time step (the code's reasoning stands, the text above is revised)
+  and the bootstrap resample count (the code now uses the 2,000 this plan names).

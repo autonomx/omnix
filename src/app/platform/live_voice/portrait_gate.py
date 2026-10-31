@@ -52,7 +52,7 @@ PORTRAIT_SCENARIOS = (
     "browser-reload",
     "rapid-interruption-soak",
 )
-BOOTSTRAP_ROUNDS = 1_000
+BOOTSTRAP_ROUNDS = 2_000
 BOOTSTRAP_SEED = 20_261_030
 
 
