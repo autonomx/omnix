@@ -298,6 +298,20 @@ def test_five_turn_live_voice_hardware_performance(
     page.add_init_script(_benchmark_storage_script())
     app_path = os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_PATH", "/chatbot").strip() or "/chatbot"
 
+    # Browser-side failures, kept in the manifest: a call that never starts leaves no other trace.
+    browser_errors: list[str] = []
+
+    def keep(line: str) -> None:
+        if len(browser_errors) < 200:
+            browser_errors.append(f"{_utc_now()} {line}")
+
+    page.on("console", lambda message: keep(f"console {message.type}: {message.text[:300]}")
+            if message.type == "error" else None)
+    page.on("pageerror", lambda error: keep(f"pageerror: {str(error)[:300]}"))
+    page.on("requestfailed", lambda req: keep(f"requestfailed: {req.method} {req.url[:200]} {req.failure}"))
+    page.on("response", lambda response: keep(f"response {response.status}: {response.request.method} "
+                                               f"{response.url[:200]}") if response.status >= 500 else None)
+
     interactions: list[dict[str, object]] = []
     manifest: dict[str, object] = {
         "schema_version": 1,
@@ -306,6 +320,7 @@ def test_five_turn_live_voice_hardware_performance(
         "expected_provider": EXPECTED_PROVIDER,
         "audio_files": [str(path.resolve()) for path in audio_paths],
         "interactions": interactions,
+        "browser_errors": browser_errors,
     }
     _persist_manifest(manifest_path, manifest)
 
@@ -419,6 +434,13 @@ def test_five_turn_live_voice_hardware_performance(
         manifest["completed_at_utc"] = _utc_now()
         manifest["completed"] = False
         manifest["failure_voice_mode"] = _voice_mode(page)
+        try:  # what the call showed when it failed
+            card = page.locator(".assistant-live-card").first
+            manifest["failure_call_card"] = {"text": card.inner_text(timeout=2_000)[:600],
+                                             "data": card.evaluate("node => ({...node.dataset})")}
+            page.screenshot(path=str(manifest_path.with_name("failure.png")), timeout=5_000)
+        except Exception as exc:  # noqa: BLE001 - diagnostics only
+            manifest["failure_call_card"] = {"error": str(exc)[:200]}
         _persist_manifest(manifest_path, manifest)
         raise
     finally:
