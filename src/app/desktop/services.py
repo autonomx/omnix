@@ -11,7 +11,8 @@ its shutdown releases the GPU model ownership it holds in PostgreSQL; only one
 that does not exit within 20 seconds is killed. A service that exits on its
 own is restarted after 30, 60 and 120 seconds (a crashed process cannot release
 its ownership lease, which expires on its own in under three minutes), then
-reported as failed until its packs change.
+reported as failed until its packs change. One that exits with ``IDLE_EXIT_CODE``
+unloaded an idle model to release its memory, and is started again at once.
 
 States reported to the shell: ``starting``, ``running``, ``stopped``,
 ``blocked`` (port busy or not enough memory; retried), ``failed``.
@@ -37,6 +38,7 @@ from app.desktop.env import LaunchConfig, service_environment
 from app.models import catalog as model_catalog
 from app.models.catalog import Catalog
 from app.models.packs import ModelStore, RuntimeStore
+from app.runtime.process_control import IDLE_EXIT_CODE
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +326,10 @@ class ModelServices:
                             running.restarts = 0
                         continue
                     del self.running[service]
+                    if code == IDLE_EXIT_CODE:
+                        # It unloaded an idle model and exited to release its memory: start it again, light.
+                        self._start(plan, restarts=running.restarts)
+                        continue
                     if running.restarts >= len(RESTART_DELAYS_SECONDS):
                         state.failed_signature = self._signature(plan)
                         self._report(service, "failed", f"it keeps stopping (exit {code}); see {service}.log")

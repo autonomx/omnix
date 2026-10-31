@@ -43,6 +43,8 @@ def portrait(monkeypatch):
     state: dict[str, Any] = {"pack": PORTRAIT, "prepare_error": None, "frames": [b"frame-0"]}
 
     async def prepare(base_url: str, tenant: str, image: bytes) -> str:
+        if state.get("prepare_errors"):
+            raise state["prepare_errors"].pop(0)
         if state["prepare_error"]:
             raise state["prepare_error"]
         assert image == b"portrait bytes"
@@ -89,7 +91,7 @@ def test_an_unknown_token_is_refused(monkeypatch, portrait) -> None:
      "portrait_not_configured"),
     (lambda monkeypatch, state: state.update(pack=PORTRAIT.model_copy(update={"renderer": "sprite"})),
      "not_a_portrait"),
-    (lambda monkeypatch, state: state.update(prepare_error=PortraitUnavailable("warming", "loading")), "warming"),
+    (lambda monkeypatch, state: state.update(prepare_error=PortraitUnavailable("model_busy", "short")), "model_busy"),
 ])
 def test_a_call_whose_portrait_cannot_serve_is_told_why(monkeypatch, portrait, setup, code: str) -> None:
     setup(monkeypatch, portrait.state)
@@ -99,6 +101,36 @@ def test_a_call_whose_portrait_cannot_serve_is_told_why(monkeypatch, portrait, s
         with client.websocket_connect(_avatar_url(token)) as avatar:
             reply = avatar.receive_json()
     assert reply["type"] == "unavailable" and reply["code"] == code
+
+
+def test_a_portrait_loading_on_demand_says_so_then_attaches_once_ready(monkeypatch, portrait) -> None:
+    # The model loads when a call first asks for it; a restarting service is briefly unreachable.
+    monkeypatch.setattr(avatar_websocket, "LOAD_POLL_SECONDS", 0.01)
+    portrait.state["prepare_errors"] = [PortraitUnavailable("service_unreachable", "restarting"),
+                                        PortraitUnavailable("warming", "loading"),
+                                        PortraitUnavailable("warming", "loading")]
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with client.websocket_connect(_avatar_url(token)) as avatar:
+            assert avatar.receive_json() == {"type": "loading"}
+            assert avatar.receive_json()["type"] == "ready"
+            assert avatar.receive_bytes() == b"frame-0"
+    assert portrait.opened[0]["latent_key"] == "latent-key"
+
+
+def test_a_portrait_that_does_not_load_in_time_falls_back(monkeypatch, portrait) -> None:
+    monkeypatch.setattr(avatar_websocket, "LOAD_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(avatar_websocket, "LOAD_WAIT_SECONDS", 0.05)
+    portrait.state["prepare_error"] = PortraitUnavailable("warming", "loading")
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with client.websocket_connect(_avatar_url(token)) as avatar:
+            assert avatar.receive_json() == {"type": "loading"}
+            reply = avatar.receive_json()
+    assert reply["type"] == "unavailable" and reply["code"] == "warming"
+    assert portrait.opened == []
 
 
 def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monkeypatch, portrait) -> None:

@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 from app.composition.launcher.config import load_launcher_config
 from app.runtime.net import bind_host
+from app.runtime.process_control import IDLE_EXIT_CODE
 from app.security.service_credentials import initialize_service_token
 
 logger = logging.getLogger(__name__)
@@ -409,16 +410,26 @@ class LauncherServiceManager:
     ) -> None:
         if process.stdout is None:
             return
+        restart = False
         try:
             for line in process.stdout:
                 self._append(service, line)
         finally:
+            # Its output ends as it exits: give the exit a moment to register.
+            deadline = time.monotonic() + 5.0
+            while process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.05)
             with service.lock:
                 if process.poll() is not None:
                     if service.process is process:
                         service.last_returncode = process.returncode
                         service.process = None
+                        restart = process.returncode == IDLE_EXIT_CODE
                     self._append(service, f"[launcher] exited with code {process.returncode}")
+        if restart:
+            # It unloaded an idle model and exited to release its memory: start it again, light.
+            self._append(service, "[launcher] it released an idle model; starting it again without one")
+            self.start(service.spec.service_id)
 
 
 def _is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -521,7 +532,8 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     audio_enabled = _env_flag("OMNIX_AUDIO_ENABLED", "1")
     audio_auto_start = audio_enabled and Path(audio_python).is_file()
     portrait_python = launcher.python("portrait")
-    # The live portrait service is optional too; it loads its model in the background once started.
+    # The live portrait service is optional too. It starts light and loads its model when a call to a character with
+    # a portrait asks for it; after an idle while it exits to release that memory and is started again (light).
     portrait_enabled = _env_flag("OMNIX_PORTRAIT_ENABLED", "1")
     portrait_auto_start = portrait_enabled and Path(portrait_python).is_file()
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")

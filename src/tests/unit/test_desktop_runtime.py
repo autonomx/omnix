@@ -272,6 +272,20 @@ def test_a_crashing_service_is_restarted_after_growing_delays_then_failed(servic
     assert len(state.launched) == 4  # failed stays failed until its packs change
 
 
+def test_a_service_that_released_an_idle_model_starts_again_at_once(services) -> None:
+    from app.runtime.process_control import IDLE_EXIT_CODE
+
+    manager, state = services
+    state.install()
+    manager.reconcile()
+    for _ in range(5):  # never counted as a crash: no delay, never failed
+        state.launched[-1][2].code = IDLE_EXIT_CODE
+        launched = len(state.launched)
+        manager.reconcile()
+        assert len(state.launched) == launched + 1
+    assert ("tts", "restarting") not in _states(state) and ("tts", "failed") not in _states(state)
+
+
 def test_a_stop_asks_the_service_to_shut_down_before_killing_it(monkeypatch) -> None:
     import signal
 

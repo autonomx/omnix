@@ -18,8 +18,11 @@ this service only; the browser never does. Routes:
   ``spec_bind``, ``spec_prefix_end``, see ``services.portrait.scheduler``) and ``heartbeat``. Frames come back as
   binary JPEG messages: after ``ready``, the portrait's idle loop at the opening level, then the call's speech.
 
-Loading takes about a minute (cuDNN builds its plans for each network's one input shape), so the model loads
-in the background when the service starts and stays resident until it has been idle for a long while. One
+Loading takes about a minute (cuDNN builds its plans for each network's one input shape). The model loads on
+demand, when a call to a character with a portrait (or the avatar setup's preview) first asks for it; until
+then the service holds no model and no CUDA context (``OMNIX_PORTRAIT_PRELOAD=1`` loads it at start instead).
+After ten minutes without a call it unloads and the process exits with ``IDLE_EXIT_CODE``, which its launcher
+answers by starting it again, light: only the process's end releases its CUDA context. One
 stream per GPU by default: a stream is a lease kept by heartbeats; the same principal and session reopening
 (a browser reload) replaces its old stream, and any other call is refused with ``portrait_busy``. Outcomes the
 gateway acts on travel as ``{"ok": false, "code", "message"}`` (the middleware replaces error bodies).
@@ -33,6 +36,7 @@ import hashlib
 import json
 import logging
 import queue
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -44,9 +48,10 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
-from app.config.env import env_int
+from app.config.env import env_bool, env_int
 from app.conversation.portrait_stream_contract import QUALITY_LEVELS, PortraitMessageError, pack, unpack
 from app.runtime.net import bind_host
+from app.runtime.process_control import IDLE_EXIT_CODE
 from app.security.model_service import ModelServiceMiddleware
 
 logger = logging.getLogger(__name__)
@@ -364,25 +369,33 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                installed: Callable[[], tuple[bool, str]] = _default_installed,
                resources: Callable[[], tuple[bool, str]] = _default_resources,
                max_streams: int | None = None, lease_seconds: float = 6.0,
-               idle_unload_seconds: float | None = None, preload: bool = True) -> FastAPI:
-    """The service app; tests pass their own model loader and checks."""
+               idle_unload_seconds: float | None = None, preload: bool | None = None) -> FastAPI:
+    """The service app; tests pass their own model loader and checks.
+
+    ``app.state.request_exit`` (set by ``main``) is called with ``IDLE_EXIT_CODE`` once the idle model unloads.
+    """
     from services.portrait.portrait_image import PortraitImageError
 
     host = RuntimeHost(load, installed, resources)
     admission = Admission(max_streams or env_int("OMNIX_PORTRAIT_MAX_STREAMS", 1, minimum=1, maximum=4),
                           lease_seconds)
     idle_seconds = idle_unload_seconds if idle_unload_seconds is not None else float(
-        env_int("OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS", 1800, minimum=60, maximum=86_400))
+        env_int("OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS", 600, minimum=60, maximum=86_400))
+    if preload is None:
+        preload = env_bool("OMNIX_PORTRAIT_PRELOAD", False)
     app = FastAPI(title="Omnix live portrait", version="1.0.0")
     app.add_middleware(ModelServiceMiddleware)
     app.state.host, app.state.admission = host, admission
+    app.state.request_exit = None
 
     @app.get("/health")
     def health() -> dict[str, Any]:
         from app.providers.host_memory import available_commit_bytes
         from services.helper_models import free_vram_gb
 
-        free, commit = free_vram_gb(), available_commit_bytes()
+        # Free VRAM only once the model is loading or loaded: asking CUDA creates the context it would hold.
+        free = free_vram_gb() if host.status in {"warming", "ready"} else None
+        commit = available_commit_bytes()
         return {"ok": True, "status": host.status, "message": host.message,
                 "streams": {"active": admission.active, "max": admission.max_streams},
                 "gpu": {"vram_free_bytes": int(free * 1024**3)} if free is not None else {},
@@ -588,7 +601,10 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                     with contextlib.suppress(Exception):
                         await lease.websocket.close(code=4002, reason="lease_expired")
                 if host.unload_if_idle(idle_seconds, admission.active):
-                    logger.info("Unloaded the idle portrait model")
+                    logger.info("Unloaded the idle portrait model; exiting so its launcher starts the service light")
+                    if app.state.request_exit is not None:
+                        app.state.request_exit(IDLE_EXIT_CODE)
+                        return
 
         app.state.housekeeping = asyncio.create_task(housekeeping())
 
@@ -605,7 +621,16 @@ def main() -> None:
     host = bind_host()
     port = env_int("OMNIX_PORTRAIT_PORT", 5501, minimum=1, maximum=65535)
     print(f"[PORTRAIT] Starting the live portrait service on http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port))
+    exit_code = 0
+
+    def request_exit(code: int) -> None:
+        nonlocal exit_code
+        exit_code, server.should_exit = code, True
+
+    app.state.request_exit = request_exit
+    server.run()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

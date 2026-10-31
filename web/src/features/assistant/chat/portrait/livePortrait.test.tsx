@@ -314,6 +314,26 @@ describe('the live portrait client', () => {
     expect(release.counter).toHaveBeenLastCalledWith('portrait_degrade_count', { reason: 'portrait_lost' });
   });
 
+  it('shows the fallback while the model loads on demand, never holding audio for frames, then the portrait', () => {
+    const { portrait, sockets } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'loading' }));
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'loading', fallbackRenderer: 'sprite' });
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+    vi.advanceTimersByTime(60_000); // the model takes about a minute: no timeout gives up on it
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    expect(portrait.getSnapshot().status).toBe('ready');
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+
+    portrait.begin('chat:maya').onHello({ callKey: 'call-2', avatarToken: 'token' });
+    sockets[1].message(JSON.stringify({ type: 'loading' }));
+    sockets[1].emit('close', {});
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_lost' });
+  });
+
   it('ignores a previous call once it has ended', () => {
     const { portrait, sockets } = setup();
     const { session } = fakeSession({ currentTime: 0 });

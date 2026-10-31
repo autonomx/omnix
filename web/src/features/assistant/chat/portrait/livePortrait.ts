@@ -20,7 +20,8 @@ import { IDLE_OUTPUT_ID, parsePortraitFrame, TRANSITION_OUTPUT_ID, type Portrait
  * shows between replies, and with each reply its transition back to the loop, played once the reply's audio has
  * drained. When the user stops speaking the loop settles on its first frame, where the reply's motion starts.
  * Anything that stops the portrait (no hello, a refusal, a lost stream) leaves the status `unavailable` and the
- * call shows the pack's fallback renderer.
+ * call shows the pack's fallback renderer. The model loads when a call first asks for it: until it is ready the
+ * gateway says `loading`, the call shows the fallback and its audio never waits for frames.
  *
  * Each `frame_ack` also says how many speech frames have arrived, how many came too late to draw and how long
  * decoding took; the gateway steps the call's quality level from them (`quality` messages). When frames are still
@@ -29,7 +30,8 @@ import { IDLE_OUTPUT_ID, parsePortraitFrame, TRANSITION_OUTPUT_ID, type Portrait
 
 export type PortraitFallbackRenderer = 'sprite' | 'live2d' | 'orb';
 // `degraded`: frames still come too late at the lowest quality level, so this turn shows the fallback.
-export type LivePortraitStatus = 'off' | 'connecting' | 'ready' | 'degraded' | 'unavailable';
+// `loading`: the portrait model is loading on demand (about a minute); the call shows the fallback meanwhile.
+export type LivePortraitStatus = 'off' | 'connecting' | 'loading' | 'ready' | 'degraded' | 'unavailable';
 export type LivePortraitSnapshot = {
   status: LivePortraitStatus;
   fallbackRenderer: PortraitFallbackRenderer;
@@ -224,8 +226,9 @@ export class LivePortrait {
       }).catch(() => undefined);
     });
     socket.addEventListener('close', () => {
-      if (generation === this.generation && this.snapshot.status === 'ready') this.unavailable('portrait_lost', generation);
-      else if (generation === this.generation && this.snapshot.status === 'connecting') {
+      if (generation === this.generation && (this.snapshot.status === 'ready' || this.snapshot.status === 'loading')) {
+        this.unavailable('portrait_lost', generation);
+      } else if (generation === this.generation && this.snapshot.status === 'connecting') {
         this.unavailable('avatar_socket_refused', generation);
       }
     });
@@ -244,6 +247,9 @@ export class LivePortrait {
       this.session?.setPortraitClock(true);
       this.publish({ status: 'ready', fallbackRenderer: message.fallback_renderer ?? this.snapshot.fallbackRenderer, reason: null });
       this.ackTimer = setInterval(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
+    } else if (message.type === 'loading') {
+      this.session?.setPortraitClock(false); // no frames for a minute: the replies' audio never waits for them
+      this.publish({ status: 'loading', fallbackRenderer: this.snapshot.fallbackRenderer, reason: null });
     } else if (message.type === 'quality' && typeof message.level === 'number') {
       this.level = message.level;
     } else if (message.type === 'unavailable') {

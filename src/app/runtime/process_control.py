@@ -4,6 +4,11 @@ from __future__ import annotations
 import sys
 import time
 
+# A model service that unloaded its model after a long idle exits with this code, and its launcher (the local
+# launcher, the desktop supervisor) starts it again at once, without the model: a CUDA context (about 2.5 GB of
+# commit on Windows) is released only with its process. Any other exit is a crash.
+IDLE_EXIT_CODE = 75
+
 
 def wait_for_parent_control() -> None:
     """Return after a line arrives or the private stdin pipe closes."""

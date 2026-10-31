@@ -69,7 +69,7 @@ def portrait_service():
         port = probe.getsockname()[1]
     token = secrets.token_urlsafe(32)
     env = {**os.environ, "OMNIX_SERVICE_TOKEN": token, "OMNIX_BIND_HOST": "127.0.0.1",
-           "OMNIX_PORTRAIT_PORT": str(port), "PYTHONPATH": str(ROOT / "src")}
+           "OMNIX_PORTRAIT_PORT": str(port), "PYTHONPATH": str(ROOT / "src"), "OMNIX_PORTRAIT_PRELOAD": "1"}
     out = os.environ.get("OMNIX_PORTRAIT_E2E_OUT")
     log = open(Path(out).with_suffix(".service.log"), "w", encoding="utf-8") if out else subprocess.DEVNULL  # noqa: SIM115
     process = subprocess.Popen([PYTHON, "-m", "services.portrait.portrait_server"], cwd=ROOT, env=env,

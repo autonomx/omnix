@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
+**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30, D-9 on 2026-10-31. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -453,7 +453,7 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
 - **Code:** `src/services/portrait/portrait_server.py` (FastAPI) and `portrait.in`, compiled to Windows and Linux lock files. It gets its own environment unless Phase 0 shows torch **and** transformers both match an existing one.
 - **Launcher:** a `ServiceSpec` with a fixed port (`5501` proposed), an interpreter role, `OMNIX_PORTRAIT_URL`, and an optional-service policy.
 - **Behaviour:** the wrapper and hop scheduler described above, plus admission, the priority pause, micro-batch decoding, and the latent cache keyed by tenant and image hash.
-- **Lifecycle (revised after the runtime check):** the model loads in the background when the service starts, if the models are installed and VRAM and host commit allow, and `/health` reports `warming` until it is ready. Loading takes about 60 s on the 4090, almost all of it cuDNN building plans for each network's one input shape, so it can't happen on the first `prepare` of a call. The model stays resident (1.45 GB held, 3.5 GB peak while loading, under a 4 GB allocator cap; measured 2026-10-30) and unloads only after a long idle timeout (30 minutes by default) or when VRAM is needed. A call that arrives while it is warming or unloaded gets the fallback renderer with a reason.
+- **Lifecycle (revised after the runtime check, and again by D-9):** the model loads on demand, when a call to a character with a portrait first asks for it, if the models are installed and VRAM and host commit allow; `/health` reports `warming` until it is ready. Loading takes about 60 s on the 4090, almost all of it cuDNN building plans for each network's one input shape, so the first call after the service started shows the fallback renderer (`loading`) for about a minute and then the portrait. The model stays resident while calls use it (1.45 GB held, 3.5 GB peak while loading, under a 4 GB allocator cap; measured 2026-10-30), unloads after 10 idle minutes, and the service then exits to release its CUDA context and is started again light. A call that arrives while it cannot load gets the fallback renderer with a reason.
 
 **Done so far (2026-10-29):**
 - **The hop scheduler** (`services/portrait/scheduler.py`), with 9 tests against a fake model.
@@ -474,7 +474,7 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
     - `POST /portrait/prepare` checks the image digest; cache keys are tenant, image SHA-256 and FLOAT revision.
     - `DELETE /portrait/cache/...` forgets an encoding.
     - `WS /portrait/stream` runs the scheduler on its own worker thread. `cancel` and `tts_priority` take effect between micro-batches. Admission is one lease per GPU: a reload by the same principal and session replaces the old stream, another call gets `portrait_busy`, and a lease expires after 6 s without a message.
-    - The model loads in the background at start and unloads after 30 idle minutes with no stream open.
+    - The model loads on demand (D-9): on a call's first `prepare`, or at start with `OMNIX_PORTRAIT_PRELOAD=1`. After 10 idle minutes with no stream open it unloads and the service exits with `IDLE_EXIT_CODE` to be started again light.
 - **Binary messages** (`app/conversation/portrait_stream_contract.py`): a length-prefixed JSON header, then the payload (PCM in, JPEG out). Phase 2's gateway uses the same module.
 - **Environment:** `services/portrait/portrait.in` and a hashed Windows lock, `portrait.lock.txt` (pip-compile; torch 2.6 cu124, transformers 4.57.6, timm 1.0.30, face-alignment 1.4.1). The lock pins the versions the GPU checks ran on.
 - **Launcher:** interpreter role `portrait` (`OMNIX_PORTRAIT_PYTHON`, conda env `omnix-portrait`), and an optional `ServiceSpec` on port 5501. It auto-starts when that interpreter exists and sets `OMNIX_PORTRAIT_URL`. 2 launcher tests.
@@ -795,6 +795,13 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - **D-8 Interruption scenarios count interruptions (settled 2026-10-30).** `hard-stop` and `rapid-interruption-soak`
   need at least 30 measured interruptions a side instead of 40 completed replies: their replies are the interrupted
   ones, and some short replies end before the interruption. A reply counts once it has played, interrupted or not.
+- **D-9 The portrait loads on demand (settled 2026-10-31).** The service starts light (no model, no CUDA context) and
+  loads FLOAT when a call to a character with a portrait, or the avatar setup's preview, first asks for it. Until it is
+  ready (about a minute) the gateway tells the browser `loading` and the call shows the pack's fallback; its audio
+  never waits for frames. After 10 idle minutes the model unloads and the service exits with `IDLE_EXIT_CODE`
+  (`app/runtime/process_control.py`); the launcher and the desktop supervisor start it again at once, light, since only
+  the process's end releases its CUDA context (about 2.5 GB of commit). `OMNIX_PORTRAIT_PRELOAD=1` loads at start (the
+  benchmark runs and the end-to-end check measure a loaded portrait).
 
 ## Validation
 

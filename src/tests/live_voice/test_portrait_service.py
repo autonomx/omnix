@@ -262,6 +262,39 @@ def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
     assert host.unload_if_idle(0.0, active_streams=0) and host.status == "unloaded"
 
 
+def test_the_model_loads_on_demand_and_health_never_wakes_cuda_before(monkeypatch, token: str) -> None:
+    import services.helper_models
+
+    asked: list[str] = []
+    monkeypatch.setattr(services.helper_models, "free_vram_gb", lambda: asked.append("vram") or 8.0)
+    monkeypatch.delenv("OMNIX_PORTRAIT_PRELOAD", raising=False)
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=lambda: (True, ""))
+    with _client(app, token) as client:  # runs the startup hook: nothing loads
+        assert client.get("/health").json()["status"] == "unloaded"
+        assert asked == []  # asking CUDA for free memory would create the context the service is meant not to hold
+        assert _prepare(client).get("code") in {"warming", None}  # a call's prepare starts the load
+        for _ in range(200):
+            if app.state.host.status == "ready":
+                break
+            time.sleep(0.01)
+        assert _prepare(client)["ok"] is True
+        assert client.get("/health").json()["gpu"] == {"vram_free_bytes": 8 * 1024**3}
+
+
+def test_an_unloaded_idle_model_asks_its_launcher_to_start_the_service_again_light(token: str) -> None:
+    from app.runtime.process_control import IDLE_EXIT_CODE
+
+    app = _ready_app(FakeRuntime(), idle_unload_seconds=0.0)
+    exits: list[int] = []
+    app.state.request_exit = exits.append
+    with _client(app, token):  # the housekeeping task runs once a second
+        for _ in range(300):
+            if exits:
+                break
+            time.sleep(0.01)
+    assert exits == [IDLE_EXIT_CODE] and app.state.host.status == "unloaded"
+
+
 def test_a_preview_renders_a_short_clip_and_is_refused_while_a_call_streams(token: str) -> None:
     import base64
 

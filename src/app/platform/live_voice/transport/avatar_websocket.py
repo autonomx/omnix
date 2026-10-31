@@ -10,7 +10,9 @@ To the browser: ``{"type": "ready", "fallback_renderer": ...}``, then frames as 
 service sends them (``app.conversation.portrait_stream_contract``: a header with the output, epoch, segment and
 offset, then a JPEG; the idle loop's frames first). When the portrait cannot serve,
 ``{"type": "unavailable", "code", "message"}`` and the socket closes; the browser shows the pack's fallback
-renderer. From the browser, every 250 ms: ``frame_ack`` with the segment and offset it is playing (the play
+renderer. The portrait model loads on demand (about a minute, on the first call after the service started): while it
+does, ``{"type": "loading"}`` goes to the browser, which shows the fallback, and the gateway asks again every 2 s
+until it is ready (up to three minutes). From the browser, every 250 ms: ``frame_ack`` with the segment and offset it is playing (the play
 position the service's phrase-end deadlines use), the speech frames it has ``received``, how many came ``late``
 and its average ``decode_ms``. Those step the call's quality level (``portrait/quality.py``); a change goes to
 the service and, as ``{"type": "quality", "level"}``, to the browser.
@@ -43,6 +45,10 @@ logger = logging.getLogger(__name__)
 AVATAR_WEBSOCKET_PATH = "/api/tts/live-call/avatar-websocket"
 MAX_PORTRAIT_BYTES = 12 * 1024 * 1024
 LINK_CHECK_SECONDS = 0.5
+LOAD_WAIT_SECONDS = 180.0
+LOAD_POLL_SECONDS = 2.0
+# The service restarts itself after an idle unload (a few seconds without it).
+RESTART_WAIT_SECONDS = 20.0
 
 
 def _load_session(chat_store_factory: Callable[[], Any], session_id: str) -> Any:
@@ -53,6 +59,29 @@ def _load_session(chat_store_factory: Callable[[], Any], session_id: str) -> Any
 async def _unavailable(websocket: WebSocket, code: str, message: str) -> None:
     await websocket.send_json({"type": "unavailable", "code": code, "message": message})
     await websocket.close(code=4001, reason=code)
+
+
+async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str, image: bytes) -> str | None:
+    """The portrait's latent key, once its model has loaded; None when the browser left while it loaded."""
+    started = time.monotonic()
+    told = False
+    while True:
+        try:
+            return await prepare_portrait(base_url, tenant, image)
+        except PortraitUnavailable as exc:
+            waited = time.monotonic() - started
+            if not ((exc.code == "warming" and waited < LOAD_WAIT_SECONDS)
+                    or (exc.code == "service_unreachable" and waited < RESTART_WAIT_SECONDS)):
+                raise
+        if not told:
+            await websocket.send_json({"type": "loading"})
+            told = True
+        try:
+            await asyncio.wait_for(websocket.receive_text(), LOAD_POLL_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+        except WebSocketDisconnect:
+            return None
 
 
 def _is_speech_frame(message: bytes) -> bool:
@@ -99,7 +128,9 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
         try:
             image = await asyncio.to_thread(default_character_avatar_service().portrait_image, pack,
                                             max_bytes=MAX_PORTRAIT_BYTES)
-            latent_key = await prepare_portrait(base_url, current_tenant().workspace_id, image)
+            latent_key = await _prepare_when_loaded(websocket, base_url, current_tenant().workspace_id, image)
+            if latent_key is None:
+                return
             quality = QualityController(starting_level(websocket.client.host if websocket.client else None))
 
             async def relay(message: bytes) -> None:
