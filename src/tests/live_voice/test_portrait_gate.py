@@ -9,7 +9,7 @@ from app.platform.live_voice.release_gate_cli import main
 SCENARIOS = ("character-normal", "hard-stop")
 
 
-def _run(portrait: bool, *, latency: float, tokens: float, underruns: int = 0, replies: int = 3) -> list[dict]:
+def _run(portrait: bool, *, latency: float, tokens: float, underruns: float = 0, replies: int = 3) -> list[dict]:
     events = []
     for scenario in SCENARIOS:
         for reply in range(replies):
@@ -39,6 +39,17 @@ def test_a_portrait_that_costs_nothing_passes() -> None:
     assert tokens.interval is not None and tokens.interval[0] <= tokens.on / tokens.off <= tokens.interval[1]
     assert report.replies == {"off": {"character-normal": 3, "hard-stop": 3}, "on": {"character-normal": 3,
                                                                                      "hard-stop": 3}}
+
+
+def test_underruns_may_be_up_to_a_tenth_per_reply_higher_on() -> None:
+    # Owner decision D-10 (2026-10-31): one more underrun in 40 replies was noise, not the portrait.
+    def underruns(on: float) -> str:
+        report = evaluate_portrait_pairing(_run(False, latency=500, tokens=80, underruns=1.4)
+                                           + _run(True, latency=500, tokens=80, underruns=on), _limits())
+        return next(check.status for check in report.checks if check.name == "underrun_count")
+
+    assert underruns(1.5) == "pass"  # 0.1 a reply more: within the allowance
+    assert underruns(1.6) == "fail"
 
 
 def test_slower_replies_more_underruns_or_a_long_hold_fail() -> None:

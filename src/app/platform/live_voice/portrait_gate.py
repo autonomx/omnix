@@ -8,7 +8,8 @@ The same scenarios run twice, with the portrait off and on; every release metric
 - every latency metric, ``first_audible_ms`` among them, has its on-run p50 within 10% of the off run's or within
   20 ms of it (a ratio of a few milliseconds is noise, below what a listener hears; owner decision 2026-10-30), and
   ``llm_tokens_per_second`` its p50 at least 90% of the off run's, each with a bootstrap 95% interval of the ratio;
-- ``underrun_count`` per reply no higher on than off;
+- ``underrun_count`` per reply at most 0.1 higher on than off (about 4 in 40 replies: both runs underrun about
+  1.4 times a reply from TTS alone, and one more in 40 failed the gate run to run; owner decision 2026-10-31);
 - at least ``minimum_replies`` replies that played per required scenario in each run; an interruption scenario
   needs ``minimum_interruptions`` measured interruptions instead (some short replies end before the interruption,
   and its replies are the ones that were interrupted; owner decision 2026-10-30).
@@ -67,6 +68,7 @@ class PortraitGateThresholds(BaseModel):
     latency_p50_ratio: float = Field(default=1.10, gt=1)
     latency_p50_allowance_ms: float = Field(default=20.0, ge=0)
     tokens_p50_ratio: float = Field(default=0.90, gt=0, lt=1)
+    underruns_per_reply_allowance: float = Field(default=0.1, ge=0)
 
 
 class PortraitGateCheck(BaseModel):
@@ -190,8 +192,10 @@ def evaluate_portrait_pairing(events: Iterable[dict[str, Any]],
     off_runs, on_runs = samples[(False, "underrun_count")], samples[(True, "underrun_count")]
     if off_runs and on_runs:
         off_mean, on_mean = sum(off_runs) / len(off_runs), sum(on_runs) / len(on_runs)
-        add("underrun_count", "pass" if on_mean <= off_mean else "fail",
-            f"per reply: on {on_mean:.3f}, off {off_mean:.3f}", off=off_mean, on=on_mean)
+        ok = on_mean <= off_mean + limits.underruns_per_reply_allowance
+        add("underrun_count", "pass" if ok else "fail",
+            f"per reply: on {on_mean:.3f}, off {off_mean:.3f} (at most "
+            f"+{limits.underruns_per_reply_allowance:g})", off=off_mean, on=on_mean)
     else:
         add("underrun_count", "insufficient", "no replies with playback in one of the runs")
 

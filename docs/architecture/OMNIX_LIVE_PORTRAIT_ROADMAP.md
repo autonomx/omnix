@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30, D-9 on 2026-10-31. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
+**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30, D-9 and D-10 on 2026-10-31. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -347,7 +347,7 @@ A script under `scripts/` that runs upstream FLOAT through a prototype of the ho
 | Joins where the next phrase arrived in time but the browser then inserted a clause silence (the held last frame may show the next phrase's mouth shape) | No visible wrong mouth shape, rated on 10. If it shows, commit phrase ends without lookahead when the controller plans a pause |
 | Barge-in, measured over at least 200 cancels | ≤ 60 ms p95 |
 | Paired on vs off: `first_token_to_first_audio_ms`, TTS chunk jitter, LLM tokens/s, `stt_finalize_ms` | On's p50 within 10% of off's, with confidence intervals reported |
-| Paired underruns per reply | No higher than off |
+| Paired underruns per reply | At most 0.1 higher than off (D-10) |
 | Divergence from a full-context reference (whole clip, upstream windows) as a function of `R`, `H` and the per-buffer normalization: motion-latent distance, and SyncNet LSE-C/LSE-D as the FLOAT paper uses | Lip-sync scores within 5% of the reference at the chosen `R` and `H` |
 | Rest-pose first pass and phrase joins | No visible jump, rated on 10 replies, alongside the LSE scores |
 | Share of accepted replies whose first pass can run from speculative audio before playback | Recorded (it sets how often the hold is zero) |
@@ -802,6 +802,9 @@ During any of them the renderer holds the last speaking frame. If the gap passes
   (`app/runtime/process_control.py`); the launcher and the desktop supervisor start it again at once, light, since only
   the process's end releases its CUDA context (about 2.5 GB of commit). `OMNIX_PORTRAIT_PRELOAD=1` loads at start (the
   benchmark runs and the end-to-end check measure a loaded portrait).
+- **D-10 The paired gate's underrun bound: +0.1 per reply (settled 2026-10-31).** Underruns per reply may be at most
+  0.1 higher with the portrait on than off (about 4 in 40 replies). Both runs underrun about 1.4 times a reply from TTS
+  alone on this machine, and with no allowance one more in 40 replies failed the gate from run to run.
 
 ## Validation
 
