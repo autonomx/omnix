@@ -51,8 +51,10 @@ HEADROOM_BASE_BYTES = 2 * 2**30
 # A started service's memory is reserved for this long (or until it is healthy, if later): its commit charge
 # grows while it loads, so the next service's headroom check must not count that memory as free.
 SETTLE_SECONDS = 90.0
-# Services that load their models when asked, not at start: the image view loads FLUX when the user wants it.
-ON_DEMAND_SERVICES = frozenset({"image"})
+# Services that load their models when asked, not at start: the image view loads FLUX when the user wants it, and
+# the portrait loads FLOAT when a call to a character with one starts (D-9). They start (and restart) light, so only
+# the base headroom is asked of them; each checks the memory a load needs before it loads.
+ON_DEMAND_SERVICES = frozenset({"image", "portrait"})
 # A service still not ready after this long (its model failed to load, but the process lives on) no longer holds the
 # others back; its memory, if any, shows in the commit figure by then.
 LOAD_LIMIT_SECONDS = 600.0

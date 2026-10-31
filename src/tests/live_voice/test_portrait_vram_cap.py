@@ -54,3 +54,21 @@ def test_the_load_check_asks_for_the_capped_peak(monkeypatch) -> None:
 
     assert portrait_server.LOAD_VRAM_GB * 1024 >= 4096
     assert portrait_server.LOAD_COMMIT_BYTES >= 8 * 1024**3
+
+
+def test_encoded_portraits_are_capped_least_recently_used_first(float_runtime) -> None:
+    # Review finding (2026-10-31): every encoding stayed on the GPU (about 65 MB each) until a pack stopped
+    # showing it; images tried in the avatar setup and never saved stayed for good.
+    import collections
+    import threading
+
+    module, _fractions = float_runtime
+    runtime = module.FloatRuntime.__new__(module.FloatRuntime)
+    runtime.lock, runtime.portraits = threading.Lock(), collections.OrderedDict()
+    kept = [object() for _ in range(module.MAX_PORTRAITS)]
+    for index, portrait in enumerate(kept):
+        runtime._remember(f"p{index}", portrait)
+    assert runtime.portrait("p0") is kept[0]  # used: now the most recent
+    runtime._remember("new", object())
+    assert len(runtime.portraits) == module.MAX_PORTRAITS
+    assert "p1" not in runtime.portraits and runtime.portrait("p0") is kept[0] and "new" in runtime.portraits

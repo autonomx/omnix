@@ -22,6 +22,7 @@ the loop ``services.portrait.idle_loop`` chooses, rendered once per quality leve
 from __future__ import annotations
 
 import argparse
+import collections
 import importlib
 import logging
 import math
@@ -61,6 +62,9 @@ VRAM_CAP_MB = 4096
 TRANSITION_STEP = 0.5
 TRANSITION_MIN_FRAMES = 6
 TRANSITION_MAX_FRAMES = 20
+# Encoded portraits kept on the GPU (about 65 MB each: the identity latent and its decoder features), the least
+# recently used given up first; a stream keeps the one it uses until it ends.
+MAX_PORTRAITS = 8
 
 
 class PortraitModelMissing(HelperUnavailable):
@@ -322,7 +326,7 @@ class FloatRuntime:
             self.eyelid = self.model.motion_autoencoder.dec.direction(None)[:, EYELID_DIRECTION].contiguous()
         self.detector_path = folders[DETECTOR_MODEL] / "s3fd-619a316812.pth"
         self._detector: Any = None
-        self.portraits: dict[str, Portrait] = {}
+        self.portraits: collections.OrderedDict[str, Portrait] = collections.OrderedDict()
         with torch.no_grad():
             self.solver = WindowSolver(self.model, self.opt, nfe)
             self._warm()
@@ -346,6 +350,7 @@ class FloatRuntime:
 
         with self.lock:
             if key in self.portraits:
+                self.portraits.move_to_end(key)
                 return self.portraits[key]
         return self.encode(key, portrait_pixels(payload, self.detect))
 
@@ -356,9 +361,16 @@ class FloatRuntime:
         s_r, _, s_r_feats = self.model.motion_autoencoder.enc(image, input_target=None)
         r_s_lambda = self.model.motion_autoencoder.enc.fc(s_r)
         portrait = Portrait(key, s_r, s_r_feats, self.model.motion_autoencoder.dec.direction(r_s_lambda))
+        self._remember(key, portrait)
+        return portrait
+
+    def _remember(self, key: str, portrait: Portrait) -> None:
+        """Keep an encoding, giving up the least recently used past ``MAX_PORTRAITS``."""
         with self.lock:
             self.portraits[key] = portrait
-        return portrait
+            self.portraits.move_to_end(key)
+            while len(self.portraits) > MAX_PORTRAITS:
+                self.portraits.popitem(last=False)
 
     def _warm(self) -> None:
         """Run every network once at the one input shape it will see (each new shape costs seconds once)."""
@@ -476,6 +488,8 @@ class FloatRuntime:
 
     def portrait(self, key: str) -> Portrait | None:
         with self.lock:
+            if key in self.portraits:
+                self.portraits.move_to_end(key)
             return self.portraits.get(key)
 
     @staticmethod
@@ -561,6 +575,10 @@ class FloatSession:
     def reset(self) -> None:
         self.latents = self.latents[:0]
         self.feats = self.feats[:0]
+
+    def rewind(self, frames: int) -> None:
+        self.latents = self.latents[:frames]
+        self.feats = self.feats[:frames]
 
     def spawn(self) -> FloatSession:
         session = FloatSession(self.runtime, self.portrait, self.we)

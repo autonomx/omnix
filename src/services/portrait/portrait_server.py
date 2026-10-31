@@ -65,6 +65,18 @@ MAX_PREVIEW_SECONDS = 8
 # Control messages a stream applies in order on the GPU thread (``cancel`` and ``tts_priority`` act at once).
 STREAM_MESSAGES = frozenset({"phrase_start", "phrase_done", "output_end", "play_position", "quality", "spec_start",
                              "spec_drop", "spec_bind", "spec_prefix_end"})
+# The fields each control message needs (checked as it arrives, so a malformed one never reaches the GPU thread);
+# counts are integers of at least 0, and a sample rate is a real one.
+MESSAGE_FIELDS: dict[str, tuple[str, ...]] = {
+    "phrase_start": ("output_id", "epoch", "segment_id", "sample_rate"), "phrase_done": ("segment_id",),
+    "output_end": ("output_id", "epoch"), "play_position": ("segment_id", "offset"), "quality": (),
+    "spec_start": ("generation_id", "sample_rate"), "spec_drop": ("generation_id",),
+    "spec_bind": ("generation_id", "output_id", "epoch", "segment_id"),
+    "spec_prefix_end": ("generation_id", "segment_id", "samples"), "cancel": ("output_id", "epoch")}
+COUNT_FIELDS = frozenset({"epoch", "offset", "samples", "trim"})
+MIN_SAMPLE_RATE, MAX_SAMPLE_RATE = 8_000, 192_000
+# How often a stream's handler looks at its worker when no message comes (a failed stream is closed at once).
+WORKER_CHECK_SECONDS = 0.5
 
 
 class Unavailable(RuntimeError):
@@ -89,10 +101,45 @@ def _default_load() -> Any:
     return FloatRuntime(required_folders())
 
 
+def free_vram_gb() -> float | None:
+    """Free memory on the first visible GPU from the driver's NVML (None without one).
+
+    Never through CUDA: asking CUDA creates the context (about 2.5 GB of commit) that the light, model-free process
+    is meant not to hold, and a check that found too little would keep it for good.
+    """
+    import ctypes
+    import os
+
+    class Memory(ctypes.Structure):
+        _fields_ = [("total", ctypes.c_ulonglong), ("free", ctypes.c_ulonglong), ("used", ctypes.c_ulonglong)]
+
+    try:
+        nvml = ctypes.CDLL("nvml.dll" if sys.platform == "win32" else "libnvidia-ml.so.1")
+    except OSError:
+        return None
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")[0].strip()
+    if nvml.nvmlInit_v2() != 0:
+        return None
+    try:
+        handle, memory = ctypes.c_void_p(), Memory()
+        if nvml.nvmlDeviceGetHandleByIndex_v2(ctypes.c_uint(int(visible) if visible.isdigit() else 0),
+                                             ctypes.byref(handle)) != 0:
+            return None
+        if nvml.nvmlDeviceGetMemoryInfo(handle, ctypes.byref(memory)) != 0:
+            return None
+        return memory.free / 1024**3
+    finally:
+        nvml.nvmlShutdown()
+
+
+def _cuda_initialized() -> bool:
+    torch = sys.modules.get("torch")
+    return torch is not None and torch.cuda.is_initialized()
+
+
 def _default_resources() -> tuple[bool, str]:
     """Whether a load fits now (free VRAM and host commit), and why not."""
     from app.providers.host_memory import available_commit_bytes
-    from services.helper_models import free_vram_gb
 
     free = free_vram_gb()
     if free is not None and free < LOAD_VRAM_GB:
@@ -177,7 +224,7 @@ class RuntimeHost:
 
     def ensure_loading(self) -> None:
         with self._lock:
-            if self.status in {"warming", "ready"}:
+            if self.status in {"warming", "ready", "exiting"}:
                 return
             try:
                 installed, why = self._installed()
@@ -203,6 +250,7 @@ class RuntimeHost:
             logger.exception("Portrait model failed to load")
             with self._lock:
                 self.status, self.message = "failed", f"The portrait model failed to load ({type(exc).__name__})"
+                self.last_used = time.monotonic()  # an idle while from now, its CUDA context goes with the process
             return
         with self._lock:
             self.runtime, self.status, self.message = runtime, "ready", ""
@@ -219,15 +267,28 @@ class RuntimeHost:
         with self._lock:
             if self.status == "ready":
                 return self.runtime
-            code = {"missing": "model_missing", "short": "model_busy", "warming": "warming"}.get(self.status,
-                                                                                               "model_failed")
+            code = {"missing": "model_missing", "short": "model_busy", "warming": "warming",
+                    "exiting": "service_unreachable"}.get(self.status, "model_failed")
             raise Unavailable(code, self.message or "The portrait model is not ready")
 
-    def unload_if_idle(self, idle_seconds: float, active_streams: int) -> bool:
+    def ready_runtime(self) -> Any:
+        """The loaded runtime, or None (read under the lock: an unload may be under way)."""
         with self._lock:
-            if self.status != "ready" or active_streams or time.monotonic() - self.last_used < idle_seconds:
+            return self.runtime if self.status == "ready" else None
+
+    def unload_if_idle(self, idle_seconds: float, active_streams: int, *, exit_after: bool = False) -> bool:
+        """Unload a model idle for ``idle_seconds`` with no stream open.
+
+        With ``exit_after`` the process exits next: the status becomes ``exiting``, so nothing loads in the
+        meantime, and a failed load that left a CUDA context behind is given up the same way.
+        """
+        with self._lock:
+            if active_streams or time.monotonic() - self.last_used < idle_seconds:
                 return False
-            self.runtime, self.status, self.message = None, "unloaded", ""
+            if self.status != "ready" and not (exit_after and self.status == "failed" and _cuda_initialized()):
+                return False
+            self.runtime, self.message = None, "The portrait service is restarting" if exit_after else ""
+            self.status = "exiting" if exit_after else "unloaded"
         with contextlib.suppress(Exception):
             import torch
 
@@ -338,15 +399,41 @@ class StreamWorker:
             self.failed = exc
 
 
-def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, sample_rate: int) -> list[bytes]:
+class PreviewAborted(RuntimeError):
+    """A call started while a preview rendered: the call has the GPU."""
+
+
+class _GivesWay:
+    """A preview's motion session that stops between passes and decodes once ``abort`` says a call started."""
+
+    def __init__(self, session: Any, abort: Callable[[], bool]) -> None:
+        self._session, self._abort = session, abort
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session, name)
+
+    def run_pass(self, *args: Any) -> None:
+        if self._abort():
+            raise PreviewAborted
+        self._session.run_pass(*args)
+
+    def decode(self, *args: Any) -> Any:
+        if self._abort():
+            raise PreviewAborted
+        return self._session.decode(*args)
+
+
+def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, sample_rate: int,
+                   abort: Callable[[], bool] = lambda: False) -> list[bytes]:
     """Every frame for a short clip, through the same scheduler a call uses (so the GPU sees the same shapes).
 
-    Only the clip's own frames: not the transition back to the idle loop a call's reply ends with.
+    Only the clip's own frames: not the transition back to the idle loop a call's reply ends with. Raises
+    PreviewAborted, between passes, once ``abort`` is true.
     """
     from services.portrait.scheduler import TRANSITION_OUTPUT_ID, PortraitStream
 
     frames: list[bytes] = []
-    stream = PortraitStream(runtime.session(portrait, emotion),
+    stream = PortraitStream(_GivesWay(runtime.session(portrait, emotion), abort),
                             lambda frame: frames.append(frame.jpeg) if frame.output_id != TRANSITION_OUTPUT_ID else None,
                             resample=runtime.resample)
     stream.phrase_start("preview", 0, "preview", sample_rate)
@@ -355,6 +442,18 @@ def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, s
     stream.output_end("preview", 0)
     stream.pump()
     return frames
+
+
+def check_message(kind: str, message: dict[str, Any]) -> None:
+    """Raise ValueError (or KeyError) for a control message missing a field or carrying a bad one."""
+    for name in MESSAGE_FIELDS.get(kind, ()):
+        if message[name] is None:
+            raise ValueError(f"{kind} needs {name}")
+    for name in COUNT_FIELDS & message.keys():
+        if message[name] is not None and int(message[name]) < 0:
+            raise ValueError(f"{name} is negative")
+    if "sample_rate" in message and not MIN_SAMPLE_RATE <= int(message["sample_rate"]) <= MAX_SAMPLE_RATE:
+        raise ValueError("not a sample rate")
 
 
 def quality_level(value: Any) -> int:
@@ -391,11 +490,8 @@ def create_app(*, load: Callable[[], Any] = _default_load,
     @app.get("/health")
     def health() -> dict[str, Any]:
         from app.providers.host_memory import available_commit_bytes
-        from services.helper_models import free_vram_gb
 
-        # Free VRAM only once the model is loading or loaded: asking CUDA creates the context it would hold.
-        free = free_vram_gb() if host.status in {"warming", "ready"} else None
-        commit = available_commit_bytes()
+        free, commit = free_vram_gb(), available_commit_bytes()
         return {"ok": True, "status": host.status, "message": host.message,
                 "streams": {"active": admission.active, "max": admission.max_streams},
                 "gpu": {"vram_free_bytes": int(free * 1024**3)} if free is not None else {},
@@ -435,19 +531,25 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             runtime = host.get()
         except Unavailable as exc:
             return {"ok": False, "code": exc.code, "message": str(exc)}
+        busy = {"ok": False, "code": "portrait_busy", "message": "A call is using the portrait"}
         if admission.active >= admission.max_streams:
-            return {"ok": False, "code": "portrait_busy", "message": "A call is using the portrait"}
+            return busy
         portrait = runtime.portrait(latent_key)
         if portrait is None:
             return {"ok": False, "code": "portrait_not_prepared", "message": "Prepare the portrait first"}
         pcm = np.frombuffer(payload, dtype="<i2")
-        frames = await asyncio.wrap_future(host.submit(render_preview, runtime, portrait, emotion, pcm, sample_rate))
+        try:
+            frames = await asyncio.wrap_future(host.submit(render_preview, runtime, portrait, emotion, pcm, sample_rate,
+                                                           lambda: admission.active > 0))
+        except PreviewAborted:  # a call started meanwhile: it gets the GPU, the preview gives way
+            return busy
         return {"ok": True, "fps": 25, "frames": [base64.b64encode(frame).decode("ascii") for frame in frames]}
 
     @app.delete("/portrait/cache/{tenant}/{image_sha256}")
     def forget(tenant: str, image_sha256: str) -> dict[str, Any]:
-        if host.status == "ready":
-            host.runtime.forget(portrait_key(tenant, image_sha256.lower()))
+        runtime = host.ready_runtime()
+        if runtime is not None:
+            runtime.forget(portrait_key(tenant, image_sha256.lower()))
         return {"ok": True}
 
     @app.websocket("/portrait/stream")
@@ -482,6 +584,9 @@ def create_app(*, load: Callable[[], Any] = _default_load,
 
         from services.portrait.scheduler import PortraitStream
 
+        portrait_stream: Any = None
+        worker: StreamWorker | None = None
+        tasks: list[asyncio.Task[None]] = []
         loop = asyncio.get_running_loop()
         outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=OUTBOX_FRAMES)
         dropped = 0
@@ -499,12 +604,6 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             if frame.count is not None:  # a sequence played by time (the transition back to the idle loop)
                 header.update(count=frame.count, frame_ms=frame.frame_ms)
             loop.call_soon_threadsafe(queue_frame, pack(header, frame.jpeg))
-
-        session = runtime.session(portrait, str(opened.get("emotion") or "neutral"))
-        session.level = quality_level(opened.get("level"))
-        portrait_stream = PortraitStream(session, emit, resample=runtime.resample)
-        worker = StreamWorker(portrait_stream)
-        host.attach(worker)
 
         idle_box: collections.deque[bytes] = collections.deque()
         # Remote calls get the idle loop at its own frame rate, so a reply's first frames never queue behind
@@ -549,42 +648,71 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                                       "offset": index, "count": len(blink), "frame_ms": frame_ms}, jpeg))
             queue_frame(b"")
 
-        sender = asyncio.create_task(send_frames())
-        await websocket.send_json({"type": "ready"})
-        idle_sender = asyncio.create_task(send_idle_loop())
+        # Everything after admission is undone below, however the stream ends: a gateway that goes away before
+        # ``ready``, a session that fails to make, a malformed message, a worker that fails on the GPU thread.
         try:
-            while worker.failed is None:
-                message = await websocket.receive()
+            # The session's tensors are made on the GPU thread, like all of the model's work.
+            session = await asyncio.wrap_future(host.submit(runtime.session, portrait,
+                                                            str(opened.get("emotion") or "neutral")))
+            session.level = quality_level(opened.get("level"))
+            portrait_stream = PortraitStream(session, emit, resample=runtime.resample)
+            worker = StreamWorker(portrait_stream)
+            host.attach(worker)
+            tasks.append(asyncio.create_task(send_frames()))
+            await websocket.send_json({"type": "ready"})
+            tasks.append(asyncio.create_task(send_idle_loop()))
+            while True:
+                if worker.failed is not None:
+                    with contextlib.suppress(Exception):
+                        await websocket.close(code=1011, reason="stream_failed")
+                    break
+                try:
+                    message = await asyncio.wait_for(websocket.receive(), WORKER_CHECK_SECONDS)
+                except asyncio.TimeoutError:
+                    continue
                 if message["type"] == "websocket.disconnect":
                     break
                 host.last_used = lease.last_seen = time.monotonic()
                 if message.get("bytes") is not None:
                     try:
                         header, payload = unpack(message["bytes"])
+                        header = {"segment_id": str(header["segment_id"]), "offset": int(header["offset"])}
+                        if header["offset"] < 0:
+                            raise ValueError("negative offset")
                         worker.inbox.put(("pcm", header, np.frombuffer(payload, dtype="<i2")))
-                    except (PortraitMessageError, ValueError):
+                    except (PortraitMessageError, ValueError, KeyError, TypeError, OverflowError):
                         await websocket.send_json({"type": "error", "code": "bad_audio"})
                     continue
                 control = json.loads(message.get("text") or "{}")
+                if not isinstance(control, dict):
+                    raise ValueError("a control message is an object")
                 kind = str(control.get("type") or "")
                 if kind == "cancel":  # takes effect between micro-batches, not after the queue drains
+                    check_message(kind, control)
                     portrait_stream.cancel(str(control["output_id"]), int(control["epoch"]))
                 elif kind == "tts_priority":
                     (portrait_stream.priority.set if control.get("on") else portrait_stream.priority.clear)()
                 elif kind in STREAM_MESSAGES:
+                    check_message(kind, control)
                     if kind == "play_position":  # its time is when it came, not when the GPU thread gets to it
                         control["received_at"] = time.monotonic()
                     worker.inbox.put((kind, control, None))
         except WebSocketDisconnect:
             pass
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, OverflowError):
             with contextlib.suppress(Exception):
                 await websocket.close(code=1003, reason="bad_message")
+        except Exception:  # noqa: BLE001 - a session that failed to make, or a send to a gateway already gone
+            logger.warning("Portrait stream %s ended with an error", call_key, exc_info=True)
+            with contextlib.suppress(Exception):
+                await websocket.close(code=1011, reason="stream_failed")
         finally:
-            portrait_stream.priority.clear()
-            host.detach(worker)
-            sender.cancel()
-            idle_sender.cancel()
+            if portrait_stream is not None:
+                portrait_stream.priority.clear()
+            if worker is not None:
+                host.detach(worker)
+            for task in tasks:
+                task.cancel()
             admission.release(lease)
             if dropped:
                 logger.info("Portrait stream %s dropped %d late frames", call_key, dropped)
@@ -604,11 +732,16 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                 for lease in admission.expired():
                     with contextlib.suppress(Exception):
                         await lease.websocket.close(code=4002, reason="lease_expired")
-                if host.unload_if_idle(idle_seconds, admission.active):
+                if preload:
+                    continue  # loaded at start to stay loaded: never unloaded, so never reloaded every idle while
+                exiting = app.state.request_exit is not None
+                if host.unload_if_idle(idle_seconds, admission.active, exit_after=exiting):
+                    if not exiting:
+                        logger.info("Unloaded the idle portrait model")
+                        continue
                     logger.info("Unloaded the idle portrait model; exiting so its launcher starts the service light")
-                    if app.state.request_exit is not None:
-                        app.state.request_exit(IDLE_EXIT_CODE)
-                        return
+                    app.state.request_exit(IDLE_EXIT_CODE)
+                    return
 
         app.state.housekeeping = asyncio.create_task(housekeeping())
 
@@ -641,5 +774,5 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["Admission", "Lease", "RuntimeHost", "StreamWorker", "Unavailable", "app", "create_app", "main", "quality_level",
-           "render_preview"]
+__all__ = ["Admission", "Lease", "PreviewAborted", "RuntimeHost", "StreamWorker", "Unavailable", "app", "check_message",
+           "create_app", "free_vram_gb", "main", "quality_level", "render_preview"]

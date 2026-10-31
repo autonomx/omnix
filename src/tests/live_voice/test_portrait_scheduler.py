@@ -24,6 +24,7 @@ class FakeSession:
         self.plans: list[PassPlan] = []
         self.audio_lengths: list[int] = []
         self.resets = 0
+        self.rewinds: list[int] = []
         self.level = 0
         self.children: list[FakeSession] = []
 
@@ -36,6 +37,9 @@ class FakeSession:
 
     def reset(self) -> None:
         self.resets += 1
+
+    def rewind(self, frames: int) -> None:
+        self.rewinds.append(frames)
 
     def transition(self) -> list[bytes]:
         return [f"transition-{index}".encode() for index in range(3)]
@@ -264,6 +268,38 @@ def test_a_prefix_longer_than_its_copy_is_filled_with_silence_and_a_shorter_one_
     assert stream.output is not None and stream.output.segment("seg-a").samples == 36_000
     stream.spec_prefix_end("gen-1", "seg-a", 12_000)
     assert stream.output.segment("seg-a").samples == 12_000
+
+
+def test_frames_made_past_a_shorter_prefix_are_made_again_from_the_fresh_audio() -> None:
+    # Review finding (2026-10-31): frames from speculative audio the phrase did not use stayed committed, and the
+    # fresh audio in their stretch never got frames of its own.
+    stream, session, frames = _stream()
+    _speculate(stream, "gen-1", 2.0)  # 28 frames made from it
+    stream.phrase_start("turn-1", 1, "seg-a", 24_000)
+    stream.spec_bind("gen-1", "turn-1", 1, "seg-a")
+    assert len(frames) == 28
+    stream.spec_prefix_end("gen-1", "seg-a", 12_000)  # only half a second of it was the phrase's
+    child = session.children[0]
+    assert child.rewinds == [12] and stream.output is not None and stream.output.committed == 12
+    _feed(stream, "seg-a", np.concatenate([np.zeros(12_000, np.int16), _pcm(1.0, 24_000)]), 6_000)
+    stream.phrase_done("seg-a")
+    stream.output_end("turn-1", 1)
+    stream.pump()
+    again = [frame.offset for frame in frames[28:]]
+    assert again[0] == 12 * 960  # from the frame the prefix ends in, made again
+    assert again == [index * 960 for index in range(12, 38)]
+
+
+def test_a_cancel_that_lands_while_its_output_opens_still_cancels_it() -> None:
+    # Review finding (2026-10-31): ``cancel`` (event loop) between phrase_start's check and the new output marked
+    # the previous output, and the cancelled turn's frames went out.
+    stream, _session, frames = _stream()
+    stream.phrase_start("turn-1", 1, "seg-a", 16_000)
+    stream.cancel("turn-2", 2)  # arrives while turn-2's phrase_start is past its check
+    stream._open("turn-2", 2)
+    stream.output.start_segment("seg-b", 16_000)  # type: ignore[union-attr]
+    stream.pcm("seg-b", 0, _pcm(1.0, 16_000))
+    assert stream.output is not None and stream.output.cancelled and stream.pump() == 0 and frames == []
 
 
 def test_unknown_dropped_or_cancelled_speculation_changes_nothing() -> None:

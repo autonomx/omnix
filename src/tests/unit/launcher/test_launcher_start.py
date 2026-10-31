@@ -97,3 +97,27 @@ def test_a_service_that_released_an_idle_model_is_started_again(tmp_path, monkey
         assert manager._services["model"].status() == "running"
     finally:
         manager.stop("model")
+
+
+def test_a_service_asked_to_stop_is_not_started_again_by_its_idle_exit(tmp_path, monkeypatch):
+    # Review finding (2026-10-31): a stop landing as the service exited for idleness was followed by a restart.
+    import time
+
+    from app.composition.launcher.service_manager import LauncherServiceManager, ServiceSpec
+    from app.runtime.process_control import IDLE_EXIT_CODE
+
+    monkeypatch.setattr("app.composition.launcher.service_manager.initialize_service_token", lambda: "token")
+    script = f"import sys, time\ntime.sleep(0.5)\nsys.exit({IDLE_EXIT_CODE})\n"
+    manager = LauncherServiceManager([
+        ServiceSpec(service_id="model", label="Model", command=[sys.executable, "-c", script], cwd=tmp_path),
+    ])
+    assert manager.start("model")["ok"]
+    service = manager._services["model"]
+    service.stop_requested = True  # stop() as the process exits on its own
+    for _ in range(200):
+        if any(f"exited with code {IDLE_EXIT_CODE}" in line for line in service.logs):
+            break
+        time.sleep(0.02)
+    time.sleep(0.3)
+    assert service.status() != "running"
+    assert not any("starting it again" in line for line in service.logs)

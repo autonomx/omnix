@@ -35,6 +35,9 @@ class FakeSession:
     def reset(self) -> None:
         pass
 
+    def rewind(self, frames: int) -> None:
+        pass
+
     def transition(self) -> list[bytes]:
         return [b"transition-0", b"transition-1"]
 
@@ -268,16 +271,12 @@ def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
     assert host.unload_if_idle(0.0, active_streams=0) and host.status == "unloaded"
 
 
-def test_the_model_loads_on_demand_and_health_never_wakes_cuda_before(monkeypatch, token: str) -> None:
-    import services.helper_models
-
-    asked: list[str] = []
-    monkeypatch.setattr(services.helper_models, "free_vram_gb", lambda: asked.append("vram") or 8.0)
+def test_the_model_loads_on_demand(monkeypatch, token: str) -> None:
+    monkeypatch.setattr(portrait_server, "free_vram_gb", lambda: 8.0)
     monkeypatch.delenv("OMNIX_PORTRAIT_PRELOAD", raising=False)
     app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=lambda: (True, ""))
     with _client(app, token) as client:  # runs the startup hook: nothing loads
         assert client.get("/health").json()["status"] == "unloaded"
-        assert asked == []  # asking CUDA for free memory would create the context the service is meant not to hold
         assert _prepare(client).get("code") in {"warming", None}  # a call's prepare starts the load
         for _ in range(200):
             if app.state.host.status == "ready":
@@ -285,6 +284,23 @@ def test_the_model_loads_on_demand_and_health_never_wakes_cuda_before(monkeypatc
             time.sleep(0.01)
         assert _prepare(client)["ok"] is True
         assert client.get("/health").json()["gpu"] == {"vram_free_bytes": 8 * 1024**3}
+
+
+def test_the_load_check_never_asks_cuda(monkeypatch) -> None:
+    # Review finding (2026-10-31): the check asked CUDA for free memory, which created the context (about 2.5 GB)
+    # the light process is meant not to hold, and a check that found too little kept it for good.
+    import sys
+    import types
+
+    def refuse() -> None:
+        raise AssertionError("CUDA was asked")
+
+    fake_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(mem_get_info=refuse, is_available=refuse,
+                                                                  is_initialized=lambda: False))
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(portrait_server, "free_vram_gb", lambda: 1.0)
+    fits, why = portrait_server._default_resources()
+    assert not fits and "VRAM" in why
 
 
 def test_an_unloaded_idle_model_asks_its_launcher_to_start_the_service_again_light(token: str) -> None:
@@ -298,7 +314,123 @@ def test_an_unloaded_idle_model_asks_its_launcher_to_start_the_service_again_lig
             if exits:
                 break
             time.sleep(0.01)
-    assert exits == [IDLE_EXIT_CODE] and app.state.host.status == "unloaded"
+    assert exits == [IDLE_EXIT_CODE] and app.state.host.status == "exiting"  # nothing loads before it exits
+
+
+def test_an_exiting_service_loads_nothing_and_says_it_is_restarting() -> None:
+    host = portrait_server.RuntimeHost(FakeRuntime, lambda: (True, ""), lambda: (True, ""))
+    host.ensure_loading()
+    for _ in range(200):
+        if host.status == "ready":
+            break
+        time.sleep(0.01)
+    assert host.unload_if_idle(0.0, active_streams=0, exit_after=True) and host.status == "exiting"
+    host.ensure_loading()  # a prepare in the moments before the process exits
+    assert host.status == "exiting"
+    with pytest.raises(portrait_server.Unavailable) as refused:
+        host.get()
+    assert refused.value.code == "service_unreachable"  # the gateway waits for the restart
+    assert host.ready_runtime() is None
+
+
+def test_a_failed_load_that_woke_cuda_exits_once_idle(monkeypatch) -> None:
+    def broken() -> object:
+        raise RuntimeError("no")
+
+    host = portrait_server.RuntimeHost(broken, lambda: (True, ""), lambda: (True, ""))
+    host.ensure_loading()
+    for _ in range(200):
+        if host.status == "failed":
+            break
+        time.sleep(0.01)
+    monkeypatch.setattr(portrait_server, "_cuda_initialized", lambda: False)
+    assert not host.unload_if_idle(0.0, active_streams=0, exit_after=True)  # nothing held: stay up
+    monkeypatch.setattr(portrait_server, "_cuda_initialized", lambda: True)
+    assert not host.unload_if_idle(0.0, active_streams=0)  # no launcher to restart it: stay up
+    assert host.unload_if_idle(0.0, active_streams=0, exit_after=True) and host.status == "exiting"
+
+
+def test_a_preloaded_model_stays_loaded(token: str) -> None:
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=lambda: (True, ""),
+                                     idle_unload_seconds=0.0, preload=True)
+    exits: list[int] = []
+    app.state.request_exit = exits.append
+    with _client(app, token):
+        time.sleep(1.5)  # past a housekeeping pass, idle all along
+    assert exits == [] and app.state.host.status == "ready"
+
+
+def test_a_stream_whose_session_fails_to_make_leaves_nothing_behind(token: str) -> None:
+    # Review finding (2026-10-31): setup ran outside the cleanup, leaking the worker, its sender and the lease.
+    class BrokenSessions(FakeRuntime):
+        def session(self, portrait: object, emotion: str) -> FakeSession:
+            raise RuntimeError("out of memory")
+
+    app = _ready_app(BrokenSessions())
+    client = _client(app, token)
+    latent_key = _prepare(client)["latent_key"]
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        websocket.send_json({"type": "open", "call_key": "c", "principal": "p", "session": "s",
+                             "latent_key": latent_key, "emotion": "neutral", "level": 0})
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+    assert closed.value.code == 1011
+    assert app.state.admission.active == 0 and app.state.host._workers == []
+
+
+@pytest.mark.parametrize("message", [
+    {"type": "phrase_start", "output_id": "o", "epoch": 1, "segment_id": "s", "sample_rate": 0},
+    {"type": "phrase_start", "output_id": "o", "epoch": 1, "segment_id": "s"},
+    {"type": "spec_prefix_end", "generation_id": "g", "segment_id": "s", "samples": -4},
+    {"type": "cancel", "output_id": "o"},
+    ["not", "an", "object"],
+])
+def test_a_malformed_control_message_closes_the_stream_and_cleans_up(token: str, message: object) -> None:
+    app = _ready_app(FakeRuntime())
+    client = _client(app, token)
+    latent_key = _prepare(client)["latent_key"]
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, latent_key) == {"type": "ready"}
+        websocket.send_json(message)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            while True:
+                websocket.receive_bytes()
+    assert closed.value.code == 1003
+    for _ in range(100):
+        if app.state.admission.active == 0 and not app.state.host._workers:
+            break
+        time.sleep(0.01)
+    assert app.state.admission.active == 0 and app.state.host._workers == []
+
+
+def test_a_stream_whose_worker_fails_is_closed_without_waiting_for_a_message(token: str) -> None:
+    class FailingSession(FakeSession):
+        def run_pass(self, audio, plan: PassPlan, seed: int) -> None:
+            raise RuntimeError("CUDA error")
+
+    class FailingRuntime(FakeRuntime):
+        def session(self, portrait: object, emotion: str) -> FakeSession:
+            return FailingSession()
+
+    app = _ready_app(FailingRuntime())
+    client = _client(app, token)
+    latent_key = _prepare(client)["latent_key"]
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, latent_key) == {"type": "ready"}
+        _speak(websocket)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            while True:
+                websocket.receive_bytes()
+    assert closed.value.code == 1011
+
+
+def test_a_preview_gives_way_to_a_call_that_starts_while_it_renders() -> None:
+    runtime = FakeRuntime()
+    portrait = runtime.prepare("k", b"image")
+    pcm = (np.sin(np.arange(24_000) / 5.0) * 9000).astype("<i2")
+    with pytest.raises(portrait_server.PreviewAborted):
+        portrait_server.render_preview(runtime, portrait, "neutral", pcm, 24_000, abort=lambda: True)
+    assert portrait_server.render_preview(runtime, portrait, "neutral", pcm, 24_000)  # no call: it renders
 
 
 def test_a_preview_renders_a_short_clip_and_is_refused_while_a_call_streams(token: str) -> None:

@@ -103,6 +103,9 @@ class MotionSession(Protocol):
     def reset(self) -> None:
         """Forget the output's frames; the next output starts from the idle loop's first frame."""
 
+    def rewind(self, frames: int) -> None:
+        """Forget committed frames from ``frames`` on: they are made again from other audio."""
+
     def transition(self) -> list[bytes]:
         """JPEG frames from the output's last committed pose to the idle loop's first frame, at the level's step."""
 
@@ -447,23 +450,38 @@ class PortraitStream:
         output.start_buffered_at = now if output.samples_16k >= threshold else None
         self.output, self.session = output, session
         self.bound[generation_id] = segment_id
+        if (output_id, epoch) in self.cancel_requested:  # cancelled (on the event loop) while it was bound
+            output.cancelled = True
+            return
         for index, jpeg in held:
             stamp_segment, offset = output.stamp(index)
             if offset >= 0:
                 self.emit(Frame(output_id, epoch, stamp_segment, offset, jpeg))
 
     def spec_prefix_end(self, generation_id: str, segment_id: str, samples: int) -> None:
-        """The replayed prefix was ``samples`` long: fit the segment to it; fresh audio follows from there."""
+        """The replayed prefix was ``samples`` long: fit the segment to it; fresh audio follows from there.
+
+        Frames already made past the prefix came from speculative audio the phrase did not use: the output
+        rewinds to the frame the prefix ends in, and its fresh audio makes them again (the browser replaces a
+        frame that comes again at the same offset).
+        """
         self.bound.pop(generation_id, None)
-        segment = self.output.segment(segment_id) if self.output is not None else None
-        if segment is None:
+        output = self.output
+        segment = output.segment(segment_id) if output is not None else None
+        if output is None or segment is None:
             return
         if segment.samples != samples:
             logger.info("portrait: speculative prefix %s was %d samples, %d arrived", generation_id, samples,
                         segment.samples)
+        cut = segment.samples > samples
         segment.fit(int(samples))
-        assert self.output is not None
-        self.output.restack()
+        output.restack()
+        if cut:
+            end = (segment.start_16k + segment.length_16k) // SAMPLES_PER_FRAME
+            if output.committed > end:
+                output.committed = end
+                output.decoded = min(output.decoded, end)
+                self.session.rewind(end)
 
     def phrase_done(self, segment_id: str) -> None:
         if self.output is not None:
@@ -591,6 +609,10 @@ class PortraitStream:
         self.output = Output(output_id, epoch, self.settings, self.resample, self.clock())
         self.session.reset()
         self.bound.clear()
+        # ``cancel`` runs on the event loop: one that came after ``phrase_start`` checked, but before this output
+        # existed, marked the previous output instead.
+        if (output_id, epoch) in self.cancel_requested:
+            self.output.cancelled = True
 
     @property
     def finished(self) -> bool:

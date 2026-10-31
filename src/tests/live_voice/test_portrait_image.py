@@ -42,6 +42,22 @@ def test_an_image_over_the_pixel_limit_is_refused_from_its_header() -> None:
     assert raised.value.code == "image_too_large"
 
 
+def test_an_image_past_pils_own_bomb_limit_is_refused_as_too_large_not_an_error() -> None:
+    # Review finding (2026-10-31): PIL raises DecompressionBombError itself past twice its pixel limit, which
+    # escaped as a 500. A PNG header claiming 20,000 x 20,000 pixels is enough: PIL checks before decoding.
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = struct.pack(">IIBBBBB", 20_000, 20_000, 8, 2, 0, 0, 0)
+    bomb = bytes([0x89]) + b"PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IEND", b"")
+    with pytest.raises(PortraitImageError) as raised:
+        decode_image(bomb)
+    assert raised.value.code == "image_too_large"
+
+
 def test_the_first_confident_face_is_used_in_the_images_own_pixels() -> None:
     image = np.zeros((720, 1280, 3), dtype=np.uint8)
     seen: list[tuple[int, ...]] = []

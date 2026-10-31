@@ -48,6 +48,8 @@ def decode_image(payload: bytes) -> np.ndarray:
             if width * height > MAX_IMAGE_PIXELS:
                 raise PortraitImageError("image_too_large", f"The portrait image is over {MAX_IMAGE_PIXELS:,} pixels")
             return np.asarray(image.convert("RGB"))
+    except Image.DecompressionBombError as exc:  # PIL's own refusal, past twice its pixel limit
+        raise PortraitImageError("image_too_large", f"The portrait image is over {MAX_IMAGE_PIXELS:,} pixels") from exc
     except (UnidentifiedImageError, OSError) as exc:
         raise PortraitImageError("image_unreadable", "The portrait image could not be read") from exc
 

@@ -89,6 +89,9 @@ class ManagedProcess:
     logs: deque[str] = field(default_factory=lambda: deque(maxlen=DEFAULT_LOG_LIMIT))
     last_returncode: int | None = None
     lock: threading.RLock = field(default_factory=threading.RLock)
+    # Set by stop() (and so stop_all()), cleared by start(): a service asked to stop is never started again by its
+    # idle exit, however the two interleave.
+    stop_requested: bool = False
 
     def status(self) -> str:
         with self.lock:
@@ -314,6 +317,7 @@ class LauncherServiceManager:
             service.process = process
             service.started_at = time.time()
             service.last_returncode = None
+            service.stop_requested = False
             thread = threading.Thread(
                 target=self._pump_logs_for_process,
                 args=(service, process),
@@ -347,6 +351,7 @@ class LauncherServiceManager:
     def stop(self, service_id: str, *, timeout_s: float = 8.0) -> dict[str, Any]:
         service = self._service(service_id)
         with service.lock:
+            service.stop_requested = True
             process = service.process
             if process is None or process.poll() is not None:
                 service.process = None
@@ -427,9 +432,13 @@ class LauncherServiceManager:
                         restart = process.returncode == IDLE_EXIT_CODE
                     self._append(service, f"[launcher] exited with code {process.returncode}")
         if restart:
-            # It unloaded an idle model and exited to release its memory: start it again, light.
-            self._append(service, "[launcher] it released an idle model; starting it again without one")
-            self.start(service.spec.service_id)
+            # It unloaded an idle model and exited to release its memory: start it again, light (unless it was asked
+            # to stop meanwhile; the lock is re-entrant, so the check and the start are one step).
+            with service.lock:
+                if service.stop_requested or service.process is not None:
+                    return
+                self._append(service, "[launcher] it released an idle model; starting it again without one")
+                self.start(service.spec.service_id)
 
 
 def _is_port_available(port: int, host: str = "127.0.0.1") -> bool:
