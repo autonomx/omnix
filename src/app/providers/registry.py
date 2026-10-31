@@ -4,6 +4,7 @@ plus a factory for creating provider instances.
 """
 
 import logging
+import threading
 
 from typing import Any, Dict, List, Optional, Type
 
@@ -25,29 +26,37 @@ class ProviderRegistry:
         """Initialize the provider registry."""
         self._providers: Dict[str, Type[BaseProvider]] = {}
         self._discovered = False
-        
+        self._discovery_lock = threading.Lock()
+
     def discover_providers(self) -> None:
         """Load the LLM providers listed in ``app.providers.catalog`` (WP-7.2).
 
         A provider whose module fails to import is reported and skipped; the
-        rest stay available.
+        rest stay available. Discovery runs once, under a lock, and publishes
+        the table whole: two requests discovering at once could each reset it
+        while the other read it (the audio registry's twin race lost a call's
+        STT provider).
         """
         if self._discovered:
             return
-        from .catalog import specs
+        with self._discovery_lock:
+            if self._discovered:
+                return
+            from .catalog import specs
 
-        self._providers = {}
-        for spec in specs("llm"):
-            try:
-                provider_class = spec.load()
-            except Exception as exc:
-                logger.warning(f"Error loading provider {spec.id} from {spec.module}: {exc}")
-                continue
-            if not issubclass(provider_class, BaseProvider):
-                raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a BaseProvider")
-            self._providers[spec.id] = provider_class
-        self._discovered = True
-        logger.info(f"Provider discovery complete. {len(self._providers)} providers available")
+            providers: Dict[str, Type[BaseProvider]] = {}
+            for spec in specs("llm"):
+                try:
+                    provider_class = spec.load()
+                except Exception as exc:
+                    logger.warning(f"Error loading provider {spec.id} from {spec.module}: {exc}")
+                    continue
+                if not issubclass(provider_class, BaseProvider):
+                    raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a BaseProvider")
+                providers[spec.id] = provider_class
+            self._providers = providers
+            self._discovered = True
+        logger.info(f"Provider discovery complete. {len(providers)} providers available")
 
     def register_provider(self, provider_class: Type[BaseProvider]) -> None:
         """
@@ -226,8 +235,9 @@ class ProviderRegistry:
     
     def clear(self) -> None:
         """Clear all registered providers (useful for testing)."""
-        self._providers.clear()
-        self._discovered = False
+        with self._discovery_lock:
+            self._providers = {}
+            self._discovered = False
 
 
 # Global registry instance

@@ -6,6 +6,7 @@ and provides a factory for creating TTS and STT provider instances.
 """
 
 import logging
+import threading
 
 from typing import Any, Dict, List, Optional, Type
 
@@ -28,27 +29,37 @@ class AudioProviderRegistry:
         self._tts_providers: Dict[str, Type[BaseTTSProvider]] = {}
         self._stt_providers: Dict[str, Type[BaseSTTProvider]] = {}
         self._discovered = False
-        
+        self._discovery_lock = threading.Lock()
+
     def discover_providers(self) -> None:
-        """Load the TTS and STT providers listed in ``app.providers.catalog`` (WP-7.2)."""
+        """Load the TTS and STT providers listed in ``app.providers.catalog`` (WP-7.2).
+
+        Once, under a lock, publishing both tables together: two requests discovering at once each reset the tables
+        while the other read them, and one saw no STT provider (2026-10-31: "4 TTS and 0 STT providers" beside
+        "4 TTS and 1 STT", logged as the first live call after a gateway start connected and never heard anything).
+        """
         if self._discovered:
             return
-        from .catalog import specs
+        with self._discovery_lock:
+            if self._discovered:
+                return
+            from .catalog import specs
 
-        self._tts_providers = {}
-        self._stt_providers = {}
-        for kind, base, target in (("tts", BaseTTSProvider, self._tts_providers), ("stt", BaseSTTProvider, self._stt_providers)):
-            for spec in specs(kind):
-                try:
-                    provider_class = spec.load()
-                except Exception as exc:
-                    logger.warning(f"Error loading {kind.upper()} provider {spec.id} from {spec.module}: {exc}")
-                    continue
-                if not issubclass(provider_class, base):
-                    raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a {base.__name__}")
-                target[spec.id] = provider_class
-        self._discovered = True
-        logger.info(f"[INFO] Audio provider discovery complete. {len(self._tts_providers)} TTS and {len(self._stt_providers)} STT providers available")
+            tts: Dict[str, Type[BaseTTSProvider]] = {}
+            stt: Dict[str, Type[BaseSTTProvider]] = {}
+            for kind, base, target in (("tts", BaseTTSProvider, tts), ("stt", BaseSTTProvider, stt)):
+                for spec in specs(kind):
+                    try:
+                        provider_class = spec.load()
+                    except Exception as exc:
+                        logger.warning(f"Error loading {kind.upper()} provider {spec.id} from {spec.module}: {exc}")
+                        continue
+                    if not issubclass(provider_class, base):
+                        raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a {base.__name__}")
+                    target[spec.id] = provider_class
+            self._tts_providers, self._stt_providers = tts, stt
+            self._discovered = True
+        logger.info(f"[INFO] Audio provider discovery complete. {len(tts)} TTS and {len(stt)} STT providers available")
 
     def register_tts_provider(self, provider_class: Type[BaseTTSProvider]) -> None:
         """
@@ -314,9 +325,9 @@ class AudioProviderRegistry:
     
     def clear(self) -> None:
         """Clear all registered providers (useful for testing)."""
-        self._tts_providers.clear()
-        self._stt_providers.clear()
-        self._discovered = False
+        with self._discovery_lock:
+            self._tts_providers, self._stt_providers = {}, {}
+            self._discovered = False
 
 
 

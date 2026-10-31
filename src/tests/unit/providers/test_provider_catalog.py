@@ -1,6 +1,9 @@
 """Providers come from an explicit catalog (WP-7.2 Part A)."""
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 
 from app.providers import catalog
@@ -30,6 +33,43 @@ def test_a_spec_must_name_the_class_that_declares_its_id() -> None:
     wrong = ProviderSpec("not-cerebras", "llm", "app.providers.cerebras_provider", "CerebrasProvider", frozenset({"chat"}))
     with pytest.raises(ValueError, match="declares provider id 'cerebras'"):
         wrong.load()
+
+
+@pytest.mark.parametrize("make", [ProviderRegistry, AudioProviderRegistry])
+def test_concurrent_discovery_shows_every_caller_the_whole_table(monkeypatch, make) -> None:
+    # 2026-10-31: two requests discovering at once each reset the audio tables while the other read them, and one
+    # call found "4 TTS and 0 STT providers" and never began.
+    real_specs = catalog.specs
+
+    def slow_specs(kind):
+        for spec in real_specs(kind):
+            time.sleep(0.01)
+            yield spec
+
+    monkeypatch.setattr(catalog, "specs", slow_specs)
+    registry = make()
+    start = threading.Barrier(4)
+    seen: list[tuple[list[str], ...]] = []
+
+    def discover() -> None:
+        start.wait()
+        registry.discover_providers()
+        if isinstance(registry, AudioProviderRegistry):
+            seen.append((sorted(registry._tts_providers), sorted(registry._stt_providers)))
+        else:
+            seen.append((sorted(registry._providers),))
+
+    threads = [threading.Thread(target=discover) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    if make is AudioProviderRegistry:
+        expected = (sorted(spec.id for spec in real_specs("tts")), sorted(spec.id for spec in real_specs("stt")))
+    else:
+        expected = (sorted(spec.id for spec in real_specs("llm")),)
+    assert seen == [expected] * 4
 
 
 def test_a_provider_that_fails_to_import_is_skipped(monkeypatch, caplog) -> None:
