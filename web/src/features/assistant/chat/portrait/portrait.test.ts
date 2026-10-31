@@ -176,11 +176,30 @@ describe('the portrait compositor', () => {
 
     // It ends mid-sway: the loop runs on from the frame the sway is on, not back at i0.
     const midSway = new PortraitCompositor<string>();
-    midSway.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4', 'i5'], 0, 80); // 80 ms frames: the sway spans three
+    midSway.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7'], 0, 80); // 80 ms frames: the sway spans five
     midSway.settle(0);
     expect(midSway.picture(0, null, false).under).toBe('i0');
-    expect(midSway.picture(11_000, null, false).under).toBe('i3'); // 11 s is half a sway: its far end
-    expect(midSway.picture(11_090, null, false)).toEqual({ under: 'i4', over: null, alpha: 0 });
+    expect(midSway.picture(11_000, null, false).under).toBe('i5'); // 11 s is half a sway: its far end
+    expect(midSway.picture(11_090, null, false)).toEqual({ under: 'i6', over: null, alpha: 0 });
+  });
+
+  it('blinks while settled, every few seconds, as the sway passes back through the first frame', () => {
+    const compositor = new PortraitCompositor<string>(() => 0); // the shortest gap: 2.5 s
+    compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
+    compositor.setBlink(['b0', 'b1', 'b2'], 40);
+    compositor.settle(0);
+    expect(compositor.picture(0, null, false).under).toBe('i0'); // reached at 0: a blink is due from 2.5 s
+    expect(compositor.picture(2_600, null, false).under).toBe('i2'); // due, but the sway is out: it waits
+    expect(compositor.picture(4_000, null, false)).toEqual({ under: 'b0', over: null, alpha: 0 }); // back at i0
+    expect(compositor.picture(4_040, null, false).under).toBe('b1');
+    expect(compositor.picture(4_080, null, false).under).toBe('b2');
+    // The blink over, the sway goes on from where it paused, and the next blink is 2.5 s off.
+    expect(compositor.picture(4_120, null, false).under).toBe('i0');
+    expect(compositor.picture(4_720, null, false).under).toBe('i2');
+    expect(compositor.picture(6_120, null, false).under).toBe('i0'); // at rest, but not due until 6.62 s
+    expect(compositor.picture(8_120, null, false).under).toBe('b0');
+    // A reply cuts in, even mid-blink.
+    expect(compositor.picture(8_140, 's1', false)).toEqual({ under: 's1', over: null, alpha: 0 });
   });
 
   it('plays a transition only as its own reply ends, though it arrived before that reply played', () => {

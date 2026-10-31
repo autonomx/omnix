@@ -221,6 +221,13 @@ describe('the live portrait client', () => {
     sockets[0].message(idle(0, 20));
     await flush();
     expect((portrait.picture(performance.now()).under as unknown as FakeImage).id).toBe(20);
+    // The blink after the loop is kept for the settled sway: never drawn as speech or while the loop runs free.
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage({ output_id: 'blink', epoch: 0, segment_id: 'blink', offset, count: 2, frame_ms: 40 },
+        30 + offset));
+    }
+    await flush();
+    expect([20, 21]).toContain((portrait.picture(performance.now()).under as unknown as FakeImage).id);
 
     sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
     await flush();
@@ -234,7 +241,7 @@ describe('the live portrait client', () => {
     expect(images.find((image) => image.id === 5)?.closed).toBe(true);
 
     portrait.end();
-    expect(images.filter((image) => image.id >= 20).every((image) => image.closed)).toBe(true);
+    expect(images.filter((image) => image.id >= 20).every((image) => image.closed)).toBe(true); // loop and blink
   });
 
   it('plays a reply transition once its audio has drained, then resumes the idle loop at its first frame', async () => {

@@ -4,10 +4,11 @@
  *
  * While a phrase is heard, its frame for the heard position. A reply's motion starts from the idle loop's first
  * frame, so once the user stops speaking the loop is steered there (the shorter way, at its own pace) and then sways
- * slowly over its first few frames, which stay within about one step of speech motion of it (rated 2026-10-31: a
- * face held dead still while the reply was thought of looked frozen). The reply then cuts in with no blend, from
- * whichever of those frames is on screen. A pause inside a reply (a
- * clause silence, a late phrase, an underrun) holds the last frame. When the reply's audio has drained, the
+ * slowly over its first few frames, which stay close to it in motion (rated 2026-10-31: a face held dead still
+ * while the reply was thought of looked frozen). Every few seconds, as the sway passes back through that first frame
+ * (where it is momentarily still), it pauses for the service's blink there. The reply then cuts in with no blend,
+ * from whichever of those frames is on screen. The free-running loop has a blink of its own. A pause inside a reply
+ * (a clause silence, a late phrase, an underrun) holds the last frame. When the reply's audio has drained, the
  * service's transition frames take the face back to the loop's first frame, and the loop resumes from there. A
  * pixel crossfade, which shows two poses at once, is left only as the fallback: a reply that comes before the loop
  * has settled, or playback that drains without a transition. A cancelled or interrupted turn cuts to the idle
@@ -20,15 +21,29 @@ export const HOLD_MAX_MS = 1_500;
 export const CROSSFADE_MS = 80;
 export const IDLE_FRAME_MS = 40;
 export const SETTLE_HOLD_MS = 10_000;
-// The sway while settled: out over the loop's first 240 ms of motion (three idle frames, about six rendered frames
-// of idle motion at a quarter of a speech step each) and back, eased, every 2 s.
-export const SWAY_LOOP_MS = 240;
+// The sway while settled: out over the loop's first 400 ms of motion (five idle frames: ten rendered frames, at most
+// 1.7 in FLOAT's motion space from the first, where a reply's first frame is already about 3 from it) and back,
+// eased, every 2 s (more of it, as rated 2026-10-31, than the 240 ms first tried).
+export const SWAY_LOOP_MS = 400;
 export const SWAY_PERIOD_MS = 2_000;
+// A blink while settled every 2.5-6 s (and at the sway's next pass through the first frame, within 0.05 of a frame).
+export const BLINK_GAP_MIN_MS = 2_500;
+export const BLINK_GAP_MAX_MS = 6_000;
+const SWAY_AT_REST = 0.05;
 
 /** Draw `under`, then `over` (when set) at `alpha` on top of it. */
 export type PortraitPicture<T> = { under: T | null; over: T | null; alpha: number };
 
-type Settle = { from: number; direction: 1 | -1; since: number; reachedAt: number | null };
+// `paused`: how long the sway has stood still for blinks; `blinkSince`, while one plays.
+type Settle = {
+  from: number;
+  direction: 1 | -1;
+  since: number;
+  reachedAt: number | null;
+  paused: number;
+  blinkSince: number | null;
+  nextBlinkAt: number;
+};
 type Transition<T> = { frames: T[]; frameMs: number; since: number };
 
 export class PortraitCompositor<T> {
@@ -45,6 +60,10 @@ export class PortraitCompositor<T> {
   private transition: { frames: T[]; frameMs: number; epoch: number | null } | null = null;
   private playing: Transition<T> | null = null;
   private speechEpoch: number | null = null;
+  private blink: { frames: T[]; frameMs: number } | null = null;
+
+  /** `random` spaces the blinks (in [0, 1), as Math.random). */
+  constructor(private readonly random: () => number = Math.random) {}
 
   /** The idle loop, complete, with its frame period; it starts from its first frame. */
   setIdleLoop(frames: T[], now: number, frameMs = IDLE_FRAME_MS): void {
@@ -63,7 +82,15 @@ export class PortraitCompositor<T> {
       direction: this.idle.length - position <= position ? 1 : -1,
       since: now,
       reachedAt: null,
+      paused: 0,
+      blinkSince: null,
+      nextBlinkAt: 0,
     };
+  }
+
+  /** A blink at the idle loop's first frame (it starts and ends on it), played now and then while settled. */
+  setBlink(frames: T[], frameMs = IDLE_FRAME_MS): void {
+    this.blink = frames.length ? { frames, frameMs: frameMs > 0 ? frameMs : IDLE_FRAME_MS } : null;
   }
 
   /** A reply's frames back to the idle loop's first frame: played once that reply's audio has drained. */
@@ -85,6 +112,7 @@ export class PortraitCompositor<T> {
 
   reset(): void {
     this.idle = [];
+    this.blink = null;
     this.interrupt(0);
   }
 
@@ -158,11 +186,25 @@ export class PortraitCompositor<T> {
     return { under: this.idle[index], over: this.idle[0], alpha: position - Math.floor(position) };
   }
 
-  /** Settled: between the two loop frames either side of the sway's position, blended by how far it is between them. */
+  /**
+   * Settled: between the two loop frames either side of the sway's position, blended by how far it is between them;
+   * or, when a blink is due and the sway is back at the first frame, the blink, with the sway paused until it ends.
+   */
   private swaying(now: number): PortraitPicture<T> | null {
-    const reachedAt = this.settling?.reachedAt;
-    if (reachedAt === null || reachedAt === undefined) return null;
-    const position = this.swayPosition(now, reachedAt);
+    const settling = this.settling;
+    if (!settling || settling.reachedAt === null) return null;
+    if (settling.blinkSince !== null) {
+      const frame = this.blink ? Math.floor((now - settling.blinkSince) / this.blink.frameMs) : Infinity;
+      if (this.blink && frame < this.blink.frames.length) return { under: this.blink.frames[frame], over: null, alpha: 0 };
+      settling.paused += now - settling.blinkSince;
+      settling.blinkSince = null;
+      settling.nextBlinkAt = now + this.blinkGap();
+    }
+    const position = this.swayPosition(now);
+    if (this.blink && now >= settling.nextBlinkAt && position < SWAY_AT_REST) {
+      settling.blinkSince = now;
+      return { under: this.blink.frames[0], over: null, alpha: 0 };
+    }
     const index = Math.floor(position);
     const alpha = position - index;
     return alpha > 0 && index + 1 < this.idle.length
@@ -170,11 +212,19 @@ export class PortraitCompositor<T> {
       : { under: this.idle[index], over: null, alpha: 0 };
   }
 
-  /** Where the sway is, in loop frames from the first (fractional): out and back, eased, from `reachedAt`. */
-  private swayPosition(now: number, reachedAt: number): number {
+  /** Where the sway is, in loop frames from the first (fractional): out and back, eased, from when the loop got
+   * there, less the time it stood still for blinks. */
+  private swayPosition(now: number): number {
+    const settling = this.settling;
+    if (!settling || settling.reachedAt === null) return 0;
+    const blinking = settling.blinkSince === null ? 0 : now - settling.blinkSince;
+    const elapsed = Math.max(0, now - settling.reachedAt - settling.paused - blinking);
     const span = Math.min(this.idle.length - 1, Math.max(1, Math.round(SWAY_LOOP_MS / this.idleFrameMs)));
-    const phase = (2 * Math.PI * Math.max(0, now - reachedAt)) / SWAY_PERIOD_MS;
-    return (span * (1 - Math.cos(phase))) / 2;
+    return (span * (1 - Math.cos((2 * Math.PI * elapsed) / SWAY_PERIOD_MS))) / 2;
+  }
+
+  private blinkGap(): number {
+    return BLINK_GAP_MIN_MS + this.random() * (BLINK_GAP_MAX_MS - BLINK_GAP_MIN_MS);
   }
 
   private fade(now: number): number {
@@ -194,8 +244,11 @@ export class PortraitCompositor<T> {
     if (!settling) return Math.floor(this.loopPosition(now));
     const position = settling.from + settling.direction * ((now - settling.since) / this.idleFrameMs);
     if (settling.direction > 0 ? position < this.idle.length : position > 0) return Math.floor(position);
-    settling.reachedAt ??= now;
-    const sway = Math.floor(this.swayPosition(now, settling.reachedAt));
+    if (settling.reachedAt === null) {
+      settling.reachedAt = now;
+      settling.nextBlinkAt = now + this.blinkGap();
+    }
+    const sway = Math.floor(this.swayPosition(now));
     if (now - settling.reachedAt > SETTLE_HOLD_MS) {
       // No reply came: the loop runs on from the frame the sway is on.
       this.settling = null;

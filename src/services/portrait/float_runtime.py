@@ -273,9 +273,11 @@ class Portrait:
     s_r: torch.Tensor
     s_r_feats: list[torch.Tensor]
     r_s: torch.Tensor
-    # The idle loop's motion latents, and its JPEG frames by quality level (made on first use).
+    # The idle loop's motion latents (with a blink), and its JPEG frames by quality level (made on first use); a blink
+    # at the loop's first frame, likewise.
     idle: torch.Tensor | None = None
     idle_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
+    blink_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
     # The silence features the idle loop was rendered with (a carry's audio half when a reply starts from it).
     idle_wa: torch.Tensor | None = None
 
@@ -314,6 +316,10 @@ class FloatRuntime:
         del state
         model.use_omnix_parts()
         self.model = model.requires_grad_(False).to("cuda").eval()
+        from services.portrait.idle_loop import EYELID_DIRECTION
+
+        with torch.no_grad():  # the direction a blink moves along (a unit vector in motion space)
+            self.eyelid = self.model.motion_autoencoder.dec.direction(None)[:, EYELID_DIRECTION].contiguous()
         self.detector_path = folders[DETECTOR_MODEL] / "s3fd-619a316812.pth"
         self._detector: Any = None
         self.portraits: dict[str, Portrait] = {}
@@ -405,8 +411,9 @@ class FloatRuntime:
 
     @torch.no_grad()
     def idle_latents(self, portrait: Portrait) -> torch.Tensor:
-        """The portrait's idle loop: silence rendered window after window from the rest pose, then cut."""
-        from services.portrait.idle_loop import IDLE_RENDER_FRAMES, choose_loop
+        """The portrait's idle loop: silence rendered window after window from the rest pose, then cut, with a blink
+        near its middle."""
+        from services.portrait.idle_loop import IDLE_RENDER_FRAMES, blink, choose_loop, idle_frame_step, loop_blink_center
 
         if portrait.idle is not None:
             return portrait.idle
@@ -423,7 +430,9 @@ class FloatRuntime:
             prev_x, prev_wa = sample[-carry:], silence[-carry:]
         latents = torch.cat(windows)
         start, stop = choose_loop(latents.cpu().numpy())
-        portrait.idle = latents[start:stop].clone()
+        loop = latents[start:stop]
+        step = max(idle_frame_step(level) for level in range(len(QUALITY_LEVELS)))
+        portrait.idle = blink(loop, self.eyelid, loop_blink_center(loop.shape[0], step))
         portrait.idle_wa = silence[-carry:].clone()
         return portrait.idle
 
@@ -435,6 +444,17 @@ class FloatRuntime:
             step = idle_frame_step(level)
             portrait.idle_jpegs[level] = self.render(portrait, self.idle_latents(portrait)[::step], level)
         return portrait.idle_jpegs[level]
+
+    def blink_frames(self, portrait: Portrait, level: int = 0) -> list[bytes]:
+        """A blink at the idle loop's first frame (25 frames a second), which the browser plays while it holds the
+        face near there; it starts and ends on that frame."""
+        from services.portrait.idle_loop import BLINK_ENVELOPE, blink
+
+        if level not in portrait.blink_jpegs:
+            first = self.idle_latents(portrait)[:1].repeat(len(BLINK_ENVELOPE), 1)
+            latents = blink(first, self.eyelid, BLINK_ENVELOPE.index(1.0))
+            portrait.blink_jpegs[level] = self.render(portrait, latents, level)
+        return portrait.blink_jpegs[level]
 
     @torch.no_grad()
     def render_pixels(self, portrait: Portrait, latents: torch.Tensor) -> torch.Tensor:

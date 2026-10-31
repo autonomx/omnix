@@ -530,11 +530,12 @@ def create_app(*, load: Callable[[], Any] = _default_load,
                     await websocket.send_bytes(message)
 
         async def send_idle_loop() -> None:
-            from services.portrait.idle_loop import IDLE_OUTPUT_ID, IDLE_SEGMENT_ID, idle_frame_step
+            from services.portrait.idle_loop import BLINK_OUTPUT_ID, IDLE_OUTPUT_ID, IDLE_SEGMENT_ID, idle_frame_step
 
             level = session.level
             try:
                 frames = await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, level))
+                blink = await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, level))
             except Exception:  # noqa: BLE001 - the call goes on; the browser holds the last frame instead
                 logger.warning("Portrait idle loop failed for %s", call_key, exc_info=True)
                 return
@@ -543,6 +544,9 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             for index, jpeg in enumerate(frames):
                 idle_box.append(pack({"output_id": IDLE_OUTPUT_ID, "epoch": 0, "segment_id": IDLE_SEGMENT_ID,
                                       "offset": index, "count": len(frames), "frame_ms": frame_ms}, jpeg))
+            for index, jpeg in enumerate(blink):  # after the loop: the browser plays it while the loop holds
+                idle_box.append(pack({"output_id": BLINK_OUTPUT_ID, "epoch": 0, "segment_id": BLINK_OUTPUT_ID,
+                                      "offset": index, "count": len(blink), "frame_ms": 40}, jpeg))
             queue_frame(b"")
 
         sender = asyncio.create_task(send_frames())

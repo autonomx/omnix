@@ -68,6 +68,9 @@ class FakeRuntime:
     def idle_frames(self, portrait: object, level: int = 0) -> list[bytes]:
         return [f"idle-{index}-l{level}".encode() for index in range(3)]
 
+    def blink_frames(self, portrait: object, level: int = 0) -> list[bytes]:
+        return [f"blink-{index}-l{level}".encode() for index in range(2)]
+
 
 @pytest.fixture
 def token(monkeypatch) -> str:
@@ -116,10 +119,10 @@ def _speak(websocket, output_id: str = "out-1", epoch: int = 3, segment_id: str 
 
 
 def _frames(websocket, count: int) -> tuple[list[tuple[dict, bytes]], list[tuple[dict, bytes]]]:
-    """``count`` frames, split into the idle loop's and the speech's (the two may interleave)."""
+    """``count`` frames, split into the idle loop's (and its blink's) and the speech's (the two may interleave)."""
     frames = [unpack(websocket.receive_bytes()) for _ in range(count)]
-    idle = [frame for frame in frames if frame[0]["output_id"] == "idle"]
-    return idle, [frame for frame in frames if frame[0]["output_id"] != "idle"]
+    idle = [frame for frame in frames if frame[0]["output_id"] in {"idle", "blink"}]
+    return idle, [frame for frame in frames if frame[0]["output_id"] not in {"idle", "blink"}]
 
 
 def test_health_is_public_and_says_why_the_model_is_not_ready(token: str) -> None:
@@ -193,8 +196,8 @@ def test_audio_in_frames_out_stamped_by_segment_and_offset(token: str) -> None:
     with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
         assert _open(websocket, latent_key) == {"type": "ready"}
         _speak(websocket)
-        idle, frames = _frames(websocket, 3 + 25)
-    assert len(idle) == 3
+        idle, frames = _frames(websocket, 3 + 2 + 25)
+    assert len(idle) == 3 + 2
     headers = [header for header, _jpeg in frames]
     assert [jpeg for _header, jpeg in frames] == [f"jpeg-{index}-l0".encode() for index in range(25)]
     assert {(header["output_id"], header["epoch"], header["segment_id"]) for header in headers} == {("out-1", 3, "seg-a")}
@@ -206,12 +209,15 @@ def test_the_idle_loop_follows_ready_at_the_opening_level(token: str) -> None:
     latent_key = _prepare(client)["latent_key"]
     with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
         assert _open(websocket, latent_key, level=2) == {"type": "ready"}
-        idle, speech = _frames(websocket, 3)
+        idle, speech = _frames(websocket, 3 + 2)
     assert speech == []
     assert [header for header, _jpeg in idle] == [
         {"output_id": "idle", "epoch": 0, "segment_id": "idle", "offset": index, "count": 3, "frame_ms": 80}
-        for index in range(3)]
-    assert [jpeg for _header, jpeg in idle] == [f"idle-{index}-l2".encode() for index in range(3)]
+        for index in range(3)] + [  # then the blink at the loop's first frame, at the full frame rate
+        {"output_id": "blink", "epoch": 0, "segment_id": "blink", "offset": index, "count": 2, "frame_ms": 40}
+        for index in range(2)]
+    assert [jpeg for _header, jpeg in idle] == [f"idle-{index}-l2".encode() for index in range(3)] + [
+        f"blink-{index}-l2".encode() for index in range(2)]
 
 
 def test_a_quality_change_takes_effect_on_the_next_frames(token: str) -> None:
@@ -221,7 +227,7 @@ def test_a_quality_change_takes_effect_on_the_next_frames(token: str) -> None:
         assert _open(websocket, latent_key)["type"] == "ready"
         websocket.send_json({"type": "quality", "level": 3})
         _speak(websocket)
-        _idle, frames = _frames(websocket, 3 + 13)  # every other frame of 25 at level 3
+        _idle, frames = _frames(websocket, 3 + 2 + 13)  # every other frame of 25 at level 3
     assert [jpeg for _header, jpeg in frames] == [f"jpeg-{index}-l3".encode() for index in range(0, 25, 2)]
     assert portrait_server.quality_level(9) == 3 and portrait_server.quality_level("x") == 0
 

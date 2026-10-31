@@ -85,13 +85,13 @@ async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str,
 
 
 def _is_speech_frame(message: bytes) -> bool:
-    """Whether a frame is the call's speech: not the idle loop's burst at the start, nor a reply's frames back to it
-    (the browser counts neither as received speech, so neither is counted in flight)."""
+    """Whether a frame is the call's speech: not the idle loop's burst at the start (with its blink), nor a reply's
+    frames back to it (the browser counts none of them as received speech, so none is counted in flight)."""
     try:
         header, _ = unpack(message)
     except PortraitMessageError:
         return False
-    return header.get("output_id") not in ("idle", "transition")
+    return header.get("output_id") not in ("idle", "blink", "transition")
 
 
 def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls, *,

@@ -8,7 +8,13 @@ import type { LiveVoicePcmSession, LiveVoicePortraitHooks } from '../../workspac
 import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { PortraitFrameBuffer } from './frameBuffer';
-import { IDLE_OUTPUT_ID, parsePortraitFrame, TRANSITION_OUTPUT_ID, type PortraitFrameHeader } from './protocol';
+import {
+  BLINK_OUTPUT_ID,
+  IDLE_OUTPUT_ID,
+  parsePortraitFrame,
+  TRANSITION_OUTPUT_ID,
+  type PortraitFrameHeader,
+} from './protocol';
 
 /**
  * The live call's portrait (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 3).
@@ -66,6 +72,8 @@ export class LivePortrait {
   private readonly compositor = new PortraitCompositor<ImageBitmap>();
   private idleFrames: ImageBitmap[] = [];
   private idleReceived = 0;
+  private blinkFrames: ImageBitmap[] = [];
+  private blinkReceived = 0;
   // The latest reply's transition back to the idle loop, by epoch, as its frames arrive; the one before it is
   // kept until this one is complete (the compositor may still be drawing it).
   private transition: { epoch: number; frames: ImageBitmap[]; received: number } | null = null;
@@ -179,9 +187,11 @@ export class LivePortrait {
     this.clock = null;
     this.buffer.clear();
     this.compositor.reset();
-    for (const image of this.idleFrames) image?.close();
+    for (const image of [...this.idleFrames, ...this.blinkFrames]) image?.close();
     this.idleFrames = [];
     this.idleReceived = 0;
+    this.blinkFrames = [];
+    this.blinkReceived = 0;
     this.closeTransitions();
     this.readySegments.clear();
     this.liveCallKey = null;
@@ -221,6 +231,7 @@ export class LivePortrait {
       void this.decode(frame.jpeg).then((image) => {
         if (generation !== this.generation) image.close();
         else if (frame.header.output_id === IDLE_OUTPUT_ID) this.addIdleFrame(frame.header, image);
+        else if (frame.header.output_id === BLINK_OUTPUT_ID) this.addBlinkFrame(frame.header, image);
         else if (frame.header.output_id === TRANSITION_OUTPUT_ID) this.addTransitionFrame(frame.header, image);
         else this.addSpeechFrame(frame.header, image, performance.now() - began);
       }).catch(() => undefined);
@@ -308,6 +319,17 @@ export class LivePortrait {
     this.idleFrames[header.offset] = image;
     this.idleReceived += 1;
     if (this.idleReceived === count) this.compositor.setIdleLoop(this.idleFrames.slice(0, count), performance.now(), header.frame_ms);
+  }
+
+  private addBlinkFrame(header: PortraitFrameHeader, image: ImageBitmap): void {
+    const count = header.count ?? 0;
+    if (count <= 0 || header.offset >= count || this.blinkFrames[header.offset]) {
+      image.close();
+      return;
+    }
+    this.blinkFrames[header.offset] = image;
+    this.blinkReceived += 1;
+    if (this.blinkReceived === count) this.compositor.setBlink(this.blinkFrames.slice(0, count), header.frame_ms);
   }
 
   private addTransitionFrame(header: PortraitFrameHeader, image: ImageBitmap): void {
