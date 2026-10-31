@@ -302,7 +302,7 @@ def test_five_turn_live_voice_hardware_performance(
     browser_errors: list[str] = []
 
     def keep(line: str) -> None:
-        if len(browser_errors) < 200:
+        if len(browser_errors) < (2_000 if os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_TRACE") == "1" else 200):
             browser_errors.append(f"{_utc_now()} {line}")
 
     page.on("console", lambda message: keep(f"console {message.type}: {message.text[:300]}")
@@ -311,6 +311,21 @@ def test_five_turn_live_voice_hardware_performance(
     page.on("requestfailed", lambda req: keep(f"requestfailed: {req.method} {req.url[:200]} {req.failure}"))
     page.on("response", lambda response: keep(f"response {response.status}: {response.request.method} "
                                                f"{response.url[:200]}") if response.status >= 500 else None)
+    if os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_TRACE") == "1":
+        # Diagnostics for a call that never begins: navigations (a reload), every console line, and each
+        # websocket's open, close and errors.
+        page.on("framenavigated", lambda frame: keep(f"navigated: {frame.url[:200]}")
+                if frame == page.main_frame else None)
+        page.on("console", lambda message: keep(f"console {message.type}: {message.text[:300]}")
+                if message.type != "error" else None)
+
+        def watch_socket(socket) -> None:
+            url = socket.url.split("?")[0][:200]
+            keep(f"websocket open: {url}")
+            socket.on("close", lambda _socket: keep(f"websocket close: {url}"))
+            socket.on("socketerror", lambda error: keep(f"websocket error: {url} {str(error)[:200]}"))
+
+        page.on("websocket", watch_socket)
 
     interactions: list[dict[str, object]] = []
     manifest: dict[str, object] = {
