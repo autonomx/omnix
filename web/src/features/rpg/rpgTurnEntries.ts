@@ -2,6 +2,8 @@
 import type { components } from './api/generated';
 import type { RpgStoryMessagePreview } from './rpgUiTypes';
 
+type RpgLoreSpan = { entry_id: string; start: number; end: number };
+
 export type RpgTurnUiStatus = 'optimistic' | 'pending' | 'complete' | 'failed';
 
 export interface RpgTurnUiEntry extends RpgStoryMessagePreview {
@@ -25,6 +27,10 @@ export interface RpgVisibleResponseV2 {
   narration?: string;
   messages?: RpgVisibleMessageV2[];
   plain_text?: string;
+  /** The names in the final text that open their lore (EV-12): the narration's, and each message's. */
+  links?: { narration?: RpgLoreSpan[]; messages?: RpgLoreSpan[][] };
+  /** Who speaks inside the narration (EV-13). */
+  voices?: { narration?: Array<{ speaker_id: string; start: number; end: number }> };
 }
 
 export interface RpgTurnResponseV2 {
@@ -94,6 +100,9 @@ export function rpgTurnEntriesFromPayload(
       tone: 'narrator',
       messageKind: 'narration',
       messageIndex: 0,
+      speakerId: 'narrator',
+      ...(visible.voices?.narration?.length && narration === visible.narration ? { voices: visible.voices.narration } : {}),
+      ...(visible.links?.narration?.length && narration === visible.narration ? { links: visible.links.narration } : {}),
     });
   }
   for (const [index, message] of (visible.messages || []).entries()) {
@@ -112,6 +121,8 @@ export function rpgTurnEntriesFromPayload(
       tone: message.kind === 'narration' ? 'narrator' : 'npc',
       messageKind: message.kind || 'npc_dialogue',
       messageIndex: index,
+      speakerId: message.kind === 'narration' ? 'narrator' : message.speaker_id || '',
+      ...(visible.links?.messages?.[index]?.length && text === message.text ? { links: visible.links.messages[index] } : {}),
     });
   }
   if (!entries.length) {

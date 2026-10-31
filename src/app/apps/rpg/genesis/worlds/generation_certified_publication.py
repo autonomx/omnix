@@ -229,10 +229,13 @@ def publish_certified_world_generation(
             compiled.world_release,
             requirements,
         )
+        from .approved_inventions import approved_inventions
+
         revision_document, release_document = merge_authored_play_sections(
             revision_document,
             release_document,
             authored_play_sections(world),
+            approved_inventions(world),
         )
         assembled_certification = {
             **dict(artifact.certification),

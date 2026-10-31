@@ -14,58 +14,17 @@ Matching is by whole words. Verbs and the longer words of names tolerate one typ
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, replace
-from typing import Iterable, Literal
+from dataclasses import dataclass, replace
+from typing import Iterable
 
-Family = Literal[
-    "look", "inspect", "move", "talk", "ask", "decline", "buy", "sell", "attack", "flee", "defend",
-    "take", "drop", "give", "use_item", "equip", "unequip", "manipulate", "rest", "wait", "quest",
-    "practice", "party", "status", "order", "clarify", "ability", "check", "grow",
-]
-EntityKind = Literal["person", "creature", "item", "place", "offer", "quest", "skill", "group", "ability"]
-
-# Families that change the campaign's state when carried out.
-STATEFUL_FAMILIES = frozenset(
-    {"move", "buy", "attack", "take", "drop", "give", "use_item", "rest", "quest", "practice", "party"}
+from app.apps.rpg.rules.intent.reading import (  # noqa: F401 - the reading's types, re-exported for the grammar's readers
+    STATEFUL_FAMILIES,
+    EntityKind,
+    Family,
+    IntentCandidate,
+    SceneEntity,
+    SceneView,
 )
-
-
-@dataclass(frozen=True)
-class SceneEntity:
-    entity_id: str
-    kind: EntityKind
-    names: tuple[str, ...]
-    here: bool = False  # present in the scene (a person or creature here, an exit, an offer on sale here)
-
-
-@dataclass(frozen=True)
-class SceneView:
-    entities: tuple[SceneEntity, ...] = ()
-    focus_id: str = ""  # the person the player is in conversation with, whom "him" or "her" means
-
-    def of(self, *kinds: str, here: bool | None = None) -> list[SceneEntity]:
-        return [
-            entity for entity in self.entities
-            if entity.kind in kinds and (here is None or entity.here == here)
-        ]
-
-
-@dataclass(frozen=True)
-class IntentCandidate:
-    family: Family
-    target_id: str | None = None
-    target_kind: str | None = None
-    confidence: float = 0.0
-    reason: str = ""
-    second_target_id: str | None = None  # the recipient of a give, the seller of a buy
-    clauses: tuple[str, ...] = field(default=())
-
-    @property
-    def stateful(self) -> bool:
-        """Whether carrying it out would change state, as far as the words tell: buying needs something on sale."""
-        if self.family == "buy":
-            return self.target_kind == "offer"
-        return self.family in STATEFUL_FAMILIES
 
 
 _FILLER = frozenset(

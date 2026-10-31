@@ -16,9 +16,9 @@ from typing import Any, Iterator, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, PressuresMoved, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
-from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView
+from app.apps.rpg.rules.intent.reading import IntentCandidate, SceneView
 from app.apps.rpg.rules.ability_use import known as known_abilities
-from app.apps.rpg.session.command_reading import read_command, reading_record
+from app.apps.rpg.session.turn.scene import reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
 from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, free_action, resolve_turn
@@ -34,19 +34,21 @@ _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarifica
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
                 "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "hotbar": "hotbar_slot",
                 "check": "skill_check",
-                "grow": "level_choice", "rewind": "rewind", "act": "free_action"}
+                "grow": "level_choice", "rewind": "rewind", "act": "free_action", "note_preference": "preference",
+                "explore": "explore"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "give": "inventory", "take": "inventory",
            "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
            "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat",
            "hotbar": "loadout",
-           "check": "check", "grow": "progression", "rewind": "meta", "act": "action"}
+           "check": "check", "grow": "progression", "rewind": "meta", "act": "action", "note_preference": "meta",
+           "explore": "exploration"}
 SOURCE = "rpg_turn_pipeline_v1"
 logger = logging.getLogger(__name__)
 # Turns in which the hero does nothing in the world: a question back, a rewind, a hotbar slot, a level's choice. What
 # a turn leads to (quests, pressures) and the foes on the grid do not follow them.
-_NOTHING_DONE_IN_THE_WORLD = frozenset({"clarify", "rewind", "hotbar", "grow"})
+_NOTHING_DONE_IN_THE_WORLD = frozenset({"clarify", "rewind", "hotbar", "grow", "note_preference"})
 
 
 def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int, summary: str) -> JournalWritten:
@@ -84,16 +86,40 @@ def _offered(document: dict[str, Any], planned: PlannedAction | None) -> dict[st
     from app.apps.rpg.session.turn.suggestions import choices, suggestions
 
     asked = planned is not None and planned.mechanic == "clarify"
-    answers = ([Suggestion(label=command, command=command).model_dump() for command in planned.options]
-               if asked and planned.options else
-               [row.model_dump() for row in choices(document, planned.reason)] if asked else [])
-    return {"suggestions": [row.model_dump() for row in suggestions(document)], "choices": answers}
+    offered_at = int(_d(document.get("state")).get("turn_count") or 0)  # a card from an older turn is refused
+
+    def dealt(rows: list[Suggestion]) -> list[dict[str, Any]]:
+        return [{**row.model_dump(), "action": {**row.action, "offered_turn": offered_at}} if row.action
+                else row.model_dump() for row in rows]
+
+    answers = (dealt([Suggestion(label=command, command=command, action=dict(action))
+                      for command, action in zip(planned.options, planned.option_actions or ({},) * len(planned.options))])
+               if asked and planned.options else dealt(choices(document, planned.reason)) if asked else [])
+    return {"suggestions": dealt(suggestions(document)), "choices": answers}
+
+
+def _knowledge(document: dict[str, Any], applied: list[StateChange]) -> tuple[dict[str, Any], list[StateChange]]:
+    """What the turn showed the hero, in the record of what they know (``rules/hero_knowledge.py``, EV-1), and the
+    game master's note of a meaningful event (``rules/direction.py``, EV-0)."""
+    from app.apps.rpg.rules.direction import tracked
+    from app.apps.rpg.rules.exploration import rooms_cleared
+    from app.apps.rpg.rules.hero_knowledge import entries_met
+
+    simulation = _d(_sections.simulation_state_of(document))
+    turns = int(_d(document.get("state")).get("turn_count") or 0)
+    met: list[StateChange] = [*entries_met(simulation, applied), *tracked(simulation, applied, turns),
+                              *rooms_cleared(simulation, applied)]  # a site's room beaten or looted (EV-10)
+    if met:
+        document, _ = reduce(document, met)
+    return document, met
 
 
 def turn_consequences(document: dict[str, Any],
                       applied: list[StateChange]) -> tuple[dict[str, Any], list[StateChange], list[str]]:
-    """What the turn led to: the quests of steps it moved on (rules/quest/progress.py), the pressures its deeds pushed
-    on, and the side quests a high pressure raises (rules/pressures.py)."""
+    """What the turn led to: the quests of steps it moved on (rules/quest/progress.py), the facts its decisions left
+    and what they change, and an ending's epilogue (rules/consequences.py, EV-1), the pressures its deeds pushed on,
+    and the side quests a high pressure raises (rules/pressures.py)."""
+    from app.apps.rpg.rules.consequences import consequences, epilogue
     from app.apps.rpg.rules.pressures import lever_pulls, pressure_offers
     from app.apps.rpg.world.causal_runtime import pull_levers
     from app.apps.rpg.rules.quest.arrival import quest_rewards
@@ -102,6 +128,8 @@ def turn_consequences(document: dict[str, Any],
     changes: list[StateChange] = []
     lines: list[str] = []
     for step in (lambda simulation: quest_progress(simulation, applied, lambda quest: quest_rewards(simulation, quest)),
+                 lambda simulation: consequences(simulation, [*applied, *changes]),
+                 lambda simulation: ([], epilogue(simulation, [*applied, *changes])),
                  lambda simulation: lever_pulls(simulation, [*applied, *changes],
                                                 pull=lambda runtime, pulls: pull_levers(runtime, pulls, cause="hero")),
                  pressure_offers):
@@ -122,6 +150,9 @@ def run_planned_turn(
     resolution: Resolution,
 ) -> dict[str, Any]:
     """Apply one resolved turn to the turn-start campaign and let the world tick; the result for the commit."""
+    from app.apps.rpg.session.turn.proposals import take_folded
+
+    folded = take_folded()  # what the load folded in (EV-11): reported with the turn, settled at its commit
     document, _ = reduce(session, resolution.changes)
     simulation = _d(_sections.simulation_state_of(document))
     tick = int(simulation.get("tick") or 0)
@@ -134,11 +165,13 @@ def run_planned_turn(
         tick_changes, causal, seen = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
                                                 turn_key=turn_id)
         document, _ = reduce(document, tick_changes)
-    applied = [*resolution.changes, *tick_changes]
+    applied = [*folded.changes, *resolution.changes, *tick_changes]
     quested: list[StateChange] = []
     quest_lines: list[str] = []
     if planned.mechanic not in _NOTHING_DONE_IN_THE_WORLD and not resolution.refused:  # step 5: what it led to
         document, quested, quest_lines = turn_consequences(document, applied)
+    elif folded.changes:  # the hero did nothing in the world, but what the load folded in still leads somewhere
+        document, quested, quest_lines = turn_consequences(document, list(folded.changes))
     applied += quested
     maps_made: list[dict[str, Any]] = []
     if planned.mechanic not in _NOTHING_DONE_IN_THE_WORLD and not resolution.refused:  # the grid the hero stands on
@@ -151,6 +184,9 @@ def run_planned_turn(
         if grounded:
             document, _ = reduce(document, grounded)
             applied += grounded
+    if planned.mechanic not in _NOTHING_DONE_IN_THE_WORLD and not resolution.refused:  # what the hero now knows
+        document, known = _knowledge(document, applied)
+        applied += known
     from app.apps.rpg.world.map_world_integration import projected_map_state
 
     projected = projected_map_state(document)  # the world map the play screen shows, from where the hero now is
@@ -199,6 +235,7 @@ def run_planned_turn(
             "planned": planned.model_dump(mode="json"),
             "intent": reading_record(reading),
             "changes": _reported(applied),
+            **({"proposals": folded.reported()} if folded else {}),
             **({"action_result": resolution.action_result} if resolution.action_result else {}),
             "presentation": _offered(document, planned),
         },
@@ -247,24 +284,32 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
     The hero did nothing, so no turn is counted and their needs do not rise; the campaign's clock, its people's days
     and its causal pressures advance. The recap is the game's own line, with no model call.
     """
+    from app.apps.rpg.session.turn.proposals import take_folded
+
+    folded = take_folded()
     seconds = int(request.action.get("elapsed_seconds") or request.elapsed_minutes * 60)
     asked = int(request.action.get("ticks") or 0)
     ticks = min(MAX_WORLD_TICKS, max(0, asked or seconds // SECONDS_PER_WORLD_TICK))
     changes: list[StateChange] = [TimeAdvanced(ticks=ticks, minutes=ticks * MINUTES_PER_TICK)] if ticks else []
     document, _ = reduce(session, changes)
+    changes = [*folded.changes, *changes]
     simulation = _d(_sections.simulation_state_of(document))
     tick = int(simulation.get("tick") or 0)
     turn_id = f"turn:{tick}:world"
     causal: dict[str, Any] = {}
     seen: list[str] = []
+    tick_changes: list[StateChange] = []
     if ticks:
         tick_changes, causal, seen = world_tick(document, needs=None, minutes=ticks * MINUTES_PER_TICK,
                                                 turn_key=turn_id)
         document, _ = reduce(document, tick_changes)
         changes.extend(tick_changes)
-        document, quested, quest_lines = turn_consequences(document, tick_changes)  # a deadline may run out away
+    if ticks or folded.changes:  # a deadline may run out away; what the load folded in leads where it leads
+        document, quested, quest_lines = turn_consequences(document, [*folded.changes, *tick_changes])
         changes.extend(quested)
         seen = [*seen, *quest_lines]
+    document, known = _knowledge(document, changes)
+    changes.extend(known)
     place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
     if asked:
         opening = f"Time passes in {place}."
@@ -281,6 +326,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
         "source": SOURCE, "response_mode": "world_tick", "resolved_result": resolved, "result": dict(resolved),
         "causal_world_runtime": causal, "world_tick": {"elapsed_seconds": seconds, "ticks": ticks},
         "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick", "changes": _reported(changes),
+                          **({"proposals": folded.reported()} if folded else {}),
                           "presentation": _offered(document, None)},
     }
     from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
@@ -305,12 +351,15 @@ def keeping_turn_start() -> Iterator[dict[str, Any]]:
         _TURN_START.reset(token)
 
 
-def _load(ctx: Any) -> dict[str, Any]:
+def _load(ctx: Any, *, fold: bool = True) -> dict[str, Any]:
     """Step 1: the turn-start campaign (a copy of the caller's, when it hands one in), as stored: the hero's simulation
-    record was filled from the sheet when the campaign was created (``upgrades/hero_record.py``)."""
+    record was filled from the sheet when the campaign was created (``upgrades/hero_record.py``). The proposals
+    pending from earlier turns are folded in (EV-11), unless ``fold`` is off (a rewind puts an earlier game back, and
+    they wait for the turn after it)."""
     from copy import deepcopy
 
     from app.apps.rpg.session.session_runtime_store import load_runtime_session
+    from app.apps.rpg.session.turn.proposals import fold_at_load, take_folded
 
     override = _d(ctx.session_override)
     session = deepcopy(override) if override else _d(load_runtime_session(ctx.session_id))
@@ -319,7 +368,8 @@ def _load(ctx: Any) -> dict[str, Any]:
     holder = _TURN_START.get()
     if holder is not None and "document" not in holder:
         holder["document"] = session  # the turn reduces copies of it: it stays as the turn found it
-    return session
+    take_folded()  # nothing an earlier turn in this context folded in is this one's
+    return fold_at_load(ctx.session_id, session) if fold else session
 
 
 _LOADOUT = {"use": "use_item", "equip": "equip", "drop": "drop", "unequip": "unequip"}
@@ -329,7 +379,7 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
     """A pack action from the play screen's loadout (use, equip, take off, drop) as a turn: the item rule's, its
     lines the game's own (no model call); what the rule refuses refuses the request, with no turn taken."""
     from app.apps.rpg.foundation.state.changes import TurnCounted
-    from app.apps.rpg.rules.interactions.items import drop_item, equip_item, unequip_item, use_item
+    from app.apps.rpg.rules.interactions.items import drop_item, equip_item, item_by_name, unequip_item, use_item
     from app.apps.rpg.session.turn.resolution import Resolution
 
     mechanic = _LOADOUT[_s(action.get("action"))]
@@ -338,7 +388,9 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
     if mechanic == "use_item" and _d(_sections.combat_state_of(simulation)).get("active") is True:
         return {"ok": False, "error": "loadout_in_a_fight", "status_code": 409,
                 "detail": "In a fight, say what you use: the others act after it."}
-    outcome = rule(simulation, "", _s(action.get("item_name")))
+    # The panel names the stack it shows (its id, or its name as shown), never a line to read.
+    item_id = _s(action.get("item_id")) or item_by_name(simulation, _s(action.get("item_name")))
+    outcome = rule(simulation, item_id)
     if outcome.refused:
         return {"ok": False, "error": "loadout_refused", "status_code": 409, "detail": " ".join(outcome.lines)}
     ticks = -(-outcome.minutes // MINUTES_PER_TICK)
@@ -450,9 +502,9 @@ def _learn_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], count
 
     wanted = _s(action.get("ability"))
     tree = [_d(row) for row in _d(_d(session.get("state")).get("ability_tree")).get("abilities") or ()]
-    name = next((_s(row.get("name")) for row in tree if wanted in {_s(row.get("ability_id")), _s(row.get("name"))}),
-                wanted)
-    grown = choose(session, f"learn {name}")
+    ability_id = next((_s(row.get("ability_id")) for row in tree
+                       if wanted in {_s(row.get("ability_id")), _s(row.get("name"))}), wanted)
+    grown = choose(session, f"ability:{ability_id}")
     if grown.refused:
         return {"ok": False, "error": "level_choice_refused", "status_code": 409, "detail": " ".join(grown.lines)}
     resolution = Resolution([TurnCounted(turn_count=count), *grown.changes], grown.lines, told=False,
@@ -491,7 +543,7 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.session.turn.tactical import grid_attack, grid_move, map_for_turn
     from app.apps.rpg.world.tactical_spatial import TacticalSpatialError
 
-    session = _load(ctx)
+    session = _load(ctx, fold=action.get("type") != "rewind")
     if not session:
         return {"ok": False, "error": "session_not_found"}
     revision = int(_d(_sections.runtime_state_of(session)).get("state_revision") or 0)
@@ -513,6 +565,10 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
         return _learn_turn(ctx, session, action, count)
     if action.get("type") == "rewind":
         return _rewind_turn(ctx, session, action)
+    if action.get("type") == "card":
+        return _card_turn(ctx, session, action)
+    if action.get("type") == "preference":
+        return _preference_turn(ctx, session, action)
     try:
         definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
         if action.get("type") == "tactical_move":
@@ -571,50 +627,124 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
         ctx.result.setdefault("trace_id", ctx.trace_id)
         ctx.resolved = True
         return ctx
+    from app.apps.rpg.session.turn.dialogue import hold_reply, settle_held_reply
+
     text = _s(ctx.player_input)
-    planned, reading = plan_player_text(session, text)
-    resolution = resolve_turn(planned, session, text)
+    hold_reply(session, text)  # a conversation under way: the reply is written beside the intent call (EV-9)
+    try:
+        planned, reading = plan_player_text(session, text)
+        resolution = resolve_turn(planned, session, text)
+    finally:
+        held = settle_held_reply()
     if resolution is None:  # the rule found nothing to do here: the attempt is told, and changes nothing
         planned, resolution = PlannedAction(mechanic="act", ticks=1, reason=f"unresolved:{planned.mechanic}"), free_action(session)
     request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=text)
     ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+    if held:  # how the reply written beside the intent call went: used, or discarded and counted apart (F3)
+        ctx.result["turn_pipeline"]["parallel_reply"] = held
     ctx.result.setdefault("trace_id", ctx.trace_id)
     ctx.resolved = True
     return ctx
 
 
 def plan_player_text(session: Mapping[str, Any], text: str) -> tuple[PlannedAction, IntentCandidate]:
-    """What a player's command will do (steps 2 and 3): the grammar's reading; else the intent call's (RQ-3.2); a
-    question when two readings stay close; in a fight, the fight's moves only; else a free action."""
-    from app.apps.rpg.session.command_reading import scene_view
+    """What a typed line will do (steps 2 and 3, evolution roadmap EV-9): the intent call reads it, every time; its
+    question when the line is unclear; a question when two readings stay close; in a fight, the fight's moves only;
+    else a free action. With no model, the storyteller is unavailable and only the cards run (RQ-8.8)."""
     from app.apps.rpg.session.turn.intent import read_with_model
+    from app.apps.rpg.session.turn.scene import scene_view
 
     simulation = _d(_sections.simulation_state_of(session))
     runtime = _d(_sections.runtime_state_of(session))
     abilities = tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known_abilities(session))
     fighting = _d(_sections.combat_state_of(simulation)).get("active") is True
-    reading = read_command(simulation, text, runtime, abilities=abilities)
-    planned = plan_action(reading, fighting=fighting)
-    if planned is not None:
-        return planned, reading
     scene = scene_view(simulation, runtime, abilities)
-    model = read_with_model(simulation, scene, text, remark=reading.reason == "remark")
-    if model.unavailable:  # the storyteller is down: only what the grammar read runs (RQ-8.8), and it says what does
+    model = read_with_model(session, scene, text)
+    unread = IntentCandidate(family="clarify", reason="no_reading")
+    if model.unavailable:  # the storyteller is down: the cards the game offers still run (RQ-8.8)
         from app.apps.rpg.narration.presentation.visible_response import NOTHING_COMES_OF_IT
 
         return PlannedAction(mechanic="clarify", ticks=0, reason="storyteller_unavailable",
-                             question=NOTHING_COMES_OF_IT), reading
+                             question=NOTHING_COMES_OF_IT), unread
+    if model.question:  # its answers are cards for what it asks about (whom to attack, where to go, whom to talk to)
+        reason = f"unclear:{model.question_about}" if model.question_about else "unclear"
+        return PlannedAction(mechanic="clarify", ticks=0, reason=reason, question=model.question), unread
     if model.between:
         options = tuple(command_for(candidate, scene) for candidate in model.between)
         return PlannedAction(mechanic="clarify", ticks=0, reason="two_readings",
-                             question=f"Do you mean {options[0]!r} or {options[1]!r}?", options=options), reading
+                             question=f"Do you mean {options[0]!r} or {options[1]!r}?", options=options,
+                             option_actions=tuple(card_action(candidate) for candidate in model.between)), unread
     if model.reading is not None:
-        planned = plan_action(model.reading, fighting=fighting, decided=True)
+        planned = plan_action(model.reading, fighting=fighting)
         if planned is not None:
             return planned, model.reading
     if fighting:  # a fight goes on: strike, break away, or use something
-        return PlannedAction(mechanic="fight", ticks=0, reason="busy"), reading
-    return PlannedAction(mechanic="act", ticks=1, reason="free_action"), reading
+        return PlannedAction(mechanic="fight", ticks=0, reason="busy"), model.reading or unread
+    return PlannedAction(mechanic="act", ticks=1, reason="free_action"), model.reading or unread
+
+
+def card_action(reading: IntentCandidate) -> dict[str, Any]:
+    """A reading as the card that plays it (EV-9): the question's answers are cards."""
+    from app.apps.rpg.rules.intent.reading import NO_SLOTS
+
+    return {"family": reading.family, **({"target_id": reading.target_id} if reading.target_id else {}),
+            **({"second_target_id": reading.second_target_id} if reading.second_target_id else {}),
+            **({"check": reading.reason.removeprefix("check:")} if reading.reason.startswith("check:") else {}),
+            **({"slots": reading.slots.model_dump(mode="json", exclude_defaults=True)}
+               if reading.slots != NO_SLOTS else {})}
+
+
+def _card_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    """A card the player clicked (EV-9): the reading it carries, planned directly, with no model call. A card from an
+    older turn, or one whose reading the scene cannot take, is refused, with no turn taken."""
+    from app.apps.rpg.session.turn.intent import valid_readings
+    from app.apps.rpg.session.turn.scene import scene_view
+
+    card = _d(action.get("card"))
+    turn_count = int(_d(session.get("state")).get("turn_count") or 0)
+    if card.get("offered_turn") is not None and int(card["offered_turn"]) != turn_count:
+        return {"ok": False, "error": "stale_card", "status_code": 409,
+                "detail": "That choice was offered before your last turn; choose again."}
+    simulation = _d(_sections.simulation_state_of(session))
+    abilities = tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known_abilities(session))
+    scene = scene_view(simulation, _d(_sections.runtime_state_of(session)), abilities)
+    readings = valid_readings([{**card, "confidence": 1.0}], scene)
+    fighting = _d(_sections.combat_state_of(simulation)).get("active") is True
+    planned = None
+    if readings:
+        reading = replace_reading(readings[0], reason=readings[0].reason if readings[0].family == "check" else "card")
+        planned = plan_action(reading, fighting=fighting)
+    if not readings or planned is None:
+        return {"ok": False, "error": "card_refused", "status_code": 409, "detail": "That cannot be done now."}
+    text = _s(ctx.player_input)
+    resolution = resolve_turn(planned, session, text)
+    if resolution is None:
+        planned, resolution = PlannedAction(mechanic="act", ticks=1, reason=f"unresolved:{planned.mechanic}"), free_action(session)
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=text, action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
+def _preference_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    """A wish for the story the game master's panel offered and the player confirmed (EV-0): noted, with no time; one
+    the rules do not keep refuses the request, with no turn taken."""
+    from app.apps.rpg.rules.direction import note_preference
+    from app.apps.rpg.session.turn.resolution import Resolution
+
+    noted = note_preference(_d(_sections.simulation_state_of(session)), _s(action.get("kind")), _s(action.get("value")))
+    if noted.refused:
+        return {"ok": False, "error": "preference_refused", "status_code": 409, "detail": " ".join(noted.lines)}
+    resolution = Resolution(noted.changes, noted.lines, told=False,
+                            action_result={"kind": "preference", "detail": " ".join(noted.lines)})
+    planned = PlannedAction(mechanic="note_preference", ticks=0, reason=_s(action.get("kind")))
+    reading = IntentCandidate(family="status", confidence=1.0, reason="preference")
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
+def replace_reading(reading: IntentCandidate, **changes: Any) -> IntentCandidate:
+    from dataclasses import replace
+
+    return replace(reading, **changes)
 
 
 def command_for(reading: IntentCandidate, scene: SceneView) -> str:

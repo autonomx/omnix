@@ -7,7 +7,8 @@ import type { RpgPlaySectionsDraft, RpgPlaySectionsReferences } from './api/rpgW
  */
 export type RefKind = keyof RpgPlaySectionsReferences;
 export type PlayRow = Record<string, unknown>;
-export type PlaySectionId = 'economy' | 'routines' | 'knowledge' | 'pressures' | 'bestiary' | 'quests';
+export type PlaySectionId = 'economy' | 'routines' | 'knowledge' | 'pressures' | 'bestiary' | 'quests'
+  | 'fact_effects';
 export type NameOf = (id: unknown) => string;
 
 export type PlayField =
@@ -16,6 +17,8 @@ export type PlayField =
   | { key: string; label: string; kind: 'select'; options: Array<[string, string]>; nullable?: string }
   | { key: string; label: string; kind: 'ref'; refs: RefKind[]; optional?: string }
   | { key: string; label: string; kind: 'tags' }
+  | { key: string; label: string; kind: 'facts' }
+  | { key: string; label: string; kind: 'bool' }
   | { key: string; label: string; kind: 'price'; nullable?: boolean }
   | { key: string; label: string; kind: 'lever' }
   | { key: string; label: string; kind: 'subject'; by: string }
@@ -51,18 +54,46 @@ function text(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
+const MATERIALS: PlayRows = {
+  fields: [
+    { key: 'item_id', label: 'Material', kind: 'ref', refs: ['items'] },
+    { key: 'quantity', label: 'How many a tier', kind: 'number', min: 1, max: 10 },
+  ],
+  blank: () => ({ item_id: '', quantity: 1 }),
+  title: (row, name) => `${String(row.quantity ?? 1)} × ${name(row.item_id)}`,
+  add: 'Add material',
+};
+
+/** What a way, an ending or a beat leaves behind (EV-1): a fact, its value, and the author's line for it. */
+const FACT_WRITES: PlayRows = {
+  fields: [
+    { key: 'fact', label: 'Fact', kind: 'text' },
+    { key: 'value', label: 'Value', kind: 'text' },
+    { key: 'told', label: 'Its line in "What has changed"', kind: 'textarea' },
+  ],
+  blank: () => ({ fact: '', value: 'true', told: '' }),
+  title: (row) => `${text(row.fact, 'New fact')} = ${String(row.value ?? true)}`,
+  add: 'Add fact',
+};
+
 const OFFER: PlayRows = {
   fields: [
     { key: 'name', label: 'Name', kind: 'text' },
     { key: 'service', label: 'Service', kind: 'select', options: [
       ['shop_goods', 'Goods'], ['lodging', 'Lodging'], ['meal', 'Meal'], ['drink', 'Drink'], ['repair', 'Repair'],
-      ['paid_information', 'Information'],
+      ['paid_information', 'Information'], ['upgrade', 'Upgrade (improves gear)'],
     ] },
     { key: 'item_id', label: 'Item sold (goods)', kind: 'ref', refs: ['items'], optional: 'None' },
     { key: 'price', label: 'Price', kind: 'price' },
     { key: 'stock', label: 'Stock (blank: never runs out)', kind: 'number', min: 0, nullable: true },
     { key: 'restock_per_day', label: 'Restocks per day', kind: 'number', min: 0 },
     { key: 'description', label: 'Description', kind: 'textarea' },
+    { key: 'recipe', label: 'What an upgrade takes (EV-5)', kind: 'group', blank: () => ({ slots: ['main_hand'],
+      materials: [], per_tier: { damage_max: 1, armor: 1 }, max_tier: 3 }), fields: [
+      { key: 'slots', label: 'Gear it improves, by slot (main_hand, body, …)', kind: 'tags' },
+      { key: 'materials', label: 'Materials', kind: 'list', rows: MATERIALS },
+      { key: 'max_tier', label: 'Last tier', kind: 'number', min: 1, max: 5 },
+    ] },
     { key: 'offer_key', label: 'Offer key', kind: 'text' },
   ],
   blank: (siblings) => ({ offer_key: nextId('offer', siblings, 'offer_key'), service: 'shop_goods', name: '',
@@ -98,15 +129,39 @@ const SCHEDULE: PlayRows = {
   add: 'Add hours',
 };
 
+const BEATS: PlayRows = {
+  fields: [
+    { key: 'rumour', label: 'The word that goes about', kind: 'textarea' },
+    { key: 'chance', label: 'Chance a day (0–1)', kind: 'number', min: 0, max: 1, step: 0.05 },
+    { key: 'when', label: 'Once these facts hold', kind: 'facts' },
+    { key: 'visited', label: 'Once the hero has been to', kind: 'ref', refs: ['places'], optional: 'Anywhere' },
+    { key: 'after_day', label: 'Not before day', kind: 'number', min: 0, max: 365 },
+    { key: 'told_at', label: 'Told at (place ids, comma separated; blank: where they keep)', kind: 'tags' },
+    { key: 'sets', label: 'Facts it sets', kind: 'list', rows: FACT_WRITES },
+    { key: 'move', label: 'Where it takes them (no place: away for good)', kind: 'group',
+      blank: () => ({ location: '', activity: '' }), fields: [
+        { key: 'location', label: 'Place', kind: 'ref', refs: ['places'], optional: 'Away for good' },
+        { key: 'activity', label: 'Doing', kind: 'text' },
+      ] },
+    { key: 'id', label: 'Beat id', kind: 'text' },
+  ],
+  blank: (siblings) => ({ id: nextId('beat', siblings, 'id'), chance: 0.5, when: {}, visited: '', after_day: 0,
+    sets: [], move: null, rumour: '', told_at: [] }),
+  title: (row) => text(row.rumour, text(row.id, 'New beat')),
+  add: 'Add beat',
+};
+
 const GOALS: PlayRows = {
   fields: [
     { key: 'summary', label: 'Goal', kind: 'textarea' },
     { key: 'priority', label: 'Priority (5 leads)', kind: 'number', min: 1, max: 5 },
     { key: 'topics', label: 'Topics that touch it (comma separated)', kind: 'tags' },
     { key: 'location_id', label: 'Where it leads them', kind: 'ref', refs: ['places'], optional: 'Nowhere in particular' },
+    { key: 'beats', label: 'Beats, the steps they take toward it (EV-4)', kind: 'list', rows: BEATS },
     { key: 'goal_id', label: 'Goal id', kind: 'text' },
   ],
-  blank: (siblings) => ({ goal_id: nextId('goal', siblings, 'goal_id'), summary: '', priority: 3, topics: [], location_id: '' }),
+  blank: (siblings) => ({ goal_id: nextId('goal', siblings, 'goal_id'), summary: '', priority: 3, topics: [], location_id: '',
+    beats: [] }),
   title: (row) => text(row.summary, 'New goal'),
   add: 'Add goal',
 };
@@ -199,6 +254,20 @@ const LOOT: PlayRows = {
   add: 'Add drop',
 };
 
+const PHASES: PlayRows = {
+  fields: [
+    { key: 'at', label: 'Below this share of its health (0–1)', kind: 'number', min: 0.05, max: 0.95, step: 0.05 },
+    { key: 'defense_bonus', label: 'Defense bonus', kind: 'number', min: -10, max: 10 },
+    { key: 'damage_bonus', label: 'Damage bonus', kind: 'number', min: -10, max: 20 },
+    { key: 'calls_ally', label: 'Calls an ally', kind: 'bool' },
+    { key: 'exposes_weakness', label: 'Lays its weakness bare', kind: 'bool' },
+    { key: 'told', label: 'Said when it begins', kind: 'textarea' },
+  ],
+  blank: () => ({ at: 0.5, defense_bonus: 0, damage_bonus: 2, calls_ally: false, exposes_weakness: false, told: '' }),
+  title: (row) => `Below ${Math.round(Number(row.at ?? 0.5) * 100)}%`,
+  add: 'Add phase',
+};
+
 const BESTIARY: PlayRows = {
   fields: [
     { key: 'id', label: 'Creature', kind: 'ref', refs: ['creatures'] },
@@ -217,8 +286,12 @@ const BESTIARY: PlayRows = {
       { key: 'xp_value', label: 'Experience', kind: 'number', min: 0, max: 10000 },
     ] },
     { key: 'loot', label: 'Drops', kind: 'list', rows: LOOT },
+    { key: 'resists', label: 'Resists (weapon materials, comma separated)', kind: 'tags' },
+    { key: 'no_escape', label: 'No escape from a fight with it', kind: 'bool' },
+    { key: 'recovers', label: 'Share of lost health it regains when left (0–1)', kind: 'number', min: 0, max: 1, step: 0.05, nullable: true },
+    { key: 'phases', label: 'Phases (a boss)', kind: 'list', rows: PHASES },
   ],
-  blank: () => ({ id: '', stats: null, behaviour: null, loot: [] }),
+  blank: () => ({ id: '', stats: null, behaviour: null, loot: [], resists: [], no_escape: false, recovers: null, phases: [] }),
   title: (row, name) => name(row.id),
   add: 'Add creature',
 };
@@ -269,6 +342,7 @@ const WAYS: PlayRows = {
   fields: [
     { key: 'conditions', label: 'All of', kind: 'list', rows: CONDITIONS },
     { key: 'told', label: 'What came of it, told when it is done this way (an ending, a choice)', kind: 'textarea' },
+    { key: 'sets', label: 'Facts it leaves', kind: 'list', rows: FACT_WRITES },
   ],
   blank: () => ({ conditions: [CONDITIONS.blank([])] }),
   title: (row, name) => rowsOf(row.conditions).map((condition) => conditionText(condition, name)).join(' and ') || 'New way',
@@ -292,11 +366,77 @@ const QUESTS: PlayRows = {
     { key: 'giver_id', label: 'Given by', kind: 'ref', refs: ['people'], optional: 'No one in particular' },
     { key: 'deadline_hours', label: 'Deadline in hours (blank: none)', kind: 'number', min: 1, max: 1440, nullable: true },
     { key: 'steps', label: 'Steps, in order', kind: 'list', rows: STEPS },
+    { key: 'sets', label: 'Facts its completion leaves (an ending)', kind: 'list', rows: FACT_WRITES },
+    { key: 'requires', label: 'Offered only while these facts hold', kind: 'facts' },
+    { key: 'forbids', label: 'Never offered while these hold', kind: 'facts' },
   ],
-  blank: () => ({ id: '', giver_id: '', deadline_hours: null, steps: [] }),
+  blank: () => ({ id: '', giver_id: '', deadline_hours: null, steps: [], sets: [], requires: {}, forbids: {} }),
   title: (row, name) => name(row.id),
   add: 'Add quest',
 };
+
+const EFFECT_KINDS: Array<[string, string]> = [
+  ['price', 'Prices move'], ['waive', 'An offer given free once'], ['closes', 'A seller stops trading'],
+  ['place', 'A line added to a place'], ['whereabouts', 'A person keeps to one place, or is gone'],
+  ['standing', 'A group’s standing moves'], ['quest', 'A quest opens or closes'],
+];
+
+/** What the world's facts change (EV-1), one effect a row; the form keeps the effect's kind beside its fields. */
+const FACT_EFFECTS: PlayRows = {
+  fields: [
+    { key: 'when', label: 'While these facts hold', kind: 'facts' },
+    { key: 'effect', label: 'Effect', kind: 'select', options: EFFECT_KINDS },
+    { key: 'provider', label: 'Seller (price, free offer, closes)', kind: 'ref', refs: ['people'], optional: 'None' },
+    { key: 'region', label: 'Region (price)', kind: 'ref', refs: ['regions'], optional: 'None' },
+    { key: 'percent', label: 'Percent (price)', kind: 'number', min: -90, max: 500 },
+    { key: 'offer', label: 'Offer key (free offer)', kind: 'text' },
+    { key: 'location', label: 'Place (a line, whereabouts)', kind: 'ref', refs: ['places'], optional: 'None' },
+    { key: 'line', label: 'The line (place)', kind: 'textarea' },
+    { key: 'npc', label: 'Person (whereabouts)', kind: 'ref', refs: ['people'], optional: 'None' },
+    { key: 'activity', label: 'Doing (whereabouts)', kind: 'text' },
+    { key: 'group', label: 'Group (standing)', kind: 'text' },
+    { key: 'delta', label: 'By (standing)', kind: 'number', min: -100, max: 100 },
+    { key: 'opens', label: 'Opens quest', kind: 'ref', refs: ['quests'], optional: 'None' },
+    { key: 'closes_quest', label: 'Closes quest', kind: 'ref', refs: ['quests'], optional: 'None' },
+    { key: 'told', label: 'Told when it comes to hold', kind: 'textarea' },
+  ],
+  blank: () => ({ when: {}, effect: 'place', location: '', line: '', told: '' }),
+  title: (row) => `${EFFECT_KINDS.find(([kind]) => kind === row.effect)?.[1] ?? 'An effect'} · ${factsLabel(row.when)}`,
+  add: 'Add effect',
+};
+
+function factsLabel(value: unknown): string {
+  const entries = value && typeof value === 'object' ? Object.entries(value as Record<string, unknown>) : [];
+  return entries.length ? entries.map(([fact, held]) => `${fact}=${String(held)}`).join(', ') : 'always';
+}
+
+const EFFECT_FIELDS: Record<string, string[]> = {
+  price: ['provider', 'region', 'percent'], waive: ['provider', 'offer'], closes: ['provider'],
+  place: ['location', 'line'], whereabouts: ['npc', 'location', 'activity'], standing: ['group', 'delta'],
+  quest: ['opens', 'closes_quest'],
+};
+
+/** A stored fact effect (``{when, <kind>: {...}, told}``) as the form's flat row, and back. */
+export function effectRow(stored: PlayRow): PlayRow {
+  const effect = Object.keys(EFFECT_FIELDS).find((kind) => stored[kind] && typeof stored[kind] === 'object') ?? 'place';
+  const fields = { ...(stored[effect] as Record<string, unknown>) };
+  if (effect === 'quest' && 'closes' in fields) {
+    fields.closes_quest = fields.closes;
+    delete fields.closes;
+  }
+  return { when: stored.when ?? {}, effect, told: stored.told ?? '', ...fields };
+}
+
+export function storedEffect(row: PlayRow): PlayRow {
+  const effect = String(row.effect ?? 'place');
+  const fields: Record<string, unknown> = {};
+  for (const key of EFFECT_FIELDS[effect] ?? []) {
+    const value = row[key];
+    if (value === '' || value === null || value === undefined) continue;
+    fields[key === 'closes_quest' ? 'closes' : key] = value;
+  }
+  return { when: row.when ?? {}, [effect]: fields, told: row.told ?? '' };
+}
 
 function rowsOf(value: unknown): PlayRow[] {
   return Array.isArray(value) ? value as PlayRow[] : [];
@@ -338,6 +478,12 @@ export const PLAY_SECTIONS: PlaySection[] = [
     rows: QUESTS,
     read: (draft) => rowsOf(draft.quests),
     write: (draft, rows) => ({ ...draft, quests: rows as never }),
+  },
+  {
+    id: 'fact_effects', label: 'Consequences', summary: 'What the world’s facts change: prices, places, people, standing and quests (EV-1).',
+    rows: FACT_EFFECTS,
+    read: (draft) => rowsOf((draft as Record<string, unknown>).fact_effects).map(effectRow),
+    write: (draft, rows) => ({ ...draft, fact_effects: rows.map(storedEffect) as never }),
   },
 ];
 

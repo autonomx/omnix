@@ -12,7 +12,8 @@ interface RpgActionComposerProps {
   isPending: boolean;
   /** The campaign being played, when there is one: what Undo rewinds. */
   liveSessionId: string;
-  onQuickAction: (command: string) => void;
+  /** A card plays at once (EV-9); an action without one fills the command to send. */
+  onQuickAction: (action: RpgQuickActionPreview) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
   /** A turn the composer ran (an undo) changed the campaign. */
   onTurnApplied: () => void;
@@ -100,7 +101,7 @@ export function RpgActionComposer({
       </form>
       <div role="group" className="rpg-quick-actions" aria-label="Quick RPG actions">
         {quickActions.map((action) => (
-          <button key={`${action.label}:${action.command}`} type="button" onClick={() => onQuickAction(action.command)}>
+          <button key={`${action.label}:${action.command}`} type="button" onClick={() => onQuickAction(action)}>
             <span className="rpg-quick-action-icon" aria-hidden="true">{action.icon}</span>
             <span className="rpg-quick-action-label">{action.label}</span>
           </button>

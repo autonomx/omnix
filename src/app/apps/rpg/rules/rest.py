@@ -6,7 +6,6 @@ wound a night nearer healing (stakes.md).
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -24,8 +23,6 @@ from app.apps.rpg.rules.combat.stakes import BATTERED, WOUND_RESTS, WOUNDED, con
 from app.apps.rpg.foundation.state import access as _sections
 from app.apps.rpg.rules.wording import in_sentence
 
-_SLEEP = re.compile(r"\b(sleep|slumber|bed|night|room)\b")
-_CAMP = re.compile(r"\b(camp|bedroll|tent)\b")
 # kind: (minutes, fatigue, share of missing HP restored, a full rest)
 RESTS = {"room": (480, -60, 0.5, True), "camp": (480, -40, 0.25, True), "while": (60, -15, 0.0, False)}
 WAKE_MINUTE = 8 * 60  # a night's sleep lasts until morning (time.md)
@@ -90,14 +87,15 @@ def _full_rest(simulation: Mapping[str, Any]) -> list[StateChange]:
     return changes
 
 
-def rest(simulation: Mapping[str, Any], text: str) -> RestOutcome:
+def rest(simulation: Mapping[str, Any], how: str | None = None) -> RestOutcome:
+    """A rest, as the reading names it (EV-9): a while, a night's sleep, or a camp; unnamed, a night in the room the
+    hero has here, else a while."""
     player = _d(_sections.player_state_of(simulation))
     location = _s(player.get("location_id"))
-    lowered = text.casefold()
     room = _room(simulation, location)
-    if _CAMP.search(lowered):
+    if how == "camp":
         kind = "camp"
-    elif _SLEEP.search(lowered) or room:
+    elif how == "sleep" or room:
         kind = "room" if room else "camp"
         if not room:
             for_rent = _rooms_for_rent(simulation, location)

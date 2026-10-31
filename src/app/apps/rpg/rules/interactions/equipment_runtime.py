@@ -61,7 +61,7 @@ def _find_item(items, item_id: str) -> Dict[str, Any]:
     return {}
 
 
-def _item_equipment(item: Dict[str, Any]) -> Dict[str, Any]:
+def item_equipment(item: Dict[str, Any]) -> Dict[str, Any]:
     """An item's equipment block; a world's own weapon fights as the kind its name ends in ("Iron Dagger": a dagger)."""
     equipment = _safe_dict(item.get("equipment"))
     if _safe_dict(equipment.get("stats")):
@@ -94,8 +94,7 @@ def project_equipment_stats(
         if not item:
             continue
 
-        item_equipment = _item_equipment(item)
-        item_stats = _safe_dict(item_equipment.get("stats"))
+        item_stats = _safe_dict(item_equipment(item).get("stats"))
         for key, value in item_stats.items():
             stats[key] = _safe_int(stats.get(key), 0) + _safe_int(value, 0)
 

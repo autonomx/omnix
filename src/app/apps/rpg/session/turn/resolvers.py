@@ -11,6 +11,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import LocationChanged, StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.location_registry import current_location_id
+from app.apps.rpg.rules.consequences import place_lines
 from app.apps.rpg.rules.contracts import A_WHILE, said, sayable
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
@@ -52,7 +53,7 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
         looked = _looked_at(simulation, world, planned.target_id)
         if looked:
             return [looked]
-    lines = [f"You look around {name}."]
+    lines = [f"You look around {name}.", *place_lines(simulation, location_id)]  # and what the world's facts changed
     if present:
         lines.append(f"Here: {', '.join(present)}.")
     places = _d(world.get("locations"))

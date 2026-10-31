@@ -8,7 +8,6 @@ attribute, a new ability the hero's level allows, or a rank in two skills. Skill
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -30,9 +29,6 @@ DISCOVERY_XP = 15  # the first visit to a named place
 QUEST_STEP_XP = 50  # a quest that names no experience pays this for each of its places (tuned, RQ-5.3)
 CHECK_XP = ((22, 35), (16, 20), (13, 10), (0, 5))  # a check passed: by difficulty, heroic to easy
 ATTRIBUTES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
-_ATTRIBUTE_WORDS = {"str": "strength", "agility": "dexterity", "dex": "dexterity", "endurance": "constitution",
-                    "con": "constitution", "intellect": "intelligence", "int": "intelligence", "wis": "wisdom",
-                    "perception": "wisdom", "cha": "charisma", "presence": "charisma"}
 PROMPT = ('Choose how you grow: raise an attribute by 2 ("raise strength"), learn a new ability ("learn ...") or '
           'improve two skills ("improve stealth and archery").')
 
@@ -113,31 +109,31 @@ def _learnable(document: Mapping[str, Any]) -> list[dict[str, Any]]:
             and all(_s(need) in unlocked for need in _l(_d(row).get("prerequisites")))]
 
 
-def choose(document: Mapping[str, Any], text: str) -> Growth:
-    """The level's choice the player makes in their words: an attribute raised, an ability learned, or two skills."""
+def choose(document: Mapping[str, Any], choice: str) -> Growth:
+    """The level's choice the reading names (EV-9), or a card's: "attribute:<name>" raised, "ability:<id>" learned, or
+    "skills:<one>,<other>" each a rank higher. Anything else asks again."""
     simulation = _d(_sections.simulation_state_of(document))
     player = _player(simulation)
     if int(player.get("level_choices_pending") or 0) <= 0:
         return Growth([], ["You have no level's choice to make yet."], refused=True)
-    words = re.findall(r"[a-z]+", text.casefold())
-    attribute = next((ATTRIBUTES[ATTRIBUTES.index(word)] if word in ATTRIBUTES else _ATTRIBUTE_WORDS[word]
-                      for word in words if word in ATTRIBUTES or word in _ATTRIBUTE_WORDS), "")
-    if attribute and words[:1] != ["learn"]:
+    kind, _, value = choice.partition(":")
+    attribute = value if kind == "attribute" and value in ATTRIBUTES else ""
+    if attribute:
         stats = _d(player.get("stats"))
         value = int(stats.get(attribute) or 10) + ATTRIBUTE_RAISE
         return Growth([LevelChoiceMade(choice="attribute", attribute=attribute, value=value)],
                       [f"Your {attribute} rises to {value}."], detail={"choice": "attribute", "attribute": attribute})
     learnable = _learnable(document)
-    named = [row for row in learnable
-             if all(word in words for word in re.findall(r"[a-z]+", _s(row.get("name")).casefold()))]
+    named = [row for row in learnable if kind == "ability" and _s(row.get("ability_id")) == value]
     if named:
-        ability = max(named, key=lambda row: len(_s(row.get("name"))))
+        ability = named[0]
         return Growth([LevelChoiceMade(choice="ability", ability_id=_s(ability.get("ability_id")))],
                       [f"You learn {_s(ability.get('name'))}."], detail={"choice": "ability",
                                                                         "ability_id": _s(ability.get("ability_id"))})
     skills = _d(player.get("skills"))
-    chosen = [skill for skill in skills if skill.replace("_", " ") in " ".join(words)
-              and int(_d(skills.get(skill)).get("level") or 0) < SKILL_RANK_MAX][:2]
+    asked = value.split(",") if kind == "skills" else []
+    chosen = [skill for skill in dict.fromkeys(asked)
+              if skill in skills and int(_d(skills.get(skill)).get("level") or 0) < SKILL_RANK_MAX][:2]
     if len(chosen) == 2:
         return Growth([LevelChoiceMade(choice="skills", skills=tuple(chosen))],
                       [f"Your {chosen[0]} and {chosen[1]} each rise a rank."], detail={"choice": "skills",

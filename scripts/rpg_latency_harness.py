@@ -68,7 +68,9 @@ CLASSES: dict[str, dict[str, Any]] = {
 }
 SCENE_SETUP = {"grove": [], "village": ["go to Starfall Village"], "pass": ["go to Starfall Village", "go to Skybridge Pass"],
                "fight": ["go to Starfall Village", "go to Skybridge Pass", "attack the echo wolf"]}
-DETERMINISTIC = {"status", "wait", "tactical_move"}
+# Played with no model call (owner decision 2026-10-29: every typed line goes to the intent call; only a card or the
+# tactical route runs without one).
+DETERMINISTIC = {"tactical_move"}
 
 
 class Clock:
@@ -269,18 +271,28 @@ def class_report(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def checks(classes: dict[str, Any], rows: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     every = [row for group in rows.values() for row in group]
+
+    def calls_but_revision(row: dict[str, Any]) -> int:  # one revision of the narration is its own call (2026-10-29)
+        writes = sum(1 for role in row["model_roles"] if role == "narrative_writer")
+        return int(row["model_calls"]) - min(1, max(0, writes - 1))
+
     return {
-        "F3_turns_with_at_most_one_call": round(sum(row["model_calls"] <= 1 for row in every) / len(every), 3) if every else None,
+        "F3_met": (max((calls_but_revision(row) for row in every), default=0) <= 2
+                   and not any(row["model_calls"] > 0 for name in DETERMINISTIC for row in rows.get(name, []))),
         "F3_max_calls_per_turn": max((row["model_calls"] for row in every), default=None),
+        "F3_max_calls_per_turn_but_a_revision": max((calls_but_revision(row) for row in every), default=None),
+        "F3_turns_revised": sum(1 for row in every if calls_but_revision(row) < int(row["model_calls"])),
         "F3_deterministic_turns_with_a_call": sum(row["model_calls"] > 0 for name in DETERMINISTIC for row in rows.get(name, [])),
         "F1_first_narration_p95_ms": {name: report["first_narration_ms"]["p95"] for name, report in classes.items()},
         "F1_complete_p50_ms": {name: report["complete_ms"]["p50"] for name, report in classes.items()},
         "F1_complete_p95_ms": {name: report["complete_ms"]["p95"] for name, report in classes.items()},
         "targets": {
             "outcome_p95": "<= 300 ms tactical moves and attacks; <= 1.0 s other grammar-parsed and structured; <= 3.0 s with an intent call",
-            "first_narration_p95": "<= 2.5 s", "complete": "p50 <= 6 s, p95 <= 10 s",
-            "deterministic": "status, equip, inventory, wait <= 500 ms complete, no model call",
-            "F3": ">= 80% of turns at most one call; deterministic turns none; no turn more than two",
+            # Typed turns, now that the model reads every line (owner decision 2026-10-31, question 19).
+            "first_narration_p95": "<= 5 s", "complete": "p50 <= 9 s, p95 <= 10 s",
+            "deterministic": "a card or the tactical route: <= 500 ms complete, no model call",
+            "F3": "no turn more than two calls, but for one revision of its narration; deterministic turns none "
+                  "(owner decisions 2026-10-29)",
         },
     }
 

@@ -43,8 +43,26 @@ from .changes import (
     StateChange,
     ConditionsChanged,
     DialogueExchanged,
+    BeatAdvanced,
+    DirectionTracked,
+    AreaDetailed,
+    EntryMet,
+    ItemImproved,
+    InventionAdded,
+    RoomCleared,
+    SiteFound,
+    RumourHeard,
+    RumourSpread,
+    GuardSet,
+    PreferenceNoted,
+    KNOWING_RANK,
+    PhaseEntered,
+    standing_band,
+    FactLearned,
+    FactSet,
     KnowledgeShared,
     QuestOffered,
+    StandingChanged,
     PressuresMoved,
     CombatAdvanced,
     CompanionHpChanged,
@@ -87,6 +105,15 @@ SLOT_LABELS = {"main_hand": "Weapon", "off_hand": "Shield", "body": "Armor", "he
 
 
 CHECKS_KEPT = 20  # the recent checks a retry is judged against (checks.md)
+_KNOWN = ("simulation_state", "hero_knowledge", "entries")
+_DIRECTION = ("simulation_state", "direction")
+DAYS_KEPT, SCENES_KEPT, WISHES_KEPT = 7, 20, 8  # the game master's counts kept (EV-0)
+_FACTS = ("simulation_state", "world_facts")
+_GOALS = ("simulation_state", "npc_goal_state")
+_RUMOURS = ("simulation_state", "active_rumors")
+_LAYER = ("simulation_state", "lore_layer", "entries")
+_WORLD = ("simulation_state", "world_model")
+RUMOURS_KEPT, WORD_SHOWN = 40, 12  # the rumours a campaign keeps going about, and those heard the sheet shows (EV-4)
 
 
 class ChangeRejected(ValueError):
@@ -579,6 +606,98 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         known = [str(fact) for fact in writer.get(("simulation_state", "dialogue", "known_facts", change.npc_id)) or ()]
         if change.fact_id not in known:
             writer.set(("simulation_state", "dialogue", "known_facts", change.npc_id), [*known, change.fact_id])
+    elif isinstance(change, EntryMet):
+        held = writer.get(_KNOWN + (change.entry_id,))
+        if not isinstance(held, dict) or KNOWING_RANK.get(str(held.get("kind") or ""), 0) < KNOWING_RANK[change.kind]:
+            writer.set(_KNOWN + (change.entry_id,), {"kind": change.kind,
+                                                      "tick": int(writer.get(("simulation_state", "tick")) or 0)})
+    elif isinstance(change, FactSet):
+        held = writer.get(_FACTS + (change.fact_id,))
+        known = change.known or (isinstance(held, dict) and held.get("known") is True)
+        writer.set(_FACTS + (change.fact_id,), {"value": change.value, "source": change.source, "known": known,
+                                                "told": change.told,
+                                                "tick": int(writer.get(("simulation_state", "tick")) or 0)})
+        _show_what_has_changed(writer)
+    elif isinstance(change, FactLearned):
+        held = writer.get(_FACTS + (change.fact_id,))
+        if not isinstance(held, dict):
+            raise ChangeRejected(f"no fact {change.fact_id} holds")
+        if held.get("known") is not True:
+            writer.set(_FACTS + (change.fact_id,), {**held, "known": True})
+            _show_what_has_changed(writer)
+    elif isinstance(change, BeatAdvanced):
+        held = dict(writer.get(_GOALS + (change.person_id, change.goal_id)) or {})
+        beats = [str(beat) for beat in held.get("beats") or ()]
+        if change.beat in beats:
+            raise ChangeRejected(f"{change.person_id} has already reached {change.beat}")
+        held["beats"] = [*beats, change.beat]
+        at = change.at_minute if change.at_minute is not None else int(
+            writer.get(("simulation_state", "environment", "absolute_minutes")) or 0)
+        held.update(day=at // 1440, at=at)
+        if change.location_id or change.gone:
+            held.update(location_id=change.location_id, activity=change.activity, gone=change.gone)
+        writer.set(_GOALS + (change.person_id, change.goal_id), held)
+    elif isinstance(change, InventionAdded):
+        if writer.get(_LAYER + (change.entry_id,)) is not None:
+            raise ChangeRejected(f"{change.entry_id} is already in the lore layer")
+        writer.set(_LAYER + (change.entry_id,), {"family": change.family, "name": change.name, "row": change.row,
+                                                 "play": change.play, "provenance": change.provenance})
+        _play_invention(writer, change)
+    elif isinstance(change, ItemImproved):
+        items = _items(writer)
+        stack = next((row for row in items if row.get("item_id") == change.item_id), None)
+        if stack is None or not (isinstance(stack.get("equipment"), dict) or change.slot):
+            raise ChangeRejected(f"no gear {change.item_id} is carried")
+        equipment = dict(stack["equipment"]) if isinstance(stack.get("equipment"), dict) else {}
+        if not equipment.get("slot") and change.slot:  # a block with no slot of its own: where the gear is worn
+            equipment["slot"] = change.slot
+        stack.update(tier=change.tier, equipment={**equipment, "stats": {**dict(equipment.get("stats") or {}),
+                                                                          **change.stats}})
+        _write_items(writer, items)
+    elif isinstance(change, AreaDetailed):
+        held = dict(writer.get(("simulation_state", "area_detail", change.area_id)) or {})
+        entries = [dict(row) for row in held.get("entries") or () if isinstance(row, dict)]
+        if any(row.get("entry_id") == change.entry_id for row in entries):
+            raise ChangeRejected(f"{change.entry_id} is already part of {change.area_id}")
+        held["entries"] = [*entries, {"entry_id": change.entry_id, "kind": change.kind}]
+        if change.kind == "lore" and change.told:
+            held["lore"] = [*(str(line) for line in held.get("lore") or ()), change.told]
+        writer.set(("simulation_state", "area_detail", change.area_id), held)
+    elif isinstance(change, SiteFound):
+        place = writer.get(_WORLD + ("locations", change.location_id))
+        if not isinstance(place, dict) or place.get("hidden") is not True:
+            raise ChangeRejected(f"{change.location_id} is no hidden place")
+        writer.set(_WORLD + ("locations", change.location_id), {**place, "hidden": False})
+        layer = writer.get(_LAYER + (change.location_id,))
+        _join_roads(writer, change.location_id, str(place.get("name") or ""),
+                    (layer or {}).get("play", {}).get("roads") if isinstance(layer, dict) else ())
+        found = [str(row) for row in writer.get(("simulation_state", "exploration", "found")) or ()]
+        writer.set(("simulation_state", "exploration", "found"), [*found, change.location_id])
+    elif isinstance(change, RoomCleared):
+        writer.set(("simulation_state", "exploration", "cleared", change.site_id, change.room_id), change.how)
+    elif isinstance(change, RumourSpread):
+        rumours = [dict(row) for row in writer.get(_RUMOURS) or () if isinstance(row, dict) and row.get("rumour_id")]
+        if any(row["rumour_id"] == change.rumour_id for row in rumours):
+            raise ChangeRejected(f"the rumour {change.rumour_id} is already about")
+        rumours.append({"rumour_id": change.rumour_id, "place_id": change.place_id, "text_id": change.text_id,
+                        "text": change.text, "source": change.source, "heard": False,
+                        "day": int(writer.get(("simulation_state", "environment", "absolute_minutes")) or 0) // 1440})
+        writer.set(_RUMOURS, rumours[-RUMOURS_KEPT:])
+    elif isinstance(change, RumourHeard):
+        rumours = [dict(row) for row in writer.get(_RUMOURS) or () if isinstance(row, dict) and row.get("rumour_id")]
+        if not any(row["rumour_id"] == change.rumour_id for row in rumours):
+            raise ChangeRejected(f"no rumour {change.rumour_id} is about")
+        writer.set(_RUMOURS, [{**row, "heard": True} if row["rumour_id"] == change.rumour_id else row
+                              for row in rumours])
+        if isinstance(writer.get(("state",)), dict):
+            heard = dict.fromkeys(str(row.get("text") or "") for row in writer.get(_RUMOURS)
+                                  if row.get("heard") and row.get("text"))  # a rumour told at two places is one
+            writer.set(("state", "word_heard"), list(heard)[-WORD_SHOWN:])
+    elif isinstance(change, StandingChanged):
+        standing = int(writer.get(("simulation_state", "group_standing", change.group_id)) or 0)
+        writer.set(("simulation_state", "group_standing", change.group_id),
+                   max(-100, min(100, standing + change.delta)))
+        _show_standing(writer)
     elif isinstance(change, QuestOffered):
         quests = writer.get(("simulation_state", "quest_state", "quests"))
         known = isinstance(quests, list) and any(
@@ -613,6 +732,31 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         writer.set(("simulation_state", "combat_state"), {**combat, "active": False, "outcome": change.outcome})
     elif isinstance(change, CombatAdvanced):
         writer.set(("simulation_state", "combat_state"), copy_state(change.combat_state))
+    elif isinstance(change, DirectionTracked):
+        held = dict(writer.get(_DIRECTION) or {})
+        held["last_event_turn"] = max(int(held.get("last_event_turn") or 0), change.last_event_turn)
+        if change.day is not None:
+            events = {str(day): int(count) for day, count in dict(held.get("events") or {}).items()
+                      if int(day) > change.day - DAYS_KEPT}
+            events[str(change.day)] = events.get(str(change.day), 0) + 1
+            held["events"] = events
+        if change.complication_scene:
+            scenes = dict(held.get("complications") or {})
+            scenes[change.complication_scene] = int(scenes.get(change.complication_scene) or 0) + 1
+            held["complications"] = dict(list(scenes.items())[-SCENES_KEPT:])
+        writer.set(_DIRECTION, held)
+    elif isinstance(change, PreferenceNoted):
+        held = dict(writer.get(_DIRECTION) or {})
+        kept = [row for row in held.get("wishes") or () if isinstance(row, dict) and row.get("kind") != change.kind]
+        writer.set(_DIRECTION, {**held, "wishes": [*kept, {"kind": change.kind, "value": change.value}][-WISHES_KEPT:]})
+    elif isinstance(change, (PhaseEntered, GuardSet)):
+        actor = change.actor_id if isinstance(change, PhaseEntered) else change.guard_id
+        row = writer.get(("simulation_state", "combat_state", "participants", actor))
+        if not isinstance(row, dict):
+            raise ChangeRejected(f"{actor} is not in the fight")
+        update = ({"phase": change.phase} if isinstance(change, PhaseEntered) else {"guards": change.guarded_id})
+        if any(row.get(key) != value for key, value in update.items()):
+            writer.set(("simulation_state", "combat_state", "participants", actor), {**row, **update})
     elif isinstance(change, CompanionHpChanged):
         party = dict(writer.get(_PLAYER + ("party_state",)) or {})
         companions = [dict(row) for row in party.get("companions") or () if isinstance(row, dict)]
@@ -681,6 +825,90 @@ def _make_level_choice(writer: _Writer, change: LevelChoiceMade) -> None:
             writer.set(_PLAYER + ("skills", skill_id), skill)
             if sheet:
                 writer.set(("state", "player", "skills", skill_id), dict(skill))
+
+
+def _play_invention(writer: _Writer, change: InventionAdded) -> None:
+    """An invention joins the effective world model, which the rules read, as an authored entry of its family would
+    (EV-0, part 2): only adding, under its own new id."""
+    play, entry_id = change.play, change.entry_id
+    if change.family == "person":
+        writer.set(_WORLD + ("npcs", entry_id), dict(change.row))
+        if play.get("schedule"):
+            routines = [dict(row) for row in writer.get(_WORLD + ("routines",)) or () if isinstance(row, dict)]
+            writer.set(_WORLD + ("routines",), [*routines, {"npc_id": entry_id, "schedule": list(play["schedule"]),
+                                                            "goals": []}])
+        if play.get("knowledge"):
+            known = [dict(row) for row in writer.get(_WORLD + ("knowledge",)) or () if isinstance(row, dict)]
+            writer.set(_WORLD + ("knowledge",), [*known, {"npc_id": entry_id, "facts": list(play["knowledge"])}])
+    elif change.family == "place":
+        writer.set(_WORLD + ("locations", entry_id), dict(change.row))
+        if change.row.get("hidden") is not True:  # a hidden place joins the roads when it is found (EV-10)
+            _join_roads(writer, entry_id, change.name, play.get("roads") or ())
+        for room in (play.get("site") or {}).get("rooms") or ():  # a site's rooms, each a place, one way to the next
+            writer.set(_WORLD + ("locations", str(room["id"])), {
+                "name": str(room.get("name") or ""), "description": str(room.get("description") or ""),
+                "region_id": str(change.row.get("region_id") or ""), "deferred": True, "site_id": entry_id,
+                "exits": {}, **({"map_id": str(room["map"]["map_id"])} if isinstance(room.get("map"), dict) else {})})
+            _join_roads(writer, str(room["id"]), str(room.get("name") or ""),
+                        [{"to": str(room.get("from") or entry_id), "travel_time": "5 minutes"}])
+            loot = str(room.get("loot_item_id") or "")
+            item = next((dict(row) for row in writer.get(_WORLD + ("items",)) or ()
+                         if isinstance(row, dict) and row.get("id") == loot), None)
+            if item is not None:  # the site's reward, where its last room is
+                ground = _ground(writer, str(room["id"]))
+                _put(ground, {"item_id": loot, "name": str(item.get("name") or loot), "quantity": 1,
+                              "category": str(item.get("type") or ""),
+                              **({"equipment": dict(item["equipment"])} if isinstance(item.get("equipment"), dict) else {})})
+                writer.set(("simulation_state", "world_items", "by_location", str(room["id"])), ground)
+    elif change.family == "item":
+        items = [dict(row) for row in writer.get(_WORLD + ("items",)) or () if isinstance(row, dict)]
+        writer.set(_WORLD + ("items",), [*items, dict(change.row)])
+        stack = {"item_id": entry_id, "name": change.name, "quantity": 1, "category": str(change.row.get("type") or ""),
+                 **({"description": change.row["effect"]} if change.row.get("effect") else {}),
+                 **({"equipment": dict(change.row["equipment"])} if isinstance(change.row.get("equipment"), dict) else {})}
+        if play.get("location_id"):
+            ground = _ground(writer, str(play["location_id"]))
+            _put(ground, stack)
+            writer.set(("simulation_state", "world_items", "by_location", str(play["location_id"])), ground)
+        if play.get("offer"):
+            seller = str(play["offer"].get("provider_id") or "")
+            offers = [dict(row) for row in writer.get(_WORLD + ("offers", seller)) or () if isinstance(row, dict)]
+            writer.set(_WORLD + ("offers", seller), [*offers, dict(play["offer"])])
+    elif change.family == "creature":
+        writer.set(("simulation_state", "campaign_mechanics", "creatures", entry_id), dict(play.get("combat") or {}))
+    else:
+        writer.set(_WORLD + ("quests", entry_id), dict(change.row))
+
+
+def _join_roads(writer: _Writer, place_id: str, name: str, roads: Any) -> None:
+    """A place's roads, both ways: a route to each place it names, and an exit there back to it."""
+    routes = [dict(row) for row in writer.get(_WORLD + ("routes",)) or () if isinstance(row, dict)]
+    for road in roads or ():
+        other = str(road.get("to") or "")
+        routes.append({"id": f"route:{place_id}:{other}", "from": place_id, "to": other,
+                       "travel_time": str(road.get("travel_time") or "30 minutes")})
+        exits = dict(writer.get(_WORLD + ("locations", other, "exits")) or {})
+        writer.set(_WORLD + ("locations", other, "exits"), {**exits, name.casefold(): place_id})
+        own = dict(writer.get(_WORLD + ("locations", place_id, "exits")) or {})
+        other_name = str(writer.get(_WORLD + ("locations", other, "name")) or other)
+        writer.set(_WORLD + ("locations", place_id, "exits"), {**own, other_name.casefold(): other})
+    writer.set(_WORLD + ("routes",), routes)
+
+
+def _show_what_has_changed(writer: _Writer) -> None:
+    """The sheet's "What has changed" (EV-1): the line of each fact that holds and that the hero knows."""
+    facts = writer.get(_FACTS) or {}
+    writer.set(("state", "what_has_changed"), [str(row["told"]) for _, row in sorted(facts.items())
+                                               if isinstance(row, dict) and row.get("known") is True and row.get("told")])
+
+
+def _show_standing(writer: _Writer) -> None:
+    """The sheet's standing with each group (EV-1): its name, the value, and the band the player reads."""
+    groups = writer.get(("simulation_state", "world_model", "groups")) or {}
+    writer.set(("state", "group_standing"), [
+        {"group_id": group, "name": str((groups.get(group) or {}).get("name") or group) if isinstance(groups, dict) else group,
+         "standing": int(value), "band": standing_band(int(value))}
+        for group, value in sorted((writer.get(("simulation_state", "group_standing")) or {}).items())])
 
 
 def _show_cooldowns(writer: _Writer) -> None:

@@ -70,3 +70,13 @@ world's creatures keep to the wild, where no one lives." Before, any creature of
 anywhere (a wolf in the guild hall). The playthroughs, the balance simulation, the latency harness and the Aurelia
 golden now meet their creatures in the wild (Skybridge Pass, the Northern Road, Black Rain Station Interior); the
 balance bands still hold.
+
+## Sites and exploring (evolution roadmap EV-10)
+
+What an area holds is filled in as the hero approaches it, by the game master, within the area's budget
+(`rules/budgets.area_budget`). A hidden place is found by exploring (`explore`, a seeded d20 and the hero's best
+searching skill against its difficulty, `rules/exploration.py`); found, it joins the roads (`SiteFound`). A site's
+rooms lie one way after another, built by code: an encounter in each from the world's creatures sized to the hero's
+level, met on arriving in it, the last its boss's, with the site's reward among the world's things on its floor. A
+room whose encounter is beaten or put to flight, or whose loot is taken, is cleared (`RoomCleared`). Scenario:
+`test_areas.py`.

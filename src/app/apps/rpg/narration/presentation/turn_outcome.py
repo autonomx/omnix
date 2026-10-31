@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.apps.rpg.foundation.model_calls import used_calls
 from app.apps.rpg.foundation.state.changes import StateChange
 from app.apps.rpg.foundation.state.changes import parse_changes
 from app.apps.rpg.foundation.state.extract import CHANGE_SECTIONS, changes_between
@@ -165,5 +166,5 @@ def build_turn_outcome(
             choices=tuple(Suggestion(**row) for row in _mapping(planned.get("presentation")).get("choices") or ()),
         ),
         timings=_timings(timings),
-        model_calls=ModelCalls(total=sum(calls.values()), by_kind=calls),
+        model_calls=ModelCalls(total=used_calls(calls), by_kind=calls),  # a discarded reply counted apart (EV-9)
     )

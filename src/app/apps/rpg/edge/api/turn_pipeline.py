@@ -263,6 +263,10 @@ def _run_rpg_turn(
     writer must narrate returns at its commit, its narration pending, and is narrated beside the request: its
     events reach ``foundation/turn_stream.py`` (RQ-6.2).
     """
+    from app.apps.rpg.narration.lore_links import taken, taken_quotes
+
+    taken()  # no lore mark of an earlier response in this context links this one (EV-12)
+    taken_quotes()  # nor voices its quotes (EV-13)
     with rpg_pipeline_span("turn.campaign_genesis_gate") as span:
         from app.apps.rpg.genesis.forge.launch_readiness import (
             CampaignLaunchBlockedError,
@@ -639,6 +643,10 @@ def _respond(result: dict[str, Any], *, session_id: str, command: str, submissio
             timings={**(payload.get("timing") or {}), "pipeline_before_encode_ms": trace.elapsed_ms},
         )
         payload = attach_turn_outcome(payload, outcome)
+        # Its names that open their lore (EV-12); a turn narrated after its commit is linked when its narration is.
+        if isinstance(payload.get("visible_response"), dict) and result.get("narration_after_commit") is not True:
+            payload["visible_response"] = _linked(payload["visible_response"], session_id, session,
+                                                  revision=result.get("state_revision"))
         from app.apps.rpg.foundation.model_calls import current_model_failures
 
         if current_model_failures():
@@ -663,6 +671,27 @@ def _respond(result: dict[str, Any], *, session_id: str, command: str, submissio
         )
 
     return payload
+
+
+def _linked(visible: dict[str, Any], session_id: str, document: Any, *, revision: Any) -> dict[str, Any]:
+    """The visible response with its lore links, worked out on its final text (EV-12); and the entries it named that
+    the hero did not know, proposed as heard of for the next turn (EV-11). Never fails the turn."""
+    from app.apps.rpg.narration.lore_links import propose_heard_of, taken, with_links
+
+    try:
+        if not (visible.get("narration") or visible.get("messages")):
+            return visible
+        linked = with_links(visible, document)
+        propose_heard_of(session_id, document, linked.get("links") or {}, revision=int(revision or 0))
+        return linked
+    except Exception:
+        logger.warning("rpg_lore_links_failed session=%s", session_id, exc_info=True)
+        return visible
+    finally:
+        taken()  # the response's marks are used up, whatever came of them
+        from app.apps.rpg.narration.lore_links import taken_quotes
+
+        taken_quotes()
 
 
 def _final(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -709,7 +738,8 @@ def _narrate_after_commit(result: dict[str, Any], *, session_id: str, command: s
                                     delivery_mode=DeliveryMode.BLOCKING)
             from app.apps.rpg.narration.presentation.turn_response import build_visible_response
 
-            visible = dict(narrated.get("visible_response") or build_visible_response(narrated, command))
+            visible = _linked(dict(narrated.get("visible_response") or build_visible_response(narrated, command)),
+                              session_id, committed.get("session"), revision=result.get("state_revision"))
             canonical = narrated.get("canonical_narrative_response")
             turn_stream.publish(stream, "narration.final", {
                 "visible_response": visible,

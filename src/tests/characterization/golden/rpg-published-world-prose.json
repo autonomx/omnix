@@ -141,11 +141,11 @@
     },
     {
       "blocks": [
-        "action||You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete."
+        "action||Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival)."
       ],
       "step": "I rent a room for the night from Orik Stonewake.",
-      "told": "You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete. You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete. You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete.",
-      "visible": "You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete."
+      "told": "Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival). Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival). Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival).",
+      "visible": "Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival)."
     },
     {
       "blocks": [
@@ -164,10 +164,7 @@
       "visible": "You wait a while in Starfall Village; time passes. Around you: Miri Kestrel (sorting Earth curios at a corner table of the inn), Orik Stonewake (keeping the Lantern Below), Liora Fen."
     },
     {
-      "blocks": [
-        "narration||Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.",
-        "action||You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check."
-      ],
+      "blocks": [],
       "step": "go to Skybridge Pass",
       "told": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check.",
       "visible": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.\n\nYou travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check."

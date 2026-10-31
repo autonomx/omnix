@@ -143,8 +143,10 @@ capital, by a road of three hours.
 A hand-written source carries the same sections in its canon: `economy.providers`, `routines`, `knowledge`,
 `pressures`, and `bestiary` rows with `stats`, `behaviour` and `loot` beside their lore, using the same fields as the
 editor's forms. Publication checks them; `the-market-road/world.source.json` uses every one of them. Aurelia's bundle
-shows the same for a shared world: `lore-additions.json` (its gear, the Valecourt people, a quest's reward) and
-`play-sections.json` are written in by `author_play_sections.py`, through the world library's own publication.
+shows the same for a shared world: its people, items, gear and quest rewards are its own topics, as the editor edits
+them (a publication carries the editor's changes into its canon), and `lore-additions.json` (the game master's
+palette, and the maps of places that had none) and `play-sections.json` are written in by `author_play_sections.py`,
+through the world library's own publication.
 
 ## Sharing
 

@@ -94,7 +94,8 @@ def test_equip_through_loadout_survives_story_turns(launch, world) -> None:
 
 
 INN = {
-    "aurelia": {"route": ["go to Starfall Village"], "keeper": "Orik Stonewake", "room": 60, "meal": 10},
+    # Orik gives a new arrival the first night free (EV-1: Aurelia's fact_effects): the price is the second night's.
+    "aurelia": {"route": ["go to Starfall Village"], "keeper": "Orik Stonewake", "room": 0, "meal": 10},
     "starter": {"route": [], "keeper": "Bran", "room": 50, "meal": 15},
     "vesper": {"route": [], "keeper": "Dex Marlowe", "room": 20, "meal": 6},
 }

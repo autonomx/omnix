@@ -22,10 +22,12 @@ class TradeResolution:
     kind: str = ""
 
 
-def resolve_trade(document: Mapping[str, Any], text: str, *, selling: bool = False) -> TradeResolution | None:
-    """The trade the player asks for, or ``None`` in a world without an economy section (the older path's)."""
+def resolve_trade(document: Mapping[str, Any], target_id: str, party_id: str = "", *, selling: bool = False,
+                  quantity: int | None = None) -> TradeResolution | None:
+    """The trade the reading names (the offer or thing, and the seller or buyer, by id), or ``None`` in a world
+    without an economy section (the older path's)."""
     simulation = _d(_sections.simulation_state_of(document))
-    outcome = sell(simulation, text) if selling else buy(simulation, text)
+    outcome = sell(simulation, target_id, party_id) if selling else buy(simulation, target_id, party_id, quantity)
     if outcome is None:
         return None
     state, manifest = _d(document.get("state")), _d(document.get("manifest"))

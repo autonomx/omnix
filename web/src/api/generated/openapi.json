@@ -2176,6 +2176,58 @@
         "title": "ArchiveCharacterResponse",
         "type": "object"
       },
+      "AreaDetailed": {
+        "additionalProperties": false,
+        "description": "An entry of a larger area filled in as the hero approaches it (evolution roadmap EV-10): its id (an invention\nbeside it, ``InventionAdded``), its kind, and for a rumour or a piece of lore its line.",
+        "properties": {
+          "area_id": {
+            "minLength": 1,
+            "title": "Area Id",
+            "type": "string"
+          },
+          "entry_id": {
+            "minLength": 1,
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "place",
+              "site",
+              "person",
+              "creature",
+              "item",
+              "service",
+              "quest",
+              "rumour",
+              "lore"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "told": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Told",
+            "type": "string"
+          },
+          "type": {
+            "const": "area_detailed",
+            "default": "area_detailed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "area_id",
+          "entry_id",
+          "kind",
+          "type",
+          "told"
+        ],
+        "title": "AreaDetailed",
+        "type": "object"
+      },
       "AssetClass": {
         "enum": [
           "crypto",
@@ -4924,6 +4976,25 @@
         "title": "BacktestTrade",
         "type": "object"
       },
+      "Band": {
+        "additionalProperties": false,
+        "properties": {
+          "high": {
+            "title": "High",
+            "type": "integer"
+          },
+          "low": {
+            "title": "Low",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "low",
+          "high"
+        ],
+        "title": "Band",
+        "type": "object"
+      },
       "BarsResponse": {
         "properties": {
           "bars": {
@@ -5142,6 +5213,100 @@
           "asset_ids"
         ],
         "title": "BatchStart",
+        "type": "object"
+      },
+      "BeatAdvanced": {
+        "additionalProperties": false,
+        "description": "A person takes the next step toward a goal (EV-4, ``rules/routines.py``): the beat reached, and, when it moves\nthem, where they keep to now (``location_id`` empty and ``gone``: they have left).",
+        "properties": {
+          "activity": {
+            "default": "",
+            "title": "Activity",
+            "type": "string"
+          },
+          "at_minute": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Minute"
+          },
+          "beat": {
+            "minLength": 1,
+            "title": "Beat",
+            "type": "string"
+          },
+          "goal_id": {
+            "minLength": 1,
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "gone": {
+            "default": false,
+            "title": "Gone",
+            "type": "boolean"
+          },
+          "location_id": {
+            "default": "",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "person_id": {
+            "minLength": 1,
+            "title": "Person Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "const": "beat_advanced",
+            "default": "beat_advanced",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "goal_id",
+          "beat",
+          "type",
+          "location_id",
+          "activity",
+          "gone",
+          "source"
+        ],
+        "title": "BeatAdvanced",
+        "type": "object"
+      },
+      "BeatMove": {
+        "additionalProperties": false,
+        "description": "Where a beat takes its person: a place they keep to from then on, or, with none, away for good.",
+        "properties": {
+          "activity": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Activity",
+            "type": "string"
+          },
+          "location": {
+            "default": "",
+            "title": "Location",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location",
+          "activity"
+        ],
+        "title": "BeatMove",
         "type": "object"
       },
       "BinaryForecastMetrics": {
@@ -10414,6 +10579,21 @@
         "title": "ClonedVoiceCharacterBackfillItem",
         "type": "object"
       },
+      "ClosesEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ClosesEffect",
+        "type": "object"
+      },
       "CodexAuthStatus": {
         "properties": {
           "auth_mode": {
@@ -12376,6 +12556,79 @@
         "title": "CreateSpeaker",
         "type": "object"
       },
+      "CreatureBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "damage_max": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "defense": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "hp": {
+            "$ref": "#/components/schemas/Band"
+          }
+        },
+        "required": [
+          "hp",
+          "damage_max",
+          "defense"
+        ],
+        "title": "CreatureBudget",
+        "type": "object"
+      },
+      "CreaturePhase": {
+        "additionalProperties": false,
+        "description": "A stage of a boss fight (EV-2): below ``at`` of its health it fights harder, may call an ally, or lays its\nweakness bare; ``told`` is said when it begins.",
+        "properties": {
+          "at": {
+            "exclusiveMaximum": 1,
+            "exclusiveMinimum": 0,
+            "title": "At",
+            "type": "number"
+          },
+          "calls_ally": {
+            "default": false,
+            "title": "Calls Ally",
+            "type": "boolean"
+          },
+          "damage_bonus": {
+            "default": 0,
+            "maximum": 20,
+            "minimum": -10,
+            "title": "Damage Bonus",
+            "type": "integer"
+          },
+          "defense_bonus": {
+            "default": 0,
+            "maximum": 10,
+            "minimum": -10,
+            "title": "Defense Bonus",
+            "type": "integer"
+          },
+          "exposes_weakness": {
+            "default": false,
+            "title": "Exposes Weakness",
+            "type": "boolean"
+          },
+          "told": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Told",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "defense_bonus",
+          "damage_bonus",
+          "calls_ally",
+          "exposes_weakness",
+          "told"
+        ],
+        "title": "CreaturePhase",
+        "type": "object"
+      },
       "CreaturePlay": {
         "additionalProperties": false,
         "description": "How one of the world's creatures fights; a field left out is taken from its lore.",
@@ -12411,6 +12664,41 @@
             "title": "Loot",
             "type": "array"
           },
+          "no_escape": {
+            "default": false,
+            "title": "No Escape",
+            "type": "boolean"
+          },
+          "phases": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CreaturePhase"
+            },
+            "maxItems": 4,
+            "title": "Phases",
+            "type": "array"
+          },
+          "recovers": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovers"
+          },
+          "resists": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Resists",
+            "type": "array"
+          },
           "stats": {
             "anyOf": [
               {
@@ -12420,10 +12708,29 @@
                 "type": "null"
               }
             ]
+          },
+          "weakness_effect": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stun",
+                  "damage",
+                  "morale"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weakness Effect"
           }
         },
         "required": [
           "id",
+          "resists",
+          "phases",
+          "no_escape",
           "loot"
         ],
         "title": "CreaturePlay",
@@ -15318,6 +15625,11 @@
             "title": "Player Line",
             "type": "string"
           },
+          "step": {
+            "default": "",
+            "title": "Step",
+            "type": "string"
+          },
           "type": {
             "const": "dialogue_exchanged",
             "default": "dialogue_exchanged",
@@ -15330,7 +15642,8 @@
           "type",
           "name",
           "player_line",
-          "npc_line"
+          "npc_line",
+          "step"
         ],
         "title": "DialogueExchanged",
         "type": "object"
@@ -15390,6 +15703,47 @@
           }
         },
         "title": "DirectPerformance",
+        "type": "object"
+      },
+      "DirectionTracked": {
+        "additionalProperties": false,
+        "description": "The game master's bookkeeping (EV-0): the turn of the last meaningful event; and, for one of its own events,\nthe day it is counted against (``day``) and the scene a complication was had in.",
+        "properties": {
+          "complication_scene": {
+            "default": "",
+            "title": "Complication Scene",
+            "type": "string"
+          },
+          "day": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day"
+          },
+          "last_event_turn": {
+            "minimum": 0,
+            "title": "Last Event Turn",
+            "type": "integer"
+          },
+          "type": {
+            "const": "direction_tracked",
+            "default": "direction_tracked",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "last_event_turn",
+          "type",
+          "complication_scene"
+        ],
+        "title": "DirectionTracked",
         "type": "object"
       },
       "DubApproval": {
@@ -16033,6 +16387,46 @@
           "to_addresses"
         ],
         "title": "EmailSettingsWrite",
+        "type": "object"
+      },
+      "EntryMet": {
+        "additionalProperties": false,
+        "description": "An entry of the world the hero now knows (evolution roadmap EV-1): a person or creature met, a place\nvisited, a thing held, a quest or group heard of. A stronger kind replaces a weaker one, never the reverse.",
+        "properties": {
+          "entry_id": {
+            "minLength": 1,
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "met",
+            "enum": [
+              "heard_of",
+              "met",
+              "visited"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "const": "entry_met",
+            "default": "entry_met",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "type",
+          "kind",
+          "source"
+        ],
+        "title": "EntryMet",
         "type": "object"
       },
       "EventReaderDiagnostics": {
@@ -17379,6 +17773,236 @@
           }
         },
         "title": "ExportDefinitionRequestBody",
+        "type": "object"
+      },
+      "FactEffect": {
+        "additionalProperties": false,
+        "description": "What the world's facts change (EV-1): while ``when`` holds (every fact at its value; empty, always), one effect,\nread by the rule that owns it (``rules/consequences.py``); ``told`` is said when it comes to hold.",
+        "properties": {
+          "closes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClosesEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "place": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StandingEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "told": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Told",
+            "type": "string"
+          },
+          "waive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WaiveEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "when": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "When",
+            "type": "object"
+          },
+          "whereabouts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WhereaboutsEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "told"
+        ],
+        "title": "FactEffect",
+        "type": "object"
+      },
+      "FactLearned": {
+        "additionalProperties": false,
+        "description": "The hero comes to know a fact that holds, by seeing it or being told.",
+        "properties": {
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "const": "fact_learned",
+            "default": "fact_learned",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "type",
+          "source"
+        ],
+        "title": "FactLearned",
+        "type": "object"
+      },
+      "FactSet": {
+        "additionalProperties": false,
+        "description": "A world fact's value (EV-1, ``rules/consequences.py``): what a decision, an ending or an outcome left\nbehind. ``known``: the hero saw it happen.",
+        "properties": {
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "known": {
+            "default": true,
+            "title": "Known",
+            "type": "boolean"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "told": {
+            "default": "",
+            "title": "Told",
+            "type": "string"
+          },
+          "type": {
+            "const": "fact_set",
+            "default": "fact_set",
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "fact_id",
+          "value",
+          "type",
+          "source",
+          "known",
+          "told"
+        ],
+        "title": "FactSet",
+        "type": "object"
+      },
+      "FactWrite": {
+        "additionalProperties": false,
+        "description": "A world fact a way or an ending leaves (EV-1), and the author's line for it (\"What has changed\").",
+        "properties": {
+          "fact": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_:.-]*$",
+            "title": "Fact",
+            "type": "string"
+          },
+          "told": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Told",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": true,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "fact",
+          "value",
+          "told"
+        ],
+        "title": "FactWrite",
         "type": "object"
       },
       "FailJobRequest": {
@@ -21756,6 +22380,99 @@
         "title": "GeometryCellPatch",
         "type": "object"
       },
+      "GoalBeat": {
+        "additionalProperties": false,
+        "description": "A step toward a goal (evolution roadmap EV-4, ``rules/routines.py``). Beats are reached in order, each with\n``chance`` a day once its condition holds: the facts of ``when``, a place the hero has been (``visited``), and the\nday of the campaign (``after_day``). It may set facts, move its person (``move``) and send word about\n(``rumour``, told at ``told_at``: by default where its person keeps and the goal's place).",
+        "properties": {
+          "after_day": {
+            "default": 0,
+            "minimum": 0,
+            "title": "After Day",
+            "type": "integer"
+          },
+          "chance": {
+            "default": 0.5,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Chance",
+            "type": "number"
+          },
+          "id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_:.-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "move": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BeatMove"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rumour": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Rumour",
+            "type": "string"
+          },
+          "sets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FactWrite"
+            },
+            "maxItems": 8,
+            "title": "Sets",
+            "type": "array"
+          },
+          "told_at": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Told At",
+            "type": "array"
+          },
+          "visited": {
+            "default": "",
+            "title": "Visited",
+            "type": "string"
+          },
+          "when": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "When",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "chance",
+          "visited",
+          "after_day",
+          "sets",
+          "rumour",
+          "told_at"
+        ],
+        "title": "GoalBeat",
+        "type": "object"
+      },
       "GpuResidencyPolicy": {
         "properties": {
           "allow_co_residency": {
@@ -21917,6 +22634,61 @@
           "q90"
         ],
         "title": "GrossReturnDistribution",
+        "type": "object"
+      },
+      "GroupMembers": {
+        "additionalProperties": false,
+        "description": "Who answers for a group in conversation, where the lore does not say (EV-1).",
+        "properties": {
+          "group_id": {
+            "minLength": 1,
+            "title": "Group Id",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_id",
+          "members"
+        ],
+        "title": "GroupMembers",
+        "type": "object"
+      },
+      "GuardSet": {
+        "additionalProperties": false,
+        "description": "One of the party guards another (EV-2): the blows aimed at the one guarded fall on the guard.",
+        "properties": {
+          "guard_id": {
+            "minLength": 1,
+            "title": "Guard Id",
+            "type": "string"
+          },
+          "guarded_id": {
+            "minLength": 1,
+            "title": "Guarded Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "guard_set",
+            "default": "guard_set",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "guard_id",
+          "guarded_id",
+          "type"
+        ],
+        "title": "GuardSet",
         "type": "object"
       },
       "GuestUpgradeRequest": {
@@ -25779,6 +26551,63 @@
         "title": "IntrabarResponse",
         "type": "object"
       },
+      "InventionAdded": {
+        "additionalProperties": false,
+        "description": "Something the game master invented, played from now on (evolution roadmap EV-0, part 2; ``rules/inventions.py``):\na person, place, item, creature or quest, its lore ``row`` in the world model's shape and its ``play`` data, kept\nin the campaign's lore layer with its ``provenance`` (the campaign, the turn, the game master's reason).",
+        "properties": {
+          "entry_id": {
+            "minLength": 1,
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "family": {
+            "enum": [
+              "person",
+              "place",
+              "item",
+              "creature",
+              "quest"
+            ],
+            "title": "Family",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "play": {
+            "additionalProperties": true,
+            "title": "Play",
+            "type": "object"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "title": "Provenance",
+            "type": "object"
+          },
+          "row": {
+            "additionalProperties": true,
+            "title": "Row",
+            "type": "object"
+          },
+          "type": {
+            "const": "invention_added",
+            "default": "invention_added",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "family",
+          "name",
+          "type"
+        ],
+        "title": "InventionAdded",
+        "type": "object"
+      },
       "InviteCheckResponse": {
         "properties": {
           "usable": {
@@ -26064,6 +26893,39 @@
         "title": "ItemAdded",
         "type": "object"
       },
+      "ItemBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "armor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Band"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "damage_max": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Band"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_copper": {
+            "$ref": "#/components/schemas/Band"
+          }
+        },
+        "required": [
+          "price_copper"
+        ],
+        "title": "ItemBudget",
+        "type": "object"
+      },
       "ItemDropped": {
         "additionalProperties": false,
         "description": "From the pack to the ground where the hero stands.",
@@ -26126,6 +26988,49 @@
           "type"
         ],
         "title": "ItemEquipped",
+        "type": "object"
+      },
+      "ItemImproved": {
+        "additionalProperties": false,
+        "description": "A carried piece of gear improved by one tier (evolution roadmap EV-5, the trade rule's ``upgrade``): its tier\nand the numbers it fights with now.",
+        "properties": {
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "slot": {
+            "default": "",
+            "title": "Slot",
+            "type": "string"
+          },
+          "stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Stats",
+            "type": "object"
+          },
+          "tier": {
+            "maximum": 5,
+            "minimum": 1,
+            "title": "Tier",
+            "type": "integer"
+          },
+          "type": {
+            "const": "item_improved",
+            "default": "item_improved",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "tier",
+          "type",
+          "slot"
+        ],
+        "title": "ItemImproved",
         "type": "object"
       },
       "ItemPickedUp": {
@@ -27161,6 +28066,51 @@
           "success"
         ],
         "title": "LegacySuccessResponse",
+        "type": "object"
+      },
+      "LevelBudget": {
+        "additionalProperties": false,
+        "description": "What a hero of ``level`` should meet, carry and earn.",
+        "properties": {
+          "creature": {
+            "$ref": "#/components/schemas/CreatureBudget"
+          },
+          "danger": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "group_member": {
+            "$ref": "#/components/schemas/CreatureBudget"
+          },
+          "items": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ItemBudget"
+            },
+            "title": "Items",
+            "type": "object"
+          },
+          "level": {
+            "maximum": 30,
+            "minimum": 1,
+            "title": "Level",
+            "type": "integer"
+          },
+          "quest_reward": {
+            "$ref": "#/components/schemas/RewardBudget"
+          },
+          "site_reward": {
+            "$ref": "#/components/schemas/RewardBudget"
+          }
+        },
+        "required": [
+          "level",
+          "creature",
+          "group_member",
+          "items",
+          "quest_reward",
+          "site_reward",
+          "danger"
+        ],
+        "title": "LevelBudget",
         "type": "object"
       },
       "LevelChoiceMade": {
@@ -30869,6 +31819,29 @@
         "title": "MarketStatusResponse",
         "type": "object"
       },
+      "Material": {
+        "additionalProperties": false,
+        "properties": {
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "quantity"
+        ],
+        "title": "Material",
+        "type": "object"
+      },
       "MechanismRiskScores-Input": {
         "additionalProperties": false,
         "description": "Diagnostic mechanism heads; these are not calibrated probabilities.",
@@ -32437,6 +33410,15 @@
       "NpcGoal": {
         "additionalProperties": false,
         "properties": {
+          "beats": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GoalBeat"
+            },
+            "maxItems": 12,
+            "title": "Beats",
+            "type": "array"
+          },
           "goal_id": {
             "minLength": 1,
             "title": "Goal Id",
@@ -32474,7 +33456,8 @@
           "summary",
           "priority",
           "topics",
-          "location_id"
+          "location_id",
+          "beats"
         ],
         "title": "NpcGoal",
         "type": "object"
@@ -39041,6 +40024,63 @@
         "title": "PersonWhereabouts",
         "type": "object"
       },
+      "PhaseEntered": {
+        "additionalProperties": false,
+        "description": "A boss's fight enters its next phase (EV-2): it fights harder, calls an ally, or lays its weakness bare.",
+        "properties": {
+          "actor_id": {
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "phase": {
+            "minimum": 1,
+            "title": "Phase",
+            "type": "integer"
+          },
+          "told": {
+            "default": "",
+            "title": "Told",
+            "type": "string"
+          },
+          "type": {
+            "const": "phase_entered",
+            "default": "phase_entered",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_id",
+          "phase",
+          "type",
+          "told"
+        ],
+        "title": "PhaseEntered",
+        "type": "object"
+      },
+      "PlaceEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Line",
+            "type": "string"
+          },
+          "location": {
+            "minLength": 1,
+            "title": "Location",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location",
+          "line"
+        ],
+        "title": "PlaceEffect",
+        "type": "object"
+      },
       "PlanImpactDisposition": {
         "additionalProperties": false,
         "properties": {
@@ -39309,11 +40349,35 @@
             "title": "Bestiary",
             "type": "array"
           },
+          "budgets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LevelBudget"
+            },
+            "title": "Budgets",
+            "type": "array"
+          },
           "economy": {
             "$ref": "#/components/schemas/EconomyDraft",
             "default": {
               "providers": []
             }
+          },
+          "fact_effects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FactEffect"
+            },
+            "title": "Fact Effects",
+            "type": "array"
+          },
+          "group_members": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GroupMembers"
+            },
+            "title": "Group Members",
+            "type": "array"
           },
           "knowledge": {
             "default": [],
@@ -39359,7 +40423,10 @@
           "routines",
           "knowledge",
           "pressures",
-          "bestiary"
+          "bestiary",
+          "fact_effects",
+          "group_members",
+          "budgets"
         ],
         "title": "PlaySectionsDraft",
         "type": "object"
@@ -39835,6 +40902,41 @@
           "reasons"
         ],
         "title": "PredictionEvidenceQuality",
+        "type": "object"
+      },
+      "PreferenceNoted": {
+        "additionalProperties": false,
+        "description": "A wish of the player's for the story (EV-0's panel): its kind and value; the latest of a kind stands.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "pace",
+              "danger",
+              "tone",
+              "focus"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "type": {
+            "const": "preference_noted",
+            "default": "preference_noted",
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value",
+          "type"
+        ],
+        "title": "PreferenceNoted",
         "type": "object"
       },
       "PremarketEvidenceItem": {
@@ -41072,9 +42174,9 @@
         "additionalProperties": false,
         "properties": {
           "action": {
-            "maxLength": 80,
+            "maxLength": 120,
             "minLength": 1,
-            "pattern": "^(defeat|quest):\\S+$",
+            "pattern": "^(defeat|quest|fact):\\S+$",
             "title": "Action",
             "type": "string"
           },
@@ -41165,6 +42267,41 @@
           "copper"
         ],
         "title": "Price",
+        "type": "object"
+      },
+      "PriceEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "percent": {
+            "maximum": 500,
+            "minimum": -100,
+            "title": "Percent",
+            "type": "integer"
+          },
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          },
+          "region": {
+            "default": "",
+            "title": "Region",
+            "type": "string"
+          },
+          "why": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "percent",
+          "provider",
+          "region",
+          "why"
+        ],
+        "title": "PriceEffect",
         "type": "object"
       },
       "PriceSource": {
@@ -43249,6 +44386,27 @@
         "title": "QuestCondition",
         "type": "object"
       },
+      "QuestEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "closes": {
+            "default": "",
+            "title": "Closes",
+            "type": "string"
+          },
+          "opens": {
+            "default": "",
+            "title": "Opens",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opens",
+          "closes"
+        ],
+        "title": "QuestEffect",
+        "type": "object"
+      },
       "QuestOffered": {
         "additionalProperties": false,
         "description": "A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest\na pressure raised, quests.md) comes with its row.",
@@ -43328,6 +44486,23 @@
             ],
             "title": "Deadline Hours"
           },
+          "forbids": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Forbids",
+            "type": "object"
+          },
           "giver_id": {
             "default": "",
             "title": "Giver Id",
@@ -43337,6 +44512,32 @@
             "minLength": 1,
             "title": "Id",
             "type": "string"
+          },
+          "requires": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Requires",
+            "type": "object"
+          },
+          "sets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FactWrite"
+            },
+            "maxItems": 8,
+            "title": "Sets",
+            "type": "array"
           },
           "steps": {
             "default": [],
@@ -43351,7 +44552,8 @@
         "required": [
           "id",
           "giver_id",
-          "steps"
+          "steps",
+          "sets"
         ],
         "title": "QuestPlay",
         "type": "object"
@@ -43507,7 +44709,7 @@
       },
       "QuestWay": {
         "additionalProperties": false,
-        "description": "One way to do a step: all of its conditions, and what is told when it is taken (an ending's branch).",
+        "description": "One way to do a step: all of its conditions, what is told when it is taken (an ending's branch), and the facts\nit leaves.",
         "properties": {
           "conditions": {
             "items": {
@@ -43516,6 +44718,15 @@
             "maxItems": 8,
             "minItems": 1,
             "title": "Conditions",
+            "type": "array"
+          },
+          "sets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FactWrite"
+            },
+            "maxItems": 8,
+            "title": "Sets",
             "type": "array"
           },
           "told": {
@@ -43527,7 +44738,8 @@
         },
         "required": [
           "conditions",
-          "told"
+          "told",
+          "sets"
         ],
         "title": "QuestWay",
         "type": "object"
@@ -45914,6 +47126,71 @@
         "title": "Revoked",
         "type": "object"
       },
+      "RewardBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "copper": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "items": {
+            "default": 1,
+            "maximum": 10,
+            "minimum": 0,
+            "title": "Items",
+            "type": "integer"
+          },
+          "xp": {
+            "$ref": "#/components/schemas/Band"
+          }
+        },
+        "required": [
+          "copper",
+          "xp",
+          "items"
+        ],
+        "title": "RewardBudget",
+        "type": "object"
+      },
+      "RoomCleared": {
+        "additionalProperties": false,
+        "description": "A room of a site whose encounter is beaten or whose loot is taken (EV-10).",
+        "properties": {
+          "how": {
+            "default": "beaten",
+            "enum": [
+              "beaten",
+              "looted",
+              "passed"
+            ],
+            "title": "How",
+            "type": "string"
+          },
+          "room_id": {
+            "minLength": 1,
+            "title": "Room Id",
+            "type": "string"
+          },
+          "site_id": {
+            "minLength": 1,
+            "title": "Site Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "room_cleared",
+            "default": "room_cleared",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site_id",
+          "room_id",
+          "type",
+          "how"
+        ],
+        "title": "RoomCleared",
+        "type": "object"
+      },
       "RouteRequest": {
         "properties": {
           "content": {
@@ -46089,6 +47366,19 @@
         "title": "RpgAbilityCoverageResponse",
         "type": "object"
       },
+      "RpgAddWorldEntityRequestBody": {
+        "additionalProperties": true,
+        "properties": {
+          "collection": {
+            "title": "Collection"
+          },
+          "entity": {
+            "title": "Entity"
+          }
+        },
+        "title": "RpgAddWorldEntityRequestBody",
+        "type": "object"
+      },
       "RpgAdvanceCampaignSpatialTickRequestBody": {
         "additionalProperties": false,
         "properties": {
@@ -46106,6 +47396,18 @@
       "RpgApplyTurnRequestBody": {
         "additionalProperties": true,
         "properties": {
+          "card": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card"
+          },
           "command": {
             "anyOf": [
               {
@@ -46150,6 +47452,18 @@
               }
             ],
             "title": "Player Input"
+          },
+          "preference": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preference"
           },
           "text": {
             "anyOf": [
@@ -47472,6 +48786,29 @@
         "title": "RpgCampaignWorldBindingResponse",
         "type": "object"
       },
+      "RpgCastableVoice": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id",
+          "name",
+          "description"
+        ],
+        "title": "RpgCastableVoice",
+        "type": "object"
+      },
       "RpgCompatibilityRequest": {
         "additionalProperties": {
           "$ref": "#/components/schemas/JsonValue"
@@ -48020,6 +49357,112 @@
           }
         },
         "title": "RpgFeatureOptions",
+        "type": "object"
+      },
+      "RpgGameMasterEntry": {
+        "description": "One question to the game master, and the answer shown (EV-0).",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "wish": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgGameMasterWish"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "withheld": {
+            "title": "Withheld",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "answer",
+          "withheld"
+        ],
+        "title": "RpgGameMasterEntry",
+        "type": "object"
+      },
+      "RpgGameMasterQuestionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "RpgGameMasterQuestionBody",
+        "type": "object"
+      },
+      "RpgGameMasterResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/RpgGameMasterEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/RpgGameMasterEntry"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id"
+        ],
+        "title": "RpgGameMasterResponse",
+        "type": "object"
+      },
+      "RpgGameMasterWish": {
+        "description": "A wish for the story the game master proposes, for the player to confirm (EV-0): its kind and value.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "RpgGameMasterWish",
         "type": "object"
       },
       "RpgGeometryPatchResponse": {
@@ -48797,6 +50240,215 @@
         "title": "RpgLoreDossiers",
         "type": "object"
       },
+      "RpgLoreDraft": {
+        "description": "One of the game master's inventions filed for its world's review (EV-0, part 2).",
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "canon_id": {
+            "title": "Canon Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "entry": {
+            "additionalProperties": true,
+            "title": "Entry",
+            "type": "object"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "findings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings"
+          },
+          "group_key": {
+            "title": "Group Key",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "linked_to": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked To"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "title": "Provenance",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "world_id",
+          "campaign_id",
+          "entry_id",
+          "family",
+          "name",
+          "group_key",
+          "entry",
+          "provenance",
+          "status",
+          "canon_id",
+          "created_at"
+        ],
+        "title": "RpgLoreDraft",
+        "type": "object"
+      },
+      "RpgLoreDraftGroup": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/RpgLoreDraft"
+            },
+            "title": "Drafts",
+            "type": "array"
+          },
+          "group_key": {
+            "title": "Group Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_key",
+          "drafts"
+        ],
+        "title": "RpgLoreDraftGroup",
+        "type": "object"
+      },
+      "RpgLoreEntryLinks": {
+        "properties": {
+          "lore": {
+            "items": {
+              "$ref": "#/components/schemas/RpgLoreLink"
+            },
+            "title": "Lore",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "lore"
+        ],
+        "title": "RpgLoreEntryLinks",
+        "type": "object"
+      },
+      "RpgLoreEntryResponse": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/RpgLoreEntryView"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "entry"
+        ],
+        "title": "RpgLoreEntryResponse",
+        "type": "object"
+      },
+      "RpgLoreEntryView": {
+        "description": "What a link opens (EV-12): the entry's public lore, what the hero has learned of it, and links onward.",
+        "properties": {
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "learned": {
+            "$ref": "#/components/schemas/RpgLoreLearned"
+          },
+          "links": {
+            "$ref": "#/components/schemas/RpgLoreEntryLinks"
+          },
+          "lore": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Lore",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "family",
+          "name",
+          "lore",
+          "learned",
+          "links"
+        ],
+        "title": "RpgLoreEntryView",
+        "type": "object"
+      },
       "RpgLoreGeneration": {
         "properties": {
           "completed_jobs": {
@@ -48861,6 +50513,112 @@
           }
         },
         "title": "RpgLoreGenerationJob",
+        "type": "object"
+      },
+      "RpgLoreLearned": {
+        "properties": {
+          "facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "known_as": {
+            "title": "Known As",
+            "type": "string"
+          },
+          "told": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Told",
+            "type": "array"
+          }
+        },
+        "required": [
+          "known_as",
+          "told",
+          "facts"
+        ],
+        "title": "RpgLoreLearned",
+        "type": "object"
+      },
+      "RpgLoreLink": {
+        "description": "A name in a text that opens its entry's lore (EV-12): the entry, and where the name stands in the text.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entry_id",
+          "start",
+          "end"
+        ],
+        "title": "RpgLoreLink",
+        "type": "object"
+      },
+      "RpgLoreLinkable": {
+        "description": "An entry a text may link (EV-12): its family and names. None the hero may not be shown.",
+        "properties": {
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entry_id",
+          "family",
+          "names"
+        ],
+        "title": "RpgLoreLinkable",
+        "type": "object"
+      },
+      "RpgLoreLinkablesResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/RpgLoreLinkable"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "entries"
+        ],
+        "title": "RpgLoreLinkablesResponse",
         "type": "object"
       },
       "RpgLoreMaterializationResponse": {
@@ -48928,6 +50686,90 @@
           "storage"
         ],
         "title": "RpgLoreRegenerationResponse",
+        "type": "object"
+      },
+      "RpgLoreReviewDecisionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject",
+              "link",
+              "withdraw"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "link_to": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link To"
+          },
+          "play": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Play"
+          },
+          "row": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "RpgLoreReviewDecisionBody",
+        "type": "object"
+      },
+      "RpgLoreReviewResponse": {
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/RpgLoreDraft"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/RpgLoreDraftGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id"
+        ],
+        "title": "RpgLoreReviewResponse",
         "type": "object"
       },
       "RpgLoreStorage": {
@@ -50268,7 +52110,7 @@
         "type": "object"
       },
       "RpgPlaySectionsReadiness": {
-        "description": "Each section (economy, routines, knowledge, pressures, bestiary, quests): written by the world, or inferred\nfrom its lore at launch.",
+        "description": "Each section (``world_play_sections.SECTIONS``): written by the world, or inferred from its lore at launch.",
         "properties": {
           "bestiary": {
             "enum": [
@@ -50278,12 +52120,36 @@
             "title": "Bestiary",
             "type": "string"
           },
+          "budgets": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Budgets",
+            "type": "string"
+          },
           "economy": {
             "enum": [
               "authored",
               "derived"
             ],
             "title": "Economy",
+            "type": "string"
+          },
+          "fact_effects": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Fact Effects",
+            "type": "string"
+          },
+          "group_members": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Group Members",
             "type": "string"
           },
           "knowledge": {
@@ -50325,7 +52191,10 @@
           "knowledge",
           "pressures",
           "bestiary",
-          "quests"
+          "quests",
+          "fact_effects",
+          "group_members",
+          "budgets"
         ],
         "title": "RpgPlaySectionsReadiness",
         "type": "object"
@@ -51609,6 +53478,69 @@
         "title": "RpgSpatialStateResponse",
         "type": "object"
       },
+      "RpgSpeechBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "speaker_id": {
+            "default": "narrator",
+            "maxLength": 200,
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "RpgSpeechBlock",
+        "type": "object"
+      },
+      "RpgSpeechPlanBody": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/RpgSpeechBlock"
+            },
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "RpgSpeechPlanBody",
+        "type": "object"
+      },
+      "RpgSpeechSentence": {
+        "additionalProperties": false,
+        "properties": {
+          "speaker_id": {
+            "default": "narrator",
+            "maxLength": 200,
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "RpgSpeechSentence",
+        "type": "object"
+      },
       "RpgStarterBubblePromotionResponse": {
         "properties": {
           "ok": {
@@ -52425,6 +54357,18 @@
             ],
             "title": "Format Version"
           },
+          "links": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links"
+          },
           "messages": {
             "items": {
               "additionalProperties": true,
@@ -52466,6 +54410,18 @@
               }
             ],
             "title": "Plain Text"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
           }
         },
         "title": "RpgTurnVisibleResponse",
@@ -52637,6 +54593,87 @@
           }
         },
         "title": "RpgUpdateWorldTopicRequestBody",
+        "type": "object"
+      },
+      "RpgVoiceCastEntry": {
+        "description": "The narrator or a person who speaks, and their voice (EV-13).",
+        "properties": {
+          "chosen_by": {
+            "title": "Chosen By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          },
+          "voice_revision": {
+            "title": "Voice Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "name"
+        ],
+        "title": "RpgVoiceCastEntry",
+        "type": "object"
+      },
+      "RpgVoiceCastResponse": {
+        "properties": {
+          "cast": {
+            "items": {
+              "$ref": "#/components/schemas/RpgVoiceCastEntry"
+            },
+            "title": "Cast",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/RpgCastableVoice"
+            },
+            "title": "Voices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "cast",
+          "voices"
+        ],
+        "title": "RpgVoiceCastResponse",
+        "type": "object"
+      },
+      "RpgVoiceChoiceBody": {
+        "additionalProperties": false,
+        "properties": {
+          "voice_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id"
+        ],
+        "title": "RpgVoiceChoiceBody",
         "type": "object"
       },
       "RpgWorldAdoptRequestBody": {
@@ -56473,6 +58510,83 @@
         "title": "RpgWorldTopicResponse",
         "type": "object"
       },
+      "RumourHeard": {
+        "additionalProperties": false,
+        "description": "The hero is told a rumour (EV-4): by someone of its place, or for a price.",
+        "properties": {
+          "rumour_id": {
+            "minLength": 1,
+            "title": "Rumour Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "const": "rumour_heard",
+            "default": "rumour_heard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rumour_id",
+          "type",
+          "source"
+        ],
+        "title": "RumourHeard",
+        "type": "object"
+      },
+      "RumourSpread": {
+        "additionalProperties": false,
+        "description": "Word the people of a place come to know and will tell (EV-4, ``rules/rumours.py``). ``text_id`` names its\nauthored line (a beat's rumour); ``text`` holds one no author wrote (the game master's).",
+        "properties": {
+          "place_id": {
+            "minLength": 1,
+            "title": "Place Id",
+            "type": "string"
+          },
+          "rumour_id": {
+            "minLength": 1,
+            "title": "Rumour Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Text",
+            "type": "string"
+          },
+          "text_id": {
+            "default": "",
+            "title": "Text Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "rumour_spread",
+            "default": "rumour_spread",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rumour_id",
+          "place_id",
+          "type",
+          "text_id",
+          "text",
+          "source"
+        ],
+        "title": "RumourSpread",
+        "type": "object"
+      },
       "RunChangeSet": {
         "additionalProperties": false,
         "description": "Canonical run-owned change subject bound to one exact candidate state.\n\nWorkspaceState intentionally contains the entire exact checkout, including\ndirties that predated the run. RunChangeSet is the smaller authoritative\nsubject Omnix attributes to the run and presents to validation/review.",
@@ -59020,6 +61134,16 @@
           "price": {
             "$ref": "#/components/schemas/Price"
           },
+          "recipe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpgradeRecipe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "restock_per_day": {
             "default": 0,
             "minimum": 0,
@@ -59033,7 +61157,8 @@
               "drink",
               "shop_goods",
               "repair",
-              "paid_information"
+              "paid_information",
+              "upgrade"
             ],
             "title": "Service",
             "type": "string"
@@ -59061,6 +61186,35 @@
           "restock_per_day"
         ],
         "title": "ShopOffer",
+        "type": "object"
+      },
+      "SiteFound": {
+        "additionalProperties": false,
+        "description": "A hidden place found by exploring (EV-10, ``rules/exploration.py``): it joins the roads, and the hero can go.",
+        "properties": {
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "told": {
+            "default": "",
+            "title": "Told",
+            "type": "string"
+          },
+          "type": {
+            "const": "site_found",
+            "default": "site_found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "type",
+          "told"
+        ],
+        "title": "SiteFound",
         "type": "object"
       },
       "SkillProgressed": {
@@ -59951,6 +62105,62 @@
           }
         },
         "title": "SpeechPerformancePlan",
+        "type": "object"
+      },
+      "StandingChanged": {
+        "additionalProperties": false,
+        "description": "A group's standing with the hero moved, from -100 to 100.",
+        "properties": {
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "group_id": {
+            "minLength": 1,
+            "title": "Group Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "const": "standing_changed",
+            "default": "standing_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "delta",
+          "type",
+          "source"
+        ],
+        "title": "StandingChanged",
+        "type": "object"
+      },
+      "StandingEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "delta": {
+            "maximum": 100,
+            "minimum": -100,
+            "title": "Delta",
+            "type": "integer"
+          },
+          "group": {
+            "minLength": 1,
+            "title": "Group",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "delta"
+        ],
+        "title": "StandingEffect",
         "type": "object"
       },
       "StartAgentRunRequest": {
@@ -63185,8 +65395,13 @@
       },
       "Suggestion": {
         "additionalProperties": false,
-        "description": "Something the play screen offers to do next (RQ-7.3): a label, and the command it sends.",
+        "description": "Something the play screen offers to do next (RQ-7.3): a label, the command its log shows, and the card's action\n(evolution roadmap EV-9): the reading it carries (``family``, ``target_id``, ``second_target_id``, ``check``,\n``slots``) and the turn it was offered at, played with no model call.",
         "properties": {
+          "action": {
+            "additionalProperties": true,
+            "title": "Action",
+            "type": "object"
+          },
           "command": {
             "title": "Command",
             "type": "string"
@@ -68577,6 +70792,8 @@
               "discriminator": {
                 "mapping": {
                   "ability_used": "#/components/schemas/AbilityUsed",
+                  "area_detailed": "#/components/schemas/AreaDetailed",
+                  "beat_advanced": "#/components/schemas/BeatAdvanced",
                   "campaign_ended": "#/components/schemas/CampaignEnded",
                   "check_resolved": "#/components/schemas/CheckResolved",
                   "combat_advanced": "#/components/schemas/CombatAdvanced",
@@ -68590,15 +70807,22 @@
                   "conditions_changed": "#/components/schemas/ConditionsChanged",
                   "defeat_recorded": "#/components/schemas/DefeatRecorded",
                   "dialogue_exchanged": "#/components/schemas/DialogueExchanged",
+                  "direction_tracked": "#/components/schemas/DirectionTracked",
+                  "entry_met": "#/components/schemas/EntryMet",
                   "experience_gained": "#/components/schemas/ExperienceGained",
+                  "fact_learned": "#/components/schemas/FactLearned",
+                  "fact_set": "#/components/schemas/FactSet",
+                  "guard_set": "#/components/schemas/GuardSet",
                   "hotbar_changed": "#/components/schemas/HotbarChanged",
                   "hp_changed": "#/components/schemas/HpChanged",
                   "interaction_presented": "#/components/schemas/InteractionPresented",
                   "interaction_recorded": "#/components/schemas/InteractionRecorded",
                   "interactions_replayed": "#/components/schemas/InteractionsReplayed",
+                  "invention_added": "#/components/schemas/InventionAdded",
                   "item_added": "#/components/schemas/ItemAdded",
                   "item_dropped": "#/components/schemas/ItemDropped",
                   "item_equipped": "#/components/schemas/ItemEquipped",
+                  "item_improved": "#/components/schemas/ItemImproved",
                   "item_picked_up": "#/components/schemas/ItemPickedUp",
                   "item_removed": "#/components/schemas/ItemRemoved",
                   "item_unequipped": "#/components/schemas/ItemUnequipped",
@@ -68611,6 +70835,8 @@
                   "location_changed": "#/components/schemas/LocationChanged",
                   "map_state_projected": "#/components/schemas/MapStateProjected",
                   "needs_changed": "#/components/schemas/NeedsChanged",
+                  "phase_entered": "#/components/schemas/PhaseEntered",
+                  "preference_noted": "#/components/schemas/PreferenceNoted",
                   "presence_changed": "#/components/schemas/PresenceChanged",
                   "pressures_moved": "#/components/schemas/PressuresMoved",
                   "purse_changed": "#/components/schemas/PurseChanged",
@@ -68623,9 +70849,14 @@
                   "resources_changed": "#/components/schemas/ResourcesChanged",
                   "rest_taken": "#/components/schemas/RestTaken",
                   "revision_restored": "#/components/schemas/RevisionRestored",
+                  "room_cleared": "#/components/schemas/RoomCleared",
+                  "rumour_heard": "#/components/schemas/RumourHeard",
+                  "rumour_spread": "#/components/schemas/RumourSpread",
                   "service_reserved": "#/components/schemas/ServiceReserved",
                   "service_used": "#/components/schemas/ServiceUsed",
+                  "site_found": "#/components/schemas/SiteFound",
                   "skill_progressed": "#/components/schemas/SkillProgressed",
+                  "standing_changed": "#/components/schemas/StandingChanged",
                   "stock_taken": "#/components/schemas/StockTaken",
                   "time_advanced": "#/components/schemas/TimeAdvanced",
                   "trade_remembered": "#/components/schemas/TradeRemembered",
@@ -68803,6 +71034,54 @@
                 },
                 {
                   "$ref": "#/components/schemas/LocalMapEntered"
+                },
+                {
+                  "$ref": "#/components/schemas/EntryMet"
+                },
+                {
+                  "$ref": "#/components/schemas/FactSet"
+                },
+                {
+                  "$ref": "#/components/schemas/FactLearned"
+                },
+                {
+                  "$ref": "#/components/schemas/StandingChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/PhaseEntered"
+                },
+                {
+                  "$ref": "#/components/schemas/GuardSet"
+                },
+                {
+                  "$ref": "#/components/schemas/DirectionTracked"
+                },
+                {
+                  "$ref": "#/components/schemas/PreferenceNoted"
+                },
+                {
+                  "$ref": "#/components/schemas/BeatAdvanced"
+                },
+                {
+                  "$ref": "#/components/schemas/RumourSpread"
+                },
+                {
+                  "$ref": "#/components/schemas/RumourHeard"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionAdded"
+                },
+                {
+                  "$ref": "#/components/schemas/AreaDetailed"
+                },
+                {
+                  "$ref": "#/components/schemas/SiteFound"
+                },
+                {
+                  "$ref": "#/components/schemas/RoomCleared"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemImproved"
                 }
               ]
             },
@@ -69214,6 +71493,49 @@
           "consent_status"
         ],
         "title": "UpdateVoiceProfileGovernanceRequest",
+        "type": "object"
+      },
+      "UpgradeRecipe": {
+        "additionalProperties": false,
+        "description": "What an ``upgrade`` takes (evolution roadmap EV-5): the gear it improves (by slot), the materials each tier\ntakes, what each tier adds, and the last tier. The level's budgets bound the result (``rules/budgets.py``).",
+        "properties": {
+          "materials": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Material"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "max_tier": {
+            "default": 3,
+            "maximum": 5,
+            "minimum": 1,
+            "title": "Max Tier",
+            "type": "integer"
+          },
+          "per_tier": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Per Tier",
+            "type": "object"
+          },
+          "slots": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slots",
+          "materials",
+          "max_tier"
+        ],
+        "title": "UpgradeRecipe",
         "type": "object"
       },
       "UpsertCharacterAvatarPackRequest": {
@@ -72040,6 +74362,35 @@
         "title": "VoiceTranscriptPreparation",
         "type": "object"
       },
+      "WaiveEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "offer": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Offer",
+            "type": "string"
+          },
+          "provider": {
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "why": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "offer",
+          "why"
+        ],
+        "title": "WaiveEffect",
+        "type": "object"
+      },
       "WatchlistAlertCapacity": {
         "description": "What an alert on a watchlist evaluates (TVP-1.7): the dialog shows it next to the symbol limit.",
         "properties": {
@@ -72106,6 +74457,34 @@
           "type"
         ],
         "title": "WhereaboutsChanged",
+        "type": "object"
+      },
+      "WhereaboutsEffect": {
+        "additionalProperties": false,
+        "properties": {
+          "activity": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Activity",
+            "type": "string"
+          },
+          "location": {
+            "default": "",
+            "title": "Location",
+            "type": "string"
+          },
+          "npc": {
+            "minLength": 1,
+            "title": "Npc",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc",
+          "location",
+          "activity"
+        ],
+        "title": "WhereaboutsEffect",
         "type": "object"
       },
       "WorkerHealth": {
@@ -90952,6 +93331,104 @@
         ]
       }
     },
+    "/api/rpg/sessions/{session_id}/game-master": {
+      "get": {
+        "operationId": "rpg_game_master_log_api_rpg_sessions__session_id__game_master_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgGameMasterResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Game Master Log Api Rpg Sessions  Session Id  Game Master Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Game Master Log",
+        "tags": [
+          "rpg-session"
+        ]
+      },
+      "post": {
+        "operationId": "rpg_ask_game_master_api_rpg_sessions__session_id__game_master_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgGameMasterQuestionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgGameMasterResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Ask Game Master Api Rpg Sessions  Session Id  Game Master Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Ask Game Master",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
     "/api/rpg/sessions/{session_id}/loadout-action": {
       "post": {
         "operationId": "rpg_loadout_action_api_rpg_sessions__session_id__loadout_action_post",
@@ -91158,6 +93635,105 @@
           }
         },
         "summary": "Rpg Campaign Lore Document",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/lore/entries/{entry_id}": {
+      "get": {
+        "operationId": "rpg_lore_entry_api_rpg_sessions__session_id__lore_entries__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgLoreEntryResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Lore Entry Api Rpg Sessions  Session Id  Lore Entries  Entry Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Lore Entry",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/lore/linkable": {
+      "get": {
+        "operationId": "rpg_lore_linkable_api_rpg_sessions__session_id__lore_linkable_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgLoreLinkablesResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Lore Linkable Api Rpg Sessions  Session Id  Lore Linkable Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Lore Linkable",
         "tags": [
           "rpg-session"
         ]
@@ -91768,6 +94344,107 @@
         ]
       }
     },
+    "/api/rpg/sessions/{session_id}/speech-audio": {
+      "post": {
+        "description": "A sentence of a final response in its speaker's cast voice, as WAV: from the campaign's audio cache, else\nsynthesized once and kept (EV-13). With the speech service down, 503: the text stands, silent.",
+        "operationId": "rpg_speech_audio_api_rpg_sessions__session_id__speech_audio_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgSpeechSentence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Speech Audio",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/speech-plan": {
+      "post": {
+        "description": "How a final response is spoken: only its shown text, block by block in each speaker's cast voice.",
+        "operationId": "rpg_speech_plan_api_rpg_sessions__session_id__speech_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgSpeechPlanBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Speech Plan Api Rpg Sessions  Session Id  Speech Plan Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Speech Plan",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
     "/api/rpg/sessions/{session_id}/turn": {
       "post": {
         "operationId": "rpg_apply_turn_api_rpg_sessions__session_id__turn_post",
@@ -91873,6 +94550,115 @@
           }
         },
         "summary": "Rpg Turn Draft",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/voices": {
+      "get": {
+        "operationId": "rpg_voice_cast_api_rpg_sessions__session_id__voices_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgVoiceCastResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Voice Cast Api Rpg Sessions  Session Id  Voices Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Voice Cast",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/voices/{speaker_id}": {
+      "put": {
+        "operationId": "rpg_choose_voice_api_rpg_sessions__session_id__voices__speaker_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgVoiceChoiceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgVoiceCastResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Choose Voice Api Rpg Sessions  Session Id  Voices  Speaker Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Choose Voice",
         "tags": [
           "rpg-session"
         ]
@@ -94156,6 +96942,179 @@
         "summary": "Rpg World Detail"
       }
     },
+    "/api/rpg/worlds/{world_id}/lore-review": {
+      "get": {
+        "operationId": "rpg_lore_review_queue_api_rpg_worlds__world_id__lore_review_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgLoreReviewResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Lore Review Queue Api Rpg Worlds  World Id  Lore Review Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Lore Review Queue",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/lore-review/{draft_id}/check": {
+      "post": {
+        "operationId": "rpg_lore_review_check_api_rpg_worlds__world_id__lore_review__draft_id__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgLoreReviewResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Lore Review Check Api Rpg Worlds  World Id  Lore Review  Draft Id  Check Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Lore Review Check",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/lore-review/{draft_id}/decision": {
+      "post": {
+        "operationId": "rpg_lore_review_decide_api_rpg_worlds__world_id__lore_review__draft_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgLoreReviewDecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgLoreReviewResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Lore Review Decide Api Rpg Worlds  World Id  Lore Review  Draft Id  Decision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Lore Review Decide",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
     "/api/rpg/worlds/{world_id}/map-blueprints": {
       "get": {
         "operationId": "rpg_world_map_blueprints_api_rpg_worlds__world_id__map_blueprints_get",
@@ -95333,6 +98292,71 @@
           }
         },
         "summary": "Rpg Update World Topic",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities": {
+      "post": {
+        "description": "An author adds an entity to a topic (EV-6).",
+        "operationId": "rpg_add_world_entity_api_rpg_worlds__world_id__topics__topic_id__entities_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgAddWorldEntityRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgAuthoringEntityMutationResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Add World Entity Api Rpg Worlds  World Id  Topics  Topic Id  Entities Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Add World Entity",
         "tags": [
           "rpg-world"
         ]

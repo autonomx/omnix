@@ -100,6 +100,9 @@ def _character(entity: Mapping[str, Any]) -> dict[str, Any]:
         "goals": _texts(entity.get("goals") or entity.get("goal")),
         "secrets": _hidden(entity),
         "personality": _texts(entity.get("personality")),
+        # What else they are called and the group they answer for, as the editor writes them (EV-6).
+        **({"aliases": _texts(entity.get("aliases"))} if _texts(entity.get("aliases")) else {}),
+        **({"group_id": _text(entity.get("group_id"))} if _text(entity.get("group_id")) else {}),
     }
 
 
@@ -119,7 +122,9 @@ def _item(entity: Mapping[str, Any]) -> dict[str, Any]:
     return {"id": _text(entity.get("id")), "name": _text(entity.get("name")),
             "type": _text(entity.get("item_type") or entity.get("category") or entity.get("kind")),
             "rarity": _text(entity.get("rarity")),
-            "effect": _text(entity.get("effect") or entity.get("short_summary") or entity.get("description"))}
+            "effect": _text(entity.get("effect") or entity.get("short_summary") or entity.get("description")),
+            # How it is worn and fights, where the lore says (EV-6): World Forge sells gear the world names.
+            **({"equipment": _mapping(entity.get("equipment"))} if _mapping(entity.get("equipment")) else {})}
 
 
 def _group(entity: Mapping[str, Any]) -> dict[str, Any]:
@@ -128,8 +133,13 @@ def _group(entity: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _quest(entity: Mapping[str, Any]) -> dict[str, Any]:
+    places = entity.get("locations") or entity.get("location_ids") or ()
+    giver = _text(entity.get("giver_id") or entity.get("quest_giver"))
     return {"id": _text(entity.get("id")), "name": _text(entity.get("name") or entity.get("title")),
-            "summary": _text(entity.get("short_summary") or entity.get("description"))}
+            "summary": _text(entity.get("short_summary") or entity.get("description")),
+            # Where it goes and who gives it, where the lore says: World Forge drafts its steps from them (EV-6).
+            **({"locations": [_text(place) for place in places if _text(place)]} if isinstance(places, list) else {}),
+            **({"giver_id": giver} if giver else {})}
 
 
 _SHAPES = {"characters": _character, "regions": _region, "bestiary": _creature, "items": _item, "quests": _quest,

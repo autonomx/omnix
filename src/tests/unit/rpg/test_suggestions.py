@@ -26,8 +26,13 @@ def _labels(rows) -> list[str]:
 def test_outside_a_fight_the_people_here_a_quest_a_sellers_wares_the_roads_and_a_look() -> None:
     offered = suggestions(_document())
     assert _labels(offered) == ["Talk to Orik", "Talk to Liora", "Take on Rats", "See Orik's wares", "Go to The Road",
-                                "Look around"]
+                                "Look around", "Rest", "Wait", "Status"]  # and the cards always on offer (EV-9)
     assert offered[2].command == "I accept the quest Rats."
+    # Each is a card: the reading it plays, with no model call (EV-9).
+    assert [row.action for row in offered[:4]] == [
+        {"family": "talk", "target_id": "npc:orik"}, {"family": "talk", "target_id": "npc:liora"},
+        {"family": "quest", "target_id": "q"}, {"family": "buy", "second_target_id": "npc:orik"}]
+    assert offered[6].action == {"family": "rest", "slots": {"rest": "while"}}
     party = _document(player_state={"location_id": "loc:inn", "party_state": {"companions": [{"npc_id": "npc:liora"}]}})
     assert "Talk to Liora" not in _labels(suggestions(party))  # a companion is with the hero, not someone to meet
 
@@ -35,10 +40,11 @@ def test_outside_a_fight_the_people_here_a_quest_a_sellers_wares_the_roads_and_a
 def test_in_a_fight_its_moves_and_before_blows_the_ways_out_of_it() -> None:
     combat = {"active": True, "combat_log": [], "participants": {
         "player": {"side": "party", "hp": 10}, "enemy:1": {"side": "enemy", "name": "Bandit", "hp": 5, "speaks": True}}}
-    assert _labels(suggestions(_document(combat_state=combat))) == [
-        "Attack the Bandit", "Defend", "Break away", "Slip past", "Talk it down"]
+    offered = suggestions(_document(combat_state=combat))
+    assert _labels(offered) == ["Attack the Bandit", "Defend", "Break away", "Slip past", "Talk it down", "Status"]
+    assert [row.action.get("check") for row in offered[3:5]] == ["sneak", "persuade"]
     struck = {**combat, "combat_log": [{"kind": "attack"}]}
-    assert _labels(suggestions(_document(combat_state=struck))) == ["Attack the Bandit", "Defend", "Break away"]
+    assert _labels(suggestions(_document(combat_state=struck))) == ["Attack the Bandit", "Defend", "Break away", "Status"]
 
 
 def test_a_question_comes_with_its_answers() -> None:
@@ -59,7 +65,7 @@ def test_a_waiting_level_choice_is_offered_first_and_said_by_status() -> None:
                                               "archery": {"level": 0, "xp": 0}}}}
     offered = suggestions({"simulation_state": simulation})
     assert [row.command for row in offered[:2]] == ["raise strength", "improve stealth and persuasion"]
-    told = status(simulation, "what level am I?").lines
+    told = status(simulation, ("progress",)).lines
     assert any("A level's choice is waiting" in line for line in told)
     simulation["player_state"]["level_choices_pending"] = 0
     assert not any(row.command == "raise strength" for row in suggestions({"simulation_state": simulation}))

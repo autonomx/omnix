@@ -565,7 +565,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
     ) -> dict[str, Any]:
         payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
-            return launch_published_scenario(
+            launched = launch_published_scenario(
                 world_id=str(payload.get("world_id") or ""),
                 world_revision=int(payload.get("world_revision") or 0),
                 world_release=int(payload.get("world_release") or 0),
@@ -585,3 +585,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
         except Exception as exc:
             _raise_domain_error(exc)
             raise
+        from app.apps.rpg.session.jobs.game_master_job import fill_areas_at_launch
+
+        fill_areas_at_launch(str(launched.get("session_id") or ""))  # the start's areas, filled in ahead (EV-10)
+        return launched

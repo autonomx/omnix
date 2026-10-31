@@ -3,6 +3,7 @@ import { jobProgressPercent } from '../../api/jobProgress';
 import { buildInteractionStoryMessages, buildJournalDetail, buildJournalEntries, buildRecentEvents, buildRpgTurnJobTimelineEvents, buildStoryMessages, buildTimelineEvents } from './rpgStoryState';
 import { NOT_TRACKED, activeQuests, equippedGear, heroStats, hotbarAbilities, inventoryItems, npcRelationships, partyMembers, previewHeroSummary, previewJobs, previewSessionSummary, previewSurvival, previewWorldStateRows, quickActions } from './rpgUiPreview';
 import { compactTimestamp, emptyHeroStats, emptyStat, firstArray, firstNumber, firstRecord, firstString, formatCurrency, formatNumber, getEnvironmentSnapshot, getPlayerRecord, getSessionRecords, iconForEquipment, iconForInventory, initialFor, metricLabel, metricPercent, questIcon, quickActionIcon, quickActionLabel, readMetric, recordValue, relationshipScore, stanceForScore, timestampRank, titleCase, toStat } from './rpgUiRecords';
+import { buildWorldChanges, type RpgWorldChangesPreview } from './rpgWorldChanges';
 import type { RpgAsset, RpgCheckpointSummaryPreview, RpgGearPreview, RpgHeroSummaryPreview, RpgHotbarAbilityPreview, RpgInventoryItemPreview, RpgJob, RpgJobCardPreview, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgNpcRelationshipPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgQuickActionPreview, RpgReport, RpgSession, RpgSessionSummaryPreview, RpgStatPreview, RpgStoryMessagePreview, RpgSurvivalNeedPreview, RpgSurvivalPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
 
 export interface RpgWorkspaceState {
@@ -18,6 +19,7 @@ export interface RpgWorkspaceState {
   journalEntries: RpgJournalEntryPreview[];
   narrativeLogEntries: RpgJournalEntryPreview[];
   journalDetail: RpgJournalDetailPreview;
+  worldChanges: RpgWorldChangesPreview;
   inventoryItems: RpgInventoryItemPreview[];
   hotbarAbilities: RpgHotbarAbilityPreview[];
   worldStateRows: RpgWorldStateRowPreview[];
@@ -99,6 +101,7 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     journalEntries,
     narrativeLogEntries,
     journalDetail,
+    worldChanges: buildWorldChanges(selectedSession),
     inventoryItems: buildInventoryItems(selectedSession),
     hotbarAbilities: buildHotbarAbilities(selectedSession),
     worldStateRows,

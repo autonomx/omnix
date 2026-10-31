@@ -1,8 +1,9 @@
 """Step 6: the world moves on for the time the turn took (roadmap §4.1, §4.5), as changes.
 
 The one clock, the simulation's environment, advances by the turn's minutes (its weather with it); the world's
-people go where their day takes them at the new hour, and who is present where the hero stands follows; the hero's
-needs rise for the turn; and the world's causal runtime ticks (its pressures and the subsystems they push on).
+people go where their day takes them at the new hour, and who is present where the hero stands follows; on each day
+the clock crosses, people take the beats of their goals (``rules/routines.py``, EV-4); the hero's needs rise for the
+turn; and the world's causal runtime ticks (its pressures and the subsystems they push on).
 Events join here as their mechanics move onto the pipeline (RQ-4.3, RQ-4.4).
 """
 from __future__ import annotations
@@ -126,6 +127,10 @@ def world_tick(
         changes.extend(people)
     before = clock_minute(document)
     after = int(_d(sections.get("environment")).get("absolute_minutes") or before)
+    if after // routines.MINUTES_PER_DAY > before // routines.MINUTES_PER_DAY:  # a new day: people act on their goals
+        beats, told = routines.daily_beats(_d(_sections.simulation_state_of(document)), before=before, after=after)
+        changes.extend(beats)
+        seen = [*seen, *told]
     receipt: dict[str, Any] = {}
     runtime: dict[str, Any] = {}
     events: list[str] = []

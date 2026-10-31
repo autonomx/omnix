@@ -1,10 +1,11 @@
-"""The command grammar applied to a turn: the scene it reads, when the intent model can be skipped,
-and what to ask when the command is unclear (RQ-3.1).
+"""The scene a typed line is read in (evolution roadmap EV-9): what the intent call is told is here.
 
-The scene is built from the campaign's own state: the people present and the people the world knows,
-the creatures of its bestiary, what the player carries, the places and the offers where they stand,
-their skills and quests. A confident reading in a family the game resolves without a model skips the
-intent call; an unclear command gets a question instead of a guess.
+The model reads every typed line against the scene: the people present and the people the world knows (by their other
+names and callings too), the creatures of its bestiary, what the hero carries (and by its kind), the places (and
+their aliases), the offers where the hero stands, their skills, quests and abilities. A person present also carries
+what a line may ask them about (``rules/dialogue/plan.speaker_topics``) and the open quest steps a line to them may
+answer (``rules/quest/progress.open_steps``, EV-3). What the scene knows of names is data for the model: no code here
+reads the player's words.
 """
 from __future__ import annotations
 
@@ -12,26 +13,11 @@ import re
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
-from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneEntity, SceneView, parse_command
+from app.apps.rpg.rules.intent.reading import NO_SLOTS, IntentCandidate, SceneEntity, SceneView
 from app.apps.rpg.foundation.state import access as _sections
 from app.apps.rpg.foundation.contracts import called as _called
-
-# Families the game resolves with its own rules, so a confident reading needs no intent model call.
-# Speech (talk, ask) still goes to the dialogue call, which chooses who answers and writes their line;
-# trade goes to the service matcher; raising a hand against a person is left to the model, which reads
-# what it means. Travel needs a place and an attack a creature.
-RESOLVED_WITHOUT_MODEL = frozenset({"look", "wait", "rest", "status", "flee", "defend", "move", "attack"})
-SKIP_CONFIDENCE = 0.8
-
-_CLARIFICATIONS = {
-    "give_without_item": "What do you want to give, and to whom?",
-    "attack_without_target": "Who or what do you want to attack?",
-    "move_without_place": "Where do you want to go?",
-    "vague_reference": "Who or what do you mean?",
-    "pronoun_without_antecedent": "Who or what do you mean?",
-    "speech_without_listener": "Who are you speaking to?",
-}
-
+from app.apps.rpg.rules.dialogue.plan import speaker_topics
+from app.apps.rpg.rules.quest.progress import open_steps
 
 def _names(*values: Any) -> tuple[str, ...]:
     names: list[str] = []
@@ -184,8 +170,8 @@ def _label(entity_id: str) -> str:
 
 def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any] | None = None,
                abilities: tuple[tuple[str, str], ...] = ()) -> SceneView:
-    """The scene the player stands in, as the command grammar reads it (with whom they are talking to, and the
-    hero's abilities, as ``(ability_id, name)``)."""
+    """The scene the player stands in, as the intent call is told it (with whom they are talking to, and the hero's
+    abilities, as ``(ability_id, name)``)."""
     state = _d(simulation_state)
     world = _d(_sections.world_model_of(state))
     location_id = _s(_d(_sections.player_state_of(state)).get("location_id") or state.get("location_id"))
@@ -193,10 +179,10 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     entities: list[SceneEntity] = []
     seen: set[str] = set()
 
-    def add(entity_id: str, kind: str, names: tuple[str, ...], here: bool) -> None:
+    def add(entity_id: str, kind: str, names: tuple[str, ...], here: bool, **more: Any) -> None:
         if entity_id and names and entity_id not in seen:
             seen.add(entity_id)
-            entities.append(SceneEntity(entity_id, kind, names, here=here))  # type: ignore[arg-type]
+            entities.append(SceneEntity(entity_id, kind, names, here=here, **more))  # type: ignore[arg-type]
 
     people = {**{str(key): _d(value) for key, value in _d(_sections.npc_index_of(state)).items()},
               **{str(key): _d(value) for key, value in _d(world.get("npcs")).items()}}
@@ -207,9 +193,15 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
                                      *_title_names(name),
                                      *_leader_names(role, _d(world.get("groups"))),
                                      f"the {role}" if role and len(role.split()) <= 3 else "",
-                                     *_role_names(role.casefold())), npc_id in present)
+                                     *_role_names(role.casefold())), npc_id in present,
+            **({"topics": tuple(speaker_topics(state, npc_id)), "steps": tuple(open_steps(state, npc_id))}
+               if npc_id in present else {}))
     for creature_id, creature in _d(_d(state.get("campaign_mechanics")).get("creatures")).items():
-        add(str(creature_id), "creature", _names(_d(creature).get("name"), _label(str(creature_id))), True)
+        # What it is weak to, as names a line may use (EV-2): the reading names the weakness; no words are matched.
+        weak = tuple((_s(_d(row).get("trigger_tag")), ", ".join(_s(alias) for alias in _l(_d(row).get("aliases"))))
+                     for row in _l(_d(creature).get("vulnerabilities")) if _s(_d(row).get("trigger_tag")))
+        add(str(creature_id), "creature", _names(_d(creature).get("name"), _label(str(creature_id))), True,
+            **({"weaknesses": weak} if weak else {}))
     inventory = _d(_sections.inventory_state_of(_d(_sections.player_state_of(state))))
     for item in _l(inventory.get("items")):
         item = _d(item)
@@ -255,49 +247,20 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     return SceneView(tuple(entities), focus_id=focus if focus in present else "")
 
 
-def read_command(
-    simulation_state: Mapping[str, Any],
-    player_input: str,
-    runtime_state: Mapping[str, Any] | None = None,
-    abilities: tuple[tuple[str, str], ...] = (),
-) -> IntentCandidate:
-    return parse_command(player_input, scene_view(simulation_state, runtime_state, abilities))
-
-
-def skip_reason(reading: IntentCandidate) -> str:
-    """Why the intent model is not needed for this reading, or "" when it is."""
-    if reading.family in RESOLVED_WITHOUT_MODEL and reading.confidence >= SKIP_CONFIDENCE:
-        if reading.family == "move" and reading.target_kind != "place":
-            return ""
-        if reading.family == "attack" and reading.target_kind != "creature":
-            return ""
-        return f"grammar:{reading.family}"
-    return ""
-
-
-def clarification(reading: IntentCandidate) -> str:
-    """The question to ask when the command is unclear in any situation, or "" when the turn should go on.
-
-    A bare "yes" or "attack" can mean something (accepting a pending offer, striking the foe in a fight), so
-    only readings that are unclear whatever is going on are asked about here.
-    """
-    if reading.family != "clarify" or reading.confidence < SKIP_CONFIDENCE:
-        return ""
-    return _CLARIFICATIONS.get(reading.reason, "")
-
-
 def reading_record(reading: IntentCandidate) -> dict[str, Any]:
     """The reading as the turn records it (TurnOutcome.intent and diagnostics)."""
     return {
-        "source": "command_grammar_v1",
+        "source": "turn_intent_v2",
         "family": reading.family,
         "target_id": reading.target_id,
         "target_kind": reading.target_kind,
         "second_target_id": reading.second_target_id,
         "confidence": reading.confidence,
         "reason": reading.reason,
+        **({"slots": reading.slots.model_dump(mode="json", exclude_defaults=True)} if reading.slots != NO_SLOTS else {}),
+        **({"asks": True} if reading.asks else {}),
         "clauses": list(reading.clauses),
     }
 
 
-__all__ = ["RESOLVED_WITHOUT_MODEL", "clarification", "read_command", "reading_record", "scene_view", "skip_reason"]
+__all__ = ["reading_record", "scene_view"]

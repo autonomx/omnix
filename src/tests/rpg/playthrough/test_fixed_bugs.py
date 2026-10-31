@@ -62,7 +62,8 @@ def test_mechanics_change_real_state_and_survival_reads_whole_words(play) -> Non
     shown = play.turn("Check my quests")["visible_response"]["plain_text"]
     assert "Active quests: First Night in Aurelia" in shown
     assert "Quests you could take on: Voices in the Phone, The Hollow Meridian" in shown
-    assert play.model.roles(calls) == []  # the game reads it off the campaign; no model rephrases it (RQ-2.5)
+    # The intent call reads the line (EV-9); the game reads the answer off the campaign: no model rephrases it (RQ-2.5).
+    assert play.model.roles(calls) == ["intent"]
 
 
 def test_every_turn_counts_and_the_narrator_is_told_the_purchase(play) -> None:
@@ -77,16 +78,23 @@ def test_every_turn_counts_and_the_narrator_is_told_the_purchase(play) -> None:
             "It eases your hunger.") in play.model.told()
 
 
-def test_commands_the_game_resolves_itself_ask_no_model(play) -> None:
-    """bb83af47aa: services, joining, quests, practice, status, travel to a named place, waiting and looking
-    make no intent call; meeting the world's own people writes no dossier."""
+def test_commands_the_game_resolves_itself_ask_the_model_only_to_read_them(play) -> None:
+    """bb83af47aa, and EV-9: services, joining, quests, practice, status, travel to a named place, waiting and looking
+    make one intent call, to read the line, and no other call besides the narration; meeting the world's own people
+    writes no dossier. A card the game offers makes no intent call at all."""
     for command in ("look around", "I ask Liora Fen to join my party as a companion.", "I accept the quest Voices "
                     "in the Phone.", "Practice swordsmanship with a careful training drill.", "Check my quests",
                     "go to Starfall Village", "wait", "I buy a meal from Orik Stonewake."):
         calls = len(play.model.calls)
-        play.turn(command)
-        assert Role.INTENT.value not in play.model.roles(calls), command
+        body = play.turn(command)
+        assert play.model.roles(calls).count(Role.INTENT.value) == 1, command
     assert Role.LORE.value not in play.model.roles(), play.model.roles()
+    card = next(row for row in body["outcome"]["presentation"]["suggestions"] if row["action"].get("family") == "wait")
+    calls = len(play.model.calls)
+    response = play.client.post(f"/api/rpg/sessions/{play.session_id}/turn",
+                                json={"command": card["command"], "card": card["action"]})
+    assert response.status_code == 200, response.text[:300]
+    assert Role.INTENT.value not in play.model.roles(calls)  # a card plays its reading
 
 
 def test_an_arrival_is_described_once(play) -> None:
@@ -105,7 +113,7 @@ def test_a_question_to_someone_present_is_answered_by_them(play) -> None:
     play.model.answer(Role.DIALOGUE, ("Liora Fen", "You stand in Starfall Grove, Earthborn."))
     calls = len(play.model.calls)
     body = play.turn("I greet Liora Fen and ask her where I am")
-    assert play.model.roles(calls) == ["dialogue"]
+    assert play.model.roles(calls) == ["intent", "dialogue"]  # the line read (EV-9), then theirs written
     assert body["visible_response"]["messages"][0]["speaker_id"] == "npc:liora-fen"
     assert body["visible_response"]["messages"][0]["text"] == "You stand in Starfall Grove, Earthborn."
 
@@ -171,7 +179,8 @@ def test_renting_a_room_is_buying_one(play) -> None:
     play.turn("go to Starfall Village")
     purse = play.purse()
     play.turn("I book a room for the night with Orik Stonewake.")
-    assert play.purse() == purse - 60  # 5 silver, and the roads' fifth
+    assert play.purse() == purse  # a new arrival's first night is on the house (EV-1)
+    assert "lodging" in play.model.told()
     tired = play.survival()["fatigue"]
     assert tired > 0
     play.turn("I go to my room and sleep for the night.")
@@ -183,14 +192,16 @@ def test_travel_follows_the_world_routes_by_name(play) -> None:
     """RQ-0.3 (fixed here): a route is named by where it leads, both ways, and a word two places share or the
     place the hero stands in sends no one anywhere ("go to Starfall Village" in the village used to lead back
     out to Starfall Grove; "go to Moonroot Ruins" from the village led to the Wayfarers' Guild). A place further
-    off is set out for by the first road of its way (time.md)."""
+    off is one journey by the shortest way (time.md, EV-7)."""
     play.turn("go to Starfall Village")
     play.turn("go to Starfall Village")
     assert play.location() == "location:aurelia:starfall-village"
     play.turn("I ask Liora Fen to leave.")
     assert play.location() == "location:aurelia:starfall-village"
     play.turn("go to Moonroot Ruins")
-    assert play.location() == "location:aurelia:skybridge-pass"  # on the way to the ruins, not the guild
+    visited = play.simulation().get("visited_locations") or []
+    assert "location:aurelia:skybridge-pass" in visited  # by the pass, the way to the ruins
+    assert play.location() in {"location:aurelia:skybridge-pass", "location:aurelia:moonroot-ruins"}
 
 
 def test_a_second_import_of_a_lore_world_prepares_its_openings(launch) -> None:

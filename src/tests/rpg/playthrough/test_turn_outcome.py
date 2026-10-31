@@ -57,8 +57,11 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
         assert kinds <= types, (command, types)
         assert outcome.kind == "player_text" and outcome.document_version == CURRENT_SCHEMA_VERSION
         assert outcome.revision == play.revision()
-        # Every model call the turn made is counted, by kind.
-        assert outcome.model_calls.total == len(play.model.calls) - calls, (command, outcome.model_calls)
+        # Every model call the turn made is counted, by kind; the total is those whose output it used (a reply
+        # written beside the intent call and discarded is counted apart, EV-9).
+        assert sum(outcome.model_calls.by_kind.values()) == len(play.model.calls) - calls, (command, outcome.model_calls)
+        assert outcome.model_calls.total == len(play.model.calls) - calls - outcome.model_calls.by_kind.get(
+            "parallel_reply", 0)
         assert "pipeline_before_encode_ms" in outcome.timings
         assert set(outcome.presentation.changed_sections) <= set(body["state"]["changed_domains"])
         assert body["state"]["changed"] is True  # every turn counts, so every turn changes the campaign
@@ -70,10 +73,13 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
     play.turn("go to Starfall Village")
     dialogue = play.turn("I ask Orik Stonewake what he thinks of the newcomers.")
     outcome = TurnOutcome.model_validate(dialogue["outcome"])
-    assert outcome.model_calls.by_kind == {"provider": 1}  # one short call writes the line
+    assert outcome.model_calls.by_kind == {"provider": 2}  # the intent call reads it (EV-9), one short call answers
     assert "npc:orik-stonewake" in outcome.narration.speaker_ids
     look = TurnOutcome.model_validate(play.turn("look around")["outcome"])
-    assert look.model_calls.by_kind == {"narrative_writer": 1} and look.narration.response_id
+    # The line read (EV-9) and the narrator's; a reply written beside the intent call in the conversation under way
+    # with Orik is discarded, and counted apart.
+    assert look.model_calls.total == 2 and look.model_calls.by_kind.get("parallel_reply", 0) <= 1
+    assert look.narration.response_id
 
 
 @pytest.mark.parametrize("world", ["starter", "vesper"])
@@ -100,7 +106,8 @@ def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> N
         outcome = TurnOutcome.model_validate(play.turn(command)["outcome"])
         types = [change.type for change in outcome.applied_changes]
         assert outcome.planned_action == ("wait" if command == "wait" else "look"), (command, outcome)
-        placed = [kind for kind in types if kind != "location_changed"]  # the starter town places the hero first
+        # The starter town places the hero first; what the last response named folds in at the load (EV-12).
+        placed = [kind for kind in types if kind not in {"location_changed", "entry_met"}]
         assert placed[:2] == ["turn_counted", "time_advanced"] and types[-1] == "journal_written", types
         assert "world_ticked" in types, types  # the clock moves with the turn's minutes
         replayed, _ = reduce(before, parse_changes([change.model_dump() for change in outcome.applied_changes]))
@@ -135,17 +142,22 @@ def test_each_turn_offers_what_to_do_next_and_a_question_its_answers(launch) -> 
     play = launch("starter")  # Bran and Mira in the Rusty Flagon
     looked = play.turn("look around")["outcome"]["presentation"]
     labels = [row["label"] for row in looked["suggestions"]]
-    assert labels[:2] == ["Talk to Bran", "Talk to Mira"] and "Go to Market Square" in labels and len(labels) <= 6
+    # The scene's (at most six), then the cards always on offer (EV-9); each a card with its reading.
+    assert labels[:2] == ["Talk to Bran", "Talk to Mira"] and "Go to Market Square" in labels
+    assert labels[-3:] == ["Rest", "Wait", "Status"] and len(labels) <= 9
+    assert all(row["action"]["family"] for row in looked["suggestions"])
     assert looked["choices"] == []
     asked = play.turn("I attack")["outcome"]["presentation"]  # "Who or what do you want to attack?"
     assert [(row["label"], row["command"]) for row in asked["choices"]] == [
         ("Bran", "I attack Bran."), ("Mira", "I attack Mira.")], asked
+    assert [row["action"]["target_id"] for row in asked["choices"]] == ["npc:bran", "npc:mira"]  # cards
 
 
-# F3 over the latency harness's turn mix (RQ-6.1): the turns the game decides make no model call, no turn makes more
-# than two, and at least four in five make at most one.
-F3_MIX = (("look around", None), ("Liora, where am I?", None), ("check my inventory", 0), ("wait", 0),
-          ("Check my quests", 0), ("go to Starfall Village", None), ("buy a healing potion", None),
+# F3 over the latency harness's turn mix (RQ-6.1), as EV-9 restated it: a typed turn makes one intent call; the turns
+# the game decides make no other; no turn uses more than two, besides narration's one revision. (The "four in five
+# make at most one" share is dropped: every typed turn reads its line.)
+F3_MIX = (("look around", None), ("Liora, where am I?", None), ("check my inventory", 1), ("wait", 1),
+          ("Check my quests", 1), ("go to Starfall Village", None), ("buy a healing potion", None),
           ("go to Skybridge Pass", None), ("attack the echo wolf", None), ("I flee from the Echo Wolf.", None))
 
 
@@ -160,4 +172,3 @@ def test_the_turn_mix_keeps_its_model_call_budget(launch) -> None:
         if budget is not None:
             assert outcome.model_calls.total <= budget, (command, outcome.model_calls)
     assert max(totals.values()) <= 2, totals
-    assert sum(total <= 1 for total in totals.values()) >= 0.8 * len(totals), totals

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.apps.rpg.rules.dialogue.plan import DialoguePlan
 from app.apps.rpg.session.turn import dialogue
+from tests.support.rpg_reading import planned
 
 
 def _plan() -> DialoguePlan:
@@ -48,15 +49,14 @@ def test_a_turn_no_one_follows_writes_the_line_in_one_call(monkeypatch) -> None:
 def test_what_repeats_a_secret_is_left_out_of_what_the_writer_is_told() -> None:
     """Review 4: dropping ``must_never_reveal`` left an author's description or goal that repeats a secret in the
     prompt, now shown as it streams."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {"world_model": {"npcs": {"npc:liora": {
         "name": "Liora Fen", "role": "gatewarden",
         "description": "A foxkin gatewarden of the grove. She knows the shrine word is Heronglass. She laughs easily.",
         "goals": ["keep the shrine word Heronglass from the Synod", "find the lost Earthborn"],
         "secrets": ["the shrine word is Heronglass"]}}},
         "present_npc_state": {"present_npc_ids": ["npc:liora"]}}
-    plan = build_plan(simulation, "npc:liora", "Liora, what do you guard?")
+    plan = planned(simulation, "npc:liora", "Liora, what do you guard?")
     told = str(plan.context())
     assert "Heronglass" not in told
     assert "A foxkin gatewarden of the grove." in plan.background and "She laughs easily." in plan.background
@@ -85,8 +85,7 @@ def test_the_streamed_line_has_the_lines_own_limits(monkeypatch) -> None:
 def test_the_plan_tells_where_the_heros_quest_goes_on() -> None:
     """The playtest: asked how to mend the phone, Brindle wanted "aether-coil wire"; the quest goes on at the
     Moonroot Ruins. The plan carries the hero's quests the speaker bears on, and where each goes on."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {
         "world_model": {"npcs": {"npc:brindle": {"name": "Brindle Gearwing", "role": "relic mechanic",
                                                  "location_id": "location:village"},
@@ -98,16 +97,15 @@ def test_the_plan_tells_where_the_heros_quest_goes_on() -> None:
                                     "objective": "Repair your phone", "visited_locations": ["location:village"],
                                     "locations": ["location:village", "location:ruins"]}]},
     }
-    told = build_plan(simulation, "npc:brindle", "What would you need to fix it?").context()
+    told = planned(simulation, "npc:brindle", "What would you need to fix it?").context()
     assert told["heros_quests"] == [{"title": "Voices in the Phone", "objective": "Repair your phone",
                                      "goes_on_at": ["Moonroot Ruins"]}]
-    assert "heros_quests" not in build_plan(simulation, "npc:rhea", "Any news?").context()  # it is not hers
+    assert "heros_quests" not in planned(simulation, "npc:rhea", "Any news?").context()  # it is not hers
 
 
 def test_someone_who_hands_out_work_offers_a_quest_no_one_gave() -> None:
     """The playtest: the Wayfarers' Guild's registrar, asked for contracts, had none, though the roads' quest was open."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {
         "world_model": {"npcs": {"npc:miri": {"name": "Miri Kestrel", "role": "guild registrar",
                                               "location_id": "location:guild"},
@@ -118,17 +116,17 @@ def test_someone_who_hands_out_work_offers_a_quest_no_one_gave() -> None:
              "objective": "Defeat 3 Echo Wolves", "locations": ["location:pass"]},
             {"quest_id": "quest:first", "title": "First Night", "status": "completed", "locations": ["location:guild"]}]},
     }
-    miri = build_plan(simulation, "npc:miri", "What contracts does the guild have for me?")
+    miri = planned(simulation, "npc:miri", "What contracts does the guild have for me?")
     assert miri.quest_offer["title"] == "Echo beasts on the March roads"
     assert {"title": "First Night", "done": True} in [dict(quest) for quest in miri.hero_quests]
-    assert build_plan(simulation, "npc:orik", "Any work for me?").quest_offer == {}  # an innkeeper hands out none
+    assert planned(simulation, "npc:orik", "Any work for me?").quest_offer == {}  # an innkeeper hands out none
 
 
 def test_a_worlds_quest_not_in_the_log_is_offered_and_joins_it_and_a_finale_comes_last() -> None:
     """The playtest: three of Aurelia's six quests could never be offered (only the opening's were in the log), and a
     newcomer asking for work was offered the finale."""
     from app.apps.rpg.foundation.state.reducer import reduce
-    from app.apps.rpg.rules.dialogue.plan import build_plan, plan_changes
+    from app.apps.rpg.rules.dialogue.plan import plan_changes
 
     engine = {"id": "quest:engine", "quest_id": "quest:engine", "title": "The Princess and the Engine",
               "objective": "Help restore the royal engine", "locations": ["location:guild"], "tier": "political"}
@@ -140,7 +138,7 @@ def test_a_worlds_quest_not_in_the_log_is_offered_and_joins_it_and_a_finale_come
         "quest_state": {"quests": [{"quest_id": "quest:finale", "title": "The Hollow Meridian", "status": "available",
                                     "tier": "finale", "locations": ["location:guild"]}]},
     }
-    plan = build_plan(simulation, "npc:seraphine", "Is there any work I could help you with?")
+    plan = planned(simulation, "npc:seraphine", "Is there any work I could help you with?")
     assert plan.quest_offer["title"] == "The Princess and the Engine"
     document, _ = reduce({"manifest": {}, "state": {}, "simulation_state": simulation}, plan_changes(plan))
     rows = {row["quest_id"]: row for row in document["simulation_state"]["quest_state"]["quests"]}
@@ -150,8 +148,7 @@ def test_a_worlds_quest_not_in_the_log_is_offered_and_joins_it_and_a_finale_come
 def test_a_seller_asked_what_is_for_sale_names_their_wares_and_a_hunt_goes_on_in_the_wild() -> None:
     """The playtest: Brindle, asked "what do you have for sale?", had nothing priced; the captain, asked where the
     echo wolves are, could only say "the March roads"."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {
         "world_model": {
             "npcs": {"npc:brindle": {"name": "Brindle", "role": "relic mechanic", "location_id": "location:village"}},
@@ -166,7 +163,7 @@ def test_a_seller_asked_what_is_for_sale_names_their_wares_and_a_hunt_goes_on_in
     }
     simulation["player_state"] = {"location_id": "location:village",
                                   "party_state": {"companions": [{"npc_id": "npc:brindle"}]}}
-    plan = build_plan(simulation, "npc:brindle", "What do you have for sale?")
+    plan = planned(simulation, "npc:brindle", "What do you have for sale?")
     assert plan.wares == ("Healing Potion for 3 silver",)
     # No one lives there, so creatures are met there; the nearest by road first (not Cinderhold, two roads off).
     assert plan.hero_quests[0]["goes_on_at"] == ["Skybridge Pass", "Cinderhold"]
@@ -174,8 +171,7 @@ def test_a_seller_asked_what_is_for_sale_names_their_wares_and_a_hunt_goes_on_in
 
 def test_a_place_or_person_asked_of_is_told_as_anyone_here_knows_them() -> None:
     """The playtest: Liora, asked about the Moonroot Ruins, knew "not much beyond the name"."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {
         "world_model": {
             "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide", "location_id": "location:grove"},
@@ -184,18 +180,17 @@ def test_a_place_or_person_asked_of_is_told_as_anyone_here_knows_them() -> None:
                           "location:grove": {"name": "Starfall Grove", "description": "Where the gate fell."}}},
         "present_npc_state": {"present_npc_ids": ["npc:liora"]},
     }
-    told = build_plan(simulation, "npc:liora", "What do you know about the Moonroot Ruins?").context()
+    told = planned(simulation, "npc:liora", "What do you know about the Moonroot Ruins?").context()
     assert told["common_knowledge"] == [{"place": "Moonroot Ruins", "is": "Forests over memory vaults.",
                                          "who_is_there": ["Elyra Moonroot, dryad archivist"]}]
-    told = build_plan(simulation, "npc:liora", "Who is Elyra?").context()
+    told = planned(simulation, "npc:liora", "Who is Elyra?").context()
     assert told["common_knowledge"] == [{"person": "Elyra Moonroot", "is": "dryad archivist", "found_at": "Moonroot Ruins"}]
 
 
 def test_words_that_do_a_quest_step_are_answered_as_done_and_a_step_goes_on_where_it_is() -> None:
     """The playtest: told in Valecourt what should become of the engine, the princess asked to be told it at the
     engine ("come to Valecourt"): the plan said the quest went on at a place it had not visited."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     engine = {"quest_id": "quest:engine", "title": "The Princess and the Engine", "status": "active",
               "giver_id": "npc:seraphine", "locations": ["location:valecourt"], "visited_locations": [],
               "objective": "Tell Seraphine what should become of the engine", "progress": {"stage": 1},
@@ -209,41 +204,38 @@ def test_words_that_do_a_quest_step_are_answered_as_done_and_a_step_goes_on_wher
         "present_npc_state": {"location_id": "location:valecourt", "present_npc_ids": ["npc:seraphine"]},
         "quest_state": {"quests": [engine]},
     }
-    told = build_plan(simulation, "npc:seraphine", "It should be shared with the people.").context()
+    told = planned(simulation, "npc:seraphine", "It should be shared with the people.").context()
     assert told["heros_quests"][0]["goes_on_at"] == ["here"]  # she is with the hero: it goes on here, not "Valecourt"
     assert told["what_these_words_do"] == [{"quest": "The Princess and the Engine",
                                             "done": "Tell Seraphine what should become of the engine",
                                             "quest_complete": True}]
-    assert "what_these_words_do" not in build_plan(simulation, "npc:seraphine", "Nice towers.").context()
+    assert "what_these_words_do" not in planned(simulation, "npc:seraphine", "Nice towers.").context()
 
 
 def test_the_line_writer_is_told_who_the_hero_is() -> None:
     """The playtest: Orik called Wren (they/them) "lass"."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {"world_model": {"npcs": {"npc:orik": {"name": "Orik", "role": "innkeeper"}}}}
-    told = build_plan(simulation, "npc:orik", "Hello.", hero={"name": "Wren", "pronouns": "they/them"}).context()
+    told = planned(simulation, "npc:orik", "Hello.", hero={"name": "Wren", "pronouns": "they/them"}).context()
     assert told["hero"] == {"name": "Wren", "pronouns": "they/them"}
 
 
 def test_asked_about_their_own_quest_a_giver_offers_it_and_their_name_alone_is_not_asking() -> None:
     """The playtest: asked what vow he would have witnessed, Vael never offered the quest of his vow."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {"world_model": {
         "npcs": {"npc:vael": {"name": "Vael Ardyn", "role": "exiled general", "location_id": "location:ruins"}},
         "quests": {"quest:bridge": {"id": "quest:bridge", "title": "Bridge of Promises", "giver_id": "npc:vael",
                                     "objective": "Hear the vow Vael Ardyn would have you witness"}}}}
-    offered = build_plan(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
+    offered = planned(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
     assert offered["offers_quest"]["quest_id"] == "quest:bridge"
-    assert build_plan(simulation, "npc:vael", "Is there anything you need of me?").context()["offers_quest"]
-    assert "offers_quest" not in build_plan(simulation, "npc:vael", "Vael, nice weather.").context()
+    assert planned(simulation, "npc:vael", "Is there anything you need of me?").context()["offers_quest"]
+    assert "offers_quest" not in planned(simulation, "npc:vael", "Vael, nice weather.").context()
 
 
 def test_a_word_in_common_with_a_quest_offers_no_quest_and_the_finale_never_so() -> None:
     """The review: "Liora, should we head to the village now?" touched the finale's "should" and offered it."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {"world_model": {
         "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide"},
                  "npc:will": {"name": "Will Marsh", "role": "ferryman", "location_id": "loc:quay"}},
@@ -251,16 +243,15 @@ def test_a_word_in_common_with_a_quest_offers_no_quest_and_the_finale_never_so()
         "quests": {"quest:finale": {"id": "quest:finale", "title": "The Hollow Meridian", "giver_id": "npc:liora",
                                     "tier": "finale", "objective": "Choose whether the gate should close or open"}}}}
     for line in ("Liora, should we head to the village now?", "Can you open the door?", "Liora, can you help me?"):
-        assert "offers_quest" not in build_plan(simulation, "npc:liora", line).context(), line
-    assert "common_knowledge" not in build_plan(simulation, "npc:liora", "Will you help me?").context()
-    assert build_plan(simulation, "npc:liora", "Where is Will?").context()["common_knowledge"][0]["person"] == "Will Marsh"
+        assert "offers_quest" not in planned(simulation, "npc:liora", line).context(), line
+    assert "common_knowledge" not in planned(simulation, "npc:liora", "Will you help me?").context()
+    assert planned(simulation, "npc:liora", "Where is Will?").context()["common_knowledge"][0]["person"] == "Will Marsh"
 
 
 def test_a_finale_asked_about_in_its_own_words_is_offered_and_a_quest_by_its_steps_words() -> None:
     """The second review: asking Liora about the Hollow Meridian offered nothing, and in two of Aurelia's openings
     that is the only way to it; Vael's quest is about his vow in its first step, not its objective."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {"world_model": {
         "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide"}, "npc:vael": {"name": "Vael Ardyn", "role": "general"}},
         "quests": {
@@ -270,16 +261,15 @@ def test_a_finale_asked_about_in_its_own_words_is_offered_and_a_quest_by_its_ste
                              "objective": "Cross Skybridge Pass while a gale spirit tests the party's vows",
                              "steps": [{"id": "vow", "summary": "Hear the vow Vael Ardyn would have you witness",
                                         "all_of": [{"talk": "npc:vael"}]}]}}}}
-    told = build_plan(simulation, "npc:liora", "Liora, tell me about the Hollow Meridian.").context()
+    told = planned(simulation, "npc:liora", "Liora, tell me about the Hollow Meridian.").context()
     assert told["offers_quest"]["quest_id"] == "quest:finale"
-    told = build_plan(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
+    told = planned(simulation, "npc:vael", "Vael, what vow would you have me witness?").context()
     assert told["offers_quest"]["quest_id"] == "quest:bridge"
 
 
 def test_a_newcomers_first_questions_are_not_asked_after_the_finale() -> None:
     """The third review: "Is it Earth or Aurelia?" touched the finale's steps' words and offered it."""
-    from app.apps.rpg.rules.dialogue.plan import build_plan
-
+    
     simulation = {"world_model": {
         "npcs": {"npc:liora": {"name": "Liora Fen", "role": "guide"}},
         "quests": {"quest:finale": {"id": "quest:finale", "title": "The Hollow Meridian", "giver_id": "npc:liora",
@@ -287,4 +277,4 @@ def test_a_newcomers_first_questions_are_not_asked_after_the_finale() -> None:
                                     "steps": [{"summary": "Find a way home to Earth through the gate"}]}}}}
     for line in ("Can you help me find the way to the village?", "What is this place? Is it Earth or Aurelia?",
                  "Liora, how do I get back to Earth? Is there a gate?"):
-        assert "offers_quest" not in build_plan(simulation, "npc:liora", line).context(), line
+        assert "offers_quest" not in planned(simulation, "npc:liora", line).context(), line

@@ -799,8 +799,7 @@ RpgPlaySectionSource = Literal["authored", "derived"]
 
 
 class RpgPlaySectionsReadiness(TypedDict):
-    """Each section (economy, routines, knowledge, pressures, bestiary, quests): written by the world, or inferred
-    from its lore at launch."""
+    """Each section (``world_play_sections.SECTIONS``): written by the world, or inferred from its lore at launch."""
 
     economy: RpgPlaySectionSource
     routines: RpgPlaySectionSource
@@ -808,6 +807,9 @@ class RpgPlaySectionsReadiness(TypedDict):
     pressures: RpgPlaySectionSource
     bestiary: RpgPlaySectionSource
     quests: RpgPlaySectionSource
+    fact_effects: RpgPlaySectionSource
+    group_members: RpgPlaySectionSource
+    budgets: RpgPlaySectionSource
 
 
 class RpgWorldRevision(TypedDict, total=False):
@@ -1081,3 +1083,133 @@ class RpgSavePointsResponse(TypedDict, total=False):
     session_id: Required[str]
     save_points: Required[list[RpgSavePoint]]
     save_point: NotRequired[RpgSavePoint]
+
+
+class RpgGameMasterWish(TypedDict, total=False):
+    """A wish for the story the game master proposes, for the player to confirm (EV-0): its kind and value."""
+
+    kind: Required[str]
+    value: Required[str]
+
+
+class RpgGameMasterEntry(TypedDict, total=False):
+    """One question to the game master, and the answer shown (EV-0)."""
+
+    id: Required[int]
+    question: Required[str]
+    answer: Required[str]
+    withheld: Required[bool]
+    wish: NotRequired[RpgGameMasterWish | None]
+    asked_at: NotRequired[str]
+
+
+class RpgGameMasterResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    entry: NotRequired[RpgGameMasterEntry]
+    entries: NotRequired[list[RpgGameMasterEntry]]
+
+
+class RpgLoreLink(TypedDict, total=False):
+    """A name in a text that opens its entry's lore (EV-12): the entry, and where the name stands in the text."""
+
+    entry_id: Required[str]
+    start: Required[int]
+    end: Required[int]
+
+
+class RpgLoreLinkable(TypedDict, total=False):
+    """An entry a text may link (EV-12): its family and names. None the hero may not be shown."""
+
+    entry_id: Required[str]
+    family: Required[str]
+    names: Required[list[str]]
+
+
+class RpgLoreLinkablesResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    entries: Required[list[RpgLoreLinkable]]
+
+
+class RpgLoreLearned(TypedDict, total=False):
+    known_as: Required[str]
+    told: Required[list[str]]
+    facts: Required[list[str]]
+
+
+class RpgLoreEntryLinks(TypedDict, total=False):
+    text: Required[str]
+    lore: Required[list[RpgLoreLink]]
+
+
+class RpgLoreEntryView(TypedDict, total=False):
+    """What a link opens (EV-12): the entry's public lore, what the hero has learned of it, and links onward."""
+
+    entry_id: Required[str]
+    family: Required[str]
+    name: Required[str]
+    lore: Required[dict[str, str]]
+    learned: Required[RpgLoreLearned]
+    links: Required[RpgLoreEntryLinks]
+
+
+class RpgLoreDraft(TypedDict, total=False):
+    """One of the game master's inventions filed for its world's review (EV-0, part 2)."""
+
+    id: Required[int]
+    world_id: Required[str]
+    campaign_id: Required[str]
+    entry_id: Required[str]
+    family: Required[str]
+    name: Required[str]
+    group_key: Required[str]
+    entry: Required[dict[str, Any]]
+    provenance: Required[dict[str, Any]]
+    status: Required[str]
+    findings: NotRequired[dict[str, Any] | None]
+    canon_id: Required[str]
+    linked_to: NotRequired[int | None]
+    created_at: Required[str]
+    decided_at: NotRequired[str | None]
+
+
+class RpgLoreDraftGroup(TypedDict, total=False):
+    group_key: Required[str]
+    drafts: Required[list[RpgLoreDraft]]
+
+
+class RpgLoreReviewResponse(TypedDict, total=False):
+    ok: Required[bool]
+    world_id: Required[str]
+    groups: NotRequired[list[RpgLoreDraftGroup]]
+    draft: NotRequired[RpgLoreDraft]
+
+
+class RpgVoiceCastEntry(TypedDict, total=False):
+    """The narrator or a person who speaks, and their voice (EV-13)."""
+
+    speaker_id: Required[str]
+    name: Required[str]
+    voice_id: NotRequired[str]
+    voice_revision: NotRequired[str]
+    chosen_by: NotRequired[str]
+
+
+class RpgCastableVoice(TypedDict, total=False):
+    voice_id: Required[str]
+    name: Required[str]
+    description: Required[str]
+
+
+class RpgVoiceCastResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    cast: Required[list[RpgVoiceCastEntry]]
+    voices: Required[list[RpgCastableVoice]]
+
+
+class RpgLoreEntryResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    entry: Required[RpgLoreEntryView]

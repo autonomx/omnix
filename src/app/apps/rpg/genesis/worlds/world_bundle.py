@@ -14,7 +14,10 @@ from typing import Any, Iterable, Mapping
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 WORLD_BUNDLE_FORMAT = "omnix_rpg_world_bundle"
-WORLD_BUNDLE_VERSION = 1
+# Version 2 (evolution roadmap EV-2): a world's play sections may hold its level budgets; a version 1 bundle, made
+# before, imports as it is and plays from the derived budgets.
+WORLD_BUNDLE_VERSION = 2
+SUPPORTED_WORLD_BUNDLE_VERSIONS = frozenset({1, 2})
 WORLD_BUNDLE_DATA_PATH = "world.json"
 WORLD_BUNDLE_MANIFEST_PATH = "manifest.json"
 MAX_WORLD_BUNDLE_BYTES = 512 * 1024 * 1024
@@ -23,7 +26,10 @@ MAX_WORLD_BUNDLE_ENTRIES = 2_000
 MAX_WORLD_BUNDLE_ASSETS = 1_000
 # World metadata keys a client's metadata edit never sets: import and adoption write the first two, and the
 # play-sections editor its draft (play_section_authoring, RQ-4.1).
-RESERVED_WORLD_METADATA_KEYS = frozenset({"world_bundle_import", "world_adoption", "play_sections"})
+# The import's and adoption's records, the author's play sections, and the inventions approved from the review queue
+# (EV-0 part 2: written only by a review decision).
+RESERVED_WORLD_METADATA_KEYS = frozenset({"world_bundle_import", "world_adoption", "play_sections",
+                                          "lore_review_approved"})
 
 _IMAGE_MIME_EXTENSIONS = {
     "image/gif": ".gif",
@@ -82,7 +88,7 @@ class WorldBundleManifest(FrozenBundleModel):
 
     @model_validator(mode="after")
     def validate_manifest(self) -> "WorldBundleManifest":
-        if self.format != WORLD_BUNDLE_FORMAT or self.version != WORLD_BUNDLE_VERSION:
+        if self.format != WORLD_BUNDLE_FORMAT or self.version not in SUPPORTED_WORLD_BUNDLE_VERSIONS:
             raise ValueError("world_bundle_version_unsupported")
         if self.data_path != WORLD_BUNDLE_DATA_PATH:
             raise ValueError("world_bundle_data_path_invalid")

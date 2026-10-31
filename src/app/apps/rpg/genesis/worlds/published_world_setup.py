@@ -288,6 +288,8 @@ def _authored_offer(canon: Mapping[str, Any], provider: Mapping[str, Any], offer
                    priced, effects, stock=offer.stock)
     if offer.stock is not None:
         built["restock_per_day"] = offer.restock_per_day  # as the world wrote it: 0 never restocks (economy.md)
+    if offer.recipe is not None:  # an upgrade: what it improves and takes (EV-5)
+        built["recipe"] = offer.recipe.model_dump(mode="json")
     return built
 
 
@@ -353,6 +355,7 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
                 "secrets": [_text(secret) for secret in _rows_or_texts(character.get("secrets"))],
                 # What else they are called ("the barkeep"), as the author wrote it: commands may name them so.
                 "aliases": [_text(alias) for alias in _rows_or_texts(character.get("aliases")) if _text(alias)],
+                "group_id": _text(character.get("group_id")),  # the group they answer for (EV-6)
             }.items() if value},
         }
     routes: list[dict[str, Any]] = []
@@ -449,6 +452,15 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         "routines": [routine.model_dump(mode="json") for routine in sections.routines],
         "knowledge": [entry.model_dump(mode="json") for entry in sections.knowledge],
         "pressures": [pressure.model_dump(mode="json") for pressure in sections.pressures],
+        # What the world's facts change, and who answers for its groups (EV-1, rules/consequences.py).
+        **({"fact_effects": [effect.model_dump(mode="json", exclude_none=True) for effect in sections.fact_effects]}
+           if sections.fact_effects else {}),
+        **({"group_members": [row.model_dump(mode="json") for row in sections.group_members]}
+           if sections.group_members else {}),
+        # Its level budgets (EV-2, rules/budgets.py); a world that writes none plays from the derived table.
+        **({"budgets": [row.model_dump(mode="json") for row in sections.budgets]} if sections.budgets else {}),
+        # The game master's palette (EV-0, EV-10): what its areas hold and favour, as its author wrote it.
+        **({"gm_guide": dict(_mapping(canon.get("gm_guide")))} if _mapping(canon.get("gm_guide")) else {}),
         # Every quest the world has, as the log would keep it: one not in the log yet can be offered in play.
         "quests": {_text(quest.get("id")): world_quest_row(quest, start) for quest in _rows(canon.get("quests"))
                    if _text(quest.get("id"))},
@@ -525,6 +537,8 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
             stats = play.stats.model_dump()
         weakness = _text(row.get("weakness"))
         aliases = [part.strip() for part in re.split(r",|\band\b|\bor\b", weakness) if part.strip()]
+        boss = threat in {"boss", "extreme", "legendary"} or bool(play is not None and play.phases)
+        effect = (play.weakness_effect if play is not None and play.weakness_effect else "stun")
         creatures[creature_id] = {
             "definition_id": creature_id,
             "definition_revision": int(getattr(revision, "revision", 1) or 1),
@@ -536,9 +550,17 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
             "tags": [_text(trait) for trait in row.get("traits") or () if _text(trait)],
             "budget_cost": stats["xp_value"],
             "vulnerabilities": (
-                [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1}]
+                [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1,
+                  "effect": effect}]
                 if weakness else []
             ),
+            # EV-2: what blunts its hurt, a boss's phases, a fight with no escape, and what it regains when left (a
+            # boss half of what it lost, by default; another all of it, as before).
+            "resists": list(play.resists) if play is not None else [],
+            "phases": [phase.model_dump() for phase in play.phases] if play is not None else [],
+            "no_escape": bool(play is not None and play.no_escape),
+            "recovers": (play.recovers if play is not None and play.recovers is not None else 0.5 if boss else 1.0),
+            "boss": boss,
             "behaviour": play.behaviour if play is not None and row.get("behaviour") else derived_behaviour(row),
             "threat": threat,
             "speaks": row["speaks"] is True if "speaks" in row else derived_speaks(row),
@@ -726,7 +748,8 @@ def world_quest_row(quest: Mapping[str, Any], start: str, *, hook: str = "") -> 
         # The player starts at the opening's place, so a quest that names it has already been there.
         "visited_locations": [start] if start in places else [],
         # A quest of steps, its deadline and who gave it, and its kind (an intro, a finale), as the world wrote them.
-        **{key: quest[key] for key in ("steps", "deadline_hours", "giver_id", "tier") if quest.get(key)},
+        **{key: quest[key] for key in ("steps", "deadline_hours", "giver_id", "tier", "sets", "requires", "forbids")
+           if quest.get(key)},
         **({"objective": _to_the_hero(_text(_mapping(quest["steps"][0]).get("summary")) or _text(quest.get("objective")))}
            if quest.get("steps") else {}),
         "source": "published_world",

@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.apps.rpg.foundation.state import reduce
 from app.apps.rpg.foundation.state.changes import CheckResolved, CombatAdvanced, DialogueExchanged
 from app.apps.rpg.rules.quest.arrival import quest_rewards
-from app.apps.rpg.rules.quest.progress import quest_progress
+from app.apps.rpg.rules.quest.progress import accepted_step, open_steps, quest_progress
 
 RATS = {"quest_id": "quest:rats", "title": "Cellar Rats", "status": "active", "giver_id": "npc:bran",
         "rewards": ["5 silver"], "steps": [
@@ -57,12 +57,18 @@ def test_a_deadline_gone_by_fails_the_quest_and_costs_the_givers_trust() -> None
     assert [(change.npc_id, change.delta) for change in changes if change.type == "regard_changed"] == [("npc:bran", -10)]
 
 
-def test_a_talk_about_something_needs_the_heros_words_to_touch_it() -> None:
+def test_a_talk_about_something_needs_the_line_to_answer_its_step() -> None:
+    """EV-3: a step that asks something particular of someone is done by a line whose reading names it (its address,
+    accepted by the plan); talking to them of anything else does not do it, and no word of the line is matched."""
     rumor = {"quest_id": "quest:rumor", "title": "Rumor", "status": "active", "steps": [
         {"id": "ask", "summary": "Ask Bran", "any_of": [{"talk": "npc:bran", "about": ["rumor", "rumour"]}]}]}
-    document, _, _ = _advance(_document(rumor), [DialogueExchanged(npc_id="npc:bran", player_line="Nice weather?")])
-    assert _quest(document)["status"] == "active"
-    document, _, _ = _advance(document, [DialogueExchanged(npc_id="npc:bran", player_line="Which RUMOR is true?")])
+    document, _, _ = _advance(_document(rumor), [DialogueExchanged(npc_id="npc:bran", player_line="Which RUMOR is true?")])
+    assert _quest(document)["status"] == "active"  # the words alone do nothing
+    document, _, _ = _advance(document, [DialogueExchanged(npc_id="npc:bran", step="quest:rumor|ask|1")])
+    assert _quest(document)["status"] == "active"  # a way the step does not have
+    assert open_steps(document["simulation_state"], "npc:bran") == [("quest:rumor|ask|0", "Ask Bran (about: rumor, rumour)")]
+    assert accepted_step(document["simulation_state"], "npc:orik", "quest:rumor|ask|0") == ""  # not Orik's to answer
+    document, _, _ = _advance(document, [DialogueExchanged(npc_id="npc:bran", step="quest:rumor|ask|0")])
     assert _quest(document)["status"] == "completed"
 
 
@@ -88,7 +94,7 @@ def test_a_way_taken_tells_what_came_of_it() -> None:
         {"id": "choose", "summary": "Choose the gate's fate", "any_of": [
             {"all_of": [{"talk": "npc:bran", "about": ["close"]}], "told": "The gate is sealed forever."},
             {"all_of": [{"talk": "npc:bran", "about": ["bridge"]}], "told": "The gate becomes a guarded bridge."}]}]}
-    document, _, lines = _advance(_document(gate), [DialogueExchanged(npc_id="npc:bran", player_line="Make it a bridge.")])
+    document, _, lines = _advance(_document(gate), [DialogueExchanged(npc_id="npc:bran", step="quest:gate|choose|1")])
     assert _quest(document)["status"] == "completed" and _quest(document)["progress"]["branches"] == [
         {"stage": 0, "branch": 1}]
     assert lines[0] == "The gate becomes a guarded bridge." and lines[1].startswith("Quest complete: The Gate.")

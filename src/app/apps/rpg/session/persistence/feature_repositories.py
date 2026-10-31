@@ -9,6 +9,11 @@ from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import Po
 from app.apps.rpg.foundation.persistence.rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
 from app.apps.rpg.foundation.persistence.rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
 from app.apps.rpg.foundation.persistence.rpg_map_instance_repository import PostgresRpgMapInstanceRepository
+from app.apps.rpg.foundation.persistence.rpg_proposal_repository import PostgresRpgProposalRepository
+from app.apps.rpg.foundation.persistence.rpg_game_master_panel_repository import PostgresRpgGameMasterPanelRepository
+from app.apps.rpg.foundation.persistence.rpg_lore_review_repository import PostgresRpgLoreReviewRepository
+from app.apps.rpg.foundation.persistence.rpg_voice_cast_repository import PostgresRpgVoiceCastRepository
+from app.apps.rpg.foundation.persistence.rpg_speech_audio_repository import PostgresRpgSpeechAudioRepository
 from app.apps.rpg.narration.persistence.rpg_narrative_delivery_repository import PostgresRpgNarrativeDeliveryRepository
 from app.apps.rpg.narration.persistence.rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
 from app.apps.rpg.narration.persistence.rpg_narrative_retirement_repository import PostgresRpgNarrativeRetirementRepository
@@ -36,6 +41,11 @@ RPG_REPOSITORY_SPECS = (
     RepositorySpec(PostgresRpgWorldGenerationRepository, PostgresRpgWorldGenerationRepository, "world_generation"),
     RepositorySpec(PostgresRpgWorldLibraryRepository, PostgresRpgWorldLibraryRepository, "world_library"),
     RepositorySpec(PostgresRpgMapInstanceRepository, PostgresRpgMapInstanceRepository, "map_instances"),
+    RepositorySpec(PostgresRpgProposalRepository, PostgresRpgProposalRepository, "rpg_proposals"),
+    RepositorySpec(PostgresRpgGameMasterPanelRepository, PostgresRpgGameMasterPanelRepository, "rpg_game_master_panel"),
+    RepositorySpec(PostgresRpgLoreReviewRepository, PostgresRpgLoreReviewRepository, "rpg_lore_review"),
+    RepositorySpec(PostgresRpgVoiceCastRepository, PostgresRpgVoiceCastRepository, "rpg_voice_cast"),
+    RepositorySpec(PostgresRpgSpeechAudioRepository, PostgresRpgSpeechAudioRepository, "rpg_speech_audio"),
     RepositorySpec(PostgresRpgObserverRepository, PostgresRpgObserverRepository, "observers"),
     RepositorySpec(PostgresRpgHermesResearchRepository, PostgresRpgHermesResearchRepository, "hermes_research"),
     RepositorySpec(PostgresRpgNarrativeResponseRepository, PostgresRpgNarrativeResponseRepository, "narrative_responses"),

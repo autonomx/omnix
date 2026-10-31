@@ -14,6 +14,9 @@ from contextvars import ContextVar
 from typing import Any
 
 _CALLS: ContextVar[Counter[str] | None] = ContextVar("rpg_model_calls", default=None)
+# A call made for something the turn may not use (a reply written beside the intent call, EV-9) is counted apart.
+_AS: ContextVar[str] = ContextVar("rpg_model_call_kind", default="")
+APART = "parallel_reply"
 
 
 @contextmanager
@@ -45,7 +48,30 @@ def current_model_failures() -> dict[str, int]:
 def record_model_call(kind: str) -> None:
     calls = _CALLS.get()
     if calls is not None:
+        calls[_AS.get() or kind] += 1
+
+
+@contextmanager
+def counted_as(kind: str) -> Iterator[None]:
+    """Count the calls the enclosed work makes as ``kind`` (``APART``: not the turn's own, unless it uses them)."""
+    token = _AS.set(kind)
+    try:
+        yield
+    finally:
+        _AS.reset(token)
+
+
+def used_apart(kind: str = "provider") -> None:
+    """A call counted apart that the turn used after all: counted as the turn's own ``kind``."""
+    calls = _CALLS.get()
+    if calls is not None and calls.get(APART):
+        calls[APART] -= 1
         calls[kind] += 1
+
+
+def used_calls(calls: dict[str, int]) -> int:
+    """The calls whose output the turn used (F3): every call but those counted apart."""
+    return sum(count for kind, count in calls.items() if kind != APART)
 
 
 def record_model_failure(kind: str) -> None:

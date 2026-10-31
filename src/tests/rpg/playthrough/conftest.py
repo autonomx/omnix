@@ -31,7 +31,7 @@ def launch(model, tmp_path, monkeypatch):
         else:
             raise ValueError(world)
         play = Playthrough(session_id)
-        play.model = model
+        play.model = model  # every typed line goes to the model, which reads it against this campaign
         play.world = world
         return play
 

@@ -16,10 +16,14 @@ pressures turned, and what reached the hero of it. The checks (W1's target):
   who came or went in that tick, and each "Word comes" a pressure that turned in it;
 - the run replays: from its snapshots the stored turn patches rebuild every turn's ``state_hash_after``
   (``scripts/rpg_replay_audit.py``), and each local map's event log, applied to the snapshot it was created with,
-  rebuilds the grid as stored.
+  rebuilds the grid as stored;
+- with ``--reexecute``, the run is re-executed (evolution roadmap D1): a second campaign, launched the same way, is
+  sent the same inputs, each intent call answered by the reading the first run was given and each turn folding in
+  the proposals the first run's turn row recorded (``folded_proposals_jsonb``), and after every input its document,
+  ids and times normalized, must hash as the first run's did.
 
     OMNIX_DATABASE_URL=postgresql://...@127.0.0.1:16432/<disposable db> \\
-        python scripts/rpg_living_world.py --output docs/measurements/rpg-living-world-<date>.json
+        python scripts/rpg_living_world.py [--turns 1000] [--reexecute] --output docs/measurements/rpg-living-world-<date>.json
 """
 from __future__ import annotations
 
@@ -31,7 +35,6 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import Any
-import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -45,6 +48,7 @@ ROUND = ("go to Starfall Village", "look around", "talk to {person}", "wait a wh
          "rest until morning", "look around", "wait a while", "go to Starfall Grove", "look around")
 IDLE_EVERY = 25  # a return after time away, every this many turns
 IDLE_SECONDS = 3600  # longer than the catch-up's cap, so each return catches up as far as it may
+HEARD_EVERY = 50  # a name heard in narration (a ``heard_of`` proposal, EV-11), every this many turns, from turn 10
 GRID_STEP_EVERY = 5  # a step on the local grid the hero stands on, every this many turns
 
 
@@ -159,7 +163,7 @@ class LivingPlayer:
 
 
 class Run:
-    def __init__(self, turns: int) -> None:
+    def __init__(self, turns: int, *, replaying: "Run | None" = None) -> None:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
@@ -170,7 +174,9 @@ class Run:
 
         self.worlds = worlds
         self.turns = turns
-        worlds.install_scripted_model()
+        self.model = worlds.install_scripted_model()
+        self.replaying = replaying  # the first run this one re-executes
+        self.inputs: list[dict[str, Any]] = []  # each input sent: its intent answers, its folds, the hash after it
         self.recorder = Recorder()
         app = FastAPI()
         include_router_registrar(app, register_rpg_session_routes)
@@ -201,7 +207,7 @@ class Run:
         if player is None:
             return None
         x, y = player["cell"]
-        submission = f"submit:living:{uuid.uuid4().hex}"
+        submission = f"submit:living:{self.session_id}:{step}"  # the campaign's own: the same when re-executed
         response = self.client.post(f"/api/rpg/map-instances/{instance_id}/tactical/move", json={
             "submission_id": submission, "command_id": f"command:{submission}", "actor_id": player["actor_id"],
             "destination": [x, y + 1] if step % 2 == 0 else [x, y - 1],
@@ -218,18 +224,78 @@ class Run:
         self.presence.append({"turn": turn, "location_id": where, "present": sorted(present),
                               "part_of_day": part_of_day(clock_minute(state))})
 
+    def _turn_folds(self) -> list[list[dict[str, Any]]]:
+        """What each of the campaign's committed turn rows folded in, oldest first."""
+        from app.persistence.unit_of_work import unit_of_work
+
+        with unit_of_work() as work:
+            rows = work.connection.execute(
+                "SELECT folded_proposals_jsonb FROM omnix_rpg_turns WHERE campaign_id = %s ORDER BY sequence",
+                (self.session_id,)).fetchall()
+            work.rollback()
+        return [list((row[0] or {}).get("folded") or ()) for row in rows]
+
+    def _send(self, send: Any) -> Any:
+        """One input: re-executed, answered and folded as the first run's same input was; its record, and the
+        document's normalized hash after it."""
+        from app.apps.rpg.session.turn.proposals import replay_folded
+        from tests.characterization.test_rpg_published_world_golden import _document_hash
+
+        index = len(self.inputs)
+        first = self.replaying.inputs[index] if self.replaying is not None else None
+        if first is not None:
+            self.model.recorded = list(first["answers"])
+            replay_folded(self.session_id, [row for turn in first["folds"] for row in turn])
+        read, rows = len(self.model.read), len(self._turn_folds())
+        response = send()
+        if first is not None:
+            from app.apps.rpg.session.turn import proposals
+
+            proposals._REPLAY.pop(self.session_id, None)  # an input that loaded no turn leaves nothing behind
+        state = self._state()
+        world_id = str((state.get("manifest") or {}).get("world_id") or "")
+        self.inputs.append({"answers": self.model.read[read:], "folds": self._turn_folds()[rows:],
+                            "hash": _document_hash(state, self.session_id, world_id)})
+        return response
+
+    def _hear_of_someone(self, turn: int) -> None:
+        """A person the hero does not know, named in narration: a proposal the next turn folds in (EV-11)."""
+        from app.apps.rpg.foundation.state.proposals import Proposal
+        from app.apps.rpg.rules.hero_knowledge import known_entries, world_entries
+        from app.apps.rpg.session.turn.proposals import record_proposals
+
+        state = self._state()
+        simulation = state.get("simulation_state") or {}
+        known = known_entries(simulation)
+        person = next((entry for entry, row in sorted(world_entries(simulation).items())  # one the hero may hear of
+                       if row["family"] == "person" and entry not in known
+                       and row.get("hidden") is not True and row.get("secret") is not True), "")
+        if person:
+            from app.apps.rpg.session.persistence.session_records import load_session_version_from_postgres
+
+            revision = int((load_session_version_from_postgres(self.session_id) or (0,))[0])
+            record_proposals(self.session_id, [Proposal(
+                proposal_id=f"proposal:living-heard:{turn}", kind="heard_of", source="narration",
+                after_revision=revision, payload={"entry_id": person})])
+
     def play(self) -> None:
         self.session_id = self.worlds.launch("aurelia")
+        if self.replaying is not None:  # re-executed: every intent answer is the first run's, none read again
+            self.model.session_id = ""
         player = LivingPlayer()
         for turn in range(self.turns):
             ticks_before = len(self.recorder.ticks)
+            if self.replaying is None and turn % HEARD_EVERY == 10:  # re-executed, folded from the turn rows instead
+                self._hear_of_someone(turn)
             if turn and turn % IDLE_EVERY == 0:
-                response = self.client.post(f"/api/rpg/sessions/{self.session_id}/resume",
-                                            json={"elapsed_seconds": IDLE_SECONDS})
+                response = self._send(lambda: self.client.post(f"/api/rpg/sessions/{self.session_id}/resume",
+                                                               json={"elapsed_seconds": IDLE_SECONDS}))
                 kind, said = "return", "(time away)"
             else:
-                said = player.next(self._state())
-                response = self.client.post(f"/api/rpg/sessions/{self.session_id}/turn", json={"command": said})
+                # Re-executed, the first run's own commands are sent again (not chosen again).
+                said = self.replaying.rows[turn]["command"] if self.replaying is not None else player.next(self._state())
+                response = self._send(lambda: self.client.post(f"/api/rpg/sessions/{self.session_id}/turn",
+                                                               json={"command": said}))
                 kind = "turn"
             ticks = self.recorder.ticks[ticks_before:]
             body = response.json() if response.status_code == 200 else {}
@@ -245,7 +311,7 @@ class Run:
                 self.returns.append({"turn": turn, "ticks": ticks})
             self._observe(turn)
             if turn % GRID_STEP_EVERY == 0:
-                self._grid_step(turn // GRID_STEP_EVERY)
+                self._send(lambda: self._grid_step(turn // GRID_STEP_EVERY))
 
     # --- the report ---------------------------------------------------------------------------------------
 
@@ -300,6 +366,22 @@ class Run:
             "rows": self.rows,
         }
 
+    def reexecuted(self, again: "Run") -> dict[str, Any]:
+        """The re-executed run against this one: after each input, the same normalized document."""
+        pairs = list(zip(self.inputs, again.inputs))
+        mismatched = [index for index, (first, second) in enumerate(pairs) if first["hash"] != second["hash"]]
+        # The re-executed run was given the first's answers, input by input, and folded what its turn rows recorded.
+        answered_otherwise = [index for index, (first, second) in enumerate(pairs) if first["answers"] != second["answers"]]
+        folded_otherwise = [index for index, (first, second) in enumerate(pairs) if first["folds"] != second["folds"]]
+        answers = sum(len(row["answers"]) for row in self.inputs)
+        folded = sum(len(turn) for row in self.inputs for turn in row["folds"])
+        return {"inputs": len(self.inputs), "reexecuted_inputs": len(again.inputs), "mismatched": mismatched[:20],
+                "first_mismatch": mismatched[0] if mismatched else None,
+                "answered_otherwise": answered_otherwise[:20], "folded_otherwise": folded_otherwise[:20],
+                "intent_answers": answers, "folded": folded,
+                "passed": bool(self.inputs) and len(again.inputs) == len(self.inputs) and not mismatched
+                and not answered_otherwise and not folded_otherwise and answers > 0 and folded > 0}
+
     def replay(self) -> dict[str, Any]:
         import rpg_replay_audit as audit
         from app.apps.rpg.foundation.persistence.rpg_map_instance_repository import PostgresRpgMapInstanceRepository
@@ -337,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--turns", type=int, default=200)
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--reexecute", action="store_true", help="re-execute the run on a second campaign (D1)")
     args = parser.parse_args(argv)
     os.environ.setdefault("OMNIX_RPG_TURNS_PER_HOUR", "0")
     os.environ["OMNIX_RPG_NARRATIVE_WRITER_MODE"] = "deterministic"
@@ -347,6 +430,11 @@ def main(argv: list[str] | None = None) -> int:
     run = Run(args.turns)
     run.play()
     report = run.report()
+    if args.reexecute:
+        again = Run(args.turns, replaying=run)
+        again.play()
+        report["checks"]["reexecuted"] = run.reexecuted(again)
+        report["passed"] = all(check["passed"] for check in report["checks"].values())
     text = json.dumps(report, indent=2, sort_keys=True, default=str) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

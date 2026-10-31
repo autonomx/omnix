@@ -3,8 +3,10 @@
 A deterministic "reasonable player" plays a campaign on the turn pipeline's own rules, in memory: each turn is read,
 planned and resolved as the turn route does, its changes reduced, the world ticked and what it led to followed (quests,
 pressures; no persistence, no narration, no model call). The policy rests when hurt, eats or buys food when hungry,
-takes every quest offered and does it (walks to its places, or its stage's first way: the creature, the person, the
-place), fights what the world holds, breaks away when losing, and otherwise wanders. ``simulate`` returns the
+buys a better weapon or armour when it has coin to spare and wears it, has its gear improved where it carries the
+materials (EV-5), takes every quest offered and does it (walks to its places, or its stage's first way: the creature,
+the person, the place), fights what the world holds, breaks away when losing (from a finale, which has no breaking
+away, it drinks a potion instead, if it has one), and otherwise wanders. ``simulate`` returns the
 measures the bands are judged on after each checkpoint.
 """
 from __future__ import annotations
@@ -28,6 +30,7 @@ BANDS = {  # docs/rpg/design/README.md: (low, high) after 100 turns, and after 5
 @dataclass
 class _Tally:
     fights_started: int = 0
+    spent: int = 0  # copper paid out (EV-5: the purse rises and is spent)
     fights_won: int = 0
     defeats: int = 0
     low_hp_turns: int = 0
@@ -35,6 +38,9 @@ class _Tally:
     unplanned: int = 0
     commands: dict[str, int] = field(default_factory=dict)
     fights: dict[str, dict[str, int]] = field(default_factory=dict)  # by foe: how each fight ended
+    rounds: dict[str, list[int]] = field(default_factory=dict)  # EV-2: each won or lost fight's rounds, by kind
+    boss_turns: int = 0
+    boss_potions: int = 0
 
 
 def _player(session: Mapping[str, Any]) -> dict[str, Any]:
@@ -133,6 +139,72 @@ def _spoils_to_sell(session: Mapping[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+_GEAR_SLOTS = {"main_hand": "damage_max", "body": "armor", "off_hand": "armor", "head": "armor"}
+SPARE_COPPER = 300  # what the player keeps for food and rooms before spending on gear
+
+
+def _gear(session: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """What the hero wears, by slot: the carried row and its numbers."""
+    store = _d(_player(session).get("inventory_state"))
+    worn = _d(store.get("equipment"))
+    items = {_s(_d(item).get("item_id")): _d(item) for item in _l(store.get("items"))}
+    return {slot: items[item_id] for slot, item_id in worn.items() if item_id in items}
+
+
+def _equipment(row: Mapping[str, Any]) -> dict[str, Any]:
+    from app.apps.rpg.rules.interactions.equipment_runtime import item_equipment
+
+    return _d(item_equipment(dict(row)))  # as it fights: its own block, else its kind's ("Iron Dagger": a dagger)
+
+
+def _score(row: Mapping[str, Any], slot: str) -> int:
+    return int(_d(_equipment(row).get("stats")).get(_GEAR_SLOTS[slot]) or 0)
+
+
+def gear_score(session: Mapping[str, Any]) -> int:
+    """How well the hero is armed and armoured: the worn weapon's most damage and the worn armour's."""
+    return sum(_score(row, slot) for slot, row in _gear(session).items() if slot in _GEAR_SLOTS)
+
+
+def _gear_step(session: Mapping[str, Any]) -> str:
+    """A better piece of gear carried and not worn, put on; one on sale here bought with coin to spare; else gear
+    improved where an upgrade is sold. The trade rule is asked first, so a purchase it would refuse (an upgrade
+    without its materials, or past the level's budget) is not tried."""
+    from app.apps.rpg.rules.economy.trade import buy
+
+    store = _d(_player(session).get("inventory_state"))
+    worn = _gear(session)
+    for item in map(_d, _l(store.get("items"))):
+        slot = _s(_equipment(item).get("slot"))
+        if slot in _GEAR_SLOTS and _s(item.get("item_id")) not in _d(store.get("equipment")).values() \
+                and _score(item, slot) > _score(worn.get(slot, {}), slot):
+            return f"I equip the {_s(item.get('name'))}."
+    here = _here(session)
+    world = _world(session)
+    simulation = _d(session.get("simulation_state"))
+    for provider_id, provider in sorted(_d(world.get("providers")).items()):
+        if _s(_d(provider).get("location_id")) != here:
+            continue
+        for offer in map(_d, _l(_d(world.get("offers")).get(provider_id))):
+            added = [_d(row) for row in _l(_d(offer.get("effects")).get("items_added"))]
+            slot = _s(_equipment(added[0]).get("slot")) if added else ""
+            better = slot in _GEAR_SLOTS and _score(added[0], slot) > _score(worn.get(slot, {}), slot)
+            if not better and _s(offer.get("service_kind")) != "upgrade":
+                continue
+            outcome = buy(simulation, _s(offer.get("offer_id")), provider_id)
+            paid = -sum(int(getattr(change, "delta_copper", 0) or 0) for change in (outcome.changes if outcome else ()))
+            if outcome is not None and outcome.kind == "bought" and _purse(session) - paid >= SPARE_COPPER:
+                return f"I buy {_s(offer.get('label'))} from {_s(_d(provider).get('provider_name'))}."
+    return ""
+
+
+def _potions(session: Mapping[str, Any]) -> int:
+    """How many potions the hero carries."""
+    return sum(int(_d(row).get("qty") or _d(row).get("quantity") or 1)
+               for row in _l(_d(_player(session).get("inventory_state")).get("items"))
+               if "potion" in _s(_d(row).get("name")).casefold())
+
+
 def _copper(price: Mapping[str, Any]) -> int:
     return int(price.get("gold") or 0) * 100 + int(price.get("silver") or 0) * 10 + int(price.get("copper") or 0)
 
@@ -141,8 +213,17 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
     """The reasonable player's next command."""
     simulation = _d(session.get("simulation_state"))
     hp, max_hp = _hp(session)
-    if _d(simulation.get("combat_state")).get("active") is True:
-        return "I break away and flee." if hp < max_hp * 0.25 else "attack"
+    combat = _d(simulation.get("combat_state"))
+    if combat.get("active") is True:
+        if hp >= max_hp * 0.25:
+            return "attack"
+        finale = any(_d(row).get("no_escape") and _s(_d(row).get("side")) == "enemy" and int(_d(row).get("hp") or 0) > 0
+                     for row in _d(combat.get("participants")).values())
+        if not finale:  # a finale has no breaking away (EV-2): a potion if one is carried, else the fight goes on
+            return "I break away and flee."
+        potion = next((_s(_d(item).get("name")) for item in _l(_d(_player(session).get("inventory_state")).get("items"))
+                       if "potion" in _s(_d(item).get("name")).casefold()), "")
+        return f"I drink the {potion}." if potion else "attack"
     hunger = int(_d(simulation.get("survival")).get("hunger") or 0)
     if hunger > 60:
         food = next((_s(_d(item).get("name")) for item in _l(_d(_player(session).get("inventory_state")).get("items"))
@@ -173,6 +254,9 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
     spoils = _spoils_to_sell(session)
     if spoils:  # what the fights left them, sold to someone here who buys its kind (food is kept)
         return f"I sell my {spoils[0]} to {spoils[1]}."
+    gear = _gear_step(session)
+    if gear:  # better gear, put on or bought with coin to spare, or improved (EV-5)
+        return gear
     if int(_player(session).get("level_choices_pending") or 0) > 0:  # a level's choice: strength, then dexterity
         return "raise my strength" if int(_player(session).get("level") or 1) % 2 else "raise my dexterity"
     quests = [_d(quest) for quest in _l(_d(simulation.get("quest_state")).get("quests"))]
@@ -241,17 +325,18 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
 
 def _turn(session: dict[str, Any], text: str) -> tuple[dict[str, Any], bool]:
     """One turn on the pipeline's rules, in memory; ``False`` when no rule of the pipeline plays it."""
-    from app.apps.rpg.rules.ability_use import known
-    from app.apps.rpg.session.command_reading import read_command
+    from app.apps.rpg.session.turn.intent import valid_readings
     from app.apps.rpg.session.turn.planning import plan_action
     from app.apps.rpg.session.turn.resolution import resolve_turn
     from app.apps.rpg.session.turn.run import turn_consequences
     from app.apps.rpg.session.turn.world_tick import world_tick
+    from tests.support.rpg_line_reader.reader import read_line, scene_of
 
     simulation = _d(session.get("simulation_state"))
-    reading = read_command(simulation, text, _d(session.get("runtime_state")),
-                           abilities=tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known(session)))
-    planned = plan_action(reading, fighting=_d(simulation.get("combat_state")).get("active") is True)
+    # Every typed line is the model's to read (EV-9); the simulation reads it as the scripted model does.
+    readings = valid_readings(list(read_line(session, text).get("readings") or ()), scene_of(session))
+    planned = (plan_action(readings[0], fighting=_d(simulation.get("combat_state")).get("active") is True)
+               if readings else None)
     resolution = resolve_turn(planned, session, text) if planned is not None else None
     if resolution is None and planned is not None and planned.mechanic == "talk" and planned.target_id:
         # A conversation needs the model's line, which the simulation does not call: the person is taken to answer.
@@ -280,11 +365,17 @@ def _measures(session: Mapping[str, Any], tally: _Tally, turns: int) -> dict[str
     quests = [_d(quest) for quest in _l(_d(_d(session.get("simulation_state")).get("quest_state")).get("quests"))]
     return {
         "turns": turns, "level": int(_player(session).get("level") or 1), "purse": _purse(session),
+        # EV-5's bands: how the hero is armed (the worn weapon's and armour's numbers) and the coin spent so far.
+        "gear": gear_score(session), "spent": tally.spent,
         "win_rate": round(tally.fights_won / tally.fights_started, 3) if tally.fights_started else None,
         "fights_started": tally.fights_started, "defeats": tally.defeats,
         "low_hp_share": round(tally.low_hp_turns / turns, 3), "starving_share": round(tally.starving_turns / turns, 3),
         "quests_completed": sum(1 for quest in quests if quest.get("status") == "completed"),
         "unplanned": tally.unplanned, "commands": dict(sorted(tally.commands.items(), key=lambda kv: -kv[1])[:8]),
+        # EV-2's pacing: the median rounds of an ordinary fight and of a boss's, and a boss fight's potion share.
+        "ordinary_fight_rounds": _median(tally.rounds.get("ordinary", [])),
+        "boss_fight_rounds": _median(tally.rounds.get("boss", [])),
+        "boss_potion_share": round(tally.boss_potions / tally.boss_turns, 3) if tally.boss_turns else None,
         "fights": tally.fights,
     }
 
@@ -303,7 +394,10 @@ def simulate(session: Mapping[str, Any], *, turns: int = 500, checkpoints: tuple
         tally.commands[verb] = tally.commands.get(verb, 0) + 1
         fighting = _d(_d(document.get("simulation_state")).get("combat_state")).get("active") is True
         defeats = int(_player(document).get("defeats") or 0)
+        purse, potions = _purse(document), _potions(document)
         document, played = _turn(document, text)
+        if text.startswith("I buy"):  # coin paid for goods and services (a defeat's loss is no purchase)
+            tally.spent += max(0, purse - _purse(document))
         if not played:
             tally.unplanned += 1
             document, _ = _turn(document, "wait")
@@ -312,6 +406,14 @@ def simulate(session: Mapping[str, Any], *, turns: int = 500, checkpoints: tuple
             tally.fights_started += 1
         if fighting and combat.get("active") is not True and combat.get("ended_reason") == "enemy_side_defeated":
             tally.fights_won += 1
+        boss = any(_d(row).get("boss") for row in _d(combat.get("participants")).values()
+                   if _s(_d(row).get("side")) == "enemy")
+        if fighting and boss:  # a boss fight's turns, and those spent on a potion (EV-2's pacing)
+            tally.boss_turns += 1
+            tally.boss_potions += _potions(document) < potions  # one was drunk, not only asked for
+        if fighting and combat.get("active") is not True and combat.get("ended_reason") in {
+                "enemy_side_defeated", "party_side_defeated"}:
+            tally.rounds.setdefault("boss" if boss else "ordinary", []).append(int(combat.get("round") or 1))
         if fighting and combat.get("active") is not True:
             foe = next((_s(_d(row).get("name")) for row in _d(combat.get("participants")).values()
                         if _s(_d(row).get("side")) == "enemy"), "?")
@@ -326,6 +428,29 @@ def simulate(session: Mapping[str, Any], *, turns: int = 500, checkpoints: tuple
     return report
 
 
+def _median(values: list[int]) -> float | None:
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    return float(ordered[middle]) if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+
+# EV-2's pacing targets: an ordinary fight lasts 3-5 rounds and a boss 8-12; a boss fight's potions under a quarter.
+PACING = {"ordinary_fight_rounds": (3, 5), "boss_fight_rounds": (8, 12), "boss_potion_share": (0.0, 0.25)}
+
+
+def pacing_outside(report: Mapping[int, Mapping[str, Any]]) -> list[str]:
+    """The pacing targets a report breaks, at its last checkpoint (a measure with no fight of its kind is not
+    judged)."""
+    if not report:
+        return []
+    turns = max(report)
+    return [f"after {turns} turns, {key} {report[turns].get(key)} is outside {low}-{high}"
+            for key, (low, high) in PACING.items()
+            if report[turns].get(key) is not None and not low <= report[turns][key] <= high]
+
+
 def outside(report: Mapping[int, Mapping[str, Any]]) -> list[str]:
     """The bands a report breaks."""
     broken = []
@@ -337,4 +462,4 @@ def outside(report: Mapping[int, Mapping[str, Any]]) -> list[str]:
     return broken
 
 
-__all__ = ["BANDS", "outside", "simulate"]
+__all__ = ["BANDS", "PACING", "outside", "pacing_outside", "simulate"]

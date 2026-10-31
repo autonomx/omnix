@@ -187,6 +187,7 @@ class DialogueExchanged(_Change):
     name: str = ""
     player_line: str = ""
     npc_line: str = ""
+    step: str = ""  # the quest step the line answers, as the reading proposed and the plan accepted (EV-3)
 
 
 class ResourcesChanged(_Change):
@@ -337,6 +338,57 @@ class KnowledgeShared(_Change):
     fact_id: str = Field(min_length=1)
 
 
+# A group's standing with the hero, in words: the band's lower bound, highest first (EV-1, question 2).
+STANDING_BANDS = ((50, "trusted"), (20, "respected"), (-19, "neutral"), (-49, "wary"), (-100, "hostile"))
+
+
+def standing_band(value: int) -> str:
+    return next(band for floor, band in STANDING_BANDS if value >= floor)
+
+
+# How the hero knows an entry, weakest first: a stronger kind replaces a weaker one, never the reverse (EV-1).
+KNOWING_RANK = {"": 0, "heard_of": 1, "met": 2, "visited": 2}
+
+
+class EntryMet(_Change):
+    """An entry of the world the hero now knows (evolution roadmap EV-1): a person or creature met, a place
+    visited, a thing held, a quest or group heard of. A stronger kind replaces a weaker one, never the reverse."""
+
+    type: Literal["entry_met"] = "entry_met"
+    entry_id: str = Field(min_length=1)
+    kind: Literal["heard_of", "met", "visited"] = "met"
+    source: str = ""
+
+
+class FactSet(_Change):
+    """A world fact's value (EV-1, ``rules/consequences.py``): what a decision, an ending or an outcome left
+    behind. ``known``: the hero saw it happen."""
+
+    type: Literal["fact_set"] = "fact_set"
+    fact_id: str = Field(min_length=1)
+    value: str | int | bool
+    source: str = ""
+    known: bool = True
+    told: str = ""  # the author's line for it, which "What has changed" shows while the hero knows it
+
+
+class FactLearned(_Change):
+    """The hero comes to know a fact that holds, by seeing it or being told."""
+
+    type: Literal["fact_learned"] = "fact_learned"
+    fact_id: str = Field(min_length=1)
+    source: str = ""
+
+
+class StandingChanged(_Change):
+    """A group's standing with the hero moved, from -100 to 100."""
+
+    type: Literal["standing_changed"] = "standing_changed"
+    group_id: str = Field(min_length=1)
+    delta: int
+    source: str = ""
+
+
 class QuestOffered(_Change):
     """A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest
     a pressure raised, quests.md) comes with its row."""
@@ -359,6 +411,129 @@ class CombatantHpChanged(_Change):
     type: Literal["combatant_hp_changed"] = "combatant_hp_changed"
     actor_id: str = Field(min_length=1)
     delta: int
+
+
+class DirectionTracked(_Change):
+    """The game master's bookkeeping (EV-0): the turn of the last meaningful event; and, for one of its own events,
+    the day it is counted against (``day``) and the scene a complication was had in."""
+
+    type: Literal["direction_tracked"] = "direction_tracked"
+    last_event_turn: int = Field(ge=0)
+    day: int | None = Field(default=None, ge=0)
+    complication_scene: str = ""
+
+
+class PreferenceNoted(_Change):
+    """A wish of the player's for the story (EV-0's panel): its kind and value; the latest of a kind stands."""
+
+    type: Literal["preference_noted"] = "preference_noted"
+    kind: Literal["pace", "danger", "tone", "focus"]
+    value: str = Field(min_length=1, max_length=120)
+
+
+class BeatAdvanced(_Change):
+    """A person takes the next step toward a goal (EV-4, ``rules/routines.py``): the beat reached, and, when it moves
+    them, where they keep to now (``location_id`` empty and ``gone``: they have left)."""
+
+    type: Literal["beat_advanced"] = "beat_advanced"
+    person_id: str = Field(min_length=1)
+    goal_id: str = Field(min_length=1)
+    beat: str = Field(min_length=1)
+    location_id: str = ""
+    activity: str = ""
+    gone: bool = False
+    source: str = ""
+    at_minute: int | None = Field(default=None, ge=0)  # when it happened (the day it was rolled for); else now
+
+
+class RumourSpread(_Change):
+    """Word the people of a place come to know and will tell (EV-4, ``rules/rumours.py``). ``text_id`` names its
+    authored line (a beat's rumour); ``text`` holds one no author wrote (the game master's)."""
+
+    type: Literal["rumour_spread"] = "rumour_spread"
+    rumour_id: str = Field(min_length=1)
+    place_id: str = Field(min_length=1)
+    text_id: str = ""
+    text: str = Field(default="", max_length=600)
+    source: str = ""
+
+
+class RumourHeard(_Change):
+    """The hero is told a rumour (EV-4): by someone of its place, or for a price."""
+
+    type: Literal["rumour_heard"] = "rumour_heard"
+    rumour_id: str = Field(min_length=1)
+    source: str = ""
+
+
+class InventionAdded(_Change):
+    """Something the game master invented, played from now on (evolution roadmap EV-0, part 2; ``rules/inventions.py``):
+    a person, place, item, creature or quest, its lore ``row`` in the world model's shape and its ``play`` data, kept
+    in the campaign's lore layer with its ``provenance`` (the campaign, the turn, the game master's reason)."""
+
+    type: Literal["invention_added"] = "invention_added"
+    entry_id: str = Field(min_length=1)
+    family: Literal["person", "place", "item", "creature", "quest"]
+    name: str = Field(min_length=1, max_length=120)
+    row: dict[str, Any] = Field(default_factory=dict)
+    play: dict[str, Any] = Field(default_factory=dict)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class ItemImproved(_Change):
+    """A carried piece of gear improved by one tier (evolution roadmap EV-5, the trade rule's ``upgrade``): its tier
+    and the numbers it fights with now."""
+
+    type: Literal["item_improved"] = "item_improved"
+    item_id: str = Field(min_length=1)
+    tier: int = Field(ge=1, le=5)
+    stats: dict[str, int] = Field(default_factory=dict)
+    slot: str = ""  # where it is worn: written when the carried row had no block of its own (it fought as its kind)
+
+
+class AreaDetailed(_Change):
+    """An entry of a larger area filled in as the hero approaches it (evolution roadmap EV-10): its id (an invention
+    beside it, ``InventionAdded``), its kind, and for a rumour or a piece of lore its line."""
+
+    type: Literal["area_detailed"] = "area_detailed"
+    area_id: str = Field(min_length=1)
+    entry_id: str = Field(min_length=1)
+    kind: Literal["place", "site", "person", "creature", "item", "service", "quest", "rumour", "lore"]
+    told: str = Field(default="", max_length=600)
+
+
+class SiteFound(_Change):
+    """A hidden place found by exploring (EV-10, ``rules/exploration.py``): it joins the roads, and the hero can go."""
+
+    type: Literal["site_found"] = "site_found"
+    location_id: str = Field(min_length=1)
+    told: str = ""
+
+
+class RoomCleared(_Change):
+    """A room of a site whose encounter is beaten or whose loot is taken (EV-10)."""
+
+    type: Literal["room_cleared"] = "room_cleared"
+    site_id: str = Field(min_length=1)
+    room_id: str = Field(min_length=1)
+    how: Literal["beaten", "looted", "passed"] = "beaten"  # passed: the room's hazard met
+
+
+class PhaseEntered(_Change):
+    """A boss's fight enters its next phase (EV-2): it fights harder, calls an ally, or lays its weakness bare."""
+
+    type: Literal["phase_entered"] = "phase_entered"
+    actor_id: str = Field(min_length=1)
+    phase: int = Field(ge=1)
+    told: str = ""
+
+
+class GuardSet(_Change):
+    """One of the party guards another (EV-2): the blows aimed at the one guarded fall on the guard."""
+
+    type: Literal["guard_set"] = "guard_set"
+    guard_id: str = Field(min_length=1)
+    guarded_id: str = Field(min_length=1)
 
 
 class CombatEnded(_Change):
@@ -534,7 +709,10 @@ StateChange = Annotated[
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
     | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | HotbarChanged
     | MapStateProjected | InteractionRecorded | InteractionsReplayed | LifecycleRecorded | InteractionPresented | CheckResolved | LevelChoiceMade
-    | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved | LocalMapEntered,
+    | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved | LocalMapEntered
+    | EntryMet | FactSet | FactLearned | StandingChanged | PhaseEntered | GuardSet | DirectionTracked
+    | PreferenceNoted | BeatAdvanced | RumourSpread | RumourHeard | InventionAdded | AreaDetailed | SiteFound
+    | RoomCleared | ItemImproved,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -192,6 +194,45 @@ def campaign_lore_research_required(
     return any(term in text for term in _LORE_QUERY_TERMS)
 
 
+SCENE_LORE_KEPT = 64
+_SCENE_LORE: "OrderedDict[tuple[Any, ...], tuple[Any, ...]]" = OrderedDict()
+_SCENE_LORE_LOCK = threading.Lock()
+
+
+def _scene_lore(session: Mapping[str, Any], loaded: Any, portable: Any,
+                target_entity_ids: tuple[str, ...]) -> tuple[Any, ...]:
+    """The scene's lore evidence (the bible snapshot it is drawn from, its records, what is missing), kept by the
+    canon it was built from (both snapshots' content hashes), the scene's entries, the place and the time of day
+    (evolution roadmap EV-7): a turn in the same scene at the same canon builds it once. The cache is display data,
+    never game state; its entries are frozen records."""
+    if not getattr(loaded, "content_hash", "") or (portable is not None and not getattr(portable, "content_hash", "")):
+        return select_complete_turn_snapshot(loaded, portable, target_entity_ids)  # no canon hash to key it by
+    from app.apps.rpg.foundation.state import access as sections
+    from app.apps.rpg.rules.routines import clock, hero_location
+
+    simulation = _mapping(sections.simulation_state_of(session))
+    place, hour = hero_location(simulation), clock(simulation) // 60 % 24
+    from app.apps.rpg.foundation.core.determinism import stable_json
+
+    # What changes the evidence: whose campaign, both canons (their hashes and revisions), what of it is discovered
+    # (the projection's discovery state, which a discovery write changes without the hash), the scene's entries.
+    discovered = stable_json(_mapping(_mapping(session.get("campaign_bible_projection")).get("discovery_state")))
+    key = (str(getattr(loaded, "campaign_id", "")), getattr(loaded, "content_hash", ""), getattr(loaded, "revision", 0),
+           getattr(portable, "content_hash", ""), getattr(portable, "revision", 0), discovered,
+           tuple(target_entity_ids), place, hour // 6)
+    with _SCENE_LORE_LOCK:
+        held = _SCENE_LORE.get(key)
+        if held is not None:
+            _SCENE_LORE.move_to_end(key)
+            return held
+    built = select_complete_turn_snapshot(loaded, portable, target_entity_ids)
+    with _SCENE_LORE_LOCK:
+        _SCENE_LORE[key] = built
+        while len(_SCENE_LORE) > SCENE_LORE_KEPT:
+            _SCENE_LORE.popitem(last=False)
+    return built
+
+
 def build_turn_grounding_packet(
     result: Mapping[str, Any],
     *,
@@ -262,13 +303,8 @@ def build_turn_grounding_packet(
             prefer_postgresql=prefer_postgresql,
             sessions=sessions,
         )
-    snapshot, complete_bible_evidence, missing_materialized = (
-        select_complete_turn_snapshot(
-            loaded_snapshot,
-            portable_snapshot,
-            target_entity_ids,
-        )
-    )
+    snapshot, complete_bible_evidence, missing_materialized = _scene_lore(
+        session, loaded_snapshot, portable_snapshot, target_entity_ids)
     if target_entity_ids and (snapshot is None or missing_materialized):
         missing = ",".join(missing_materialized or target_entity_ids)
         raise RuntimeError(f"turn_lore_source_of_truth_unavailable:{missing}")

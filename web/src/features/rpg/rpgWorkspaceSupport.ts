@@ -6,6 +6,8 @@ import type { RpgQuickActionPreview, RpgStoryMessagePreview } from './rpgUiTypes
 export interface RpgFormValues {
   sessionId: string;
   command: string;
+  /** A card clicked (EV-9): played as it is, not read from the command. */
+  card?: Record<string, unknown>;
 }
 
 export interface PendingRpgTurnSubmission {

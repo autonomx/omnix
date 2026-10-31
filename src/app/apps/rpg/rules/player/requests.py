@@ -5,7 +5,6 @@ Pure rules: they read the campaign and say what happens as changes, and the fact
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -21,16 +20,9 @@ from app.apps.rpg.foundation.state import access as _sections
 
 PRACTICE_XP = 5  # an hour's practice, on the skill curve (progression.md)
 PARTY_SIZE = 3
-_STATUS_TOPICS = {
-    "progress": re.compile(r"\b(level|experience|xp|progress|character)\b"),
-    "inventory": re.compile(r"\b(inventory|pack|bag|belongings|purse|carry(?:ing)?|gear|have|money|coin|gold)\b"),
-    "quests": re.compile(r"\b(quests?|journal|objectives?)\b"),
-    "skills": re.compile(r"\b(skills?|training)\b"),
-    "health": re.compile(r"\b(health|hurt|wounds?|hp)\b"),
-}
-_ORDERS = (("keep watch", "watch"), ("stand watch", "watch"), ("stand guard", "guard"), ("keep guard", "guard"),
-           ("guard", "guard"), ("wait here", "stay"), ("stay", "stay"), ("hold", "stay"), ("follow", "follow"),
-           ("scout", "scout"), ("protect", "guard"), ("cover", "guard"), ("take point", "scout"))
+# A companion's standing orders (EV-9: the reading names one), and how the hero's line says it.
+ORDERS = {"watch": "keep watch", "guard": "stand guard", "stay": "wait here", "follow": "follow", "scout": "scout ahead",
+          "flank": "flank the foe"}
 
 
 @dataclass(frozen=True)
@@ -99,10 +91,10 @@ def _coins(currency: Mapping[str, Any]) -> str:
     return ", ".join(coins) or "no coin"
 
 
-def status(simulation: Mapping[str, Any], text: str) -> RequestOutcome:
-    """Where the hero stands, from the campaign, when they ask: nothing changes and no time passes."""
-    lowered = text.casefold()
-    topics = [topic for topic, pattern in _STATUS_TOPICS.items() if pattern.search(lowered)] or ["inventory", "health"]
+def status(simulation: Mapping[str, Any], topics: tuple[str, ...] = ()) -> RequestOutcome:
+    """Where the hero stands, from the campaign, on what they ask (the reading's topics: health, progress, inventory,
+    quests, skills; unnamed, what they carry and their health): nothing changes and no time passes."""
+    topics = list(topics) or ["inventory", "health"]
     player = _d(_sections.player_state_of(simulation))
     lines = []
     if "health" in topics:
@@ -173,16 +165,17 @@ def leave(simulation: Mapping[str, Any], npc_id: str) -> RequestOutcome:
     return RequestOutcome([CompanionLeft(npc_id=npc_id)], [f"{_s(companion.get('name')) or name} leaves your party."])
 
 
-def order(simulation: Mapping[str, Any], npc_id: str, text: str) -> RequestOutcome | None:
-    """A standing order to a companion; ``None`` when the person spoken to is not one (then it is talk)."""
+def order(simulation: Mapping[str, Any], npc_id: str, stance: str = "") -> RequestOutcome | None:
+    """A standing order to a companion, one of ``ORDERS`` (unnamed or unknown: follow); ``None`` when the person
+    spoken to is not one (then it is talk)."""
     companion = next((row for row in _companions(simulation) if row.get("npc_id") == npc_id), None)
     if companion is None:
         return None
-    lowered = text.casefold()
-    words, stance = next(((words, stance) for words, stance in _ORDERS if words in lowered), ("follow", "follow"))
+    stance = stance if stance in ORDERS else "follow"
+    words = ORDERS[stance]
     name = _s(companion.get("name")) or npc_id
     return RequestOutcome([CompanionOrdered(npc_id=npc_id, order=words, stance=stance)],
                           [f"{name} will {words}." if stance != "follow" else f"{name} follows your lead."], minutes=0)
 
 
-__all__ = ["RequestOutcome", "accept_quest", "join", "leave", "order", "practise", "status"]
+__all__ = ["ORDERS", "RequestOutcome", "accept_quest", "join", "leave", "order", "practise", "status"]

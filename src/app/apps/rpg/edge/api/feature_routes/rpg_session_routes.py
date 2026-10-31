@@ -62,6 +62,10 @@ class RpgNewGameRequestBody(RpgNewGameRequest):
 
 class RpgApplyTurnRequestBody(_TypedRequestModel):
     command: str | dict[str, Any] | None = None
+    # A card the player clicked (evolution roadmap EV-9): the reading it carries, played with no model call.
+    card: dict[str, Any] | None = None
+    # A wish for the story the game master's panel offered, confirmed (EV-0): its kind and value.
+    preference: dict[str, Any] | None = None
     player_input: str | dict[str, Any] | None = None
     text: str | dict[str, Any] | None = None
     message: str | dict[str, Any] | None = None
@@ -139,7 +143,12 @@ def _create_new_game_from_payload(
         if _has_genesis_contract(payload):
             return create_new_game_from_genesis_payload(payload, sessions=SESSION_CAMPAIGN_SESSIONS)
         request = legacy_request or RpgNewGameRequest.model_validate(payload)
-        return create_new_game_session(_preserve_seed_zero(request))
+        created = create_new_game_session(_preserve_seed_zero(request))
+        if created.get("ok") is not False:
+            from app.apps.rpg.session.jobs.game_master_job import fill_areas_at_launch
+
+            fill_areas_at_launch(str(created.get("session_id") or ""))  # the start's areas, filled in ahead (EV-10)
+        return created
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
@@ -507,7 +516,18 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         http_request: Request, request_body: RpgApplyTurnRequestBody,
     ) -> Any:
         raw_payload = request_body.model_dump(exclude_unset=True, by_alias=True)
+        card = raw_payload.pop("card", None)
+        preference = raw_payload.pop("preference", None)
         command = _foreground_turn_command(raw_payload)
+        if isinstance(preference, dict) and preference:
+            return await execute_foreground_rpg_turn(
+                session_id=session_id, command=command, request=http_request,
+                action={"turn_kind": "structured_action", "type": "preference",
+                        "kind": str(preference.get("kind") or ""), "value": str(preference.get("value") or "")})
+        if isinstance(card, dict) and card:
+            return await execute_foreground_rpg_turn(
+                session_id=session_id, command=command, request=http_request,
+                action={"turn_kind": "structured_action", "type": "card", "card": card})
         return await execute_foreground_rpg_turn(
             session_id=session_id,
             command=command,

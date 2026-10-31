@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.rules.intent.grammar import SceneEntity, SceneView, parse_command
+from tests.support.rpg_line_reader.grammar import SceneEntity, SceneView, parse_command
 
 SCENE = SceneView((
     SceneEntity("npc:brindle", "person", ("Brindle Gearwing", "the relic merchant", "Brindle"), here=True),
@@ -109,7 +109,7 @@ def test_an_ability_is_read_by_its_whole_name_only() -> None:
     ("Shall we head to the market?", False), ("Attack the wolf?", False), ("buy the bread", False),
 ])
 def test_a_question_about_a_deed_is_asked_and_a_request_or_command_is_done(text: str, asked: bool) -> None:
-    from app.apps.rpg.rules.intent.grammar import asked_not_done
+    from tests.support.rpg_line_reader.grammar import asked_not_done
 
     assert asked_not_done(text) is asked
 
@@ -118,7 +118,7 @@ def test_a_question_about_a_deed_is_asked_and_a_request_or_command_is_done(text:
 def test_a_person_is_named_by_the_aliases_their_world_gives_them() -> None:
     """The route's intent eval: "ask the barkeep" did not reach Bran, the innkeeper; a world's people may carry
     aliases (world-author-guide.md)."""
-    from app.apps.rpg.session.command_reading import scene_view
+    from app.apps.rpg.session.turn.scene import scene_view
 
     simulation = {"world_model": {"npcs": {"npc:bran": {"name": "Bran", "role": "innkeeper of the Rusty Flagon",
                                                         "aliases": ["the barkeep", "the bartender"]}}},
@@ -186,7 +186,7 @@ def test_a_question_about_a_thing_is_answered_by_its_seller_or_whoever_is_here_a
 
 def test_a_thing_carried_and_a_calling_answer_to_their_other_names() -> None:
     """The intent gate: "examine my knife" named no Iron Dagger, "ask the trader" no merchant."""
-    from app.apps.rpg.session.command_reading import scene_view
+    from app.apps.rpg.session.turn.scene import scene_view
 
     simulation = {"world_model": {"npcs": {"npc:elara": {"name": "Elara", "role": "merchant of the market square"}}},
                   "present_npc_state": {"present_npc_ids": ["npc:elara"]},
@@ -199,7 +199,7 @@ def test_a_thing_carried_and_a_calling_answer_to_their_other_names() -> None:
 
 
 def test_a_title_names_a_calling_and_a_group_is_asked_about() -> None:
-    from app.apps.rpg.session.command_reading import scene_view
+    from app.apps.rpg.session.turn.scene import scene_view
 
     simulation = {"world_model": {"npcs": {"npc:kade": {"name": "Dr. Selene Kade", "role": "clinical director"},
                                            "npc:juno": {"name": "Juno Rask", "role": "crane operator"}},
@@ -262,7 +262,7 @@ def test_the_real_scene_names_offers_by_service_places_by_kind_and_a_groups_lead
     """The intent gate's target misses at 9818f0e5e9, by class: offers whose labels have no "supper" or "room", "the
     club" for a nightclub, "the union leader" for the union's elected coordinator, "Master Stonewake" taken for the
     foundry master, and a place and a quest sharing a name."""
-    from app.apps.rpg.session.command_reading import scene_view
+    from app.apps.rpg.session.turn.scene import scene_view
 
     simulation = {
         "player_state": {"location_id": "loc:inn"},
@@ -343,7 +343,7 @@ def test_the_eleventh_reviews_readings() -> None:
 
 
 def test_a_place_is_called_by_its_kind_only_when_its_description_says_so() -> None:
-    from app.apps.rpg.session.command_reading import _leader_names, _place_kind_names
+    from app.apps.rpg.session.turn.scene import _leader_names, _place_kind_names
 
     assert _place_kind_names("A nightclub and neutral exchange built around a pump.") == (
         "the nightclub", "the club", "the exchange")
@@ -358,7 +358,7 @@ def test_a_place_is_called_by_its_kind_only_when_its_description_says_so() -> No
 def test_the_twelfth_reviews_readings() -> None:
     """A price question keeps its seller; a name ending a later clause is not the first's listener; an offer sold
     elsewhere is named in full or not at all; "The main interchange" is a place's kind."""
-    from app.apps.rpg.session.command_reading import _place_kind_names
+    from app.apps.rpg.session.turn.scene import _place_kind_names
 
     scene = SceneView((
         SceneEntity("npc:orik", "person", ("Orik Stonewake", "Orik"), here=True),

@@ -12,6 +12,22 @@ const REF_LABELS: Record<RefKind, string> = {
   people: 'People', places: 'Places', items: 'Items', creatures: 'Creatures', regions: 'Regions', quests: 'Quests',
 };
 
+/** A condition on the world's facts (EV-1), ``{fact: value}``, as an author writes it: ``fact=value, …``. */
+function factsText(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  return Object.entries(value as Record<string, unknown>).map(([fact, held]) => `${fact}=${String(held)}`).join(', ');
+}
+
+function parseFacts(text: string): Record<string, string | number | boolean> {
+  const facts: Record<string, string | number | boolean> = {};
+  for (const part of text.split(',')) {
+    const [fact, raw = 'true'] = part.split('=').map((piece) => piece.trim());
+    if (!fact) continue;
+    facts[fact] = raw === 'true' ? true : raw === 'false' ? false : /^-?\d+$/.test(raw) ? Number(raw) : raw;
+  }
+  return facts;
+}
+
 function numberOr(value: string, nullable: boolean | undefined): number | null {
   if (value.trim() === '') return nullable ? null : 0;
   const parsed = Number(value);
@@ -146,6 +162,10 @@ function FieldInput({ field, value, row, onChange, context }: {
       return <RefSelect field={field} value={value} onChange={onChange} context={context} />;
     case 'tags':
       return <input value={Array.isArray(value) ? value.join(', ') : ''} onChange={(event) => onChange(event.currentTarget.value.split(',').map((part) => part.trim()).filter(Boolean))} />;
+    case 'facts':
+      return <input placeholder="fact=value, …" value={factsText(value)} onChange={(event) => onChange(parseFacts(event.currentTarget.value))} />;
+    case 'bool':
+      return <input checked={value === true} type="checkbox" onChange={(event) => onChange(event.currentTarget.checked)} />;
     case 'price':
       return <PriceInput nullable={field.nullable} value={value} onChange={onChange} />;
     case 'lever':

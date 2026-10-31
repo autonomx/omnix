@@ -46,6 +46,21 @@ def wait_minutes(text: str, minute_of_day: int) -> int:
     return A_WHILE
 
 
+def wait_for(minutes: int | None, until_hour: int | None, minute_of_day: int, *, tomorrow: bool = False) -> int:
+    """The minutes a wait lasts, from the reading's slots (EV-9): until the hour of the day it names (tomorrow's,
+    when today's has gone by or it says so), or for the minutes it names, at most ``LONGEST_WAIT``; else
+    ``A_WHILE``."""
+    if until_hour is not None:
+        at = int(until_hour) * 60
+        if tomorrow:
+            return 1440 - minute_of_day + at
+        ahead = (at - minute_of_day) % 1440
+        return A_WHILE if ahead == 0 or ahead > 1440 - ALREADY else ahead  # until it comes, however long
+    if minutes:
+        return max(10, min(LONGEST_WAIT, int(minutes)))
+    return A_WHILE
+
+
 def said(minutes: int) -> str:
     """A wait's length as the hero's line says it."""
     if minutes < 60:
@@ -54,4 +69,4 @@ def said(minutes: int) -> str:
     return f"{hours} hour{'s' if hours != 1 else ''}"
 
 
-__all__ = ["A_WHILE", "LONGEST_WAIT", "said", "wait_minutes"]
+__all__ = ["A_WHILE", "LONGEST_WAIT", "said", "wait_for", "wait_minutes"]

@@ -1,0 +1,30 @@
+.rpg-lore-review {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rpg-lore-review-group {
+  border: 1px solid var(--color-border, rgba(127, 127, 127, 0.35));
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.rpg-lore-review-draft h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.rpg-lore-review-family,
+.rpg-lore-review-from,
+.rpg-lore-review-status {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.rpg-lore-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

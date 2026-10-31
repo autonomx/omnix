@@ -38,6 +38,9 @@ def test_a_reasonable_player_stays_inside_the_progression_bands(launch, world) -
     broken = [line for line in outside(report) if not any(key in line for key in PENDING.get(world, {}))]
     assert broken == [], report
     assert report[500]["unplanned"] == 0  # every command the player gives, the pipeline plays
+    if world == "aurelia":  # EV-5's bands: the purse rises and is spent, and later gear is better than early gear
+        assert report[500]["spent"] > report[100]["spent"] > 0
+        assert report[500]["gear"] > report[100]["gear"], (report[100]["gear"], report[500]["gear"])
 
 
 @pytest.mark.parametrize("world", sorted(PENDING))

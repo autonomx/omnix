@@ -11,8 +11,20 @@ def _ability(play, action: str, **fields):
     return play.client.post(f"/api/rpg/sessions/{play.session_id}/loadout-action", json={"action": action, **fields})
 
 
+def _knows(play, *ability_ids: str) -> None:
+    """The hero learned these as levels' choices (EV-2: a calling starts with two abilities, Aimed Shot and Frost
+    Arrow here, and learns the rest at its levels)."""
+    from app.apps.rpg.session.service import load_session, save_session
+
+    session = load_session(play.session_id)
+    unlocked = session["state"]["ability_state"]["unlocked"]
+    session["state"]["ability_state"]["unlocked"] = [*unlocked, *(row for row in ability_ids if row not in unlocked)]
+    save_session(session, compact=False)
+
+
 def test_an_ability_out_of_a_fight_is_paid_for_and_what_it_restores_comes_back(launch) -> None:
     play = launch("aurelia")
+    _knows(play, "recon_trail_sense", "survival_make_camp")
     sensed = play.turn("use Trail Sense")
     assert sensed["outcome"]["planned_action"] == "ability"
     assert play.public()["player"]["resources"]["stamina"]["current"] == 95
@@ -34,6 +46,7 @@ def test_an_ability_out_of_a_fight_is_paid_for_and_what_it_restores_comes_back(l
 
 def test_the_hotbar_holds_the_heros_active_abilities(launch) -> None:
     play = launch("aurelia")
+    _knows(play, "survival_make_camp")
     revision = play.revision()
     put = _ability(play, "assign_hotbar", ability_name="Make Camp", hotbar_slot="7")
     assert put.status_code == 200, put.text[:300]

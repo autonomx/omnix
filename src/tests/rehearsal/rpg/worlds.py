@@ -91,8 +91,9 @@ class ScriptedModel:
     """Answers each model call by its role, so a harness can play without a provider.
 
     The dialogue call names the present NPC whose name the player used (else the first present NPC); narration
-    answers with a fixed line; a canon dossier adds nothing; the intent router answers "{}" (no advice), so the
-    deterministic engine decides.
+    answers with a fixed line; a canon dossier adds nothing. Every typed line goes to the intent call (evolution
+    roadmap EV-9): it is read as the command grammar read it before (``tests/support/rpg_line_reader``), against the
+    campaign launched last, and answers "{}" (no reading) where the grammar read nothing it acted on.
     """
 
     name = "scripted"
@@ -100,6 +101,19 @@ class ScriptedModel:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.session_id = ""  # the campaign whose lines the intent call reads (``launch`` sets it)
+        self.read: list[str] = []  # each intent call's answer, in order
+        self.recorded: list[str] | None = None  # re-executed: the answers to give, in order, in place of reading
+
+    def _read_line(self, text: str) -> str:
+        import re
+
+        from tests.support.rpg_line_reader.reader import read_line
+
+        said = re.search(r"\nPLAYER: (.*)\n", text)
+        document = load(self.session_id) if self.session_id and said else None
+        read = read_line(document, said.group(1).strip()) if document else {}
+        return json.dumps(read) if read.get("readings") or read.get("question") else "{}"
 
     def classify(self, text: str) -> str:
         if "decide which one present NPC" in text:
@@ -137,6 +151,9 @@ class ScriptedModel:
             answer = json.dumps({"entities": [], "documents": [], "facts": [], "relationships": []})
         elif kind == "turn_narration":
             answer = "The moment passes."
+        elif kind == "semantic_intent" and "Read what the player means" in text:
+            answer = self.recorded.pop(0) if self.recorded else self._read_line(text)
+            self.read.append(answer)
         self.calls.append(kind)
         response = ChatResponse(content=answer, model="scripted")
         return iter([response]) if stream else response
@@ -170,7 +187,9 @@ def install_scripted_model() -> ScriptedModel:
     from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
     from app.providers import service as provider_service
 
+    global _INSTALLED
     model = ScriptedModel()
+    _INSTALLED = model
     setattr(provider_service, "get_provider", lambda *args, **kwargs: model)
     setattr(narrative_service, "_production_writer",
             lambda: StructuredNarrativeWriter(scripted_narrative, provider="scripted", model="scripted"))
@@ -244,7 +263,8 @@ def install_counting_provider(route: tuple[str, str] | None = LIVE_RPG_ROUTE, *,
     settings route. The settings service is installed first (as gateway composition does): the provider's own
     configuration is read from it. ``model`` names another model of the route's provider. ``effort`` sets the
     provider's effort level (the Claude CLI's ``--effort``) for this process, as its settings would; empty keeps the
-    configured one.
+    configured one. ``OMNIX_RPG_GATE_PROVIDER`` names another provider for the route (``lmstudio``: a local model, for
+    a run that measures the game's own time beside the reference model's).
     """
     from app.apps.rpg.foundation import provider_access
     from app.persistence.database import default_database
@@ -252,6 +272,11 @@ def install_counting_provider(route: tuple[str, str] | None = LIVE_RPG_ROUTE, *,
     from app.settings.access import install_database_settings_service
 
     install_database_settings_service(default_database())
+    provider = os.environ.get("OMNIX_RPG_GATE_PROVIDER", "").strip()
+    if route is not None and provider:
+        if not model:  # the route's own model is the reference provider's ("haiku"), not one the other serves
+            raise SystemExit("OMNIX_RPG_GATE_PROVIDER needs --model: a model that provider serves")
+        route = (provider, route[1])
     if route is not None and model:
         route = (route[0], model)
     if route is not None:
@@ -359,10 +384,17 @@ def launch_starter(seed: int = 7) -> str:
     return str(created["session_id"])
 
 
+_INSTALLED: ScriptedModel | None = None
+
+
 def launch(world: str, *, starter_gear: tuple[str, ...] = ()) -> str:
-    if world == "starter":
-        return launch_starter()
-    return launch_published(world, starter_gear=starter_gear)
+    from app.apps.rpg.session.jobs.game_master_job import fill_areas_at_launch
+
+    session_id = launch_starter() if world == "starter" else launch_published(world, starter_gear=starter_gear)
+    fill_areas_at_launch(session_id)  # as the launch routes do: the start's areas, filled in ahead (EV-10)
+    if _INSTALLED is not None:  # the scripted model reads this campaign's lines (EV-9)
+        _INSTALLED.session_id = session_id
+    return session_id
 
 
 def turn_client():

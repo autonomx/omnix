@@ -128,6 +128,7 @@ def _play(tmp_path, monkeypatch) -> tuple[dict, dict]:
 
     with scripted_model_installed(monkeypatch) as model:
         session_id, world_id = launch_aurelia(tmp_path, monkeypatch)
+        model.session_id = session_id  # every typed line goes to the model, which reads it against this campaign
         play = Playthrough(session_id)
         facts = play.facts()
         opening = {"facts": facts, "document_hash": _document_hash(play.stored(), session_id, world_id)}
@@ -165,7 +166,9 @@ def _play(tmp_path, monkeypatch) -> tuple[dict, dict]:
                 "patched_sections": sorted({section for row in new_rows for section in _patched_sections(row)}),
                 "turn_rows": len(new_rows),
                 "facts": after,
-                "model_calls": model.roles(calls),
+                # As a set in order of role: a person's reply written beside the intent call (EV-9) may be recorded
+                # before or after it.
+                "model_calls": sorted(model.roles(calls)),
                 "document_hash": _document_hash(play.stored(), session_id, world_id),
             })
             turns.append(record)

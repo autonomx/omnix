@@ -31,6 +31,7 @@ from .library_service import start_world_library_generation
 from .postgres_service import create_scenario_project, publish_scenario_revision
 from .service import compile_world_release, compile_world_revision
 from .starter_bubble_service import promote_starter_bubble
+from .topic_entries import carries_entries, entries_hash, unresolved, with_topic_entries
 from .world_adoption import require_adopted_if_shared
 from .world_bundle import safe_bundle_segment
 
@@ -169,13 +170,19 @@ _REPUBLISHED_PROVENANCE_DROPPED = frozenset({
 })
 
 
+def _draft_topics(work: Any, context: Any, world: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The world's topics as its editor holds them (one each, as last written)."""
+    return work.world_library.list_topics(context, str(world["id"]))
+
+
 def _republished_latest(
-    work: Any, context: Any, world_id: str, *, revision: int,
+    work: Any, context: Any, world_id: str, *, revision: int, topic_rows: list[Mapping[str, Any]],
 ) -> tuple[WorldGenerationPublication, list[GridMapDefinition]]:
     """A world with nothing to recompile from (written by hand or installed from a bundle: no generation run, no
     imported topics) republished as its latest revision stands, from before that revision's starter-bubble
-    promotion, so the author's play sections can be written in (RQ-4.1); with its map definitions issued again for
-    the new revision, to be stored once that revision is."""
+    promotion, so the author's play sections can be written in (RQ-4.1), and with the entries its editor holds
+    (``topic_entries``, EV-6); with its map definitions issued again for the new revision, to be stored once that
+    revision is."""
     latest = work.world_scenarios.latest_world_revision(context, world_id)
     if latest is None:
         raise ValueError(f"world_launch_repair_generation_missing:{world_id}")
@@ -206,27 +213,34 @@ def _republished_latest(
             "definition_hash": definition.definition_hash,
             "semantic_interface_hash": definition.semantic_interface_hash,
         }))
+    canon, manifest, indexes = with_topic_entries(base.canon, base.entity_manifest, base_release.indexes, topic_rows)
+    dangling = unresolved(base.canon, base.entity_manifest, topic_rows)
+    if dangling:  # an entry the editor added or changed names what the world does not hold
+        raise ValueError(f"world_launch_repair_entry_unresolved:{'; '.join(dangling[:5])}")
+    entries = entries_hash(topic_rows)
     republished = compile_world_revision(
         world_id=world_id,
         revision=revision,
         title=base.title,
-        canon=base.canon,
-        entity_manifest=base.entity_manifest,
+        canon=canon,
+        entity_manifest=manifest,
         topology=base.topology,
         adventure_seeds=base.adventure_seeds,
         blueprint_requirements=base.blueprint_requirements,
         provenance={**{key: value for key, value in base.provenance.items() if key not in _REPUBLISHED_PROVENANCE_DROPPED},
-                    "republished_from_revision": base.revision},
+                    "republished_from_revision": base.revision, "topic_entries": entries},
     )
     release = compile_world_release(
         republished,
         release=1,
         map_bindings=bindings,
-        indexes=base_release.indexes,
+        indexes=indexes,
         asset_bindings=base_release.asset_bindings,
         compiler_provenance={**dict(base_release.compiler_provenance), "republished_from_revision": base.revision},
-        # The same canon and maps as the revision it is made from (its play sections are checked when written in).
-        certification={**dict(base_release.certification), "republished_from_revision": base.revision},
+        # The revision it is made from, with the editor's entries, each reference checked above (``unresolved``), and
+        # its maps (its play sections are checked when written in).
+        certification={**dict(base_release.certification), "republished_from_revision": base.revision,
+                       "topic_entries": entries},
         artifact_stage=base_release.artifact_stage,
         runtime_seed=base_release.runtime_seed,
         materialization=base_release.materialization,
@@ -242,9 +256,11 @@ def _existing_ready_promotion(
     starting_location_id: str,
     play_sections: str,
     database: Any | None,
+    topic_rows: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """A launch-ready promotion at ``starting_location_id`` that already carries the world's play-sections draft
-    (``play_sections``, its hash, "" for none): a repair reuses it rather than publishing again."""
+    (``play_sections``, its hash, "" for none), and, for a republished world, the entries its editor holds
+    (``topic_rows``): a repair reuses it rather than publishing again."""
     context = current_tenant()
     with unit_of_work(database) as work:
         revisions = work.world_library.list_world_revisions(context, world_id)
@@ -275,6 +291,8 @@ def _existing_ready_promotion(
             or {}
         )
         provenance = dict(revision_document.get("provenance") or {})
+        if topic_rows is not None and not carries_entries(revision_document, topic_rows):
+            continue  # the editor has changed or added an entry since (EV-6)
         if provenance.get("republished_from_revision"):
             # A republished world's maps are its own and complete: any opening launches from it, wherever it starts,
             # while it is the world as it stands (a later revision, from an edit or another draft, supersedes it).
@@ -319,7 +337,8 @@ def _publish_repaired_world(
         current_revision = int(current_row[0])
         definitions: list[GridMapDefinition] = []
         if not runs and not imported_topics:
-            compiled, definitions = _republished_latest(work, context, world_id, revision=current_revision + 1)
+            compiled, definitions = _republished_latest(work, context, world_id, revision=current_revision + 1,
+                                                        topic_rows=_draft_topics(work, context, world))
         else:
             run = None if imported_topics else runs[0]
             topic_rows = (
@@ -353,7 +372,10 @@ def _publish_repaired_world(
             compiled.world_release,
             requirements,
         )
-        revision, release = merge_authored_play_sections(revision, release, authored_play_sections(world))
+        from .approved_inventions import approved_inventions
+
+        revision, release = merge_authored_play_sections(revision, release, authored_play_sections(world),
+                                                         approved_inventions(world))
         compiled = WorldGenerationPublication(
             world_revision=revision,
             world_release=release,
@@ -452,6 +474,10 @@ def repair_world_for_launch(
         if str(scenario.get("world_id") or "") != world_id:
             raise ValueError(f"scenario_world_mismatch:{scenario_id}:{world_id}")
         revisions = work.world_library.list_scenario_revisions(context, scenario_id)
+        # A world with nothing to recompile from carries its editor's entries when it is published (EV-6).
+        republishes = (str(world.get("source_mode") or "") != "imported"
+                       and not work.world_library.list_generation_runs(context, world_id=world_id, limit=1))
+        topic_rows = _draft_topics(work, context, world) if republishes else None
         work.rollback()
 
     promotion = _existing_ready_promotion(
@@ -459,6 +485,7 @@ def repair_world_for_launch(
         starting_location_id=starting_location_id,
         play_sections=play_sections_hash(authored_play_sections(world)),
         database=database,
+        topic_rows=topic_rows,
     )
     repaired: dict[str, Any] = {}
     if promotion is None:
@@ -575,8 +602,9 @@ def prepare_opening_scenarios_for_launch(
         if str(topic.get("topic_id") or "") != "opening_scenarios":
             continue
         content = raw_content if isinstance(raw_content := topic.get("content"), Mapping) else {}
-        openings.extend(
-            entity for entity in content.get("entities") or () if isinstance(entity, Mapping)
+        openings.extend(  # the entries the topic keeps, in either list the editor writes them to (EV-6)
+            entity for key in ("entities", "opening_scenarios") for entity in content.get(key) or ()
+            if isinstance(entity, Mapping)
         )
     if not openings:
         raise ValueError("world_opening_scenarios_not_found")

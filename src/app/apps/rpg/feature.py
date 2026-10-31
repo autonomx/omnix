@@ -26,6 +26,7 @@ from app.apps.rpg.session.jobs.handlers import (
 )
 from app.apps.rpg.session.jobs.debug_observer import rpg_debug_job_observer
 from app.apps.rpg.genesis.forge.scene_lore_job import RpgSceneLoreJobInput, execute_scene_lore_job
+from app.apps.rpg.session.jobs.game_master_job import RpgGameMasterJobInput, execute_game_master_job
 
 
 def _turn(context: JobExecutionContext, job):
@@ -42,6 +43,10 @@ def _narration(context: JobExecutionContext, job):
 
 def _scene_lore(context: JobExecutionContext, job):
     return execute_scene_lore_job(context.job_store, job)
+
+
+def _game_master(context: JobExecutionContext, job):
+    return execute_game_master_job(context.job_store, job)
 
 
 def _rpg_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
@@ -130,6 +135,15 @@ FEATURE = FeatureModule(
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=300,
             max_attempts=3,
+        ),
+        JobHandlerSpec(
+            # The game master's direction after a turn (EV-0): its proposals go to the proposal record.
+            type="rpg.game_master",
+            handler=_game_master,
+            input_model=RpgGameMasterJobInput,
+            resource_class=ResourceClass.GPU_LLM,
+            timeout_seconds=180,
+            max_attempts=2,
         ),
         JobHandlerSpec(
             type="rpg.report.last10",

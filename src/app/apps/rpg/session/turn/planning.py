@@ -5,21 +5,21 @@ pipeline are planned here; for anything else ``plan_action`` returns ``None`` an
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.apps.rpg.rules.intent.grammar import IntentCandidate
-from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
+from app.apps.rpg.rules.intent.reading import NO_SLOTS, IntentCandidate, ReadingSlots
 
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "give", "take", "rest",
                            "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
-                           "ability", "hotbar", "check", "grow", "rewind", "act"]
+                           "ability", "hotbar", "check", "grow", "rewind", "act", "note_preference", "explore"]
 
 
 # What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
 _NOT_IN_A_FIGHT = frozenset({"move", "rest", "wait", "buy", "sell", "take", "drop", "give", "quest", "practice",
+                             "explore",
                              "party", "talk", "ask", "look", "inspect"})
 
 
@@ -32,24 +32,26 @@ class PlannedAction(BaseModel):
     ticks: int = 1
     reason: str = ""
     question: str = ""
-    second_target_id: str = ""  # an ability's target (the foe it is aimed at); a gift's receiver
+    second_target_id: str = ""  # an ability's target (the foe it is aimed at); a gift's receiver; a seller, a buyer
     options: tuple[str, ...] = ()  # a question's answers, as the commands they send (RQ-7.3)
+    option_actions: tuple[dict[str, Any], ...] = ()  # and as the cards they are (EV-9), one for each
+    slots: ReadingSlots = NO_SLOTS  # what the rules need of the line besides its target (EV-9)
 
 
-def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bool = False) -> PlannedAction | None:
-    """The plan for a confident, single-step reading of a mechanic the pipeline runs; else ``None``.
+def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
+    """The plan for a reading (``_plan``), carrying the reading's slots to the rule that resolves it (EV-9)."""
+    planned = _plan(reading, fighting=fighting)
+    if planned is None or reading.slots == NO_SLOTS:
+        return planned
+    return planned.model_copy(update={"slots": reading.slots})
 
-    ``decided`` is a reading the intent call chose (``intent.decide``: above its own trust, with no close rival, aimed
-    at something really here): its confidence is the model's, not the grammar's, so the grammar's bar does not apply.
 
-    In a fight a bare "attack" means the foe in front of the hero, so it is not asked about.
-    """
-    question = clarification(reading)
-    if question and not (fighting and reading.reason == "attack_without_target"):
-        return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
+def _plan(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
+    """The plan for a single-step reading of a mechanic the pipeline runs (one the intent call decided, or a card's);
+    else ``None``. In a fight an attack at no one means the foe in front of the hero, so it is not asked about."""
     if len(reading.clauses) > 1:
         return None
-    if fighting and reading.reason == "attack_without_target":
+    if fighting and reading.family == "attack" and not reading.target_id:
         return PlannedAction(mechanic="fight", ticks=0, reason="attack")  # "attack": the foe in front of the hero
     if reading.family == "attack" and (fighting or (reading.target_kind in {"creature", "person"} and reading.target_id)):
         # A creature the world knows or a person present, or in a fight the foe in front of the hero (combat.md).
@@ -70,8 +72,11 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
     if fighting and reading.family == "check" and reading.reason in {"check:sneak", "check:persuade", "check:intimidate"}:
         # Before blows are traded, slipping past or talking the foe down (encounters.md): the fight rule's to judge.
         return PlannedAction(mechanic="fight", ticks=0, reason=reading.reason.removeprefix("check:"))
-    if reading.family == "defend" and fighting:
-        return PlannedAction(mechanic="fight", ticks=0, reason="defend")
+    if reading.family == "defend" and fighting:  # aimed at one of the party: guarding them (EV-2)
+        return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="defend")
+    if fighting and reading.family == "order" and reading.target_kind == "person" and reading.target_id:
+        # A companion's order in a fight ("Liora, flank it"): the companion rule's, and the fight reads it (EV-2).
+        return PlannedAction(mechanic="order", target_id=reading.target_id, ticks=0, reason=reading.reason)
     if reading.family == "flee" and fighting:
         return PlannedAction(mechanic="fight", ticks=0, reason="flee")
     if fighting and reading.family == "use_item" and reading.target_kind == "item" and reading.target_id:
@@ -83,10 +88,9 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
         return PlannedAction(mechanic="fight", ticks=0, reason="busy")  # the game says no: the fight goes on
     if fighting and reading.family != "status":
         return None  # a move the grammar does not name; abilities and orders in a fight are RQ-2.6 part 2's
-    if reading.family in {"buy", "sell"}:  # which offer, or which buyer, is the trade rule's to say
-        return PlannedAction(mechanic="trade", reason=reading.family)
-    if not decided and reading.confidence < SKIP_CONFIDENCE:
-        return None
+    if reading.family in {"buy", "sell"}:  # the offer or thing, and the seller or buyer, the reading named
+        return PlannedAction(mechanic="trade", target_id=reading.target_id or "",
+                             second_target_id=reading.second_target_id or "", reason=reading.family)
     if reading.family == "look":
         return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)
     if reading.family == "inspect" and reading.target_id:  # a close look at something here, told by what it is
@@ -112,7 +116,8 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
     if reading.family == "status":
         return PlannedAction(mechanic="status", ticks=0, reason=reading.reason)
     if reading.family in {"party", "order"} and reading.target_kind == "person" and reading.target_id:
-        return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reading.reason)
+        reason = "party_leave" if reading.family == "party" and reading.slots.parting else reading.reason
+        return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reason)
     if reading.family == "ask" and reading.reason == "asks_hypothetical":
         # A question about what would happen is speech, whatever it is about (RQ-3.2): asked of the person it
         # names, else of whoever the hero is talking with.
@@ -125,6 +130,8 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False, decided: bo
         return PlannedAction(mechanic="rest", ticks=0, reason=reading.reason)
     if reading.family == "wait":
         return PlannedAction(mechanic="wait", ticks=3, reason=reading.reason)  # a while: half an hour
+    if reading.family == "explore":  # a search of the area for what is hidden (EV-10)
+        return PlannedAction(mechanic="explore", ticks=0, reason=reading.reason)
     return None
 
 

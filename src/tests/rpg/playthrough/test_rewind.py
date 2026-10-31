@@ -91,3 +91,22 @@ def test_a_moment_that_will_not_upgrade_is_refused_not_a_server_error(launch, mo
     refused = _rewind(play)
     assert refused.status_code == 409, refused.text[:300]
     assert "can no longer be rebuilt" in refused.text
+
+
+def test_what_was_proposed_in_a_timeline_undone_never_folds_in(launch) -> None:
+    """Review: after a rewind, a name heard only in the undone turn was still heard in the game restored."""
+    from app.apps.rpg.foundation.state.proposals import Proposal
+    from app.apps.rpg.session.turn.proposals import record_proposals
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    play = launch("aurelia")
+    play.turn("look around")
+    play.turn("wait")
+    record_proposals(play.session_id, [Proposal(proposal_id="proposal:undone", kind="heard_of", source="narration",
+                                                after_revision=play.revision(), payload={"entry_id": "npc:orik-stonewake"})])
+    assert _rewind(play).status_code == 200
+    with unit_of_work() as work:
+        stored = work.rpg_proposals.get(current_tenant(), play.session_id, "proposal:undone")
+        work.rollback()
+    assert (stored["status"], stored["drop_reason"]) == ("dropped", "rewound")

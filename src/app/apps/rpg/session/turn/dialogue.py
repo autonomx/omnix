@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -52,14 +54,18 @@ class DialogueResolution:
 
 
 def _clean(raw: Any, speaker: str) -> str:
-    line = _s(raw).strip().strip('"').strip()
+    from app.apps.rpg.narration.lore_links import note
+
+    line = note(_s(raw)).strip().strip('"').strip()  # a lore mark is noted for the links, never kept (EV-12)
     line = re.sub(rf"^\s*{re.escape(speaker)}\s*:\s*", "", line, flags=re.IGNORECASE).strip().strip('"')
     if line[:1] in "{[<" or not re.search(r"[^\W\d_]", line):
         return ""  # JSON, markup or no words at all is no line: the plan's own answers
     return line[:MAX_LINE]
 
 
-def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) -> str:
+def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str, *, held: bool = False) -> str:
+    """The line the model writes from the plan; ``held``: written beside the intent call, not shown as it grows (it
+    may be discarded, EV-9)."""
     from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 
     gateway = build_app_llm_gateway()
@@ -68,7 +74,7 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
     context = {**plan.context(), "recent_exchanges": exchanges[-3:]}
     prompt = _LINE_PROMPT.format(v0=text[:500]) + world_data(context)  # the plan's world text, fenced as data
     try:
-        if narration_draft_active():  # the play screen follows the turn: the line is shown as it is written (Q-12)
+        if narration_draft_active() and not held:  # the line is shown as it is written (Q-12)
             return _streamed_line(gateway, prompt, plan.speaker_name)
         raw = gateway.generate(prompt, timeout_s=LINE_TIMEOUT_SECONDS, provider_options=_LINE_OPTIONS)
     except Exception:
@@ -88,7 +94,9 @@ def _streamed_line(gateway: Any, prompt: str, speaker: str) -> str:
     return "".join(parts)
 
 
-def _speaker(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_id: str) -> str:
+def speaker_for(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_id: str) -> str:
+    """Who answers a line: the person present it names; unnamed, the one the hero is talking with, or the one person
+    here; "" when no one present is clearly spoken to."""
     present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
     if target_id and target_id in present:
         return target_id
@@ -101,17 +109,104 @@ def _speaker(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_i
     return next(iter(present)) if len(present) == 1 else ""
 
 
-def resolve_dialogue(session: Mapping[str, Any], target_id: str, text: str) -> DialogueResolution | None:
-    """The answer of the person spoken to; ``None`` when no one present is clearly spoken to (the older path's)."""
+@dataclass
+class HeldReply:
+    """A person's reply written beside the intent call in a conversation under way (EV-9), from their plan with no
+    topics; held, not shown, and used only when the turn's own plan for them is the plan it was written for."""
+
+    speaker_id: str
+    context: dict[str, Any]
+    future: Future[str]
+    used: bool = False
+
+
+_HELD: ContextVar[HeldReply | None] = ContextVar("RPG_HELD_REPLY", default=None)
+_REPLIES = ThreadPoolExecutor(max_workers=4, thread_name_prefix="rpg-held-reply")
+
+
+def under_way(session: Mapping[str, Any]) -> str:
+    """The person a conversation is under way with: the last turn left the hero talking with them, and they are still
+    here; "" when there is none."""
     simulation = _d(_sections.simulation_state_of(session))
-    speaker_id = _speaker(simulation, _d(_sections.runtime_state_of(session)), target_id)
+    focus = _s(_d(_d(_sections.runtime_state_of(session)).get("dialogue_focus")).get("target_id"))
+    present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
+    return focus if focus and focus in present else ""
+
+
+def hold_reply(session: Mapping[str, Any], text: str) -> HeldReply | None:
+    """In a conversation under way, start the person's reply to ``text`` from their topic-free plan, beside the
+    intent call; the turn uses it only when its own plan matches (``take_held_reply``)."""
+    speaker_id = under_way(session)
+    if not speaker_id:
+        _HELD.set(None)
+        return None
+    simulation = _d(_sections.simulation_state_of(session))
+    sheet = _d(_d(session.get("state")).get("player"))
+    hero = {key: _s(sheet.get(key)) for key in ("name", "pronouns") if _s(sheet.get(key))}
+    plan = build_plan(simulation, speaker_id, text, hero=hero)
+    if plan is None:
+        _HELD.set(None)
+        return None
+    exchanges = [_d(row) for row in _l(_d(_d(simulation.get("dialogue")).get("exchanges")).get(speaker_id))]
+    future = _REPLIES.submit(copy_context().run, _write_held, plan, exchanges, text)
+    held = HeldReply(speaker_id=speaker_id, context=plan.context(), future=future)
+    _HELD.set(held)
+    return held
+
+
+def _write_held(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) -> str:
+    from app.apps.rpg.foundation.model_calls import APART, counted_as
+
+    with counted_as(APART):  # counted apart: the turn may discard it (F3)
+        return _write_line(plan, exchanges, text, held=True)
+
+
+def take_held_reply(plan: DialoguePlan) -> str | None:
+    """The held reply, when it was written for this very plan (the reading's topics and step added nothing to it);
+    ``None`` otherwise, and the line is written for the plan as it is."""
+    held = _HELD.get()
+    if held is None or held.speaker_id != plan.speaker_id or held.context != plan.context():
+        return None
+    try:
+        line = held.future.result(timeout=LINE_TIMEOUT_SECONDS)
+    except Exception:  # timed out or failed: the line is written now
+        logger.warning("rpg_held_reply_failed speaker=%s", plan.speaker_id, exc_info=True)
+        return None
+    from app.apps.rpg.foundation.model_calls import used_apart
+
+    held.used = True
+    used_apart()  # the turn's own dialogue call after all
+    return line
+
+
+def settle_held_reply() -> str:
+    """How the held reply went, once the turn is planned and resolved: "used", "discarded" (counted apart, F3), or
+    "" when none was written."""
+    held = _HELD.get()
+    _HELD.set(None)
+    if held is None:
+        return ""
+    return "used" if held.used else "discarded"
+
+
+def resolve_dialogue(session: Mapping[str, Any], target_id: str, text: str, *, topics: tuple[str, ...] = (),
+                     step: str = "") -> DialogueResolution | None:
+    """The answer of the person spoken to, to the line ``text``, which asks about its reading's ``topics`` and may
+    answer a quest ``step`` (EV-3: accepted only when it is one of the speaker's open steps); ``None`` when no one
+    present is clearly spoken to (the older path's)."""
+    from app.apps.rpg.rules.quest.progress import accepted_step
+
+    simulation = _d(_sections.simulation_state_of(session))
+    speaker_id = speaker_for(simulation, _d(_sections.runtime_state_of(session)), target_id)
     sheet = _d(_d(session.get("state")).get("player"))  # who the hero is, as their sheet names them
     hero = {key: _s(sheet.get(key)) for key in ("name", "pronouns") if _s(sheet.get(key))}
-    plan = build_plan(simulation, speaker_id, text, hero=hero) if speaker_id else None
+    plan = (build_plan(simulation, speaker_id, text, topics=topics, step=accepted_step(simulation, speaker_id, step),
+                       hero=hero) if speaker_id else None)
     if plan is None:
         return None
     exchanges = [_d(row) for row in _l(_d(_d(simulation.get("dialogue")).get("exchanges")).get(speaker_id))]
-    written = _clean(_write_line(plan, exchanges, text), plan.speaker_name)
+    held = take_held_reply(plan)  # written beside the intent call for this same plan (EV-9)
+    written = _clean(held if held is not None else _write_line(plan, exchanges, text), plan.speaker_name)
     keeps = bool(written) and line_keeps_the_plan(plan, written)
     line = written if keeps else plan.fallback_line()
     told = [f"{plan.speaker_name} answers ({plan.stance})."]
@@ -125,8 +220,9 @@ def resolve_dialogue(session: Mapping[str, Any], target_id: str, text: str) -> D
         return DialogueResolution(plan_changes(plan), [*told, plan.fallback_beat()], speaker_id, plan.speaker_name,
                                   "", written_by_model=False)
     changes = [*plan_changes(plan), DialogueExchanged(npc_id=speaker_id, name=plan.speaker_name, player_line=text[:500],
-                                                      npc_line=line)]
+                                                      npc_line=line, step=plan.step)]
     return DialogueResolution(changes, told, speaker_id, plan.speaker_name, line, written_by_model=keeps)
 
 
-__all__ = ["DialogueResolution", "resolve_dialogue"]
+__all__ = ["DialogueResolution", "HeldReply", "hold_reply", "resolve_dialogue", "settle_held_reply", "speaker_for",
+           "take_held_reply", "under_way"]

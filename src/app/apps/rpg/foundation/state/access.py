@@ -113,6 +113,53 @@ def needs_of(simulation: Any) -> Any:
     return _kept(simulation, "needs")
 
 
+def hero_knowledge_of(simulation: Any) -> Any:
+    """What the hero knows (EV-1): ``{"entries": {entry id: {"kind", "tick"}}}``."""
+    return _kept(simulation, "hero_knowledge")
+
+
+def world_facts_of(simulation: Any) -> Any:
+    """The world's facts (EV-1): ``{fact id: {"value", "source", "known", "tick"}}``."""
+    return _kept(simulation, "world_facts")
+
+
+def group_standing_of(simulation: Any) -> Any:
+    """Each group's standing with the hero (EV-1): ``{group id: -100..100}``."""
+    return _kept(simulation, "group_standing")
+
+
+def goal_state_of(simulation: Any) -> Any:
+    """How far each person has come toward their goals (EV-4): ``{npc id: {goal id: {"beats", "location_id",
+    "activity", "gone", "day"}}}``."""
+    return _kept(simulation, "npc_goal_state")
+
+
+def active_rumors_of(simulation: Any) -> Any:
+    """The rumours going about (EV-4): ``[{"rumour_id", "place_id", "text_id", "text", "source", "day", "heard"}]``."""
+    return _kept(simulation, "active_rumors")
+
+
+def direction_of(simulation: Any) -> Any:
+    """The game master's bookkeeping (EV-0): ``{"last_event_turn", "events", "complications", "wishes"}``."""
+    return _kept(simulation, "direction")
+
+
+def lore_layer_of(simulation: Any) -> Any:
+    """The campaign's lore layer (EV-0, part 2): ``{"entries": {entry id: {"family", "name", "row", "play",
+    "provenance"}}}``, what the game master invented, played beside the canon."""
+    return _kept(simulation, "lore_layer")
+
+
+def area_detail_of(simulation: Any) -> Any:
+    """What each larger area has had filled in (EV-10): ``{area id: {"entries": [{"entry_id", "kind"}], "lore": [..]}}``."""
+    return _kept(simulation, "area_detail")
+
+
+def exploration_of(simulation: Any) -> Any:
+    """What exploring found (EV-10): ``{"found": [place id], "cleared": {site id: {room id: how}}}``."""
+    return _kept(simulation, "exploration")
+
+
 def interaction_seq_of(runtime: Any) -> Any:
     return _kept(runtime, "interaction_seq")
 
@@ -140,7 +187,11 @@ def performance_of(runtime: Any) -> Any:
 FIELD_ACCESSORS = {
     "rng_seed": rng_seed_of, "campaign_rules": campaign_rules_of, "campaign_mechanics": campaign_mechanics_of,
     "campaign_end": campaign_end_of, "presentation_state": presentation_state_of, "memory_state": memory_state_of,
-    "climate_survival": climate_survival_of, "needs": needs_of, "interaction_seq": interaction_seq_of,
+    "climate_survival": climate_survival_of, "needs": needs_of, "hero_knowledge": hero_knowledge_of,
+    "world_facts": world_facts_of, "group_standing": group_standing_of,
+    "npc_goal_state": goal_state_of, "active_rumors": active_rumors_of, "lore_layer": lore_layer_of, "direction": direction_of,
+    "area_detail": area_detail_of, "exploration": exploration_of,
+    "interaction_seq": interaction_seq_of,
     "state_revision": state_revision_of, "campaign_calendar": campaign_calendar_of,
     "player_journal": player_journal_of, "causal_applied_turn_keys": causal_applied_turn_keys_of,
     "performance": performance_of,

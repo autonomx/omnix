@@ -31,7 +31,6 @@ MIN_HEAL = 10
 GIFT_REGARD = 5  # a gift warms its receiver a little
 GIFT_TRUST_CEILING = 25  # but gifts alone win no one's trust (dialogue's friendly stance is at 50)
 RELIEF = {"food": ("hunger", -25), "drink": ("thirst", -30)}
-_NUMBERS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "both": 2, "all": 0}
 
 
 @dataclass(frozen=True)
@@ -54,16 +53,15 @@ def _count(item: Mapping[str, Any]) -> int:
     return int(item.get("qty", item.get("quantity", 1)) or 0)
 
 
-def _find(stacks: list[dict[str, Any]], item_id: str, text: str) -> dict[str, Any]:
-    """The stack the player means: the one the grammar read, else the longest name the words contain."""
-    if item_id:
-        found = next((stack for stack in stacks if _id(stack) == item_id), None)
-        if found:
-            return found
-    lowered = text.casefold()
-    named = sorted((stack for stack in stacks if _s(stack.get("name")) and _s(stack.get("name")).casefold() in lowered),
-                   key=lambda stack: len(_s(stack.get("name"))), reverse=True)
-    return named[0] if named else {}
+def _find(stacks: list[dict[str, Any]], item_id: str) -> dict[str, Any]:
+    """The stack the reading named (EV-9: by its id; no words are matched)."""
+    return next((stack for stack in stacks if item_id and _id(stack) == item_id), {})
+
+
+def item_by_name(simulation: Mapping[str, Any], name: str) -> str:
+    """The id of the stack in the pack by its exact name, as a play-screen panel names it (the loadout's buttons)."""
+    wanted = name.strip().casefold()
+    return next((_id(stack) for stack in _pack(simulation) if _s(stack.get("name")).casefold() == wanted), "")
 
 
 def _kind(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
@@ -75,17 +73,15 @@ def _kind(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
     return kind
 
 
-def _quantity(text: str, held: int) -> int:
-    for word in re.findall(r"[a-z]+|\d+", text.casefold()):
-        if word.isdigit():
-            return max(1, min(held, int(word)))
-        if word in _NUMBERS:
-            return held if _NUMBERS[word] == 0 else min(held, _NUMBERS[word])
-    return 1
+def _quantity(quantity: int | None, everything: bool, held: int) -> int:
+    """How many of a stack: all of it, the count the reading named (at most what is held), else one."""
+    if everything:
+        return max(1, held)
+    return max(1, min(held, quantity)) if quantity else 1
 
 
-def use_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
-    item = _find(_pack(simulation), item_id, text)
+def use_item(simulation: Mapping[str, Any], item_id: str) -> ItemOutcome:
+    item = _find(_pack(simulation), item_id)
     if not item:
         return ItemOutcome(lines=["You carry nothing like that."], refused=True)
     name, kind = _s(item.get("name")) or _id(item), _kind(simulation, item)
@@ -111,21 +107,23 @@ def use_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutc
     return ItemOutcome(lines=[f"The {name} is not something you can use like that."], refused=True)
 
 
-def drop_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
-    item = _find(_pack(simulation), item_id, text)
+def drop_item(simulation: Mapping[str, Any], item_id: str, *, quantity: int | None = None,
+              everything: bool = False) -> ItemOutcome:
+    item = _find(_pack(simulation), item_id)
     if not item:
         return ItemOutcome(lines=["You carry nothing like that."], refused=True)
     location = _s(_d(_sections.player_state_of(simulation)).get("location_id"))
-    quantity = _quantity(text, _count(item))
+    quantity = _quantity(quantity, everything, _count(item))
     name = _s(item.get("name")) or _id(item)
     return ItemOutcome([ItemDropped(item_id=_id(item), quantity=quantity, location_id=location)],
                        [f"You put down {quantity} {name}; it lies here now." if quantity > 1
                         else f"You put down the {name}; it lies here now."])
 
 
-def give_item(simulation: Mapping[str, Any], item_id: str, recipient_id: str, text: str) -> ItemOutcome:
+def give_item(simulation: Mapping[str, Any], item_id: str, recipient_id: str, *, quantity: int | None = None,
+              everything: bool = False) -> ItemOutcome:
     """Something carried, given to someone here; unnamed, to the one person here."""
-    item = _find(_pack(simulation), item_id, text)
+    item = _find(_pack(simulation), item_id)
     if not item:
         return ItemOutcome(lines=["You carry nothing like that."], refused=True)
     people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
@@ -139,7 +137,7 @@ def give_item(simulation: Mapping[str, Any], item_id: str, recipient_id: str, te
     person = _s(_d(people.get(recipient_id)).get("name")) or recipient_id
     if recipient_id not in present:
         return ItemOutcome(lines=[f"{person} is not here."], refused=True)
-    quantity = _quantity(text, _count(item))
+    quantity = _quantity(quantity, everything, _count(item))
     given = f"{quantity} {name}" if quantity > 1 else f"the {name}"
     relation = _d(_d(simulation.get("relationship_state")).get(recipient_id))
     trust = int(relation.get("trust") or relation.get("score") or 0)
@@ -150,13 +148,14 @@ def give_item(simulation: Mapping[str, Any], item_id: str, recipient_id: str, te
     return ItemOutcome(changes, [f"You give {given} to {person}."])
 
 
-def pick_up(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
+def pick_up(simulation: Mapping[str, Any], item_id: str, *, quantity: int | None = None,
+            everything: bool = False) -> ItemOutcome:
     location = _s(_d(_sections.player_state_of(simulation)).get("location_id"))
     ground = [_d(item) for item in _l(_d(_d(simulation.get("world_items")).get("by_location")).get(location))]
-    item = _find(ground, item_id, text)
+    item = _find(ground, item_id)
     if not item:
         return ItemOutcome(lines=["Nothing by that name lies here to pick up."], refused=True)
-    quantity = _quantity(text, _count(item))
+    quantity = _quantity(quantity, everything, _count(item))
     name = _s(item.get("name")) or _id(item)
     return ItemOutcome([ItemPickedUp(item_id=_id(item), quantity=quantity, location_id=location)],
                        [f"You pick up the {name} and stow it in your pack."])
@@ -190,9 +189,9 @@ def _worn(simulation: Mapping[str, Any]) -> dict[str, str]:
     return {_s(slot): _s(item_id) for slot, item_id in _d(store.get("equipment")).items() if _s(item_id)}
 
 
-def equip_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
+def equip_item(simulation: Mapping[str, Any], item_id: str) -> ItemOutcome:
     """Wear or wield something carried, in its place (a second weapon takes the first one's)."""
-    item = _find(_pack(simulation), item_id, text)
+    item = _find(_pack(simulation), item_id)
     if not item:
         return ItemOutcome(lines=["You carry nothing like that."], refused=True)
     name, slot = _s(item.get("name")) or _id(item), _slot(simulation, item)
@@ -204,11 +203,11 @@ def equip_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOu
     return ItemOutcome([ItemEquipped(slot=slot, item_id=_id(item))], [f"You {verb} the {name}."])
 
 
-def unequip_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
+def unequip_item(simulation: Mapping[str, Any], item_id: str) -> ItemOutcome:
     """Take off or put away something worn; it stays in the pack."""
     worn = _worn(simulation)
     items = {_id(item): item for item in _pack(simulation)}
-    wanted = _find([items[item] for item in worn.values() if item in items], item_id, text)
+    wanted = _find([items[item] for item in worn.values() if item in items], item_id)
     if not wanted:
         return ItemOutcome(lines=["You are not wearing or wielding anything like that."], refused=True)
     slot = next(slot for slot, worn_id in worn.items() if worn_id == _id(wanted))

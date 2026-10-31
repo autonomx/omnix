@@ -16,7 +16,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import lru_cache
 from typing import Any
@@ -30,12 +30,15 @@ class Role(str, Enum):
     WORLD = "world"  # NPC reactions, NPC decisions, state-change proposals, story resolution
     CHOICES = "choices"  # suggested next actions and their flavour
     AUDIT = "audit"  # a check of displayed text against the turn
+    GAME_MASTER = "game_master"  # the game master's direction and its panel's answers (EV-0)
     UNCLASSIFIED = "unclassified"
 
 
 # Each registered RPG prompt template, by id prefix, names its call's role. Longest prefix wins.
 _TEMPLATE_ROLES: tuple[tuple[str, Role], ...] = (
     ("rpg.turn_intent.", Role.INTENT),
+    ("rpg.game_master.", Role.GAME_MASTER),  # the game master's direction and panel (EV-0)
+    ("rpg.lore_review.", Role.AUDIT),  # the author's consistency check of a draft (EV-0, part 2)
     ("rpg.ai_compact_dialogue.", Role.DIALOGUE),
     ("rpg.ai_conversation_prompt_builder.", Role.DIALOGUE),
     ("rpg.npc_dialogue_intelligence.", Role.DIALOGUE),
@@ -91,6 +94,7 @@ class ModelCall:
     text: str
     player_text: str = ""
     context: Mapping[str, Any] = field(default_factory=dict)
+    answer: str = ""  # what the scripted model answered it
 
     @property
     def present_npcs(self) -> list[dict[str, Any]]:
@@ -167,6 +171,7 @@ class ScriptedRoleModel:
         self._queued: dict[Role, list[Answer]] = {}
         self.calls: list[ModelCall] = []
         self.writer_payloads: list[dict[str, Any]] = []
+        self.session_id = ""  # the campaign the scenario plays: its lines are read against it (EV-9)
 
     # -- scripting ---------------------------------------------------------------------------------
     def answer(self, role: Role, value: Answer) -> None:
@@ -193,8 +198,24 @@ class ScriptedRoleModel:
         return value(call) if callable(value) else value
 
     # -- answering, in each contract's shape -------------------------------------------------------
+    def _read_line(self, call: ModelCall) -> dict[str, Any]:
+        """The intent call read as the grammar reads the line (EV-9: the engine asks the model for every typed line),
+        against the campaign as it stands; nothing when no campaign is played here or the grammar reads nothing."""
+        if not self.session_id or not call.player_text:
+            return {}
+        from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
+        from tests.support.rpg_line_reader.reader import read_line
+
+        document = load_session_from_postgres(self.session_id)
+        return read_line(document, call.player_text) if document else {}
+
     def _render(self, call: ModelCall) -> str:
         if call.role is Role.INTENT:
+            # What the grammar reads and the game acted on is read so; anything else is the scenario's to script, as
+            # the model's fallback was before every line went to it.
+            read = self._read_line(call)
+            if read.get("readings") or read.get("question"):
+                return json.dumps(read)
             return json.dumps(self._scripted(call, {}) or {})
         if call.role is Role.DIALOGUE:
             speaker, line = self._scripted(call, ("", DEFAULT_LINE))
@@ -224,8 +245,11 @@ class ScriptedRoleModel:
         text = "\n".join(str(getattr(message, "content", None) or (message.get("content") if isinstance(message, Mapping) else "") or "")
                          for message in messages)
         call = classify(text)
+        index = len(self.calls)
         self.calls.append(call)
-        return self._render(call)
+        answer = self._render(call)
+        self.calls[index] = replace(call, answer=answer)
+        return answer
 
     # -- the provider surface the RPG uses -------------------------------------------------------------
     def chat_completion(self, messages, model=None, stream=False, **kwargs):

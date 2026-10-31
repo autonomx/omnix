@@ -38,21 +38,34 @@ def merge_authored_play_sections(
     world_revision: WorldRevisionDocument,
     world_release: WorldReleaseDocument,
     draft: PlaySectionsDraft | None,
+    approved: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[WorldRevisionDocument, WorldReleaseDocument]:
-    if draft is None:
+    """The revision and release with the author's play sections written in, and the inventions they approved from
+    their campaigns' review (EV-0, part 2: each a lore entity with its play data, ``session/lore_review.py``)."""
+    if draft is None and not approved:
         return world_revision, world_release
+    canon = with_play_sections(world_revision.canon, draft) if draft is not None else dict(world_revision.canon)
+    topology = world_revision.topology
+    if approved:  # after the author's sections, which they only add to
+        from .approved_inventions import manifest_with_approved, with_approved_inventions
+
+        canon, topology = with_approved_inventions(canon, topology, approved)
+        manifest = manifest_with_approved(world_revision.entity_manifest, approved)
+    else:
+        manifest = world_revision.entity_manifest
     revision = compile_world_revision(
         world_id=world_revision.world_id,
         revision=world_revision.revision,
         title=world_revision.title,
-        canon=with_play_sections(world_revision.canon, draft),
-        entity_manifest=world_revision.entity_manifest,
-        topology=world_revision.topology,
+        canon=canon,
+        entity_manifest=manifest,
+        topology=topology,
         adventure_seeds=world_revision.adventure_seeds,
         blueprint_requirements=world_revision.blueprint_requirements,
         provenance={**dict(world_revision.provenance), "authored_play_sections": play_sections_hash(draft)},
     )
-    findings = (*unknown_creatures(world_revision.canon, draft), *play_section_release_findings(revision))
+    findings = ((*unknown_creatures(world_revision.canon, draft),) if draft is not None else ()) \
+        + tuple(play_section_release_findings(revision))
     if findings:
         raise ValueError("world_play_sections_invalid:" + ",".join(findings[:5]))
     release = compile_world_release(

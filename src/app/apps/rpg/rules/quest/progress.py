@@ -3,7 +3,8 @@
 A world may author a quest's ``steps``: stages done in order, each a set of conditions that must all hold, or
 ``any_of`` alternatives (the branches: either way completes the stage; one written ``{"all_of": [...], "told": ...}``
 says what came of it, told when it is taken). A condition is one of ``reach`` a place,
-``talk`` to someone, ``hold`` an item, ``defeat`` a creature (``count`` of them), pass a ``check`` (its kind, and
+``talk`` to someone (with ``about``: about what the step asks, which the reading judges by meaning and names as the
+step it answers, EV-3), ``hold`` an item, ``defeat`` a creature (``count`` of them), pass a ``check`` (its kind, and
 a target when named), or have a ``companion`` (someone named, or ``anyone``) in the party. Progress is judged after every turn, against the campaign as the turn leaves it and the turn's
 own changes: a stage done advances the quest, the last one completes it and pays its rewards. A quest with a
 ``deadline_hours`` fails when the time since it was taken up runs out, and its giver trusts the hero less. A quest
@@ -58,15 +59,22 @@ def victories(applied: Sequence[StateChange]) -> dict[str, int]:
     return felled
 
 
+def step_address(quest_id: str, step_id: str, way: int) -> str:
+    """How a reading names the step a line answers, and the way of it (EV-3)."""
+    return f"{quest_id}|{step_id}|{way}"
+
+
 def _holds(condition: Mapping[str, Any], simulation: Mapping[str, Any], applied: Sequence[StateChange],
-           counts: Mapping[str, int]) -> bool:
+           counts: Mapping[str, int], address: str = "") -> bool:
     if condition.get("reach"):
         return routines.hero_location(simulation) == _s(condition["reach"])
     if condition.get("talk"):
-        # ``about``: words the hero's line must touch (asking the innkeeper about the weather is not asking about the rumor).
-        about = [_s(word).casefold() for word in (_l(condition.get("about")) or [condition.get("about")]) if _s(word)]
+        # ``about``: the step asks something particular of them (asking the innkeeper about the weather is not asking
+        # about the rumor): the line answers it when its reading named this step and way, and the plan accepted it
+        # (EV-3; no word of the line is matched).
+        about = [_s(word) for word in (_l(condition.get("about")) or [condition.get("about")]) if _s(word)]
         return any(isinstance(change, DialogueExchanged) and change.npc_id == _s(condition["talk"])
-                   and (not about or any(word in change.player_line.casefold() for word in about))
+                   and (not about or change.step == address)
                    for change in applied)
     if condition.get("hold"):
         wanted = _s(condition["hold"])
@@ -133,8 +141,10 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
             changes.append(QuestProgressed(quest_id=quest_id, counts=counts))
         while stage < len(steps):
             ways = step_ways(steps[stage])
+            step_id = _s(steps[stage].get("id"))
             branch = next((index for index, (way, _) in enumerate(ways)
-                           if way and all(_holds(condition, simulation, applied, counts) for condition in way)), None)
+                           if way and all(_holds(condition, simulation, applied, counts,
+                                                 step_address(quest_id, step_id, index)) for condition in way)), None)
             if branch is None:
                 break
             told = ways[branch][1]
@@ -156,4 +166,59 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
     return changes, lines
 
 
-__all__ = ["ANYONE", "DONE_REGARD", "FAILED_REGARD", "giver_thanks", "quest_progress", "step_ways", "victories"]
+def fold_quest_offer(document: Mapping[str, Any], payload: Mapping[str, Any]):
+    """A quest the game master offers (EV-0): one of the world's, not in the log yet, open to the hero by its facts;
+    offered by its giver (or the world), within the day's limit."""
+    from app.apps.rpg.foundation.state.changes import QuestOffered
+    from app.apps.rpg.foundation.state.proposals import Folded, refused
+    from app.apps.rpg.rules.consequences import quest_open
+    from app.apps.rpg.rules.direction import allows, counted
+
+    simulation = _d(_sections.simulation_state_of(document))
+    quest_id = _s(payload.get("quest_id"))
+    quest = _d(_d(_d(_sections.world_model_of(simulation)).get("quests")).get(quest_id))
+    logged = {_s(_d(row).get("quest_id") or _d(row).get("id")) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))}
+    if not quest:
+        return refused(f"no quest {quest_id!r} in this world")
+    if quest_id in logged:
+        return refused("the hero already has it")
+    if not quest_open(simulation, quest):
+        return refused("its facts close it")
+    limit = allows(simulation, "quest")
+    if limit:
+        return refused(limit)
+    giver = _s(quest.get("giver_id")) or "world"
+    return Folded([QuestOffered(quest_id=quest_id, npc_id=giver, quest={**quest, "status": "available"}),
+                   counted(simulation, "quest")])
+
+
+def open_steps(simulation: Mapping[str, Any], speaker_id: str) -> list[tuple[str, str]]:
+    """The open steps of the hero's active quests a line to ``speaker_id`` may answer, each way of them (EV-3): its
+    address, and what it asks, as the reading is told it (the step's summary, and its ``about``, which describes the
+    subject; no word is matched)."""
+    found: list[tuple[str, str]] = []
+    for quest in map(_d, _l(_d(_sections.quest_state_of(simulation)).get("quests"))):
+        steps = [_d(step) for step in _l(quest.get("steps"))]
+        stage = int(_d(quest.get("progress")).get("stage") or 0)
+        quest_id = _s(quest.get("quest_id") or quest.get("id"))
+        if quest.get("status") != "active" or stage >= len(steps) or not quest_id:
+            continue
+        for index, (way, told) in enumerate(step_ways(steps[stage])):
+            talk = next((condition for condition in way if _s(condition.get("talk")) == speaker_id), None)
+            if talk is None:
+                continue
+            about = [_s(word) for word in (_l(talk.get("about")) or [talk.get("about")]) if _s(word)]
+            asks = _s(steps[stage].get("summary")) + (f" (about: {', '.join(about)})" if about else "")
+            found.append((step_address(quest_id, _s(steps[stage].get("id")), index),
+                          asks + (f"; this way: {told}" if told and len(step_ways(steps[stage])) > 1 else "")))
+    return found
+
+
+def accepted_step(simulation: Mapping[str, Any], speaker_id: str, step: str) -> str:
+    """The step a reading proposed a line answers, accepted only when it is one of ``speaker_id``'s open steps: the
+    speaker is its subject, the step is open, and the hero stands where the speaker is (EV-3); else none."""
+    return step if step and step in {address for address, _ in open_steps(simulation, speaker_id)} else ""
+
+
+__all__ = ["ANYONE", "DONE_REGARD", "FAILED_REGARD", "accepted_step", "fold_quest_offer", "giver_thanks", "open_steps", "quest_progress",
+           "step_address", "step_ways", "victories"]

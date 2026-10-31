@@ -31,6 +31,11 @@ class RpgTurnVisibleResponse(_OpenContract):
     narration: str | None = None
     npc: dict[str, Any] | None = None
     messages: list[dict[str, Any]] = Field(default_factory=list)
+    # The names that open their lore (EV-12): {"narration": [{"entry_id", "start", "end"}], "messages": [[...], ...]},
+    # worked out on the final text.
+    links: dict[str, Any] | None = None
+    # Who speaks inside the narration (EV-13): {"narration": [{"speaker_id", "start", "end"}]}.
+    voices: dict[str, Any] | None = None
 
 
 class RpgTurnState(_OpenContract):

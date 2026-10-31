@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "note": "Which voices may be cast to a campaign's people automatically or offered to other players (evolution roadmap EV-13). A voice not listed, or listed as not castable, is never cast or offered: a clone of a real person or of another work's character stays off this list unless its owner marks it. 'default' is the speech service's own voice.",
+  "voices": {
+    "default": {"castable": true, "description": "a clear, even storyteller's voice", "name": "The narrator's voice"},
+    "Asian-male": {"castable": true, "description": "an adult man, calm, measured and warm"}
+  }
+}

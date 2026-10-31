@@ -4,10 +4,12 @@ The world's economy section says who sells what, at what price and stock, and wh
 rule reads it with the campaign's stock and the hero's purse and pack, and says what happens as changes: coin paid
 or earned, goods taken or handed over, a need eased, a room reserved, the stock left, and the trade remembered.
 A world without an economy section (the starter town until RQ-2.8) has no trade here; ``trade`` returns ``None``.
+
+What is bought or sold, from or to whom, and how many is the reading's (evolution roadmap EV-9): an offer or a thing,
+by id, and a seller or buyer, by id. No word of the line is read here.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -23,7 +25,9 @@ from app.apps.rpg.foundation.state.changes import (
     TradeRemembered,
 )
 from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.consequences import closed_providers, price_factor, waived
 from app.apps.rpg.rules.routines import MINUTES_PER_DAY
+from app.apps.rpg.rules.wording import in_sentence
 from app.apps.rpg.foundation.state import access as _sections
 
 COPPER = {"gold": 100, "silver": 10, "copper": 1}
@@ -35,59 +39,7 @@ TRUSTED, TRUSTED_DISCOUNT = 50, 0.90
 HAGGLE_DISCOUNT = 0.90
 UNTRADED_GOODS_COPPER = 5  # what a shop pays for goods it does not sell itself: a token
 RELIEF = {"meal": ("hunger", -35), "drink": ("thirst", -30)}
-_WORD = re.compile(r"[a-z0-9']+")
-# Words that name what is wanted without naming an offer ("supplies"), and words for each kind of service.
-_GENERIC = frozenset({"supplies", "goods", "wares", "something", "anything", "stuff", "things", "items"})
 MOST_AT_ONCE = 10  # goods bought in one go (the playtest: "two Healing Potions" bought one)
-_COUNTS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-           "a couple of": 2, "a pair of": 2, "a few": 3, "several": 3}
-_COUNT_WORDS = r"(\d+|" + "|".join(sorted(_COUNTS, key=len, reverse=True)) + r")"
-_COINS = frozenset({"gold", "silver", "copper", "coin", "coins", "crown", "crowns", "credit", "credits"})
-_COIN_WORDS = "|".join(sorted(_COINS))
-_MEASURE_WORDS = ("feet|foot|yards?|met(?:er|re)s?|inch(?:es)?|pounds?|lbs|ounces?|miles?|hours?|days?|minutes?|"
-                  "lit(?:er|re)s?|gallons?")
-
-
-def wanted_count(text: str, label: str) -> int:
-    """How many of ``label`` the words ask for: a number or a number's word just before its name ("two Healing
-    Potions", "3 lantern bread"), else one; at most ``MOST_AT_ONCE``. A price ("for 15 coppers") is no count."""
-    named = [word for word in re.findall(r"[a-z]+", label.casefold()) if word not in {"a", "an", "the", "some", "of"}]
-    words = [re.escape(word) for word in named if word not in _COINS][-1:] or [re.escape(word) for word in named][-1:]
-    # "Potion of Healing" is a potion too ("two potions"; the review); "Feet of Rope" is no feet.
-    words += [re.escape(word) for word in re.findall(r"([a-z]+)\s+of\s", label.casefold())[:1]
-              if word not in _COINS and not re.fullmatch(_MEASURE_WORDS, word)]
-    if not words:
-        return 1
-    # Some of them: "two of the three health potions" is two (the twelfth review).
-    # Only of the goods themselves: "a torch for two of the miners" is one torch (the thirteenth review).
-    some_of = re.search(rf"\b{_COUNT_WORDS}\s+of\s+(?:the|those|these|your|his|her|their)\s+"
-                        rf"(?:[a-z0-9'-]+\s+){{0,3}}?(?:{'|'.join(words)})(?:s|es)?\b", text.casefold())
-    if some_of is not None:
-        word = some_of.group(1)
-        return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
-    # Up to two words between the count and the head, a hyphen's halves among them ("two ward-glass bucklers", "two
-    # half-plates", "two mugs of ale": the review).
-    # Never past a measure or a coin, unless the name has it ("50 feet of rope" is one rope; "two gold rings" two).
-    own = "|".join(re.escape(word) for word in named) or "(?!)"
-    between = rf"(?:(?:{own})(?:s|es)?[\s-]+|(?!(?:{_MEASURE_WORDS}|{_COIN_WORDS})\b)[a-z']+[\s-]+)"
-    match = re.search(rf"\b{_COUNT_WORDS}\s+{between}{{0,2}}(?:{'|'.join(words)})(?:s|es)?\b"
-                      rf"(?!\s+(?:{_COIN_WORDS})\b)", text.casefold())
-    if match is None:
-        return 1
-    word = match.group(1)
-    # The name's own number, said with the word it goes with ("buy 50 feet of rope" is one "50 Feet of Rope"; "buy
-    # three potions" is three of the "Potion of the Three Moons": the reviews).
-    own_number = re.search(rf"\b{re.escape(word)}\s+([a-z']+)", label.casefold())
-    said_next = re.match(r"\s*([a-z']+)", match.group(0)[len(word):])
-    if own_number and said_next and said_next.group(1).rstrip("s") == own_number.group(1).rstrip("s"):
-        return 1
-    return max(1, min(MOST_AT_ONCE, int(word) if word.isdigit() else _COUNTS[word]))
-_KIND_WORDS = {
-    "lodging": frozenset({"room", "rent", "lodging", "bed", "stay", "night", "sleep"}),
-    "meal": frozenset({"meal", "food", "stew", "supper", "dinner", "breakfast", "lunch", "eat"}),
-    "drink": frozenset({"drink", "ale", "wine", "beer", "mead"}),
-}
-_FILLER = frozenset("a an the some my one i buy purchase rent order get from to for of please".split())
 
 
 def copper(price: Mapping[str, Any]) -> int:
@@ -110,40 +62,19 @@ class TradeOutcome:
     kind: str = ""  # bought, sold, listed, refused
 
 
-def _words(text: str) -> set[str]:
-    return {word for word in _WORD.findall(text.casefold()) if word not in _FILLER}
-
-
 def _providers_here(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
     world = _d(_sections.world_model_of(simulation))
     location = _s(_d(_sections.player_state_of(simulation)).get("location_id"))
     present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
+    closed = closed_providers(simulation)  # a seller the world's facts closed (rules/consequences.py)
     return [_d(provider) for provider_id, provider in _d(world.get("providers")).items()
-            if _s(_d(provider).get("location_id")) == location and (not present or provider_id in present)]
+            if _s(_d(provider).get("location_id")) == location and (not present or provider_id in present)
+            and provider_id not in closed]
 
 
 def sellers_here(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
     """The people here who sell something."""
     return [provider for provider in _providers_here(simulation) if _offers(simulation, provider)]
-
-
-# Words of a name that say rank, not who ("Captain Rhea Sunward" is Rhea).
-_TITLES = frozenset({"captain", "lord", "lady", "sir", "dame", "dr", "doctor", "princess", "prince", "king", "queen",
-                     "saint", "inspector", "archon", "master", "mistress", "father", "mother", "brother", "sister"})
-
-
-def _name_words(name: str) -> set[str]:
-    return {word for word in _words(name) if len(word) >= 3 and word not in _TITLES}
-
-
-def _named(providers: list[dict[str, Any]], words: set[str], text: str) -> list[dict[str, Any]]:
-    """The providers ``words`` name: by their whole name, a one-word alias, or a word of their name that is not a
-    title (the review: "sell it to Rhea" never named Captain Rhea Sunward, whose first word is her rank)."""
-    lowered = text.casefold()
-    return [provider for provider in providers
-            if _s(provider.get("provider_name")).casefold() in lowered
-            or words & {_s(alias).casefold() for alias in _l(provider.get("aliases")) if " " not in _s(alias)}
-            or words & _name_words(_s(provider.get("provider_name")))]
 
 
 def _offers(simulation: Mapping[str, Any], provider: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -189,32 +120,25 @@ def haggled(simulation: Mapping[str, Any], provider_id: str) -> bool:
 
 
 def price_of(simulation: Mapping[str, Any], provider: Mapping[str, Any], offer: Mapping[str, Any]) -> tuple[int, list[str]]:
-    """What ``offer`` costs now, in copper, and why it differs from its price (economy.md)."""
+    """What ``offer`` costs now, in copper, and why it differs from its price (economy.md), and the world's facts
+    (``rules/consequences.py``: a seller's or region's prices moved, an offer given free once)."""
+    provider_id = _s(provider.get("provider_id"))
+    free = waived(simulation, provider_id, _s(offer.get("offer_key")) or _s(offer.get("offer_id")).rsplit(":", 1)[-1])
+    if free:
+        return 0, [free]
     price = copper(_d(offer.get("price")))
-    factor, why = 1.0, []
+    factor, why = price_factor(simulation, provider_id, _s(provider.get("location_id")))
     left, full = stock_left(simulation, offer), int(offer.get("stock") or 0)
     if left is not None and full and left <= full * SCARCE_SHARE:
         factor, why = factor * SCARCE_MARKUP, [*why, "it is nearly gone"]
     access = _trade_access(simulation, _s(provider.get("location_id")))
     if access is not None and access < CHOKED_TRADE:
         factor, why = factor * CHOKED_MARKUP, [*why, "the roads choke trade"]
-    provider_id = _s(provider.get("provider_id"))
     if int(_d(_d(simulation.get("relationship_state")).get(provider_id)).get("trust") or 0) >= TRUSTED:
         factor, why = factor * TRUSTED_DISCOUNT, [*why, "you are trusted"]
     if haggled(simulation, provider_id):
         factor, why = factor * HAGGLE_DISCOUNT, [*why, "you haggled"]
     return (price if factor == 1.0 else max(1, round(price * factor))), why
-
-
-def _score(offer: Mapping[str, Any], words: set[str]) -> int:
-    label = _words(_s(offer.get("label")))
-    score = 10 * len(words & label)
-    if words & _KIND_WORDS.get(_s(offer.get("service_kind")), frozenset()):
-        score += 6
-    items = {_s(_d(item).get("item_id")).rsplit(":", 1)[-1] for item in _l(_d(offer.get("effects")).get("items_added"))}
-    if any(word in item.split("-") or word in item.split("_") for word in words for item in items):
-        score += 4
-    return score
 
 
 def _purse(simulation: Mapping[str, Any]) -> int:
@@ -228,42 +152,61 @@ def _listing(simulation: Mapping[str, Any], provider: Mapping[str, Any], offers:
     return f"{_s(provider.get('provider_name'))} offers: {listed}." + (" Nothing is sold until you name one." if unnamed else "")
 
 
-def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
-    """Buying what the player names from someone here who sells it; their offers when it names none of them."""
+def buy(simulation: Mapping[str, Any], target_id: str = "", seller_id: str = "",
+        quantity: int | None = None, item_id: str = "") -> TradeOutcome | None:
+    """Buying what the reading names (an offer, or a thing on offer, by id) from someone here who sells it (the
+    seller it names, else any here); a seller's offers when it names none of them."""
     if not _d(_d(_sections.world_model_of(simulation)).get("offers")):
         return None
-    words = _words(text)
-    here = _providers_here(simulation)
-    sellers = [provider for provider in here if _offers(simulation, provider)]
-    named = _named(sellers, words, text)
-    candidates = named or sellers
-    ranked = sorted(((_score(offer, words), index, provider, offer) for provider in candidates
-                     for index, offer in enumerate(_offers(simulation, provider))), key=lambda row: (-row[0], row[1]))
-    if not ranked or ranked[0][0] == 0 or words <= _GENERIC:
+    sellers = [provider for provider in _providers_here(simulation) if _offers(simulation, provider)]
+    candidates = [provider for provider in sellers if _s(provider.get("provider_id")) == seller_id] if seller_id else sellers
+    if seller_id and not candidates:
+        return TradeOutcome(lines=["No one here by that name sells anything."], refused=True, kind="refused")
+    matches = [(provider, offer) for provider in candidates for offer in _offers(simulation, provider)
+               if target_id and (_s(offer.get("offer_id")) == target_id or target_id in {
+                   _s(_d(item).get("item_id")) for item in _l(_d(offer.get("effects")).get("items_added"))})]
+    if not matches and target_id in _carried(simulation):  # gear named: the one here who improves it (EV-5)
+        matches = [(provider, offer) for provider in candidates for offer in _offers(simulation, provider)
+                   if _s(offer.get("service_kind")) == "upgrade"
+                   and _slot(_carried(simulation)[target_id]) in _l(_d(offer.get("recipe")).get("slots"))]
+        item_id = target_id
+    if not matches:
         if len(candidates) == 1:
             return TradeOutcome(lines=[_listing(simulation, candidates[0], _offers(simulation, candidates[0]),
                                                 unnamed=True)],
                                 kind="listed")
         return TradeOutcome(lines=["No one here sells that."], refused=True, kind="refused")
-    _, _, provider, offer = ranked[0]
+    provider, offer = matches[0]
     name, label = _s(provider.get("provider_name")), _s(offer.get("label"))
     price, why = price_of(simulation, provider, offer)
     left = stock_left(simulation, offer)
     if left is not None and left <= 0:
         return TradeOutcome(lines=[f"{label} is sold out."], refused=True, kind="refused")
+    kind = _s(offer.get("service_kind"))
+    if kind == "upgrade":  # a carried piece of gear improved by a tier (EV-5)
+        return improve(simulation, provider, offer, item_id=item_id)
+    told: tuple[list[StateChange], list[str]] = ([], [])
+    if kind == "paid_information":  # what is going about here, for a price (EV-4, ``rules/rumours.py``)
+        from app.apps.rpg.rules.rumours import news_here, tell
+
+        told = tell(simulation, news_here(simulation, routines.hero_location(simulation)),
+                    source=_s(provider.get("provider_id")))
+        if not told[1]:
+            return TradeOutcome(lines=[f"{name} has nothing new to tell you."], refused=True, kind="refused")
     purse = _purse(simulation)
     if purse < price:
         return TradeOutcome(lines=[f"You cannot afford {label}: it costs {coins(price)} and you have {coins(purse)}."],
                             refused=True, kind="refused")
-    kind = _s(offer.get("service_kind"))
     effects = _d(offer.get("effects"))
     # Goods by the count asked, as many as are left and the purse covers; a room, a meal or a drink is one.
-    asked = wanted_count(text, label) if kind == "shop_goods" else 1
+    asked = max(1, min(MOST_AT_ONCE, quantity or 1)) if kind == "shop_goods" else 1
     count = min(asked, left if left is not None else asked, purse // price if price else asked)
     what = label if count == 1 else f"{count} × {label}"
-    changes: list[StateChange] = [PurseChanged(delta_copper=-price * count, reason=f"bought {what} from {name}")]
-    lines = [f"You pay {coins(price * count)} to {name} for {what}" + (f" ({', '.join(why)})" if why else "")
-             + ". The transaction is complete."]
+    changes: list[StateChange] = ([PurseChanged(delta_copper=-price * count, reason=f"bought {what} from {name}")]
+                                  if price else [])
+    lines = ([f"You pay {coins(price * count)} to {name} for {what}" + (f" ({', '.join(why)})" if why else "")
+              + ". The transaction is complete."] if price else
+             [f"{name} gives you {in_sentence(what)} for nothing" + (f" ({', '.join(why)})" if why else "") + "."])
     if count < asked:
         lines.append(f"That is all {'there is' if left is not None and left < asked else 'you can afford'} of {label}.")
     for item in _l(effects.get("items_added")):
@@ -276,6 +219,9 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
         need, delta = RELIEF[kind]
         changes.append(NeedsChanged(**{need: delta}))
         lines.append(f"It eases your {need}.")
+    if told[1]:
+        changes += told[0]
+        lines += [f"{name} tells you: {line}" for line in told[1]]
     if kind == "lodging":
         changes.append(ServiceReserved(offer_id=_s(offer.get("offer_id")), service_kind=kind,
                                        provider_id=_s(provider.get("provider_id")), provider_name=name, label=label,
@@ -298,49 +244,101 @@ def _buys(simulation: Mapping[str, Any], shop: Mapping[str, Any], item: Mapping[
             or _s(item.get("category") or item.get("type")).casefold() in kinds)
 
 
-def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
-    """Selling one of something the hero carries to a shopkeeper here: half the price of goods they sell
-    themselves, a token for other goods, and nothing for what a quest gave."""
+def _carried(simulation: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    player = _d(_sections.player_state_of(simulation))
+    return {_s(_d(row).get("item_id")): _d(row) for row in _l(_d(_sections.inventory_state_of(player)).get("items"))
+            if _s(_d(row).get("item_id"))}
+
+
+def _equipment(item: Mapping[str, Any]) -> dict[str, Any]:
+    """A carried piece's equipment as it fights (``equipment_runtime.project_equipment_stats``): its own block, or its
+    definition's, else its kind's by its name ("Iron Dagger": a dagger)."""
+    from app.apps.rpg.rules.interactions.equipment_runtime import item_equipment
+    from app.apps.rpg.rules.interactions.item_model import normalize_item_instance
+
+    return _d(item_equipment(normalize_item_instance(dict(item))))
+
+
+def _slot(item: Mapping[str, Any]) -> str:
+    return _s(_equipment(item).get("slot"))
+
+
+def improve(simulation: Mapping[str, Any], provider: Mapping[str, Any], offer: Mapping[str, Any], *,
+            item_id: str = "") -> TradeOutcome:
+    """A seller improves a piece of gear the hero carries by one tier (EV-5): the one named, else the first worn or
+    carried that the recipe covers; for its materials and the offer's price, by the tier; up to the recipe's last
+    tier, and no further than the hero's level's budget for its slot (``rules/budgets.py``)."""
+    from app.apps.rpg.foundation.state.changes import ItemImproved, ItemRemoved
+    from app.apps.rpg.rules.budgets import budget
+
+    name, label = _s(provider.get("provider_name")), _s(offer.get("label"))
+    recipe = _d(offer.get("recipe"))
+    carried = _carried(simulation)
+    covered = [item for item in carried.values() if _slot(item) in _l(recipe.get("slots"))]
+    worn = set(_d(_d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation)))).get("equipment")).values())
+    last = int(recipe.get("max_tier") or 3)
+    # Unnamed: a piece that can still be improved before one at its last tier, and what is worn before what is carried.
+    item = carried.get(item_id) if item_id else next(iter(sorted(
+        covered, key=lambda row: (int(row.get("tier") or 0) >= last, row.get("item_id") not in worn))), None)
+    if item is None or _slot(item) not in _l(recipe.get("slots")):
+        return TradeOutcome(lines=[f"{name} has nothing of yours to improve that way."], refused=True, kind="refused")
+    item_name = _s(item.get("name")) or _s(item.get("item_id"))
+    tier = int(item.get("tier") or 0)
+    if tier >= int(recipe.get("max_tier") or 3):
+        return TradeOutcome(lines=[f"The {item_name} can be improved no further."], refused=True, kind="refused")
+    level = int(_d(_sections.player_state_of(simulation)).get("level") or 1)
+    bounds = budget(simulation, level).items.get(_slot(item))
+    stats = {key: int(value) for key, value in _d(_equipment(item).get("stats")).items()
+             if isinstance(value, (int, float))}
+    improved = {key: stats[key] + int(step) for key, step in _d(recipe.get("per_tier")).items() if key in stats}
+    if not improved:
+        return TradeOutcome(lines=[f"{name} cannot improve the {item_name}."], refused=True, kind="refused")
+    for key, band in (("damage_max", getattr(bounds, "damage_max", None)), ("armor", getattr(bounds, "armor", None))):
+        if band is not None and key in improved and improved[key] > band.high:
+            return TradeOutcome(lines=[f"The {item_name} is as good as a hero of your level can make use of."],
+                                refused=True, kind="refused")
+    needed = [_d(row) for row in _l(recipe.get("materials"))]
+    for row in needed:
+        stack = _d(carried.get(_s(row.get("item_id"))))
+        held = int(stack.get("qty") or stack.get("quantity") or 0)
+        if held < int(row.get("quantity") or 1):
+            material = _s(_d(carried.get(_s(row.get("item_id")))).get("name")) or _s(row.get("item_id"))
+            return TradeOutcome(lines=[f"{name} needs {int(row.get('quantity') or 1)} × {material} for that."],
+                                refused=True, kind="refused")
+    price = price_of(simulation, provider, offer)[0] * (tier + 1)
+    if _purse(simulation) < price:
+        return TradeOutcome(lines=[f"You cannot afford {label}: it costs {coins(price)}."], refused=True, kind="refused")
+    changes: list[StateChange] = [PurseChanged(delta_copper=-price, reason=f"{label} from {name}")] if price else []
+    changes += [ItemRemoved(item_id=_s(row.get("item_id")), quantity=int(row.get("quantity") or 1)) for row in needed]
+    changes.append(ItemImproved(item_id=_s(item.get("item_id")), tier=tier + 1, stats={**stats, **improved},
+                                slot=_slot(item)))
+    changes.append(TradeRemembered(provider_id=_s(provider.get("provider_id")), provider_name=name, deal="bought",
+                                   what=f"{label}: {item_name}", copper=price))
+    gains = ", ".join(f"{key.replace('_', ' ')} {stats[key]} to {value}" for key, value in improved.items())
+    return TradeOutcome(changes=changes, kind="bought", lines=[
+        f"{name} works on your {item_name} for {coins(price)}: it is tier {tier + 1} now ({gains})."])
+
+
+def sell(simulation: Mapping[str, Any], item_id: str = "", buyer_id: str = "") -> TradeOutcome | None:
+    """Selling one of something the hero carries (by id) to a shopkeeper here (the buyer the reading names, else the
+    one here who deals in it): half the price of goods they sell themselves, a token for other goods, and nothing
+    for what a quest gave."""
     world = _d(_sections.world_model_of(simulation))
     if not _d(world.get("providers")):
         return None
-    lowered = text.casefold()
     store = _d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation))))
-    carried = sorted((_d(item) for item in _l(store.get("items")) if _s(_d(item).get("name")).casefold() in lowered),
-                     key=lambda item: len(_s(item.get("name"))), reverse=True)
-    if not carried:
+    item = next((_d(row) for row in _l(store.get("items"))
+                 if item_id and _s(_d(row).get("item_id") or _d(row).get("id")) == item_id), None)
+    if item is None:
         return TradeOutcome(lines=["You carry nothing by that name to sell."], refused=True, kind="refused")
-    item = carried[0]
     name = _s(item.get("name"))
     shops = [provider for provider in _providers_here(simulation) if "shop_goods" in _l(provider.get("service_kinds"))]
-    rest = text.casefold().replace(name.casefold(), " ")  # "sell Brindle's Arc Baton" names the baton, not its maker
-    people = _d(world.get("npcs"))
-    present = [_s(_d(people.get(npc_id)).get("name"))
-               for npc_id in _l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids"))]
-
-    def someone_in(words: set[str], said: str) -> bool:
-        return bool(_named(shops, words, said)) or any(words & _name_words(person) for person in present)
-
-    # The buyer is whom it is sold to: the first "to" followed by someone here ("Liora, sell the shard to Brindle"),
-    # its next few words only; else whoever the words name ("Rhea, I want to sell the dagger": "to sell" is no buyer,
-    # the eleventh review; "sell the shard to Brindle to pay Liora back" is Brindle's, the twelfth).
-    def buyer_after(to: re.Match[str]) -> str:
-        """The name a "to" is followed by, its first word a name's (past "the"): "to pay Liora" names no buyer."""
-        after = rest[to.end():].split()
-        start = 1 if after[:1] == ["the"] else 0
-        return " ".join(after[start:start + 1])
-
-    # After the selling: "go to Rhea and sell the shard to Brindle" sells to Brindle (the thirteenth review).
-    verb = re.search(r"\b(?:sell|selling|sold|pawn|pawned|offload|trade|traded|hawk)\b", rest)
-    slot = next((buyer_after(to) for to in re.finditer(r"\bto\s+", rest)
-                 if (verb is None or to.start() > verb.start())
-                 and someone_in(_words(buyer_after(to)) - _words(name), buyer_after(to))), "")
-    asked = _words(slot or rest) - _words(name)
-    named = _named(shops, asked, slot or rest)
-    if not named and slot:
+    named = [shop for shop in shops if buyer_id and _s(shop.get("provider_id")) == buyer_id]
+    if buyer_id and not named:
         # Someone here it is sold to who keeps no shop that buys ("sell the bread to Orik"): theirs to refuse, not
-        # another's to buy (the review: the sale went to Brindle); a companion spoken to is no buyer named.
-        other = next((person for person in present if asked & _name_words(person)), "")
+        # another's to buy (the review: the sale went to Brindle).
+        present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
+        other = _s(_d(_d(world.get("npcs")).get(buyer_id)).get("name")) if buyer_id in present else ""
         if other:
             return TradeOutcome(lines=[f"{other} does not buy the {name}."], refused=True, kind="refused")
     if len(named) == 1 and not _buys(simulation, named[0], item):
@@ -373,4 +371,5 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     ], lines=[f"You sell the {name} to {buyer} for {coins(paid)}."], kind="sold")
 
 
-__all__ = ["TradeOutcome", "buy", "coins", "copper", "haggled", "price_of", "sell", "sellers_here", "stock_left"]
+__all__ = ["MOST_AT_ONCE", "TradeOutcome", "buy", "coins", "copper", "haggled", "price_of", "sell", "sellers_here",
+           "stock_left"]

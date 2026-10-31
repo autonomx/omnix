@@ -3,6 +3,13 @@
 A pure rule. It reads the speaker from the world model, how they stand with the hero, the world's knowledge, the
 quests on offer and the speaker's wares, and decides what they reveal, offer and keep back. The model phrases the
 line from the plan; when it cannot, ``fallback_line`` says what the plan holds.
+
+What the line asks about is the reading's (evolution roadmap EV-9): its topics, chosen from those the person may be
+asked of (``speaker_topics``: what they know and share, work, their wares, their goals, their quests, and any place,
+group or person the world names), and the quest step it answers (EV-3). No word of the line is matched here.
+
+Asked for news (``rules/rumours.NEWS``), someone tells the word going about where they are that the hero has not
+heard (EV-4): it is heard, and what its beat set is known.
 """
 from __future__ import annotations
 
@@ -20,20 +27,19 @@ from app.apps.rpg.foundation.state.changes import (
     StateChange,
 )
 from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.consequences import quest_open, standing_band, standing_with
 from app.apps.rpg.rules.economy.trade import coins, price_of, stock_left
+from app.apps.rpg.rules.rumours import NEWS, news_here, tell
 from app.apps.rpg.rules.secrets import meaning_words as _words, names_a_secret as _names_a_secret, sayable
 from app.apps.rpg.rules.wording import in_sentence
 from app.apps.rpg.foundation.state import access as _sections
 
-_WORK = re.compile(r"\b(work|jobs?|tasks?|help|quests?|errands?|hire|bount(y|ies)|contracts?|need (of|from) me|"
-                   r"anything i can do)\b")
 # Someone whose work is handing out work (a guild's registrar, a quartermaster, a bounty clerk): they offer a quest
 # no one else gave, wherever it is (the playtest: the Wayfarers' Guild's registrar had no contract to offer).
 _GIVES_WORK = re.compile(r"\b(guild|registrar|registry|contracts?|bount(y|ies)|quest|notice|clerk|quartermaster|"
                          r"broker|mercenar(y|ies)|wayfarer)\b")
 _DEFEAT = re.compile(r"\b(defeat|slay|kill|hunt|drive off|destroy)\b")
-_WARES = re.compile(r"\b(sell|selling|sale|wares|buy|price|prices|cost|costs|goods|offer|stock|shop|merchandise|room|rooms|"
-                    r"food|drink)\b")
+WORK, WARES = "work", "wares"  # the topics of asking for work, and of asking what they sell and for how much
 FRIENDLY_TRUST = 50
 
 
@@ -61,6 +67,9 @@ class DialoguePlan:
     wares: tuple[str, ...] = ()  # "Healing Potion for 3 silver"
     ware_names: tuple[str, ...] = ()  # each named in the line, or the line lists them itself
     player_said: str = ""
+    step: str = ""  # the quest step the line answers, accepted (EV-3): the exchange carries it to the quest rule
+    news: tuple[str, ...] = ()  # the word going about that they tell (EV-4)
+    heard: tuple[StateChange, ...] = ()  # and what telling it changes: the rumours heard, their facts known
 
     def context(self) -> dict[str, Any]:
         """The plan as the line's writer is told it. The speaker's secrets are not in it: the model cannot say what it
@@ -70,7 +79,7 @@ class DialoguePlan:
             "speaker": self.speaker_name, "role": self.role, "stance": self.stance, "voice": self.voice,
             "hero": dict(self.hero),
             "personality": list(self.personality), "goals": list(self.goals), "background": self.background,
-            "may_reveal": list(self.reveals), "offers_to_tell_for_a_price": list(self.for_a_price),
+            "may_reveal": list(self.reveals), "news_to_tell": list(self.news), "offers_to_tell_for_a_price": list(self.for_a_price),
             "keeps_back_until_trusted": self.held_back, "offers_quest": self.quest_offer,
             "heros_quests": [dict(quest) for quest in self.hero_quests],
             "what_these_words_do": [dict(step) for step in self.settled_now],
@@ -86,6 +95,8 @@ class DialoguePlan:
                     + (f" {objective}." if objective else ""))
         if self.reveals:
             return self.reveals[0]
+        if self.news:
+            return f"Word is, {in_sentence(self.news[0])}"
         if self.wares:
             return f"I have {', '.join(self.wares)}."
         if self.for_a_price:
@@ -123,61 +134,53 @@ def _price_text(price: Mapping[str, Any]) -> str:
                      if int(price.get(coin) or 0)) or "a price"
 
 
-def _goals(world: Mapping[str, Any], npc_id: str, asked: set[str]) -> list[dict[str, Any]]:
-    """What the speaker is after (the world's routines author it, routines.md): the goals the hero's words touch
-    first, then the most pressing."""
+def _goal_id(goal: Mapping[str, Any]) -> str:
+    return f"goal:{_s(goal.get('goal_id'))}" if _s(goal.get("goal_id")) else ""
+
+
+def _goals(world: Mapping[str, Any], npc_id: str, topics: frozenset[str]) -> list[dict[str, Any]]:
+    """What the speaker is after (the world's routines author it, routines.md): the goals the line asks about first,
+    then the most pressing."""
     goals = [_d(goal) for routine in _l(world.get("routines")) if _s(_d(routine).get("npc_id")) == npc_id
              for goal in _l(_d(routine).get("goals")) if _s(_d(goal).get("summary"))]
-
-    def touched(goal: Mapping[str, Any]) -> bool:
-        return bool(asked & _goal_words(goal))
-
-    return sorted(goals, key=lambda goal: (not touched(goal), -int(goal.get("priority") or 1)))
+    return sorted(goals, key=lambda goal: (_goal_id(goal) not in topics, -int(goal.get("priority") or 1)))
 
 
 def _stemmed(words: set[str]) -> set[str]:
     return words | {_stem(word) for word in words}
 
 
+def _goal_topics(goal: Mapping[str, Any]) -> set[str]:
+    """What a goal is about, by its author's topics (its summary's words where it names none): what a quest answering
+    it shares with it (two authored texts compared; no line of the player's)."""
+    topics = {_s(topic).casefold() for topic in _l(goal.get("topics")) if _s(topic)}
+    return _stemmed(topics) if topics else _goal_words(goal)
+
+
 def _goal_words(goal: Mapping[str, Any]) -> set[str]:
     return _stemmed({_s(topic).casefold() for topic in _l(goal.get("topics"))} | _words(_s(goal.get("summary"))))
 
 
-def _common_knowledge(world: Mapping[str, Any], text: str, speaker_id: str) -> tuple[dict[str, Any], ...]:
-    """What anyone here may know of the places and people the player names: a place's own description and who lives
-    there; a person's calling and where they are found (the playtest: Liora, asked about the Moonroot Ruins, knew
-    "not much beyond the name"). Never a secret: only what the world states openly."""
-    places = _d(world.get("locations"))
-    people = _d(world.get("npcs"))
-
-    def named(*names: str, as_written: bool = False) -> bool:
-        """Whether the words name one of ``names`` as whole words; ``as_written``: in its capitals (a first name
-        alone: "Will you help?" names no Will, "a hopeful look" no Hope)."""
-        return any(len(name) > 3 and re.search(
-            (r"(?<![.!?]\s)(?<!^)" if as_written else "") + rf"(?<![\w']){re.escape(name)}(?![\w'])", text.strip(),
-            flags=0 if as_written else re.IGNORECASE) for name in names if name)
-
+def _common_knowledge(world: Mapping[str, Any], topics: tuple[str, ...], speaker_id: str) -> tuple[dict[str, Any], ...]:
+    """What anyone here may know of the places, groups and people the line asks about: a place's own description and
+    who lives there; a person's calling and where they are found (the playtest: Liora, asked about the Moonroot Ruins,
+    knew "not much beyond the name"). Never a secret: only what the world states openly."""
+    places, people, groups = _d(world.get("locations")), _d(world.get("npcs")), _d(world.get("groups"))
     known: list[dict[str, Any]] = []
-    for place_id, place in places.items():
-        place = _d(place)
-        if not named(_s(place.get("name")), *(_s(alias) for alias in _l(place.get("aliases")))):
-            continue
-        living = [f"{_s(_d(person).get('name'))}, {_s(_d(person).get('role'))}".strip(", ")
-                  for person in people.values() if _s(_d(person).get("location_id")) == place_id]
-        known.append({"place": _s(place.get("name")), "is": _s(place.get("description")),
-                      **({"who_is_there": living[:4]} if living else {})})
-    for group in _d(world.get("groups")).values():  # a faction, a union, a network the world names
-        group = _d(group)
-        if named(_s(group.get("name")), *_s(group.get("name")).split()[-1:]) and _s(group.get("summary")):
-            known.append({"group": _s(group.get("name")), "is": _s(group.get("summary"))})
-    for person_id, person in people.items():
-        person = _d(person)
-        full = _s(person.get("name"))
-        if person_id == speaker_id or not (named(full) or named(*full.split()[:1], as_written=True)):
-            continue
-        found = _s(_d(places.get(_s(person.get("location_id")))).get("name"))
-        known.append({"person": _s(person.get("name")), "is": _s(person.get("role")),
-                      **({"found_at": found} if found else {})})
+    for topic in topics:
+        if topic in places:
+            place = _d(places[topic])
+            living = [f"{_s(_d(person).get('name'))}, {_s(_d(person).get('role'))}".strip(", ")
+                      for person in people.values() if _s(_d(person).get("location_id")) == topic]
+            known.append({"place": _s(place.get("name")), "is": _s(place.get("description")),
+                          **({"who_is_there": living[:4]} if living else {})})
+        elif topic in groups and _s(_d(groups[topic]).get("summary")):  # a faction, a union, a network
+            known.append({"group": _s(_d(groups[topic]).get("name")), "is": _s(_d(groups[topic]).get("summary"))})
+        elif topic in people and topic != speaker_id:
+            person = _d(people[topic])
+            found = _s(_d(places.get(_s(person.get("location_id")))).get("name"))
+            known.append({"person": _s(person.get("name")), "is": _s(person.get("role")),
+                          **({"found_at": found} if found else {})})
     return tuple(known[:3])
 
 
@@ -233,13 +236,13 @@ def _step_places(simulation: Mapping[str, Any], world: Mapping[str, Any], quest:
                               for place in found if place))
 
 
-def _settled_now(simulation: Mapping[str, Any], speaker_id: str, text: str) -> tuple[dict[str, Any], ...]:
-    """The quest steps the hero's words to the speaker do, judged by the quest rules as if the words were said (the
-    playtest: told what should become of the engine, the princess asked to be told it at the engine)."""
+def _settled_now(simulation: Mapping[str, Any], speaker_id: str, step: str) -> tuple[dict[str, Any], ...]:
+    """The quest steps the line to the speaker does, judged by the quest rules as if it were said, with the step its
+    reading answers (EV-3; the playtest: told what should become of the engine, the princess asked to be told it at
+    the engine)."""
     from app.apps.rpg.rules.quest.progress import quest_progress
 
-    changes, _ = quest_progress(simulation, [DialogueExchanged(npc_id=speaker_id, player_line=text[:500])],
-                                lambda quest: ([], ""))
+    changes, _ = quest_progress(simulation, [DialogueExchanged(npc_id=speaker_id, step=step)], lambda quest: ([], ""))
     quests = {_s(_d(row).get("quest_id") or _d(row).get("id")): _d(row)
               for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))}
     done = {change.quest_id for change in changes if isinstance(change, QuestStatusChanged) and change.status == "completed"}
@@ -292,92 +295,133 @@ def _hero_quests(simulation: Mapping[str, Any], world: Mapping[str, Any], speake
     return tuple(found[:3])
 
 
-def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
-               hero: Mapping[str, str] | None = None) -> DialoguePlan | None:
-    """The plan for ``speaker_id``'s answer to ``text``, to the ``hero`` (their name and pronouns); ``None`` when the
-    world does not know them."""
+def _offerable(simulation: Mapping[str, Any], world: Mapping[str, Any], npc: Mapping[str, Any],
+               speaker_id: str) -> list[dict[str, Any]]:
+    """The quests the speaker may offer: theirs, or one no one gives at their place or, from someone whose work is
+    handing out work, anywhere; the log's on offer and the world's not in it yet; never one the world's facts close."""
+    here = _s(npc.get("location_id"))
+    hands_out_work = bool(_GIVES_WORK.search(_s(npc.get("role")).casefold()))
+    logged = [_d(quest) for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests"))]
+    in_log = {_s(quest.get("quest_id") or quest.get("id")) for quest in logged}
+    unlogged = [{**_d(row), "status": "available"} for quest_id, row in _d(world.get("quests")).items()
+                if quest_id not in in_log]
+    offerable = []
+    for quest in [*logged, *unlogged]:
+        if not quest_open(simulation, quest):  # its facts close it to the hero (rules/consequences.py)
+            continue
+        places = [_s(place) for place in _l(quest.get("locations"))]
+        giver = _s(quest.get("giver_id") or quest.get("offered_by"))
+        if quest.get("status") == "available" and (giver == speaker_id or (not giver and (here in places
+                                                                                          or hands_out_work))):
+            offerable.append(quest)
+    return offerable
+
+
+def offer_key(offer: Mapping[str, Any]) -> str:
+    """How a line names one of a speaker's wares as a topic: its offer id, else its label."""
+    return _s(offer.get("offer_id")) or _s(offer.get("label"))
+
+
+def speaker_topics(simulation: Mapping[str, Any], speaker_id: str) -> list[tuple[str, str]]:
+    """What a line may ask ``speaker_id`` about, as the reading is told it: (topic id, what it is about). Work, their
+    wares, each fact they know and would ever share (by its topics, never its text), their goals and the quests they
+    may offer. None is secret. Places, groups and people the world names are topics too, by their ids."""
+    world = _d(_sections.world_model_of(simulation))
+    npc = {**_d(_d(_sections.npc_index_of(simulation)).get(speaker_id)), **_d(_d(world.get("npcs")).get(speaker_id))}
+    if not npc:
+        return []
+    found = [(WORK, "work, a job, a task, help they need")]
+    if news_here(simulation, routines.hero_location(simulation)):
+        found.append((NEWS, "news, rumours, what is going about"))
+    if _l(_d(world.get("offers")).get(speaker_id)):
+        found.append((WARES, "what they sell, and its prices"))
+        found += [(offer_key(_d(offer)), f"the price of {_s(_d(offer).get('label'))}")
+                  for offer in _l(_d(world.get("offers")).get(speaker_id)) if offer_key(_d(offer))]
+    for fact in _facts(world, speaker_id):
+        if _s(fact.get("fact_id")) and (_s(fact.get("shares")) or "freely") != "never":
+            found.append((_s(fact.get("fact_id")), ", ".join(_s(topic) for topic in _l(fact.get("topics"))) or "news"))
+    found += [(_goal_id(goal), _s(goal.get("summary"))) for goal in _goals(world, speaker_id, frozenset())
+              if _goal_id(goal)]
+    found += [(_s(quest.get("quest_id") or quest.get("id")), _s(quest.get("title")))
+              for quest in _offerable(simulation, world, npc, speaker_id)]
+    return found
+
+
+def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *, topics: tuple[str, ...] = (),
+               step: str = "", hero: Mapping[str, str] | None = None) -> DialoguePlan | None:
+    """The plan for ``speaker_id``'s answer to the line ``text`` (the writer answers it; no word of it is read here),
+    to the ``hero`` (their name and pronouns): what it asks about is its reading's ``topics``, and ``step`` the quest
+    step it answers (EV-3); ``None`` when the world does not know them."""
     world = _d(_sections.world_model_of(simulation))
     npc = {**_d(_d(_sections.npc_index_of(simulation)).get(speaker_id)), **_d(_d(world.get("npcs")).get(speaker_id))}
     if not npc:
         return None
     name = _s(npc.get("name")) or speaker_id
+    asked = frozenset(topics)
     trust = _trust(simulation, speaker_id)
     stance = "friendly" if trust >= FRIENDLY_TRUST else "wary" if trust < 0 else "neutral"
-    asked = _words(text) | {_stem(word) for word in _words(text)}
+    group = standing_with(simulation, speaker_id)  # the group they answer for, and its standing with the hero (EV-1)
+    if group is not None and standing_band(group[1]) in {"wary", "hostile"} and stance != "wary":
+        stance = "wary"
+    elif group is not None and standing_band(group[1]) in {"respected", "trusted"} and stance == "neutral":
+        stance = "friendly"
     known = set(_l(_d(_d(simulation.get("dialogue")).get("known_facts")).get(speaker_id)))
     reveals, revealed_ids, priced, held = [], [], [], 0
-    # The speaker's own name asks about none of what they know ("Brindle, what does a potion cost?" is not about
-    # "Brindle's Impossible Radio": the golden, once Aurelia's people knew things).
-    named = _words(name) | {_stem(word) for word in _words(name)}
     for fact in _facts(world, speaker_id):
-        topics = ({topic.casefold() for topic in _l(fact.get("topics"))} | _words(_s(fact.get("text")))) - named
-        if not asked & topics:
+        if _s(fact.get("fact_id")) not in asked:
             continue
         shares = _s(fact.get("shares")) or "freely"
         if shares == "freely" or (shares == "when_trusted" and trust >= int(fact.get("trust_needed") or 0)):
             reveals.append(_s(fact.get("text")))
-            if _s(fact.get("fact_id")) and _s(fact.get("fact_id")) not in known:
+            if _s(fact.get("fact_id")) not in known:
                 revealed_ids.append(_s(fact.get("fact_id")))
         elif shares == "for_price":
-            priced.append(f"{', '.join(sorted(asked & topics))} for {_price_text(_d(fact.get('price')))}")
+            about = ", ".join(_s(topic) for topic in _l(fact.get("topics"))) or "what they know"
+            priced.append(f"{about} for {_price_text(_d(fact.get('price')))}")
         elif shares == "when_trusted":
             held += 1
     goals = _goals(world, speaker_id, asked)
-    pressing = _goal_words(goals[0]) if goals else set()
     quest_offer: dict[str, str] = {}
     new_quests: dict[str, dict[str, Any]] = {}  # an offered quest the log does not have yet, with its row
     here = _s(npc.get("location_id"))
-    offerable = []
-    hands_out_work = bool(_GIVES_WORK.search(_s(npc.get("role")).casefold()))
-    logged = [_d(quest) for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests"))]
-    in_log = {_s(quest.get("quest_id") or quest.get("id")) for quest in logged}
-    # The log's quests on offer, and the world's that are not in it yet (offered, they join it).
-    unlogged = [{**_d(row), "status": "available"} for quest_id, row in _d(world.get("quests")).items()
-                if quest_id not in in_log]
-    for quest in [*logged, *unlogged]:
-        places = [_s(place) for place in _l(quest.get("locations"))]
-        giver = _s(quest.get("giver_id") or quest.get("offered_by"))
-        if quest.get("status") == "available" and (giver == speaker_id or (not giver and (here in places
-                                                                                          or hands_out_work))):
-            # The speaker's own name is no word of the quest's ("Vael, nice weather" is not about his vow).
-            steps = " ".join(_s(_d(step).get("summary")) for step in _l(quest.get("steps")))
-            # A finale by its name alone ("the Hollow Meridian"): its steps' words are a newcomer's own ("is this
-            # Earth? is there a gate?": the third review).
-            told = (_s(quest.get("title")) if _s(quest.get("tier")) == "finale"
-                    else f"{_s(quest.get('title'))} {_s(quest.get('objective'))} {steps}")
-            about = _stemmed(_words(told)) - _stemmed(_words(name))
-            # A finale is the last thing offered for work in general (a newcomer was offered the Hollow Meridian).
-            fitting = 0 if _s(quest.get("tier")) == "finale" else 1
-            offerable.append((len(about & asked), fitting, len(about & pressing), quest))
-    # Asked for work, about what one of their goals is after and a quest of theirs answers, or about a quest of their
-    # own (the playtest: asked what vow he would have witnessed, Vael never offered his): the quest closest to the
-    # words, then to the goal they are most after (routines.md), offered.
-    on_a_goal = any(asked & _goal_words(goal) for goal in goals) and any(row[0] for row in offerable)
-    # Two of its own words, at least, and never the finale this way ("Liora, should we head to the village?" touched
-    # the finale's "should" and offered it: the review).
-    on_their_quest = any(row[0] >= 2 and _s(row[3].get("giver_id") or row[3].get("offered_by")) == speaker_id
-                         for row in offerable)
-    # A finale is offered only when asked about in its own words (two of them), never for work in general.
-    offerable = [row for row in offerable if row[1] or row[0] >= 2]
-    if offerable and (_WORK.search(text.casefold()) or on_a_goal or on_their_quest):
-        quest = max(offerable, key=lambda row: row[:3])[3]
+    offerable = _offerable(simulation, world, npc, speaker_id)
+    in_log = {_s(_d(quest).get("quest_id") or _d(quest).get("id"))
+              for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests"))}
+    named = [quest for quest in offerable if _s(quest.get("quest_id") or quest.get("id")) in asked]
+    asked_goals = [goal for goal in goals if _goal_id(goal) in asked]
+    quest = named[0] if named else None
+    if quest is None and (WORK in asked or asked_goals):
+        # Asked for work, or about what they are after: their own quest first, then one answering the goal they are
+        # most after (routines.md); a finale is offered only when asked about by name (a newcomer was offered the
+        # Hollow Meridian for work in general).
+        pressing = _goal_topics(asked_goals[0] if asked_goals else goals[0]) if goals else set()
+        pool = [row for row in offerable if _s(row.get("tier")) != "finale"]
+
+        def fit(row: Mapping[str, Any]) -> tuple[int, int]:
+            steps = " ".join(_s(_d(step).get("summary")) for step in _l(row.get("steps")))
+            words = _stemmed(_words(f"{_s(row.get('title'))} {_s(row.get('objective'))} {steps}"))
+            return (_s(row.get("giver_id") or row.get("offered_by")) == speaker_id, len(words & pressing))
+
+        if pool and (WORK in asked or any(fit(row)[1] for row in pool)):
+            quest = max(pool, key=fit)
+    if quest is not None:
         quest_id = _s(quest.get("quest_id") or quest.get("id"))
         quest_offer = {"quest_id": quest_id, "title": _s(quest.get("title")), "objective": _s(quest.get("objective"))}
         if quest_id not in in_log:
             new_quests[quest_id] = quest
     hero_quests = _hero_quests(simulation, world, speaker_id, name, here)
-    common = _common_knowledge(world, text, speaker_id)
-    settled = _settled_now(simulation, speaker_id, text)
+    common = _common_knowledge(world, topics, speaker_id)
+    settled = _settled_now(simulation, speaker_id, step)
     on_sale: list[dict[str, Any]] = []
-    if _WARES.search(text.casefold()):
-        on_sale = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
-                   if _s(_d(offer).get("label")) and stock_left(simulation, _d(offer)) != 0]
-        # Asked about some of them ("what does a room cost"), those; asked what they sell, all of them.
-        # Not by the speaker's own name: asking Brindle a price is not asking for "Brindle's Arc Baton".
-        wanted = [offer for offer in on_sale
-                  if asked & ({_stem(word) for word in _words(_s(offer.get("label")))} - named)]
-        on_sale = wanted or on_sale
+    offers = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
+              if _s(_d(offer).get("label")) and stock_left(simulation, _d(offer)) != 0]
+    wanted = [offer for offer in offers if offer_key(offer) in asked]
+    if wanted or WARES in asked:  # asked about some of them ("what does a room cost"), those; else all of them
+        on_sale = wanted or offers
     secrets = tuple(_s(secret) for secret in _l(npc.get("secrets")) if _s(secret).strip())
+    sayable_news = [row for row in news_here(simulation, routines.hero_location(simulation))
+                    if not _names_a_secret(_s(row.get("text")), secrets)] if NEWS in asked else []
+    heard, news = tell(simulation, sayable_news, source=speaker_id)
     # What the writer is told leaves out whatever repeats a secret (an author's description or goal may), so the
     # model never sees one and the line can be shown as it is written (Q-12).
     goal_texts = dict.fromkeys([*(_s(goal.get("summary")) for goal in goals), *(_s(goal) for goal in _l(npc.get("goals")))])
@@ -393,7 +437,8 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *,
         wares=tuple(f"{in_sentence(_s(offer.get('label')))} for {_charged(simulation, world, speaker_id, here, offer)}"
                     for offer in on_sale),
         ware_names=tuple(_s(offer.get("label")) for offer in on_sale),
-        player_said=text,
+        player_said=text, step=step if settled else "",
+        news=tuple(news), heard=tuple(heard),
     )
 
 
@@ -401,6 +446,7 @@ def plan_changes(plan: DialoguePlan) -> list[StateChange]:
     """What the plan makes real before the commit: what is now known, and what is offered."""
     changes: list[StateChange] = []
     changes.extend(KnowledgeShared(npc_id=plan.speaker_id, fact_id=fact_id) for fact_id in plan.revealed_ids)
+    changes.extend(plan.heard)
     if plan.quest_offer.get("quest_id"):
         quest_id = plan.quest_offer["quest_id"]
         changes.append(QuestOffered(quest_id=quest_id, npc_id=plan.speaker_id,
@@ -423,4 +469,5 @@ def line_keeps_the_plan(plan: DialoguePlan, line: str) -> bool:
     return not _names_a_secret(line, plan.secrets)
 
 
-__all__ = ["DialoguePlan", "build_plan", "line_keeps_the_plan", "plan_changes"]
+__all__ = ["WARES", "WORK", "DialoguePlan", "build_plan", "line_keeps_the_plan", "offer_key", "plan_changes",
+           "speaker_topics"]

@@ -44,7 +44,12 @@ export function useRpgHermesAssist({
   // The last turn's (RQ-7.3): the answers to the game's question, else what the scene offers now.
   const turnOffers = useLatestRpgTurnOffers(selectedLiveSessionId ?? '');
   const offeredByTurn = (turnOffers?.choices.length ? turnOffers.choices : turnOffers?.suggestions ?? [])
-    .map((row) => ({ label: row.label, command: row.command, icon: quickActionIcon(row.command) }));
+    .map((row) => ({
+      label: row.label,
+      command: row.command,
+      icon: quickActionIcon(row.command),
+      ...(row.action && Object.keys(row.action).length ? { card: row.action } : {}),
+    }));
   const responseOptions = offeredByTurn.length ? offeredByTurn
     : dynamicQuickActions.length ? dynamicQuickActions : quickActions;
   const hermesSequenceReviewRequest = buildHermesSequenceReviewRequest({

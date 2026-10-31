@@ -14,6 +14,7 @@ import {
   presentLoreBlocks,
 } from './RpgWorldCompletionModels';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
+import { RpgAddWorldEntity } from './RpgAddWorldEntity';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
 import { RpgWorldLoreLayout } from './RpgWorldLoreLayout';
 import { RpgWorldOverviewDashboard } from './RpgWorldOverviewDashboard';
@@ -327,6 +328,7 @@ export function RpgWorldAuthoringPage({
     return (
       <section className="rpg-authoring-page">
         <div className="rpg-authoring-page-heading"><div><p className="eyebrow">{section.group}</p><h2>{page.title || section.label}</h2><p className="rpg-authoring-page-summary">Browse the collection, then open an entry for its complete illustrated dossier.</p></div><span>{visibleEntities.length === page.entities.length ? page.entities.length : `${visibleEntities.length} of ${page.entities.length}`} entr{page.entities.length === 1 ? 'y' : 'ies'}</span></div>
+        {page.topic ? <RpgAddWorldEntity label={page.title || section.label} topic={page.topic} worldId={worldId} /> : null}
         {page.entities.length ? (
           <div className="rpg-authoring-collection-toolbar">
             <input aria-label={`Search ${page.title || section.label}`} placeholder={`Search ${page.title || section.label.toLowerCase()}…`} value={collectionSearch} onChange={(event) => setCollectionSearch(event.currentTarget.value)} />

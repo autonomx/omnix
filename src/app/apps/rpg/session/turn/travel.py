@@ -1,7 +1,8 @@
 """Travel on the pipeline (RQ-2.1): the road from here to a neighbouring place, how long it takes, who is there, and
-the quests it advances; or why the hero cannot go. A place further off is set out for: the hero takes the first road
-of the shortest way there open now, a road a turn, so each place on the way is arrived at as any other (its people,
-its quests, what bars the way on a dangerous road).
+the quests it advances; or why the hero cannot go. A place further off is one journey, one turn (evolution roadmap
+EV-7): the hero goes by the shortest way open now, at most ``MOST_ROADS`` roads, and each place on the way is passed
+as any other is arrived at (its people, its quests). The journey stops short where something calls for the hero: a
+quest's place reached, or what bars the way on a dangerous road.
 
 A published world's routes and places are its world model's; a campaign without one (the starter town until
 RQ-2.8) takes the older path, since the command grammar has no places to read for it.
@@ -31,6 +32,7 @@ from app.apps.rpg.world.travel_graph import _edge_is_available, travel_graph_for
 from app.apps.rpg.foundation.state import access as _sections
 
 MINUTES_PER_TICK = 10
+MOST_ROADS = 4  # the roads one turn's journey takes before the hero stops to look around
 DEFAULT_ROAD_MINUTES = 30  # a road the world gives no time for
 
 
@@ -92,22 +94,71 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
                                 refused=True)
     edge = next((edge for edge in graph.outgoing(current)
                  if edge.to_location == target and _edge_is_available(edge, simulation)), None)
-    on_the_way = ""
     if edge is None:
-        step = _first_road(graph, simulation, current, target)
-        if not step:
+        if not _first_road(graph, simulation, current, target):
             return TravelResolution(
                 [counted], [f"No road leads from here to {name}. " + _routes_line(graph, simulation, current)],
                 refused=True)
-        on_the_way, target = name, step  # set out for it: the first road of the way
-        name = _s(_d(locations.get(target)).get("name")) or target
+        return _journey(document, graph, counted, current, target)
+    return _leg(document, counted, current, target)
+
+
+def _journey(document: Mapping[str, Any], graph: Any, counted: TurnCounted, current: str,
+             target: str) -> TravelResolution:
+    """The way to a place further off, one turn: road by road, stopping where a quest's place is reached or the road
+    is barred (a dangerous road's creature where the hero would pass), or after ``MOST_ROADS`` roads."""
+    from app.apps.rpg.foundation.state.reducer import reduce
+    from app.apps.rpg.rules.exploration import room_waits
+    from app.apps.rpg.rules.pressures import road_encounter
+
+    goal = _s(_d(_d(_d(_sections.world_model_of(_d(_sections.simulation_state_of(document)))).get("locations"))
+                 .get(target)).get("name")) or target
+    changes: list[StateChange] = [counted]
+    quest_lines: list[str] = []
+    seen: list[str] = []  # who is where the journey ends
+    minutes, here, travelled, passed = 0, current, dict(document), ""
+    told = ""
+    for _ in range(MOST_ROADS):
+        step = _first_road(graph, _d(_sections.simulation_state_of(travelled)), here, target)
+        if not step:
+            break
+        leg = _leg(travelled, None, here, step)
+        changes += leg.changes
+        quest_lines += leg.quest_lines
+        minutes += leg.minutes
+        seen = [line for line in leg.lines if line.startswith("Here: ")]
+        travelled, _ = reduce(dict(travelled), leg.changes)
+        here = step
+        arrived = _d(_sections.simulation_state_of(travelled))
+        passed = _s(_d(_d(_d(_sections.world_model_of(arrived)).get("locations")).get(step)).get("name")) or step
+        if step == target:
+            told = f"You travel to {goal}; the way takes {minutes} minutes."
+            break
+        quested = any(change.type.startswith("quest_") for change in leg.changes)  # a quest's place reached
+        # ... or a site's room that holds its encounter or hazard: rooms are met one by one (EV-10).
+        if quested or road_encounter(arrived, turn_key=str(counted.turn_count)) or room_waits(arrived):
+            told = f"You set out for {goal} and stop at {passed}, {minutes} minutes on."
+            break
+    if not told:
+        told = f"You set out for {goal}; after {minutes} minutes on the road you are at {passed}."
+    return TravelResolution(changes, [told, *seen, *quest_lines], minutes=minutes, destination=here,
+                            quest_lines=quest_lines)
+
+
+def _leg(document: Mapping[str, Any], counted: TurnCounted | None, current: str, target: str) -> TravelResolution:
+    """One road, from ``current`` to the neighbouring ``target``: its changes (the turn counted, when ``counted`` is
+    given) and what the hero sees there."""
+    simulation = _d(_sections.simulation_state_of(document))
+    world = _d(_sections.world_model_of(simulation))
+    locations = _d(world.get("locations"))
+    name = _s(_d(locations.get(target)).get("name")) or target
     minutes = _road_minutes(world, current, target)
     now = clock_minute(document)  # who is there when the hero arrives, the day gone on by the road's time
     present = routines.present_at(simulation, target, now + minutes, since=now)
     first_visit = target not in routines.visited(simulation)  # a first visit to a named place earns experience
     quests, quest_lines = arrival_changes(simulation, target, discovery_xp=DISCOVERY_XP if first_visit else 0)
     changes: list[StateChange] = [
-        counted,
+        *([counted] if counted is not None else []),
         LocationChanged(location_id=target, location_name=name),
         PresenceChanged(location_id=target, present_npc_ids=tuple(present)),
         TimeAdvanced(ticks=max(1, math.ceil(minutes / MINUTES_PER_TICK)), minutes=minutes),
@@ -115,9 +166,7 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
     ]
     here = routines.described(simulation, present, now + minutes, since=now, hero_at=target)
     # The place's own description reaches the narrator with the scene (runtime_state.current_scene).
-    lines = [f"You set out for {on_the_way}: the way goes by {name}." if on_the_way else "",
-             f"You travel to {name}; the road takes {minutes} minutes."]
-    lines = [line for line in lines if line]
+    lines = [f"You travel to {name}; the road takes {minutes} minutes."]
     if here:
         lines.append(f"Here: {', '.join(here)}.")
     return TravelResolution(changes, [*lines, *quest_lines], minutes=minutes, destination=target,

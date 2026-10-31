@@ -53,7 +53,8 @@ time away says it too. What the hero does to a pressure was RQ-5.4's levers (que
 
 A road takes the time the world gives it (30 minutes when it gives none), and a journey to a neighbouring place is
 one turn. A place further off is set out for (`session/turn/travel.py`): the hero takes the first road of the
-shortest way there by the roads open now ("You set out for The Ruins: the way goes by The Village."), so
-each place on the way is arrived at as any other, its people, its quests and what bars a dangerous road
-(encounters.md) included; saying it again goes on. A place no open road reaches is refused, as is the place the
+shortest way there by the roads open now, in one turn (evolution roadmap EV-7: "You travel to The Ruins; the way
+takes 140 minutes."), at most four roads; each place on the way is passed as any other is arrived at (its people,
+its first-visit experience), and the journey stops where a quest's place is reached or a dangerous road is barred
+(encounters.md: "You set out for The Ruins and stop at The Village, 20 minutes on."); saying it again goes on. A place no open road reaches is refused, as is the place the
 hero is in.

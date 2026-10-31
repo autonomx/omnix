@@ -85,6 +85,9 @@ def publish_narration_draft(text: str) -> None:
     key = _CURRENT.get()
     if key is None:
         return
+    from app.apps.rpg.narration.lore_links import strip_marks
+
+    text = strip_marks(text, draft=True)  # a draft never shows a lore mark (EV-12): links come with the final text
     with _LOCK:
         draft = _DRAFTS.get(key)
         if draft is None or text == draft.text:

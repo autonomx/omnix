@@ -190,4 +190,8 @@ CHANGE_SECTIONS: dict[str, str] = {
     "check_resolved": "player", "level_choice_made": "player", "revision_restored": "meta",
     "quest_step_completed": "quests", "quest_progressed": "quests", "pressures_moved": "world",
     "local_map_entered": "location", "map_state_projected": "location",
+    "entry_met": "knowledge", "fact_set": "facts", "fact_learned": "facts", "standing_changed": "facts",
+    "phase_entered": "combat", "guard_set": "combat", "direction_tracked": "direction", "preference_noted": "direction",
+    "beat_advanced": "npcs", "rumour_spread": "world", "rumour_heard": "world", "invention_added": "world",
+    "area_detailed": "world", "site_found": "world", "room_cleared": "world", "item_improved": "inventory",
 }

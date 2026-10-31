@@ -385,7 +385,7 @@ class NpcsSection(Section):
 
 _WORLD_KEYS = ("world_model", "causal_world_runtime", "causal_runtime_projection", "faction_pressure", "factions",
                "events", "world_events", "world_event_state", "active_rumors", "incidents", "consequences",
-               "environment", "campaign_mechanics")
+               "environment", "campaign_mechanics", "lore_layer", "area_detail", "exploration")
 
 
 class WorldSection(Section):
@@ -456,6 +456,56 @@ class InteractionsSection(Section):
                                if key in runtime and key not in {"interaction_seq", "state_revision"}})
 
 
+class KnowledgeSection(Section):
+    """What the hero knows of the world (evolution roadmap EV-1): each entry met, visited or heard of, and when."""
+
+    PATHS = (("simulation_state", "hero_knowledge"),)
+
+    entries: dict[str, str] = Field(default_factory=dict)  # entry id: how the hero knows it
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, Any]) -> KnowledgeSection:
+        known = _mapping(read_path(document, ("simulation_state", "hero_knowledge")))
+        entries = _mapping(known.get("entries"))
+        return cls(entries={str(entry): str(_mapping(row).get("kind") or "") for entry, row in entries.items()},
+                   extensions=_split(known, {"entries"}))
+
+
+class FactsSection(Section):
+    """What the world remembers (EV-1): world facts, each with its value, its source and whether the hero knows it,
+    and each group's standing with the hero."""
+
+    PATHS = (("simulation_state", "world_facts"), ("simulation_state", "group_standing"))
+
+    facts: dict[str, Any] = Field(default_factory=dict)
+    standing: dict[str, int] = Field(default_factory=dict)
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, Any]) -> FactsSection:
+        facts = _mapping(read_path(document, ("simulation_state", "world_facts")))
+        standing = _mapping(read_path(document, ("simulation_state", "group_standing")))
+        return cls(facts={str(fact): _mapping(row).get("value") for fact, row in facts.items()},
+                   standing={str(group): _int(value) for group, value in standing.items()})
+
+
+class DirectionSection(Section):
+    """The game master's bookkeeping (EV-0): the last meaningful event's turn, its events by day, the scenes that had
+    a complication, and the player's wishes for the story."""
+
+    PATHS = (("simulation_state", "direction"),)
+
+    last_event_turn: int = 0
+    wishes: dict[str, str] = Field(default_factory=dict)
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, Any]) -> DirectionSection:
+        held = _mapping(read_path(document, ("simulation_state", "direction")))
+        return cls(last_event_turn=_int(held.get("last_event_turn")),
+                   wishes={str(_mapping(row).get("kind")): str(_mapping(row).get("value"))
+                           for row in held.get("wishes") or () if isinstance(row, Mapping)},
+                   extensions=_split(held, {"last_event_turn", "wishes"}))
+
+
 class MetaSection(Section):
     PATHS = (("manifest",), ("simulation_state", "rng_seed"), ("simulation_state", "campaign_end"))
 
@@ -487,6 +537,9 @@ SECTIONS: dict[str, type[Section]] = {
     "economy": EconomySection,
     "narrative": NarrativeSection,
     "interactions": InteractionsSection,
+    "knowledge": KnowledgeSection,
+    "facts": FactsSection,
+    "direction": DirectionSection,
     "meta": MetaSection,
 }
 SECTION_PATHS: dict[str, tuple[Path, ...]] = {name: section.PATHS for name, section in SECTIONS.items()}

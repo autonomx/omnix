@@ -54,3 +54,13 @@ and a felled creature pushes back only its own region's pressure (a wolf killed 
 region's roads safe at once, which left nothing to pay for the rest of the campaign). With these the balance
 simulation's purse is inside its band in both worlds. Haggles are once a day per seller, not per offer.
 
+## Information and upgrades (evolution roadmap EV-4, EV-5)
+
+Paid information sells the word going about where the hero stands (`rules/rumours.py`): the seller tells what has
+not been heard, and refuses the price when there is nothing new. An `upgrade` offer improves a carried piece of gear
+by one tier (`rules/economy/trade.improve`, `ItemImproved`): its recipe names the slots it improves, the materials a
+tier takes, what a tier adds and the last tier; the price is the offer's by the tier, and no tier goes past the
+hero's level's budget for the slot (`rules/budgets.py`). Gear is improved as it fights: unnamed, the piece the hero
+wears comes first, and a world's own weapon with no equipment of its own ("Iron Dagger") is improved as its kind, its
+block then written on the carried row. Aurelia: Hollis improves a blade or armour with two Aether
+Shards a tier, up to three; Brindle tunes a weapon with one, up to two. Scenario: `test_upgrades.py`.

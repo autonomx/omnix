@@ -5,14 +5,15 @@ entity, and whether the correct handling changes campaign state. The harness lau
 disposable PostgreSQL database (``tests/rehearsal/rpg/worlds.py``), brings each scene about by playing its setup
 commands, and snapshots it. Then, for every item, it measures today's deterministic understanding, without a model:
 
-1. **Static reading** (``play``): the turn's command grammar on the campaign's scene (``command_reading``,
-   RQ-3.1); a reading confident enough to skip the intent call is "resolved without a model". (Before RQ-2.10 it
-   replayed the older turn path's matchers, in the order that path ran them; the RQ-0.4 baseline measured those.)
-   ``--mode grammar`` reads the corpus scenes from the catalog instead, with no campaign at all.
+1. **Static reading** (``play``): the command grammar the turn used before evolution roadmap EV-9, now the scripted
+   model's reader in tests (``tests/support/rpg_line_reader``), on the campaign's scene; a reading it was confident
+   enough to act on is reported as what the grammar would have resolved. Since EV-9 the game itself reads every typed
+   line with the intent call, so this is the old baseline, for comparison. ``--mode grammar`` reads the corpus scenes
+   from the catalog instead, with no campaign at all.
 2. **Play** (``--mode play``, the default): the scene's snapshot is restored, the input is played through
-   ``POST /api/rpg/sessions/{id}/turn`` with the scripted model (the intent router answers "{}", so the engine
-   decides; ``--provider route`` sends the intent call to RPG's settings route, the Claude CLI here, and keeps
-   the narration deterministic), and the saved game is compared with the snapshot. A material change (place, purse, pack, equipment,
+   ``POST /api/rpg/sessions/{id}/turn``. Every typed line goes to the intent call (EV-9): ``--provider route`` sends it
+   to RPG's settings route, the Claude CLI here, and keeps the narration deterministic (the M2 gate); with the scripted
+   model the intent call answers "{}" and every line is a free action, which measures only the harness, and the saved game is compared with the snapshot. A material change (place, purse, pack, equipment,
    party, quests, skills, hit points or a fight, an NPC's health, fatigue relieved) makes the turn stateful, and
    decides the family and target (a changed place is a move, a smaller purse a purchase, ...). Without one, the
    reading the turn ran on stands (the grammar's, or the intent call's when the grammar left it to the model; a
@@ -147,12 +148,14 @@ class Catalog:
 
 
 def static_reading(simulation_state: dict[str, Any], runtime_state: dict[str, Any], text: str) -> dict[str, Any]:
-    """What the turn's command grammar makes of the input in the campaign's scene, without a model (RQ-3.1)."""
-    from app.apps.rpg.session.command_reading import read_command, skip_reason
+    """What the command grammar the turn used before EV-9 makes of the input in the campaign's scene, without a
+    model: the pre-EV-9 baseline (``tests/support/rpg_line_reader``)."""
+    from tests.support.rpg_line_reader.reader import grammar_plan
 
-    reading = read_command(copy.deepcopy(simulation_state), text, copy.deepcopy(runtime_state))
+    document = {"simulation_state": copy.deepcopy(simulation_state), "runtime_state": copy.deepcopy(runtime_state)}
+    reading, planned, _ = grammar_plan(document, text)
     return {"family": reading.family, "target_ref": reading.target_id or None, "stateful": reading.stateful,
-            "source": f"grammar:{reading.reason}", "gate": bool(skip_reason(reading))}
+            "source": f"grammar:{reading.reason}", "gate": planned is not None}
 
 
 # --- material state -------------------------------------------------------------------------------------------
@@ -287,7 +290,7 @@ def turn_reading(ran: dict[str, Any]) -> dict[str, Any]:
     """The family and target of the reading a turn ran on; a question back is a clarification."""
     if ran["mechanic"] == "clarify":
         return {"family": "clarify", "target_ref": None}
-    return {"family": ran["family"], "target_ref": ran["target_ref"] or None}
+    return {"family": ran["family"], "target_ref": ran["target_ref"] or None, "topics": ran.get("topics") or []}
 
 
 # --- the run ----------------------------------------------------------------------------------------------------
@@ -311,7 +314,9 @@ class Worlds:
 
         def recorded(session: Any, *, request: Any, planned: Any, reading: Any, resolution: Any) -> Any:
             # The reading the turn ran on: the grammar's, or the intent call's when the grammar left it to the model.
-            self.ran.append({"mechanic": planned.mechanic, "family": reading.family, "target_ref": reading.target_id})
+            self.ran.append({"mechanic": planned.mechanic, "family": reading.family, "target_ref": reading.target_id,
+                             "reason": planned.reason,  # "storyteller_unavailable": the intent call failed
+                             "topics": list(reading.slots.topics)})
             return planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
 
         setattr(run, "run_planned_turn", recorded)
@@ -366,7 +371,7 @@ class Worlds:
             ran = turn_reading(self.ran[-1]) if self.ran else static
             observed = observed_reading(found, ran, after)
             prediction = {"family": (observed or ran)["family"], "target_ref": (observed or ran)["target_ref"],
-                          "stateful": observed is not None}
+                          "stateful": observed is not None, "topics": (observed or ran).get("topics") or []}
             record.update({"http": status, "turn_ms": round(elapsed, 1), "changes": found, "ran": self.ran[-1:],
                            "model_calls": self.model.calls[calls_before:]})
         prediction["target_entity"] = self.catalog[world].resolve(prediction["target_ref"])
@@ -374,7 +379,13 @@ class Worlds:
         record["correct"] = {
             "family": same_family(prediction["family"], item["action_family"]),
             "family_exact": prediction["family"] == item["action_family"],
-            "target": self.catalog[world].same_target(prediction["target_entity"], item["target_entity"])
+            # Talk is aimed at the one asked, and asks them about its topics: an ask's target (what it asks about)
+            # is either (EV-9: the intent call's talk reading carries the subject as a topic). Only for an item that
+            # is talk (ask, decline, talk): a purchase read as talk about the thing gets no target credit.
+            "target": any(self.catalog[world].same_target(entity, item["target_entity"]) for entity in (
+                prediction["target_entity"], *(self.catalog[world].resolve(topic) for topic in (
+                    prediction.get("topics") or ()
+                    if prediction["family"] == "talk" and same_family("talk", item["action_family"]) else ()))))
             if item["target_entity"] else None,
             "stateful": prediction["stateful"] == item["stateful"],
         }
@@ -419,7 +430,7 @@ def confusion(items: list[dict[str, Any]], records: dict[str, dict[str, Any]]) -
 
 def grammar_scene(catalog: dict[str, Any], world: str, scene: str):
     """The corpus scene as the command grammar sees it (RQ-3.1): who and what is here, and what the world knows."""
-    from app.apps.rpg.rules.intent.grammar import SceneEntity, SceneView
+    from app.apps.rpg.rules.intent.reading import SceneEntity, SceneView
 
     entities = catalog["worlds"][world]["entities"]
     spec = catalog["worlds"][world]["scenes"][scene]
@@ -438,7 +449,7 @@ def grammar_scene(catalog: dict[str, Any], world: str, scene: str):
 
 def grammar_records(catalog: dict[str, Any], items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Each item read by the command grammar alone: no campaign, no model."""
-    from app.apps.rpg.rules.intent.grammar import parse_command
+    from tests.support.rpg_line_reader.grammar import parse_command
 
     scenes: dict[tuple[str, str], Any] = {}
     records: dict[str, dict[str, Any]] = {}

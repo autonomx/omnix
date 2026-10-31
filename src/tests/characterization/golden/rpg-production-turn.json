@@ -5,7 +5,9 @@
       "command": "look around",
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:1",
-      "model_calls": [],
+      "model_calls": [
+        "turn_intent"
+      ],
       "narrative": {
         "blocks": [
           {
@@ -56,10 +58,17 @@
       "turn_id": "turn:1",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
+        "links": {
+          "messages": [],
+          "narration": []
+        },
         "messages": [],
         "narration": "You take in your surroundings.",
         "npc": {},
-        "plain_text": "You take in your surroundings."
+        "plain_text": "You take in your surroundings.",
+        "voices": {
+          "narration": []
+        }
       }
     },
     {
@@ -67,6 +76,7 @@
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:2",
       "model_calls": [
+        "turn_intent",
         "dialogue_line"
       ],
       "narrative": {
@@ -121,6 +131,12 @@
       "turn_id": "turn:2",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
+        "links": {
+          "messages": [
+            []
+          ],
+          "narration": []
+        },
         "messages": [
           {
             "kind": "npc_dialogue",
@@ -135,14 +151,20 @@
           "speaker": "Bran",
           "speaker_id": "npc:bran"
         },
-        "plain_text": "Bran: \"The moment passes quietly in the room.\""
+        "plain_text": "Bran: \"The moment passes quietly in the room.\"",
+        "voices": {
+          "narration": []
+        }
       }
     },
     {
       "command": "buy a drink",
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:3",
-      "model_calls": [],
+      "model_calls": [
+        "dialogue_line",
+        "turn_intent"
+      ],
       "narrative": {
         "blocks": [
           {
@@ -195,17 +217,27 @@
       "turn_id": "turn:3",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
+        "links": {
+          "messages": [],
+          "narration": []
+        },
         "messages": [],
         "narration": "You take in your surroundings.",
         "npc": {},
-        "plain_text": "You take in your surroundings."
+        "plain_text": "You take in your surroundings.",
+        "voices": {
+          "narration": []
+        }
       }
     },
     {
       "command": "go outside",
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:4",
-      "model_calls": [],
+      "model_calls": [
+        "dialogue_line",
+        "turn_intent"
+      ],
       "narrative": {
         "blocks": [
           {
@@ -237,6 +269,7 @@
           "player",
           "survival",
           "world",
+          "knowledge",
           "narrative"
         ],
         "llm_purpose": "canonical_dialogue_generation",
@@ -260,6 +293,7 @@
           "player",
           "survival",
           "world",
+          "knowledge",
           "narrative"
         ],
         "revision": 4
@@ -267,17 +301,26 @@
       "turn_id": "turn:4",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
+        "links": {
+          "messages": [],
+          "narration": []
+        },
         "messages": [],
         "narration": "You take in your surroundings.\n\nResolved action: You take in your surroundings.",
         "npc": {},
-        "plain_text": "You take in your surroundings.\n\nResolved action: You take in your surroundings."
+        "plain_text": "You take in your surroundings.\n\nResolved action: You take in your surroundings.",
+        "voices": {
+          "narration": []
+        }
       }
     },
     {
       "command": "wait",
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:5",
-      "model_calls": [],
+      "model_calls": [
+        "turn_intent"
+      ],
       "narrative": {
         "blocks": [
           {
@@ -328,10 +371,28 @@
       "turn_id": "turn:7",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
+        "links": {
+          "messages": [],
+          "narration": [
+            {
+              "end": 33,
+              "entry_id": "location:market-road:northern-road",
+              "start": 20
+            },
+            {
+              "end": 74,
+              "entry_id": "npc:aldric",
+              "start": 60
+            }
+          ]
+        },
         "messages": [],
         "narration": "You wait a while in Northern Road; time passes. Around you: Captain Aldric (patrolling the road).",
         "npc": {},
-        "plain_text": "You wait a while in Northern Road; time passes. Around you: Captain Aldric (patrolling the road)."
+        "plain_text": "You wait a while in Northern Road; time passes. Around you: Captain Aldric (patrolling the road).",
+        "voices": {
+          "narration": []
+        }
       }
     }
   ]

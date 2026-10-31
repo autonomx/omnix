@@ -150,6 +150,10 @@ class Playthrough:
         from fastapi.testclient import TestClient
 
         from app.apps.rpg.edge.api.feature_routes.rpg_debug_routes import register_rpg_debug_routes
+        from app.apps.rpg.edge.api.feature_routes.rpg_game_master_routes import register_rpg_game_master_routes
+        from app.apps.rpg.edge.api.feature_routes.rpg_lore_link_routes import register_rpg_lore_link_routes
+        from app.apps.rpg.edge.api.feature_routes.rpg_lore_review_routes import register_rpg_lore_review_routes
+        from app.apps.rpg.edge.api.feature_routes.rpg_voice_routes import register_rpg_voice_routes
         from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
         from app.apps.rpg.edge.api.feature_routes.rpg_map_routes import register_rpg_map_routes
         from app.apps.rpg.edge.api.feature_routes.rpg_npc_spatial_routes import register_rpg_npc_spatial_routes
@@ -162,8 +166,24 @@ class Playthrough:
         include_router_registrar(app, register_rpg_map_routes)
         include_router_registrar(app, register_rpg_npc_spatial_routes)
         include_router_registrar(app, register_rpg_debug_routes)  # the operations view (RQ-8.4)
+        include_router_registrar(app, register_rpg_game_master_routes)  # the game master's panel (EV-0)
+        include_router_registrar(app, register_rpg_lore_link_routes)  # names that open their lore (EV-12)
+        include_router_registrar(app, register_rpg_lore_review_routes)  # the game master's drafts (EV-0, part 2)
+        include_router_registrar(app, register_rpg_voice_routes)  # a campaign's voices (EV-13)
         self.session_id = session_id
         self.client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+        self._model: Any = None
+
+    @property
+    def model(self) -> Any:
+        return self._model
+
+    @model.setter
+    def model(self, value: Any) -> None:
+        """The scripted model plays this campaign: every typed line goes to it, read against this campaign (EV-9)."""
+        self._model = value
+        if value is not None and hasattr(value, "session_id"):
+            value.session_id = self.session_id
 
     # -- acting ----------------------------------------------------------------------------------------
     def post_turn(self, command: str, *, submission_id: str = ""):

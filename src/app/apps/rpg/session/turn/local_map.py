@@ -8,12 +8,16 @@ map instance is written in the turn's transaction, with the turn.
 """
 from __future__ import annotations
 
+import logging
+import threading
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import CombatAdvanced, LocalMapEntered, StateChange
 from app.apps.rpg.rules import routines
 from app.apps.rpg.foundation.state import access as _sections
+
+logger = logging.getLogger(__name__)
 
 
 def _location_map_id(simulation: Mapping[str, Any], location_id: str) -> str:
@@ -64,6 +68,56 @@ def _existing(session_id: str, map_instance_id: str) -> tuple[Any, Any] | None:
         return None
 
 
+_PREPARE = None  # the arrival's reads, run while travel resolves (EV-7)
+_PREPARED: dict[tuple[str, str], Any] = {}
+_PREPARED_KEPT = 64
+_PREPARED_LOCK = threading.Lock()
+PREPARED_WAIT_SECONDS = 3.0
+
+
+def prepare_arrival(session_id: str, document: Mapping[str, Any], location_id: str) -> None:
+    """Start reading the destination's local map (the campaign's instance of it, else its definition) beside the
+    travel rule, so the turn finds it read when the hero arrives (evolution roadmap EV-7). Only reads: what the turn
+    then does with them is unchanged, and a journey that stops short leaves them unused."""
+    import contextvars
+    from concurrent.futures import ThreadPoolExecutor
+
+    global _PREPARE
+    map_id = _location_map_id(_d(_sections.simulation_state_of(document)), location_id) if location_id else ""
+    if not session_id or not map_id:
+        return
+    target = map_instance_id_for(session_id, map_id)
+    if target == _s(_d(document.get("state")).get("current_map_instance_id")):
+        return
+    context = contextvars.copy_context()  # the turn's tenant
+    with _PREPARED_LOCK:
+        if _PREPARE is None:
+            _PREPARE = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rpg-arrival")
+        for key in [key for key in _PREPARED if key[0] == session_id]:  # one journey's reads a campaign: this turn's
+            _PREPARED.pop(key, None)
+        _PREPARED[(session_id, target)] = _PREPARE.submit(context.run, _read_arrival, session_id, location_id, map_id,
+                                                          target)
+        while len(_PREPARED) > _PREPARED_KEPT:
+            _PREPARED.pop(next(iter(_PREPARED)), None)
+
+
+def _read_arrival(session_id: str, location_id: str, map_id: str, target: str) -> tuple[str, Any]:
+    existing = _existing(session_id, target)
+    return ("existing", existing) if existing is not None else ("new", _new_instance(session_id, location_id, map_id))
+
+
+def _prepared(session_id: str, target: str) -> tuple[str, Any] | None:
+    with _PREPARED_LOCK:
+        future = _PREPARED.pop((session_id, target), None)
+    if future is None:
+        return None
+    try:
+        return future.result(timeout=PREPARED_WAIT_SECONDS)
+    except Exception:  # read it again, as without preparation
+        logger.warning("rpg_arrival_prepare_failed session=%s target=%s", session_id, target, exc_info=True)
+        return None
+
+
 def on_the_local_map(
     session_id: str,
     document: Mapping[str, Any],
@@ -90,8 +144,11 @@ def on_the_local_map(
     created: list[dict[str, Any]] = []
     loaded: tuple[Any, Any] | None = None
     if target and target != current:
-        loaded = _existing(session_id, target)
-        if loaded is None and (made := _new_instance(session_id, here, map_id)) is not None:
+        ready = _prepared(session_id, target)  # read while travel resolved (EV-7), else read now
+        kind, read = ready if ready is not None else ("existing", _existing(session_id, target))
+        loaded = read if kind == "existing" else None
+        made = read if kind == "new" else None
+        if loaded is None and (made or (made := _new_instance(session_id, here, map_id))) is not None:
             loaded = made
             snapshot = made[1]
             created.append({"map_instance_id": snapshot.map_instance_id, "campaign_id": snapshot.campaign_id,

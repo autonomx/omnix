@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from app.apps.rpg.foundation.state.reducer import reduce
-from app.apps.rpg.rules.economy.trade import buy, coins, sell, stock_left
+from app.apps.rpg.rules.economy.trade import coins, stock_left
+from tests.support.rpg_reading import bought, sold
 
 OFFERS = {
     "npc:orik": [
@@ -44,7 +45,7 @@ def _after(campaign, outcome):
 
 def test_buying_pays_takes_the_goods_and_the_stock_and_is_remembered() -> None:
     campaign = _campaign()
-    outcome = buy(campaign["simulation_state"], "I buy a Healing Potion from Brindle Gearwing.")
+    outcome = bought(campaign["simulation_state"], "I buy a Healing Potion from Brindle Gearwing.")
     assert outcome.kind == "bought"
     assert outcome.lines == ["You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete."]
     after = _after(campaign, outcome)
@@ -57,9 +58,9 @@ def test_buying_pays_takes_the_goods_and_the_stock_and_is_remembered() -> None:
 
 def test_a_meal_eases_hunger_and_a_room_is_kept_for_the_night() -> None:
     campaign = _campaign()
-    meal = buy(campaign["simulation_state"], "I buy a meal from Orik Stonewake.")
+    meal = bought(campaign["simulation_state"], "I buy a meal from Orik Stonewake.")
     assert meal.lines[-1] == "It eases your hunger." and _after(campaign, meal)["survival"]["hunger"] == 15
-    room = buy(campaign["simulation_state"], "I rent a room for the night from Orik.")
+    room = bought(campaign["simulation_state"], "I rent a room for the night from Orik.")
     [reserved] = _after(campaign, room)["active_services"]
     assert reserved["offer_id"] == "npc:orik:night" and reserved["status"] == "active"
     assert reserved["effects"]["duration"] == "one_night"
@@ -67,16 +68,16 @@ def test_a_meal_eases_hunger_and_a_room_is_kept_for_the_night() -> None:
 
 def test_what_cannot_be_bought_is_refused_and_an_unnamed_purchase_lists_the_offers() -> None:
     simulation = _campaign(purse=20)["simulation_state"]
-    assert buy(simulation, "I buy a Healing Potion from Brindle.").lines == [
+    assert bought(simulation, "I buy a Healing Potion from Brindle.").lines == [
         "You cannot afford Healing Potion: it costs 3 silver and you have 2 silver."]
-    listed = buy(simulation, "I buy supplies from Brindle Gearwing.")
+    listed = bought(simulation, "I buy supplies from Brindle Gearwing.")
     assert listed.kind == "listed" and listed.changes == []
     assert listed.lines == ["Brindle Gearwing offers: Healing Potion (3 silver). Nothing is sold until you name one."]
-    assert buy(_campaign(here="loc:grove")["simulation_state"], "I buy a healing potion.").lines == ["No one here sells that."]
+    assert bought(_campaign(here="loc:grove")["simulation_state"], "I buy a healing potion.").lines == ["No one here sells that."]
     sold_out = _campaign()
     sold_out["simulation_state"]["trade"] = {"stock": {"npc:orik:night": 0}}
-    assert buy(sold_out["simulation_state"], "I rent a room from Orik.").lines == ["A night's lodging is sold out."]
-    assert buy({"world_model": {}}, "buy bread") is None  # no economy section: the older path's
+    assert bought(sold_out["simulation_state"], "I rent a room from Orik.").lines == ["A night's lodging is sold out."]
+    assert bought({"world_model": {}}, "buy bread") is None  # no economy section: the older path's
 
 
 def test_what_sold_out_comes_back_with_the_days() -> None:
@@ -84,9 +85,9 @@ def test_what_sold_out_comes_back_with_the_days() -> None:
     simulation = campaign["simulation_state"]
     simulation["trade"] = {"stock": {"npc:orik:night": {"remaining": 0, "day": 0}}}
     simulation["environment"] = {"absolute_minutes": 23 * 60}
-    assert buy(simulation, "I rent a room from Orik.").lines == ["A night's lodging is sold out."]  # the same day
+    assert bought(simulation, "I rent a room from Orik.").lines == ["A night's lodging is sold out."]  # the same day
     simulation["environment"] = {"absolute_minutes": 25 * 60}  # the next: the inn's rooms are free again
-    assert buy(simulation, "I rent a room from Orik.").kind == "bought"
+    assert bought(simulation, "I rent a room from Orik.").kind == "bought"
     offer = next(row for row in simulation["world_model"]["offers"]["npc:brindle"] if row["offer_id"].endswith("potion"))
     offer["restock_per_day"] = 1  # as the world wrote it: one a day
     simulation["trade"]["stock"]["npc:brindle:healing-potion"] = {"remaining": 0, "day": 0}
@@ -101,15 +102,15 @@ def test_selling_pays_half_for_the_shops_own_goods_a_token_for_others_and_nothin
              {"item_id": "item:sigil", "name": "Wayfarer Sigil", "qty": 1}]
     campaign = _campaign(purse=0, items=items, quests=[{"id": "q", "rewards": ["item:sigil"]}])
     simulation = campaign["simulation_state"]
-    potion = sell(simulation, "I sell my Healing Potion to Brindle Gearwing.")
+    potion = sold(simulation, "I sell my Healing Potion to Brindle Gearwing.")
     assert potion.lines == ["You sell the Healing Potion to Brindle Gearwing for 1 silver, 5 copper."]
     after = _after(campaign, potion)
     assert after["player_state"]["inventory_state"]["items"][0]["qty"] == 1
-    assert sell(simulation, "I sell my Iron Dagger to Brindle Gearwing.").lines == [
+    assert sold(simulation, "I sell my Iron Dagger to Brindle Gearwing.").lines == [
         "You sell the Iron Dagger to Brindle Gearwing for 5 copper."]
-    assert sell(simulation, "I sell my Wayfarer Sigil to Brindle.").lines == [
+    assert sold(simulation, "I sell my Wayfarer Sigil to Brindle.").lines == [
         "Brindle Gearwing will not buy the Wayfarer Sigil: it was earned, not bought."]
-    assert sell(simulation, "I sell my crown.").lines == ["You carry nothing by that name to sell."]
+    assert sold(simulation, "I sell my crown.").lines == ["You carry nothing by that name to sell."]
 
 
 def test_coins_read_as_the_play_screen_shows_them() -> None:
@@ -142,8 +143,8 @@ def test_prices_answer_scarcity_the_roads_trust_and_a_haggle() -> None:
     haggled, _ = reduce(campaign, haggle.changes)
     after = haggled["simulation_state"]
     assert price_of(after, brindle, potion)[1][-1] == "you haggled"
-    bought = buy(after, "I buy a Healing Potion from Brindle Gearwing.")
-    assert bought.lines[0].startswith("You pay ") and "(the roads choke trade, you are trusted, you haggled)" in bought.lines[0]
+    paid = bought(after, "I buy a Healing Potion from Brindle Gearwing.")
+    assert paid.lines[0].startswith("You pay ") and "(the roads choke trade, you are trusted, you haggled)" in paid.lines[0]
     after["environment"] = {"absolute_minutes": 49 * 60}  # the next day: the haggle is spent
     assert "you haggled" not in price_of(after, brindle, potion)[1]
 
@@ -155,22 +156,22 @@ def test_goods_are_bought_by_the_count_asked_as_far_as_stock_and_purse_go() -> N
                    if item.get("name") == "Healing Potion")
 
     campaign = _campaign(purse=1000)
-    outcome = buy(campaign["simulation_state"], "I buy two Healing Potions from Brindle Gearwing.")
+    outcome = bought(campaign["simulation_state"], "I buy two Healing Potions from Brindle Gearwing.")
     assert outcome.lines == ["You pay 6 silver to Brindle Gearwing for 2 × Healing Potion. The transaction is complete."]
     after = _after(campaign, outcome)
     assert potions(after) == 2 and stock_left(after, OFFERS["npc:brindle"][0]) == 1
-    outcome = buy(campaign["simulation_state"], "I buy five Healing Potions from Brindle Gearwing.")
+    outcome = bought(campaign["simulation_state"], "I buy five Healing Potions from Brindle Gearwing.")
     assert potions(_after(campaign, outcome)) == 3 and outcome.lines[-1] == "That is all there is of Healing Potion."
     poor = _campaign(purse=70)
-    outcome = buy(poor["simulation_state"], "I buy 3 Healing Potions from Brindle Gearwing.")
+    outcome = bought(poor["simulation_state"], "I buy 3 Healing Potions from Brindle Gearwing.")
     assert potions(_after(poor, outcome)) == 2 and outcome.lines[-1] == "That is all you can afford of Healing Potion."
-    meal = buy(campaign["simulation_state"], "I buy two hot meals from Orik.")  # a meal is one, eaten now
+    meal = bought(campaign["simulation_state"], "I buy two hot meals from Orik.")  # a meal is one, eaten now
     assert meal.lines[0] == "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete."
 
 
 def test_a_price_or_a_measure_is_no_count() -> None:
     """The review: "for 15 coppers" bought ten potions."""
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     assert wanted_count("buy a healing potion for 15 coppers", "Healing Potion") == 1
     assert wanted_count("buy a potion, I have 12 silvers", "Healing Potion") == 1
@@ -181,7 +182,7 @@ def test_a_price_or_a_measure_is_no_count() -> None:
 
 
 def test_a_coin_in_an_offers_name_makes_no_price_a_count() -> None:
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     assert wanted_count("buy the gold ring for 5 gold", "Gold Ring") == 1
     assert wanted_count("buy a copper kettle for 30 copper", "Copper Kettle") == 1
@@ -190,7 +191,7 @@ def test_a_coin_in_an_offers_name_makes_no_price_a_count() -> None:
 
 
 def test_the_count_goes_with_the_offers_head_word() -> None:
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     assert wanted_count("buy a day pass, good for 3 days", "Day Pass") == 1
     assert wanted_count("buy 2 day passes", "Day Pass") == 2
@@ -221,11 +222,11 @@ def test_a_worlds_gear_keeps_how_it_is_worn_and_fights_from_the_shop_to_the_figh
     from app.apps.rpg.rules.interactions.items import equip_item
 
     campaign = _with_armoury(_campaign(purse=200))
-    bought = buy(campaign["simulation_state"], "I buy a Gatewarden Shortsword from Rhea.")
-    document, _ = reduce(campaign, bought.changes)
+    purchase = bought(campaign["simulation_state"], "I buy a Gatewarden Shortsword from Rhea.")
+    document, _ = reduce(campaign, purchase.changes)
     [sword] = document["simulation_state"]["player_state"]["inventory_state"]["items"]
     assert sword["equipment"] == SWORD  # the world's numbers, not a guess from "shortsword"
-    wielded = equip_item(document["simulation_state"], "item:sword", "wield the shortsword")  # as the grammar reads it
+    wielded = equip_item(document["simulation_state"], "item:sword")  # as the reading names it
     assert wielded.lines == ["You take up the Gatewarden Shortsword."]
     document, _ = reduce(document, wielded.changes)
     stats = project_equipment_stats(document["simulation_state"])["stats"]
@@ -236,11 +237,11 @@ def test_an_unnamed_sale_goes_to_the_one_shop_here_that_deals_in_it() -> None:
     items = [{"item_id": "healing_potion", "name": "Healing Potion", "qty": 1},
              {"item_id": "iron_dagger", "name": "Iron Dagger", "qty": 1}]
     simulation = _with_armoury(_campaign(purse=0, items=items))["simulation_state"]
-    assert sell(simulation, "I sell my Healing Potion.").lines == [
+    assert sold(simulation, "I sell my Healing Potion.").lines == [
         "You sell the Healing Potion to Brindle Gearwing for 1 silver, 5 copper."]
-    assert sell(simulation, "I sell my Iron Dagger.").lines == [
+    assert sold(simulation, "I sell my Iron Dagger.").lines == [
         "To whom do you sell the Iron Dagger: Brindle Gearwing or Captain Rhea?"]
-    assert sell(simulation, "I sell my Iron Dagger to Rhea.").lines == ["You sell the Iron Dagger to Captain Rhea for 5 copper."]
+    assert sold(simulation, "I sell my Iron Dagger to Rhea.").lines == ["You sell the Iron Dagger to Captain Rhea for 5 copper."]
 
 
 def test_a_shop_buys_back_only_the_kinds_of_things_it_names() -> None:
@@ -250,10 +251,10 @@ def test_a_shop_buys_back_only_the_kinds_of_things_it_names() -> None:
     campaign["simulation_state"]["world_model"]["providers"]["npc:rhea"]["buys"] = {"item_types": ["weapon", "armor"]}
     campaign["simulation_state"]["world_model"]["providers"]["npc:brindle"]["buys"] = {"item_types": ["material"]}
     simulation = campaign["simulation_state"]
-    assert sell(simulation, "I sell my Healing Potion to Rhea.").lines == ["Captain Rhea does not buy the Healing Potion."]
+    assert sold(simulation, "I sell my Healing Potion to Rhea.").lines == ["Captain Rhea does not buy the Healing Potion."]
     # Brindle buys his own goods back, and the materials he names; the captain neither.
-    assert sell(simulation, "I sell my Healing Potion.").lines[0].startswith("You sell the Healing Potion to Brindle")
-    assert sell(simulation, "I sell my Aether Shard.").lines == ["You sell the Aether Shard to Brindle Gearwing for 5 copper."]
+    assert sold(simulation, "I sell my Healing Potion.").lines[0].startswith("You sell the Healing Potion to Brindle")
+    assert sold(simulation, "I sell my Aether Shard.").lines == ["You sell the Aether Shard to Brindle Gearwing for 5 copper."]
 
 
 def test_a_buyer_is_named_by_any_word_of_their_name_and_one_who_buys_nothing_refuses() -> None:
@@ -266,13 +267,13 @@ def test_a_buyer_is_named_by_any_word_of_their_name_and_one_who_buys_nothing_ref
     world["npcs"] = {"npc:orik": {"name": "Orik Stonewake"}, "npc:brindle": {"name": "Brindle Gearwing"},
                      "npc:rhea": {"name": "Captain Rhea Sunward"}}
     simulation = campaign["simulation_state"]
-    assert sell(simulation, "sell the Aether Shard to Rhea").lines == [
+    assert sold(simulation, "sell the Aether Shard to Rhea").lines == [
         "You sell the Aether Shard to Captain Rhea Sunward for 5 copper."]
-    assert sell(simulation, "sell the Aether Shard to Orik").lines == ["Orik Stonewake does not buy the Aether Shard."]
+    assert sold(simulation, "sell the Aether Shard to Orik").lines == ["Orik Stonewake does not buy the Aether Shard."]
 
 
 def test_a_count_reaches_past_a_hyphen_and_an_of() -> None:
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     assert wanted_count("buy two ward-glass bucklers", "Ward-glass Buckler") == 2
     assert wanted_count("buy two half-plates", "Foundry Half-plate") == 2
@@ -284,7 +285,7 @@ def test_a_count_reaches_past_a_hyphen_and_an_of() -> None:
 
 def test_a_companion_spoken_to_is_no_buyer_and_a_names_own_number_no_count() -> None:
     """The tenth review: "Liora, I'll sell the Aether Shard" was refused as Liora's; "buy 50 feet of rope" bought ten."""
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
     campaign = _campaign(purse=0, items=items)
@@ -292,8 +293,8 @@ def test_a_companion_spoken_to_is_no_buyer_and_a_names_own_number_no_count() -> 
     simulation["world_model"]["npcs"] = {"npc:liora": {"name": "Liora Fen"}, "npc:orik": {"name": "Orik Stonewake"}}
     simulation["present_npc_state"]["present_npc_ids"].append("npc:liora")
     for text in ("Liora, I'll sell the Aether Shard", "sell the Aether Shard, Liora"):
-        assert sell(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
-    assert sell(simulation, "Liora, sell the Aether Shard to Orik").lines == ["Orik Stonewake does not buy the Aether Shard."]
+        assert sold(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
+    assert sold(simulation, "Liora, sell the Aether Shard to Orik").lines == ["Orik Stonewake does not buy the Aether Shard."]
     assert wanted_count("buy 50 feet of rope", "50 Feet of Rope") == 1
     assert wanted_count("buy ten days of rations", "Ten Days of Rations") == 1
     assert wanted_count("buy two days of rations", "Ten Days of Rations") == 2
@@ -301,14 +302,14 @@ def test_a_companion_spoken_to_is_no_buyer_and_a_names_own_number_no_count() -> 
 
 def test_the_buyer_named_first_buys_and_counts_keep_their_plurals() -> None:
     """The eleventh review: "Rhea, I want to sell the Iron Dagger" read "sell the Iron Dagger" as the buyer slot."""
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     items = [{"item_id": "iron_dagger", "name": "Iron Dagger", "qty": 1, "category": "weapon"}]
     campaign = _with_armoury(_campaign(purse=0, items=items))
     simulation = campaign["simulation_state"]
     simulation["world_model"]["npcs"] = {"npc:rhea": {"name": "Captain Rhea"}, "npc:brindle": {"name": "Brindle Gearwing"}}
     for text in ("Rhea, I want to sell the Iron Dagger", "sell the Iron Dagger, Rhea, to pay for supper"):
-        assert sell(simulation, text).lines == ["You sell the Iron Dagger to Captain Rhea for 5 copper."], text
+        assert sold(simulation, text).lines == ["You sell the Iron Dagger to Captain Rhea for 5 copper."], text
     assert wanted_count("buy two pounds of salt", "Pound of Salt") == 2
     assert wanted_count("buy three potions", "Potion of the Three Moons") == 3
     assert wanted_count("buy 50 feet of rope", "50 Feet of Rope") == 1
@@ -317,7 +318,7 @@ def test_the_buyer_named_first_buys_and_counts_keep_their_plurals() -> None:
 def test_a_purpose_after_the_buyer_names_no_buyer_and_some_of_them_is_a_count() -> None:
     """The twelfth review: "sell the Aether Shard to Brindle to pay Liora back" was refused as Liora's; "two of the
     three potions" bought three."""
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
     campaign = _campaign(purse=0, items=items)
@@ -325,13 +326,13 @@ def test_a_purpose_after_the_buyer_names_no_buyer_and_some_of_them_is_a_count() 
     simulation["world_model"]["npcs"] = {"npc:liora": {"name": "Liora Fen"}, "npc:brindle": {"name": "Brindle Gearwing"}}
     simulation["present_npc_state"]["present_npc_ids"].append("npc:liora")
     for text in ("sell the Aether Shard to Brindle to pay Liora back", "sell the Aether Shard to pay Liora back"):
-        assert sell(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
+        assert sold(simulation, text).lines[0].startswith("You sell the Aether Shard to Brindle Gearwing"), text
     assert wanted_count("buy two of the three health potions", "Health Potion") == 2
 
 
 def test_the_thirteenth_reviews_sales_and_counts() -> None:
     """"two of the miners" is no count of torches; a "to" before the selling is where the hero goes, not the buyer."""
-    from app.apps.rpg.rules.economy.trade import wanted_count
+    from tests.support.rpg_line_reader.line_words import wanted_count
 
     assert wanted_count("buy three healing potions for two of the guards", "Healing Potion") == 3
     assert wanted_count("buy a torch for two of the miners", "Torch") == 1
@@ -339,5 +340,5 @@ def test_the_thirteenth_reviews_sales_and_counts() -> None:
     items = [{"item_id": "item:shard", "name": "Aether Shard", "qty": 1, "category": "material"}]
     simulation = _with_armoury(_campaign(purse=0, items=items))["simulation_state"]
     simulation["world_model"]["npcs"] = {"npc:rhea": {"name": "Captain Rhea"}, "npc:brindle": {"name": "Brindle Gearwing"}}
-    assert sell(simulation, "go to Rhea and sell the Aether Shard to Brindle").lines[0].startswith(
+    assert sold(simulation, "go to Rhea and sell the Aether Shard to Brindle").lines[0].startswith(
         "You sell the Aether Shard to Brindle Gearwing")

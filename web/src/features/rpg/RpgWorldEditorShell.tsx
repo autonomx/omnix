@@ -19,6 +19,7 @@ import {
 import { RpgWorldGenerationDashboard } from './RpgWorldGenerationDashboard';
 import { RpgWorldImagesPanel } from './RpgWorldImagesPanel';
 import { RpgWorldPlaySectionsPanel } from './RpgWorldPlaySectionsPanel';
+import { RpgLoreReviewPanel } from './RpgLoreReviewPanel';
 import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel';
 import { RpgWorldVisualMapPanel } from './RpgWorldVisualMapPanel';
 import './RpgWorldFinalizedDesign.css';
@@ -49,6 +50,7 @@ const WORLD_PANELS: Record<string, (worldId: string) => ReactNode> = {
   images: (worldId) => <RpgWorldImagesPanel worldId={worldId} />,
   map: (worldId) => <RpgWorldVisualMapPanel worldId={worldId} />,
   play: (worldId) => <RpgWorldPlaySectionsPanel worldId={worldId} />,
+  review: (worldId) => <RpgLoreReviewPanel worldId={worldId} />,
   scenarios: (worldId) => <RpgWorldScenarioAuthoringPanel worldId={worldId} />,
 };
 

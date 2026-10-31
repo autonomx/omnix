@@ -5,7 +5,8 @@ narrations. Its ``transfer`` section carries what the campaign plays from beside
 
 - its creation artifacts and its bible (the campaign's own lore);
 - its binding to a world (the world, revision, release and opening it was launched from);
-- its local maps as they stand, and its canonical narrative responses.
+- its local maps as they stand, and its canonical narrative responses;
+- the proposals still pending for its next turn to fold in (EV-11).
 
 Importing writes all of it in one transaction, under the campaign's own id. A campaign already in this library is
 refused (``rpg_campaign_already_in_library``): its ids run through its document, and a copy under another id is
@@ -48,6 +49,7 @@ def export_campaign(session_id: str) -> dict[str, Any]:
         binding = work.world_scenarios.get_campaign_binding(context, session_id)
         maps = work.map_instances.list_instances(context, session_id)
         responses = work.narrative_responses.list_campaign(context, session_id, limit=2_000)
+        proposals = work.rpg_proposals.pending(context, session_id, through_revision=2**31 - 1)
         work.rollback()
     package = build_campaign_save_package(document)
     package["transfer"] = {
@@ -65,6 +67,8 @@ def export_campaign(session_id: str) -> dict[str, Any]:
             for row in maps
         ],
         "narrative_responses": [response.as_dict() for response in responses],
+        "proposals": [{key: row[key] for key in ("proposal_id", "kind", "source", "reason", "payload")}
+                      for row in proposals],
     }
     return package
 
@@ -132,6 +136,10 @@ def import_campaign(package: Any) -> dict[str, Any]:
                 scenario_revision=int(binding.get("scenario_revision") or 0),
                 binding=binding,
             )
+        from app.apps.rpg.session.site_maps import store_all_site_maps
+
+        # The grids of the campaign's own sites (EV-10), rebuilt from its document, before the instances on them.
+        store_all_site_maps(work, context, campaign_id=campaign_id, document=document)
         for row in transfer.get("map_instances") or ():
             row = _mapping(row)
             work.map_instances.create_instance(
@@ -146,6 +154,11 @@ def import_campaign(package: Any) -> dict[str, Any]:
             )
         for raw in transfer.get("narrative_responses") or ():
             work.narrative_responses.save(context, canonical_response_from_dict(_mapping(raw)))
+        for row in transfer.get("proposals") or ():  # pending: the imported campaign's next turn folds them in
+            row = _mapping(row)
+            work.rpg_proposals.put(context, campaign_id=campaign_id, proposal_id=str(row["proposal_id"]),
+                                   kind=str(row["kind"]), source=str(row["source"]), after_revision=0,
+                                   payload=_mapping(row.get("payload")), reason=str(row.get("reason") or ""))
         work.commit()
     session = load_session_from_postgres(campaign_id)
     return {"ok": True, "session_id": campaign_id, "session": session}

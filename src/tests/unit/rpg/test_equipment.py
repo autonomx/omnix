@@ -22,10 +22,10 @@ def _document(equipment: dict[str, str] | None = None) -> dict[str, Any]:
 def test_wielding_and_wearing_take_their_slots_and_the_sheet_shows_them() -> None:
     document = _document()
     simulation = document["simulation_state"]
-    sword = equip_item(simulation, "", "I wield the Short Sword")
+    sword = equip_item(simulation, "item:sword")
     assert sword.changes == [ItemEquipped(slot="main_hand", item_id="item:sword")]
     assert sword.lines == ["You take up the Short Sword."]
-    document, _ = reduce(document, [*sword.changes, *equip_item(simulation, "", "put on the travel cloak").changes])
+    document, _ = reduce(document, [*sword.changes, *equip_item(simulation, "item:cloak").changes])
     assert document["simulation_state"]["player_state"]["inventory_state"]["equipment"] == {
         "main_hand": "item:sword", "cloak": "item:cloak"}
     assert document["state"]["player"]["equipment"] == [{"slot": "Weapon", "name": "Short Sword"},
@@ -33,19 +33,19 @@ def test_wielding_and_wearing_take_their_slots_and_the_sheet_shows_them() -> Non
 
 
 def test_what_cannot_be_worn_is_refused_and_what_is_worn_is_already_ready() -> None:
-    assert equip_item(_document()["simulation_state"], "", "equip the bread").refused
-    ready = equip_item(_document({"main_hand": "item:sword"})["simulation_state"], "", "wield the Short Sword")
+    assert equip_item(_document()["simulation_state"], "item:bread").refused
+    ready = equip_item(_document({"main_hand": "item:sword"})["simulation_state"], "item:sword")
     assert not ready.refused and ready.changes == [] and ready.lines == ["You already have the Short Sword ready."]
 
 
 def test_putting_away_keeps_it_in_the_pack() -> None:
     document = _document({"main_hand": "item:sword"})
-    outcome = unequip_item(document["simulation_state"], "", "put away the short sword")
+    outcome = unequip_item(document["simulation_state"], "item:sword")
     assert outcome.changes == [ItemUnequipped(slot="main_hand")]
     after, _ = reduce(document, outcome.changes)
     assert after["simulation_state"]["player_state"]["inventory_state"]["equipment"] == {}
     assert any(item["item_id"] == "item:sword" for item in after["simulation_state"]["player_state"]["inventory_state"]["items"])
-    assert unequip_item(document["simulation_state"], "", "take off the cloak").refused  # not worn
+    assert unequip_item(document["simulation_state"], "item:cloak").refused  # not worn
 
 
 def test_gear_no_longer_carried_is_no_longer_worn() -> None:
@@ -72,9 +72,9 @@ def test_version_8_gathers_the_old_gear_record_into_the_store() -> None:
 def test_a_tool_is_held_to_hand_and_food_is_not_worn() -> None:
     simulation = {"player_state": {"inventory_state": {"items": [
         {"item_id": "item:compass", "name": "Gateborn Compass", "type": "trinket", "qty": 1}, dict(BREAD)]}}}
-    held = equip_item(simulation, "", "hold the gateborn compass")
+    held = equip_item(simulation, "item:compass")
     assert not held.refused and [change.slot for change in held.changes] == ["tool"]
-    assert equip_item(simulation, "", "wear the bread").refused
+    assert equip_item(simulation, "item:bread").refused
 
 
 def test_the_play_screen_offers_what_the_rules_allow_for_each_thing_carried() -> None:

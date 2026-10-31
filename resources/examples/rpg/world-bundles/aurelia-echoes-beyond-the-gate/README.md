@@ -14,7 +14,7 @@ This writes:
 
 `resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
-Bundle SHA-256: `48ce241589e88c78d828d8344b24f868343a21ba98534fe24047fd307a6dbf51`
+Bundle SHA-256: `108e745b7ba8efa1b2ab52e105e0cf3ce5286bdda9b319510d541984ea2985d1`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
 
@@ -56,7 +56,8 @@ The central campaign asks whether the way home should be closed, opened, or tran
 - 10 named characters with biographies, goals, secrets, relationships, and speaking styles;
 - 6 political factions;
 - 5 regions and a connected travel topology;
-- 5 certified square-grid maps with portals, spawn points, zones, objects, and hazards;
+- 7 certified square-grid maps with portals, spawn points, zones, objects, and hazards (Valecourt and Cinderhold
+  added by the evolution roadmap's EV-8, as grids without artwork yet);
 - 3 published launch scenarios;
 - 6 main quest arcs plus supporting adventure seeds;
 - a Resonance magic system with five schools and Earthborn Echo abilities;
@@ -70,6 +71,8 @@ The central campaign asks whether the way home should be closed, opened, or tran
 3. **Wayfarers' Guild** — registration, contracts, party formation, and training.
 4. **Skybridge Pass** — a tactical mountain crossing above the cloud sea.
 5. **Moonroot Ruins** — a memory-haunted dungeon containing the ancient Memory Loom.
+6. **Valecourt** — the royal city of engines: the city gate, Foundry Row, the palace workshops and the canal.
+7. **Cinderhold** — a walled refuge of black stone in the ash fields, its shrine court lit day and night.
 
 ## Launch scenarios
 

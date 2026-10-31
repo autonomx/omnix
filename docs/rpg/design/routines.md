@@ -58,3 +58,20 @@ then the character's own; of the quests they could offer, the one closest to the
 most pressing goal is offered (before, the first in the log); and a hero who asks about what one of their goals is
 after ("any trouble with the wolves?") is offered the quest that answers it, without asking for work. The starter
 world authors goals for ten of its people.
+
+## Goals pursued: beats and rumours (evolution roadmap EV-4)
+
+A goal may hold **beats**, the steps its person takes toward it, in order. Each has a chance a day and a condition
+(facts that hold, a place the hero has been, a day of the campaign); reached, it may set facts (not known to the hero
+yet), take its person to a place they keep to from then on (or away for good), and send word about. On each day the
+clock crosses (the last three of a long stretch away), the world tick rolls each goal's next ready beat, seeded by
+the campaign, the day and the beat, at most three a day (`rules/routines.daily_beats`, `BeatAdvanced`). A beat never
+takes away a protected person (a companion, an open quest's giver or a person its steps need): it waits. The game
+master may bring the next ready beat forward (`gm_beat`).
+
+The word is a rumour (`rules/rumours.py`, `RumourSpread`), told at the beat's places (by default where its person
+keeps and the goal's place). The hero hears it from someone there asked for news (the dialogue plan's `news` topic,
+offered only while there is word to tell), buys it where information is sold (economy.md), or hears it by being there
+when it happens (`RumourHeard`); then the facts the beat set are known, and the journal lists the word heard. A fact
+a beat sets fires its world's `fact_effects` as a quest's does. Aurelia authors eleven beats over nine people.
+Scenarios: `test_beats_and_rumours.py`, `test_goal_beats.py` (200 turns, at least eight beats reached and heard).

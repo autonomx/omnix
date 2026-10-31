@@ -15,8 +15,9 @@ import re
 from typing import Any, Callable, Mapping, Sequence
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
-from app.apps.rpg.foundation.state.changes import PressuresMoved, QuestOffered, QuestStatusChanged, StateChange
+from app.apps.rpg.foundation.state.changes import FactSet, PressuresMoved, QuestOffered, QuestStatusChanged, StateChange
 from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.budgets import encounter_fits
 from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
 from app.apps.rpg.rules.quest.progress import victories
 from app.apps.rpg.foundation.state import access as _sections
@@ -65,13 +66,18 @@ def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange], *
     felled = victories(applied)
     completed = {change.quest_id for change in applied
                  if isinstance(change, QuestStatusChanged) and change.status == "completed"}
+    # A fact a decision wrote (rules/consequences.py, EV-1): "fact:<id>" pulls on any value, "fact:<id>=<value>" on one.
+    written = {(change.fact_id, str(change.value)) for change in applied if isinstance(change, FactSet)}
     pulls: dict[str, float] = {}
     for pressure in pressures:
         for lever in map(_d, _l(pressure.get("levers"))):
             kind, _, subject = _s(lever.get("action")).partition(":")
             local = _pressure_region(world_model, pressure) in {here, ""}
+            fact, _, value = subject.partition("=")
             times = (felled.get(subject, 0) if kind == "defeat" and local
-                     else int(subject in completed) if kind == "quest" else 0)
+                     else int(subject in completed) if kind == "quest"
+                     else int(any(row[0] == fact and (not value or row[1] == value) for row in written))
+                     if kind == "fact" else 0)
             if times:
                 key = _s(pressure["pressure_id"])
                 pulls[key] = pulls.get(key, 0.0) + _amount(lever) * times
@@ -188,11 +194,13 @@ def road_encounter(simulation: Mapping[str, Any], *, turn_key: str) -> str:
             continue
         if deterministic_roll(f"encounter|{pressure_id}|{here}|{turn_key}", 1, 100) > severity - ENCOUNTER_FLOOR:
             continue
+        # One within the hero's level's danger budget (EV-2, rules/budgets.py).
         foes = sorted(subject for kind, _, subject in (_s(_d(lever).get("action")).partition(":")
                                                        for lever in _l(pressure.get("levers")))
                       if kind == "defeat" and (creature := campaign_creature_definition(simulation, subject))
                       and _s(creature.get("threat")).casefold() not in _UNIQUE
-                      and int(creature.get("level") or 1) <= level + 1)
+                      and int(creature.get("level") or 1) <= level + 1
+                      and encounter_fits(simulation, [creature], level))
         if foes:
             return foes[deterministic_roll(f"encounter.foe|{pressure_id}|{turn_key}", 1, len(foes)) - 1]
     return ""

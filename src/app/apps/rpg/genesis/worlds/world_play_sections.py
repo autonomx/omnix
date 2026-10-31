@@ -7,13 +7,22 @@ author wrote it; one that does not is played from what launch infers from its lo
 launch readiness can say so.
 
 - ``canon.economy.providers``: who sells what, at what price and stock, and what they buy back.
-- ``canon.routines``: each named person's day (where they are, hour by hour) and goals.
+- ``canon.routines``: each named person's day (where they are, hour by hour) and goals, with the beats by which they
+  pursue them (EV-4).
 - ``canon.knowledge``: what each person knows, and on what terms they share it.
 - ``canon.pressures``: the forces the world's clock moves (a threat, a shortage, a feud).
 - ``canon.bestiary[*]``: optional fighting numbers, behaviour and loot beside threat and weakness.
-- ``canon.quests[*]``: optional steps (what doing it takes, stage by stage, with its branches), who gives it and its
-  deadline, beside its title and objective. A quest without steps is done by reaching its places
+- ``canon.quests[*]``: optional steps (what doing it takes, stage by stage, with its branches, and the facts each way
+  leaves: ``sets``), who gives it and its deadline, the facts it ``requires`` or ``forbids`` to be offered and those its
+  completion ``sets``, beside its title and objective. A quest without steps is done by reaching its places
   (``rules/quest/arrival.py``); one with them, as ``rules/quest/progress.py`` judges them.
+
+- ``canon.fact_effects``: what the world's facts change (evolution roadmap EV-1, ``rules/consequences.py``): each a
+  condition on facts and one effect (a price, an offer given free once, a seller closed, a place's line, a group's
+  standing, a quest opened or closed).
+- ``canon.group_members``: who answers for each group, where the lore does not say.
+- ``canon.budgets``: the level budgets (EV-2, ``rules/budgets.py``): a row per level, of what a hero of it should meet,
+  carry and earn; a level the world leaves out is played from the derived row.
 
 Older bundles carry none of these and import as before; the sections ride inside canon, so a
 bundle that has them needs no new bundle version.
@@ -29,12 +38,14 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from app.apps.rpg.rules.budgets import LevelBudget
 from app.apps.rpg.rules.contracts import ANYONE, CHECK_KINDS
 
 from .lore_sections import lore_rows
 
-SECTIONS = ("economy", "routines", "knowledge", "pressures", "bestiary", "quests")
-ServiceKind = Literal["lodging", "meal", "drink", "shop_goods", "repair", "paid_information"]
+SECTIONS = ("economy", "routines", "knowledge", "pressures", "bestiary", "quests", "fact_effects", "group_members",
+            "budgets")
+ServiceKind = Literal["lodging", "meal", "drink", "shop_goods", "repair", "paid_information", "upgrade"]
 
 
 class _Section(BaseModel):
@@ -53,6 +64,21 @@ class Price(_Section):
         return self
 
 
+class Material(_Section):
+    item_id: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1, le=10)
+
+
+class UpgradeRecipe(_Section):
+    """What an ``upgrade`` takes (evolution roadmap EV-5): the gear it improves (by slot), the materials each tier
+    takes, what each tier adds, and the last tier. The level's budgets bound the result (``rules/budgets.py``)."""
+
+    slots: tuple[str, ...] = Field(min_length=1)
+    materials: tuple[Material, ...] = ()
+    per_tier: dict[str, int] = Field(default_factory=lambda: {"damage_max": 1, "armor": 1})
+    max_tier: int = Field(default=3, ge=1, le=5)
+
+
 class ShopOffer(_Section):
     offer_key: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     service: ServiceKind
@@ -62,11 +88,14 @@ class ShopOffer(_Section):
     item_id: str = ""
     stock: int | None = Field(default=None, ge=0)
     restock_per_day: int = Field(default=0, ge=0)
+    recipe: UpgradeRecipe | None = None  # an upgrade's
 
     @model_validator(mode="after")
     def _goods_name_an_item(self) -> "ShopOffer":
         if self.service == "shop_goods" and not self.item_id:
             raise ValueError("shop_goods_offer_needs_item_id")
+        if self.service == "upgrade" and self.recipe is None:
+            raise ValueError("upgrade_offer_needs_recipe")
         return self
 
 
@@ -95,12 +124,55 @@ class RoutineStep(_Section):
         return self
 
 
+FactValue = bool | int | str
+_FACT_ID = r"^[a-z0-9][a-z0-9_:.-]*$"
+
+
+class FactWrite(_Section):
+    """A world fact a way or an ending leaves (EV-1), and the author's line for it ("What has changed")."""
+
+    fact: str = Field(min_length=1, max_length=120, pattern=_FACT_ID)
+    value: FactValue = True
+    told: str = Field(default="", max_length=600)
+
+
+class BeatMove(_Section):
+    """Where a beat takes its person: a place they keep to from then on, or, with none, away for good."""
+
+    location: str = ""
+    activity: str = Field(default="", max_length=160)
+
+
+class GoalBeat(_Section):
+    """A step toward a goal (evolution roadmap EV-4, ``rules/routines.py``). Beats are reached in order, each with
+    ``chance`` a day once its condition holds: the facts of ``when``, a place the hero has been (``visited``), and the
+    day of the campaign (``after_day``). It may set facts, move its person (``move``) and send word about
+    (``rumour``, told at ``told_at``: by default where its person keeps and the goal's place)."""
+
+    id: str = Field(min_length=1, max_length=120, pattern=_FACT_ID)
+    chance: float = Field(default=0.5, ge=0.0, le=1.0)
+    when: dict[str, FactValue] = Field(default_factory=dict)
+    visited: str = ""
+    after_day: int = Field(default=0, ge=0)
+    sets: tuple[FactWrite, ...] = Field(default=(), max_length=8)
+    move: BeatMove | None = None
+    rumour: str = Field(default="", max_length=600)
+    told_at: tuple[str, ...] = Field(default=(), max_length=6)
+
+
 class NpcGoal(_Section):
     goal_id: str = Field(min_length=1)
     summary: str = Field(min_length=1, max_length=300)
     priority: int = Field(default=1, ge=1, le=5)
     topics: tuple[str, ...] = ()
     location_id: str = ""
+    beats: tuple[GoalBeat, ...] = Field(default=(), max_length=12)
+
+    @model_validator(mode="after")
+    def _beats_named_once(self) -> "NpcGoal":
+        if len({beat.id for beat in self.beats}) != len(self.beats):
+            raise ValueError("goal_beat_named_twice")
+        return self
 
 
 class NpcRoutine(_Section):
@@ -130,8 +202,9 @@ class NpcKnowledge(_Section):
 
 
 class PressureLever(_Section):
-    # What pulls it (rules/pressures.py): each creature of a kind felled, or a quest completed.
-    action: str = Field(min_length=1, max_length=80, pattern=r"^(defeat|quest):\S+$")
+    # What pulls it (rules/pressures.py): each creature of a kind felled, a quest completed, or a fact a decision
+    # wrote ("fact:<id>", or "fact:<id>=<value>"; EV-1).
+    action: str = Field(min_length=1, max_length=120, pattern=r"^(defeat|quest|fact):\S+$")
     effect: Literal["lower", "raise"]
     amount: float = Field(gt=0, le=100)
 
@@ -172,6 +245,18 @@ class CreatureStats(_Section):
         return self
 
 
+class CreaturePhase(_Section):
+    """A stage of a boss fight (EV-2): below ``at`` of its health it fights harder, may call an ally, or lays its
+    weakness bare; ``told`` is said when it begins."""
+
+    at: float = Field(gt=0, lt=1)
+    defense_bonus: int = Field(default=0, ge=-10, le=10)
+    damage_bonus: int = Field(default=0, ge=-10, le=20)
+    calls_ally: bool = False
+    exposes_weakness: bool = False
+    told: str = Field(default="", max_length=300)
+
+
 class LootDrop(_Section):
     item_id: str = Field(min_length=1)
     chance: float = Field(gt=0, le=1)
@@ -187,6 +272,11 @@ class BestiaryPlay(BaseModel):
     stats: CreatureStats | None = None
     behaviour: Literal["fights", "flees_when_hurt", "calls_allies", "guards", "ambushes"] = "fights"
     loot: tuple[LootDrop, ...] = ()
+    resists: tuple[str, ...] = ()  # what blunts its hurt: a weapon's material ("plain steel"; EV-2)
+    phases: tuple[CreaturePhase, ...] = Field(default=(), max_length=4)
+    no_escape: bool = False  # a fight with it cannot be broken away from (a finale's)
+    recovers: float | None = Field(default=None, ge=0, le=1)  # the share of its lost health it regains when left
+    weakness_effect: Literal["stun", "damage", "morale"] | None = None  # what using its weakness does
 
 
 ConditionKind = Literal["reach", "talk", "hold", "defeat", "check", "companion"]
@@ -206,10 +296,12 @@ class QuestCondition(_Section):
 
 
 class QuestWay(_Section):
-    """One way to do a step: all of its conditions, and what is told when it is taken (an ending's branch)."""
+    """One way to do a step: all of its conditions, what is told when it is taken (an ending's branch), and the facts
+    it leaves."""
 
     conditions: tuple[QuestCondition, ...] = Field(min_length=1, max_length=8)
     told: str = Field(default="", max_length=600)
+    sets: tuple[FactWrite, ...] = Field(default=(), max_length=8)
 
 
 class QuestStep(_Section):
@@ -227,6 +319,92 @@ class QuestPlay(_Section):
     giver_id: str = ""
     deadline_hours: float | None = Field(default=None, gt=0, le=24 * 60)
     steps: tuple[QuestStep, ...] = Field(default=(), max_length=30)
+    sets: tuple[FactWrite, ...] = Field(default=(), max_length=8)  # what its completion leaves (an ending)
+    requires: dict[str, FactValue] = Field(default_factory=dict)  # offered only while these facts hold
+    forbids: dict[str, FactValue] = Field(default_factory=dict)  # and never while these do
+
+
+class PriceEffect(_Section):
+    provider: str = ""
+    region: str = ""
+    percent: int = Field(ge=-100, le=500)
+    why: str = Field(default="", max_length=120)
+
+    @model_validator(mode="after")
+    def _names_one(self) -> "PriceEffect":
+        if bool(self.provider) == bool(self.region):
+            raise ValueError("price_effect_names_a_provider_or_a_region")
+        return self
+
+
+class WaiveEffect(_Section):
+    provider: str = Field(min_length=1)
+    offer: str = Field(min_length=1, max_length=80)
+    why: str = Field(default="", max_length=120)
+
+
+class ClosesEffect(_Section):
+    provider: str = Field(min_length=1)
+
+
+class PlaceEffect(_Section):
+    location: str = Field(min_length=1)
+    line: str = Field(min_length=1, max_length=400)
+
+
+class WhereaboutsEffect(_Section):
+    npc: str = Field(min_length=1)
+    location: str = ""  # none: gone
+    activity: str = Field(default="", max_length=200)
+
+
+class StandingEffect(_Section):
+    group: str = Field(min_length=1)
+    delta: int = Field(ge=-100, le=100)
+
+
+class QuestEffect(_Section):
+    opens: str = ""
+    closes: str = ""
+
+    @model_validator(mode="after")
+    def _names_one(self) -> "QuestEffect":
+        if bool(self.opens) == bool(self.closes):
+            raise ValueError("quest_effect_opens_or_closes_one_quest")
+        return self
+
+
+_EFFECTS = ("price", "waive", "closes", "place", "whereabouts", "standing", "quest")
+
+
+class FactEffect(_Section):
+    """What the world's facts change (EV-1): while ``when`` holds (every fact at its value; empty, always), one effect,
+    read by the rule that owns it (``rules/consequences.py``); ``told`` is said when it comes to hold."""
+
+    when: dict[str, FactValue] = Field(default_factory=dict)
+    price: PriceEffect | None = None
+    waive: WaiveEffect | None = None
+    closes: ClosesEffect | None = None
+    place: PlaceEffect | None = None
+    whereabouts: WhereaboutsEffect | None = None
+    standing: StandingEffect | None = None
+    quest: QuestEffect | None = None
+    told: str = Field(default="", max_length=600)
+
+    @model_validator(mode="after")
+    def _one_effect(self) -> "FactEffect":
+        if sum(getattr(self, effect) is not None for effect in _EFFECTS) != 1:
+            raise ValueError("fact_effect_has_one_effect")
+        if (self.standing is not None or self.quest is not None) and not self.when:
+            raise ValueError("fact_effect_once_needs_a_condition")
+        return self
+
+
+class GroupMembers(_Section):
+    """Who answers for a group in conversation, where the lore does not say (EV-1)."""
+
+    group_id: str = Field(min_length=1)
+    members: tuple[str, ...] = Field(min_length=1, max_length=50)
 
 
 class WorldPlaySections(_Section):
@@ -236,6 +414,9 @@ class WorldPlaySections(_Section):
     pressures: tuple[WorldPressure, ...] = ()
     bestiary: tuple[BestiaryPlay, ...] = ()
     quests: tuple[QuestPlay, ...] = ()
+    fact_effects: tuple[FactEffect, ...] = ()
+    group_members: tuple[GroupMembers, ...] = ()
+    budgets: tuple[LevelBudget, ...] = ()
     authored: tuple[str, ...] = ()
 
 
@@ -254,8 +435,8 @@ def _error_code(error: ValidationError) -> str:
     return f"{location}:{message}" if location else message
 
 
-_BESTIARY_PLAY = ("stats", "behaviour", "loot")
-_QUEST_PLAY = ("steps", "giver_id", "deadline_hours")
+_BESTIARY_PLAY = ("stats", "behaviour", "loot", "resists", "phases", "no_escape", "recovers", "weakness_effect")
+_QUEST_PLAY = ("steps", "giver_id", "deadline_hours", "sets", "requires", "forbids")
 
 
 def _condition_play(condition: Mapping[str, Any]) -> dict[str, Any]:
@@ -277,18 +458,20 @@ def _step_play(step: Mapping[str, Any]) -> dict[str, Any]:
         ways = [_rows(step.get("all_of") or step.get("conditions"))]
     plays = []
     for way in ways:
-        told = ""
-        if isinstance(way, Mapping) and "all_of" in way:  # a way with its own telling
-            way, told = _rows(way.get("all_of")), str(way.get("told") or "")
+        told, sets = "", []
+        if isinstance(way, Mapping) and "all_of" in way:  # a way with its own telling, and the facts it leaves
+            way, told, sets = _rows(way.get("all_of")), str(way.get("told") or ""), _rows(way.get("sets"))
         elif len(ways) == 1:
-            told = str(step.get("told") or "")
-        plays.append({"conditions": [_condition_play(_mapping(row)) for row in way], **({"told": told} if told else {})})
+            told, sets = str(step.get("told") or ""), _rows(step.get("sets"))
+        plays.append({"conditions": [_condition_play(_mapping(row)) for row in way], **({"told": told} if told else {}),
+                      **({"sets": sets} if sets else {})})
     return {"id": step.get("id") or "", "summary": step.get("summary"), "ways": plays}
 
 
 def quest_play_of(row: Mapping[str, Any]) -> dict[str, Any]:
     """A canon quest row's play fields in the editor's shape (``QuestPlay``)."""
-    return {"id": row.get("id"), **{key: row[key] for key in ("giver_id", "deadline_hours") if row.get(key)},
+    return {"id": row.get("id"),
+            **{key: row[key] for key in ("giver_id", "deadline_hours", "sets", "requires", "forbids") if row.get(key)},
             "steps": [_step_play(_mapping(step)) for step in _rows(row.get("steps"))]}
 
 
@@ -306,13 +489,22 @@ def quest_canon_fields(play: QuestPlay) -> dict[str, Any]:
         ways = [[_condition_canon(condition) for condition in way.conditions] for way in step.ways]
         if len(ways) == 1:
             steps.append({"id": step.id, "summary": step.summary, "all_of": ways[0],
-                          **({"told": step.ways[0].told} if step.ways[0].told else {})})
+                          **({"told": step.ways[0].told} if step.ways[0].told else {}),
+                          **({"sets": _facts(step.ways[0].sets)} if step.ways[0].sets else {})})
             continue
         steps.append({"id": step.id, "summary": step.summary, "any_of": [
-            {"all_of": way, "told": play_way.told} if play_way.told else way[0] if len(way) == 1 else way
+            {"all_of": way, **({"told": play_way.told} if play_way.told else {}),
+             **({"sets": _facts(play_way.sets)} if play_way.sets else {})}
+            if play_way.told or play_way.sets else way[0] if len(way) == 1 else way
             for way, play_way in zip(ways, step.ways)]})
     return {**({"steps": steps} if steps else {}), **({"giver_id": play.giver_id} if play.giver_id else {}),
-            **({"deadline_hours": play.deadline_hours} if play.deadline_hours is not None else {})}
+            **({"deadline_hours": play.deadline_hours} if play.deadline_hours is not None else {}),
+            **({"sets": _facts(play.sets)} if play.sets else {}),
+            **{key: dict(getattr(play, key)) for key in ("requires", "forbids") if getattr(play, key)}}
+
+
+def _facts(rows: tuple[FactWrite, ...]) -> list[dict[str, Any]]:
+    return [row.model_dump(mode="json") for row in rows]
 
 
 def _quest_plays(row: Mapping[str, Any]) -> bool:
@@ -367,6 +559,11 @@ def parse_play_sections(canon: Mapping[str, Any]) -> tuple[WorldPlaySections, tu
     if quests:
         parsed["quests"] = parse("quests", QuestPlay, quests)
         authored.append("quests")
+    for section, model in (("fact_effects", FactEffect), ("group_members", GroupMembers), ("budgets", LevelBudget)):
+        rows = _rows(canon.get(section))
+        if rows:
+            parsed[section] = parse(section, model, rows)
+            authored.append(section)
     return WorldPlaySections(**parsed, authored=tuple(authored)), tuple(findings)
 
 
@@ -406,6 +603,11 @@ def play_section_findings(
             place("routines", step.location_id)
         for goal in routine.goals:
             place("routines", goal.location_id)
+            for beat in goal.beats:
+                place("routines", beat.visited)
+                place("routines", beat.move.location if beat.move is not None else "")
+                for told_at in beat.told_at:
+                    place("routines", told_at)
     for knowledge in sections.knowledge:
         if knowledge.npc_id not in npc_ids:
             unknown.append(f"play_section_unknown_person:knowledge:{knowledge.npc_id}")
@@ -416,7 +618,7 @@ def play_section_findings(
             unknown.append(f"play_section_unknown_place:pressures:{pressure.region_id}")
         for lever in pressure.levers:
             kind, _, subject = lever.action.partition(":")
-            if subject not in (creature_ids if kind == "defeat" else quest_ids):
+            if kind != "fact" and subject not in (creature_ids if kind == "defeat" else quest_ids):
                 unknown.append(f"play_section_unknown_lever:pressures:{lever.action}")
     for creature in sections.bestiary:
         for drop in creature.loot:
@@ -425,6 +627,28 @@ def play_section_findings(
     known = {"reach": (location_ids, "place"), "talk": (npc_ids, "person"), "hold": (item_ids, "item"),
              "defeat": (creature_ids, "creature"), "companion": (npc_ids | {ANYONE}, "person"),
              "check": (set(CHECK_KINDS), "check")}
+    group_ids = _ids(canon, "groups") | {str(_mapping(row).get("id") or "") for row in _rows(canon.get("factions"))}
+    for effect in sections.fact_effects:
+        provider = next((getattr(effect, kind).provider for kind in ("price", "waive", "closes")
+                         if getattr(effect, kind) is not None and getattr(effect, kind).provider), "")
+        if provider and provider not in npc_ids:
+            unknown.append(f"play_section_unknown_person:fact_effects:{provider}")
+        if effect.price is not None and effect.price.region and effect.price.region not in region_ids:
+            unknown.append(f"play_section_unknown_place:fact_effects:{effect.price.region}")
+        if effect.place is not None:
+            place("fact_effects", effect.place.location)
+        if effect.whereabouts is not None:
+            place("fact_effects", effect.whereabouts.location)
+            if effect.whereabouts.npc not in npc_ids:
+                unknown.append(f"play_section_unknown_person:fact_effects:{effect.whereabouts.npc}")
+        if effect.standing is not None and effect.standing.group not in group_ids:
+            unknown.append(f"play_section_unknown_group:fact_effects:{effect.standing.group}")
+        if effect.quest is not None and (effect.quest.opens or effect.quest.closes) not in quest_ids:
+            unknown.append(f"play_section_unknown_quest:fact_effects:{effect.quest.opens or effect.quest.closes}")
+    for members in sections.group_members:
+        if members.group_id not in group_ids:
+            unknown.append(f"play_section_unknown_group:group_members:{members.group_id}")
+        unknown += [f"play_section_unknown_person:group_members:{npc}" for npc in members.members if npc not in npc_ids]
     for quest in sections.quests:
         if quest.id not in quest_ids:
             unknown.append(f"play_section_unknown_quest:quests:{quest.id}")
@@ -455,6 +679,11 @@ class CreaturePlay(_Section):
     id: str = Field(min_length=1)
     stats: CreatureStats | None = None
     behaviour: Literal["fights", "flees_when_hurt", "calls_allies", "guards", "ambushes"] | None = None
+    resists: tuple[str, ...] = ()  # what blunts its hurt: a weapon's material ("plain steel"; EV-2)
+    phases: tuple[CreaturePhase, ...] = Field(default=(), max_length=4)
+    no_escape: bool = False  # a fight with it cannot be broken away from (a finale's)
+    recovers: float | None = Field(default=None, ge=0, le=1)  # the share of its lost health it regains when left
+    weakness_effect: Literal["stun", "damage", "morale"] | None = None  # what using its weakness does
     loot: tuple[LootDrop, ...] = ()
 
 
@@ -469,6 +698,9 @@ class PlaySectionsDraft(_Section):
     bestiary: tuple[CreaturePlay, ...] = ()
     # None: a draft saved before quests were a section, which leaves the canon's quests as they are.
     quests: tuple[QuestPlay, ...] | None = None
+    fact_effects: tuple[FactEffect, ...] = ()
+    group_members: tuple[GroupMembers, ...] = ()
+    budgets: tuple[LevelBudget, ...] = ()
 
 
 def draft_findings(document: Any) -> tuple[PlaySectionsDraft | None, tuple[str, ...]]:
@@ -506,6 +738,9 @@ def play_sections_document(canon: Mapping[str, Any]) -> dict[str, Any]:
         "pressures": [_dump(row) for row in sections.pressures],
         "bestiary": plays,
         "quests": [_dump(row) for row in sections.quests],
+        "fact_effects": [_dump(row) for row in sections.fact_effects],
+        "group_members": [_dump(row) for row in sections.group_members],
+        "budgets": [_dump(row) for row in sections.budgets],
     }
 
 
@@ -520,7 +755,7 @@ def with_play_sections(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> di
         canon["economy"] = economy
     else:
         canon.pop("economy", None)
-    for section in ("routines", "knowledge", "pressures"):
+    for section in ("routines", "knowledge", "pressures", "fact_effects", "group_members", "budgets"):
         rows = getattr(draft, section)
         if rows:
             canon[section] = [_dump(row) for row in rows]

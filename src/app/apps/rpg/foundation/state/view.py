@@ -13,9 +13,12 @@ from typing import Any
 from .sections import (
     SECTIONS,
     CombatSection,
+    DirectionSection,
     EconomySection,
+    FactsSection,
     InteractionsSection,
     InventorySection,
+    KnowledgeSection,
     LocationSection,
     MetaSection,
     NarrativeSection,
@@ -90,6 +93,18 @@ class CampaignStateView:
     @cached_property
     def narrative(self) -> NarrativeSection:
         return NarrativeSection.from_document(self.document)
+
+    @cached_property
+    def knowledge(self) -> KnowledgeSection:
+        return KnowledgeSection.from_document(self.document)
+
+    @cached_property
+    def facts(self) -> FactsSection:
+        return FactsSection.from_document(self.document)
+
+    @cached_property
+    def direction(self) -> DirectionSection:
+        return DirectionSection.from_document(self.document)
 
     @cached_property
     def meta(self) -> MetaSection:

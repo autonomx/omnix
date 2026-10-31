@@ -5,7 +5,7 @@ import pytest
 
 from app.apps.rpg.foundation.state.changes import WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
-from app.apps.rpg.rules.intent.grammar import IntentCandidate
+from app.apps.rpg.rules.intent.reading import IntentCandidate
 from app.apps.rpg.session.turn import PlannedAction, TurnRequest, plan_action, run_planned_turn
 from app.apps.rpg.session.turn.resolution import resolve_turn
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
@@ -44,14 +44,14 @@ def _campaign(**simulation):
 @pytest.mark.parametrize(("reading", "planned"), [
     (IntentCandidate("look", confidence=0.9, reason="looks"), "look"),
     (IntentCandidate("wait", confidence=0.9, reason="waits"), "wait"),
-    (IntentCandidate("look", confidence=0.5), None),  # not confident: the older path decides
+    (IntentCandidate("look", confidence=0.5), "look"),  # decided by the intent call at its own confidence (EV-9)
     (IntentCandidate("wait", confidence=0.9, clauses=("wait", "look")), None),  # two steps
     (IntentCandidate("buy", target_id="offer:bread", target_kind="offer", confidence=0.9), "trade"),
     (IntentCandidate("sell", target_id="item:dagger", target_kind="item", confidence=0.9), "trade"),
     (IntentCandidate("give", target_id="item:dagger", target_kind="item", confidence=0.9), "give"),
     (IntentCandidate("give", confidence=0.5), None),  # nothing named to give: the intent call reads it
 ])
-def test_only_confident_single_step_look_and_wait_are_planned(reading, planned) -> None:
+def test_single_step_readings_are_planned(reading, planned) -> None:
     plan = plan_action(reading)
     assert (plan.mechanic if plan else None) == planned
 
@@ -107,30 +107,27 @@ def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() ->
     assert document["simulation_state"]["survival"]["hunger"] == 11
     assert document["simulation_state"]["environment"]["absolute_minutes"] == 9 * 60 + 30
     assert [change["type"] for change in result["turn_pipeline"]["changes"]] == [
-        "turn_counted", "time_advanced", "needs_changed", "whereabouts_changed", "world_ticked", "journal_written"]
+        "turn_counted", "time_advanced", "needs_changed", "whereabouts_changed", "world_ticked",
+        "entry_met", "entry_met", "journal_written"]  # the place the hero stands in and the person there (EV-1)
     assert document["simulation_state"]["npc_index"]["npc:wren"]["location_id"] == "loc:gate"  # in the scene: here
     assert result["resolved_result"]["outcome_lines"] == ["You wait a while in The Gate; time passes.", "Around you: Wren."]
     assert document["runtime_state"]["player_journal"]["entries"]
 
 
-def test_an_unclear_command_is_planned_as_the_games_question_and_a_bare_attack_in_a_fight_strikes() -> None:
-    from app.apps.rpg.rules.intent.grammar import SceneView, parse_command
-
-    unclear = parse_command("I talk to him.", SceneView(()))
-    plan = plan_action(unclear)
-    assert (plan.mechanic, plan.question, plan.ticks) == ("clarify", "Who are you speaking to?", 0)
-    no_target = IntentCandidate("clarify", confidence=0.9, reason="attack_without_target")
-    assert plan_action(no_target).mechanic == "clarify"
+def test_a_bare_attack_in_a_fight_strikes_the_foe_in_front_of_the_hero() -> None:
+    no_target = IntentCandidate("attack", confidence=0.9)
+    assert plan_action(no_target) is None  # out of a fight, an attack needs someone to attack
     assert (plan_action(no_target, fighting=True).mechanic, plan_action(no_target, fighting=True).reason) == (
         "fight", "attack")  # the foe in front of the hero (combat.md)
 
 
 def test_a_question_back_is_a_counted_turn_in_which_no_time_passes() -> None:
-    from app.apps.rpg.rules.intent.grammar import SceneView, parse_command
-
     campaign = _campaign()
-    reading = parse_command("I talk to him.", SceneView(()))
-    result = _run(campaign, "I talk to him.", reading)
+    reading = IntentCandidate("clarify", reason="no_reading")
+    planned = PlannedAction(mechanic="clarify", ticks=0, reason="unclear", question="Who are you speaking to?")
+    result = run_planned_turn(campaign, request=TurnRequest(kind="player_text", session_id="rpg_test",
+                                                            text="I talk to him."),
+                              planned=planned, reading=reading, resolution=resolve_turn(planned, campaign, ""))
     assert [change["type"] for change in result["turn_pipeline"]["changes"]] == ["turn_counted"]
     assert result["clarification"] == "Who are you speaking to?"
     canonical = result["canonical_narrative_response"]

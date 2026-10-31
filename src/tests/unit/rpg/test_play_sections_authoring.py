@@ -87,9 +87,32 @@ def test_world_forge_drafts_every_section_from_the_lore() -> None:
     # The draft is valid and names only what the world has.
     published = with_play_sections(CANON, PlaySectionsDraft.model_validate(draft))
     assert play_section_findings(published, location_ids=_places(), region_ids={"ent:regions:sump"}) == ()
-    # Every section but the quests' steps, which are their author's (a quest without them is done by its places).
+    # Every section but the quests' steps, the world's consequences (EV-1) and its level budgets (EV-2), which are
+    # their author's (a quest without steps is done by its places; a world without consequences remembers its facts
+    # and changes nothing; one without budgets plays from the derived table).
     assert {section for section, source in authorship(parse_play_sections(published)[0]).items()
-            if source != "authored"} == {"quests"}
+            if source != "authored"} == {"quests", "fact_effects", "group_members", "budgets"}
+
+
+def test_world_forge_drafts_quest_steps_goal_beats_and_gear_for_sale() -> None:
+    """EV-6: the drafts go as deep as the play sections do: a quest's steps from its places and giver, a first beat on
+    each goal, and the world's gear that no one sells, by its first seller of goods, priced for its slot."""
+    entities = {**CANON["entities"],
+                "ent:quests:quiet": {**CANON["entities"]["ent:quests:quiet"], "locations": ["ent:places:market"],
+                                     "giver_id": "ent:actors:mara"},
+                "ent:equipment:baton": {"id": "ent:equipment:baton", "kind": "equipment", "name": "Shock Baton",
+                                        "item_type": "weapon", "equipment": {"slot": "main_hand",
+                                                                             "stats": {"damage_max": 3}}}}
+    draft = generate_play_sections(_revision({**CANON, "entities": entities}))
+    [quest] = draft["quests"]
+    assert [step["ways"][0]["conditions"][0] for step in quest["steps"]] == [
+        {"kind": "reach", "subject": "ent:places:market", "about": [], "count": 1, "target": ""},
+        {"kind": "talk", "subject": "ent:actors:mara", "about": [], "count": 1, "target": ""}]
+    [mara] = [row for row in draft["routines"] if row["npc_id"] == "ent:actors:mara"]
+    assert mara["goals"][0]["beats"][0]["rumour"] == "Mara Vey is said to be working to find her past."
+    goods = [offer for provider in draft["economy"]["providers"] for offer in provider["sells"]]
+    assert any(offer["item_id"] == "ent:equipment:baton" for offer in goods)
+    assert PlaySectionsDraft.model_validate(draft)
 
 
 def test_a_section_the_world_wrote_is_kept_as_written() -> None:

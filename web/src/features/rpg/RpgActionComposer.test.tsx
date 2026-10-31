@@ -51,7 +51,9 @@ describe('RpgActionComposer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Investigate' }));
 
-    expect(onQuickAction).toHaveBeenCalledWith('Investigate the clawed tracks and torn Northern Watch banner.');
+    expect(onQuickAction).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'Investigate the clawed tracks and torn Northern Watch banner.' }),
+    );
   });
 
   it('renders pending and invalid states for queued turn submission', () => {

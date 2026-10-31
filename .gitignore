@@ -94,6 +94,8 @@ resources/data/
 /resources/trading/activity_log/
 /resources/benchmarks/gateway/hardening-*.json
 /resources/voice_clones/*
+# The castable list (EV-13): which voices may be cast or offered, kept with the code.
+!/resources/voice_clones/casting.json
 # Local launcher settings; resources/config/launcher.example.toml is the template.
 /resources/config/launcher.toml
 

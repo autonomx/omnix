@@ -38,7 +38,8 @@ def test_a_followed_turn_commits_first_and_streams_its_narration(launch) -> None
     # The response comes at the commit: the outcome, and the narration still to come.
     assert body["narration"]["status"] == "pending" and body["visible_response"]["status"] == "pending"
     assert body["outcome"]["revision"] == revision + 1
-    assert body["outcome"]["model_calls"]["total"] == 0  # the writer runs after the turn has committed
+    # The line read before the commit (EV-9); the writer runs after the turn has committed.
+    assert body["outcome"]["model_calls"]["total"] == 1
     events = _events(play, "stream-look")
     names = [name for _, name, _ in events]
     assert names[:3] == ["accepted", "committed", "outcome"] and names[-1] == "narration.final", names

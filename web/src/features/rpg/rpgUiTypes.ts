@@ -59,6 +59,8 @@ export interface RpgQuickActionPreview {
   label: string;
   icon: string;
   command: string;
+  /** A card the game offered (evolution roadmap EV-9): the reading it plays, with no model call. */
+  card?: Record<string, unknown>;
 }
 
 export interface RpgJournalEntryPreview {
@@ -154,6 +156,12 @@ export interface RpgStoryMessagePreview {
   tone: 'player' | 'npc' | 'narrator';
   /** The outcome card's facts (RQ-7.2): what the turn changed. */
   facts?: RpgOutcomeFactPreview[];
+  /** Who speaks it (EV-13): a person's id, or "narrator". */
+  speakerId?: string;
+  /** The quotes inside a narration and who speaks each (EV-13). */
+  voices?: { speaker_id: string; start: number; end: number }[];
+  /** The names in the text that open their lore (EV-12), as the turn's final text gave them. */
+  links?: { entry_id: string; start: number; end: number }[];
 }
 
 export type RpgSession = Record<string, unknown>;

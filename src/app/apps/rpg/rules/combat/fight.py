@@ -1,6 +1,12 @@
 """A fight, as the turn pipeline plays it (RQ-2.6; docs/rpg/design/combat.md): one pure rule, from the campaign
 to the changes.
 
+Evolution roadmap EV-2: a creature's weakness, used (the reading names it), stuns it, hurts it more or breaks its nerve;
+what it resists blunts a weapon of that material; a boss fights in phases, each entered below a share of its health;
+a fight marked ``no_escape`` cannot be broken away from; a boss the hero leaves keeps part of its wounds (it regains its
+``recovers`` share); one of the party may guard another and take the blows aimed at them; and a companion ordered to
+guard or flank fights so.
+
 ``fight`` reads the campaign (never writes it) and returns what one turn of a fight does: the combat section as the
 turn leaves it, the party's health and wounds, and at the end what the fight earned (the creatures' experience and
 drops, from the world's bestiary) or cost (the setback of a lost fight, stakes.md). The blows are seeded, so the same
@@ -26,6 +32,8 @@ from app.apps.rpg.foundation.state.changes import (
     ItemRemoved,
     LocationChanged,
     PresenceChanged,
+    GuardSet,
+    PhaseEntered,
     PurseChanged,
     RegardChanged,
     StateChange,
@@ -221,9 +229,24 @@ def _person_foe(npc_id: str, person: Mapping[str, Any]) -> dict[str, Any]:
             **numbers}
 
 
-def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: str, confronted: bool = False
-           ) -> dict[str, Any]:
-    """A fight begins, in its initiative order; a foe that bars the hero's way (``confronted``) waits on them."""
+def _stances(simulation: Mapping[str, Any], participants: dict[str, dict[str, Any]]) -> None:
+    """A companion's standing order in a fight (EV-2): guarding the hero takes the blows aimed at them; flanking
+    strikes truer."""
+    for companion in _companions(simulation):
+        row = participants.get(_s(companion.get("npc_id")))
+        if not row:
+            continue
+        stance = _s(companion.get("stance"))
+        row.pop("guards", None) if row.get("guards") == "player" and stance != "guard" else None
+        if stance == "guard":
+            row["guards"] = "player"
+        row["flanking"] = stance == "flank"
+
+
+def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: str, confronted: bool = False,
+           left: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """A fight begins, in its initiative order; a foe that bars the hero's way (``confronted``) waits on them; a boss
+    left in an earlier fight comes back as the hero left it, less what it regained (``left``, EV-2)."""
     hp, max_hp = _hero_hp(simulation)
     armor = int(_d(project_equipment_stats(dict(simulation), actor_id="player").get("stats")).get("armor") or 0)
     participants: dict[str, dict[str, Any]] = {"player": {
@@ -243,6 +266,7 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
         if participants[npc_id]["hp"] <= 0:
             participants[npc_id]["status"] = "defeated"  # a companion still down from before sits this one out
     participants[_s(enemy["actor_id"])] = {**enemy, "status_effects": []}
+    _stances(simulation, participants)
     encounter_id = f"enc:{_s(enemy.get('definition_id'))}:{turn_key}"
     order = build_initiative_order(encounter_id=encounter_id, participants=participants)
     if _s(enemy.get("behaviour")) == "ambushes":  # it strikes first in the first round
@@ -251,7 +275,8 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
         order.sort(key=lambda row: _s(_d(row).get("actor_id")) != "player")
     return {"active": True, "encounter_id": encounter_id, "round": 1, "turn_index": 0,
             "current_actor_id": _s(_d(order[0]).get("actor_id")) if order else "player",
-            "initiative_order": order, "participants": participants, "combat_log": [], "source": SOURCE}
+            "initiative_order": order, "participants": participants, "combat_log": [], "source": SOURCE,
+            **({"left": dict(left)} if left else {})}
 
 
 # -- the blows ----------------------------------------------------------------------------------------------------------
@@ -264,8 +289,12 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
             cover: int = 0, sharper: int = 0, harder: int = 0) -> dict[str, Any]:
     """One blow, applied to the combat section (and a heavy one's wound to ``conditions``); an ability's blow is
     ``sharper`` (to hit) and ``harder`` (its damage)."""
+    guard = _guard_of(combat, target_id)
+    if guard and kind in {"attack", "parting_blow"}:
+        target_id = guard  # the guard takes the blow aimed at the one guarded
     numbers = _numbers(simulation, combat, actor_id)
-    numbers = {**numbers, "accuracy_bonus": numbers["accuracy_bonus"] + sharper,
+    flank = FLANK_BONUS if participant(combat, actor_id).get("flanking") else 0
+    numbers = {**numbers, "accuracy_bonus": numbers["accuracy_bonus"] + sharper + flank,
                "damage_min": numbers["damage_min"] + harder, "damage_max": numbers["damage_max"] + harder}
     target = participant(combat, target_id)
     roll = deterministic_roll(combat_seed(combat, kind, actor_id, target_id), 1, 20)
@@ -281,13 +310,19 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
         rolled = deterministic_roll(combat_seed(combat, "damage" if kind == "attack" else f"{kind}:damage", actor_id,
                                                 target_id), numbers["damage_min"], numbers["damage_max"])
         damage = max(1, rolled - max(0, int(target.get("armor") or 0)))
+        material = _weapon_material(simulation) if actor_id == "player" else ""
+        if material and material in _l(target.get("resists")):
+            damage = max(1, damage // 2)  # what it resists blunts the blow
     after = max(0, before - damage)
     target["hp"] = after
     if after <= 0:
         target["status"] = "defeated"
     blow = {"actor_id": actor_id, "target_id": target_id, "hit": hit, "attack_roll": roll, "attack_total": total,
             "condition_penalty": penalty, "target_defense": defense, "damage_applied": damage,
-            "target_hp_before": before, "target_hp_after": after, "defeated": after <= 0}
+            "target_hp_before": before, "target_hp_after": after, "defeated": after <= 0,
+            **({"guarded_by": guard} if guard and target_id == guard else {}),
+            **({"resisted": True} if hit and actor_id == "player" and _weapon_material(simulation)
+               in _l(target.get("resists")) else {})}
     if (hit and after > 0 and _s(target.get("side")) == "party"
             and damage > max(1, int(target.get("max_hp") or 20)) * WOUNDING_SHARE):
         rows = conditions.setdefault(target_id, [])
@@ -296,7 +331,78 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
                          "rests_left": WOUND_RESTS, "until": "healed", "source": "heavy_blow", "actor_id": target_id})
         blow["wounded"] = True
     combat.setdefault("combat_log", []).append({"kind": kind, "round": int(combat.get("round") or 1), **blow})
+    if after > 0 and _s(target.get("side")) == "enemy":
+        _phase(simulation, combat, target_id)
     return blow
+
+
+FLANK_BONUS = 2  # a companion ordered to flank strikes truer (EV-2)
+WEAKNESS_DAMAGE = 4  # a weakness that hurts more: what it adds to the blow
+
+
+def _guard_of(combat: Mapping[str, Any], target_id: str) -> str:
+    """The party member standing guard over ``target_id``, when one stands (EV-2)."""
+    return next((actor for actor in living_party_ids(dict(combat)) if actor != target_id
+                 and _s(participant(dict(combat), actor).get("guards")) == target_id), "")
+
+
+def _weapon_material(simulation: Mapping[str, Any]) -> str:
+    """What the hero's weapon is made of, as its author says (``equipment.material``), for what resists it."""
+    player = _player(simulation)
+    store = _d(_sections.inventory_state_of(player))
+    worn = _s(_d(store.get("equipment")).get("main_hand"))
+    item = next((_d(row) for row in _l(store.get("items")) if _s(_d(row).get("item_id")) == worn and worn), {})
+    return _s(_d(item.get("equipment")).get("material") or _d(item.get("fields")).get("material")).casefold()
+
+
+def _phase(simulation: Mapping[str, Any], combat: dict[str, Any], actor_id: str) -> None:
+    """A boss below a phase's share of its health enters it, once (EV-2): harder, an ally called, its weakness
+    bare."""
+    actor = participant(combat, actor_id)
+    hp, most = int(actor.get("hp") or 0), max(1, int(actor.get("max_hp") or 1))
+    entered = int(actor.get("phase") or 0)
+    for index, phase in enumerate(_l(actor.get("phases")), start=1):
+        phase = _d(phase)
+        if index <= entered or hp > most * float(phase.get("at") or 0):
+            continue
+        actor["phase"] = index
+        actor["defense"] = int(actor.get("defense") or 10) + int(phase.get("defense_bonus") or 0)
+        bonus = int(phase.get("damage_bonus") or 0)
+        actor["damage_min"] = max(0, int(actor.get("damage_min") or 1) + bonus)
+        actor["damage_max"] = max(int(actor["damage_min"]), int(actor.get("damage_max") or 3) + bonus)
+        if phase.get("exposes_weakness"):
+            actor["exposed"] = True
+        entry: dict[str, Any] = {"kind": "phase", "round": int(combat.get("round") or 1), "actor_id": actor_id,
+                                 "phase": index, "told": _s(phase.get("told"))}
+        if phase.get("calls_ally"):
+            kin = sum(1 for row in _d(combat.get("participants")).values()
+                      if _s(_d(row).get("definition_id")) == _s(actor.get("definition_id")))
+            ally = instantiate_campaign_creature(simulation, _s(actor.get("definition_id")), instance_index=kin + 1)
+            if ally is not None:
+                ally_id = _s(ally["actor_id"])
+                hp_share = max(1, int(ally.get("max_hp") or 1) // 3)  # a lesser echo of it
+                combat["participants"][ally_id] = {**ally, "hp": hp_share, "max_hp": hp_share, "phases": [],
+                                                   "called": True, "no_escape": False, "status_effects": []}
+                order = _l(combat.get("initiative_order"))
+                order.insert(int(combat.get("turn_index") or 0) + 1, {"actor_id": ally_id, "initiative": 0, "roll": 0,
+                                                                       "bonus": 0})
+                combat["initiative_order"] = order
+                entry["ally_id"] = ally_id
+        combat.setdefault("combat_log", []).append(entry)
+
+
+def _weakness(combat: dict[str, Any], target_id: str, used: str) -> dict[str, Any] | None:
+    """The weakness of the foe ``used`` names (its tag or one of its names), when it has it and it lies bare (a boss
+    whose phases expose it, only once they have)."""
+    foe = participant(combat, target_id)
+    if not used or not foe or _s(foe.get("side")) != "enemy":
+        return None
+    if any(_d(phase).get("exposes_weakness") for phase in _l(foe.get("phases"))) and not foe.get("exposed"):
+        return None
+    wanted = used.casefold().strip()
+    return next((_d(row) for row in _l(foe.get("vulnerabilities"))
+                 if wanted in {_s(_d(row).get("trigger_tag")).casefold(),
+                               *(_s(alias).casefold() for alias in _l(_d(row).get("aliases")))}), None)
 
 
 def _advance(combat: dict[str, Any]) -> None:
@@ -559,17 +665,20 @@ def _met_here(simulation: Mapping[str, Any], enemy: Mapping[str, Any]) -> bool:
 
 def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "",
           cover: int = 0, ability: FightEffect | None = None, ability_name: str = "",
-          parley: Literal["persuade", "intimidate"] = "persuade") -> FightTurn | None:
+          parley: Literal["persuade", "intimidate"] = "persuade", weakness: str = "") -> FightTurn | None:
     """One turn of a fight; ``None`` when the target is neither a creature the world knows nor a person present
     (the older path's).
 
     ``cover`` is what the target's cover adds to its defence against the hero's blow (the grid's, combat.md);
-    ``parley`` is how the hero talks a foe down."""
+    ``parley`` is how the hero talks a foe down; ``weakness`` the foe's weakness the hero's attack uses (EV-2); a
+    ``defend`` aimed at one of the party (``target_ref``) guards them."""
     existing = _d(_sections.combat_state_of(simulation))
     fighting = existing.get("active") is True
     conditions = _conditions(simulation)
     report: dict[str, Any] = {"earlier_turns": [], "other_turns": [], "parting_blows": [], "foe_ids": []}
     regard: list[StateChange] = []
+    guards: list[StateChange] = []
+    log_start = len(_l(existing.get("combat_log"))) if fighting else 0
     if fighting and action in {"sneak", "parley"} and _blooded(existing):
         return FightTurn([], ["Blows have been traded: there is no slipping away or talking now. Strike, break away, "
                               "or use something you carry."], refused=True, minutes=0)
@@ -599,10 +708,15 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
                        for other in routines.present_now(simulation)[1]
                        if other != npc_id and other in people and other not in {
                            _s(row.get("npc_id")) for row in _companions(simulation)}]
-        combat = _start(simulation, enemy, turn_key=turn_key, confronted=action == "confront")
+        left = _d(existing.get("left"))
+        kept = left.get(_s(enemy.get("definition_id")))
+        if kept is not None:  # a boss left in an earlier fight: as the hero left it, less what it regained
+            enemy = {**enemy, "hp": max(1, min(int(enemy.get("max_hp") or 1), int(kept)))}
+        combat = _start(simulation, enemy, turn_key=turn_key, confronted=action == "confront", left=left)
         report["reason"] = "combat_started"
     else:
         combat = _party_as_it_stands(simulation, deepcopy(existing))
+        _stances(simulation, _d(combat.get("participants")))
     earlier, ended = _until_hero(simulation, combat, conditions)
     report["earlier_turns"] = earlier
     participant(combat, "player").pop("guarding", None)  # a raised guard lasts until the hero's next turn
@@ -622,8 +736,15 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     elif not ended and action == "pass":
         _advance(combat)
     elif not ended and action == "defend":
-        participant(combat, "player")["guarding"] = True
-        report["reason"] = "combat_defended"
+        ward = _named_ally(simulation, combat, target_ref)
+        if ward:  # guarding another of the party: the hero takes the blows aimed at them (EV-2)
+            participant(combat, "player")["guards"] = ward
+            report.update(reason="combat_guarded", guarded_id=ward)
+            guards.append(GuardSet(guard_id="player", guarded_id=ward))
+        else:
+            participant(combat, "player").pop("guards", None)
+            participant(combat, "player")["guarding"] = True
+            report["reason"] = "combat_defended"
         _advance(combat)
     elif not ended and action == "ability":
         effect = ability or FightEffect()
@@ -646,12 +767,31 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
             _advance(combat)
     elif not ended and action == "attack":
         target_id = _named(combat, target_ref) or default_target_for_actor(combat, "player")
-        blow = _strike(simulation, combat, conditions, "player", target_id, cover=cover)
+        used = _weakness(combat, target_id, weakness)
+        effect = _s(used.get("effect")) or "stun" if used else ""
+        blow = _strike(simulation, combat, conditions, "player", target_id, cover=cover,
+                       harder=WEAKNESS_DAMAGE if effect == "damage" else 0)
+        if used and blow["hit"] and int(participant(combat, target_id).get("hp") or 0) > 0:
+            foe = participant(combat, target_id)
+            if effect == "morale" and not foe.get("boss"):
+                foe["status"] = "fled"  # its nerve breaks: it flees the field
+            else:
+                combat["pending_skip_turn_actor_id"] = target_id  # it reels, and loses its next turn
+            combat.setdefault("combat_log", []).append({"kind": "weakness", "round": int(combat.get("round") or 1),
+                                                        "actor_id": "player", "target_id": target_id,
+                                                        "weakness": _s(used.get("trigger_tag")), "effect": effect})
+            report["weakness"] = {"name": _s(foe.get("name")), "effect": effect,
+                                  "weakness": weakness or _s(used.get("trigger_tag"))}
         report.update(blow, reason=report.get("reason") or ("combat_defeat_resolved" if blow["defeated"]
                                                             else "combat_attack_resolved"))
         ended = _settle(combat)
         if not ended:
             _advance(combat)
+    elif not ended and any(participant(combat, foe).get("no_escape") for foe in living_enemy_ids(combat)):
+        # A fight with no escape (EV-2: a finale): breaking away is refused, and no time passes.
+        foe = next(participant(combat, foe) for foe in living_enemy_ids(combat) if participant(combat, foe).get("no_escape"))
+        return FightTurn([], [f"There is no breaking away from the {_s(foe.get('name')) or 'foe'}: this fight ends with "
+                              "one of you. Strike, guard, or use something you carry."], refused=True, minutes=0)
     elif not ended:  # breaking away (combat.md)
         hero = participant(combat, "player")
         foe_ids = living_enemy_ids(combat)
@@ -674,6 +814,7 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
             ended = _settle(combat) if not living_party_ids(combat) else "fled"
             if ended == "fled":
                 combat.update(active=False, ended_reason="party_fled")
+                _left(combat, foe_ids)
         else:
             _advance(combat)
     if not ended:
@@ -683,7 +824,11 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     minutes = MINUTES_PER_TURN
     spoils: list[str] = []
     after: list[StateChange] = []
-    if ended == "victory":
+    if ended == "victory":  # a boss beaten is left no longer
+        left = _d(combat.get("left"))
+        for row in _d(combat.get("participants")).values():
+            left.pop(_s(_d(row).get("definition_id")), None)
+        combat["left"] = left
         after, spoils = _spoils(simulation, combat)
         # Fought beside them and won (the playtest: a whole campaign together, and Liora's regard moved only when a
         # quest ended).
@@ -695,6 +840,10 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
         after, minutes = _defeat(simulation, combat, conditions)
         minutes = minutes or MINUTES_PER_TURN
     changes.append(CombatAdvanced(combat_state=combat))
+    changes.extend(guards)
+    changes.extend(PhaseEntered(actor_id=_s(row.get("actor_id")), phase=int(row.get("phase") or 1),
+                                told=_s(row.get("told")))
+                   for row in _l(combat.get("combat_log"))[log_start:] if _d(row).get("kind") == "phase")
     start_hp, _ = _hero_hp(simulation)
     hero_hp = int(participant(combat, "player").get("hp") or 0)
     if hero_hp != start_hp:
@@ -714,7 +863,45 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     if action == "pass" and report.get("reason") is None:
         report["reason"] = "combat_turn_passed"
     lines = [*tried_lines, *describe_combat_exchange(report), *spoils]
+    if report.get("weakness"):  # its weakness, used: told before the rest of the exchange
+        used = report["weakness"]
+        lines.insert(len(tried_lines), f"The {used['name']} {_WEAKNESS_TOLD[used['effect']]}: {used['weakness']} is its "
+                                       "weakness.")
+    if report.get("guarded_id"):
+        lines.insert(len(tried_lines), f"You stand guard over {_s(participant(combat, report['guarded_id']).get('name'))}.")
+    lines += [f"The {_s(participant(combat, _s(_d(row).get('actor_id'))).get('name'))} changes: {_s(_d(row).get('told'))}"
+              if _s(_d(row).get("told")) else
+              f"The {_s(participant(combat, _s(_d(row).get('actor_id'))).get('name'))} fights on, more fiercely."
+              for row in _l(combat.get("combat_log"))[log_start:] if _d(row).get("kind") == "phase"]
     return FightTurn(changes, lines, minutes=minutes, ended=ended, report=report)
 
 
-__all__ = ["ATTACKED_REGARD", "FOUGHT_BESIDE_REGARD", "FightTurn", "GUARD_BONUS", "MINUTES_PER_TURN", "WITNESS_REGARD", "fight"]
+_WEAKNESS_TOLD = {"stun": "reels", "damage": "is hurt deeply", "morale": "loses its nerve"}
+
+
+def _named_ally(simulation: Mapping[str, Any], combat: Mapping[str, Any], target_ref: str) -> str:
+    """The companion in the fight ``target_ref`` names (by id or name); "" for none."""
+    wanted = target_ref.casefold().strip()
+    if not wanted:
+        return ""
+    return next((actor for actor in living_party_ids(dict(combat)) if actor != "player"
+                 and wanted in {actor.casefold(), _s(participant(dict(combat), actor).get("name")).casefold()}), "")
+
+
+def _left(combat: dict[str, Any], foe_ids: list[str]) -> None:
+    """A foe the hero broke away from that does not regain all it lost (a boss) is kept as it was left, less what it
+    regains (EV-2)."""
+    left = _d(combat.get("left"))
+    for foe_id in foe_ids:
+        foe = participant(combat, foe_id)
+        share = float(foe.get("recovers") if foe.get("recovers") is not None else 1.0)
+        if share >= 1.0:
+            continue
+        hp, most = int(foe.get("hp") or 0), int(foe.get("max_hp") or 0)
+        left[_s(foe.get("definition_id"))] = min(most, hp + round(share * (most - hp)))
+    if left:
+        combat["left"] = left
+
+
+__all__ = ["ATTACKED_REGARD", "FLANK_BONUS", "FOUGHT_BESIDE_REGARD", "FightTurn", "GUARD_BONUS", "MINUTES_PER_TURN",
+           "WEAKNESS_DAMAGE", "WITNESS_REGARD", "fight"]

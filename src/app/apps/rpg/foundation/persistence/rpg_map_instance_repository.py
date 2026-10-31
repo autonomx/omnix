@@ -31,14 +31,16 @@ class PostgresRpgMapInstanceRepository:
         document: Mapping[str, Any],
         definition_hash: str,
         semantic_interface_hash: str,
+        campaign_id: str | None = None,
     ) -> dict[str, Any]:
+        """A map definition, kept once; ``campaign_id``: one of a campaign's own (a site's room, EV-10)."""
         row = self.connection.execute(
             """
             INSERT INTO omnix_rpg_map_definitions (
                 workspace_id, map_id, definition_revision, world_id,
                 world_revision, document_jsonb, definition_hash,
-                semantic_interface_hash
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                semantic_interface_hash, campaign_id
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
             ON CONFLICT (workspace_id, map_id, definition_revision) DO NOTHING
             RETURNING map_id, definition_revision, world_id, world_revision,
                       document_jsonb, definition_hash, semantic_interface_hash,
@@ -53,6 +55,7 @@ class PostgresRpgMapInstanceRepository:
                 canonical_json(dict(document)),
                 definition_hash,
                 semantic_interface_hash,
+                campaign_id,
             ),
         ).fetchone()
         if row is None:

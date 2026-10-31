@@ -41,10 +41,28 @@ MECHANIC_OWNERS = {
     "ability": "app.apps.rpg.rules.ability_use", "hotbar": "app.apps.rpg.rules.ability_use",
     "check": "app.apps.rpg.rules.checks",
     "grow": "app.apps.rpg.rules.player.progression", "rewind": "app.apps.rpg.session.turn.rewind",
+    "note_preference": "app.apps.rpg.rules.direction",  # a wish the game master's panel offered (EV-0)
+    "explore": "app.apps.rpg.rules.exploration",  # a search for what is hidden (EV-10)
     "act": "app.apps.rpg.session.turn.resolution",  # a free action: no rule of the game decides it
 }
-# The world tick's own rules (step 6): people's days.
+# The world tick's own rules (step 6): people's days, and the beats of their goals (EV-4).
 TICK_OWNERS = ("app.apps.rpg.rules.routines",)
+# What a turn led to (step 5), judged after every turn: what the hero now knows (EV-1).
+CONSEQUENCE_OWNERS = ("app.apps.rpg.rules.hero_knowledge", "app.apps.rpg.rules.direction",
+                      "app.apps.rpg.rules.exploration")
+# Each kind of proposal a turn folds in at its load (EV-11) and the rule that owns it.
+FOLD_IN_OWNERS = {
+    "heard_of": "app.apps.rpg.rules.hero_knowledge:heard_of",
+    "gm_fact": "app.apps.rpg.rules.consequences:fold_fact",
+    "gm_complication": "app.apps.rpg.rules.consequences:fold_complication",
+    "gm_quest_offer": "app.apps.rpg.rules.quest.progress:fold_quest_offer",
+    "gm_move_person": "app.apps.rpg.rules.routines:fold_move",
+    "gm_encounter": "app.apps.rpg.rules.combat.encounters:fold_encounter",
+    "gm_beat": "app.apps.rpg.rules.routines:fold_beat",
+    "gm_rumour": "app.apps.rpg.rules.rumours:fold_rumour",
+    "gm_invent": "app.apps.rpg.rules.inventions:fold_invention",
+    "gm_area": "app.apps.rpg.rules.inventions:fold_area_entry",
+}
 
 # The sections each change writes besides the play screen's sheet (its projection, ``state``).
 CHANGE_WRITES = {
@@ -57,11 +75,12 @@ CHANGE_WRITES = {
     "ability_used": {"player"},
     "hotbar_changed": {"player"},
     "check_resolved": {"player"},
+    "invention_added": {"world", "inventory"},  # an invented item may lie where the hero can pick it up (EV-0)
     "level_choice_made": {"player"},
     # a rewind puts back the game of an earlier revision: the sheet and the simulation whole (paths above any one
     # section), and every section in them
     "revision_restored": {"player", "inventory", "location", "time", "party", "combat", "quests", "survival", "npcs",
-                          "world", "economy", "narrative", "meta", "(no section)"},
+                          "world", "economy", "narrative", "knowledge", "facts", "direction", "meta", "(no section)"},
 }
 
 
@@ -132,6 +151,31 @@ def _examples(doc: dict) -> list:
          doc),
         (c.PressuresMoved(moves=[], runtime={"pressure_plan": {}}), doc),
         (c.LocalMapEntered(map_instance_id="campaign:map:starfall-village:1"), doc),
+        (c.EntryMet(entry_id="npc:elyra-moonroot", kind="heard_of"), doc),
+        (c.FactSet(fact_id="fact:engine_fate", value="council", source="quest"), doc),
+        (c.FactLearned(fact_id="fact:engine_fate"), reduce(doc, [c.FactSet(fact_id="fact:engine_fate", value="council",
+                                                                          known=False)])[0]),
+        (c.StandingChanged(group_id="faction:glass-synod", delta=-10), doc),
+        (c.PhaseEntered(actor_id="enemy:a", phase=1, told="It splits."), fighting),
+        (c.DirectionTracked(last_event_turn=4, day=1, complication_scene="loc:x"), doc),
+        (c.PreferenceNoted(kind="danger", value="more"), doc),
+        (c.GuardSet(guard_id="player", guarded_id="enemy:a"), fighting),
+        (c.BeatAdvanced(person_id=npc, goal_id="goal:x", beat="b1", location_id=here), doc),
+        (c.RumourSpread(rumour_id="r:1@x", place_id=here, text="Word goes about."), doc),
+        (c.RumourHeard(rumour_id="r:1@x"), reduce(doc, [c.RumourSpread(rumour_id="r:1@x", place_id=here, text="W.")])[0]),
+        (c.InventionAdded(entry_id="gm:c:blade", family="item", name="Blade", row={"id": "gm:c:blade", "name": "Blade"},
+                          play={"location_id": here}), doc),
+        (c.AreaDetailed(area_id="region:x", entry_id="lore:region:x:1", kind="lore", told="Old roads."), doc),
+        (c.InventionAdded(entry_id="gm:c:hollow", family="place", name="Hollow", row={"name": "Hollow"},
+                          play={"roads": [{"to": here}], "site": {"rooms": [{"id": "gm:c:hollow:room-1", "name": "Pit",
+                                                                              "loot_item_id": "item:lantern-bread"}]}}),
+         doc),
+        (c.SiteFound(location_id="gm:c:cave"), reduce(doc, [c.InventionAdded(
+            entry_id="gm:c:cave", family="place", name="Cave", row={"name": "Cave", "hidden": True},
+            play={"roads": [{"to": here}]})])[0]),
+        (c.RoomCleared(site_id="gm:c:cave", room_id="gm:c:cave:room-1"), doc),
+        (c.ItemImproved(item_id="item:blade", tier=1, stats={"damage_max": 5}), reduce(doc, [c.ItemAdded(
+            item_id="item:blade", name="Blade", fields={"equipment": {"slot": "main_hand", "stats": {"damage_max": 4}}})])[0]),
         (c.LevelChoiceMade(choice="attribute", attribute="strength", value=12),
          reduce(doc, [c.LevelReached(level=2, xp=0, xp_to_next=200, choices_pending=1)])[0]),
     ]
@@ -154,7 +198,7 @@ def test_every_pipeline_mechanic_has_one_owner_and_the_pipeline_uses_it() -> Non
             if isinstance(node, ast.ImportFrom) and node.module:
                 imported.add(node.module)
                 imported.update(f"{node.module}.{alias.name}" for alias in node.names)
-    for module in {*MECHANIC_OWNERS.values(), *TICK_OWNERS}:
+    for module in {*MECHANIC_OWNERS.values(), *TICK_OWNERS, *CONSEQUENCE_OWNERS}:
         importlib.import_module(module)
         local = module.removeprefix("app.apps.rpg.session.turn.")
         assert module in imported or (TURN_PACKAGE / f"{local}.py").exists(), f"the pipeline never uses {module}"
@@ -164,7 +208,10 @@ def test_every_change_has_an_example_here() -> None:
     assert sorted({change.type for change, _ in _examples(_document())}) == sorted(CHANGE_TYPES)  # some have two
 
 
-@pytest.mark.parametrize("index", range(len(CHANGE_TYPES)))
+EXAMPLES = len(_examples(_document()))  # some changes have two (every one is checked)
+
+
+@pytest.mark.parametrize("index", range(EXAMPLES))
 def test_each_change_writes_only_the_sections_it_owns(index: int) -> None:
     change, base = _examples(_document())[index]
     written = _written(change, base)
@@ -182,4 +229,14 @@ def test_each_section_has_the_writers_declared_and_no_others() -> None:
     assert writers["location"] == {"location_changed", "presence_changed", "revision_restored", "local_map_entered",
                                    "map_state_projected"}
     assert writers["combat"] == {"combat_started", "combatant_hp_changed", "combat_ended", "combat_advanced",
-                                 "revision_restored"}
+                                 "phase_entered", "guard_set", "revision_restored"}
+
+
+def test_every_proposal_kind_has_one_owning_rule() -> None:
+    from app.apps.rpg.session.turn import proposals
+
+    assert proposals.FOLD_IN_OWNERS == FOLD_IN_OWNERS
+    for named in FOLD_IN_OWNERS.values():
+        module, function = named.split(":")
+        assert module.startswith("app.apps.rpg.rules."), f"{named}: a proposal is folded in by a rule"
+        assert callable(getattr(importlib.import_module(module), function))

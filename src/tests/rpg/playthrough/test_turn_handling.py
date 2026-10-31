@@ -47,7 +47,7 @@ def test_a_question_to_someone_present_is_one_short_call(launch, world) -> None:
     play.model.answer(Role.DIALOGUE, (name, "The gate hums at dusk."))
     before, calls = play.facts(), len(play.model.calls)
     body = play.turn(f"I ask {name} what she thinks of the weather here.")
-    assert play.model.roles(calls) == ["dialogue"]  # one short call writes the line, nothing else
+    assert play.model.roles(calls) == ["intent", "dialogue"]  # the line read (EV-9), one short call writes theirs
     speakers = [block.get("speaker_id") for block in body["canonical_narrative_response"]["blocks"]]
     assert npc_id in speakers
     assert "The gate hums at dusk." in body["visible_response"]["plain_text"]
@@ -63,11 +63,13 @@ def test_an_ambiguous_command_asks_one_question(launch, world) -> None:
     play.turn("go to Starfall Village")
     assert len(play.present()) >= 3
     calls, count, before = len(play.model.calls), play.turn_count(), play.facts()
-    # The command grammar asks who is meant (RQ-3.1), and the turn pipeline commits the question as the turn's
-    # answer (RQ-1.4): a turn that changes nothing else and passes no time.
+    # The intent call reads the line and asks who is meant (EV-9), and the turn pipeline commits the question as the
+    # turn's answer (RQ-1.4): a turn that changes nothing else and passes no time.
     body = play.turn("I talk to him.")
     assert body["visible_response"]["plain_text"].strip() == "Who are you speaking to?"
-    assert play.model.roles(calls) == []  # the game asks; no model picks someone or writes the question
+    assert play.model.roles(calls) == ["intent"]  # the reading's question; no model picks someone or writes it
+    answers = [row for row in body["outcome"]["presentation"]["choices"] if row["action"].get("family") == "talk"]
+    assert answers  # and its answers are cards
     assert play.turn_count() == count + 1
     after = play.facts()
     for fact in ("purse_copper", "inventory", "location_id", "hp", "quests", "party", "survival"):

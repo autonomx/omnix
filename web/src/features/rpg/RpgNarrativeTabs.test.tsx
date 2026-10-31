@@ -39,3 +39,33 @@ describe('RpgNarrativeTabs journal', () => {
     expect(within(screen.getByRole('tabpanel')).getAllByRole('button')).toHaveLength(12);
   });
 });
+
+describe('RpgNarrativeTabs what has changed', () => {
+  it('shows the lines of what the hero changed and each group standing in words', () => {
+    renderWithProviders(
+      <RpgNarrativeTabs
+        journalDetail={journalDetail}
+        journalEntries={days(2)}
+        logEntries={[]}
+        recentEvents={[]}
+        worldChanges={{
+          lines: ['The royal engine in Valecourt runs again, the crown keeps it.'],
+          standing: [{ groupId: 'faction:meridian-crown', name: 'The Meridian Crown', band: 'respected' }],
+          word: ['They say the warden has gone north.'],
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'What has changed' }));
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText('The royal engine in Valecourt runs again, the crown keeps it.')).toBeInTheDocument();
+    expect(within(panel).getByText('The Meridian Crown')).toBeInTheDocument();
+    expect(panel).toHaveTextContent('The Meridian Crown: respected');
+    expect(within(panel).getByText('They say the warden has gone north.')).toBeInTheDocument();
+  });
+
+  it('says so when nothing has changed yet', () => {
+    renderWithProviders(<RpgNarrativeTabs journalDetail={journalDetail} journalEntries={days(1)} logEntries={[]} recentEvents={[]} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'What has changed' }));
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Nothing you have done has changed the world yet.');
+  });
+});

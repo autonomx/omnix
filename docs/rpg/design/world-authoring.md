@@ -51,3 +51,22 @@ revisions) whose canon carries the sections.
 
 Model-written sections (World Forge's draft is the lore's inference); the quality of what a model would write is
 outside the roadmap (§9).
+
+## What the editor writes since the evolution roadmap (EV-6)
+
+The play-section form also writes a goal's beats (routines.md), the facts a way or a quest's completion sets and the
+facts a quest requires or forbids (EV-1), a creature's resistances, no-escape, recovery and boss phases (combat.md),
+upgrades and their recipes (economy.md), and the **Consequences** section (`fact_effects`: one effect a row, while
+its facts hold). World Forge's draft now also gives each quest its steps (its places in order, then word with its
+giver), each goal a first beat, and the world's gear to its first seller of goods. The **Inventions to Review** page
+is the world's review queue: what the game master invented in campaigns on the world (EV-0 part 2), with where it
+came from and the consistency check's findings, to approve into the next publication, reject or link. The entry
+forms write an item's gear and a character's home, aliases and group, and a collection's heading adds an entry.
+
+Entries are kept where their topic keeps them: a generated topic's `entities`, a bundle's `characters` or `items`
+(`authoring_presentations.ENTRY_LISTS`; a new one goes in the topic's one list, `entity_authoring.entry_list_for`).
+A generated world recompiles its canon from its topics when published. A world written by hand or installed from a
+bundle has nothing to recompile from: its publication writes its editor's entries into the canon list of the same
+name by id, the editor's fields over the canon's, a new one added to the entity manifest and the release's index
+(`topic_entries.py`), and a launch reuses a published revision only while its canon holds them. Its topics keep the
+draft revision they were installed at, so a write is taken at the world's draft or the topic's own.

@@ -1,4 +1,5 @@
 // What the play screen's components build on loads before them; RpgWorkspace.css (below) after their own styles.
+import { RpgLoreLinksProvider } from './rpgLoreLinks';
 import './RpgWorkspaceBase.css';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -127,6 +128,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     journalEntries,
     narrativeLogEntries,
     journalDetail,
+    worldChanges,
     inventoryItems,
     hotbarAbilities,
     worldStateRows,
@@ -246,6 +248,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           input_ref: sessionId ? { session_id: sessionId } : null,
           input_payload: {
             command: values.command,
+            ...(values.card ? { card: values.card } : {}),
             determinism_policy: 'replay_preserving',
           },
           stages: [
@@ -423,6 +426,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     : storyMessages;
 
   return (
+    <RpgLoreLinksProvider sessionId={selectedLiveSessionId ?? ''}>
     <WorkspacePanel labelledBy="module-title" className="rpg-workstation">
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <header className="rpg-unified-header" aria-label="Campaign menu header">
@@ -501,7 +505,9 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               hasCommandError={Boolean(errors.command)}
               isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
               liveSessionId={selectedLiveSessionId ?? ''}
-              onQuickAction={selectCommand}
+              onQuickAction={(action) => (action.card && selectedLiveSessionId
+                ? createJobMutation.mutate({ sessionId: selectedLiveSessionId, command: action.command, card: action.card })
+                : selectCommand(action.command))}
               onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
               onTurnApplied={refreshAfterTurn}
               quickActions={responseOptions}
@@ -533,7 +539,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <RpgCombatSurface fight={fight} />
 
-          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} logEntries={narrativeLogEntries} recentEvents={recentEvents} />
+          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} logEntries={narrativeLogEntries} recentEvents={recentEvents} worldChanges={worldChanges} />
 
           <RpgLoadoutTabs
             hotbarAbilities={hotbarAbilities}
@@ -577,5 +583,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         )}
       </div>
     </WorkspacePanel>
+    </RpgLoreLinksProvider>
   );
 }

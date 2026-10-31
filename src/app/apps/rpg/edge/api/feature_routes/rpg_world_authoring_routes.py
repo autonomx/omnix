@@ -12,6 +12,7 @@ from app.apps.rpg.genesis.worlds.authoring_service import (
     update_world_metadata,
 )
 from app.apps.rpg.genesis.worlds.entity_authoring import (
+    add_world_entity,
     read_world_entity,
     regenerate_world_entity,
     update_world_entity,
@@ -65,6 +66,11 @@ class RpgUpdateWorldTopicRequestBody(_TypedRequestModel):
 
 class RpgUpdateWorldEntityRequestBody(_TypedRequestModel):
     changes: _TypedRequestAny = None
+
+class RpgAddWorldEntityRequestBody(_TypedRequestModel):
+    entity: _TypedRequestAny = None
+    collection: _TypedRequestAny = None  # the topic's list it goes in ("characters"); else the one the topic keeps
+
 
 class RpgRegenerateWorldEntityRequestBody(_TypedRequestModel):
     directives: _TypedRequestAny = None
@@ -274,6 +280,30 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
                 generation_lock=bool(payload.get("generation_lock", True)),
                 approved=bool(payload.get("approved", False)),
             )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @router.post(
+        "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities",
+        tags=["rpg-world"],
+        responses=documented(RpgAuthoringEntityMutationResponse),
+    )
+    def rpg_add_world_entity(
+        world_id: str,
+        topic_id: str,
+        request: Request, request_body: RpgAddWorldEntityRequestBody,
+    ) -> dict[str, Any]:
+        """An author adds an entity to a topic (EV-6)."""
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
+        revision, content_hash = _expected(payload)
+        entity = payload.get("entity")
+        if not isinstance(entity, Mapping):
+            raise HTTPException(status_code=422, detail={"ok": False, "error": "entity_required"})
+        try:
+            return add_world_entity(world_id, topic_id, expected_draft_revision=revision,
+                                    expected_content_hash=content_hash, entity=entity,
+                                    collection=str(payload.get("collection") or ""))
         except Exception as exc:
             _raise_domain_error(exc)
             raise

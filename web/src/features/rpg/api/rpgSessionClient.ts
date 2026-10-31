@@ -324,6 +324,7 @@ async function createForegroundTurnJob(request: CreateJobRequest): Promise<JobRe
   }
   const sessionId = stringValue(asRecord(requestRecord.input_ref).session_id);
   const command = stringValue(asRecord(requestRecord.input_payload).command);
+  const card = asRecord(requestRecord.input_payload).card;
   if (!sessionId || !command) {
     return null;
   }
@@ -331,7 +332,8 @@ async function createForegroundTurnJob(request: CreateJobRequest): Promise<JobRe
   try {
     result = await unwrap(api.POST('/api/rpg/sessions/{session_id}/turn', {
       params: { path: { session_id: sessionId } },
-      body: { command },
+      // A card clicked plays the reading it carries (EV-9); its command is what the log shows.
+      body: card && typeof card === 'object' ? { command, card: card as Record<string, unknown> } : { command },
     })) as RpgTurnResponse;
   } catch (error) {
     if (isNotFound(error)) {

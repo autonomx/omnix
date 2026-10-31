@@ -30,16 +30,16 @@ def test_one_curve_levels_the_hero_and_each_level_brings_health_and_a_choice() -
 
 def test_a_levels_choice_raises_an_attribute_teaches_an_ability_or_two_skills() -> None:
     document = _document(level=2, pending=2)
-    raised = progression.choose(document, "raise my strength")
+    raised = progression.choose(document, "attribute:strength")
     document, _ = reduce(document, raised.changes)
     assert document["simulation_state"]["player_state"]["stats"]["strength"] == 12
     assert document["state"]["player"]["stats"]["strength"] == 12
-    learned = progression.choose(document, "learn Volley")
+    learned = progression.choose(document, "ability:a:volley")
     document, _ = reduce(document, learned.changes)
     assert document["state"]["ability_state"]["unlocked"] == ["a:volley"]
     assert document["simulation_state"]["player_state"]["level_choices_pending"] == 0
-    assert progression.choose(document, "improve stealth and archery").refused  # no choice waits now
-    assert progression.choose(_document(level=2, pending=1), "learn Arrow Storm").refused  # level 9's
+    assert progression.choose(document, "skills:stealth,archery").refused  # no choice waits now
+    assert progression.choose(_document(level=2, pending=1), "ability:a:storm").refused  # level 9's
 
 
 def test_skills_rise_to_rank_five_on_their_own_curve() -> None:

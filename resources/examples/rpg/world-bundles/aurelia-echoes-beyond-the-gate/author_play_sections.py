@@ -1,6 +1,8 @@
 """Write ``play-sections.json`` into Aurelia's source bundle the way a world author does (W1, RQ-4.1).
 
-First ``lore-additions.json`` (items and gear, characters, quest rewards) is written into the source world's lore.
+First ``lore-additions.json`` (the game master's palette and the maps of places that had none) is written into the
+source world. Its people, items, gear and quest rewards are the bundle's own topics, as the world editor lists, edits
+and adds them, and a publication carries what the editor changed into the canon (``genesis/worlds/topic_entries``).
 Then the world library's own lifecycle does the rest, so every hash and binding is the library's: the current bundle is
 imported into a disposable database, the sections are saved as the author's draft (``save_play_sections``) and
 published (``publish_play_sections``: a new world revision and release, each opening repaired onto it), and the world
@@ -50,51 +52,12 @@ def _json(value) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
-def _merged(rows: list, additions: list, changes: dict) -> list:
-    """``rows`` with each id's ``changes`` merged in and each addition not there yet appended (by id: run twice, it
-    writes the same)."""
-    rows = [{**row, **changes.get(row.get("id"), {})} for row in rows]
-    known = {row.get("id") for row in rows}
-    return [*rows, *(dict(row) for row in additions if row["id"] not in known)]
-
-
-def _rewarded(quests: list, rewards: dict) -> list:
-    return [{**quest, "rewards": [*quest.get("rewards", []),
-                                  *(reward for reward in rewards.get(quest.get("id"), ()) if reward not in quest.get("rewards", []))]}
-            for quest in quests]
-
-
 def with_lore_additions(payload: dict, additions: dict) -> dict:
-    """The source world with ``lore-additions.json`` written into its lore, as its author wrote the rest: items (with
-    how gear is worn and fights), characters, and quest rewards, into each revision's canon and entity manifest, the
-    releases' indexes and the topics the world editor shows. The import rehashes what changed."""
-    items, characters = additions.get("items", []), additions.get("characters", [])
-    item_changes, rewards = additions.get("item_changes", {}), additions.get("quest_rewards", {})
-    for row in payload["world_revisions"]:
-        document = row["document"]
-        canon = document["canon"]
-        canon["items"] = _merged(canon.get("items", []), items, item_changes)
-        canon["characters"] = _merged(canon.get("characters", []), characters, {})
-        canon["quests"] = _rewarded(canon.get("quests", []), rewards)
-        manifest = document["entity_manifest"]
-        for key, rows in (("items", items), ("characters", characters)):
-            manifest[key] = [*manifest.get(key, []), *(row["id"] for row in rows if row["id"] not in manifest.get(key, []))]
-    for row in payload["world_releases"]:
-        indexes = row["document"].get("indexes") or {}
-        ids = indexes.get("character_ids")
-        if isinstance(ids, list):
-            indexes["character_ids"] = [*ids, *(row["id"] for row in characters if row["id"] not in ids)]
-        summary = (row["document"].get("certification") or {}).get("content_summary") or {}
-        if "characters" in summary and isinstance(ids, list):
-            summary["characters"] = len(indexes["character_ids"])
-    for topic in payload["topics"]:
-        content = topic["content"]
-        if topic["topic_id"] == "economy":
-            content["items"] = _merged(content.get("items", []), items, item_changes)
-        elif topic["topic_id"] == "characters":
-            content["characters"] = _merged(content.get("characters", []), characters, {})
-        elif topic["topic_id"] == "quests":
-            content["quests"] = _rewarded(content.get("quests", []), rewards)
+    """The source world with ``lore-additions.json``'s game-master palette (what each area holds and favours, EV-10) in
+    each revision's canon."""
+    if additions.get("gm_guide"):
+        for row in payload["world_revisions"]:
+            row["document"]["canon"]["gm_guide"] = additions["gm_guide"]
     return payload
 
 
@@ -102,6 +65,72 @@ def source_world_json() -> dict:
     materialize = _materializer()
     with zipfile.ZipFile(io.BytesIO(materialize._source_bundle(HERE))) as source:
         return json.loads(source.read("world.json"))
+
+
+def with_maps(payload: dict, maps: list) -> dict:
+    """The source world with ``lore-additions.json``'s maps (EV-8), as the world editor's map tools would leave them:
+    each a square-grid map of a place the world had left deferred, a definition for every world revision, its
+    blueprint, its binding in every release, and the place's ``map_id``. Run twice, it writes the same."""
+    from app.apps.rpg.genesis.worlds.contracts import canonical_content_hash
+    from app.apps.rpg.genesis.worlds.map_blueprint_authoring import MapBlueprintDocument
+    from app.apps.rpg.world.map_grid_contracts import GridMapDefinition, with_grid_definition_hashes
+
+    world_id = payload["world"]["id"] if "id" in payload["world"] else _materializer().WORLD_ID
+    palette = [{"code": ".", "terrain_id": "grass", "walkable": True, "blocks_sight": False, "movement_cost": 10},
+               {"code": "r", "terrain_id": "road", "walkable": True, "blocks_sight": False, "movement_cost": 7},
+               {"code": "f", "terrain_id": "forest", "walkable": True, "blocks_sight": True, "movement_cost": 15},
+               {"code": "w", "terrain_id": "water", "walkable": False, "blocks_sight": False, "movement_cost": 99},
+               {"code": "#", "terrain_id": "wall", "walkable": False, "blocks_sight": True, "movement_cost": 99}]
+    for spec in maps:
+        map_id, location_id = spec["map_id"], spec["location_id"]
+        blueprint = MapBlueprintDocument.model_validate({
+            "map_id": map_id, "location_id": location_id, "level": spec["level"], "navigation_kind": "square_grid",
+            "size_profile": spec["size_profile"], "required_spawn_point_ids": [row["spawn_point_id"] for row in spec["spawn_points"]],
+            "required_zone_ids": [row["zone_id"] for row in spec["zones"]], "directives": spec["directives"],
+            "metadata": {"description": spec["description"]}})
+        blueprint_json = blueprint.model_dump(mode="json")
+        blueprint_hash = canonical_content_hash(blueprint_json)
+        blueprint_semantic = canonical_content_hash(blueprint.semantic_interface())
+        payload["map_blueprints"] = [row for row in payload["map_blueprints"] if row["map_id"] != map_id] + [{
+            "blueprint_revision": 1, "content_hash": blueprint_hash, "created_at": "2026-10-30T00:00:00+00:00",
+            "document": blueprint_json, "findings": [], "map_id": map_id, "semantic_interface_hash": blueprint_semantic,
+            "status": "ready"}]
+        payload["map_definitions"] = [row for row in payload["map_definitions"] if row["map_id"] != map_id]
+        definitions = {}
+        for revision in payload["world_revisions"]:
+            number = int(revision["revision"])
+            definition = with_grid_definition_hashes(GridMapDefinition.model_validate({
+                "map_id": map_id, "level": spec["level"], "definition_revision": number, "world_id": world_id,
+                "world_revision": number, "width": len(spec["terrain_rows"][0]), "height": len(spec["terrain_rows"]),
+                "terrain_palette": palette, "terrain_rows": spec["terrain_rows"], "portals": [],
+                "spawn_points": spec["spawn_points"], "zones": spec["zones"],
+                "metadata": {"location_id": location_id, "description": spec["description"],
+                             "presentation_fallback": "semantic_grid_placeholder", "art_optional": True}}))
+            document = definition.model_dump(mode="json")
+            definitions[number] = definition
+            payload["map_definitions"].append({
+                "created_at": "2026-10-30T00:00:00+00:00", "definition_hash": definition.definition_hash,
+                "definition_revision": number, "document": document, "map_id": map_id,
+                "semantic_interface_hash": definition.semantic_interface_hash, "world_revision": number})
+            body = revision["document"]
+            for row in body["topology"]["locations"]:
+                if isinstance(row, dict) and row.get("id") == location_id:
+                    row["map_id"] = map_id
+                    row.pop("deferred", None)
+            body["blueprint_requirements"] = [row for row in body.get("blueprint_requirements") or ()
+                                              if row.get("map_id") != map_id] + [{
+                **blueprint_json, "blueprint_hash": blueprint_hash, "blueprint_revision": 1,
+                "semantic_interface_hash": blueprint_semantic, "simulation_readiness": "certified",
+                "presentation_readiness": "placeholder"}]
+        for release in payload["world_releases"]:
+            definition = definitions[int(release["world_revision"])]
+            body = release["document"]
+            body["map_bindings"] = [row for row in body.get("map_bindings") or () if row.get("map_id") != map_id] + [{
+                "blueprint_revision": 1, "definition_hash": definition.definition_hash,
+                "definition_revision": definition.definition_revision, "map_id": map_id,
+                "presentation_readiness": "placeholder", "semantic_interface_hash": definition.semantic_interface_hash,
+                "simulation_readiness": "certified"}]
+    return payload
 
 
 def published_world_json(sections: dict) -> dict:
@@ -174,7 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     worlds.require_disposable_database(args.allow_database)
     worlds.bootstrap()
     additions = json.loads((HERE / "lore-additions.json").read_text(encoding="utf-8"))
-    write_source(with_lore_additions(source_world_json(), additions))  # the lore first, as its author wrote it
+    # The lore first, as its author wrote it, and the maps of the places it had left without one (EV-8).
+    write_source(with_maps(with_lore_additions(source_world_json(), additions), additions.get("maps") or []))
     sections = json.loads((HERE / "play-sections.json").read_text(encoding="utf-8"))
     payload = published_world_json(sections)
     source = write_source(payload)

@@ -195,6 +195,7 @@ def _turn(row: Any) -> dict[str, Any]:
         "created_at": row[15].isoformat(),
         "state_delta": list(row[16]) if row[16] is not None else None,
         "maps_hash_after": str(row[17]) if row[17] is not None else None,
+        "folded_proposals": dict(row[18]) if row[18] is not None else None,
     }
 
 
@@ -202,7 +203,7 @@ _TURN_COLUMNS = """
 id, workspace_id, campaign_id, sequence, submission_id, expected_revision,
 resulting_revision, command_jsonb, canonical_effects_jsonb, state_hash_before,
 state_hash_after, engine_version, schema_version, interaction_id,
-compact_response, created_at, state_delta_jsonb, maps_hash_after
+compact_response, created_at, state_delta_jsonb, maps_hash_after, folded_proposals_jsonb
 """
 
 
@@ -472,12 +473,14 @@ class PostgresRpgRepository:
         locked_campaign: dict[str, Any] | None = None,
         submission_open: bool = False,
         maps_touched: bool | None = None,
+        folded_proposals: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Commit one turn. ``locked_campaign`` is the row the caller already read ``FOR UPDATE`` in this transaction.
 
         ``submission_open``: the caller holds the submission's claim, still open, in this transaction; a turn commits
         with its claim completed, so no turn of this submission exists and none is looked for. ``maps_touched``: whether
-        this transaction changed a map instance (None: find out).
+        this transaction changed a map instance (None: find out). ``folded_proposals``: the proposals the turn folded
+        in and dropped (EV-11), recorded on its row for replay; the caller settled them in this transaction.
         """
         encoded_response = canonical_json(compact_response).encode("utf-8")
         if not 0 < len(encoded_response) <= MAX_COMPACT_TURN_RESPONSE_BYTES:
@@ -521,10 +524,10 @@ class PostgresRpgRepository:
                 expected_revision, resulting_revision, command_jsonb,
                 canonical_effects_jsonb, state_hash_before, state_hash_after,
                 engine_version, schema_version, interaction_id, compact_response,
-                state_delta_jsonb, document_version, maps_hash_after
+                state_delta_jsonb, document_version, maps_hash_after, folded_proposals_jsonb
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
-                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s
+                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s::jsonb
             ) RETURNING {_TURN_COLUMNS}
             """,
             (
@@ -546,6 +549,7 @@ class PostgresRpgRepository:
                 canonical_json(_turn_delta(campaign["state"], next_state)),
                 document_version(next_state),
                 self.touched_maps_hash(context, campaign_id) if maps_touched is not False else None,
+                canonical_json(folded_proposals) if folded_proposals else None,
             ),
         ).fetchone()
         turn = _turn(row)

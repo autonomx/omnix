@@ -34,7 +34,7 @@ def test_a_check_is_a_visible_roll_whose_band_decides_what_follows(launch) -> No
     told = play.model.told()
     if _rolled(told)[4] in {"strong", "success"}:
         assert "Its weakness: bells, contradictory commands." in told
-    searched = play.turn("search the area for anything hidden")
+    searched = play.turn("I search the undergrowth carefully")  # "search the area": exploring (EV-10)
     assert play.simulation()["checks"]["last"]["kind"] == "search" and searched["outcome"]["planned_action"] == "check"
     assert len(play.simulation()["checks"]["history"]) == 4
     assert lore and again

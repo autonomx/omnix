@@ -90,6 +90,11 @@ def instantiate_campaign_creature(
             definition.get("condition_immunities") or ()
         ),
         "vulnerabilities": deepcopy(list(definition.get("vulnerabilities") or ())),
+        # EV-2: copied into the fight when the creature joins it, as its behaviour is.
+        "resists": [_text(tag).casefold() for tag in definition.get("resists") or () if _text(tag)],
+        "phases": deepcopy(list(definition.get("phases") or ())),
+        "no_escape": definition.get("no_escape") is True,
+        "recovers": float(definition.get("recovers") if definition.get("recovers") is not None else 1.0),
         "behaviour": _text(definition.get("behaviour")) or "fights",
         "speaks": definition.get("speaks") is True,
         "status": "active",

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Mapping, Sequence
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import (
@@ -38,12 +38,15 @@ _BANDS = {"strong": "a strong success", "success": "a success", "cost": "a succe
 
 
 class Suggestion(BaseModel):
-    """Something the play screen offers to do next (RQ-7.3): a label, and the command it sends."""
+    """Something the play screen offers to do next (RQ-7.3): a label, the command its log shows, and the card's action
+    (evolution roadmap EV-9): the reading it carries (``family``, ``target_id``, ``second_target_id``, ``check``,
+    ``slots``) and the turn it was offered at, played with no model call."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     label: str
     command: str
+    action: dict[str, Any] = Field(default_factory=dict)
 
 
 class OutcomeFact(BaseModel):

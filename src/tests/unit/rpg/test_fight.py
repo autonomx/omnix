@@ -18,7 +18,7 @@ from app.apps.rpg.foundation.state.changes import (
 )
 from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.session.turn.planning import plan_action
-from app.apps.rpg.rules.intent.grammar import IntentCandidate
+from app.apps.rpg.rules.intent.reading import IntentCandidate
 
 RAT = {"definition_id": "creature:rat", "name": "Rat", "level": 1, "hp": 3, "defense": 1, "damage_min": 1,
        "damage_max": 1, "xp_value": 90, "loot": [{"item_id": "item:tail", "chance": 1.0, "quantity": 2}]}

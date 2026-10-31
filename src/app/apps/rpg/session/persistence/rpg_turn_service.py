@@ -155,6 +155,24 @@ def persist_foreground_turn(
                 canonical_narrative,
             )
 
+        from app.apps.rpg.session.turn.proposals import settle_folded
+
+        pipeline = result.get("turn_pipeline") if isinstance(result.get("turn_pipeline"), dict) else {}
+        # What the turn folded in at its load (EV-11): settled only while still pending, else the commit fails.
+        folded = settle_folded(work, context, campaign_id=session_id, turn_id=turn_id, revision=state_revision,
+                               reported=pipeline.get("proposals") if isinstance(pipeline.get("proposals"), dict) else {})
+        undone = next((int(row.get("source_revision") or 0) for row in pipeline.get("changes") or ()
+                       if isinstance(row, dict) and row.get("type") == "revision_restored"), None)
+        if undone is not None:  # a rewind: what was proposed in the timeline undone never folds in (EV-11)
+            work.rpg_proposals.drop_undone(context, campaign_id=session_id, after_revision=undone, turn_id=turn_id,
+                                           revision=state_revision)
+        from app.apps.rpg.session.lore_review import file_inventions
+
+        # What the game master invented, filed for its world's review where question 15 says so (EV-0, part 2).
+        file_inventions(work, context, campaign_id=session_id, document=session, folded=folded)
+        from app.apps.rpg.session.site_maps import store_site_maps
+
+        store_site_maps(work, context, campaign_id=session_id, document=session, folded=folded)  # EV-10's rooms
         persisted = work.rpg.commit_turn(
             context,
             campaign_id=session_id,
@@ -174,6 +192,7 @@ def persist_foreground_turn(
             locked_campaign=campaign,
             submission_open=True,  # claimed above FOR UPDATE, so no turn of it is committed (F2)
             maps_touched=bool(result.get("map_instances") or result.get("map_events")),
+            folded_proposals=folded,
         )
 
         if not work.foreground_submissions.complete(
@@ -211,6 +230,9 @@ def persist_foreground_turn(
 
     # Loads after the commit read the committed session, not the turn's shared pre-commit load.
     forget_turn_session(session_id)
+    from app.apps.rpg.session.jobs.game_master_job import after_commit
+
+    after_commit(session_id, result, session, state_revision)  # the game master, when the turn calls for it (EV-0)
 
     return {
         "idempotent_replay": bool(persisted.get("idempotent_replay")),

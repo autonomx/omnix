@@ -7,16 +7,29 @@ its next part (the clock crosses into another step of it, or a whole day goes by
 an opening, a conversation or a story keeps the people in it. A person with no routine stays where they are (the
 ``npcs`` section's index, or where the world put them), and the hero's companions are wherever the hero is. Who is
 present at a place is who is there. Pure: the world tick records the whereabouts as changes.
+
+People act on their goals (evolution roadmap EV-4). A goal the routines author may hold **beats**, steps toward it
+taken in order: each, once its condition holds (facts, a place the hero has been, the campaign's day), is reached
+with its chance on each day the clock crosses, at most ``BEATS_PER_DAY`` a day, by a roll seeded by the campaign, the
+day and the beat (``daily_beats``); the game master may bring one forward (``fold_beat``). A beat reached is
+``BeatAdvanced``: the facts it sets (not yet known to the hero), the place it takes its person to (they keep to it
+from then on, or are gone), and the word that goes about (``rules/rumours.py``), told at once when the hero is there.
+A beat never takes a protected person away (a companion, the giver of an open quest, anyone its steps need): it waits.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.state.changes import FactLearned, StateChange
+from app.apps.rpg.rules.consequences import moved_people
 
 MINUTES_PER_DAY = 24 * 60
+BEATS_PER_DAY = 3
+GAME_MASTER_GOAL = "game-master"  # where a person the game master moves is kept, as a beat's move is
+DAYS_AT_ONCE = 3  # the days of beats one stretch of time away rolls (a week's sleep is not a week of story)
 
 
 @dataclass(frozen=True)
@@ -88,6 +101,8 @@ def whereabouts(simulation: Mapping[str, Any], minute: int, *, since: int | None
     listed = {_s(_d(npc).get("id")): place_id for place_id, place in _d(world.get("locations")).items()
               for npc in _l(_d(place).get("present_npcs")) if _s(_d(npc).get("id"))}  # where the world put them
     party = set(companions(simulation))
+    moved = {**moved_people(simulation),  # a day the world's facts replaced (rules/consequences.py, EV-1)
+             **beat_moves(simulation)}  # and one a beat of their goals did (EV-4)
     here = hero_at or hero_location(simulation)
     scene_at, scene = present_now(simulation)
     with_hero = set(scene) if scene_at and scene_at == here else set()
@@ -96,6 +111,9 @@ def whereabouts(simulation: Mapping[str, Any], minute: int, *, since: int | None
         kept = _d(index.get(npc_id))
         if npc_id in party:
             found[npc_id] = Whereabouts(here)
+            continue
+        if npc_id in moved:  # where the world's facts put them; gone, nowhere
+            found[npc_id] = Whereabouts(*moved[npc_id])
             continue
         schedule = schedules.get(npc_id) or []
         now = _step(schedule, minute)
@@ -111,6 +129,194 @@ def whereabouts(simulation: Mapping[str, Any], minute: int, *, since: int | None
             found[npc_id] = Whereabouts(_s(kept.get("location_id")) or _s(_d(person).get("location_id"))
                                         or listed.get(npc_id, ""), _s(kept.get("activity")))
     return found
+
+
+def fold_move(document: Mapping[str, Any], payload: Mapping[str, Any]):
+    """A person the game master moves (EV-0): one of the world's, to one of its places; never a protected person (a
+    companion, the giver of an open quest, anyone an open quest's step needs), within the day's limit."""
+    from app.apps.rpg.foundation.state.changes import BeatAdvanced, PersonWhereabouts, WhereaboutsChanged
+    from app.apps.rpg.foundation.state.proposals import Folded, refused
+    from app.apps.rpg.rules.direction import allows, counted, protected
+
+    simulation = _d(_sections.simulation_state_of(document))
+    world = _d(_sections.world_model_of(simulation))
+    npc_id, place = _s(payload.get("npc_id")), _s(payload.get("location_id"))
+    if npc_id not in _d(world.get("npcs")) or place not in _d(world.get("locations")):
+        return refused("no such person or place in this world")
+    if npc_id in protected(simulation):
+        return refused("a protected person moves only with the hero")
+    limit = allows(simulation, "move")
+    if limit:
+        return refused(limit)
+    # Kept as a beat's move is (``beat_moves``), so the person's day does not take them back at the next hour.
+    now = clock(simulation)
+    return Folded([WhereaboutsChanged(people=(PersonWhereabouts(npc_id=npc_id, location_id=place,
+                                                                activity=_s(payload.get("activity"))),)),
+                   BeatAdvanced(person_id=npc_id, goal_id=GAME_MASTER_GOAL, beat=f"moved:{now}", location_id=place,
+                                activity=_s(payload.get("activity")), source="game_master", at_minute=now),
+                   counted(simulation, "move")])
+
+
+def goals(simulation: Mapping[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Each person's goals with beats, as the routines author them: (person, goal), in the routines' order."""
+    world = _d(_sections.world_model_of(simulation))
+    people = _d(world.get("npcs"))
+    return [(_s(_d(routine).get("npc_id")), _d(goal)) for routine in _l(world.get("routines"))
+            if _s(_d(routine).get("npc_id")) in people
+            for goal in _l(_d(routine).get("goals")) if _s(_d(goal).get("goal_id")) and _l(_d(goal).get("beats"))]
+
+
+def beat_address(npc_id: str, goal_id: str, beat_id: str) -> str:
+    return f"beat:{npc_id}:{goal_id}:{beat_id}"
+
+
+def beat_by_address(simulation: Mapping[str, Any], address: str) -> dict[str, Any]:
+    """The authored beat an address names ({} when none does)."""
+    for npc_id, goal in goals(simulation):
+        for beat in map(_d, _l(goal.get("beats"))):
+            if beat_address(npc_id, _s(goal.get("goal_id")), _s(beat.get("id"))) == address:
+                return beat
+    return {}
+
+
+def reached(simulation: Mapping[str, Any], npc_id: str, goal_id: str) -> list[str]:
+    """The beats of a person's goal reached so far, in order."""
+    held = _d(_d(_d(_sections.goal_state_of(simulation)).get(npc_id)).get(goal_id))
+    return [_s(beat) for beat in _l(held.get("beats")) if _s(beat)]
+
+
+def beat_moves(simulation: Mapping[str, Any]) -> dict[str, tuple[str, str]]:
+    """Where beats (and the game master) have taken people, the latest by when: (place, activity); gone, ("", "")."""
+    found: dict[str, tuple[int, str, str]] = {}
+    for npc_id, row in _d(_sections.goal_state_of(simulation)).items():
+        for held in map(_d, _d(row).values()):
+            if _s(held.get("location_id")) or held.get("gone") is True:
+                at = int(held.get("at") if held.get("at") is not None else int(held.get("day") or 0) * MINUTES_PER_DAY)
+                if str(npc_id) not in found or at >= found[str(npc_id)][0]:
+                    found[str(npc_id)] = (at, _s(held.get("location_id")), _s(held.get("activity")))
+    return {npc_id: (place, activity) for npc_id, (_, place, activity) in found.items()}
+
+
+def next_beat(simulation: Mapping[str, Any], npc_id: str, goal: Mapping[str, Any], *,
+              also: Iterable[str] = ()) -> dict[str, Any]:
+    """The beat a person's goal comes to next ({} when all are reached; ``also``: beats reached since)."""
+    done = {*reached(simulation, npc_id, _s(goal.get("goal_id"))), *also}
+    return next((_d(beat) for beat in _l(goal.get("beats")) if _s(_d(beat).get("id")) not in done), {})
+
+
+def _ready(simulation: Mapping[str, Any], npc_id: str, beat: Mapping[str, Any], day: int, *,
+           since: Mapping[str, Any] | None = None) -> bool:
+    """Whether a beat's condition holds on ``day`` (``since``: facts set since, by id and value)."""
+    from app.apps.rpg.rules.consequences import world_facts
+    from app.apps.rpg.rules.direction import protected
+
+    facts = {**world_facts(simulation), **{fact: {"value": value} for fact, value in _d(since).items()}}
+    if day < int(beat.get("after_day") or 0):
+        return False
+    if any(fact not in facts or facts[fact].get("value") != value for fact, value in _d(beat.get("when")).items()):
+        return False
+    if _s(beat.get("visited")) and _s(beat.get("visited")) not in visited(simulation):
+        return False
+    return not (isinstance(beat.get("move"), Mapping) and npc_id in protected(simulation))
+
+
+def _home(simulation: Mapping[str, Any], npc_id: str) -> str:
+    where = whereabouts(simulation, clock(simulation)).get(npc_id)
+    return where.location_id if where else ""
+
+
+def advance(simulation: Mapping[str, Any], npc_id: str, goal: Mapping[str, Any], beat: Mapping[str, Any], *,
+            source: str, at_minute: int | None = None) -> tuple[list[StateChange], list[str]]:
+    """A person reaches ``beat``: its changes, and what the hero sees of it when they are where it is told (the word
+    heard, and the facts it set known)."""
+    from app.apps.rpg.foundation.state.changes import BeatAdvanced, FactSet, RumourHeard
+    from app.apps.rpg.rules.rumours import spread
+
+    goal_id, beat_id = _s(goal.get("goal_id")), _s(beat.get("id"))
+    move = _d(beat.get("move")) if isinstance(beat.get("move"), Mapping) else None
+    places = [_s(place) for place in _l(beat.get("told_at"))] or [_home(simulation, npc_id), _s(goal.get("location_id"))]
+    changes: list[StateChange] = [BeatAdvanced(
+        person_id=npc_id, goal_id=goal_id, beat=beat_id, source=source, at_minute=at_minute,
+        **({"location_id": _s(move.get("location")), "activity": _s(move.get("activity")),
+            "gone": not _s(move.get("location"))} if move is not None else {}))]
+    from app.apps.rpg.rules.consequences import world_facts
+
+    held = world_facts(simulation)
+    facts = [FactSet(fact_id=_s(fact.get("fact")), value=fact.get("value", True), source=source, known=False,
+                     told=_s(fact.get("told")))
+             for fact in map(_d, _l(beat.get("sets"))) if _s(fact.get("fact"))
+             and _d(held.get(_s(fact.get("fact")))).get("value", object()) != fact.get("value", True)]  # not again
+    changes += facts
+    address = beat_address(npc_id, goal_id, beat_id)
+    word = spread(address, _s(beat.get("rumour")), places, text_id=address, source=source) if _s(beat.get("rumour")) else []
+    changes += word
+    if not any(rumour.place_id == hero_location(simulation) for rumour in word):
+        return changes, []
+    # The hero is there when it happens: they hear it (every place's copy), and know what it set.
+    changes += [RumourHeard(rumour_id=rumour.rumour_id, source="seen") for rumour in word]
+    changes += [FactLearned(fact_id=fact.fact_id, source="seen") for fact in facts]
+    return changes, [word[0].text]
+
+
+def daily_beats(simulation: Mapping[str, Any], *, before: int, after: int) -> tuple[list[StateChange], list[str]]:
+    """The beats people reach on the days the clock crosses from minute ``before`` to ``after`` (the last
+    ``DAYS_AT_ONCE`` of them, ``BEATS_PER_DAY`` a day): each goal's next beat that is ready, by its chance, rolled once
+    a day by a stream seeded by the campaign, the day and the beat."""
+    from app.apps.rpg.foundation.core.determinism import rng_for, stable_sub_index
+    from app.apps.rpg.foundation.state.changes import FactSet
+
+    first, last = before // MINUTES_PER_DAY + 1, after // MINUTES_PER_DAY
+    seed = int(_sections.rng_seed_of(simulation) or 0) % 2**64
+    changes: list[StateChange] = []
+    lines: list[str] = []
+    since: dict[str, Any] = {}  # the facts the beats of earlier days set: a later beat may wait on them
+    done: dict[tuple[str, str], list[str]] = {}
+    for day in range(max(first, last - DAYS_AT_ONCE + 1), last + 1):
+        taken = 0
+        for npc_id, goal in goals(simulation):
+            if taken >= BEATS_PER_DAY:
+                break
+            key = (npc_id, _s(goal.get("goal_id")))
+            if done.get(key) and done[key][-1].startswith(f"{day}:"):
+                continue  # one beat of a goal a day
+            beat = next_beat(simulation, npc_id, goal, also=[beat_id.partition(":")[2] for beat_id in done.get(key, ())])
+            if not beat or not _ready(simulation, npc_id, beat, day, since=since):
+                continue
+            address = beat_address(npc_id, _s(goal.get("goal_id")), _s(beat.get("id")))
+            chance = float(beat["chance"]) if beat.get("chance") is not None else 0.5
+            if rng_for(seed, day, "goal_beat", stable_sub_index(address)).random() >= chance:
+                continue
+            made, said = advance(simulation, npc_id, goal, beat, source=f"day:{day}", at_minute=day * MINUTES_PER_DAY)
+            since.update({change.fact_id: change.value for change in made if isinstance(change, FactSet)})
+            done.setdefault(key, []).append(f"{day}:{_s(beat.get('id'))}")
+            changes += made
+            lines += said
+            taken += 1
+    return changes, lines
+
+
+def fold_beat(document: Mapping[str, Any], payload: Mapping[str, Any]):
+    """A beat the game master brings forward (EV-0, EV-4): the next of a person's goal, when it is ready (its chance
+    is the game master's choice); never one that takes a protected person away; within the day's limit."""
+    from app.apps.rpg.foundation.state.proposals import Folded, refused
+    from app.apps.rpg.rules.direction import allows, counted
+
+    simulation = _d(_sections.simulation_state_of(document))
+    npc_id, goal_id = _s(payload.get("npc_id")), _s(payload.get("goal_id"))
+    goal = next((row for person, row in goals(simulation) if person == npc_id and _s(row.get("goal_id")) == goal_id),
+                None)
+    if goal is None:
+        return refused("no such goal with beats")
+    beat = next_beat(simulation, npc_id, goal)
+    if not beat:
+        return refused("every beat of that goal is reached")
+    if not _ready(simulation, npc_id, beat, clock(simulation) // MINUTES_PER_DAY):
+        return refused(f"{_s(beat.get('id'))} is not ready (its condition, or a protected person)")
+    limit = allows(simulation, "beat")
+    if limit:
+        return refused(limit)
+    made, _ = advance(simulation, npc_id, goal, beat, source="game_master")
+    return Folded([*made, counted(simulation, "beat")])
 
 
 def present_at(simulation: Mapping[str, Any], location_id: str, minute: int, *, since: int | None = None) -> list[str]:
@@ -171,5 +377,6 @@ def comings_and_goings(world_model: Mapping[str, Any], before: list[str], after:
     return lines
 
 
-__all__ = ["MINUTES_PER_DAY", "Whereabouts", "clock", "comings_and_goings", "companions", "described", "hero_location", "is_wild",
-           "moves", "present_at", "present_now", "whereabouts"]
+__all__ = ["BEATS_PER_DAY", "MINUTES_PER_DAY", "Whereabouts", "advance", "beat_address", "beat_by_address", "beat_moves",
+           "clock", "comings_and_goings", "companions", "daily_beats", "described", "fold_beat", "fold_move", "goals",
+           "hero_location", "is_wild", "moves", "next_beat", "present_at", "present_now", "reached", "whereabouts"]

@@ -56,12 +56,20 @@ def test_a_journey_moves_the_party_says_who_is_there_and_takes_the_roads_time() 
     assert scene["present_npc_ids"] == ["npc:orik", "npc:liora"]
 
 
-def test_a_place_further_off_is_set_out_for_by_the_first_road_of_the_way() -> None:
+def test_a_place_further_off_is_one_journey_by_each_place_on_the_way() -> None:
     far = resolve_travel(PlannedAction(mechanic="travel", target_id="loc:ruins"), _campaign())
-    assert not far.refused and far.destination == "loc:village" and far.minutes == 20
-    assert far.lines[:2] == ["You set out for The Ruins: the way goes by The Village.",
-                             "You travel to The Village; the road takes 20 minutes."]
-    assert "location_changed" in [change.type for change in far.changes]
+    assert not far.refused and far.destination == "loc:ruins" and far.minutes == 140  # one turn, both roads (EV-7)
+    assert far.lines[:2] == ["You travel to The Ruins; the way takes 140 minutes.", "Here: Liora."]
+    assert [change.location_id for change in far.changes if change.type == "location_changed"] == ["loc:village",
+                                                                                                    "loc:ruins"]
+
+
+def test_a_journey_stops_where_a_quests_place_is_reached() -> None:
+    campaign = _campaign()
+    campaign["simulation_state"]["quest_state"] = {"quests": [{"id": "quest:v", "title": "V", "status": "active",
+                                                                "locations": ["loc:village"]}]}
+    far = resolve_travel(PlannedAction(mechanic="travel", target_id="loc:ruins"), campaign)
+    assert far.destination == "loc:village" and far.lines[0] == "You set out for The Ruins and stop at The Village, 20 minutes on."
 
 
 def test_a_place_no_road_reaches_and_the_place_the_hero_is_in_are_refused_and_change_nothing_else() -> None:

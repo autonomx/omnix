@@ -6,8 +6,11 @@ so the author can see it, correct it and keep it. A section the world already wr
 deterministic: no model is asked, so the same lore gives the same draft.
 
 - economy: each person whose role serves the public sells what launch would have them sell, at its prices; only
-  goods that are the world's own items.
-- routines: where each person is found (their place, all day) and their goals as the lore states them.
+  goods that are the world's own items; and the world's gear no one sells, by the first seller of goods, priced by
+  the level budgets' table for its slot (EV-6).
+- routines: where each person is found (their place, all day) and their goals as the lore states them, each with a
+  first beat: word that the person is pursuing it (EV-4, EV-6).
+- quests: each quest's steps, from its places in order and, at the end, word with whoever gives it (EV-6).
 - knowledge: what each person says openly (their public truth) and what they keep until trusted (their secrets).
 - pressures: the world's own pressures (its ``pressure`` entities, pulled by the quests that name them), then the
   danger its creatures put on each region's roads.
@@ -26,6 +29,12 @@ from .published_pressures import derived_pressures
 from .published_world_setup import derived_behaviour, session_world_model, threat_stats
 from .world_play_sections import (
     CreaturePlay,
+    GoalBeat,
+    Price,
+    QuestCondition,
+    QuestPlay,
+    QuestStep,
+    QuestWay,
     KnowledgeFact,
     NpcGoal,
     NpcKnowledge,
@@ -98,6 +107,34 @@ def _economy(canon: Mapping[str, Any], model: Mapping[str, Any]) -> list[Provide
         if sells:
             providers.append(ProviderEconomy(provider_id=provider_id, location_id=provider["location_id"],
                                              sells=tuple(sells)))
+    return _with_gear(canon, providers)
+
+
+def _with_gear(canon: Mapping[str, Any], providers: list[ProviderEconomy]) -> list[ProviderEconomy]:
+    """The world's gear that no one sells, offered by the first seller of goods, priced for its slot at level 1."""
+    from app.apps.rpg.rules.budgets import derived
+
+    sold = {offer.item_id for provider in providers for offer in provider.sells}
+    gear = [row for row in lore_rows(canon, "items") if isinstance(row.get("equipment"), Mapping)
+            and _text(row.get("id")) and _text(row.get("id")) not in sold]
+    index = next((index for index, provider in enumerate(providers)
+                  if any(offer.service == "shop_goods" for offer in provider.sells)), None)
+    if index is None or not gear:
+        return providers
+    bands = derived(1).items
+    offers = list(providers[index].sells)
+    for row in gear:
+        band = bands.get(_text(dict(row["equipment"]).get("slot")))
+        if band is None:
+            continue
+        copper = (band.price_copper.low + band.price_copper.high) // 2
+        try:
+            offers.append(ShopOffer(offer_key=_slug(_text(row["id"]).rsplit(":", 1)[-1]), service="shop_goods",
+                                    name=_short(_text(row.get("name")) or _text(row["id"]), 120), item_id=_text(row["id"]),
+                                    price=Price(gold=0, silver=copper // 100, copper=copper % 100)))
+        except ValidationError:
+            continue
+    providers[index] = providers[index].model_copy(update={"sells": tuple(offers)})
     return providers
 
 
@@ -109,9 +146,12 @@ def _routines(model: Mapping[str, Any]) -> list[NpcRoutine]:
                          activity=_short(_text(npc.get("role")), 160)),)
             if npc.get("location_id") else ()
         )
+        name = _text(npc.get("name")) or npc_id
         goals = tuple(
             NpcGoal(goal_id=f"{_slug(npc_id.rsplit(':', 1)[-1])}-goal-{index + 1}", summary=_short(goal, 300),
-                    priority=max(1, 4 - index))
+                    priority=max(1, 4 - index),
+                    beats=(GoalBeat(id="word-of-it", chance=0.3, after_day=1,
+                                    rumour=_short(f"{name} is said to be working to {goal[:1].lower()}{goal[1:]}.", 600)),))
             for index, goal in enumerate(_texts(npc.get("goals")))
         )
         if schedule or goals:
@@ -192,9 +232,28 @@ def _bestiary(canon: Mapping[str, Any]) -> list[CreaturePlay]:
     return creatures
 
 
+def _quests(canon: Mapping[str, Any], places: Mapping[str, Mapping[str, Any]]) -> list[QuestPlay]:
+    """Each quest's steps: reach each of its places in order, then, when someone gives it, report back to them."""
+    quests = []
+    for row in lore_rows(canon, "quests"):
+        quest_id, giver = _text(row.get("id")), _text(row.get("giver_id") or row.get("quest_giver"))
+        locations = [place for place in _texts(row.get("locations")) if place in places]
+        steps = [QuestStep(id=f"step-{index + 1}", summary=_short(f"Go to {_text(places[place].get('name')) or place}.", 300),
+                           ways=(QuestWay(conditions=(QuestCondition(kind="reach", subject=place),)),))
+                 for index, place in enumerate(locations[:5])]
+        if giver:
+            steps.append(QuestStep(id=f"step-{len(steps) + 1}", summary="Report back.",
+                                   ways=(QuestWay(conditions=(QuestCondition(kind="talk", subject=giver),)),)))
+        if quest_id and steps:
+            try:
+                quests.append(QuestPlay(id=quest_id, giver_id=giver, steps=tuple(steps)))
+            except ValidationError:
+                continue
+    return quests
+
+
 def generate_play_sections(revision: Any, *, start_location_id: str = "") -> dict[str, Any]:
-    """A draft of every section from the revision's lore; a section the world already wrote is kept as written. A
-    quest's steps are its author's: World Forge drafts none (a quest without them is done by reaching its places)."""
+    """A draft of every section from the revision's lore; a section the world already wrote is kept as written."""
     canon = dict(getattr(revision, "canon", None) or {})
     written = play_sections_document(canon)
     authored = set(parse_play_sections(canon)[0].authored)
@@ -212,7 +271,8 @@ def generate_play_sections(revision: Any, *, start_location_id: str = "") -> dic
         else [row.model_dump(mode="json", exclude_none=True) for row in _pressures(canon, places)],
         "bestiary": written["bestiary"] if "bestiary" in authored
         else [row.model_dump(mode="json", exclude_none=True) for row in _bestiary(canon)],
-        "quests": written["quests"],
+        "quests": written["quests"] if "quests" in authored
+        else [row.model_dump(mode="json", exclude_none=True) for row in _quests(canon, places)],
     }
     return PlaySectionsDraft.model_validate(draft).model_dump(mode="json", exclude_none=True)
 

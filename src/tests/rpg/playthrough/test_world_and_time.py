@@ -38,16 +38,16 @@ def test_travel_across_three_places_and_back(launch, world) -> None:
 
 
 @pytest.mark.parametrize("world", in_worlds("aurelia"))
-def test_a_place_further_off_is_set_out_for_a_road_a_turn(launch, world) -> None:
+def test_a_place_further_off_is_one_journey_stopping_where_the_road_is_barred(launch, world) -> None:
     play = launch(world)
     play.turn("go to Starfall Village")
     refused = play.turn("go to Starfall Village")  # already there: not back out to the grove
     assert play.location() == "location:aurelia:starfall-village"
     assert "You are already in Starfall Village" in refused["visible_response"]["plain_text"]
-    first = play.turn("go to Moonroot Ruins")  # more than one road away
-    assert "You set out for Moonroot Ruins" in first["visible_response"]["plain_text"]
-    assert play.location() not in {"location:aurelia:starfall-village", "location:aurelia:moonroot-ruins"}
-    for _ in range(4):  # each place on the way is arrived at, whatever its road holds (encounters.md)
+    first = play.turn("go to Moonroot Ruins")  # more than one road away: one journey (EV-7)
+    assert "Moonroot Ruins" in first["visible_response"]["plain_text"]
+    assert play.location() != "location:aurelia:starfall-village"
+    for _ in range(4):  # it stops where something bars the road, and goes on from there (encounters.md)
         play.clear_the_road()
         if play.location() == "location:aurelia:moonroot-ruins":
             break

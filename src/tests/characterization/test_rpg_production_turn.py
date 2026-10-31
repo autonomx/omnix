@@ -59,6 +59,17 @@ class _ScriptedModel:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.session_id = ""  # every typed line goes to the intent call (EV-9), read against this campaign
+
+    def _read_line(self, text: str) -> str:
+        """The intent call read as the grammar reads the line; "" where it reads nothing the game acted on."""
+        from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
+        from tests.support.rpg_line_reader.reader import read_line
+
+        said = re.search(r"\nPLAYER: (.*)\n", text)
+        document = load_session_from_postgres(self.session_id) if self.session_id and said else None
+        read = read_line(document, said.group(1).strip()) if document else {}
+        return json.dumps(read) if read.get("readings") or read.get("question") else ""
 
     def chat_completion(self, messages, model=None, stream=False, **kwargs):
         from app.providers.base import ChatResponse
@@ -69,6 +80,8 @@ class _ScriptedModel:
                 break
         else:
             kind, answer = "unscripted", "{}"
+        if kind == "turn_intent":
+            answer = self._read_line(text) or answer
         self.calls.append(kind)
         response = ChatResponse(content=answer, model="scripted")
         return iter([response]) if stream else response
@@ -172,6 +185,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
         def play() -> dict:
             created = create_new_game_session(RpgNewGameRequest(seed=SEED))
             session_id = str(created["session_id"])
+            model.session_id = session_id
             app = FastAPI()
             include_router_registrar(app, register_rpg_session_routes)
             client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})

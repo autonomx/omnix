@@ -21,7 +21,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 from app.apps.rpg.foundation.state import access as _sections
 
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 17
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -278,6 +278,75 @@ def _to_v11_secrets_kept(document: dict[str, Any]) -> dict[str, Any]:
     return keep_secrets_to_themselves(document)
 
 
+def _to_v12_what_the_hero_knows(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 12 (evolution roadmap EV-1 and EV-2, phase 1's one version): the record of what the hero knows, seeded
+    from what the campaign already kept (``rules/hero_knowledge.seeded_record``), and the world's facts and group
+    standings, empty. EV-2's fields of a fight (a fighter's ``phase``, ``guards``, ``flanking``, ``no_escape``,
+    ``resists`` and ``recovers``, and the bosses ``left``) are new in this version's combat state; a fight from before
+    has none, and reads each as its default (no phase, no guard, an escape, a foe that regains all it lost)."""
+    from app.apps.rpg.rules.hero_knowledge import seeded_record
+
+    simulation = _sections.simulation_state_of(document)
+    if isinstance(simulation, dict):
+        simulation.setdefault("hero_knowledge", seeded_record(simulation))
+        simulation.setdefault("world_facts", {})
+        simulation.setdefault("group_standing", {})
+    return document
+
+
+def _to_v13_directed(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 13 (evolution roadmap EV-0, part 1): the game master's bookkeeping, begun at the campaign's present
+    turn (so a campaign upgraded is not taken for a stalled one), with no wishes noted yet."""
+    simulation = _sections.simulation_state_of(document)
+    if isinstance(simulation, dict):
+        turns = int(_safe_dict(document.get("state")).get("turn_count") or 0)
+        simulation.setdefault("direction", {"last_event_turn": turns, "events": {}, "complications": {}, "wishes": []})
+    return document
+
+
+def _to_v14_goals_and_word(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 14 (evolution roadmap EV-4): the beats each person has reached toward their goals, none yet; and the
+    rumours going about in their new shape (``rules/rumours.py``: a place, its line, heard or not). Nothing on the
+    pipeline read ``active_rumors`` before, so an entry of any older shape is not word the hero could hear: dropped."""
+    simulation = _sections.simulation_state_of(document)
+    if isinstance(simulation, dict):
+        if not isinstance(simulation.get("npc_goal_state"), dict):
+            simulation["npc_goal_state"] = {}
+        simulation["active_rumors"] = [row for row in _sections.active_rumors_of(simulation) or ()
+                                       if isinstance(row, dict) and row.get("rumour_id") and row.get("place_id")]
+    return document
+
+
+def _to_v15_lore_layer(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 15 (evolution roadmap EV-0, part 2): the campaign's lore layer, what the game master invents, empty."""
+    simulation = _sections.simulation_state_of(document)
+    if isinstance(simulation, dict) and not isinstance(simulation.get("lore_layer"), dict):
+        simulation["lore_layer"] = {"entries": {}}
+    return document
+
+
+def _to_v16_areas(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 16 (evolution roadmap EV-10): what each larger area has had filled in, and what exploring has found
+    and cleared, none of it yet."""
+    simulation = _sections.simulation_state_of(document)
+    if isinstance(simulation, dict):
+        if not isinstance(simulation.get("area_detail"), dict):
+            simulation["area_detail"] = {}
+        if not isinstance(simulation.get("exploration"), dict):
+            simulation["exploration"] = {"found": [], "cleared": {}}
+    return document
+
+
+def _to_v17_tiers(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 17 (evolution roadmap EV-5): each piece of gear the hero carries has its tier, none improved yet."""
+    player = _sections.player_state_of(_sections.simulation_state_of(document))
+    items = _sections.inventory_state_of(player)
+    for row in (items.get("items") if isinstance(items, dict) else None) or ():
+        if isinstance(row, dict) and isinstance(row.get("equipment"), dict):
+            row.setdefault("tier", 0)
+    return document
+
+
 # (target version, upcaster), in order. Version 5 marks the interaction
 # timeline, which the normalization below keeps for every version.
 UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = (
@@ -288,6 +357,12 @@ UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = 
     (9, _to_v9_given_once),
     (10, _to_v10_as_a_turn_reads_it),
     (11, _to_v11_secrets_kept),
+    (12, _to_v12_what_the_hero_knows),
+    (13, _to_v13_directed),
+    (14, _to_v14_goals_and_word),
+    (15, _to_v15_lore_layer),
+    (16, _to_v16_areas),
+    (17, _to_v17_tiers),
 )
 
 
