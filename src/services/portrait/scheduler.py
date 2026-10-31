@@ -70,6 +70,10 @@ class StreamSettings:
     # for the first frames (D-5); before its first play-position report, that is the play estimate.
     start_buffer_seconds: float = 0.4
     start_hold_seconds: float = 0.25
+    # How far ahead of playback a reply's frames are made (None: as soon as its audio allows). TTS runs faster than
+    # real time, so a whole reply was rendered in a burst at its start, on the GPU the LLM and TTS were using for
+    # it (the paired gate's +12% to first sound); a pass and its decode take well under 0.1 s.
+    render_ahead_seconds: float | None = 1.0
 
 
 @dataclass(frozen=True)
@@ -552,6 +556,8 @@ class PortraitStream:
     def _pump_output(self, output: Output, session: MotionSession, limit: int | None = None) -> int:
         sent = 0
         while not output.cancelled and (limit is None or output.committed < limit):
+            if limit is None and self._far_ahead(output):
+                break  # its next frames play later than the render-ahead window: made then
             flush_to = output.flush_target(self.clock(), self.round_trip_seconds)
             plan = plan_pass(self.settings, output.committed, output.available_frames, flush_to)
             if plan is None:
@@ -576,6 +582,14 @@ class PortraitStream:
             if output.ended and output.committed >= output.total_frames:
                 break
         return sent
+
+    def _far_ahead(self, output: Output) -> bool:
+        """Whether the output's next frame plays further ahead than ``render_ahead_seconds`` (unknown: not)."""
+        ahead = self.settings.render_ahead_seconds
+        if ahead is None or output.held is not None:
+            return False
+        play = output.play_time(output.committed)
+        return play is not None and play - self.clock() > ahead
 
     def _decode_committed(self, output: Output, session: MotionSession) -> int:
         sent = 0

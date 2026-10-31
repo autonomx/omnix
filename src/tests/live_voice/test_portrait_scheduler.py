@@ -17,6 +17,8 @@ from services.portrait.scheduler import (
 )
 
 SETTINGS = StreamSettings()
+# These tests drive a clock that stands still: frames are made as soon as their audio allows, not paced to playback.
+EAGER = StreamSettings(render_ahead_seconds=None)
 
 
 class FakeSession:
@@ -66,7 +68,7 @@ def _stream(clock: Clock | None = None, *, transitions: bool = False) -> tuple[P
         if transitions or frame.output_id != TRANSITION_OUTPUT_ID:
             frames.append(frame)
 
-    stream = PortraitStream(session, emit, clock=clock or Clock())
+    stream = PortraitStream(session, emit, settings=EAGER, clock=clock or Clock())
     return stream, session, frames
 
 
@@ -203,7 +205,7 @@ def test_cancel_stops_between_micro_batches_and_ignores_the_outputs_late_audio()
         if len(frames) == 2:
             stream.cancel("out-1", 1)
 
-    stream = PortraitStream(session, emit, clock=Clock())
+    stream = PortraitStream(session, emit, settings=EAGER, clock=Clock())
     stream.phrase_start("out-1", 1, "seg-a", 16_000)
     stream.pcm("seg-a", 0, _pcm(2.0, 16_000))
     stream.pump()
@@ -214,6 +216,27 @@ def test_cancel_stops_between_micro_batches_and_ignores_the_outputs_late_audio()
     # A new output starts fresh from the rest pose.
     stream.phrase_start("out-2", 2, "seg-c", 16_000)
     assert session.resets == 2 and stream.output is not None and stream.output.output_id == "out-2"
+
+
+def test_a_reply_is_made_at_most_the_render_ahead_window_before_it_plays() -> None:
+    # A reply's audio arrives faster than real time: made all at once, its frames competed for the GPU with the LLM
+    # and TTS at the reply's start (the paired gate's +12% to first sound, 2026-10-31).
+    clock, session, frames = Clock(), FakeSession(), []
+    stream = PortraitStream(session, frames.append, clock=clock)
+    stream.phrase_start("turn-1", 1, "seg-a", 16_000)
+    stream.pcm("seg-a", 0, _pcm(6.0, 16_000))  # six seconds of reply, all here at once
+    stream.pump()
+    # Playback starts at the hold's end (0.25 s): the first two passes (28 frames); frame 28 plays 1.37 s from now.
+    assert len(frames) == 28
+    clock.now += 1.0
+    stream.pump()
+    assert len(frames) == 48  # a second later, the next hop
+    stream.output_end("turn-1", 1)
+    stream.pump()
+    assert len(frames) == 48  # the end does not hurry the rest either
+    clock.now += 10.0
+    stream.pump()
+    assert len([frame for frame in frames if frame.output_id == "turn-1"]) == 150  # all of it, as playback reaches it
 
 
 def test_the_tts_priority_pause_holds_work_until_released() -> None:

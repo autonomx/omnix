@@ -430,12 +430,13 @@ def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, s
     Only the clip's own frames: not the transition back to the idle loop a call's reply ends with. Raises
     PreviewAborted, between passes, once ``abort`` is true.
     """
-    from services.portrait.scheduler import TRANSITION_OUTPUT_ID, PortraitStream
+    from services.portrait.scheduler import TRANSITION_OUTPUT_ID, PortraitStream, StreamSettings
 
     frames: list[bytes] = []
     stream = PortraitStream(_GivesWay(runtime.session(portrait, emotion), abort),
                             lambda frame: frames.append(frame.jpeg) if frame.output_id != TRANSITION_OUTPUT_ID else None,
-                            resample=runtime.resample)
+                            resample=runtime.resample,
+                            settings=StreamSettings(render_ahead_seconds=None))  # the whole clip, nothing plays it
     stream.phrase_start("preview", 0, "preview", sample_rate)
     stream.pcm("preview", 0, pcm)
     stream.phrase_done("preview")
