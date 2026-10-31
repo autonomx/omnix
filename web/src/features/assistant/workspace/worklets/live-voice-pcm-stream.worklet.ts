@@ -42,6 +42,8 @@ type PcmStreamMessage = {
   minimumBufferedSpeechSamples?: unknown;
   notBeforeRenderSample?: unknown;
   reason?: unknown;
+  enabled?: unknown;
+  startHoldSamples?: unknown;
 };
 
 function integer(value: unknown): number | undefined {
@@ -83,6 +85,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   lastProgressSamples = 0;
   activeSegment: ActiveSegment | null = null;
   activeSegmentPlayedSamples = 0;
+  // The live portrait's clock: the active segment's played samples every 20 ms, while a portrait shows.
+  portraitClockIntervalSamples = 0;
+  portraitClockSamples = 0;
+  // The portrait's start hold (D-5): an output's start waits for its first frames, at most this long.
+  startHoldSamples = 0;
+  // When the hold began, and for which segment: a hold given up (the turn cancelled, the clock off) never
+  // carries its start over to the next turn's (review finding, 2026-10-31).
+  startHold: { segmentId: string; since: number } | null = null;
+  lastHeldEpoch: number | null = null;
+  portraitReadySegments = new Set<string>();
 
   constructor(options: ProcessorOptions) {
     super();
@@ -154,7 +166,23 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     });
   }
 
-  reportAvatarPlayback(renderedSamples: number, speechSquareSum: number): void {
+  reportPortraitClock(renderedSamples: number): void {
+    if (!this.portraitClockIntervalSamples || !this.activeSegment) return;
+    this.portraitClockSamples += Math.max(0, Number(renderedSamples) || 0);
+    if (this.portraitClockSamples < this.portraitClockIntervalSamples) return;
+    this.portraitClockSamples = 0;
+    // The count includes this quantum, so it holds at the quantum's end, not at `currentTime` (its start);
+    // the render clock has already counted it.
+    const at = typeof currentTime === 'number'
+      ? currentTime + Math.max(0, Number(renderedSamples) || 0) / sampleRate
+      : this.renderClockSamples / sampleRate;
+    this.emit('portrait_clock', { ...this.segmentFields(), audio_context_time_seconds: at });
+  }
+
+  /** ``playing``: whether this quantum played the active segment; while waiting (an underrun, a held start) its
+   * count stands still, and a report then would carry a newer time for the same count (review finding). */
+  reportAvatarPlayback(renderedSamples: number, speechSquareSum: number, playing = true): void {
+    if (playing) this.reportPortraitClock(renderedSamples);
     this.avatarEnvelopeSamples += Math.max(0, Number(renderedSamples) || 0);
     this.avatarEnvelopeSquareSum += Math.max(0, Number(speechSquareSum) || 0);
     if (this.avatarEnvelopeSamples < this.avatarEnvelopeIntervalSamples) return;
@@ -170,6 +198,21 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   }
 
   handleMessage(message: PcmStreamMessage): void {
+    if (message.type === 'set_portrait_clock') {
+      this.portraitClockIntervalSamples = message.enabled ? Math.max(128, Math.round(sampleRate * 0.02)) : 0;
+      this.portraitClockSamples = 0;
+      this.startHoldSamples = message.enabled ? Math.max(0, Math.round(Number(message.startHoldSamples) || 0)) : 0;
+      this.maybeStartOrResume();
+      return;
+    }
+    if (message.type === 'portrait_frames_ready') {
+      this.portraitReadySegments.add(String(message.segmentId || ''));
+      if (this.portraitReadySegments.size > 64) {
+        this.portraitReadySegments.delete(this.portraitReadySegments.values().next().value as string);
+      }
+      this.maybeStartOrResume();
+      return;
+    }
     if (message.type === 'set_start_policy') {
       this.startPolicy = {
         notBeforeRenderSample: Math.max(0, Number(message.notBeforeRenderSample) || 0),
@@ -291,6 +334,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       const segmentId = String(message.segmentId || '');
       if (segmentId && !this.terminalSegments.has(segmentId)) this.endedSegments.add(segmentId);
       this.maybeCompleteActiveSegment();
+      this.maybeStartOrResume();
       return;
     }
     if (message.type === 'phrase_end' && integer(message.phraseIndex) !== undefined) {
@@ -363,8 +407,12 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   maybeStartOrResume(): void {
     const onsetReady = this.renderClockSamples >= this.startPolicy.notBeforeRenderSample;
     const speechReady = this.bufferedSpeechSamples >= this.startPolicy.minimumBufferedSpeechSamples;
-    const finalShortInputReady = this.inputEnded && this.bufferedSpeechSamples > 0;
+    // No more audio is coming for what is queued: the input ended, or (a call's shared session, whose input never
+    // ends between turns) every queued segment has. Waiting for a buffer target would then hold it forever.
+    const queueComplete = this.inputEnded || this.queuedSegmentsEnded();
+    const finalShortInputReady = queueComplete && this.bufferedSpeechSamples > 0;
     if (!this.started && onsetReady && (speechReady || finalShortInputReady)) {
+      if (this.holdingStartForPortrait()) return;
       this.started = true;
       this.waitingForBuffer = false;
       this.beginFadeIn();
@@ -377,7 +425,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     if (
       this.started
       && this.waitingForBuffer
-      && (this.bufferedSpeechSamples >= this.currentRebufferSamples || this.inputEnded)
+      && (this.bufferedSpeechSamples >= this.currentRebufferSamples || queueComplete)
     ) {
       this.waitingForBuffer = false;
       this.beginFadeIn();
@@ -388,6 +436,38 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         underrun_count: this.underrunCount,
       });
     }
+  }
+
+  /** Whether every queued segment has all its audio (a silence segment always has). */
+  queuedSegmentsEnded(): boolean {
+    return this.queue.length > 0 && this.queue.every((segment) => this.endedSegments.has(segment.segmentId));
+  }
+
+  /** Whether the start waits for the portrait: its first speech has no frames yet, and the cap has not passed. */
+  holdingStartForPortrait(): boolean {
+    const head = this.queue.find((segment) => segment.segmentKind === 'speech');
+    // Only a turn's start: audio is never paused mid-reply to wait for video.
+    if (!this.startHoldSamples || !head || this.queue[0] !== head || head.generationEpoch === this.lastHeldEpoch) {
+      this.startHold = null;
+      return false;
+    }
+    const ready = this.portraitReadySegments.has(head.segmentId);
+    if (this.startHold?.segmentId !== head.segmentId) {
+      this.startHold = { segmentId: head.segmentId, since: this.renderClockSamples };
+    }
+    const held = this.renderClockSamples - this.startHold.since;
+    if (!ready && held < this.startHoldSamples) return true;
+    this.startHold = null;
+    this.lastHeldEpoch = head.generationEpoch;
+    this.emit('start_hold', {
+      segment_id: head.segmentId,
+      output_id: head.outputId || undefined,
+      generation_epoch: head.generationEpoch,
+      held_samples: held,
+      held_ms: held * 1000 / sampleRate,
+      released_by: ready ? 'frames' : 'cap',
+    });
+    return false;
   }
 
   followingSpeechReady(segment: QueuedSegment): boolean {
@@ -621,7 +701,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     channel.fill(0);
     this.renderClockSamples += channel.length;
     if (this.stopped) {
-      this.reportAvatarPlayback(channel.length, 0);
+      this.reportAvatarPlayback(channel.length, 0, false);
       return false;
     }
 
@@ -629,7 +709,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     let written = this.writeCancellationFade(channel);
     let avatarSpeechSquareSum = 0;
     if ((!this.started || this.waitingForBuffer) && written === 0) {
-      this.reportAvatarPlayback(channel.length, 0);
+      this.reportAvatarPlayback(channel.length, 0, false);
       this.maybeReportProgress();
       if (this.inputEnded && this.queuedSamples === 0) return this.signalDrained();
       return true;

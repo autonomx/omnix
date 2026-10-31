@@ -5,7 +5,8 @@ import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
 import { classifyOverlap } from './live-voice-overlap-classifier';
-import { controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent, renderTranscript, setPanelStatus } from './live-voice-controller-state';
+import { controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, renderTranscript, setPanelStatus } from './live-voice-controller-state';
+import { interruptOnFinalOverlap } from './live-voice-preview';
 import { replayFinalizationBuffer } from './live-voice-finalization';
 import { resetTurnState } from './live-voice-session-lifecycle';
 import { emitOmnixEvent, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT } from '../../../events/bus';
@@ -21,6 +22,7 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
     ? classifyOverlap(final.text, currentAssistantSpeechText())
     : null;
   const overlapIntent = finalOverlapAssessment?.intent ?? partialOverlapIntent;
+  interruptOnFinalOverlap(session, finalOverlapAssessment, liveVoiceAssistantIsSpeaking());
   const interruptionDispatched = session.interruptionDispatched;
   const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
   const continuation = session.finalizationBuffer.drain();

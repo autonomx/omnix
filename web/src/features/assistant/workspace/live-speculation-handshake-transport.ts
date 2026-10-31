@@ -1,4 +1,4 @@
-import { registerFetchMiddleware } from '../../../api/fetchPipeline';
+import { registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
 import type { components } from '../api/generated';
 import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
 
@@ -28,10 +28,7 @@ export function initializeLiveSpeculationHandshakeTransport(): () => void {
     return () => undefined;
   }
   if (removeMiddleware) return () => undefined;
-  const remove = registerFetchMiddleware('live-speculation-handshake', async (input, init, next) => {
-    const bridged = await bridgeLiveSpeculationHandshakeRequest(next as typeof fetch, input, init);
-    return bridged ?? next(input, init);
-  });
+  const remove = registerFetchMiddleware('live-speculation-handshake', liveSpeculationHandshakeMiddleware);
   removeMiddleware = remove;
   return () => {
     remove();
@@ -39,11 +36,21 @@ export function initializeLiveSpeculationHandshakeTransport(): () => void {
   };
 }
 
-export async function bridgeLiveSpeculationHandshakeRequest(
-  fetchImpl: typeof fetch,
+/**
+ * Any other request goes on in the same task that made it: a request sent while the page is busy (the speculative
+ * TTS accept at the final transcript) then leaves at once instead of after that work.
+ */
+export function liveSpeculationHandshakeMiddleware(
   input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response | null> {
+  init: RequestInit | undefined,
+  next: FetchNext,
+): Promise<Response> {
+  if (!speculationStreamMatch(input, init)) return next(input, init);
+  return bridgeLiveSpeculationHandshakeRequest(next as typeof fetch, input, init)
+    .then((bridged) => bridged ?? next(input, init));
+}
+
+function speculationStreamMatch(input: RequestInfo | URL, init?: RequestInit): RegExpExecArray | null {
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
   if (method !== 'POST') return null;
 
@@ -54,7 +61,15 @@ export async function bridgeLiveSpeculationHandshakeRequest(
     ? window.location.origin
     : 'http://localhost';
   const url = new URL(rawUrl, baseUrl);
-  const match = LEGACY_SPECULATION_STREAM_PATH.exec(url.pathname);
+  return LEGACY_SPECULATION_STREAM_PATH.exec(url.pathname);
+}
+
+export async function bridgeLiveSpeculationHandshakeRequest(
+  fetchImpl: typeof fetch,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response | null> {
+  const match = speculationStreamMatch(input, init);
   if (!match) return null;
 
   const requestBody = await requestBodyText(input, init);

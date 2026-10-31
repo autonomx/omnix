@@ -1,0 +1,521 @@
+import { act, cleanup, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CharacterAvatarPack, CharacterLiveCallRuntime } from '../characterClient';
+import type { LiveVoicePcmSession } from '../../workspace/live-voice-pcm-session';
+import { drawnAvatarPack, publishCharacterAvatarRuntime } from '../liveCharacterAvatarBridge';
+import { LiveCallVisual } from '../LiveCallVisual';
+import { fixture } from '../../../../test/fixture';
+import { LivePortrait, livePortrait } from './livePortrait';
+
+const release = vi.hoisted(() => ({ samples: vi.fn(), counter: vi.fn(), portrait: vi.fn() }));
+vi.mock('../../workspace/live-voice-release-observer', () => ({
+  recordLiveVoiceReleaseSamples: release.samples,
+  recordLiveVoiceReleaseCounter: release.counter,
+  setLiveVoiceReleasePortrait: release.portrait,
+}));
+
+const CONTEXT_RATE = 48_000;
+
+class FakeSocket {
+  readyState = 1;
+  binaryType = '';
+  readonly sent: string[] = [];
+  closed = false;
+  private readonly listeners = new Map<string, Array<(event: unknown) => void>>();
+
+  constructor(readonly url: string) {}
+
+  addEventListener(type: string, listener: (event: unknown) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.closed = true;
+    this.readyState = 3;
+    this.emit('close', {});
+  }
+
+  emit(type: string, event: unknown): void {
+    for (const listener of this.listeners.get(type) ?? []) listener(event);
+  }
+
+  message(data: string | ArrayBuffer): void {
+    this.emit('message', { data });
+  }
+}
+
+type FakeImage = { id: number; close: () => void; closed: boolean };
+
+function frameMessage(header: Record<string, unknown>, id: number): ArrayBuffer {
+  const json = new TextEncoder().encode(JSON.stringify(header));
+  const buffer = new ArrayBuffer(4 + json.length + 1);
+  new DataView(buffer).setUint32(0, json.length, false);
+  new Uint8Array(buffer, 4).set(json);
+  new Uint8Array(buffer, 4 + json.length)[0] = id;
+  return buffer;
+}
+
+function fakeSession(context: { currentTime: number }) {
+  const audioContext = Object.assign(context, { sampleRate: CONTEXT_RATE, outputLatency: 0 });
+  return {
+    session: { audioContext, setPortraitClock: vi.fn(), portraitFramesReady: vi.fn() } as unknown as LiveVoicePcmSession,
+    audioContext,
+  };
+}
+
+function setup() {
+  const sockets: FakeSocket[] = [];
+  const images: FakeImage[] = [];
+  const portrait = new LivePortrait(
+    async (jpeg) => {
+      const image: FakeImage = { id: jpeg[0], closed: false, close: () => { image.closed = true; } };
+      images.push(image);
+      return image as unknown as ImageBitmap;
+    },
+    (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+  );
+  portrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite' });
+  return { portrait, sockets, images };
+}
+
+const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  release.samples.mockReset();
+  release.counter.mockReset();
+});
+
+afterEach(() => {
+  cleanup();
+  livePortrait.end();
+  livePortrait.setPack(null);
+  publishCharacterAvatarRuntime(null);
+  vi.useRealTimers();
+});
+
+describe('the live portrait client', () => {
+  it('is wanted only for a portrait pack', () => {
+    const { portrait } = setup();
+    expect(portrait.wanted()).toBe(true);
+    window.localStorage.setItem('omnix.livePortrait.enabled', '0'); // the paired gate's portrait-off run
+    expect(portrait.wanted()).toBe(false);
+    window.localStorage.removeItem('omnix.livePortrait.enabled');
+    portrait.setPack({ renderer: 'sprite' });
+    expect(portrait.wanted()).toBe(false);
+  });
+
+  it('gives up when the TTS websocket sends no hello within a second of the session opening', () => {
+    const { portrait } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    portrait.begin('chat:maya');
+    vi.advanceTimersByTime(5_000); // opening the session can wait on the browser's audio: no timeout yet
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'connecting', fallbackRenderer: 'sprite' });
+    portrait.attachSession(session);
+    vi.advanceTimersByTime(1_000);
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'no_hello', fallbackRenderer: 'sprite' });
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a hello after the timeout still brings the portrait back, with its clock', () => {
+    const { portrait, sockets } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    vi.advanceTimersByTime(1_200);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    expect(portrait.getSnapshot().status).toBe('ready');
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+  });
+
+  it('opens the avatar websocket with the hello token and becomes ready', () => {
+    const { portrait, sockets } = setup();
+    portrait.begin('chat:maya').onHello({ callKey: 'call-1', avatarToken: 'tok en' });
+    vi.advanceTimersByTime(2_000);
+    expect(sockets).toHaveLength(1);
+    expect(sockets[0].url).toContain('/api/tts/live-call/avatar-websocket?token=tok%20en&session_id=chat%3Amaya');
+    sockets[0].message(JSON.stringify({ type: 'ready', fallback_renderer: 'orb' }));
+    expect(portrait.getSnapshot()).toEqual({ status: 'ready', fallbackRenderer: 'orb', reason: null });
+    expect(portrait.callKey()).toBe('call-1'); // speculative TTS for this call carries it
+    portrait.end();
+    expect(portrait.callKey()).toBeNull();
+  });
+
+  it('draws the frame for what is heard and reports the play position in source samples', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 10 };
+    const { session } = fakeSession(context);
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    // Connecting, no frame can come: no clock, so no start held for frames (review finding, 2026-10-31).
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    const socket = sockets[0];
+    socket.message(JSON.stringify({ type: 'ready' }));
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+    for (const [index, offset] of [0, 960, 1920].entries()) {
+      socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, index));
+    }
+    await flush();
+    expect(portrait.currentFrame()).toBeNull();
+    // The first frame of the segment lets a start held for it go, once.
+    expect(session.portraitFramesReady).toHaveBeenCalledTimes(1);
+    expect(session.portraitFramesReady).toHaveBeenCalledWith('seg-1');
+
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 10 });
+    // 50 ms at 48 kHz is 1200 source samples at 24 kHz: the second frame (offset 960).
+    hooks.onWorkletEvent({ type: 'portrait_clock', segment_id: 'seg-1', segment_played_samples: 2_400, audio_context_time_seconds: 10.05 });
+    context.currentTime = 10.05;
+    expect((portrait.currentFrame() as unknown as FakeImage).id).toBe(1);
+    expect(images[0].closed).toBe(true);
+
+    vi.advanceTimersByTime(250);
+    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toEqual({
+      type: 'frame_ack', segment_id: 'seg-1', offset: 1_200, received: 3, late: 0, decode_ms: expect.any(Number),
+    });
+    // The drawn frame (960) against what is heard (1200 of 24 kHz), less half a frame: -10 ms.
+    portrait.picture(performance.now());
+    portrait.end();
+    expect(release.samples).toHaveBeenCalledWith('av_offset_ms', [-10]);
+    expect(release.portrait).toHaveBeenLastCalledWith(false);
+  });
+
+  it('never draws a cancelled turn, even frames that arrive after the cancel', async () => {
+    const { portrait, sockets } = setup();
+    const context = { currentTime: 5 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    sockets[0].message(frameMessage({ output_id: 'turn-2', epoch: 2, segment_id: 'seg-a', offset: 0 }, 7));
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-a', audio_context_time_seconds: 5 });
+    hooks.onWorkletEvent({ type: 'segment_cancelled', segment_id: 'seg-a', generation_epoch: 2, audio_context_time_seconds: 5 });
+    sockets[0].message(frameMessage({ output_id: 'turn-2', epoch: 2, segment_id: 'seg-a', offset: 0 }, 8));
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-a', audio_context_time_seconds: 5.1 });
+    context.currentTime = 5.2;
+    expect(portrait.currentFrame()).toBeNull();
+  });
+
+  it('shows the idle loop once all of it has arrived, and cuts back to it when a turn is interrupted', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 1 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    const idle = (offset: number, id: number) => frameMessage(
+      { output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 }, id);
+    sockets[0].message(idle(1, 21));
+    await flush();
+    expect(portrait.picture(performance.now()).under).toBeNull();
+    sockets[0].message(idle(0, 20));
+    await flush();
+    expect((portrait.picture(performance.now()).under as unknown as FakeImage).id).toBe(20);
+    // The blink after the loop is kept for the settled sway: never drawn as speech or while the loop runs free.
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage({ output_id: 'blink', epoch: 0, segment_id: 'blink', offset, count: 2, frame_ms: 40 },
+        30 + offset));
+    }
+    await flush();
+    expect([20, 21]).toContain((portrait.picture(performance.now()).under as unknown as FakeImage).id);
+
+    sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
+    context.currentTime = 1.01;
+    expect((portrait.picture(performance.now()).over as unknown as FakeImage).id).toBe(5);
+    hooks.onWorkletEvent({ type: 'segment_interrupted', segment_id: 'seg-1', generation_epoch: 1, audio_context_time_seconds: 1.01 });
+    const after = portrait.picture(performance.now());
+    expect(after.over).toBeNull();
+    expect([20, 21]).toContain((after.under as unknown as FakeImage).id);
+    expect(images.find((image) => image.id === 5)?.closed).toBe(true);
+
+    portrait.end();
+    expect(images.filter((image) => image.id >= 20).every((image) => image.closed)).toBe(true); // loop and blink
+  });
+
+  it('plays a reply transition once its audio has drained, then resumes the idle loop at its first frame', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 1 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage({ output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 },
+        20 + offset));
+    }
+    sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage(
+        { output_id: 'transition', epoch: 1, segment_id: 'transition', offset, count: 2, frame_ms: 40 }, 30 + offset));
+    }
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
+    context.currentTime = 1.01;
+    expect((portrait.picture(1_000).over as unknown as FakeImage).id).toBe(5);
+    // The reply's audio is over: the queue drained.
+    hooks.onWorkletEvent({ type: 'segment_completed', segment_id: 'seg-1', segment_played_samples: 960, audio_context_time_seconds: 1.02 });
+    hooks.onWorkletEvent({ type: 'idle', audio_context_time_seconds: 1.02 });
+    context.currentTime = 1.05;
+    const ids = [1_100, 1_140, 1_180].map((now) => (portrait.picture(now).under as unknown as FakeImage).id);
+    expect(ids).toEqual([30, 31, 20]);
+
+    portrait.end();
+    expect(images.filter((image) => image.id >= 30).every((image) => image.closed)).toBe(true);
+  });
+
+  it('shows the fallback for a turn whose frames are late even at the lowest level, then tries the next', async () => {
+    const { portrait, sockets } = setup();
+    const context = { currentTime: 20 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    const socket = sockets[0];
+    socket.message(JSON.stringify({ type: 'ready', level: 2 }));
+    socket.message(JSON.stringify({ type: 'quality', level: 3 }));
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 20 });
+    hooks.onWorkletEvent({ type: 'portrait_clock', segment_id: 'seg-1', segment_played_samples: 48_000, audio_context_time_seconds: 21 });
+    context.currentTime = 21;
+    // A second into the phrase, frames for its first 120 ms arrive: all late.
+    for (const offset of [0, 960, 1_920]) {
+      socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, offset / 960));
+    }
+    await flush();
+    vi.advanceTimersByTime(250);
+    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toMatchObject({ received: 3, late: 3 });
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'degraded', reason: 'frames_late' });
+
+    hooks.onSegmentRate('seg-2', 24_000);
+    socket.message(frameMessage({ output_id: 'turn-2', epoch: 2, segment_id: 'seg-2', offset: 0 }, 9));
+    await flush();
+    expect(portrait.getSnapshot().status).toBe('ready');
+  });
+
+  it('keeps a turn degraded through its clause silences, recovering only with the next turn', async () => {
+    // Review finding (2026-10-31): an ack heard in a silence (no frames) left no turn to compare, so the same
+    // turn's next frame brought the portrait back at once, and it flapped.
+    const { portrait, sockets } = setup();
+    const context = { currentTime: 20 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    const socket = sockets[0];
+    socket.message(JSON.stringify({ type: 'ready', level: 3 }));
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 20 });
+    hooks.onWorkletEvent({ type: 'portrait_clock', segment_id: 'seg-1', segment_played_samples: 48_000, audio_context_time_seconds: 21 });
+    context.currentTime = 21;
+    for (const offset of [0, 960, 1_920]) {
+      socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, offset / 960));
+    }
+    await flush();
+    portrait.picture(1_000); // turn 1 on screen
+    hooks.onWorkletEvent({ type: 'segment_completed', segment_id: 'seg-1', segment_played_samples: 48_000, audio_context_time_seconds: 21.01 });
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'sil-1', audio_context_time_seconds: 21.01 });
+    context.currentTime = 21.1; // the clause silence after it is heard as the ack goes
+    vi.advanceTimersByTime(250);
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'degraded' });
+    hooks.onSegmentRate('seg-2', 24_000);
+    socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-2', offset: 0 }, 7));
+    await flush();
+    expect(portrait.getSnapshot().status).toBe('degraded'); // the same turn: still the fallback
+    hooks.onSegmentRate('seg-3', 24_000);
+    socket.message(frameMessage({ output_id: 'turn-2', epoch: 2, segment_id: 'seg-3', offset: 0 }, 8));
+    await flush();
+    expect(portrait.getSnapshot().status).toBe('ready');
+  });
+
+  it('never releases a transition the compositor is still playing when the next one arrives', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 1 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage({ output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 },
+        20 + offset));
+    }
+    sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage(
+        { output_id: 'transition', epoch: 1, segment_id: 'transition', offset, count: 2, frame_ms: 40 }, 30 + offset));
+    }
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
+    context.currentTime = 1.01;
+    portrait.picture(1_000);
+    hooks.onWorkletEvent({ type: 'segment_completed', segment_id: 'seg-1', segment_played_samples: 960, audio_context_time_seconds: 1.02 });
+    hooks.onWorkletEvent({ type: 'idle', audio_context_time_seconds: 1.02 });
+    context.currentTime = 1.05;
+    expect((portrait.picture(1_100).under as unknown as FakeImage).id).toBe(30); // turn 1's transition plays
+    for (const offset of [0, 1]) { // turn 2's arrives meanwhile
+      sockets[0].message(frameMessage(
+        { output_id: 'transition', epoch: 2, segment_id: 'transition', offset, count: 2, frame_ms: 40 }, 40 + offset));
+    }
+    await flush();
+    expect(images.filter((image) => image.id === 30 || image.id === 31).some((image) => image.closed)).toBe(false);
+    expect((portrait.picture(1_140).under as unknown as FakeImage).id).toBe(31); // still drawable
+    portrait.picture(1_180); // played out: the loop again
+    portrait.picture(1_200);
+    expect(images.filter((image) => image.id === 30 || image.id === 31).every((image) => image.closed)).toBe(true);
+  });
+
+  it('falls back when the service refuses or the stream is lost', () => {
+    const { portrait, sockets } = setup();
+    portrait.begin('chat:maya').onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'unavailable', code: 'portrait_busy' }));
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_busy' });
+    expect(release.counter).toHaveBeenLastCalledWith('portrait_admission_refused');
+
+    portrait.begin('chat:maya').onHello({ callKey: 'call-2', avatarToken: 'token' });
+    sockets[1].emit('close', {});
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'avatar_socket_refused' });
+
+    portrait.begin('chat:maya').onHello({ callKey: 'call-3', avatarToken: 'token' });
+    sockets[2].message(JSON.stringify({ type: 'ready' }));
+    sockets[2].emit('close', {});
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_lost' });
+    expect(release.counter).toHaveBeenLastCalledWith('portrait_degrade_count', { reason: 'portrait_lost' });
+  });
+
+  it('shows the fallback while the model loads on demand, never holding audio for frames, then the portrait', () => {
+    const { portrait, sockets } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'loading' }));
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'loading', fallbackRenderer: 'sprite' });
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+    vi.advanceTimersByTime(60_000); // the model takes about a minute: no timeout gives up on it
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    expect(portrait.getSnapshot().status).toBe('ready');
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+
+    portrait.begin('chat:maya').onHello({ callKey: 'call-2', avatarToken: 'token' });
+    sockets[1].message(JSON.stringify({ type: 'loading' }));
+    sockets[1].emit('close', {});
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_lost' });
+  });
+
+  it('ignores an audio session that finished opening after its call ended', () => {
+    // Review finding (2026-10-31): attaching after end() started a hello timer that recorded a false no_hello and
+    // left the portrait unavailable rather than off.
+    const { portrait } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    portrait.begin('chat:maya');
+    portrait.end();
+    portrait.attachSession(session);
+    vi.advanceTimersByTime(2_000);
+    expect(portrait.getSnapshot().status).toBe('off');
+    expect(session.setPortraitClock).not.toHaveBeenCalled();
+    expect(release.counter).not.toHaveBeenCalled();
+  });
+
+  it('ignores a previous call once it has ended', () => {
+    const { portrait, sockets } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    const old = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    old.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    portrait.end();
+    expect(sockets[0].closed).toBe(true);
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+    expect(portrait.getSnapshot().status).toBe('off');
+    old.onHello({ callKey: 'call-1', avatarToken: 'again' });
+    vi.advanceTimersByTime(2_000);
+    expect(sockets).toHaveLength(1);
+    expect(portrait.getSnapshot().status).toBe('off');
+  });
+});
+
+const portraitPack: CharacterAvatarPack = fixture({
+  character_id: 'maya',
+  version: 2,
+  render_mode: 'audio_envelope',
+  renderer: 'portrait',
+  fallback_renderer: 'sprite',
+  portrait_emotion: 'neutral',
+  rig_asset_id: null,
+  base_asset_id: 'image:maya-portrait',
+  mouth_frames: {},
+  blink_frames: {},
+  expression_frames: {},
+  outfit_frames: {},
+  background_asset_ids: {},
+  active_outfit: null,
+  active_background: null,
+  mouth_anchor: {},
+  created_at: '2026-10-30T00:00:00Z',
+  updated_at: '2026-10-30T00:00:00Z',
+});
+
+function portraitRuntime(pack: CharacterAvatarPack): CharacterLiveCallRuntime {
+  return fixture({
+    session_id: 'chat:maya',
+    interaction_mode: 'character',
+    display_name: 'Maya',
+    character_id: 'maya',
+    avatar_pack: pack,
+  });
+}
+
+describe('the call visual for a portrait pack', () => {
+  it('draws a portrait pack itself, or its fallback when the portrait is unavailable', () => {
+    expect(drawnAvatarPack(portraitPack, false)).toBe(portraitPack);
+    expect(drawnAvatarPack(portraitPack, true)?.renderer).toBe('sprite');
+    expect(drawnAvatarPack({ ...portraitPack, fallback_renderer: 'orb' }, true)).toBeNull();
+    const sprite = { ...portraitPack, renderer: 'sprite' as const };
+    expect(drawnAvatarPack(sprite, true)).toBe(sprite);
+  });
+
+  it('shows the portrait image until frames arrive, then the pack fallback when unavailable', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    act(() => publishCharacterAvatarRuntime(portraitRuntime(portraitPack)));
+    livePortrait.setPack(portraitPack);
+    const view = render(<LiveCallVisual voiceMode="idle" thinking={false} />);
+    const figure = view.container.querySelector('figure');
+    expect(figure?.dataset.renderer).toBe('portrait');
+    expect(view.getByAltText('Maya live portrait').getAttribute('src')).toBe('/api/assets/image%3Amaya-portrait/file');
+
+    act(() => {
+      livePortrait.begin('chat:maya');
+      livePortrait.attachSession(fakeSession({ currentTime: 0 }).session);
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(view.container.querySelector('figure')?.dataset.renderer).toBe('sprite');
+    expect(view.getByAltText('Maya live avatar').getAttribute('src')).toBe('/api/assets/image%3Amaya-portrait/file');
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the orb when an unavailable portrait falls back to it', () => {
+    const pack = { ...portraitPack, fallback_renderer: 'orb' as const };
+    act(() => publishCharacterAvatarRuntime(portraitRuntime(pack)));
+    livePortrait.setPack(pack);
+    act(() => {
+      livePortrait.begin('chat:maya');
+      livePortrait.attachSession(fakeSession({ currentTime: 0 }).session);
+      vi.advanceTimersByTime(1_000);
+    });
+    const view = render(<LiveCallVisual voiceMode="idle" thinking={false} />);
+    expect(view.container.querySelector('figure')).toBeNull();
+    expect(view.container.querySelector('[data-has-character-avatar]')).toBeNull();
+  });
+});

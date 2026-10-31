@@ -1,0 +1,21 @@
+# The live portrait service (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 1): FLOAT, streamed.
+# Torch matches the desktop Torch layer and the STT and audio services (CUDA 12.4 wheels).
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
+# FLOAT's own code is installed from the model catalog (float-code), not from PyPI; it imports these.
+# The Phase 1 runtime check ran with exactly these versions.
+transformers==4.57.6
+timm==1.0.30
+# FMT imports it, though the service solves with its own CUDA-graph Euler loop.
+torchdiffeq==0.2.5
+# Face detection for the portrait crop: face_alignment's S3FD detector (its weights come from the catalog).
+face-alignment==1.4.1
+numpy
+pillow
+fastapi
+uvicorn[standard]
+python-multipart
+psutil
+# app.providers (host memory for the load check) imports Omnix's HTTP client.
+httpx

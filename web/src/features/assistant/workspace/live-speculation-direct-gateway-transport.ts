@@ -35,7 +35,7 @@ export async function directLiveGatewayFetch(
 
   const startedAt = now();
   try {
-    const response = await fetchImpl(directUrl, init);
+    const response = await fetchImpl(directUrl, withDirectGatewayClientHeader(init));
     dispatchPerformance(stageFor(input, 'response'), {
       directGateway: true,
       directOrigin: new URL(directUrl).origin,
@@ -60,6 +60,16 @@ export async function directLiveGatewayFetch(
     if (acceptedLiveChat) throw error;
     return fetchImpl(input, init);
   }
+}
+
+/**
+ * The gateway's request guard refuses an unsafe method without X-Omnix-Client. The view firewall adds it only to
+ * same-origin calls, so a call sent straight to the gateway's origin carries it itself.
+ */
+export function withDirectGatewayClientHeader(init?: RequestInit): RequestInit {
+  const headers = new Headers(init?.headers);
+  if (!headers.has('X-Omnix-Client')) headers.set('X-Omnix-Client', 'web');
+  return { ...init, headers };
 }
 
 export function withLiveVoiceCallAffinity(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {

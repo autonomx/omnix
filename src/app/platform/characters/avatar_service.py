@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from app.assets.protocol import AssetStore
+import logging
 from collections.abc import Callable
+from typing import Protocol
 
 from app.assets.content import asset_available
 from app.assets import AssetRecord, AssetType, default_asset_store
 from app.conversation.contracts import SYSTEM_ASSISTANT_ID
+from app.runtime.ports import Port, implementations
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_repository import CharacterAvatarRepository
@@ -14,8 +17,26 @@ from .repository import CharacterNotFoundError
 from .service import CharacterService, default_character_service
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class CharacterAvatarAssetError(ValueError):
     pass
+
+
+class PortraitImageObserver(Protocol):
+    """Told when no portrait pack in the tenant shows an image any more (live portrait roadmap, Phase 4).
+
+    The live portrait forgets what it made from the image (its encoding and idle loop). Called after the pack
+    change is saved; an observer that fails is logged and never fails the change.
+    """
+
+    def on_portrait_released(self, asset_id: str) -> None: ...
+
+
+PORTRAIT_IMAGE_OBSERVERS: Port[PortraitImageObserver] = Port(
+    "characters.portrait_image_observers", PortraitImageObserver, "many",
+)
 
 
 class CharacterAvatarService:
@@ -66,11 +87,37 @@ class CharacterAvatarService:
     ) -> CharacterAvatarPack:
         self._require_owner(character_id)
         self._validate_assets(request)
-        return self.repository.upsert(character_id, request)
+        previous = self.repository.get(character_id)
+        pack = self.repository.upsert(character_id, request)
+        self._release_portrait(previous)
+        return pack
+
+    def portrait_image(self, pack: CharacterAvatarPack, *, max_bytes: int) -> bytes:
+        """The portrait pack's image, read on the server (it never comes from the browser)."""
+        if pack.renderer != "portrait" or not pack.base_asset_id:
+            raise CharacterAvatarAssetError("this avatar pack is not a portrait")
+        return self.asset_store_factory().read_asset_bytes(pack.base_asset_id, max_bytes=max_bytes)
 
     def delete(self, character_id: str) -> bool:
         self._require_owner(character_id)
-        return self.repository.delete(character_id)
+        previous = self.repository.get(character_id)
+        deleted = self.repository.delete(character_id)
+        self._release_portrait(previous)
+        return deleted
+
+    def _release_portrait(self, previous: CharacterAvatarPack | None) -> None:
+        """A portrait image no portrait pack shows any more is released (its portrait cache can go)."""
+        if previous is None or previous.renderer != "portrait" or not previous.base_asset_id:
+            return
+        asset_id = previous.base_asset_id
+        uses = getattr(self.repository, "portrait_uses", None)
+        if uses is None or uses(asset_id):
+            return
+        for observer in implementations(PORTRAIT_IMAGE_OBSERVERS):
+            try:
+                observer.on_portrait_released(asset_id)
+            except Exception:
+                LOGGER.warning("portrait image observer failed", exc_info=True)
 
     def _validate_assets(self, request: UpsertCharacterAvatarPackRequest) -> None:
         image_asset_ids = {
@@ -98,7 +145,11 @@ class CharacterAvatarService:
                 )
             _require_file(asset, "avatar image")
 
-        if request.renderer != "sprite":
+        if request.renderer == "portrait" and not request.base_asset_id:
+            raise CharacterAvatarAssetError("portrait avatar pack requires its portrait image")
+        # A rigged renderer draws its rig; a portrait pack does only when its fallback is Live2D.
+        if request.renderer in {"live2d", "rive"} or (
+                request.renderer == "portrait" and request.fallback_renderer == "live2d"):
             rig_asset_id = request.rig_asset_id
             if not rig_asset_id:
                 raise CharacterAvatarAssetError("rigged avatar pack requires a rig asset")
@@ -127,7 +178,9 @@ def default_character_avatar_service() -> CharacterAvatarService:
 
 
 __all__ = [
+    "PORTRAIT_IMAGE_OBSERVERS",
     "CharacterAvatarAssetError",
     "CharacterAvatarService",
+    "PortraitImageObserver",
     "default_character_avatar_service",
 ]

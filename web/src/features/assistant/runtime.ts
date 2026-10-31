@@ -14,6 +14,7 @@ export async function activateAssistantRuntime({ queryClient }: ModuleRuntimeCon
   add((await import('./chat/liveCharacterAvatarBridge')).installLiveCharacterAvatarBridge());
   add((await import('./chat/liveCharacterVisemeBridge')).installLiveCharacterVisemeBridge());
   add((await import('./chat/live2dCharacterRenderer')).installLive2DCharacterRenderer());
+  add((await import('./chat/portrait/livePortrait')).installLivePortrait());
 
   add((await import('./chat/live-chat-workspace')).initializeLiveChatWorkspace(queryClient));
 

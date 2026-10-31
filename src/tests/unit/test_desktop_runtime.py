@@ -14,7 +14,7 @@ import pytest
 from app.desktop import env as desktop_env
 from app.desktop import service_boot
 from app.desktop.env import LaunchConfig, child_environment, service_environment
-from app.desktop.services import ModelServices, plans
+from app.desktop.services import HEADROOM_BASE_BYTES, ModelServices, plans
 from app.models import catalog as model_catalog
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -270,6 +270,20 @@ def test_a_crashing_service_is_restarted_after_growing_delays_then_failed(servic
     state.now += 1000
     manager.reconcile()
     assert len(state.launched) == 4  # failed stays failed until its packs change
+
+
+def test_a_service_that_released_an_idle_model_starts_again_at_once(services) -> None:
+    from app.runtime.process_control import IDLE_EXIT_CODE
+
+    manager, state = services
+    state.install()
+    manager.reconcile()
+    for _ in range(5):  # never counted as a crash: no delay, never failed
+        state.launched[-1][2].code = IDLE_EXIT_CODE
+        launched = len(state.launched)
+        manager.reconcile()
+        assert len(state.launched) == launched + 1
+    assert ("tts", "restarting") not in _states(state) and ("tts", "failed") not in _states(state)
 
 
 def test_a_stop_asks_the_service_to_shut_down_before_killing_it(monkeypatch) -> None:
@@ -530,3 +544,28 @@ def test_omnivoice_refuses_a_voice_with_no_transcript_in_the_desktop_app(tmp_pat
     result = provider.generate_audio("Hello.", speaker="Maya")
     assert result["success"] is False
     assert "download Speech input" in result["error"]
+
+
+def test_the_live_portrait_service_runs_from_its_pack_and_the_gateway_finds_it(tmp_path, monkeypatch) -> None:
+    """The live-portrait bundle (FLOAT): its own port, its overlay on the Torch layer, and the gateway's URL for it."""
+    monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
+    config = LaunchConfig(install_root=tmp_path / "install", data_dir=tmp_path / "data", http_port=43110,
+                          pg_port=43111, metrics_port=43112, notify_port=43113,
+                          service_ports={"stt": 43121, "tts": 43122, "image": 43123, "portrait": 43124})
+    gateway = child_environment(config, _inherited(), owner=False)
+    assert gateway["OMNIX_PORTRAIT_URL"] == "http://127.0.0.1:43124"
+    assert child_environment(_config(tmp_path), _inherited(), owner=False)["OMNIX_PORTRAIT_URL"] == ""
+    env = service_environment(config, "portrait", service_token="svc-token",
+                              site_dirs=[config.packs / "runtimes" / "portrait-windows-x64" / "site"],
+                              inherited=_inherited())
+    assert env["OMNIX_PORTRAIT_PORT"] == "43124" and env["HF_HUB_OFFLINE"] == "1"
+    assert service_boot.ENTRY_MODULES["portrait"] == "services.portrait.portrait_server"
+    catalog = model_catalog.load()
+    runtimes = SimpleNamespace(current=lambda rid: True, runnable=lambda rid: True, site=lambda rid: config.packs / rid)
+    models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
+    plan = plans(config, catalog, runtimes, models)["portrait"]
+    assert plan.runtime == "portrait-windows-x64" and plan.bundles == ["live-portrait"]
+    assert plan.site_dirs == [config.packs / "portrait-windows-x64", config.packs / "torch-windows-x64"]
+    # Its load needs 8 GiB, but the service starts (and restarts after an idle unload) without its model: only the
+    # base headroom is asked before a start (review finding, 2026-10-31).
+    assert plan.load_bytes == 8192 * 2**20 and plan.needed_bytes == HEADROOM_BASE_BYTES

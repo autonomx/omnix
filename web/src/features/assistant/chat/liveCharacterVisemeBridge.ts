@@ -13,7 +13,7 @@ export interface TimedCharacterViseme {
 
 export type RuntimeAvatarPack = {
   render_mode: 'audio_envelope' | 'viseme' | 'static';
-  renderer?: 'sprite' | 'live2d' | 'rive';
+  renderer?: 'sprite' | 'live2d' | 'rive' | 'portrait';
   rig_asset_id?: string | null;
   base_asset_id?: string | null;
   mouth_frames: Record<string, string>;

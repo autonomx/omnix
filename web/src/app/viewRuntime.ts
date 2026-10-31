@@ -14,6 +14,8 @@ import { moduleManifest, type OmnixModuleId } from './modules';
  */
 
 const activeStores = new Map<OmnixModuleId, DisposableStore>();
+const activeReady = new Map<OmnixModuleId, Promise<void>>();
+const settledReady = new WeakSet<Promise<void>>();
 
 export interface ActiveViewRuntime extends Disposable {
   /** Settles when activation finished (or failed and was logged). */
@@ -27,13 +29,32 @@ export function activateViewRuntime(moduleId: OmnixModuleId, context: ModuleRunt
   const ready = loadViewRuntime(moduleId, context, store).catch((error: unknown) => {
     console.error(`[Omnix] ${moduleId} workspace runtime failed to initialize`, error);
   });
+  activeReady.set(moduleId, ready);
+  void ready.then(() => settledReady.add(ready));
   return {
     ready,
     dispose: () => {
       store.dispose();
       if (activeStores.get(moduleId) === store) activeStores.delete(moduleId);
+      if (activeReady.get(moduleId) === ready) activeReady.delete(moduleId);
     },
   };
+}
+
+/**
+ * Settles once the workspace's active runtime has finished activating (at once when none is active).
+ *
+ * Its initializers load as separate modules after the view renders: on a cold start (a dev server compiling each
+ * on first request) the view is usable seconds before they are installed.
+ */
+export function viewRuntimeReady(moduleId: OmnixModuleId): Promise<void> {
+  return activeReady.get(moduleId) ?? Promise.resolve();
+}
+
+/** Whether the workspace's runtime has finished activating (or none is active): then there is nothing to wait for. */
+export function viewRuntimeIsReady(moduleId: OmnixModuleId): boolean {
+  const ready = activeReady.get(moduleId);
+  return ready === undefined || settledReady.has(ready);
 }
 
 /** Workspaces whose runtime is active (tests and diagnostics). */

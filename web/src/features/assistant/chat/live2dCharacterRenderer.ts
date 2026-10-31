@@ -20,7 +20,7 @@ type Live2DRenderDetail = {
 
 type RigVisemeDetail = {
   viseme: Live2DViseme;
-  renderer: 'sprite' | 'live2d' | 'rive';
+  renderer: 'sprite' | 'live2d' | 'rive' | 'portrait';
   rigAssetId: string | null;
   durationMs: number;
 };

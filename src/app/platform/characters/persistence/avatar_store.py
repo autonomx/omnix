@@ -68,6 +68,8 @@ class PostgresCharacterAvatarRepositoryAdapter:
                 active_outfit=request.active_outfit,
                 active_background=request.active_background,
                 mouth_anchor=dict(request.mouth_anchor),
+                fallback_renderer=request.fallback_renderer,
+                portrait_emotion=request.portrait_emotion,
                 created_at=current.created_at if current else now,
                 updated_at=now,
             )
@@ -99,6 +101,15 @@ class PostgresCharacterAvatarRepositoryAdapter:
             return PostgresModuleRecordRepository(connection).delete(
                 self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=character_id,
             )
+
+    def portrait_uses(self, asset_id: str) -> bool:
+        """Whether any portrait pack in the tenant shows this image."""
+        with self.database.connection() as connection:
+            payloads = PostgresModuleRecordRepository(connection).payloads_where(
+                self.context, module=_MODULE, record_type=_RECORD_TYPE, field="base_asset_id", value=asset_id,
+                newest_first_by="updated_at",
+            )
+        return any(payload.get("renderer") == "portrait" for payload in payloads)
 
     def _locked_get(self, connection: Any, character_id: str) -> CharacterAvatarPack | None:
         payload = PostgresModuleRecordRepository(connection).payload(

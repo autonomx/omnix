@@ -17,7 +17,18 @@ export type LiveVoiceLatencyMetric =
   | 'first_token_to_first_playback_ms'
   | 'final_to_first_playback_ms'
   | 'stt_request_to_first_playback_ms'
-  | 'interruption_to_silence_ms';
+  | 'interruption_to_silence_ms'
+  // The live portrait's paired gate (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 5); not all are ms.
+  | 'first_audible_ms'
+  | 'start_hold_ms'
+  | 'underrun_count'
+  | 'llm_tokens_per_second';
+
+/** Metrics recorded as many samples at once (the portrait's per-frame A/V offset). */
+export type LiveVoiceSampledMetric = 'av_offset_ms';
+
+/** Events counted per run (the portrait falling back, or refused for another call). */
+export type LiveVoiceReleaseCounter = 'portrait_degrade_count' | 'portrait_admission_refused';
 
 export type LiveVoiceQualityMetric =
   | 'false_interruption'
@@ -66,9 +77,10 @@ type ReleaseState = {
   firstPcmOutputId: string | null;
   firstPcmSegmentId: string | null;
   firstPlaybackAt: number | null;
-  interruptionAt: number | null;
   turnId: string | null;
   activeTraceId: string | null;
+  llmChars: number;
+  underruns: number;
 };
 
 const reporter = typeof window === 'undefined'
@@ -76,6 +88,37 @@ const reporter = typeof window === 'undefined'
   : createLiveCallDiagnosticsReporter('live-call:release-observer');
 let initialized = false;
 let state: ReleaseState = emptyState();
+// An interruption spans two turns: the user's speech that interrupts starts a new turn before the interrupted
+// reply's turn reports it stopped. So it is kept apart from the turn state and ends at the next turn_stopped.
+let interruptionAt: number | null = null;
+// An interruption with no reply to stop gets no turn_stopped; one this old is not paired with a later, unrelated stop.
+const INTERRUPTION_PAIR_MS = 2_000;
+// A reply still in its start hold when the user starts speaking again (a barge-in) keeps its turn state here, so
+// its first playback is still measured: the new turn's speech resets the turn state before that playback starts.
+let awaitingPlayback: ReleaseState | null = null;
+// Whether the call shows a live portrait: every release metric says so, for the paired (off/on) gate.
+let portraitActive = false;
+
+export function setLiveVoiceReleasePortrait(active: boolean): void {
+  portraitActive = active;
+}
+
+/** Many samples of one metric at once (a portrait's A/V offsets, a few seconds of frames at a time). */
+export function recordLiveVoiceReleaseSamples(metricName: LiveVoiceSampledMetric, values: number[]): void {
+  if (!values.length) return;
+  reporter?.record('release_metric_batch', {
+    metric_name: metricName,
+    values: values.map((value) => Math.round(value * 10) / 10),
+    scenario: currentScenario(),
+    portrait: portraitActive,
+  }, 'release_observer');
+}
+
+export function recordLiveVoiceReleaseCounter(counterName: LiveVoiceReleaseCounter, details: Record<string, unknown> = {}): void {
+  reporter?.record('release_counter', {
+    ...details, counter_name: counterName, scenario: currentScenario(), portrait: portraitActive,
+  }, 'release_observer');
+}
 
 export function initializeLiveVoiceReleaseObserver(): () => void {
   if (initialized || typeof window === 'undefined') return () => undefined;
@@ -110,13 +153,21 @@ export function recordLiveVoiceReleaseQuality(
 
 export function resetLiveVoiceReleaseObserver(): void {
   state = emptyState();
+  interruptionAt = null;
+  awaitingPlayback = null;
+}
+
+/** A new turn's state; a reply of the old turn that has audio but has not started playing is kept to finish. */
+function startTurn(next: ReleaseState): void {
+  if (state.firstPcmAt !== null && state.firstPlaybackAt === null) awaitingPlayback = state;
+  state = next;
 }
 
 function handleTurnTimeline(event: Event): void {
   const detail = (event as CustomEvent<LiveVoiceTurnTimelineDetail>).detail;
   if (!detail?.turnId || detail.event !== 'speech_ended') return;
   if (state.turnId !== null && state.turnId !== detail.turnId) {
-    state = { ...emptyState(), turnId: detail.turnId };
+    startTurn({ ...emptyState(), turnId: detail.turnId });
   } else {
     state.turnId = detail.turnId;
   }
@@ -145,12 +196,12 @@ function handlePerfEvent(event: Event): void {
       && state.turnId === incomingTurnId
       ? state.speechEndedAt
       : null;
-    state = {
+    startTurn({
       ...emptyState(),
       speechEndedAt: preserveSpeechEnd,
       sttRequestedAt: now,
       turnId: incomingTurnId,
-    };
+    });
     return;
   }
   if (stage === 'stt_final_received') {
@@ -166,7 +217,7 @@ function handlePerfEvent(event: Event): void {
         reason: 'empty_final_transcript',
         incoming_turn_id: incomingTurnId,
       }, 'release_observer');
-      state = emptyState();
+      startTurn(emptyState());
       return;
     }
 
@@ -177,7 +228,7 @@ function handlePerfEvent(event: Event): void {
     const explicitFinalizeMs = finiteNonnegative(detail.sttFinalizeMs);
 
     if (incomingTurnId !== null && incomingTurnId !== requestedTurnId) {
-      state = { ...emptyState(), turnId: incomingTurnId };
+      startTurn({ ...emptyState(), turnId: incomingTurnId });
     } else if (incomingTurnId !== null) {
       state.turnId = incomingTurnId;
     }
@@ -205,6 +256,31 @@ function handleDiagnosticEvent(event: Event): void {
   const traceId = typeof detail.traceId === 'string' ? detail.traceId : null;
   if (!traceId || traceId === 'live-call:release-observer') return;
   const now = performance.now();
+  // The audio session's own events: they belong to whichever turn is playing.
+  if (diagnosticEvent === 'worklet_underrun') {
+    state.underruns += 1;
+    return;
+  }
+  if (diagnosticEvent === 'worklet_start_hold') {
+    recordLatency('start_hold_ms', finiteNonnegative(detail.details?.held_ms));
+    return;
+  }
+  if (diagnosticEvent === 'turn_stopped' && interruptionAt !== null) {
+    const latency = elapsed(interruptionAt, now);
+    interruptionAt = null;
+    if (latency !== null && latency <= INTERRUPTION_PAIR_MS) recordLatency('interruption_to_silence_ms', latency);
+    return;
+  }
+  if (
+    diagnosticEvent === 'worklet_segment_started'
+    && awaitingPlayback !== null
+    && isSpeechPlayback(detail)
+    && playbackMatchesFirstPcm(detail, awaitingPlayback)
+  ) {
+    recordFirstPlayback(awaitingPlayback, detail, now);
+    awaitingPlayback = null;
+    return;
+  }
 
   if (diagnosticEvent === 'turn_intercepted') {
     if (!traceMatchesCurrentVoiceTurn(traceId)) return;
@@ -213,7 +289,17 @@ function handleDiagnosticEvent(event: Event): void {
   }
   if (!diagnosticBelongsToActiveTurn(detail, diagnosticEvent, traceId)) return;
   if (diagnosticEvent === 'turn_finished') {
+    if (state.firstPlaybackAt !== null) recordLatency('underrun_count', state.underruns);
     state = emptyState();
+    return;
+  }
+  if (diagnosticEvent === 'llm_text_chunk_received') {
+    state.llmChars += finiteNonnegative(detail.details?.text_length) ?? 0;
+  }
+  if (diagnosticEvent === 'llm_stream_finished' && state.firstTokenAt !== null && state.llmChars > 0) {
+    // About four characters a token: the same estimate for the portrait's on and off runs.
+    const seconds = (now - state.firstTokenAt) / 1000;
+    if (seconds > 0.05) recordLatency('llm_tokens_per_second', state.llmChars / 4 / seconds);
     return;
   }
   if (diagnosticEvent === 'chat_response_opened' && state.responseOpenedAt === null) {
@@ -252,24 +338,8 @@ function handleDiagnosticEvent(event: Event): void {
     && isSpeechPlayback(detail)
     && playbackMatchesFirstPcm(detail)
   ) {
-    const renderedAt = finiteNonnegative(
-      detail.details?.playback_performance_time_ms,
-    );
-    const playbackAt = Math.max(
-      state.firstPcmAt,
-      Math.min(now, renderedAt ?? now),
-    );
-    state.firstPlaybackAt = playbackAt;
-    recordLatency('speech_end_to_first_playback_ms', elapsed(state.speechEndedAt, playbackAt));
-    recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, playbackAt));
-    recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, playbackAt));
-    recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, playbackAt));
-    recordLatency('stt_request_to_first_playback_ms', elapsed(state.sttRequestedAt, playbackAt));
+    recordFirstPlayback(state, detail, now);
     return;
-  }
-  if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
-    recordLatency('interruption_to_silence_ms', elapsed(state.interruptionAt, now));
-    state.interruptionAt = null;
   }
 }
 
@@ -317,20 +387,35 @@ function isSpeechPlayback(detail: DiagnosticDetail): boolean {
   return kind === null || kind === 'speech';
 }
 
-function playbackMatchesFirstPcm(detail: DiagnosticDetail): boolean {
+function playbackMatchesFirstPcm(detail: DiagnosticDetail, turn: ReleaseState = state): boolean {
   const outputId = diagnosticString(detail, 'output_id');
   const segmentId = diagnosticString(detail, 'segment_id');
-  if (state.firstPcmOutputId !== null && outputId !== null) {
-    return state.firstPcmOutputId === outputId;
+  if (turn.firstPcmOutputId !== null && outputId !== null) {
+    return turn.firstPcmOutputId === outputId;
   }
-  if (state.firstPcmSegmentId !== null && segmentId !== null) {
-    return state.firstPcmSegmentId === segmentId;
+  if (turn.firstPcmSegmentId !== null && segmentId !== null) {
+    return turn.firstPcmSegmentId === segmentId;
   }
-  return state.firstPcmOutputId === null && state.firstPcmSegmentId === null;
+  return turn.firstPcmOutputId === null && turn.firstPcmSegmentId === null;
+}
+
+function recordFirstPlayback(turn: ReleaseState, detail: DiagnosticDetail, now: number): void {
+  const firstPcmAt = turn.firstPcmAt ?? now;
+  const renderedAt = finiteNonnegative(detail.details?.playback_performance_time_ms);
+  const playbackAt = Math.max(firstPcmAt, Math.min(now, renderedAt ?? now));
+  turn.firstPlaybackAt = playbackAt;
+  recordLatency('speech_end_to_first_playback_ms', elapsed(turn.speechEndedAt, playbackAt));
+  const heardAfter = finiteNonnegative(detail.details?.output_latency_ms) ?? 0;
+  const audible = elapsed(turn.speechEndedAt, playbackAt);
+  recordLatency('first_audible_ms', audible === null ? null : audible + heardAfter);
+  recordLatency('first_pcm_to_first_playback_ms', elapsed(turn.firstPcmAt, playbackAt));
+  recordLatency('first_token_to_first_playback_ms', elapsed(turn.firstTokenAt, playbackAt));
+  recordLatency('final_to_first_playback_ms', elapsed(turn.sttFinalAt, playbackAt));
+  recordLatency('stt_request_to_first_playback_ms', elapsed(turn.sttRequestedAt, playbackAt));
 }
 
 function handleInterruption(): void {
-  state.interruptionAt = performance.now();
+  interruptionAt = performance.now();
 }
 
 function handleQualityEvent(event: Event): void {
@@ -352,6 +437,7 @@ function recordLatency(metricName: LiveVoiceLatencyMetric, valueMs: number | nul
     metric_name: metricName,
     value_ms: rounded,
     scenario,
+    portrait: portraitActive,
     turn_id: state.turnId,
     observed_trace_id: state.activeTraceId,
   }, 'release_observer');
@@ -415,8 +501,9 @@ function emptyState(): ReleaseState {
     firstPcmOutputId: null,
     firstPcmSegmentId: null,
     firstPlaybackAt: null,
-    interruptionAt: null,
     turnId: null,
     activeTraceId: null,
+    llmChars: 0,
+    underruns: 0,
   };
 }

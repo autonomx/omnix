@@ -10,7 +10,7 @@
     border-radius: 0.65rem;
     display: grid;
     gap: 0.3rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
     padding: 0.3rem;
   }
 
@@ -788,5 +788,35 @@
     .character-live2d-intro > span {
       justify-self: start;
     }
+  }
+}
+
+@layer features {
+  .character-portrait-setup {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .character-portrait-setup label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .character-portrait-stage {
+    aspect-ratio: 1;
+    background: color-mix(in srgb, var(--bg-slate-150-2) 58%, transparent);
+    border-radius: 0.75rem;
+    max-width: 16rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .character-portrait-stage img,
+  .character-portrait-stage canvas {
+    height: 100%;
+    inset: 0;
+    object-fit: cover;
+    position: absolute;
+    width: 100%;
   }
 }

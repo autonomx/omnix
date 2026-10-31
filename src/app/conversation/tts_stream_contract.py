@@ -139,6 +139,7 @@ def stream_pcm16_blocks(
     preroll_ms: float = STREAM_INITIAL_PREROLL_MS,
     max_initial_silence_ms: float = STREAM_MAX_INITIAL_SILENCE_MS,
     fallback_threshold: float = STREAM_INITIAL_FALLBACK_THRESHOLD,
+    stats: dict[str, int] | None = None,
 ) -> Iterator[tuple[bytes, int, Any]]:
     """Repack provider chunks into steady PCM16 blocks with bounded startup scanning.
 
@@ -147,7 +148,19 @@ def stream_pcm16_blocks(
     at a quiet-speech threshold and then for any nonzero signal. Until genuine
     signal appears, only a small preroll tail is retained; all-zero PCM is not
     mislabeled as audible output.
+
+    ``stats["leading_dropped_samples"]``, when given, counts the provider samples
+    dropped before the first one sent: whoever lines the sent audio up with the
+    provider's (the live portrait's speculative copy) needs it.
     """
+    dropped = 0
+
+    def note_dropped(byte_count: int) -> None:
+        nonlocal dropped
+        dropped += max(0, byte_count) // 2
+        if stats is not None:
+            stats["leading_dropped_samples"] = dropped
+
     block_bytes = max(1, int(block_samples)) * 2
     leftover = b""
     leftover_rate = DEFAULT_SAMPLE_RATE
@@ -170,6 +183,7 @@ def stream_pcm16_blocks(
 
         if not found_speech:
             if initial_pcm and sample_rate != initial_rate:
+                note_dropped(len(initial_pcm))
                 initial_pcm = b""
                 fallback_armed = False
             initial_pcm += pcm_bytes
@@ -212,12 +226,14 @@ def stream_pcm16_blocks(
                         int(sample_rate * max(0.0, preroll_ms) / 1000.0),
                     )
                     retained_bytes = preroll_samples * 2
+                    note_dropped(len(initial_pcm) - retained_bytes if retained_bytes > 0 else len(initial_pcm))
                     initial_pcm = (
                         initial_pcm[-retained_bytes:]
                         if retained_bytes > 0
                         else b""
                     )
                     continue
+            note_dropped(start_byte)
             pcm_bytes = initial_pcm[start_byte:]
             sample_rate = initial_rate
             timing = initial_timing

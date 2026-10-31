@@ -104,6 +104,50 @@ def test_malformed_catalogs_are_refused(change, message) -> None:
         parse_catalog(raw)
 
 
+DIRECT = {"repo": "org/direct", "revision": "v1.2-abc", "service": "portrait", "source": "direct",
+          "files": {"weights.pth": {**FILE, "url": "https://example.org/weights.pth"}}}
+
+
+def test_direct_models_are_pinned_by_their_urls_and_bundles_install_them() -> None:
+    raw = _raw()
+    raw["models"]["direct-model"] = copy.deepcopy(DIRECT)
+    raw["bundles"]["voice-output"]["variants"][0]["models"].append("direct-model")
+    parsed = parse_catalog(raw)
+    entry = parsed.model("direct-model")
+    assert entry.pinned and entry.source == "direct"
+    assert entry.files[0].url == "https://example.org/weights.pth"
+    assert parsed.model("tts-model").files[0].url == ""
+
+
+@pytest.mark.parametrize(("change", "message"), [
+    (lambda model: model["files"]["weights.pth"].update(url="http://example.org/weights.pth"), "https URL"),
+    (lambda model: model["files"]["weights.pth"].pop("url"), "https URL"),
+    (lambda model: model.update(files={"../escape.pth": {**FILE, "url": "https://example.org/x"}}), "inside the model"),
+    (lambda model: model.update(revision="main/../x"), "upstream revision"),
+    (lambda model: model.update(revision=""), "upstream revision"),
+    (lambda model: model.update(files={}), "no files"),
+    (lambda model: model["files"]["weights.pth"].update(sha256="short"), "SHA-256 and size"),
+])
+def test_malformed_direct_models_are_refused(change, message) -> None:
+    raw = _raw()
+    raw["models"]["direct-model"] = copy.deepcopy(DIRECT)
+    change(raw["models"]["direct-model"])
+    with pytest.raises(CatalogError, match=message):
+        parse_catalog(raw)
+
+
+def test_the_shipped_portrait_models_are_direct_or_pinned_commits() -> None:
+    shipped = catalog.load()
+    for model_id in ("float", "float-code", "wav2vec2-base-960h", "wav2vec-english-speech-emotion-recognition",
+                     "s3fd-face-detector"):
+        entry = shipped.model(model_id)
+        assert entry.pinned and entry.kind == "portrait" and entry.service == "portrait"
+    assert not shipped.model("float").licence.commercial_use
+    code = shipped.model("float-code")
+    # The code is fetched file by file at one upstream commit, never as an archive.
+    assert all(f"/float/{code.revision}/" in item.url for item in code.files)
+
+
 def test_a_version_1_catalog_still_loads() -> None:
     parsed = parse_catalog({"models": {"m": {"repo": "org/m", "revision": REVISION, "service": "stt",
                                              "files": {"a.nemo": FILE}}}})

@@ -132,6 +132,9 @@ export const pcmControlEventSchema: z.ZodType<PcmControlEvent> = z.looseObject({
   last_frame_index: optional(z.number()),
   generated_through_frame: optional(z.number()),
   reason: optional(z.string()),
+  // The live portrait's hello (requested with ?portrait=1).
+  call_key: optional(z.string()),
+  avatar_token: optional(z.string()),
 });
 
 /** A `data:` event on POST /api/live/speculation/sessions/{session_id}/stream. */

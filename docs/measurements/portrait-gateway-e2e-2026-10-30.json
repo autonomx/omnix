@@ -1,0 +1,39 @@
+{
+  "measurement": "live portrait Phase 2: gateway to portrait service, end to end (src/tests/live_voice/test_portrait_end_to_end.py)",
+  "date": "2026-10-30",
+  "setup": "portrait service from the omnix-portrait env (real FLOAT on the 4090); gateway in process with its real TTS and avatar websockets; a stand-in TTS provider speaking voice_clones/Maya.wav as two phrases at 3x real time (no GPU use); a portrait pack whose image is upstream sam_altman.webp; two replies on one call, 1 s apart",
+  "results": {
+    "audio_seconds_per_reply": 10.64,
+    "avatar_ready_ms": 414,
+    "replies": {
+      "out-1": {
+        "frames": 264,
+        "expected": 264,
+        "segments_in_order": true,
+        "offsets_rising_per_segment": true,
+        "decodable_512": 264,
+        "first_frame_after_first_pcm_ms": 872
+      },
+      "out-2": {
+        "frames": 264,
+        "expected": 264,
+        "segments_in_order": true,
+        "offsets_rising_per_segment": true,
+        "decodable_512": 264,
+        "first_frame_after_first_pcm_ms": 291
+      }
+    }
+  },
+  "service_log": [
+    "2026-10-29 18:28:06,412 INFO __main__ Portrait model ready in 89.7 s",
+    "2026-10-29 18:28:11,733 INFO services.portrait.scheduler portrait out-1: first pass 47 ms after its first audio, took 51.3 ms",
+    "2026-10-29 18:28:12,101 INFO services.portrait.scheduler portrait out-1: first frames out 422 ms after its first audio",
+    "2026-10-29 18:28:16,753 INFO services.portrait.scheduler portrait out-2: first pass 15 ms after its first audio, took 8.0 ms",
+    "2026-10-29 18:28:16,811 INFO services.portrait.scheduler portrait out-2: first frames out 62 ms after its first audio"
+  ],
+  "findings": [
+    "Both replies arrived complete: frames equal the audio the browser got (each phrase's final partial 40 ms block is not sent by the TTS transport), in phrase order, offsets rising, all valid 512 px JPEGs.",
+    "Reply 2 (warm): first frames 62 ms after its first audio reached the service, 249-291 ms after the browser's first PCM (mostly waiting for 0.5 s of audio at 3x).",
+    "Reply 1: first pass 51 ms (warm: 8 ms) and first frames 422 ms after its first audio: the GPU waking from deep idle (nothing but a 5 ms encode since the load 90 s earlier), as the latency probe showed. The stand-in TTS does not use the GPU; real TTS on the same GPU should already have it awake. The loaded Phase 0 runs check this; the fallback is a short GPU wake after TTS's first chunk, inside the 0.5 s audio wait."
+  ]
+}

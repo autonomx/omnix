@@ -689,6 +689,7 @@
     "GET /api/tts/live-call/evaluations/export": "chat",
     "GET /api/tts/live-call/evaluations/release-gate": "chat",
     "GET /api/tts/live-call/evaluations/{evaluation_id}": "chat",
+    "POST /api/tts/live-call/portrait-preview": "live-voice",
     "GET /api/tts/live-call/presence-presets": "chat",
     "GET /api/tts/live-call/presence-presets/versions": "chat",
     "POST /api/tts/live-call/presence-presets/{preset}/activate/{version}": "chat",

@@ -5,7 +5,7 @@ import { type StreamingSttSegmentState } from './live-voice-websocket';
 import { endpointFusionAction } from './live-voice-turn-coordinator';
 import { EndpointCommitState, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, STT_SEGMENT_TELEMETRY_INTERVAL_MS, controller, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, readConversationPace, renderTranscript } from './live-voice-controller-state';
 import { requestFinalTranscript, rescheduleSemanticFinalization } from './live-voice-finalization';
-import { assessOverlapCandidate } from './live-voice-preview';
+import { assessOverlapCandidate, overlapAwaitsInterruption } from './live-voice-preview';
 import { emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../../events/bus';
 
 export class LiveSttSegmentTelemetryGate {
@@ -169,7 +169,7 @@ export function handlePartialTranscript(card: HTMLElement, text: string): void {
           : session.partialTranscript,
       });
     }
-    if (session.floorState === 'overlap_candidate' && liveVoiceAssistantIsSpeaking()) {
+    if (overlapAwaitsInterruption(session) && liveVoiceAssistantIsSpeaking()) {
       assessOverlapCandidate(session);
     }
   }

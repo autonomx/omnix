@@ -1,0 +1,386 @@
+{
+  "measurement": "live portrait Phase 0 spike, standalone pass (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md)",
+  "date": "2026-10-29",
+  "script": "scripts/portrait_spike.py",
+  "environment": "venv over the rpg-stt env: CPython 3.11, torch 2.6.0+cu124, transformers 4.57.6 (desktop torch base); GPU otherwise idle, no Omnix services running",
+  "upstream": {
+    "float_commit": "3b5b2dfc3e65df26e7fbba17d9adb3f43747851c",
+    "float_pth_sha256": "f5cd815510908284eca7c5b9e81bdd63fc4cbef761f83bfb8fbe5e2880b2b830",
+    "wav2vec2_base_960h_revision": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156",
+    "emotion_encoder_revision": "2c59b3f6092ca069fbf79629eeadd13b9f243ce8"
+  },
+  "inputs": {
+    "portrait": "upstream assets/sam_altman_512x512.jpg (already cropped)",
+    "audio": [
+      "upstream assets/aud-sample-vs-1.wav",
+      "resources/voice_clones/Maya.wav",
+      "resources/voice_clones/Morgan.wav",
+      "resources/voice_clones/Sofia.wav"
+    ],
+    "emotion": "neutral (label, no speech-to-emotion)",
+    "stream_configs": "R (lookahead frames) in 3/5/8, H (hop) in 10/20/40, first hop 8, 50 frames of audio context, normalization per buffer or running"
+  },
+  "notes": [
+    "distance = mean per-frame L2 between motion latents, relative to the reference's mean norm; noise_floor = whole clip vs whole clip with another seed. Head motion varies strongly with the seed, so this metric bounds drift but cannot judge lip-sync; SyncNet LSE-C/D is still to come.",
+    "streamed pass seeds partly coincide with the reference's window seeds, which biases some streamed distances below the noise floor.",
+    "first_frame is an estimate: the p95 pass time plus 8 decoded frames, after (H1 + R) = 13 frames of audio, against the browser's 0.4 s start buffer, for TTS producing audio at the given real-time factor. Real arrival schedules come from recorded live calls.",
+    "upstream's wav2vec2 wrapper sets config.output_attentions, which transformers 4.57 refuses under SDPA; the spike loads it with attn_implementation='eager'."
+  ],
+  "results": {
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "torch": "2.6.0+cu124",
+    "clips": {
+      "aud-sample-vs-1.wav": {
+        "seconds": 15.04,
+        "noise_floor": 0.5879,
+        "streamed": {
+          "R3_H10_buffer": {
+            "distance": 0.7229,
+            "passes": 38
+          },
+          "R3_H10_running": {
+            "distance": 0.7228,
+            "passes": 38
+          },
+          "R3_H20_buffer": {
+            "distance": 0.6281,
+            "passes": 20
+          },
+          "R3_H20_running": {
+            "distance": 0.6281,
+            "passes": 20
+          },
+          "R3_H40_buffer": {
+            "distance": 0.6843,
+            "passes": 11
+          },
+          "R3_H40_running": {
+            "distance": 0.6843,
+            "passes": 11
+          },
+          "R5_H10_buffer": {
+            "distance": 0.7073,
+            "passes": 38
+          },
+          "R5_H10_running": {
+            "distance": 0.7072,
+            "passes": 38
+          },
+          "R5_H20_buffer": {
+            "distance": 0.6212,
+            "passes": 20
+          },
+          "R5_H20_running": {
+            "distance": 0.6212,
+            "passes": 20
+          },
+          "R5_H40_buffer": {
+            "distance": 0.6661,
+            "passes": 11
+          },
+          "R5_H40_running": {
+            "distance": 0.6661,
+            "passes": 11
+          },
+          "R8_H10_buffer": {
+            "distance": 0.6818,
+            "passes": 37
+          },
+          "R8_H10_running": {
+            "distance": 0.6818,
+            "passes": 37
+          },
+          "R8_H20_buffer": {
+            "distance": 0.6066,
+            "passes": 19
+          },
+          "R8_H20_running": {
+            "distance": 0.6066,
+            "passes": 19
+          },
+          "R8_H40_buffer": {
+            "distance": 0.6428,
+            "passes": 10
+          },
+          "R8_H40_running": {
+            "distance": 0.6428,
+            "passes": 10
+          }
+        }
+      },
+      "Maya.wav": {
+        "seconds": 10.64,
+        "noise_floor": 0.7591,
+        "streamed": {
+          "R3_H10_buffer": {
+            "distance": 0.7781,
+            "passes": 27
+          },
+          "R3_H10_running": {
+            "distance": 0.778,
+            "passes": 27
+          },
+          "R3_H20_buffer": {
+            "distance": 0.6534,
+            "passes": 14
+          },
+          "R3_H20_running": {
+            "distance": 0.6533,
+            "passes": 14
+          },
+          "R3_H40_buffer": {
+            "distance": 0.8511,
+            "passes": 8
+          },
+          "R3_H40_running": {
+            "distance": 0.851,
+            "passes": 8
+          },
+          "R5_H10_buffer": {
+            "distance": 0.8017,
+            "passes": 27
+          },
+          "R5_H10_running": {
+            "distance": 0.8017,
+            "passes": 27
+          },
+          "R5_H20_buffer": {
+            "distance": 0.6475,
+            "passes": 14
+          },
+          "R5_H20_running": {
+            "distance": 0.6475,
+            "passes": 14
+          },
+          "R5_H40_buffer": {
+            "distance": 0.8344,
+            "passes": 8
+          },
+          "R5_H40_running": {
+            "distance": 0.8344,
+            "passes": 8
+          },
+          "R8_H10_buffer": {
+            "distance": 0.7935,
+            "passes": 26
+          },
+          "R8_H10_running": {
+            "distance": 0.7934,
+            "passes": 26
+          },
+          "R8_H20_buffer": {
+            "distance": 0.6452,
+            "passes": 14
+          },
+          "R8_H20_running": {
+            "distance": 0.6451,
+            "passes": 14
+          },
+          "R8_H40_buffer": {
+            "distance": 0.8356,
+            "passes": 8
+          },
+          "R8_H40_running": {
+            "distance": 0.8356,
+            "passes": 8
+          }
+        }
+      },
+      "Morgan.wav": {
+        "seconds": 11.72,
+        "noise_floor": 0.7112,
+        "streamed": {
+          "R3_H10_buffer": {
+            "distance": 0.7439,
+            "passes": 30
+          },
+          "R3_H10_running": {
+            "distance": 0.7437,
+            "passes": 30
+          },
+          "R3_H20_buffer": {
+            "distance": 0.6769,
+            "passes": 16
+          },
+          "R3_H20_running": {
+            "distance": 0.6765,
+            "passes": 16
+          },
+          "R3_H40_buffer": {
+            "distance": 0.7395,
+            "passes": 9
+          },
+          "R3_H40_running": {
+            "distance": 0.7394,
+            "passes": 9
+          },
+          "R5_H10_buffer": {
+            "distance": 0.721,
+            "passes": 29
+          },
+          "R5_H10_running": {
+            "distance": 0.7208,
+            "passes": 29
+          },
+          "R5_H20_buffer": {
+            "distance": 0.6378,
+            "passes": 15
+          },
+          "R5_H20_running": {
+            "distance": 0.6377,
+            "passes": 15
+          },
+          "R5_H40_buffer": {
+            "distance": 0.7425,
+            "passes": 8
+          },
+          "R5_H40_running": {
+            "distance": 0.7425,
+            "passes": 8
+          },
+          "R8_H10_buffer": {
+            "distance": 0.6938,
+            "passes": 29
+          },
+          "R8_H10_running": {
+            "distance": 0.6936,
+            "passes": 29
+          },
+          "R8_H20_buffer": {
+            "distance": 0.6266,
+            "passes": 15
+          },
+          "R8_H20_running": {
+            "distance": 0.6265,
+            "passes": 15
+          },
+          "R8_H40_buffer": {
+            "distance": 0.7328,
+            "passes": 8
+          },
+          "R8_H40_running": {
+            "distance": 0.7328,
+            "passes": 8
+          }
+        }
+      },
+      "Sofia.wav": {
+        "seconds": 5.29,
+        "noise_floor": 0.7915,
+        "streamed": {
+          "R3_H10_buffer": {
+            "distance": 0.8494,
+            "passes": 14
+          },
+          "R3_H10_running": {
+            "distance": 0.8494,
+            "passes": 14
+          },
+          "R3_H20_buffer": {
+            "distance": 0.7099,
+            "passes": 8
+          },
+          "R3_H20_running": {
+            "distance": 0.7099,
+            "passes": 8
+          },
+          "R3_H40_buffer": {
+            "distance": 0.974,
+            "passes": 5
+          },
+          "R3_H40_running": {
+            "distance": 0.974,
+            "passes": 5
+          },
+          "R5_H10_buffer": {
+            "distance": 0.9319,
+            "passes": 13
+          },
+          "R5_H10_running": {
+            "distance": 0.9319,
+            "passes": 13
+          },
+          "R5_H20_buffer": {
+            "distance": 0.7242,
+            "passes": 7
+          },
+          "R5_H20_running": {
+            "distance": 0.7242,
+            "passes": 7
+          },
+          "R5_H40_buffer": {
+            "distance": 0.9973,
+            "passes": 4
+          },
+          "R5_H40_running": {
+            "distance": 0.9973,
+            "passes": 4
+          },
+          "R8_H10_buffer": {
+            "distance": 0.9166,
+            "passes": 13
+          },
+          "R8_H10_running": {
+            "distance": 0.9167,
+            "passes": 13
+          },
+          "R8_H20_buffer": {
+            "distance": 0.7468,
+            "passes": 7
+          },
+          "R8_H20_running": {
+            "distance": 0.7468,
+            "passes": 7
+          },
+          "R8_H40_buffer": {
+            "distance": 1.0015,
+            "passes": 4
+          },
+          "R8_H40_running": {
+            "distance": 1.0015,
+            "passes": 4
+          }
+        }
+      }
+    },
+    "weights_mb_with_emotion_model": 2358,
+    "weights_mb_without_emotion_model": 1151,
+    "timing": {
+      "pass_ms_p50_nfe10": 54.17,
+      "pass_ms_p95_nfe10": 63.02,
+      "features_ms_p50": 6.57,
+      "fmt_ms_p50_nfe10": 47.36,
+      "pass_ms_p50_nfe7": 40.35,
+      "pass_ms_p50_nfe5": 28.19,
+      "decode_ms_per_frame_b1_fp32": 13.02,
+      "decode_ms_per_frame_b4_fp32": 5.51,
+      "decode_ms_per_frame_b8_fp32": 4.61,
+      "decode_ms_per_frame_b16_fp32": 4.72,
+      "decode_ms_per_frame_b1_fp16": 13.27,
+      "decode_ms_per_frame_b4_fp16": 5.12,
+      "decode_ms_per_frame_b8_fp16": 4.55,
+      "decode_ms_per_frame_b16_fp16": 4.49,
+      "fp16_vs_fp32_psnr_db": 73.9
+    },
+    "vram_peak_mb_whole_run": 22327,
+    "vram_peak_mb_streaming": 4091,
+    "vram_reserved_mb_streaming": 5274,
+    "first_frame": {
+      "tts_rtf_0.25": {
+        "first_frame_ready_ms": 229,
+        "browser_start_ms": 100,
+        "extra_hold_ms": 129
+      },
+      "tts_rtf_0.5": {
+        "first_frame_ready_ms": 359,
+        "browser_start_ms": 200,
+        "extra_hold_ms": 159
+      },
+      "tts_rtf_0.8": {
+        "first_frame_ready_ms": 515,
+        "browser_start_ms": 320,
+        "extra_hold_ms": 195
+      }
+    }
+  }
+}

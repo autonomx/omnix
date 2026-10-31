@@ -27,6 +27,7 @@ from app.platform.live_voice.speech.startup_frame_policy import (
     stream_live_call_pcm16_blocks,
 )
 
+from app.platform.live_voice.portrait.calls import PortraitCall, new_call_key, portrait_call_registry, principal_id
 from app.platform.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
 from app.platform.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
 from app.observability.tts_stream_diagnostics import (
@@ -78,6 +79,8 @@ class ConnectionState:
     active_frames: asyncio.Queue[FrameMessage] | None = None
     active_output: ActiveOutput | None = None
     cancelled_outputs: set[tuple[str, int]] = field(default_factory=set)
+    # The call's portrait, when the client asked for one (``?portrait=1``); a no-op until a link attaches.
+    portrait: PortraitCall | None = None
 
 
 def _connection_details(websocket: WebSocket) -> dict[str, Any]:
@@ -154,6 +157,21 @@ def _is_speculative_cache_frame(timing: Any) -> bool:
     return isinstance(timing, dict) and timing.get("speculative_tts_cache") is True
 
 
+def _advance_portrait_replay(replay: tuple[str, int, bool] | None, timing: Any,
+                             samples: int) -> tuple[str, int, bool] | None:
+    """(generation id, samples replayed, replay over) for a phrase replaying a speculation its portrait copied.
+
+    The replay is the leading run of cached chunks the portrait has a copy of; the first other chunk ends it.
+    """
+    copied = isinstance(timing, dict) and timing.get("speculation_portrait_copy") is True
+    if replay is None:
+        return (str(timing["speculation_generation_id"]), samples, False) if copied else None
+    generation_id, replayed, over = replay
+    if over:
+        return replay
+    return (generation_id, replayed + samples, False) if copied else (generation_id, replayed, True)
+
+
 def _ownership_fields(
     payload: dict[str, Any],
     output_id: str,
@@ -219,10 +237,18 @@ async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> Non
                     **(details if isinstance(details, dict) else {}),
                 )
                 continue
+            if message_type == "output_end":
+                # The turn's last phrase is queued; the portrait commits its held frames.
+                if state.portrait is not None:
+                    output_id, generation_epoch, _segment_id = _output_identity(payload)
+                    state.portrait.output_end(output_id, generation_epoch)
+                continue
             if message_type == "cancel":
                 output_id, generation_epoch, segment_id = _output_identity(payload)
                 key = (output_id, generation_epoch)
                 state.cancelled_outputs.add(key)
+                if state.portrait is not None:
+                    state.portrait.cancel(output_id, generation_epoch)
                 active = state.active_output
                 generated_through_frame = -1
                 if active and (active.output_id, active.generation_epoch) == key:
@@ -429,6 +455,9 @@ async def _stream_phrase(
         loop = asyncio.get_running_loop()
         frames: asyncio.Queue[FrameMessage] = asyncio.Queue()
         state.active_frames = frames
+        portrait = state.portrait
+        if portrait is not None:
+            portrait.tts_priority(True)  # the portrait gives way until this phrase's first chunk is out
 
         def stopped() -> bool:
             return state.stop_event.is_set() or phrase_stop.is_set() or key in state.cancelled_outputs
@@ -447,6 +476,7 @@ async def _stream_phrase(
             frame_handoff_timeout_count = 0
             max_frame_handoff_wait_ms = 0.0
             speculative_startup_burst_frames = 0
+            portrait_replay: tuple[str, int, bool] | None = None
             stream_log(
                 stream_id,
                 "provider",
@@ -471,9 +501,12 @@ async def _stream_phrase(
                 if request.parity_mode is not None:
                     stream_kwargs["parity_mode"] = request.parity_mode
                 stream_kwargs.update(performance_application.provider_kwargs)
+                if portrait is not None and getattr(provider, "claims_by_call_key", False):
+                    # Speculation made for this call only (its portrait has a copy of it).
+                    stream_kwargs["portrait_call_key"] = portrait.call_key
 
                 def raw_chunks():
-                    nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count
+                    nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count, portrait_replay
                     provider_stream = provider.generate_audio_stream(
                         text=text,
                         speaker=request.speaker,
@@ -493,6 +526,7 @@ async def _stream_phrase(
                         raw_chunk_count += 1
                         produced_samples += sample_count
                         last_raw_chunk_at = raw_chunk_ready_at
+                        portrait_replay = _advance_portrait_replay(portrait_replay, timing, sample_count)
                         stream_log(
                             stream_id,
                             "provider",
@@ -562,6 +596,10 @@ async def _stream_phrase(
                         "output_id": output_id,
                         "generation_epoch": generation_epoch,
                         "segment_id": segment_id,
+                        # Raw chunks run ahead of blocks, so this already covers the block's samples.
+                        "portrait_replay": portrait_replay,
+                        # Provider samples dropped before the first one sent (leading silence).
+                        "portrait_trim": block_stats.get("leading_dropped_samples", 0),
                     }
                     queued_frame_count += 1
                     emit(
@@ -607,10 +645,12 @@ async def _stream_phrase(
                         )
                     return not stopped()
 
+                block_stats: dict[str, int] = {}
                 transport_frames = stream_live_call_pcm16_blocks(
                     raw_chunks(),
                     streamer=_measured_pcm_block_streamer,
                     block_samples=TTS_PCM_FRAME_SAMPLES,
+                    stats=block_stats,
                 )
                 deferred_frame: tuple[bytes, int, Any] | None = None
                 first_frame = next(transport_frames, None)
@@ -738,6 +778,12 @@ async def _stream_phrase(
                                 "performance_controls_ignored": ignored_controls,
                             }
                         )
+                        if portrait is not None:
+                            portrait.phrase_start(output_id, generation_epoch, segment_id, current_sample_rate)
+                            replay = metadata.get("portrait_replay")
+                            if first_start_control and replay is not None:
+                                portrait.bind(replay[0], generation_epoch, segment_id,
+                                              trim=int(metadata.get("portrait_trim") or 0))
                         if first_start_control:
                             stream_log(
                                 stream_id,
@@ -753,6 +799,11 @@ async def _stream_phrase(
                         started = True
                     first_pcm_frame = sent_frames == 0
                     await websocket.send_bytes(pcm_bytes)
+                    if portrait is not None:
+                        # A copy of exactly what the browser plays; queued, never awaited.
+                        portrait.pcm(segment_id, pcm_bytes, metadata.get("portrait_replay"))
+                        if first_pcm_frame:
+                            portrait.tts_priority(False)
                     if first_pcm_frame:
                         now = time.perf_counter()
                         stream_log(
@@ -780,6 +831,8 @@ async def _stream_phrase(
                 sent_samples += frame_samples
                 continue
             if message_type == "done":
+                if portrait is not None:
+                    portrait.phrase_done(segment_id)
                 await websocket.send_json(
                     {
                         "type": "done",
@@ -819,6 +872,10 @@ async def _stream_phrase(
             return
     finally:
         phrase_stop.set()
+        if state.portrait is not None:
+            state.portrait.tts_priority(False)  # also on an error or a cancel before the first chunk
+            # A phrase that failed after some audio still ends: the reply's later phrases follow it.
+            state.portrait.close_phrase(segment_id)
         if state.active_frames is not None:
             state.active_frames = None
         if state.active_output is active_output:
@@ -858,10 +915,11 @@ def register_tts_live_call_websocket(
     *,
     provider_resolver: TTSProviderResolver,
 ) -> None:
+    """Register one reusable websocket per Live session."""
     if getattr(state, _ROUTE_SENTINEL, False):
         return
     setattr(state, _ROUTE_SENTINEL, True)
-    """Register one reusable websocket per Live session."""
+    portrait_calls = portrait_call_registry(state)
 
     @router.websocket(TTS_LIVE_CALL_WEBSOCKET_PATH)
     async def tts_live_call_websocket(websocket: WebSocket) -> None:
@@ -876,16 +934,27 @@ def register_tts_live_call_websocket(
             )
             return
 
-        # A durable live-speech lease for the whole call: GPU engine swaps wait while it exists.
+        # A durable live-speech lease for the whole call, held under its call key: GPU engine swaps wait while
+        # it exists. The key is the call's for its whole life (an object id can be reused once it is freed).
         from app.persistence.tts_swap import LiveSpeechLease
 
-        live_lease = await asyncio.to_thread(LiveSpeechLease("live_call", f"live-call:{id(websocket)}").start)
+        call_key = new_call_key()
+        live_lease = await asyncio.to_thread(LiveSpeechLease("live_call", f"live-call:{call_key}").start)
         try:
             await websocket.accept()
             state = ConnectionState(
                 stop_event=threading.Event(),
                 requests=asyncio.Queue(),
             )
+            if websocket.query_params.get("portrait") == "1":
+                # A client that can show a portrait asks for the call key and avatar token first.
+                state.portrait = portrait_calls.issue(principal_id(websocket.scope), call_key=call_key)
+                try:
+                    await websocket.send_json({"type": "hello", "call_key": state.portrait.call_key,
+                                               "avatar_token": state.portrait.token})
+                except BaseException:  # the client left before its hello: the call never began
+                    portrait_calls.remove(state.portrait)
+                    raise
             receiver = asyncio.create_task(_receive_messages(websocket, state))
             try:
                 while not state.stop_event.is_set():
@@ -920,6 +989,10 @@ def register_tts_live_call_websocket(
                 receiver.cancel()
                 with suppress(asyncio.CancelledError):
                     await receiver
+                if state.portrait is not None:
+                    portrait_calls.remove(state.portrait)
+                    if state.portrait.link is not None:  # the call is over: so is its portrait
+                        await state.portrait.link.close()
                 with suppress(Exception):
                     await websocket.close()
         finally:

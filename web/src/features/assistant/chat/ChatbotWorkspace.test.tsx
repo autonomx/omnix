@@ -9,6 +9,25 @@ import { ChatbotWorkspace } from './ChatbotWorkspace';
 import { selectFreshChatSession } from './chatMessageModel';
 import { createTestQueryClient } from '../../../test/renderWithProviders';
 
+// Chat's runtime, as the router activates it: ready unless a test holds it back (a cold start's loading modules).
+const runtimeGate = vi.hoisted(() => ({ ready: true, release: () => undefined as void }));
+vi.mock('../../../app/viewRuntime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../app/viewRuntime')>();
+  return {
+    ...actual,
+    viewRuntimeIsReady: (moduleId: Parameters<typeof actual.viewRuntimeIsReady>[0]) =>
+      runtimeGate.ready && actual.viewRuntimeIsReady(moduleId),
+    viewRuntimeReady: (moduleId: Parameters<typeof actual.viewRuntimeReady>[0]) => (runtimeGate.ready
+      ? actual.viewRuntimeReady(moduleId)
+      : new Promise<void>((resolve) => {
+        runtimeGate.release = () => {
+          runtimeGate.ready = true;
+          resolve();
+        };
+      })),
+  };
+});
+
 function renderChatbot() {
   const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'chatbot');
@@ -883,6 +902,35 @@ describe('ChatbotWorkspace', () => {
       expect(messageCall?.[1]?.body).toContain('"coding_approval_policy":"always_ask"');
       expect(messageCall?.[1]?.body).toMatch(/"user_turn_id":"web-user-turn:[^"]+"/);
     });
+  });
+
+  it('starts a call only once Chat\'s runtime has finished loading its live-voice controllers', async () => {
+    // A cold start: the page is usable seconds before the runtime's modules have loaded; a call started then took
+    // the legacy browser path and never began (2026-10-31).
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    }));
+    renderChatbot();
+    expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
+    runtimeGate.ready = false;
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
+      expect(screen.getByText('Preparing live voice…')).toBeInTheDocument();
+      expect(screen.getByText('Disconnected')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Start Call' })); // a second click while it waits: ignored
+      await act(async () => {
+        runtimeGate.release();
+        await Promise.resolve();
+      });
+      expect(await screen.findByText('Connected')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'End Call' })).toBeInTheDocument();
+    } finally {
+      runtimeGate.ready = true;
+    }
   });
 
   it('starts, advances, and resets the live call timer from call controls', async () => {

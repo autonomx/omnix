@@ -5,9 +5,11 @@ import argparse
 import json
 from pathlib import Path
 
+from app.platform.live_voice.portrait_gate import PortraitGateThresholds, evaluate_portrait_pairing
 from app.platform.live_voice.release_gate import (
     LiveVoiceReleaseThresholds,
     evaluate_live_voice_log,
+    read_live_voice_log,
 )
 from app.platform.live_voice.diagnostics import LIVE_VOICE_STREAM_LOG_PATH
 
@@ -24,11 +26,25 @@ def build_parser() -> argparse.ArgumentParser:
         dest="scenarios",
         help="Override the required scenario set; repeat once per scenario.",
     )
+    parser.add_argument("--portrait-pairing", action="store_true",
+                        help="Compare the live portrait's off and on runs (live portrait roadmap, Phase 5).")
+    parser.add_argument("--minimum-replies", type=int, default=40,
+                        help="With --portrait-pairing: replies needed per scenario in each run.")
+    parser.add_argument("--minimum-interruptions", type=int, default=30,
+                        help="With --portrait-pairing: interruptions needed per interruption scenario in each run.")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.portrait_pairing:
+        limits = PortraitGateThresholds(minimum_replies=args.minimum_replies,
+                                        minimum_interruptions=args.minimum_interruptions)
+        if args.scenarios:
+            limits = limits.model_copy(update={"required_scenarios": tuple(args.scenarios)})
+        paired = evaluate_portrait_pairing(read_live_voice_log(args.log, hours=args.hours), limits)
+        print(json.dumps(paired.model_dump(mode="json"), indent=2, sort_keys=True))
+        return {"pass": 0, "insufficient": 2}.get(paired.status, 1)
     defaults = LiveVoiceReleaseThresholds()
     thresholds = LiveVoiceReleaseThresholds(
         minimum_latency_samples=args.minimum_latency_samples,

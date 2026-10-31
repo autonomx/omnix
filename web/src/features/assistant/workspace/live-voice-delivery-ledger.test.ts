@@ -53,6 +53,13 @@ describe('live voice delivery ledger', () => {
     expect(ledger.phrases[1]?.audioSampleEnd).toBe(36_000);
   });
 
+  it('records how long a portrait held the start of the turn', () => {
+    const ledger = createLiveVoiceDeliveryLedger(48_000);
+    expect(ledger.startHoldMs).toBeNull();
+    handleDeliveryDiagnostic(ledger, 'worklet_start_hold', { held_ms: 42, released_by: 'frames' });
+    expect(ledger.startHoldMs).toBe(42);
+  });
+
   it('advances only from canonical semantic speech samples', () => {
     const ledger = createLiveVoiceDeliveryLedger();
     appendDeliveryPhrase(ledger, 0, 'Canonical speech.');

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { viewRuntimeIsReady, viewRuntimeReady } from '../../../app/viewRuntime';
 import { createAssistantWorkspaceRuntimeConfig, startLiveVoiceCall, toggleLiveVoiceCall, useAssistantPcmStream, useLiveCallPresentation, useLiveVoiceTranscript } from '../workspace';
 import { AssistantView, ChatbotFormValues, dedicatedLiveVoiceControllerInstalled, getLatestAssistantMessage, getSpeechRecognitionConstructor, personalityLabel, readAssistantToolReturn, selectedModelLabel, selectedProviderLabel, voiceLabelForId } from './chatbotWorkspaceModel';
 import { useChatLayout } from './useChatLayout';
@@ -20,6 +21,10 @@ import { useChatCatalog } from './useChatCatalog';
 import { useChatMessageActions } from './useChatMessageActions';
 import type { ChatUiAction } from './generative-ui/uiActions';
 import { chatMessageText } from './generative-ui/chatMessageProjection';
+
+// How long a call's start waits for Chat's runtime to finish installing its controllers (it is never longer on a
+// warm load; a runtime that failed to load is logged, and the call starts without it).
+const LIVE_RUNTIME_READY_TIMEOUT_MS = 30_000;
 
 /** Wires Chat's hooks together: layout, sessions, sending, the live call, audio and message actions. */
 export function useChatWorkspaceState() {
@@ -136,6 +141,7 @@ export function useChatWorkspaceState() {
   const liveChatMessages = useMemo(() => liveChatMessagesFor(displayedMessages, liveVoiceTranscript), [displayedMessages, liveVoiceTranscript]);
 
   const liveCardRef = useRef<HTMLElement | null>(null);
+  const startingCallRef = useRef(false);
 
   const { toolExecutionRows, refreshActivityPanel, recordActivityEvent } = useChatActivity(runtimeConfig, activeSession);
 
@@ -255,9 +261,13 @@ export function useChatWorkspaceState() {
   // The call controls start or end both the capture controller's microphone
   // stream (when installed) and Chat's call session.
   function toggleLiveCallFromControls(): void {
+    if (!liveVoiceActive) {
+      void startLiveCallFromControls();
+      return;
+    }
     const card = liveCardRef.current;
     if (card && dedicatedLiveVoiceControllerInstalled()) toggleLiveVoiceCall(card);
-    void (liveVoiceActive ? stopLiveCall() : startLiveCall());
+    void stopLiveCall();
   }
 
   function sendFromLiveChat(text: string): boolean {
@@ -268,7 +278,20 @@ export function useChatWorkspaceState() {
     return true;
   }
 
-  function startLiveCallFromControls(): Promise<void> {
+  // A call starts once Chat's runtime has installed its live-voice controllers: started before (a cold start, while
+  // they still load) it took the legacy browser path, with no streaming STT and no live TTS, and never began.
+  async function startLiveCallFromControls(): Promise<void> {
+    if (startingCallRef.current) return;
+    if (!viewRuntimeIsReady('chatbot')) {  // ready (a warm load): the call starts at once, as before
+      startingCallRef.current = true;
+      setAudioStatus('Preparing live voice…');
+      try {
+        await Promise.race([viewRuntimeReady('chatbot'),
+          new Promise<void>((resolve) => { setTimeout(resolve, LIVE_RUNTIME_READY_TIMEOUT_MS); })]);
+      } finally {
+        startingCallRef.current = false;
+      }
+    }
     const card = liveCardRef.current;
     if (card && dedicatedLiveVoiceControllerInstalled()) startLiveVoiceCall(card);
     return startLiveCall();

@@ -24,6 +24,8 @@ export interface DesktopSettings {
   sttPort: number;
   ttsPort: number;
   imagePort: number;
+  /** The live portrait service's (added after the first release: an install from before gets one on its next start). */
+  portraitPort: number;
   startAtLogin: boolean;
   /** Where runtime and model packs live, when the user moved them (Settings, Models); the data folder otherwise. */
   packsDir?: string;
@@ -34,10 +36,11 @@ export interface DesktopSettings {
   windows: Record<string, WindowState>;
 }
 
-type PortSettings = Pick<DesktopSettings, 'httpPort' | 'pgPort' | 'metricsPort' | 'notifyPort' | 'sttPort' | 'ttsPort' | 'imagePort'>;
+type PortSettings = Pick<DesktopSettings, 'httpPort' | 'pgPort' | 'metricsPort' | 'notifyPort' | 'sttPort' | 'ttsPort' | 'imagePort' | 'portraitPort'>;
 
 const DEFAULT_PORTS: PortSettings = {
   httpPort: 47900, metricsPort: 47901, notifyPort: 47902, pgPort: 47903, sttPort: 47911, ttsPort: 47912, imagePort: 47913,
+  portraitPort: 47914,
 };
 
 export function portFree(port: number): Promise<boolean> {
@@ -60,11 +63,15 @@ function anyFreePort(): Promise<number> {
   });
 }
 
-/** First run: the default ports where free, otherwise any free port; later runs never change them. */
-export async function choosePorts(): Promise<PortSettings> {
-  const chosen: Record<string, number> = {};
-  const taken = new Set<number>();
+/**
+ * First run: the default ports where free, otherwise any free port; later runs never change them. `kept` are the ports
+ * an install already has: only the missing ones are chosen (a port added by an update), never one of those.
+ */
+export async function choosePorts(kept: Partial<PortSettings> = {}): Promise<PortSettings> {
+  const chosen: Record<string, number> = { ...kept };
+  const taken = new Set<number>(Object.values(kept).filter((port): port is number => typeof port === 'number'));
   for (const [name, port] of Object.entries(DEFAULT_PORTS)) {
+    if (typeof chosen[name] === 'number') continue;
     let candidate = port;
     if (!(await portFree(candidate)) || taken.has(candidate)) {
       do candidate = await anyFreePort(); while (taken.has(candidate));
@@ -100,7 +107,13 @@ export class SettingsStore {
 
   async loadOrCreate(): Promise<DesktopSettings> {
     const existing = this.load();
-    if (existing) return existing;
+    if (existing) {
+      const missing = (Object.keys(DEFAULT_PORTS) as (keyof PortSettings)[]).some((name) => typeof existing[name] !== 'number');
+      if (!missing) return existing;
+      const completed: DesktopSettings = { ...existing, ...(await choosePorts(existing)) };
+      this.save(completed);
+      return completed;
+    }
     const created: DesktopSettings = { ...(await choosePorts()), startAtLogin: false, windows: {} };
     this.save(created);
     return created;

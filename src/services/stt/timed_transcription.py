@@ -59,6 +59,7 @@ SPEAKER_VRAM_GB = 1.0
 TRANSCRIPT_SCHEMA = "omnix-transcript-v1"
 
 BATCH_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="omnix-stt-batch")
+LIVE_CALL_WARM_MESSAGE = "A live call is streaming; the batch engine loads when push-to-talk is used"
 
 
 class TimedTranscriptionUnavailable(HelperUnavailable):
@@ -557,11 +558,25 @@ def install_timed_transcription_routes(app: Any, *, decode: Callable[[bytes, str
 
     @app.post("/transcribe/timed/warm")
     async def warm_timed() -> dict[str, object]:
-        """Load the batch engine ahead of a short utterance (push-to-talk); it unloads again when idle."""
+        """Load the batch engine ahead of a short utterance (push-to-talk); it unloads again when idle.
+
+        Not while live audio streams: loading holds the GIL for up to a minute and the live decode stalls behind it
+        (a call's finals took 20 s when the chat composer warmed it mid-call). Push-to-talk loads it when used.
+        """
+        def warm() -> bool:
+            if live_active() and not ASR.loaded:  # checked again here: the request may have queued behind a batch
+                return False
+            ASR.get()
+            return True
+
+        if live_active() and not ASR.loaded:
+            return {"ok": False, "code": "live_call_active", "message": LIVE_CALL_WARM_MESSAGE}
         try:
-            await asyncio.get_running_loop().run_in_executor(BATCH_EXECUTOR, ASR.get)
+            loaded = await asyncio.get_running_loop().run_in_executor(BATCH_EXECUTOR, warm)
         except TimedTranscriptionUnavailable as exc:
             return {"ok": False, "code": "model_unavailable", "message": str(exc)}
+        if not loaded:
+            return {"ok": False, "code": "live_call_active", "message": LIVE_CALL_WARM_MESSAGE}
         return {"ok": True, "loaded": True}
 
     @app.post("/transcribe/timed")

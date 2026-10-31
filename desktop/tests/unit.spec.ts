@@ -144,8 +144,18 @@ test("first-run ports are distinct and never a developer Omnix's model service p
   const ports = await choosePorts();
   const values = Object.values(ports);
   expect(new Set(values).size).toBe(values.length);
-  for (const developerPort of [5101, 5201, 5301, 8000, 5432]) expect(values).not.toContain(developerPort);
-  expect(Object.keys(ports).sort()).toEqual(['httpPort', 'imagePort', 'metricsPort', 'notifyPort', 'pgPort', 'sttPort', 'ttsPort']);
+  for (const developerPort of [5101, 5201, 5301, 5501, 8000, 5432]) expect(values).not.toContain(developerPort);
+  expect(Object.keys(ports).sort()).toEqual(
+    ['httpPort', 'imagePort', 'metricsPort', 'notifyPort', 'pgPort', 'portraitPort', 'sttPort', 'ttsPort']);
+});
+
+test('an install from before a port was added keeps its ports and gets only the new one', async () => {
+  const kept = { httpPort: 48900, pgPort: 48903, metricsPort: 48901, notifyPort: 48902, sttPort: 48911, ttsPort: 48912,
+    imagePort: 48913 };
+  const ports = await choosePorts(kept);
+  expect(ports).toMatchObject(kept);
+  expect(typeof ports.portraitPort).toBe('number');
+  expect(Object.values(kept)).not.toContain(ports.portraitPort);
 });
 
 test('a development run has its own AppUserModelID, so its shortcut never gives the installed app its icon', () => {

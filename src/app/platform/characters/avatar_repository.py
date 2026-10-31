@@ -70,6 +70,8 @@ class CharacterAvatarRepository:
                 active_outfit=request.active_outfit,
                 active_background=request.active_background,
                 mouth_anchor=dict(request.mouth_anchor),
+                fallback_renderer=request.fallback_renderer,
+                portrait_emotion=request.portrait_emotion,
                 created_at=current.created_at if current else now,
                 updated_at=now,
             )
@@ -79,6 +81,12 @@ class CharacterAvatarRepository:
     def delete(self, character_id: str) -> bool:
         with self._state.lock:
             return self._state.packs.pop(character_id, None) is not None
+
+    def portrait_uses(self, asset_id: str) -> bool:
+        """Whether any portrait pack shows this image."""
+        with self._state.lock:
+            return any(pack.renderer == "portrait" and pack.base_asset_id == asset_id
+                       for pack in self._state.packs.values())
 
 
 def _utcnow() -> str:

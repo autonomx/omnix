@@ -36,6 +36,22 @@ Host memory limits a swap as much as VRAM:
 
 The controller, the live-session lease and the swap requests are described in the roadmap (Phase 1 §6) and implemented in `app/platform/voice/swap_controller.py` and `app/persistence/tts_swap.py`.
 
+## The live portrait
+
+The live portrait service (`src/services/portrait/`, port 5501, environment `omnix-portrait`, launcher role
+`portrait`) follows the pattern above with two differences, both because it renders video for a call in progress
+(`docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md`):
+- **Residency:** it is neither swapped nor an exempt helper. It loads in the background when it starts (about a
+  minute: cuDNN builds its plans for each network's one input shape), stays resident while used, and unloads after
+  30 idle minutes. It refuses to load with less than 2.5 GB of free VRAM or 6 GB of commit headroom.
+- **GPU sharing:** it shares the GPU with live speech by giving way, not by a lease. All of its GPU work runs on one
+  thread (cuDNN's setup is per thread), in micro-batches; it pauses while accepted TTS waits for a phrase's first
+  chunk (`tts_priority`), and admits one call's stream per GPU.
+
+The Models tool installs its models as the `live-portrait` bundle (FLOAT's weights through the catalog's `direct`
+source, its code at a pinned commit, wav2vec2 and the S3FD detector); on the desktop the `portrait-windows-x64`
+runtime pack holds its environment. Elsewhere `OMNIX_SETUP_PORTRAIT=1` makes the setup scripts build it.
+
 ## Engines in their own environment
 
 An engine whose dependencies cannot share the TTS environment runs as a child server of the process that owns TTS:

@@ -1,0 +1,194 @@
+{
+  "measurement": "live portrait Phase 1: the service runtime (services/portrait) on the GPU (scripts/portrait_runtime_check.py)",
+  "date": "2026-10-29",
+  "environment": "spike venv over rpg-stt (CPython 3.11, torch 2.6.0+cu124); models installed through the catalog's direct and Hugging Face paths into resources/models/portrait; GPU otherwise idle",
+  "inputs": "portrait: upstream sam_altman_512x512.jpg (and sam_altman.webp for the crop); audio: aud-sample-vs-1, Maya, Morgan, Sofia fed one video frame at a time as 16-bit PCM; nfe 7, R 5, H 20, decode batch 4",
+  "findings": [
+    "With float input and no buffer padding the service's motion latents equal the spike's exactly (0.0); 16-bit PCM moves them 2%.",
+    "Each new wav2vec2 input length costs about 0.4 s and each new decoder batch size about 28 s of one-off GPU setup; the service feeds both one fixed shape (100-frame buffer with silence before it, decode batches of exactly 4) and warms them at load.",
+    "torchvision's GPU JPEG encoder returned noise for some frames (PSNR 18 dB on average against the decoded frames), which SyncNet scored as lost sync (LSE-C 4.4); the service encodes on the CPU (every sent frame within 43 dB of its decoded frame).",
+    "Open: load takes about 60 s (mostly decoder setup), and the first pass of an output after a few idle seconds took 80-350 ms instead of 24 ms."
+  ],
+  "lipsync_lse_c": {
+    "service_production": {
+      "aud-sample-vs-1-service.mp4": 8.644,
+      "Maya-service.mp4": 7.046,
+      "Morgan-service.mp4": 4.625,
+      "Sofia-service.mp4": 5.3,
+      "mean": 6.404
+    },
+    "service_raw_frames_no_padding": {
+      "aud-sample-vs-1-raw.mp4": 8.969,
+      "Maya-raw.mp4": 6.712,
+      "Morgan-raw.mp4": 4.554,
+      "Sofia-raw.mp4": 5.602
+    },
+    "service_gpu_jpeg_no_padding": {
+      "aud-sample-vs-1-service.mp4": 6.762,
+      "Maya-service.mp4": 4.433,
+      "Morgan-service.mp4": 2.635,
+      "Sofia-service.mp4": 3.856,
+      "mean": 4.421
+    },
+    "spike_streamed_nfe7_mean": 6.468,
+    "spike_whole_clip_nfe10_mean": 6.767
+  },
+  "lipsync_lse_d_service_production": {
+    "aud-sample-vs-1-service.mp4": 7.046,
+    "Maya-service.mp4": 8.159,
+    "Morgan-service.mp4": 8.157,
+    "Sofia-service.mp4": 9.658,
+    "mean": 8.255
+  },
+  "runtime": {
+    "pcm": "int16",
+    "clips": {
+      "aud-sample-vs-1.wav": {
+        "frames_sent": 376,
+        "first_pass_ms": 27.1,
+        "jpeg_min_psnr_db": 43.4
+      },
+      "Maya.wav": {
+        "frames_sent": 266,
+        "first_pass_ms": 349.5,
+        "jpeg_min_psnr_db": 43.2
+      },
+      "Morgan.wav": {
+        "frames_sent": 293,
+        "first_pass_ms": 80.8,
+        "jpeg_min_psnr_db": 43.2
+      },
+      "Sofia.wav": {
+        "frames_sent": 133,
+        "first_pass_ms": 283.9,
+        "jpeg_min_psnr_db": 43.1
+      }
+    },
+    "buffer_frames": 100,
+    "load_s": 60.39,
+    "prepare_photo_ms": 82,
+    "encode_ms": 5,
+    "pass_ms_p50": 23.51,
+    "pass_ms_p95": 55.69,
+    "pass_ms_max": 349.53,
+    "passes": 58
+  },
+  "latency_probe": {
+    "script": "scripts/portrait_latency_probe.py",
+    "results": {
+      "load_s": 60.5,
+      "cudnn_on": {
+        "first_decode_b5_ms": 10363.4,
+        "steady_decode_b4_ms": 15.7
+      },
+      "cudnn_off": {
+        "first_decode_b6_ms": 191.6,
+        "second_decode_b6_ms": 154.6,
+        "steady_decode_b4_ms": 101.5
+      },
+      "passes_ms": {
+        "warm": [
+          27.1,
+          22.7,
+          23.2,
+          22.2,
+          22.4
+        ],
+        "after_3.0s_idle": [
+          103.9,
+          77.8,
+          24.1
+        ],
+        "tiny_wake_kernel": 1.3,
+        "after_tiny_wake": [
+          172.8,
+          24.9
+        ],
+        "after_150ms_busy_wake": [
+          26.8,
+          24.1
+        ]
+      }
+    },
+    "findings": [
+      "A new decoder batch size costs 10.4 s of cuDNN plan building once; with cuDNN off there is no setup but a batch of 4 takes 101 ms instead of 15.7 ms, too slow for 25 fps. cuDNN stays on with fixed shapes, warmed at load (about 60 s in all).",
+      "After 3 s of GPU idle the first passes took 104 and 78 ms before returning to 24 ms; one tiny kernel did not wake the GPU (173 ms after it), 150 ms of busy GPU did (27 ms). In a call, TTS on the same GPU should already have the clocks up before FLOAT's first pass; the loaded Phase 0 runs check this."
+    ]
+  },
+  "thread_probe": {
+    "script": "scripts/portrait_thread_probe.py",
+    "decode_ms_batch_4": {
+      "warmed_thread": [
+        29.5,
+        16.3
+      ],
+      "new_thread_1": [
+        49193.1,
+        26.7
+      ],
+      "new_thread_2": [
+        49103.2,
+        28.8
+      ]
+    },
+    "finding": "cuDNN's one-off setup is kept per thread: the first decode on a new thread took 49 s. The service runs all GPU work (load, warm-up, prepare, every stream) on one long-lived thread."
+  },
+  "service_smoke": {
+    "date": "2026-10-30",
+    "script": "scripts/portrait_service_smoke.py",
+    "environment": "omnix-portrait conda env built from services/portrait/portrait.lock.txt (--require-hashes); service process started on a free local port with a fresh service token",
+    "inputs": "photo upstream sam_altman.webp (uncropped); audio voice_clones/Maya.wav (10.64 s, 16-bit) sent in 80 ms blocks at 3x real time",
+    "results": {
+      "ready_after_s": 84.5,
+      "health": {
+        "ok": true,
+        "status": "ready",
+        "message": "",
+        "streams": {
+          "active": 0,
+          "max": 1
+        },
+        "gpu": {
+          "vram_free_bytes": 22460497920
+        },
+        "host": {
+          "commit_free_bytes": 24746889216
+        }
+      },
+      "prepare": {
+        "ok": true,
+        "latent_key": "03a07c3194cf8d2b9f0b85959c6c2a502035b435312b79a2d2b528ef8d40bc7b",
+        "ms": 289
+      },
+      "stream": {
+        "frames": 266,
+        "expected": 266,
+        "in_order": true,
+        "decodable_512": 266,
+        "first_frame_after_first_audio_ms": 399,
+        "stream_seconds": 3.73,
+        "audio_seconds": 10.64
+      },
+      "health_after": {
+        "ok": true,
+        "status": "ready",
+        "message": "",
+        "streams": {
+          "active": 0,
+          "max": 1
+        },
+        "gpu": {
+          "vram_free_bytes": 21223178240
+        },
+        "host": {
+          "commit_free_bytes": 23548616704
+        }
+      },
+      "ok": true
+    },
+    "notes": [
+      "The first runs found two packages missing from the lock (httpx, imported by app.providers; torchdiffeq, imported by upstream FMT) and a load check that could kill the service; all three fixed.",
+      "First frame 399 ms after the first audio: about 175 ms of waiting for 13 frames of audio at 3x, about 40 ms of pass, decode and JPEG, and the rest most likely the GPU waking from idle after prepare (see latency_probe). Against the browser's start at 0.4 s of audio that is about 265 ms of hold; the loaded Phase 0 runs (TTS keeping the GPU busy) and Phase 3's speculative frames address it."
+    ]
+  }
+}

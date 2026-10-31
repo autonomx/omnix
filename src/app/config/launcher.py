@@ -26,6 +26,8 @@ _INTERPRETERS = {
     "stt": ("RPG_STT_PYTHON", "rpg-stt"),
     # Voice Studio audio tools (src/services/audio/audio.lock.txt).
     "audio": ("OMNIX_AUDIO_PYTHON", "omnix-audio"),
+    # The live portrait service (src/services/portrait/portrait.lock.txt).
+    "portrait": ("OMNIX_PORTRAIT_PYTHON", "omnix-portrait"),
     # OmniVoice's child server, started by the omnivoice TTS provider (src/services/omnivoice).
     "omnivoice": ("OMNIX_OMNIVOICE_PYTHON", "omnix-omnivoice"),
     # Fish Audio S2 Pro's API server, started by the fish-s2-pro TTS provider.

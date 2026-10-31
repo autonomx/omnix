@@ -70,6 +70,69 @@ def test_a_file_with_the_wrong_digest_is_refused_and_removed(tmp_path):
     assert "weights/model.safetensors: missing" in verify(entry, cache_dir=cache)
 
 
+def _direct_catalog(path: Path, *, weights: bytes = WEIGHTS) -> Path:
+    path.write_text(json.dumps({"models": {"direct-model": {
+        "repo": "org/direct-model", "revision": "v1", "service": "portrait", "source": "direct",
+        "files": {"weights.pth": {"sha256": hashlib.sha256(weights).hexdigest(), "size": len(weights),
+                                  "url": "https://example.org/weights.pth"}},
+    }}}), encoding="utf-8")
+    return path
+
+
+class _FakeUrls:
+    """Stands in for the direct fetcher: writes the URL's bytes to the target."""
+
+    def __init__(self, contents: dict[str, bytes]) -> None:
+        self.contents = contents
+        self.calls: list[str] = []
+
+    def __call__(self, item, target: Path) -> Path:
+        self.calls.append(item.url)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(self.contents[item.url])
+        return target
+
+
+def test_a_direct_model_downloads_from_its_urls_into_the_snapshot_layout(tmp_path):
+    entry = load_catalog(_direct_catalog(tmp_path / "catalog.json"))["direct-model"]
+    urls = _FakeUrls({"https://example.org/weights.pth": WEIGHTS})
+    cache = tmp_path / "hub"
+
+    snapshot = download(entry, cache_dir=cache, fetch_url=urls)
+
+    assert snapshot == cache / "models--org--direct-model" / "snapshots" / "v1"
+    assert (snapshot / "weights.pth").read_bytes() == WEIGHTS
+    assert verify(entry, cache_dir=cache) == []
+    download(entry, cache_dir=cache, fetch_url=urls)
+    assert urls.calls == ["https://example.org/weights.pth"]
+
+
+def test_a_direct_file_with_the_wrong_digest_is_refused_and_removed(tmp_path):
+    entry = load_catalog(_direct_catalog(tmp_path / "catalog.json"))["direct-model"]
+    cache = tmp_path / "hub"
+
+    with pytest.raises(ModelDownloadError, match="weights.pth has SHA-256"):
+        download(entry, cache_dir=cache, fetch_url=_FakeUrls({"https://example.org/weights.pth": b"tampered"}))
+
+    assert not (cache / "models--org--direct-model" / "snapshots" / "v1" / "weights.pth").exists()
+
+
+def test_a_refused_direct_download_says_where_to_save_the_file_by_hand(tmp_path, monkeypatch):
+    from app.models import packs
+    from app.models.downloads import fetch_direct_file
+
+    def refuse(url, target, **_kwargs):
+        raise packs.PackError(f"download failed (403): {url}")
+
+    monkeypatch.setattr(packs, "download_file", refuse)
+    entry = load_catalog(_direct_catalog(tmp_path / "catalog.json"))["direct-model"]
+    target = tmp_path / "snapshot" / "weights.pth"
+    with pytest.raises(ModelDownloadError) as raised:
+        fetch_direct_file(entry.files[0], target)
+    message = str(raised.value)
+    assert "403" in message and "https://example.org/weights.pth" in message and str(target) in message
+
+
 def test_verify_reports_a_changed_file(tmp_path):
     entry = load_catalog(_catalog(tmp_path / "catalog.json"))["test-model"]
     cache = tmp_path / "hub"

@@ -1,4 +1,12 @@
-"""Accepted-first speculative TTS cache for the dedicated live execution lane."""
+"""Accepted-first speculative TTS cache for the dedicated live execution lane.
+
+A prefetch request may carry a live call's key (from the TTS websocket's ``hello``). The route checks the call is
+the caller's and records the key on the entry: only that call's phrases can claim it. When the call has a live
+portrait, the entry also gets the portrait's ``SpeculativeCopy`` (``platform/live_voice/portrait/calls.py``): the
+prefetch thread copies each chunk to it while holding the entry's condition, before replay can see the chunk, and
+every way an entry is dropped (replaced, pruned, cancelled, an abandoned cold claim, the cache cleared) drops the
+copy too. Replayed chunks say whether the portrait has them (``speculation_portrait_copy``).
+"""
 from __future__ import annotations
 
 import re
@@ -8,7 +16,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.config.env import env_str as _env_str
@@ -18,6 +26,7 @@ from app.conversation.performance_contract import (
 )
 from app.conversation.text import remove_emojis
 from app.platform.live_voice.hardware_policy import should_defer_speculative_tts
+from app.platform.live_voice.portrait.calls import portrait_call_registry, principal_id
 
 from .tts_lane import (
     TtsLanePriority,
@@ -74,6 +83,8 @@ _DEFERRED_TTS_ERROR = "speculative_tts_deferred_nonconcurrent_provider"
 class SpeculativeTtsPrefetchRequest(BaseModel):
     generation_id: str = Field(min_length=1, max_length=160)
     request: TtsStreamRequest
+    # The live call this speculation is for (its TTS websocket's hello); only that call can claim it.
+    call_key: str | None = Field(default=None, max_length=64)
 
 
 @dataclass
@@ -103,6 +114,14 @@ class _SpeculativeTtsEntry:
     condition: threading.Condition = field(
         default_factory=lambda: threading.Condition(threading.RLock())
     )
+    call_key: str | None = None
+    portrait: Any = None  # the call's portrait copy (SpeculativeCopy), when it has one
+
+
+def _drop_portrait_copy(entry: _SpeculativeTtsEntry) -> None:
+    """The entry will never be replayed: its portrait copy (if any) is dropped too."""
+    if entry.portrait is not None:
+        entry.portrait.drop()
 
 
 @dataclass(frozen=True)
@@ -117,6 +136,9 @@ _CACHE_LOCK = threading.RLock()
 
 class _LiveLaneProviderProxy:
     """Replay accepted PCM and schedule all provider work by turn priority."""
+
+    # The TTS websocket passes ``portrait_call_key``: claims are limited to the call's own speculation.
+    claims_by_call_key = True
 
     def __init__(self, provider: Any, lane: str) -> None:
         self._provider = provider
@@ -133,7 +155,8 @@ class _LiveLaneProviderProxy:
         language: str = "en",
         **kwargs: Any,
     ) -> Iterator[tuple[bytes, int, Any]]:
-        claim = _claim_entry(text, speaker, language, kwargs)
+        call_key = kwargs.pop("portrait_call_key", None)
+        claim = _claim_entry(text, speaker, language, kwargs, call_key)
         if claim is None:
             yield from _scheduled_provider_stream(
                 self._provider,
@@ -160,6 +183,7 @@ class _LiveLaneProviderProxy:
         index = 0
         emitted = 0
         replay_completed = False
+        portrait_copy = entry.portrait is not None and entry.portrait.usable
         try:
             while True:
                 with entry.condition:
@@ -180,6 +204,9 @@ class _LiveLaneProviderProxy:
                     error = entry.error
                 for chunk in available:
                     emitted += 1
+                    # A copy that fell behind (and was dropped) since the claim no longer has the rest: the replay
+                    # ends at this chunk, and the phrase sends the portrait its audio from here.
+                    portrait_copy = portrait_copy and entry.portrait is not None and entry.portrait.usable
                     yield chunk.pcm_bytes, chunk.sample_rate, {
                         **(
                             chunk.timing
@@ -188,6 +215,7 @@ class _LiveLaneProviderProxy:
                         ),
                         "speculative_tts_cache": True,
                         "speculation_generation_id": entry.generation_id,
+                        "speculation_portrait_copy": portrait_copy,
                         "live_execution_lane": entry.lane,
                     }
                 if terminal:
@@ -292,6 +320,7 @@ def clear_speculative_tts_cache() -> None:
         entries = list(_ENTRIES.values())
         _ENTRIES.clear()
     for entry in entries:
+        _drop_portrait_copy(entry)
         with entry.condition:
             entry.cancelled = True
             entry.condition.notify_all()
@@ -340,6 +369,9 @@ def _start_prefetch(
     request: TtsStreamRequest,
     provider: Any,
     lane: str,
+    *,
+    call_key: str | None = None,
+    portrait: Any = None,
 ) -> _SpeculativeTtsEntry:
     text = _normalized_text(remove_emojis(request.text or ""))
     if not text:
@@ -361,6 +393,7 @@ def _start_prefetch(
             lane=lane,
             completed=True,
             error=_DEFERRED_TTS_ERROR,
+            call_key=call_key,
         )
         with _CACHE_LOCK:
             _prune_entries_locked()
@@ -368,6 +401,7 @@ def _start_prefetch(
             _ENTRIES[generation_id] = entry
             _prune_entries_locked()
         if previous is not None:
+            _drop_portrait_copy(previous)
             with previous.condition:
                 previous.cancelled = True
                 previous.condition.notify_all()
@@ -392,6 +426,8 @@ def _start_prefetch(
         language=language,
         stable_kwargs=_stable_kwargs(kwargs),
         lane=lane,
+        call_key=call_key,
+        portrait=portrait,
     )
     with _CACHE_LOCK:
         _prune_entries_locked()
@@ -399,6 +435,7 @@ def _start_prefetch(
         _ENTRIES[generation_id] = entry
         _prune_entries_locked()
     if previous is not None:
+        _drop_portrait_copy(previous)
         with previous.condition:
             previous.cancelled = True
             previous.condition.notify_all()
@@ -433,6 +470,8 @@ def _start_prefetch(
                             timing=timing,
                         )
                     )
+                    if entry.portrait is not None:  # before any replay can see the chunk
+                        entry.portrait.chunk(pcm_bytes, int(sample_rate or 24_000))
                     entry.condition.notify_all()
                 # Once accepted playback is consuming this cache, the gateway
                 # event loop must get a scheduling window between CUDA decoder
@@ -489,6 +528,7 @@ def _cancel_entry(generation_id: str) -> bool:
         entry = _ENTRIES.pop(generation_id, None)
     if entry is None:
         return False
+    _drop_portrait_copy(entry)
     with entry.condition:
         entry.cancelled = True
         entry.condition.notify_all()
@@ -500,6 +540,7 @@ def _claim_entry(
     speaker: str | None,
     language: str,
     kwargs: dict[str, Any],
+    call_key: str | None = None,
 ) -> _CacheClaim | None:
     actual_text = _normalized_text(text)
     actual_speaker = _normalized_speaker(speaker)
@@ -517,6 +558,7 @@ def _claim_entry(
                 or entry.speaker != actual_speaker
                 or entry.language != actual_language
                 or entry.stable_kwargs != actual_kwargs
+                or (entry.call_key is not None and entry.call_key != call_key)
             ):
                 continue
             remainder = _prefix_remainder(entry.text, actual_text)
@@ -571,6 +613,7 @@ def _claim_entry(
         entry.condition.notify_all()
         completed = entry.completed
         error = entry.error
+    _drop_portrait_copy(entry)
 
     with _CACHE_LOCK:
         if _ENTRIES.get(entry.generation_id) is entry:
@@ -667,6 +710,7 @@ def _prune_entries_locked() -> None:
     for generation_id in expired:
         entry = _ENTRIES.pop(generation_id, None)
         if entry is not None:
+            _drop_portrait_copy(entry)
             with entry.condition:
                 entry.cancelled = True
                 entry.condition.notify_all()
@@ -675,6 +719,7 @@ def _prune_entries_locked() -> None:
     oldest = sorted(_ENTRIES.values(), key=lambda item: item.created_at)
     for entry in oldest[: len(_ENTRIES) - _MAX_CACHE_ENTRIES]:
         _ENTRIES.pop(entry.generation_id, None)
+        _drop_portrait_copy(entry)
         with entry.condition:
             entry.cancelled = True
             entry.condition.notify_all()
@@ -702,8 +747,14 @@ def register_live_voice_execution_lane_routes(router: APIRouter, state: Any) -> 
     @router.post("/api/live/speculation/tts-prefetch")
     def prefetch_speculative_tts(
         payload: SpeculativeTtsPrefetchRequest,
+        http_request: Request,
     ) -> dict[str, Any]:
         route_started = time.perf_counter()
+        call = None
+        if payload.call_key:
+            call = portrait_call_registry(state).get(payload.call_key, principal_id(http_request.scope))
+            if call is None:
+                raise HTTPException(status_code=403, detail="live_call_not_found")
         default_provider = get_cached_live_tts_provider()
         cached_provider_resolved = time.perf_counter()
         provider, lane = resolve_live_voice_tts_provider(default_provider)
@@ -715,6 +766,8 @@ def register_live_voice_execution_lane_routes(router: APIRouter, state: Any) -> 
             payload.request,
             provider,
             lane,
+            call_key=payload.call_key,
+            portrait=call.speculative_copy(payload.generation_id) if call is not None else None,
         )
         prefetch_started = time.perf_counter()
         stream_log(

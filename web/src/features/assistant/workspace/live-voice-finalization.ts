@@ -3,7 +3,7 @@ import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
 import { type ConversationPace, assessSemanticTurn, reduceUserFloor, semanticFinalizeDelay } from './live-voice-floor-manager';
 import { calculateRms } from './live-voice-websocket';
 import { FINAL_RESPONSE_TIMEOUT_MS, INTERRUPT_CONFIRMATION_FRAMES, LiveVoiceSession, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, controller, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, liveVoiceAssistantOwnsFloor, liveVoiceSpeechThreshold, readConversationPace, renderTranscript, setPanelStatus, updateVoiceVisualizer } from './live-voice-controller-state';
-import { assessOverlapCandidate, clearAuthoritativePreview, scheduleAuthoritativePreview } from './live-voice-preview';
+import { assessOverlapCandidate, clearAuthoritativePreview, overlapAwaitsInterruption, scheduleAuthoritativePreview } from './live-voice-preview';
 import { resetTurnState, stopLiveVoice } from './live-voice-session-lifecycle';
 import { ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, emitOmnixEvent } from '../../../events/bus';
 
@@ -213,7 +213,7 @@ export function requestFinalTranscript(
   session.silenceTimer = null;
   session.previewTimer = null;
   session.pauseStartedAt = null;
-  if (session.floorState === 'overlap_candidate' && session.partialTranscript) assessOverlapCandidate(session);
+  if (overlapAwaitsInterruption(session) && session.partialTranscript) assessOverlapCandidate(session);
   session.floorState = reduceUserFloor(session.floorState, { type: 'commit' });
   session.finalRequested = true;
   session.perfTurnId ??= `voice-turn:${Date.now()}`;

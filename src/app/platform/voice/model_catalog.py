@@ -15,13 +15,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-ModelKind = Literal["tts", "stt", "audio"]
+ModelKind = Literal["tts", "stt", "audio", "portrait"]
 # How a model sits on the GPU (Phase 1 §6): resident engines and swapped-in
 # heavy models take the TTS engine's place; small helpers may load beside it.
 Residency = Literal["engine", "swap", "helper"]
-# Where the weights come from: the Hugging Face hub (the install job fetches
-# them), or the model's own package, which downloads them on first use.
-ModelSource = Literal["huggingface", "package"]
+# Where the weights come from: the Hugging Face hub or pinned URLs (the install
+# job fetches them), or the model's own package, which downloads them on first use.
+ModelSource = Literal["huggingface", "direct", "package"]
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ class SpeechModel:
     @property
     def requires_acceptance(self) -> bool:
         """Every model installs only after its licence and terms are accepted (roadmap D-4)."""
-        return self.source == "huggingface"
+        return self.source in {"huggingface", "direct"}
 
     def as_dict(self) -> dict[str, object]:
         data = asdict(self)

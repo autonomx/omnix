@@ -1,11 +1,11 @@
 """``models.install`` and ``models.remove``: fetch or delete a catalogued speech model's weights.
 
-Downloads come from the Hugging Face hub at the commit model catalog v2 pins,
-resume after an interruption (the hub keeps partial files beside the target),
-and every pinned file is checked against its catalogued SHA-256 before the
-install counts. A model installs only when the request accepts its terms
-(roadmap D-4); the acceptance, licence and commit are written to
-``.omnix-model.json`` in the model folder.
+Downloads come from the Hugging Face hub at the commit model catalog v2 pins
+(or, for a direct model, from each file's catalogued URL), resume after an
+interruption (partial files are kept beside the target), and every pinned file
+is checked against its catalogued SHA-256 before the install counts. A model
+installs only when the request accepts its terms (roadmap D-4); the acceptance,
+licence and commit are written to ``.omnix-model.json`` in the model folder.
 
 Weights land under ``resources/models/<kind>/<repository name>``, the layout
 the TTS and STT services already read. Environments are not installed here.
@@ -107,7 +107,7 @@ def _pack_status(model: SpeechModel) -> dict[str, Any]:
     from app.models import packs
 
     store = packs.model_store()
-    installed = model.source == "huggingface" and store.installed(model.id)
+    installed = model.source != "package" and store.installed(model.id)
     marker = store.marker(model.id) if installed else None
     status = "package" if model.source == "package" else "installed" if installed else "missing"
     return {
@@ -153,27 +153,33 @@ def _hub_token() -> str | None:
     return load_model_hub_token() or None
 
 
-def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None) -> dict[str, Any]:
-    """Download the model's weights; returns its status. ``hub`` is the huggingface_hub module (tests swap it)."""
+def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None,
+                  fetch_url: Any = None) -> dict[str, Any]:
+    """Download the model's weights; returns its status.
+
+    ``hub`` is the huggingface_hub module and ``fetch_url`` the direct-file fetcher (tests swap both)."""
     model = speech_model(model_id)
-    if model.source != "huggingface":
+    if model.source == "package":
         raise ModelInstallError(f"{model.label} is downloaded by its own package on first use, not installed here")
     if model.requires_acceptance and not accept_terms:
         reason = "is gated" if model.gated else f"is licensed {model.licence}" + (
             "" if model.commercial_use else " (not for commercial use)")
         raise ModelInstallError(f"{model.label} {reason}; accept its terms to install it")
-    token = _hub_token()
-    if model.gated and not token:
-        raise ModelInstallError(f"{model.label} is gated; add a Hugging Face token and accept the terms on its model page")
-    if hub is None:
-        import huggingface_hub as hub
-
     folder = model_dir(model)
     folder.mkdir(parents=True, exist_ok=True)
-    # The catalog pins the commit, so a resumed or repeated install fetches exactly the same files.
+    # The catalog pins the commit (or the URLs), so a resumed or repeated install fetches exactly the same files.
     commit = model.revision
-    hub.snapshot_download(repo_id=model.repo_id, revision=commit, local_dir=str(folder), token=token,
-                          allow_patterns=list(model.files) or None)
+    if model.source == "direct":
+        _fetch_direct(model, folder, fetch_url)
+    else:
+        token = _hub_token()
+        if model.gated and not token:
+            raise ModelInstallError(
+                f"{model.label} is gated; add a Hugging Face token and accept the terms on its model page")
+        if hub is None:
+            import huggingface_hub as hub
+        hub.snapshot_download(repo_id=model.repo_id, revision=commit, local_dir=str(folder), token=token,
+                              allow_patterns=list(model.files) or None)
     _check_digests(model, folder)
     marker = {
         "model_id": model.id,
@@ -186,6 +192,22 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
     }
     (folder / MARKER).write_text(json.dumps(marker, indent=2) + "\n", encoding="utf-8")
     return model_status(model)
+
+
+def _fetch_direct(model: SpeechModel, folder: Path, fetch_url: Any) -> None:
+    """Each pinned file from its catalogued URL; a file already present with its digest is kept."""
+    from app.models.catalog import load
+    from app.models.downloads import ModelDownloadError, fetch_direct_file, sha256_file
+
+    fetch = fetch_url or fetch_direct_file
+    for item in load().model(model.id).files:
+        target = folder / item.path
+        if target.is_file() and sha256_file(target) == item.sha256:
+            continue
+        try:
+            fetch(item, target)
+        except ModelDownloadError as exc:
+            raise ModelInstallError(f"{model.label}: {exc}") from exc
 
 
 def _require_recorded_acceptance(model: SpeechModel) -> None:

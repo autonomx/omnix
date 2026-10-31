@@ -1,0 +1,290 @@
+{
+  "measurement": "live portrait Phase 0: SyncNet lip-sync scores (scripts/portrait_lipsync.py)",
+  "date": "2026-10-29",
+  "environment": "venv over the rpg-stt env: CPython 3.11, torch 2.6.0+cu124, transformers 4.57.6; GPU otherwise idle, no Omnix services running",
+  "inputs": "portrait: upstream assets/sam_altman_512x512.jpg; audio: upstream aud-sample-vs-1.wav (15.0 s), voice_clones Maya (10.6 s), Morgan (11.7 s), Sofia (5.3 s); emotion neutral",
+  "scorer": {
+    "code": "joonson/syncnet_python 907c0b579c2e2d83f0eae1b2ac9e720cde4e5623 (run_pipeline face tracks, SyncNetInstance.evaluate)",
+    "syncnet_v2_model_sha256": "961e8696f888fce4f3f3a6c3d5b3267cf5b343100b238e79b2659bff2c605442",
+    "sfd_face_sha256": "d54a87c2b7543b64729c9a25eafd188da15fd3f6e02f0ecec76ae1b30d86c491"
+  },
+  "notes": [
+    "LSE-D: mean SyncNet distance at the best audio shift (lower is better). LSE-C: median minus minimum distance (higher is better).",
+    "whole = upstream's whole-clip method; stream = the roadmap's hop scheduler (R lookahead frames, H hop), first hop 8.",
+    "control_mismatched_audio = the whole-clip video of one clip with the next clip's audio.",
+    "Offsets of -1 or 0 frames appear for whole-clip and streamed alike, so they are not from streaming."
+  ],
+  "results": {
+    "clips": {
+      "aud-sample-vs-1.wav": {
+        "whole_nfe10": {
+          "tracks": 1,
+          "lse_d": 7.177,
+          "lse_c": 8.898,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "whole_nfe7": {
+          "tracks": 1,
+          "lse_d": 7.077,
+          "lse_c": 9.003,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 7.075,
+          "lse_c": 8.7,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R8_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 7.159,
+          "lse_c": 8.712,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe7": {
+          "tracks": 1,
+          "lse_d": 6.923,
+          "lse_c": 8.963,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe5": {
+          "tracks": 1,
+          "lse_d": 6.774,
+          "lse_c": 9.046,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "control_mismatched_audio": {
+          "tracks": 1,
+          "lse_d": 15.308,
+          "lse_c": 0.847,
+          "offset_frames": [
+            9
+          ]
+        }
+      },
+      "Maya.wav": {
+        "whole_nfe10": {
+          "tracks": 1,
+          "lse_d": 7.997,
+          "lse_c": 7.199,
+          "offset_frames": [
+            0
+          ]
+        },
+        "whole_nfe7": {
+          "tracks": 1,
+          "lse_d": 7.853,
+          "lse_c": 7.287,
+          "offset_frames": [
+            0
+          ]
+        },
+        "stream_R5_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 8.433,
+          "lse_c": 6.671,
+          "offset_frames": [
+            0
+          ]
+        },
+        "stream_R8_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 8.428,
+          "lse_c": 6.749,
+          "offset_frames": [
+            0
+          ]
+        },
+        "stream_R5_H20_nfe7": {
+          "tracks": 1,
+          "lse_d": 8.3,
+          "lse_c": 6.779,
+          "offset_frames": [
+            0
+          ]
+        },
+        "stream_R5_H20_nfe5": {
+          "tracks": 1,
+          "lse_d": 8.165,
+          "lse_c": 6.866,
+          "offset_frames": [
+            0
+          ]
+        },
+        "control_mismatched_audio": {
+          "tracks": 1,
+          "lse_d": 13.787,
+          "lse_c": 0.761,
+          "offset_frames": [
+            -13
+          ]
+        }
+      },
+      "Morgan.wav": {
+        "whole_nfe10": {
+          "tracks": 1,
+          "lse_d": 8.243,
+          "lse_c": 4.6,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "whole_nfe7": {
+          "tracks": 1,
+          "lse_d": 8.012,
+          "lse_c": 4.804,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 8.233,
+          "lse_c": 4.512,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R8_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 8.201,
+          "lse_c": 4.516,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe7": {
+          "tracks": 1,
+          "lse_d": 8.164,
+          "lse_c": 4.571,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe5": {
+          "tracks": 1,
+          "lse_d": 8.115,
+          "lse_c": 4.665,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "control_mismatched_audio": {
+          "tracks": 1,
+          "lse_d": 15.498,
+          "lse_c": 0.696,
+          "offset_frames": [
+            -9
+          ]
+        }
+      },
+      "Sofia.wav": {
+        "whole_nfe10": {
+          "tracks": 1,
+          "lse_d": 8.602,
+          "lse_c": 6.371,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "whole_nfe7": {
+          "tracks": 1,
+          "lse_d": 8.524,
+          "lse_c": 6.458,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 9.514,
+          "lse_c": 5.534,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R8_H20_nfe10": {
+          "tracks": 1,
+          "lse_d": 9.36,
+          "lse_c": 5.614,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe7": {
+          "tracks": 1,
+          "lse_d": 9.399,
+          "lse_c": 5.558,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "stream_R5_H20_nfe5": {
+          "tracks": 1,
+          "lse_d": 9.504,
+          "lse_c": 5.475,
+          "offset_frames": [
+            -1
+          ]
+        },
+        "control_mismatched_audio": {
+          "tracks": 1,
+          "lse_d": 13.513,
+          "lse_c": 2.071,
+          "offset_frames": [
+            13
+          ]
+        }
+      }
+    },
+    "mean": {
+      "whole_nfe10": {
+        "lse_d": 8.005,
+        "lse_c": 6.767,
+        "clips": 4
+      },
+      "whole_nfe7": {
+        "lse_d": 7.867,
+        "lse_c": 6.888,
+        "clips": 4
+      },
+      "stream_R5_H20_nfe10": {
+        "lse_d": 8.314,
+        "lse_c": 6.354,
+        "clips": 4
+      },
+      "stream_R8_H20_nfe10": {
+        "lse_d": 8.287,
+        "lse_c": 6.398,
+        "clips": 4
+      },
+      "stream_R5_H20_nfe7": {
+        "lse_d": 8.197,
+        "lse_c": 6.468,
+        "clips": 4
+      },
+      "stream_R5_H20_nfe5": {
+        "lse_d": 8.139,
+        "lse_c": 6.513,
+        "clips": 4
+      },
+      "control_mismatched_audio": {
+        "lse_d": 14.526,
+        "lse_c": 1.094,
+        "clips": 4
+      }
+    }
+  }
+}

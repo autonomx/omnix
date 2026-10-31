@@ -27,7 +27,8 @@ from app.security.permissions import requires
 logger = logging.getLogger(__name__)
 
 # Bundle capability -> the gateway's service endpoint that serves it.
-_SERVICE_OF_CAPABILITY = {"live_stt": "stt", "stt_batch": "stt", "tts": "tts", "image": "image"}
+_SERVICE_OF_CAPABILITY = {"live_stt": "stt", "stt_batch": "stt", "tts": "tts", "image": "image",
+                          "live_portrait": "portrait"}
 
 
 class PackOptionLicence(BaseModel):
@@ -198,11 +199,17 @@ def _service_answers(service: str) -> bool:
     from app.runtime.config import get_runtime_config
     from app.runtime.http_client import shared_http_client
 
-    endpoint = getattr(get_runtime_config(), service, None)
-    if endpoint is None:
+    if service == "portrait":  # not a runtime-config endpoint: the gateway reaches it through OMNIX_PORTRAIT_URL
+        from app.config.env import env_str
+
+        url = (env_str("OMNIX_PORTRAIT_URL", "") or "").strip()
+    else:
+        endpoint = getattr(get_runtime_config(), service, None)
+        url = endpoint.url if endpoint is not None else ""
+    if not url:
         return False
     try:
-        response = shared_http_client(f"{service}-service").get(endpoint.url.rstrip("/") + "/health", timeout=1.5,
+        response = shared_http_client(f"{service}-service").get(url.rstrip("/") + "/health", timeout=1.5,
                                                                 retry=False)
     except Exception:
         return False

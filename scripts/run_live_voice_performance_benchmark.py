@@ -268,14 +268,16 @@ def _analyze(
     expect_tts_speculation: str,
     max_median_ms: float | None,
     max_p95_ms: float | None,
+    repeat: int = 1,
 ) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
     interactions = list(manifest.get("interactions") or [])
     turns = _release_turns(live_records)
-    if len(interactions) != 5:
-        failures.append(f"expected 5 driven interactions, observed {len(interactions)}")
-    if len(turns) != 5:
-        failures.append(f"expected 5 completed release-metric turns, observed {len(turns)}")
+    expected_turns = 5 * max(1, repeat)
+    if len(interactions) != expected_turns:
+        failures.append(f"expected {expected_turns} driven interactions, observed {len(interactions)}")
+    if len(turns) != expected_turns:
+        failures.append(f"expected {expected_turns} completed release-metric turns, observed {len(turns)}")
 
     metric_summaries: dict[str, Any] = {}
     for metric in (*METRICS, "speech_end_to_final_ms"):
@@ -464,6 +466,17 @@ def main() -> int:
     parser.add_argument("--max-median-ms", type=float, default=None)
     parser.add_argument("--max-p95-ms", type=float, default=None)
     parser.add_argument("--skip-preflight", action="store_true")
+    # The live portrait's paired gate (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 5): run a scenario
+    # with --portrait off, then on, with --repeat 8 (40 replies), then compare the two runs with
+    # python -m app.platform.live_voice.release_gate_cli --portrait-pairing.
+    parser.add_argument("--portrait", choices=("off", "on"), default=None,
+                        help="Show the call's live portrait (on) or its fallback (off)")
+    parser.add_argument("--scenario", default="", help="The release scenario label for this run")
+    parser.add_argument("--app-path", default="/chatbot",
+                        help="Where the call starts (a session whose character has a portrait pack)")
+    parser.add_argument("--repeat", type=int, default=1, help="Play the five interactions this many times")
+    parser.add_argument("--video-dir", type=Path, default=None,
+                        help="Record the browser here (the portrait's ghosting rating; never for a gated run)")
     args = parser.parse_args()
 
     audio_paths = [args.audio_dir / f"interaction-{index}.wav" for index in range(1, 6)]
@@ -506,6 +519,11 @@ def main() -> int:
     env["OMNIX_LIVE_VOICE_EXPECTED_PROVIDER"] = args.expected_provider
     env["OMNIX_LIVE_VOICE_BENCHMARK_AUDIO_DIR"] = str(args.audio_dir.resolve())
     env["OMNIX_LIVE_VOICE_BENCHMARK_MANIFEST"] = str(manifest_path.resolve())
+    env["OMNIX_LIVE_VOICE_BENCHMARK_PORTRAIT"] = args.portrait or ""
+    env["OMNIX_LIVE_VOICE_BENCHMARK_SCENARIO"] = args.scenario
+    env["OMNIX_LIVE_VOICE_BENCHMARK_PATH"] = args.app_path
+    env["OMNIX_LIVE_VOICE_BENCHMARK_REPEAT"] = str(max(1, args.repeat))
+    env["OMNIX_LIVE_VOICE_BENCHMARK_VIDEO_DIR"] = str(args.video_dir.resolve()) if args.video_dir else ""
 
     command = [
         sys.executable,
@@ -574,6 +592,7 @@ def main() -> int:
         expect_tts_speculation=args.expect_tts_speculation,
         max_median_ms=args.max_median_ms,
         max_p95_ms=args.max_p95_ms,
+        repeat=args.repeat,
     )
     report.update(
         {

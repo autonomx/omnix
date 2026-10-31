@@ -4,7 +4,7 @@ import { unwrapAs } from '../../../api/http';
 import { api } from '../api/gateway';
 
 export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
-export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive';
+export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive' | 'portrait';
 
 export type CharacterAvatarPack = components['schemas']['CharacterAvatarPack'];
 

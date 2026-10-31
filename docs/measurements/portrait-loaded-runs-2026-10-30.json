@@ -1,0 +1,273 @@
+{
+  "date": "2026-10-30",
+  "what": "Loaded runs (Phase 0) and the paired gate (Phase 5): live calls on the whole stack, portrait off and on",
+  "git": "1496ee7954 (live-portrait)",
+  "stack": {
+    "gpu": "RTX 4090 (one card shared by every service and LM Studio)",
+    "stt": "nemotron_parakeet_eou (services.stt, rpg-stt env)",
+    "tts": "faster-qwen3-tts, Qwen3-TTS-12Hz-0.6B-Base (services.tts, rpg-tts env)",
+    "llm": "LM Studio liquid/lfm2.5-1.2b on the same GPU (the owner's choice for these runs)",
+    "portrait": "FLOAT service, nfe 7, R 5, H 20, decode batch 4, CUDA-graph solve",
+    "database": "scratch omnix_portrait_runs (16432 test container), never the live one",
+    "browser": "headless Chromium driven by src/tests/e2e/test_live_voice_performance.py (programmable mic)"
+  },
+  "scenario": "character-normal, 5 recorded interactions x 8 = 40 replies a side, one Character-mode session",
+  "runs": {
+    "off": {
+      "run": "20261030-095601-1496ee79543b",
+      "replies": 40,
+      "underruns": 59,
+      "metrics": {
+        "stt_finalize_ms": {
+          "median": 192.0,
+          "p95": 605.1
+        },
+        "final_to_response_open_ms": {
+          "median": 18.0,
+          "p95": 24.68
+        },
+        "response_open_to_first_token_ms": {
+          "median": 3.5,
+          "p95": 79.985
+        },
+        "final_to_first_token_ms": {
+          "median": 21.9,
+          "p95": 102.385
+        },
+        "first_token_to_first_audio_ms": {
+          "median": 557.75,
+          "p95": 1031.845
+        },
+        "final_to_first_audio_ms": {
+          "median": 579.55,
+          "p95": 1121.29
+        },
+        "first_pcm_to_first_playback_ms": {
+          "median": 678.3,
+          "p95": 973.015
+        },
+        "first_token_to_first_playback_ms": {
+          "median": 1246.9,
+          "p95": 1607.905
+        },
+        "final_to_first_playback_ms": {
+          "median": 1266.45,
+          "p95": 1637.425
+        },
+        "speech_end_to_first_playback_ms": {
+          "median": 1944.7,
+          "p95": 2654.455
+        },
+        "speech_end_to_final_ms": {
+          "median": 685.1,
+          "p95": 1116.55
+        }
+      }
+    },
+    "on": {
+      "run": "20261030-094415-1496ee79543b",
+      "replies": 40,
+      "underruns": 60,
+      "metrics": {
+        "stt_finalize_ms": {
+          "median": 185.5,
+          "p95": 408.8
+        },
+        "final_to_response_open_ms": {
+          "median": 16.8,
+          "p95": 29.45
+        },
+        "response_open_to_first_token_ms": {
+          "median": 19.5,
+          "p95": 79.02
+        },
+        "final_to_first_token_ms": {
+          "median": 38.15,
+          "p95": 94.075
+        },
+        "first_token_to_first_audio_ms": {
+          "median": 583.5,
+          "p95": 896.33
+        },
+        "final_to_first_audio_ms": {
+          "median": 609.1,
+          "p95": 1074.445
+        },
+        "first_pcm_to_first_playback_ms": {
+          "median": 780.3,
+          "p95": 1102.815
+        },
+        "first_token_to_first_playback_ms": {
+          "median": 1343.35,
+          "p95": 1896.945
+        },
+        "final_to_first_playback_ms": {
+          "median": 1374.65,
+          "p95": 2090.865
+        },
+        "speech_end_to_first_playback_ms": {
+          "median": 2093.7,
+          "p95": 2724.43
+        },
+        "speech_end_to_final_ms": {
+          "median": 688.6,
+          "p95": 918.595
+        }
+      }
+    }
+  },
+  "paired_gate": {
+    "checks": [
+      {
+        "detail": "p50 0.0 ms (limit 150)",
+        "interval": null,
+        "name": "start_hold_ms",
+        "off": null,
+        "on": 0.0,
+        "status": "pass"
+      },
+      {
+        "detail": "|offset| p95 19.7 ms over 4005 frames (limit 40)",
+        "interval": null,
+        "name": "av_offset_ms",
+        "off": null,
+        "on": 19.7,
+        "status": "pass"
+      },
+      {
+        "detail": "on p50 185.0 ms, off 191.0 ms (at most 110%)",
+        "interval": [
+          0.7571,
+          1.0977
+        ],
+        "name": "stt_finalize_ms",
+        "off": 191.0,
+        "on": 185.0,
+        "status": "pass"
+      },
+      {
+        "detail": "on p50 38.0 ms, off 21.9 ms (at most 110%)",
+        "interval": [
+          1.3648,
+          1.9904
+        ],
+        "name": "final_to_first_token_ms",
+        "off": 21.9,
+        "on": 38.0,
+        "status": "fail"
+      },
+      {
+        "detail": "on p50 577.6 ms, off 557.2 ms (at most 110%)",
+        "interval": [
+          0.9261,
+          1.249
+        ],
+        "name": "first_token_to_first_audio_ms",
+        "off": 557.2,
+        "on": 577.6,
+        "status": "pass"
+      },
+      {
+        "detail": "on p50 1362.1 ms, off 1262.4 ms (at most 110%)",
+        "interval": [
+          1.0157,
+          1.2766
+        ],
+        "name": "final_to_first_playback_ms",
+        "off": 1262.4,
+        "on": 1362.1,
+        "status": "pass"
+      },
+      {
+        "detail": "on p50 2089.0 ms, off 1940.1 ms (at most 110%)",
+        "interval": [
+          1.0167,
+          1.1665
+        ],
+        "name": "speech_end_to_first_playback_ms",
+        "off": 1940.1,
+        "on": 2089.0,
+        "status": "pass"
+      },
+      {
+        "detail": "on p50 2142.0 ms, off 1993.1 ms (at most 110%)",
+        "interval": [
+          1.0163,
+          1.1621
+        ],
+        "name": "first_audible_ms",
+        "off": 1993.1,
+        "on": 2142.0,
+        "status": "pass"
+      },
+      {
+        "detail": "0 off and 0 on samples",
+        "interval": null,
+        "name": "interruption_to_silence_ms",
+        "off": null,
+        "on": null,
+        "status": "insufficient"
+      },
+      {
+        "detail": "on p50 155.1/s, off 126.0/s (at least 90%)",
+        "interval": [
+          1.1016,
+          1.4443
+        ],
+        "name": "llm_tokens_per_second",
+        "off": 126.05,
+        "on": 155.087,
+        "status": "pass"
+      },
+      {
+        "detail": "per reply: on 1.475, off 1.475",
+        "interval": null,
+        "name": "underrun_count",
+        "off": 1.475,
+        "on": 1.475,
+        "status": "pass"
+      }
+    ],
+    "counters": {},
+    "recorded": {
+      "final_to_first_playback_ms:p95:off": 1632.1,
+      "final_to_first_playback_ms:p95:on": 2089.6,
+      "final_to_first_token_ms:p95:off": 102.1,
+      "final_to_first_token_ms:p95:on": 94.0,
+      "first_audible_ms:p95:off": 2659.3,
+      "first_audible_ms:p95:on": 2772.0,
+      "first_token_to_first_audio_ms:p95:off": 1028.5,
+      "first_token_to_first_audio_ms:p95:on": 892.2,
+      "llm_tokens_per_second:p95:off": 245.154,
+      "llm_tokens_per_second:p95:on": 251.032,
+      "speech_end_to_first_playback_ms:p95:off": 2606.3,
+      "speech_end_to_first_playback_ms:p95:on": 2719.0,
+      "start_hold_p95_ms": 250.667,
+      "stt_finalize_ms:p95:off": 547.0,
+      "stt_finalize_ms:p95:on": 395.0
+    },
+    "replies": {
+      "off": {
+        "character-normal": 40
+      },
+      "on": {
+        "character-normal": 40
+      }
+    },
+    "status": "fail"
+  },
+  "gate_input": "the two runs' own live-call-streaming.run.log files (the shared log rotated during the runs)",
+  "findings": [
+    "Underruns per reply were the same with the portrait off and on (1.475): the TTS on this machine, sharing the GPU with LM Studio, generates at about 1.5-2.3x real time, so every side underruns; the portrait adds none.",
+    "The only failing check is final_to_first_token_ms: on p50 38.0 ms vs off 21.9 ms (+16 ms). Every user-facing latency passes the 110% bound: speech end to first playback 2089 vs 1940 ms (+7.7%).",
+    "Start hold: p50 0 ms (frames were ready), p95 251 ms (the cap). A/V offset p95 19.7 ms over 4005 frames.",
+    "interruption_to_silence_ms has no samples: the benchmark does not interrupt."
+  ],
+  "bugs_fixed_to_get_here": {
+    "9c2716128d": "a call missed the chat session selected before its runtime loaded (cold dev server)",
+    "9eca6642c2": "direct-to-gateway live chat lacked X-Omnix-Client (403 on the Vite origin)",
+    "ae7eef1a0d": "playback held a finished phrase tail shorter than the rebuffer target forever",
+    "cce3f88789": "the live prompt's memory-settings cache recursed on a cold cache (every live reply failed)",
+    "1496ee7954": "STT's live models used NeMo's CUDA-graph decoder; another model loading or unloading in the process made the next decode an illegal memory access that ended the CUDA context"
+  }
+}

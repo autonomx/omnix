@@ -1,7 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { emitOmnixEvent } from '../../../events/bus';
+import { liveConversationProfileClient, type LiveConversationProfile } from '../chat/liveConversationProfileClient';
 import { initializeLiveConversationStoreBridge } from './live-conversation-store-bridge';
 import { liveConversationStore } from './live-conversation-store';
+
+vi.mock('../chat/liveConversationProfileClient', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../chat/liveConversationProfileClient')>();
+  // A session's profile load never settles unless a test resolves it.
+  return { ...original, liveConversationProfileClient: { ...original.liveConversationProfileClient,
+    get: vi.fn(() => new Promise(() => undefined)) } };
+});
 
 let dispose: (() => void) | null = null;
 
@@ -24,6 +33,16 @@ describe('live conversation store bridge', () => {
     }));
 
     expect(liveConversationStore.getState().sessionId).toBe('chat:new-call');
+  });
+
+  it('takes the chat session selected before the bridge was installed', () => {
+    dispose?.();
+    liveConversationStore.reset();
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: 'chat:early', session: undefined });
+    dispose = initializeLiveConversationStoreBridge();
+
+    expect(liveConversationStore.getState().sessionId).toBe('chat:early');
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: null, session: undefined });
   });
 
   it('projects call, speech, transcript, playback, and interruption events', () => {
@@ -118,5 +137,22 @@ describe('live conversation store bridge', () => {
     expect(liveConversationStore.getState().deliveryPlan).toMatchObject({
       speech_act: 'reassurance', warmth: 'high',
     });
+  });
+
+  it("loads the selected session's profile for the call, whichever view is open", async () => {
+    const replies = new Map<string, (profile: Partial<LiveConversationProfile>) => void>();
+    vi.mocked(liveConversationProfileClient.get).mockImplementation((sessionId) => new Promise((resolve) => {
+      replies.set(sessionId, (effective) => resolve({ effective } as never));
+    }));
+
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: 'chat:older', session: undefined });
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: 'chat:newer', session: undefined });
+    replies.get('chat:newer')?.({ duplex_mode: 'echo_aware' });
+    await vi.waitFor(() => expect(liveConversationStore.getState().profile?.duplex_mode).toBe('echo_aware'));
+    replies.get('chat:older')?.({ duplex_mode: 'half_duplex' });
+    await Promise.resolve();
+
+    expect(liveConversationStore.getState().profile?.duplex_mode).toBe('echo_aware');
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: null, session: undefined });
   });
 });

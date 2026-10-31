@@ -51,6 +51,7 @@ The normal local stack is a set of independently observable processes. Optional 
 | TTS | http://127.0.0.1:5101 | Speech synthesis worker | Feature-dependent |
 | STT | http://127.0.0.1:5201 | Speech recognition/transcription worker | Feature-dependent |
 | Image | http://127.0.0.1:5301 | Image service and model residency | Feature-dependent |
+| Live portrait | http://127.0.0.1:5501 | FLOAT talking portraits for live calls (`OMNIX_PORTRAIT_URL`) | Optional |
 | Hermes | http://127.0.0.1:8642 | Optional out-of-process agent proposals | Optional |
 
 The Vite server proxies browser calls to the gateway. A direct browser request to a worker is not a substitute for a gateway contract: feature code should continue to use the shared API and event boundaries.
@@ -432,6 +433,20 @@ For STT:
 - confirm the provider supports transcription;
 - check language/automatic-detection settings;
 - inspect the stt.transcribe job and transcript asset.
+
+For a live call's portrait (`docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md`):
+
+- a call with a portrait character shows the pack's fallback (its image, its Live2D rig or the orb) whenever the
+  portrait cannot serve; the call itself goes on. The browser's live-call diagnostics name the reason
+  (`portrait_not_configured`, `portrait_busy`, `warming`, `portrait_lost`, `frames_late`, ...);
+- check `GET 127.0.0.1:5501/health`: `status` is `missing` (install the live-portrait bundle in Settings, Models),
+  `short` (less than 2.5 GB of free VRAM or 6 GB of commit headroom: close something), `warming` (cuDNN builds its
+  plans; about a minute after start), `ready`, or `failed` (its `message` says why);
+- `streams.active` against `streams.max`: one call's portrait per GPU. Another call is refused with `portrait_busy`;
+  the same user and session reloading replaces its own stream. A stream whose heartbeats stop is closed after 6 s;
+- the model unloads after 30 idle minutes with no stream open (`OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS`) and loads again
+  on the next call's prepare, which then reports `warming`;
+- the diagnostics page lists the service with the other model services when `OMNIX_PORTRAIT_URL` is set.
 
 ### 8. An agent proposes but does not execute
 

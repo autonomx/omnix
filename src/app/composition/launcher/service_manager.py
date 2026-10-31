@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 from app.composition.launcher.config import load_launcher_config
 from app.runtime.net import bind_host
+from app.runtime.process_control import IDLE_EXIT_CODE
 from app.security.service_credentials import initialize_service_token
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,9 @@ class ManagedProcess:
     logs: deque[str] = field(default_factory=lambda: deque(maxlen=DEFAULT_LOG_LIMIT))
     last_returncode: int | None = None
     lock: threading.RLock = field(default_factory=threading.RLock)
+    # Set by stop() (and so stop_all()), cleared by start(): a service asked to stop is never started again by its
+    # idle exit, however the two interleave.
+    stop_requested: bool = False
 
     def status(self) -> str:
         with self.lock:
@@ -313,6 +317,7 @@ class LauncherServiceManager:
             service.process = process
             service.started_at = time.time()
             service.last_returncode = None
+            service.stop_requested = False
             thread = threading.Thread(
                 target=self._pump_logs_for_process,
                 args=(service, process),
@@ -346,6 +351,7 @@ class LauncherServiceManager:
     def stop(self, service_id: str, *, timeout_s: float = 8.0) -> dict[str, Any]:
         service = self._service(service_id)
         with service.lock:
+            service.stop_requested = True
             process = service.process
             if process is None or process.poll() is not None:
                 service.process = None
@@ -409,16 +415,30 @@ class LauncherServiceManager:
     ) -> None:
         if process.stdout is None:
             return
+        restart = False
         try:
             for line in process.stdout:
                 self._append(service, line)
         finally:
+            # Its output ends as it exits: give the exit a moment to register.
+            deadline = time.monotonic() + 5.0
+            while process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.05)
             with service.lock:
                 if process.poll() is not None:
                     if service.process is process:
                         service.last_returncode = process.returncode
                         service.process = None
+                        restart = process.returncode == IDLE_EXIT_CODE
                     self._append(service, f"[launcher] exited with code {process.returncode}")
+        if restart:
+            # It unloaded an idle model and exited to release its memory: start it again, light (unless it was asked
+            # to stop meanwhile; the lock is re-entrant, so the check and the start are one step).
+            with service.lock:
+                if service.stop_requested or service.process is not None:
+                    return
+                self._append(service, "[launcher] it released an idle model; starting it again without one")
+                self.start(service.spec.service_id)
 
 
 def _is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -520,6 +540,11 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     # The audio service starts when its environment exists (it is optional).
     audio_enabled = _env_flag("OMNIX_AUDIO_ENABLED", "1")
     audio_auto_start = audio_enabled and Path(audio_python).is_file()
+    portrait_python = launcher.python("portrait")
+    # The live portrait service is optional too. It starts light and loads its model when a call to a character with
+    # a portrait asks for it; after an idle while it exits to release that memory and is started again (light).
+    portrait_enabled = _env_flag("OMNIX_PORTRAIT_ENABLED", "1")
+    portrait_auto_start = portrait_enabled and Path(portrait_python).is_file()
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")
     image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")
@@ -535,6 +560,8 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         "OMNIX_TTS_URL": environment().get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
         "OMNIX_STT_URL": environment().get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
         "OMNIX_AUDIO_URL": environment().get("OMNIX_AUDIO_URL", "http://127.0.0.1:5401") if audio_enabled else "",
+        "OMNIX_PORTRAIT_URL": (environment().get("OMNIX_PORTRAIT_URL", "http://127.0.0.1:5501")
+                               if portrait_enabled else ""),
         "OMNIX_IMAGE_ENABLED": environment().get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
         "OMNIX_CHARACTER_MODE_ENABLED": environment().get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
@@ -653,6 +680,19 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             auto_start=audio_auto_start,
             startup_critical=False,
             description="Voice Studio audio tools (vocal isolation, enhancement, watermarks) on 127.0.0.1:5401.",
+        ),
+        ServiceSpec(
+            service_id="portrait",
+            label="Live Portrait",
+            command=[portrait_python, "-m", "services.portrait.portrait_server"],
+            cwd=root,
+            env=common,
+            ports=(5501,),
+            optional=True,
+            enabled=portrait_enabled,
+            auto_start=portrait_auto_start,
+            startup_critical=False,
+            description="Live call talking portraits (FLOAT) on 127.0.0.1:5501.",
         ),
         ServiceSpec(
             service_id="image",

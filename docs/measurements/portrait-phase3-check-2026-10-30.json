@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-30",
+  "script": "scripts/portrait_phase3_check.py",
+  "code": "live-portrait at 52bc99a3a6",
+  "environment": "omnix-portrait conda env from services/portrait/portrait.lock.txt; the service alone on a free local port (no gateway, TTS or STT); started after scripts/portrait_spike.py busy_reasons found no RPG gate or model service for a minute",
+  "inputs": "photo upstream sam_altman.webp (uncropped); audio voice_clones/Maya.wav (10.64 s, 24 kHz) sent in 80 ms blocks at 3x real time; speculation: its first 2 s as speculative audio, bound 1 s later; preview: its first 4 s",
+  "results": {
+    "ready_after_s": 106.4,
+    "level0": {
+      "frames": 266,
+      "expected": 266,
+      "in_order": true,
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ],
+      "first_frame_ms": 252
+    },
+    "level3": {
+      "frames": 133,
+      "expected": 133,
+      "sizes": [
+        [
+          384,
+          384
+        ]
+      ]
+    },
+    "speculation": {
+      "frames": 266,
+      "expected": 266,
+      "sent_within_300ms_of_bind": 28,
+      "first_frame_after_bind_ms": 16,
+      "each_once_in_order": true
+    },
+    "idle": {
+      "frames": 54,
+      "count": 54,
+      "frame_ms": 80,
+      "loop_seconds": 4.32,
+      "size": [
+        512,
+        512
+      ],
+      "arrived_after_ready_s": 0.43,
+      "seam_mean_abs": 6.59,
+      "neighbour_median_mean_abs": 2.19
+    },
+    "preview": {
+      "ok": true,
+      "frames": 100,
+      "expected": 100,
+      "ms": 786,
+      "size": [
+        512,
+        512
+      ]
+    },
+    "ok": true
+  },
+  "notes": [
+    "idle seam_mean_abs is the mean absolute pixel change (0-255) from the loop's last frame back to its first; neighbour_median is the median change between neighbouring idle frames (80 ms apart). The seam is about 3x a normal step: a small visible jump every 4.3 s.",
+    "first_frame_ms (level 0) is from the reply's first audio block to its first frame, with the model warm."
+  ]
+}
