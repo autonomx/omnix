@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -51,6 +52,8 @@ def portrait(monkeypatch):
         return "latent-key"
 
     async def open_link(base_url: str, **kwargs: Any) -> FakeLink:
+        if state.get("open_delay"):
+            await asyncio.sleep(state["open_delay"])
         link = FakeLink(kwargs["on_frame"])
         opened.append({**kwargs, "link": link})
 
@@ -131,6 +134,76 @@ def test_a_portrait_that_does_not_load_in_time_falls_back(monkeypatch, portrait)
             reply = avatar.receive_json()
     assert reply["type"] == "unavailable" and reply["code"] == "warming"
     assert portrait.opened == []
+
+
+def test_a_call_that_ends_while_its_portrait_loads_never_gets_a_link(monkeypatch, portrait) -> None:
+    # Review finding (2026-10-31): the link opened once loaded attached to the ended call and held the service's
+    # one stream slot, since nothing would close it.
+    monkeypatch.setattr(avatar_websocket, "LOAD_POLL_SECONDS", 0.05)
+    portrait.state["prepare_error"] = PortraitUnavailable("warming", "loading")
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with contextlib.ExitStack() as stack:
+        tts = stack.enter_context(client.websocket_connect("/api/tts/live-call/websocket?portrait=1"))
+        avatar = stack.enter_context(client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])))
+        assert avatar.receive_json() == {"type": "loading"}
+        tts.close()
+        time.sleep(0.2)
+        portrait.state["prepare_error"] = None  # the model is ready now: too late for this call
+        with pytest.raises(WebSocketDisconnect):
+            avatar.receive_json()
+    assert portrait.opened == []
+
+
+def test_a_link_that_opens_after_its_call_ended_is_closed_not_attached(monkeypatch, portrait) -> None:
+    portrait.state["open_delay"] = 0.3
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with contextlib.ExitStack() as stack:
+        tts = stack.enter_context(client.websocket_connect("/api/tts/live-call/websocket?portrait=1"))
+        avatar = stack.enter_context(client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])))
+        time.sleep(0.05)  # the avatar route is opening its link
+        tts.close()
+        with pytest.raises(WebSocketDisconnect) as closed:
+            avatar.receive_json()
+    assert closed.value.code == 1000
+    assert len(portrait.opened) == 1 and portrait.opened[0]["link"].closed
+
+
+def test_while_loading_the_service_is_asked_at_its_own_pace_whatever_the_browser_sends(monkeypatch, portrait) -> None:
+    monkeypatch.setattr(avatar_websocket, "LOAD_POLL_SECONDS", 0.2)
+    asked: list[float] = []
+    portrait.state["prepare_errors"] = [PortraitUnavailable("warming", "loading") for _ in range(2)]
+    original = avatar_websocket.prepare_portrait
+
+    async def counted(*args: Any) -> str:
+        asked.append(time.monotonic())
+        return await original(*args)
+
+    monkeypatch.setattr(avatar_websocket, "prepare_portrait", counted)
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        with client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])) as avatar:
+            assert avatar.receive_json() == {"type": "loading"}
+            for _ in range(50):
+                avatar.send_text("{}")
+            assert avatar.receive_json()["type"] == "ready"
+    assert len(asked) == 3
+    assert min(later - earlier for earlier, later in zip(asked, asked[1:])) >= 0.19
+
+
+@pytest.mark.parametrize("ack", ['{"type":"frame_ack","segment_id":"s","offset":1e400}',
+                                 '{"type":"frame_ack","segment_id":"s","offset":-5}',
+                                 '{"type":"frame_ack","segment_id":"s","offset":0,"decode_ms":NaN}'])
+def test_an_ack_with_a_number_that_is_not_a_count_closes_the_socket_cleanly(monkeypatch, portrait, ack: str) -> None:
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        with client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])) as avatar:
+            assert avatar.receive_json()["type"] == "ready"
+            avatar.receive_bytes()
+            avatar.send_text(ack)
+            with pytest.raises(WebSocketDisconnect) as closed:
+                avatar.receive_json()
+    assert closed.value.code == 1003
+    assert portrait.opened[0]["link"].closed
 
 
 def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monkeypatch, portrait) -> None:

@@ -153,6 +153,30 @@ def test_the_prefetch_thread_copies_each_chunk_under_the_entry_lock_and_claims_s
         _reset()
 
 
+def test_a_copy_that_falls_behind_mid_replay_ends_the_replay_at_the_next_chunk() -> None:
+    # Review finding (2026-10-31): the flag was read once at the claim, so a copy dropped later still had its
+    # remaining chunks marked copied, and the call skipped audio the service no longer had.
+    _reset()
+    provider = _BlockingProvider()
+    request = _request("A copy that cannot keep up.")
+    copy = FakeCopy("spec-behind")
+    try:
+        _start_prefetch("spec-behind", request, provider, "shared", call_key="call-1", portrait=copy)
+        assert provider.first_chunk_ready.wait(timeout=1)
+        _accept_entry("spec-behind")
+        kwargs = _stream_kwargs(request, provider)
+        replay = _LiveLaneProviderProxy(provider, "shared").generate_audio_stream(
+            text=request.text, speaker=request.speaker, language=request.language or "en",
+            portrait_call_key="call-1", **kwargs)
+        assert next(replay)[2]["speculation_portrait_copy"] is True
+        copy.usable = False  # the copy fell behind and was dropped
+        provider.allow_finish.set()
+        assert [timing["speculation_portrait_copy"] for _pcm, _rate, timing in replay] == [False]
+    finally:
+        provider.allow_finish.set()
+        _reset()
+
+
 def test_every_way_an_entry_is_dropped_drops_its_portrait_copy() -> None:
     _reset()
     provider = _BlockingProvider()

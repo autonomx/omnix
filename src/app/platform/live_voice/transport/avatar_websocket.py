@@ -23,6 +23,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import time
 from collections.abc import Callable
 from typing import Any
@@ -49,6 +50,8 @@ LOAD_WAIT_SECONDS = 180.0
 LOAD_POLL_SECONDS = 2.0
 # The service restarts itself after an idle unload (a few seconds without it).
 RESTART_WAIT_SECONDS = 20.0
+# Above any offset or frame count a call reaches (about 12 hours of 48 kHz samples).
+MAX_ACK_COUNT = 2**31
 
 
 def _load_session(chat_store_factory: Callable[[], Any], session_id: str) -> Any:
@@ -61,8 +64,10 @@ async def _unavailable(websocket: WebSocket, code: str, message: str) -> None:
     await websocket.close(code=4001, reason=code)
 
 
-async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str, image: bytes) -> str | None:
-    """The portrait's latent key, once its model has loaded; None when the browser left while it loaded."""
+async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str, image: bytes,
+                               call_open: Callable[[], bool]) -> str | None:
+    """The portrait's latent key, once its model has loaded; None when the browser left, or the call ended, while it
+    loaded. The service is asked again every ``LOAD_POLL_SECONDS`` whatever the browser sends meanwhile."""
     started = time.monotonic()
     told = False
     while True:
@@ -76,12 +81,32 @@ async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str,
         if not told:
             await websocket.send_json({"type": "loading"})
             told = True
-        try:
-            await asyncio.wait_for(websocket.receive_text(), LOAD_POLL_SECONDS)
-        except asyncio.TimeoutError:
-            pass
-        except WebSocketDisconnect:
+        poll_at = time.monotonic() + LOAD_POLL_SECONDS
+        while (left := poll_at - time.monotonic()) > 0:
+            try:
+                await asyncio.wait_for(websocket.receive_text(), left)  # anything sent meanwhile is ignored
+            except asyncio.TimeoutError:
+                break
+            except WebSocketDisconnect:
+                return None
+        if not call_open():
             return None
+
+
+def _count(value: Any) -> int:
+    """A non-negative count from the browser (ValueError for one that is not)."""
+    number = float(value or 0)
+    if not math.isfinite(number) or number < 0 or number > MAX_ACK_COUNT:
+        raise ValueError("not a count")
+    return int(number)
+
+
+def _finite(value: Any) -> float:
+    """A non-negative, finite measure from the browser (ValueError for one that is not)."""
+    number = float(value or 0.0)
+    if not math.isfinite(number) or number < 0:
+        raise ValueError("not a finite measure")
+    return number
 
 
 def _is_speech_frame(message: bytes) -> bool:
@@ -128,8 +153,11 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
         try:
             image = await asyncio.to_thread(default_character_avatar_service().portrait_image, pack,
                                             max_bytes=MAX_PORTRAIT_BYTES)
-            latent_key = await _prepare_when_loaded(websocket, base_url, current_tenant().workspace_id, image)
-            if latent_key is None:
+            latent_key = await _prepare_when_loaded(websocket, base_url, current_tenant().workspace_id, image,
+                                                    lambda: calls.open(call))
+            if latent_key is None:  # the browser left, or the call ended, while the model loaded
+                with contextlib.suppress(Exception):
+                    await websocket.close(code=1000, reason="call_ended")
                 return
             quality = QualityController(starting_level(websocket.client.host if websocket.client else None))
 
@@ -150,10 +178,17 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
             logger.warning("Live portrait could not start for session %s", session_id, exc_info=True)
             await _unavailable(websocket, "portrait_failed", "The portrait could not start")
             return
-        call.attach(link)
-        await websocket.send_json({"type": "ready", "fallback_renderer": pack.fallback_renderer,
-                                   "level": quality.level})
+        if not calls.open(call):
+            # The call ended while its portrait loaded or opened: the TTS route has already closed whatever was
+            # attached, so this link would hold the service's stream slot with nothing to close it.
+            await link.close()
+            with contextlib.suppress(Exception):
+                await websocket.close(code=1000, reason="call_ended")
+            return
+        call.attach(link)  # no await since the check: the TTS route cannot end the call in between
         try:
+            await websocket.send_json({"type": "ready", "fallback_renderer": pack.fallback_renderer,
+                                       "level": quality.level})
             while True:
                 if link.closed:
                     await _unavailable(websocket, "portrait_lost", "The portrait stopped")
@@ -164,11 +199,11 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
                     continue
                 message = json.loads(raw)
                 if isinstance(message, dict) and message.get("type") == "frame_ack":
-                    call.play_position(str(message["segment_id"]), int(message["offset"]),
-                                       float(message.get("round_trip_seconds") or 0.0))
-                    level = quality.observe(time.monotonic(), received=int(message.get("received") or 0),
-                                            late=int(message.get("late") or 0),
-                                            decode_ms=float(message.get("decode_ms") or 0.0))
+                    call.play_position(str(message["segment_id"])[:160], _count(message["offset"]),
+                                       _finite(message.get("round_trip_seconds")))
+                    level = quality.observe(time.monotonic(), received=_count(message.get("received")),
+                                            late=_count(message.get("late")),
+                                            decode_ms=_finite(message.get("decode_ms")))
                     if level is not None:
                         link.send({"type": "quality", "level": level})
                         await websocket.send_json({"type": "quality", "level": level})

@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.config.env import env_str
-from app.conversation.portrait_stream_contract import pack
+from app.conversation.portrait_stream_contract import PortraitMessageError, pack
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,7 @@ class PortraitLink:
 
             connect = websockets.connect
         url = "ws" + base_url.removeprefix("http") + "/portrait/stream"
+        websocket = None
         try:
             websocket = await asyncio.wait_for(
                 connect(url, additional_headers=service_headers(), max_size=None), OPEN_TIMEOUT_SECONDS)
@@ -123,10 +124,20 @@ class PortraitLink:
                                              "session": session, "latent_key": latent_key, "emotion": emotion,
                                              "level": level}))
             reply = json.loads(await asyncio.wait_for(websocket.recv(), OPEN_TIMEOUT_SECONDS))
-        except (OSError, asyncio.TimeoutError, ValueError) as exc:
-            raise PortraitUnavailable("service_unreachable", "The portrait stream could not be opened") from exc
-        except Exception as exc:  # noqa: BLE001 - the websockets library's own connection errors
-            raise PortraitUnavailable("service_unreachable", f"The portrait stream failed ({type(exc).__name__})") from exc
+            if not isinstance(reply, dict):
+                raise ValueError("the reply to open is not an object")
+        except BaseException as exc:
+            # Connected but not opened (a timeout, a bad reply, the call going away): the service may already hold a
+            # lease for it, so the connection is closed rather than left to the lease's expiry.
+            if websocket is not None:
+                with contextlib.suppress(Exception):
+                    await websocket.close()
+            if isinstance(exc, (OSError, asyncio.TimeoutError, ValueError)):
+                raise PortraitUnavailable("service_unreachable", "The portrait stream could not be opened") from exc
+            if isinstance(exc, Exception):  # the websockets library's own connection errors
+                raise PortraitUnavailable("service_unreachable",
+                                          f"The portrait stream failed ({type(exc).__name__})") from exc
+            raise
         if reply.get("type") != "ready":
             with contextlib.suppress(Exception):
                 await websocket.close()
@@ -144,7 +155,13 @@ class PortraitLink:
         self._put(json.dumps(message, separators=(",", ":")))
 
     def send_pcm(self, segment_id: str, offset: int, pcm: bytes) -> None:
-        self._put(pack({"segment_id": segment_id, "offset": offset}, pcm))
+        try:
+            message = pack({"segment_id": segment_id, "offset": offset}, pcm)
+        except PortraitMessageError:  # the portrait's copy only: the call's own audio goes on
+            self.dropped += 1
+            logger.warning("Portrait link dropped a PCM block whose header does not fit")
+            return
+        self._put(message)
 
     def _put(self, item: str | bytes) -> None:
         if self.closed:

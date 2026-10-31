@@ -949,8 +949,12 @@ def register_tts_live_call_websocket(
             if websocket.query_params.get("portrait") == "1":
                 # A client that can show a portrait asks for the call key and avatar token first.
                 state.portrait = portrait_calls.issue(principal_id(websocket.scope), call_key=call_key)
-                await websocket.send_json({"type": "hello", "call_key": state.portrait.call_key,
-                                           "avatar_token": state.portrait.token})
+                try:
+                    await websocket.send_json({"type": "hello", "call_key": state.portrait.call_key,
+                                               "avatar_token": state.portrait.token})
+                except BaseException:  # the client left before its hello: the call never began
+                    portrait_calls.remove(state.portrait)
+                    raise
             receiver = asyncio.create_task(_receive_messages(websocket, state))
             try:
                 while not state.stop_event.is_set():

@@ -38,6 +38,27 @@ def test_without_a_portrait_request_nothing_changes(monkeypatch) -> None:
         assert len(client.app.state.live_portrait_calls) == 0
 
 
+def test_a_call_whose_hello_cannot_be_sent_leaves_no_entry_behind(monkeypatch) -> None:
+    # Review finding (2026-10-31): the entry was registered before the cleanup that removes it.
+    from starlette.websockets import WebSocket, WebSocketDisconnect
+
+    original = WebSocket.send_json
+
+    async def failing_hello(self, data: Any, mode: str = "text") -> None:
+        if isinstance(data, dict) and data.get("type") == "hello":
+            raise WebSocketDisconnect(code=1006)
+        await original(self, data, mode)
+
+    monkeypatch.setattr(WebSocket, "send_json", failing_hello)
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    try:
+        with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
+            websocket.receive_json()
+    except WebSocketDisconnect:
+        pass
+    assert len(client.app.state.live_portrait_calls) == 0
+
+
 def test_a_portrait_call_gets_a_hello_and_its_audio_is_copied_with_offsets(monkeypatch) -> None:
     client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
     calls = client.app.state.live_portrait_calls

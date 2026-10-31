@@ -204,6 +204,9 @@ class _LiveLaneProviderProxy:
                     error = entry.error
                 for chunk in available:
                     emitted += 1
+                    # A copy that fell behind (and was dropped) since the claim no longer has the rest: the replay
+                    # ends at this chunk, and the phrase sends the portrait its audio from here.
+                    portrait_copy = portrait_copy and entry.portrait is not None and entry.portrait.usable
                     yield chunk.pcm_bytes, chunk.sample_rate, {
                         **(
                             chunk.timing

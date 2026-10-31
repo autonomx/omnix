@@ -246,6 +246,11 @@ class PortraitCalls:
             if self._calls.get(call.call_key) is call:
                 del self._calls[call.call_key]
 
+    def open(self, call: PortraitCall) -> bool:
+        """Whether the call is still open: a portrait that became ready after its call ended must not attach."""
+        with self._lock:
+            return self._calls.get(call.call_key) is call
+
     def __len__(self) -> int:
         with self._lock:
             return len(self._calls)

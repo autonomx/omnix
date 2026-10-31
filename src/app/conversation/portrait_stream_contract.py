@@ -30,7 +30,8 @@ class PortraitMessageError(ValueError):
 
 
 def pack(header: dict[str, Any], payload: bytes) -> bytes:
-    encoded = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    # UTF-8 as is, not \\u escapes: a 160-character segment id outside the basic plane is 640 bytes, not 1,920.
+    encoded = json.dumps(header, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > MAX_HEADER_BYTES:
         raise PortraitMessageError("header too long")
     return _LENGTH.pack(len(encoded)) + encoded + payload
