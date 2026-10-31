@@ -4,8 +4,8 @@ FLOAT cannot be told to end on a chosen pose, so the idle loop is cut from a lon
 at the rest pose (motion latent zero: the source portrait itself). Of that render the loop keeps the least-moving
 span (the one whose frames stay closest to the rest pose) and, inside it, the stretch between the two frames
 whose motion latents are closest, so the jump from its last frame back to its first is the smallest available.
-Speaking outputs also start from the rest pose, so the browser's crossfades between them and the loop move only a
-small pose difference.
+A reply's motion starts from the loop's first frame (the browser holds the loop there once the user stops speaking),
+and a reply ends with rendered frames back to it, so the browser never blends two different poses.
 """
 from __future__ import annotations
 

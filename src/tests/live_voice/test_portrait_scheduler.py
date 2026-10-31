@@ -8,6 +8,7 @@ import numpy as np
 
 from services.portrait.scheduler import (
     SAMPLES_PER_FRAME,
+    TRANSITION_OUTPUT_ID,
     Frame,
     PassPlan,
     PortraitStream,
@@ -36,6 +37,9 @@ class FakeSession:
     def reset(self) -> None:
         self.resets += 1
 
+    def transition(self) -> list[bytes]:
+        return [f"transition-{index}".encode() for index in range(3)]
+
     def spawn(self) -> FakeSession:
         child = FakeSession()
         self.children.append(child)
@@ -50,9 +54,15 @@ class Clock:
         return self.now
 
 
-def _stream(clock: Clock | None = None) -> tuple[PortraitStream, FakeSession, list[Frame]]:
+def _stream(clock: Clock | None = None, *, transitions: bool = False) -> tuple[PortraitStream, FakeSession, list[Frame]]:
+    """A stream on a fake model; its frames, without a finished reply's transition unless asked for."""
     session, frames = FakeSession(), []
-    stream = PortraitStream(session, frames.append, clock=clock or Clock())
+
+    def emit(frame: Frame) -> None:
+        if transitions or frame.output_id != TRANSITION_OUTPUT_ID:
+            frames.append(frame)
+
+    stream = PortraitStream(session, emit, clock=clock or Clock())
     return stream, session, frames
 
 
@@ -303,3 +313,31 @@ def test_a_play_position_counts_from_when_it_arrived() -> None:
     clock.now = 105.0
     stream.play_position("seg-a", 2_400, received_at=104.5)
     assert stream.output is not None and stream.output.play_anchor == (0.1, 104.5)
+
+
+def test_a_finished_reply_sends_its_frames_back_to_the_idle_loop_once() -> None:
+    stream, _session, frames = _stream(transitions=True)
+    stream.phrase_start("turn-1", 1, "s1", 24_000)
+    _feed(stream, "s1", _pcm(1.0, 24_000), 2_400)
+    stream.phrase_done("s1")
+    stream.output_end("turn-1", 1)
+    stream.pump()
+    stream.pump()
+    transition = [frame for frame in frames if frame.output_id == TRANSITION_OUTPUT_ID]
+    speech = [frame for frame in frames if frame.output_id != TRANSITION_OUTPUT_ID]
+    assert [frame.jpeg for frame in transition] == [b"transition-0", b"transition-1", b"transition-2"]
+    assert {(frame.epoch, frame.count, frame.frame_ms) for frame in transition} == {(1, 3, 40)}
+    assert frames.index(transition[0]) > frames.index(speech[-1])  # after the reply's last frame
+
+
+def test_a_cancelled_or_unfinished_reply_sends_no_transition() -> None:
+    stream, _session, frames = _stream(transitions=True)
+    stream.phrase_start("turn-1", 1, "s1", 24_000)
+    _feed(stream, "s1", _pcm(1.0, 24_000), 2_400)
+    stream.pump()
+    assert not any(frame.output_id == TRANSITION_OUTPUT_ID for frame in frames)  # not ended yet
+    stream.cancel("turn-1", 1)
+    stream.output_end("turn-1", 1)
+    stream.pump()
+    assert not any(frame.output_id == TRANSITION_OUTPUT_ID for frame in frames)
+

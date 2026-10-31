@@ -237,6 +237,37 @@ describe('the live portrait client', () => {
     expect(images.filter((image) => image.id >= 20).every((image) => image.closed)).toBe(true);
   });
 
+  it('plays a reply transition once its audio has drained, then resumes the idle loop at its first frame', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 1 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage({ output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 },
+        20 + offset));
+    }
+    sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage(
+        { output_id: 'transition', epoch: 1, segment_id: 'transition', offset, count: 2, frame_ms: 40 }, 30 + offset));
+    }
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
+    context.currentTime = 1.01;
+    expect((portrait.picture(1_000).over as unknown as FakeImage).id).toBe(5);
+    // The reply's audio is over: the queue drained.
+    hooks.onWorkletEvent({ type: 'segment_completed', segment_id: 'seg-1', segment_played_samples: 960, audio_context_time_seconds: 1.02 });
+    hooks.onWorkletEvent({ type: 'idle', audio_context_time_seconds: 1.02 });
+    context.currentTime = 1.05;
+    const ids = [1_100, 1_140, 1_180].map((now) => (portrait.picture(now).under as unknown as FakeImage).id);
+    expect(ids).toEqual([30, 31, 20]);
+
+    portrait.end();
+    expect(images.filter((image) => image.id >= 30).every((image) => image.closed)).toBe(true);
+  });
+
   it('shows the fallback for a turn whose frames are late even at the lowest level, then tries the next', async () => {
     const { portrait, sockets } = setup();
     const context = { currentTime: 20 };

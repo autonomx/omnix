@@ -15,7 +15,7 @@ export type HeardPosition = {
   playedSamples: number;
 };
 
-type Transition = { at: number; segmentId: string | null; underrun?: boolean };
+type Transition = { at: number; segmentId: string | null; underrun?: boolean; drained?: boolean };
 type Count = { at: number; played: number };
 
 const MAX_EXTRAPOLATION_SECONDS = 0.02;
@@ -55,7 +55,7 @@ export class PortraitPlaybackClock {
         this.transition(at, null);
       }
     } else if (type === 'underrun' || type === 'idle' || type === 'stopped') {
-      this.transition(at, null, type === 'underrun');
+      this.transition(at, null, type === 'underrun', type !== 'underrun');
     } else if (type === 'resumed' && this.active) {
       // Playback resumes in the segment the underrun interrupted.
       this.transition(at, this.active);
@@ -84,12 +84,17 @@ export class PortraitPlaybackClock {
     return this.transitionAt(now - Math.max(0, outputLatency))?.underrun === true;
   }
 
+  /** Whether what is heard at `now` is after playback drained (its queue ran out, or it stopped). */
+  drainedAt(now: number, outputLatency: number): boolean {
+    return this.transitionAt(now - Math.max(0, outputLatency))?.drained === true;
+  }
+
   get rate(): number {
     return this.contextRate;
   }
 
-  private transition(at: number, segmentId: string | null, underrun = false): void {
-    this.transitions.push({ at, segmentId, underrun });
+  private transition(at: number, segmentId: string | null, underrun = false, drained = false): void {
+    this.transitions.push({ at, segmentId, underrun, drained });
     if (this.transitions.length > MAX_HISTORY) this.transitions.splice(0, this.transitions.length - MAX_HISTORY);
   }
 

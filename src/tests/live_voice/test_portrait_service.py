@@ -35,6 +35,9 @@ class FakeSession:
     def reset(self) -> None:
         pass
 
+    def transition(self) -> list[bytes]:
+        return [b"transition-0", b"transition-1"]
+
     def spawn(self) -> FakeSession:
         return FakeSession()
 

@@ -334,11 +334,15 @@ class StreamWorker:
 
 
 def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, sample_rate: int) -> list[bytes]:
-    """Every frame for a short clip, through the same scheduler a call uses (so the GPU sees the same shapes)."""
-    from services.portrait.scheduler import PortraitStream
+    """Every frame for a short clip, through the same scheduler a call uses (so the GPU sees the same shapes).
+
+    Only the clip's own frames: not the transition back to the idle loop a call's reply ends with.
+    """
+    from services.portrait.scheduler import TRANSITION_OUTPUT_ID, PortraitStream
 
     frames: list[bytes] = []
-    stream = PortraitStream(runtime.session(portrait, emotion), lambda frame: frames.append(frame.jpeg),
+    stream = PortraitStream(runtime.session(portrait, emotion),
+                            lambda frame: frames.append(frame.jpeg) if frame.output_id != TRANSITION_OUTPUT_ID else None,
                             resample=runtime.resample)
     stream.phrase_start("preview", 0, "preview", sample_rate)
     stream.pcm("preview", 0, pcm)
@@ -479,6 +483,8 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         def emit(frame: Any) -> None:
             header = {"output_id": frame.output_id, "epoch": frame.epoch, "segment_id": frame.segment_id,
                       "offset": frame.offset}
+            if frame.count is not None:  # a sequence played by time (the transition back to the idle loop)
+                header.update(count=frame.count, frame_ms=frame.frame_ms)
             loop.call_soon_threadsafe(queue_frame, pack(header, frame.jpeg))
 
         session = runtime.session(portrait, str(opened.get("emotion") or "neutral"))

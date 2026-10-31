@@ -56,6 +56,11 @@ IDLE_SEED = 7_919
 # the face detector's warm-up once took 15 GB of VRAM and ran from host memory, its process unkillable (2026-10-30).
 # Capped, cuDNN's large-workspace algorithms fail to allocate and it picks another; the load peaks at 3.5 GB.
 VRAM_CAP_MB = 4096
+# The end-of-reply transition back to the idle loop's first frame: at most twice the idle loop's frame-to-frame motion
+# (about 0.25 in FLOAT's motion space), in 6 to 20 frames, eased in and out.
+TRANSITION_STEP = 0.5
+TRANSITION_MIN_FRAMES = 6
+TRANSITION_MAX_FRAMES = 20
 
 
 class PortraitModelMissing(HelperUnavailable):
@@ -271,6 +276,8 @@ class Portrait:
     # The idle loop's motion latents, and its JPEG frames by quality level (made on first use).
     idle: torch.Tensor | None = None
     idle_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
+    # The silence features the idle loop was rendered with (a carry's audio half when a reply starts from it).
+    idle_wa: torch.Tensor | None = None
 
 
 def emotion_vector(label: str) -> torch.Tensor:
@@ -417,6 +424,7 @@ class FloatRuntime:
         latents = torch.cat(windows)
         start, stop = choose_loop(latents.cpu().numpy())
         portrait.idle = latents[start:stop].clone()
+        portrait.idle_wa = silence[-carry:].clone()
         return portrait.idle
 
     def idle_frames(self, portrait: Portrait, level: int = 0) -> list[bytes]:
@@ -484,12 +492,46 @@ class FloatSession:
             wa = torch.cat([wa, wa[-1:].expand(window - wa.shape[0], -1)], dim=0)
         wa = wa[:window]
         prev_x, prev_wa = self.latents[plan.carry_start:plan.start], self.feats[plan.carry_start:plan.start]
-        if prev_x.shape[0] < carry:  # the first carry is zeros, as upstream's
-            pad = torch.zeros(carry - prev_x.shape[0], prev_x.shape[1], device="cuda")
-            prev_x, prev_wa = torch.cat([pad, prev_x]), torch.cat([pad, prev_wa])
+        if prev_x.shape[0] < carry:
+            lead_x, lead_wa = self._lead_in(carry - prev_x.shape[0])
+            prev_x, prev_wa = torch.cat([lead_x, prev_x]), torch.cat([lead_wa, prev_wa])
         sample = runtime.solver(wa[None], prev_x[None], prev_wa[None], self.portrait.r_s, self.we, seed)[0]
         self.latents = torch.cat([self.latents[:plan.start], sample[:plan.commit]])
         self.feats = torch.cat([self.feats[:plan.start], wa[:plan.commit]])
+
+    def _lead_in(self, frames: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """What a reply's motion continues from: the idle loop leading into its first frame.
+
+        The browser holds the idle loop on that frame once the user stops speaking, so the reply's first frame is
+        one step from the one on screen. From the rest pose (zeros, as upstream starts) it was 12 to 20 idle steps
+        away, and the browser's crossfade between the two showed a double face (owner's rating, 2026-10-30).
+        """
+        idle, idle_wa = self.portrait.idle, self.portrait.idle_wa
+        dim = self.runtime.opt.dim_w
+        if idle is None or idle_wa is None or idle.shape[0] < 2:
+            zeros = torch.zeros(frames, dim, device="cuda")
+            return zeros, zeros
+        # The loop wraps from its last frame to its first: the frames before frame 0 are its last ones.
+        lead = torch.cat([idle[-(frames - 1):], idle[:1]]) if frames > 1 else idle[:1]
+        return lead[-frames:], idle_wa[-frames:]
+
+    @torch.no_grad()
+    def transition(self) -> list[bytes]:
+        """Frames from the reply's last pose to the idle loop's first, rendered in motion space (never a pixel blend).
+
+        The browser plays them as the reply ends, then resumes the idle loop from its first frame.
+        """
+        idle = self.portrait.idle
+        if idle is None or self.latents.shape[0] == 0:
+            return []
+        start, end = self.latents[-1], idle[0]
+        distance = float(torch.linalg.norm(end - start))
+        count = min(TRANSITION_MAX_FRAMES, max(TRANSITION_MIN_FRAMES, math.ceil(distance / TRANSITION_STEP)))
+        progress = torch.arange(1, count + 1, device="cuda", dtype=start.dtype) / (count + 1)
+        eased = progress * progress * (3 - 2 * progress)  # smoothstep: no jolt at either end
+        latents = start[None] + eased[:, None] * (end - start)[None]
+        step = QUALITY_LEVELS[self.level][1]
+        return self.runtime.render(self.portrait, latents[::step], self.level)
 
     def decode(self, start: int, stop: int) -> list[bytes | None]:
         """JPEG frames for [start, stop); at a level that sends every other frame, None for the others."""
@@ -512,5 +554,6 @@ class FloatSession:
 
 __all__ = [
     "CODE_MODEL", "DEFAULT_NFE", "EMOTIONS", "FloatRuntime", "FloatSession", "Portrait", "PortraitModelMissing",
-    "REQUIRED_MODELS", "model_folder", "required_folders", "verify_code",
+    "REQUIRED_MODELS", "TRANSITION_MAX_FRAMES", "TRANSITION_MIN_FRAMES", "model_folder", "required_folders",
+    "verify_code",
 ]

@@ -37,6 +37,8 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from app.conversation.portrait_stream_contract import QUALITY_LEVELS
+
 logger = logging.getLogger(__name__)
 
 FPS = 25
@@ -44,6 +46,10 @@ SAMPLE_RATE = 16_000
 SAMPLES_PER_FRAME = SAMPLE_RATE // FPS  # 640
 SPEC_PREFIX = "spec:"
 MAX_SPECULATIVE_OUTPUTS = 4
+# A reply's frames back to the idle loop's first frame, sent once it ends: stamped with this output id, the reply's
+# epoch, the frame's index as offset, and the count and frame period (as the idle loop's are).
+TRANSITION_OUTPUT_ID = "transition"
+FRAME_MS = 1000 // FPS
 
 
 @dataclass(frozen=True)
@@ -95,7 +101,10 @@ class MotionSession(Protocol):
         """JPEG frames for committed frames [start, stop); None for a frame the quality level does not send."""
 
     def reset(self) -> None:
-        """Forget the output's frames; the next output starts from the rest pose."""
+        """Forget the output's frames; the next output starts from the idle loop's first frame."""
+
+    def transition(self) -> list[bytes]:
+        """JPEG frames from the output's last committed pose to the idle loop's first frame, at the level's step."""
 
 
 @dataclass(frozen=True)
@@ -105,6 +114,9 @@ class Frame:
     segment_id: str
     offset: int
     jpeg: bytes
+    # A sequence played by time (a transition): how many frames it has and their period.
+    count: int | None = None
+    frame_ms: int | None = None
 
 
 def plan_pass(settings: StreamSettings, committed: int, available: int, flush_to: int | None) -> PassPlan | None:
@@ -209,6 +221,7 @@ class Output:
         self.play_anchor: tuple[float, float] | None = None
         # A speculative output keeps its frames (frame index, JPEG) until a phrase claims it.
         self.held: list[tuple[int, bytes]] | None = None
+        self.transition_sent = False
 
     def segment(self, segment_id: str) -> _Segment | None:
         return next((item for item in self.segments if item.segment_id == segment_id), None)
@@ -495,9 +508,22 @@ class PortraitStream:
             self._pump_speculative()
             return 0
         sent = self._pump_output(output, self.session)
+        self._send_transition(output)
         if not sent:
             self._pump_speculative()
         return sent
+
+    def _send_transition(self, output: Output) -> None:
+        """Once a reply's every frame is out: its frames back to the idle loop (not for a cancelled reply)."""
+        if (output.transition_sent or output.cancelled or output.held is not None or not output.ended
+                or output.committed < output.total_frames or output.decoded < output.committed):
+            return
+        output.transition_sent = True
+        jpegs = self.session.transition()
+        frame_ms = FRAME_MS * QUALITY_LEVELS[self.session.level][1]
+        for index, jpeg in enumerate(jpegs):
+            self.emit(Frame(TRANSITION_OUTPUT_ID, output.epoch, TRANSITION_OUTPUT_ID, index, jpeg,
+                            count=len(jpegs), frame_ms=frame_ms))
 
     def _pump_speculative(self) -> None:
         limit = self.settings.first_hop + self.settings.hop
@@ -579,5 +605,6 @@ class PortraitStream:
 
 __all__ = [
     "FPS", "Frame", "MAX_SPECULATIVE_OUTPUTS", "MotionSession", "Output", "PassPlan", "PortraitStream",
-    "SAMPLES_PER_FRAME", "SAMPLE_RATE", "SPEC_PREFIX", "StreamSettings", "linear_resample", "plan_pass",
+    "SAMPLES_PER_FRAME", "SAMPLE_RATE", "SPEC_PREFIX", "StreamSettings", "TRANSITION_OUTPUT_ID", "linear_resample",
+    "plan_pass",
 ]

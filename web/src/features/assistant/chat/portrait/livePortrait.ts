@@ -1,4 +1,4 @@
-import { CHARACTER_AVATAR_RUNTIME_EVENT } from '../../../../events/bus';
+import { CHARACTER_AVATAR_RUNTIME_EVENT, LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../../../events/bus';
 import {
   recordLiveVoiceReleaseCounter,
   recordLiveVoiceReleaseSamples,
@@ -8,7 +8,7 @@ import type { LiveVoicePcmSession, LiveVoicePortraitHooks } from '../../workspac
 import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { PortraitFrameBuffer } from './frameBuffer';
-import { IDLE_OUTPUT_ID, parsePortraitFrame, type PortraitFrameHeader } from './protocol';
+import { IDLE_OUTPUT_ID, parsePortraitFrame, TRANSITION_OUTPUT_ID, type PortraitFrameHeader } from './protocol';
 
 /**
  * The live call's portrait (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 3).
@@ -17,8 +17,10 @@ import { IDLE_OUTPUT_ID, parsePortraitFrame, type PortraitFrameHeader } from './
  * avatar token opens the avatar websocket, whose frames are decoded into a buffer and drawn by what the
  * worklet's clock says is heard. Every 250 ms the play position goes back (`frame_ack`) so the service can
  * commit a phrase's last frames in time. The service also sends the portrait's idle loop, which the compositor
- * shows before the first speech and through long gaps. Anything that stops the portrait (no hello, a refusal, a lost
- * stream) leaves the status `unavailable` and the call shows the pack's fallback renderer.
+ * shows between replies, and with each reply its transition back to the loop, played once the reply's audio has
+ * drained. When the user stops speaking the loop settles on its first frame, where the reply's motion starts.
+ * Anything that stops the portrait (no hello, a refusal, a lost stream) leaves the status `unavailable` and the
+ * call shows the pack's fallback renderer.
  *
  * Each `frame_ack` also says how many speech frames have arrived, how many came too late to draw and how long
  * decoding took; the gateway steps the call's quality level from them (`quality` messages). When frames are still
@@ -62,6 +64,10 @@ export class LivePortrait {
   private readonly compositor = new PortraitCompositor<ImageBitmap>();
   private idleFrames: ImageBitmap[] = [];
   private idleReceived = 0;
+  // The latest reply's transition back to the idle loop, by epoch, as its frames arrive; the one before it is
+  // kept until this one is complete (the compositor may still be drawing it).
+  private transition: { epoch: number; frames: ImageBitmap[]; received: number } | null = null;
+  private previousTransition: ImageBitmap[] = [];
   private readySegments = new Set<string>();
   private level = 0;
   private received = 0;
@@ -141,11 +147,19 @@ export class LivePortrait {
 
   /** What to draw at `now` (performance time, ms): speech, the held frame, or the idle loop, with crossfades. */
   picture(now: number): PortraitPicture<ImageBitmap> {
-    const speech = this.currentFrame();
+    const position = this.heard();
+    const speech = position && this.clock ? this.buffer.frameAt(position, this.clock.rate) : null;
     if (speech && speech !== this.lastMeasured) this.measureOffset(speech);
     const context = this.session?.audioContext;
     const stalled = Boolean(context && this.clock?.underrunAt(context.currentTime, outputLatency(context)));
-    return this.compositor.picture(now, speech, stalled);
+    const drained = Boolean(context && this.clock?.drainedAt(context.currentTime, outputLatency(context)));
+    const epoch = speech && position ? this.buffer.epochAt(position) : null;
+    return this.compositor.picture(now, speech, stalled, drained, epoch);
+  }
+
+  /** The user stopped speaking: a reply is coming, and its motion starts from the idle loop's first frame. */
+  settle(): void {
+    if (this.snapshot.status === 'ready') this.compositor.settle(performance.now());
   }
 
   end(): void {
@@ -166,6 +180,7 @@ export class LivePortrait {
     for (const image of this.idleFrames) image?.close();
     this.idleFrames = [];
     this.idleReceived = 0;
+    this.closeTransitions();
     this.readySegments.clear();
     this.liveCallKey = null;
     this.level = 0;
@@ -204,6 +219,7 @@ export class LivePortrait {
       void this.decode(frame.jpeg).then((image) => {
         if (generation !== this.generation) image.close();
         else if (frame.header.output_id === IDLE_OUTPUT_ID) this.addIdleFrame(frame.header, image);
+        else if (frame.header.output_id === TRANSITION_OUTPUT_ID) this.addTransitionFrame(frame.header, image);
         else this.addSpeechFrame(frame.header, image, performance.now() - began);
       }).catch(() => undefined);
     });
@@ -288,6 +304,36 @@ export class LivePortrait {
     if (this.idleReceived === count) this.compositor.setIdleLoop(this.idleFrames.slice(0, count), performance.now(), header.frame_ms);
   }
 
+  private addTransitionFrame(header: PortraitFrameHeader, image: ImageBitmap): void {
+    const count = header.count ?? 0;
+    if (count <= 0 || header.offset >= count) {
+      image.close();
+      return;
+    }
+    if (this.transition?.epoch !== header.epoch) {
+      for (const frame of this.transition?.frames ?? []) frame?.close(); // an incomplete one is never drawn
+      this.transition = { epoch: header.epoch, frames: [], received: 0 };
+    }
+    if (this.transition.frames[header.offset]) {
+      image.close();
+      return;
+    }
+    this.transition.frames[header.offset] = image;
+    this.transition.received += 1;
+    if (this.transition.received < count) return;
+    for (const frame of this.previousTransition) frame.close();
+    this.previousTransition = this.transition.frames.slice(0, count);
+    this.compositor.setTransition(this.previousTransition, header.frame_ms, header.epoch);
+    this.transition = null;
+  }
+
+  private closeTransitions(): void {
+    for (const frame of this.transition?.frames ?? []) frame?.close();
+    for (const frame of this.previousTransition) frame.close();
+    this.transition = null;
+    this.previousTransition = [];
+  }
+
   private acknowledge(): void {
     const position = this.heard();
     const socket = this.socket;
@@ -357,9 +403,15 @@ export function installLivePortrait(): () => void {
     const runtime = (event as CustomEvent<{ avatar_pack?: RuntimePack } | null>).detail;
     livePortrait.setPack(runtime?.avatar_pack ?? null);
   };
+  // The user's speech ended: the reply that follows starts from the idle loop's first frame.
+  const settle = (event: Event): void => {
+    if ((event as CustomEvent<{ event?: string } | null>).detail?.event === 'speech_ended') livePortrait.settle();
+  };
   window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, follow);
+  window.addEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, settle);
   return () => {
     window.removeEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, follow);
+    window.removeEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, settle);
     livePortrait.end();
     livePortrait.setPack(null);
   };

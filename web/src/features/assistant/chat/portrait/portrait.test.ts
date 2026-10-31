@@ -123,19 +123,73 @@ describe('the portrait compositor', () => {
     expect(compositor.picture(2_080, 's2', false)).toEqual({ under: 's2', over: null, alpha: 0 });
   });
 
-  it('holds the last frame through short gaps and underruns, then fades to idle after 250 ms', () => {
+  it('holds the last frame through pauses and underruns; drained with no transition, fades to idle after 250 ms', () => {
     const compositor = new PortraitCompositor<string>();
     compositor.setIdleLoop(['i0', 'i1'], 0);
     compositor.picture(0, 's1', false);
     compositor.picture(100, 's1', false);
     expect(compositor.picture(200, null, false).under).toBe('s1');
-    expect(compositor.picture(449, null, false).under).toBe('s1');
-    expect(compositor.picture(460, 's2', false).under).toBe('s2'); // speech came back in time: no idle
-    expect(compositor.picture(500, null, true).under).toBe('s2');
-    expect(compositor.picture(1_000, null, true).under).toBe('s2'); // an underrun freezes, however long
-    expect(compositor.picture(1_100, null, false)).toEqual({ under: 's2', over: 'i0', alpha: 0 });
-    expect(compositor.picture(1_140, null, false)).toEqual({ under: 's2', over: 'i1', alpha: 0.5 });
-    expect(compositor.picture(1_180, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    expect(compositor.picture(1_600, null, false).under).toBe('s1'); // a clause pause holds, up to 1.5 s
+    expect(compositor.picture(1_660, 's2', false).under).toBe('s2'); // speech came back in time: no idle
+    expect(compositor.picture(1_700, null, true).under).toBe('s2');
+    expect(compositor.picture(2_200, null, true).under).toBe('s2'); // an underrun freezes, however long
+    expect(compositor.picture(2_300, null, false, true)).toEqual({ under: 's2', over: 'i0', alpha: 0 });
+    expect(compositor.picture(2_340, null, false, true)).toEqual({ under: 's2', over: 'i1', alpha: 0.5 });
+    expect(compositor.picture(2_380, null, false, true)).toEqual({ under: 'i0', over: null, alpha: 0 });
+  });
+
+  it('settles the idle loop on its first frame the shorter way, holds it, then cuts into the reply', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
+    expect(compositor.picture(140, null, false).under).toBe('i3');
+    compositor.settle(140); // at 3.5 of 5: forward to the wrap is shorter
+    expect(compositor.picture(160, null, false).under).toBe('i4');
+    expect(compositor.picture(200, null, false).under).toBe('i0');
+    expect(compositor.picture(5_000, null, false).under).toBe('i0'); // held for the reply
+    // Settled: the reply's first frame continues from i0, so it cuts in with no blend.
+    expect(compositor.picture(5_010, 's1', false)).toEqual({ under: 's1', over: null, alpha: 0 });
+
+    const backward = new PortraitCompositor<string>();
+    backward.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
+    backward.settle(60); // at 1.5: back to i0 is shorter
+    expect(backward.picture(60, null, false).under).toBe('i1');
+    expect(backward.picture(120, null, false).under).toBe('i0');
+  });
+
+  it('crossfades a reply that comes before the loop has settled, and loops on if none comes', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
+    compositor.settle(80);
+    expect(compositor.picture(90, 's1', false)).toMatchObject({ over: 's1', alpha: 0 }); // not there yet: blend
+
+    const idle = new PortraitCompositor<string>();
+    idle.setIdleLoop(['i0', 'i1', 'i2'], 0, 40);
+    idle.settle(0);
+    expect(idle.picture(1_000, null, false).under).toBe('i0');
+    expect(idle.picture(11_100, null, false).under).toBe('i0'); // the hold ends: the loop runs on from i0
+    expect(idle.picture(11_150, null, false).under).toBe('i1');
+  });
+
+  it('plays a transition only as its own reply ends, though it arrived before that reply played', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.setIdleLoop(['i0', 'i1', 'i2'], 0, 40);
+    compositor.setTransition(['t0'], 40, 2); // reply 2's, sent before reply 1 has even finished playing
+    compositor.picture(1_000, 's1', false, false, 1);
+    expect(compositor.picture(1_100, null, false, true).under).toBe('s1'); // reply 1 drained: not its transition
+    compositor.picture(1_200, 's2', false, false, 2);
+    expect(compositor.picture(1_300, null, false, true).under).toBe('t0');
+  });
+
+  it('plays a reply transition once its audio has drained, then resumes the loop at its first frame', () => {
+    const compositor = new PortraitCompositor<string>();
+    compositor.setIdleLoop(['i0', 'i1', 'i2'], 0, 40);
+    compositor.picture(1_000, 's1', false);
+    compositor.setTransition(['t0', 't1'], 40);
+    expect(compositor.picture(1_100, null, false).under).toBe('s1'); // a pause, not drained: hold
+    expect(compositor.picture(1_200, null, false, true)).toEqual({ under: 't0', over: null, alpha: 0 });
+    expect(compositor.picture(1_240, null, false, true).under).toBe('t1');
+    expect(compositor.picture(1_280, null, false, true)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    expect(compositor.picture(1_320, null, false, true).under).toBe('i1');
   });
 
   it('cuts to the idle loop when a turn is interrupted, and holds speech when there is no loop', () => {
@@ -147,6 +201,19 @@ describe('the portrait compositor', () => {
     expect(compositor.picture(1_020, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
     compositor.reset();
     expect(compositor.picture(1_030, null, false).under).toBeNull();
+  });
+});
+
+describe('the clock when playback drains', () => {
+  it('says when what is heard is after the queue ran out, until a segment starts again', () => {
+    const clock = new PortraitPlaybackClock(CONTEXT_RATE);
+    clock.observe({ type: 'segment_started', segment_id: 'a', audio_context_time_seconds: 1 });
+    clock.observe({ type: 'idle', audio_context_time_seconds: 2 });
+    clock.observe({ type: 'segment_started', segment_id: 'b', audio_context_time_seconds: 3 });
+    expect(clock.drainedAt(1.5, 0)).toBe(false);
+    expect(clock.drainedAt(2.5, 0)).toBe(true);
+    expect(clock.drainedAt(3.05, 0.1)).toBe(true); // heard 100 ms after it renders
+    expect(clock.drainedAt(3.2, 0.1)).toBe(false);
   });
 });
 
