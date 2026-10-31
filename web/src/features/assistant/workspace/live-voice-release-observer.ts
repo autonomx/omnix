@@ -91,6 +91,8 @@ let state: ReleaseState = emptyState();
 // An interruption spans two turns: the user's speech that interrupts starts a new turn before the interrupted
 // reply's turn reports it stopped. So it is kept apart from the turn state and ends at the next turn_stopped.
 let interruptionAt: number | null = null;
+// An interruption with no reply to stop gets no turn_stopped; one this old is not paired with a later, unrelated stop.
+const INTERRUPTION_PAIR_MS = 2_000;
 // A reply still in its start hold when the user starts speaking again (a barge-in) keeps its turn state here, so
 // its first playback is still measured: the new turn's speech resets the turn state before that playback starts.
 let awaitingPlayback: ReleaseState | null = null;
@@ -264,8 +266,9 @@ function handleDiagnosticEvent(event: Event): void {
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && interruptionAt !== null) {
-    recordLatency('interruption_to_silence_ms', elapsed(interruptionAt, now));
+    const latency = elapsed(interruptionAt, now);
     interruptionAt = null;
+    if (latency !== null && latency <= INTERRUPTION_PAIR_MS) recordLatency('interruption_to_silence_ms', latency);
     return;
   }
   if (

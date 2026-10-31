@@ -91,6 +91,11 @@ export class PortraitCompositor<T> {
     this.transition = frames.length ? { frames, frameMs: frameMs > 0 ? frameMs : IDLE_FRAME_MS, epoch } : null;
   }
 
+  /** Whether these frames are a transition the compositor plays or holds for its reply (so not to be released). */
+  shows(frames: T[]): boolean {
+    return this.playing?.frames === frames || this.transition?.frames === frames;
+  }
+
   /** A turn was cancelled or interrupted: its frames are gone, so cut to the idle loop. */
   interrupt(now: number): void {
     this.lastSpeech = null;
@@ -125,6 +130,7 @@ export class PortraitCompositor<T> {
         this.settling = null;
         this.playing = null;
         this.blinkSince = null;
+        this.nextBlinkAt = null; // the next blink is due a gap after the idle loop shows again, not on its return
       }
       this.lastSpeech = speech;
       this.speechEpoch = epoch;

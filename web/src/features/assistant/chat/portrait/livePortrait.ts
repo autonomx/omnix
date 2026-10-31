@@ -78,6 +78,8 @@ export class LivePortrait {
   // kept until this one is complete (the compositor may still be drawing it).
   private transition: { epoch: number; frames: ImageBitmap[]; received: number } | null = null;
   private previousTransition: ImageBitmap[] = [];
+  // Replaced transitions the compositor may still be playing: closed once it no longer shows them.
+  private retiredTransitions: ImageBitmap[][] = [];
   private readySegments = new Set<string>();
   private level = 0;
   private received = 0;
@@ -85,6 +87,8 @@ export class LivePortrait {
   private decodeMs = 0;
   private decoded = 0;
   private degradedEpoch: number | null = null;
+  // The epoch of the speech frame last drawn: the turn on screen, also through its clause silences.
+  private shownEpoch: number | null = null;
   private avOffsets: number[] = [];
   private lastMeasured: ImageBitmap | null = null;
   private acks = 0;
@@ -139,9 +143,13 @@ export class LivePortrait {
 
   /** The audio session the hooks belong to: its context is the clock's, and its worklet starts reporting. */
   attachSession(session: LiveVoicePcmSession): void {
+    // A session that finished opening after its call ended (hung up while it opened): nothing to attach to.
+    if (this.snapshot.status === 'off') return;
     this.session = session;
     this.clock = new PortraitPlaybackClock(session.audioContext.sampleRate);
-    if (this.snapshot.status !== 'unavailable') session.setPortraitClock(true);
+    // The clock, and with it the start hold, only once frames can come: connecting or loading, none can, and a
+    // hold would only delay the audio (``ready`` turns it on).
+    session.setPortraitClock(this.snapshot.status === 'ready' || this.snapshot.status === 'degraded');
     // The session is open: its hello is due now (opening it can wait on the browser's audio and the gateway).
     const generation = this.generation;
     if (this.liveCallKey === null && !this.socket) {
@@ -164,6 +172,8 @@ export class LivePortrait {
     const stalled = Boolean(context && this.clock?.underrunAt(context.currentTime, outputLatency(context)));
     const drained = Boolean(context && this.clock?.drainedAt(context.currentTime, outputLatency(context)));
     const epoch = speech && position ? this.buffer.epochAt(position) : null;
+    if (epoch !== null) this.shownEpoch = epoch;
+    this.closeRetiredTransitions();
     return this.compositor.picture(now, speech, stalled, drained, epoch);
   }
 
@@ -198,6 +208,7 @@ export class LivePortrait {
     this.level = 0;
     this.received = this.late = this.decoded = this.decodeMs = 0;
     this.degradedEpoch = null;
+    this.shownEpoch = null;
     if (this.snapshot.status !== 'off') this.publish(OFF);
   }
 
@@ -349,15 +360,27 @@ export class LivePortrait {
     this.transition.frames[header.offset] = image;
     this.transition.received += 1;
     if (this.transition.received < count) return;
-    for (const frame of this.previousTransition) frame.close();
+    // The one it replaces may still be playing (a reply's transition while the next reply's arrives).
+    if (this.previousTransition.length) this.retiredTransitions.push(this.previousTransition);
     this.previousTransition = this.transition.frames.slice(0, count);
     this.compositor.setTransition(this.previousTransition, header.frame_ms, header.epoch);
+    this.closeRetiredTransitions();
     this.transition = null;
+  }
+
+  private closeRetiredTransitions(): void {
+    this.retiredTransitions = this.retiredTransitions.filter((frames) => {
+      if (this.compositor.shows(frames)) return true;
+      for (const frame of frames) frame.close();
+      return false;
+    });
   }
 
   private closeTransitions(): void {
     for (const frame of this.transition?.frames ?? []) frame?.close();
     for (const frame of this.previousTransition) frame.close();
+    for (const frames of this.retiredTransitions) for (const frame of frames) frame.close();
+    this.retiredTransitions = [];
     this.transition = null;
     this.previousTransition = [];
   }
@@ -377,7 +400,8 @@ export class LivePortrait {
     this.acks += 1;
     if (this.acks % AV_OFFSET_FLUSH_ACKS === 0) this.flushOffsets();
     if (this.snapshot.status === 'ready' && this.level >= LOWEST_LEVEL && late >= LATE_FRAMES_TO_DEGRADE) {
-      this.degradedEpoch = this.buffer.epochAt(position);
+      // A clause silence or a cue has no frames: the turn degraded is the one on screen.
+      this.degradedEpoch = this.buffer.epochAt(position) ?? this.shownEpoch;
       this.publish({ ...this.snapshot, status: 'degraded', reason: 'frames_late' });
       recordLiveVoiceReleaseCounter('portrait_degrade_count', { reason: 'frames_late' });
     }

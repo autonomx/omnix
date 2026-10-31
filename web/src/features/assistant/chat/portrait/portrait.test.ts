@@ -90,6 +90,17 @@ describe('the portrait frame buffer', () => {
     expect(buffer.frameAt({ segmentId: 'other', playedSamples: 0 }, CONTEXT_RATE)).toBeNull();
   });
 
+  it('replaces a frame that comes again at the same position, releasing the first', () => {
+    // A speculation's prefix cut short: the service makes the frames past it again from the phrase's own audio.
+    const released: string[] = [];
+    const buffer = new PortraitFrameBuffer<string>((image) => released.push(image));
+    buffer.add(header('seg', 0), 'first');
+    buffer.add(header('seg', 960), 'again-from-speculation');
+    buffer.add(header('seg', 960), 'again-from-the-phrase');
+    expect(released).toEqual(['again-from-speculation']);
+    expect(buffer.frameAt({ segmentId: 'seg', playedSamples: 960 * 2 }, CONTEXT_RATE)).toBe('again-from-the-phrase');
+  });
+
   it('keeps frames in offset order whatever order they arrive in', () => {
     const buffer = new PortraitFrameBuffer<string>();
     buffer.add(header('seg', 1920), 'f2');
@@ -208,6 +219,21 @@ describe('the portrait compositor', () => {
     incomplete.setBlink(['s0']); // not one twin a frame: no blinks
     incomplete.picture(0, null, false);
     expect(incomplete.picture(2_500, null, false).over).toBeNull();
+  });
+
+  it('blinks a gap after a reply ends, not the moment the idle loop returns', () => {
+    // Review finding (2026-10-31): the next blink came due during the reply, so the face blinked on its return.
+    const compositor = new PortraitCompositor<string>(() => 0); // 2.5 s gaps
+    compositor.setIdleLoop(['i0', 'i1'], 0, 40);
+    compositor.setBlink(['s0', 's1']);
+    compositor.picture(0, null, false); // due at 2.5 s
+    compositor.picture(100, 's1', false);
+    compositor.picture(5_000, 's2', false); // a long reply
+    compositor.picture(5_100, null, false, true);
+    compositor.picture(5_400, null, false, true); // drained: fading back to the loop
+    expect(compositor.picture(5_500, null, false, true).over).toBeNull(); // the loop again: no blink yet
+    expect(compositor.picture(7_990, null, false, true).over).toBeNull();
+    expect(compositor.picture(8_000, null, false, true).over).toMatch(/^s/); // 2.5 s after it returned
   });
 
   it('plays a transition only as its own reply ends, though it arrived before that reply played', () => {

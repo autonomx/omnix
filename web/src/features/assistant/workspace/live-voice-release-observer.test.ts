@@ -439,6 +439,22 @@ describe('live voice release observer', () => {
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 
+  it('never pairs an interruption with a stop long after it', () => {
+    // Review finding (2026-10-31): an interruption with no reply to stop was paired with a later, unrelated stop.
+    const observations: LiveVoiceReleaseObservation[] = [];
+    const listener = (event: Event) => observations.push(
+      (event as CustomEvent<LiveVoiceReleaseObservation>).detail,
+    );
+    window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+    now = 5_000;
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt', { detail: { intent: 'hard_stop' } }));
+    now = 9_000;
+    diagnostic('turn_stopped', 'live-call:voice-turn:later');
+    expect(observations.filter((item) => item.kind === 'latency' && item.metricName === 'interruption_to_silence_ms'))
+      .toEqual([]);
+    window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+  });
+
   it('measures the playback of a reply still in its start hold when the user starts speaking again', () => {
     const observations: LiveVoiceReleaseObservation[] = [];
     const listener = (event: Event) => observations.push(

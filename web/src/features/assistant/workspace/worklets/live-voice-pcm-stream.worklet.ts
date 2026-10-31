@@ -90,7 +90,9 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   portraitClockSamples = 0;
   // The portrait's start hold (D-5): an output's start waits for its first frames, at most this long.
   startHoldSamples = 0;
-  startHoldSince: number | null = null;
+  // When the hold began, and for which segment: a hold given up (the turn cancelled, the clock off) never
+  // carries its start over to the next turn's (review finding, 2026-10-31).
+  startHold: { segmentId: string; since: number } | null = null;
   lastHeldEpoch: number | null = null;
   portraitReadySegments = new Set<string>();
 
@@ -177,8 +179,10 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     this.emit('portrait_clock', { ...this.segmentFields(), audio_context_time_seconds: at });
   }
 
-  reportAvatarPlayback(renderedSamples: number, speechSquareSum: number): void {
-    this.reportPortraitClock(renderedSamples);
+  /** ``playing``: whether this quantum played the active segment; while waiting (an underrun, a held start) its
+   * count stands still, and a report then would carry a newer time for the same count (review finding). */
+  reportAvatarPlayback(renderedSamples: number, speechSquareSum: number, playing = true): void {
+    if (playing) this.reportPortraitClock(renderedSamples);
     this.avatarEnvelopeSamples += Math.max(0, Number(renderedSamples) || 0);
     this.avatarEnvelopeSquareSum += Math.max(0, Number(speechSquareSum) || 0);
     if (this.avatarEnvelopeSamples < this.avatarEnvelopeIntervalSamples) return;
@@ -444,13 +448,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     const head = this.queue.find((segment) => segment.segmentKind === 'speech');
     // Only a turn's start: audio is never paused mid-reply to wait for video.
     if (!this.startHoldSamples || !head || this.queue[0] !== head || head.generationEpoch === this.lastHeldEpoch) {
+      this.startHold = null;
       return false;
     }
     const ready = this.portraitReadySegments.has(head.segmentId);
-    this.startHoldSince ??= this.renderClockSamples;
-    const held = this.renderClockSamples - this.startHoldSince;
+    if (this.startHold?.segmentId !== head.segmentId) {
+      this.startHold = { segmentId: head.segmentId, since: this.renderClockSamples };
+    }
+    const held = this.renderClockSamples - this.startHold.since;
     if (!ready && held < this.startHoldSamples) return true;
-    this.startHoldSince = null;
+    this.startHold = null;
     this.lastHeldEpoch = head.generationEpoch;
     this.emit('start_hold', {
       segment_id: head.segmentId,
@@ -694,7 +701,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     channel.fill(0);
     this.renderClockSamples += channel.length;
     if (this.stopped) {
-      this.reportAvatarPlayback(channel.length, 0);
+      this.reportAvatarPlayback(channel.length, 0, false);
       return false;
     }
 
@@ -702,7 +709,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     let written = this.writeCancellationFade(channel);
     let avatarSpeechSquareSum = 0;
     if ((!this.started || this.waitingForBuffer) && written === 0) {
-      this.reportAvatarPlayback(channel.length, 0);
+      this.reportAvatarPlayback(channel.length, 0, false);
       this.maybeReportProgress();
       if (this.inputEnded && this.queuedSamples === 0) return this.signalDrained();
       return true;

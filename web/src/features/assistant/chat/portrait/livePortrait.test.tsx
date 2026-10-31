@@ -156,11 +156,13 @@ describe('the live portrait client', () => {
     const { session } = fakeSession(context);
     const hooks = portrait.begin('chat:maya');
     portrait.attachSession(session);
-    expect(session.setPortraitClock).toHaveBeenCalledWith(true);
+    // Connecting, no frame can come: no clock, so no start held for frames (review finding, 2026-10-31).
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
     hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
     hooks.onSegmentRate('seg-1', 24_000);
     const socket = sockets[0];
     socket.message(JSON.stringify({ type: 'ready' }));
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
     for (const [index, offset] of [0, 960, 1920].entries()) {
       socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, index));
     }
@@ -303,6 +305,77 @@ describe('the live portrait client', () => {
     expect(portrait.getSnapshot().status).toBe('ready');
   });
 
+  it('keeps a turn degraded through its clause silences, recovering only with the next turn', async () => {
+    // Review finding (2026-10-31): an ack heard in a silence (no frames) left no turn to compare, so the same
+    // turn's next frame brought the portrait back at once, and it flapped.
+    const { portrait, sockets } = setup();
+    const context = { currentTime: 20 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    const socket = sockets[0];
+    socket.message(JSON.stringify({ type: 'ready', level: 3 }));
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 20 });
+    hooks.onWorkletEvent({ type: 'portrait_clock', segment_id: 'seg-1', segment_played_samples: 48_000, audio_context_time_seconds: 21 });
+    context.currentTime = 21;
+    for (const offset of [0, 960, 1_920]) {
+      socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, offset / 960));
+    }
+    await flush();
+    portrait.picture(1_000); // turn 1 on screen
+    hooks.onWorkletEvent({ type: 'segment_completed', segment_id: 'seg-1', segment_played_samples: 48_000, audio_context_time_seconds: 21.01 });
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'sil-1', audio_context_time_seconds: 21.01 });
+    context.currentTime = 21.1; // the clause silence after it is heard as the ack goes
+    vi.advanceTimersByTime(250);
+    expect(portrait.getSnapshot()).toMatchObject({ status: 'degraded' });
+    hooks.onSegmentRate('seg-2', 24_000);
+    socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-2', offset: 0 }, 7));
+    await flush();
+    expect(portrait.getSnapshot().status).toBe('degraded'); // the same turn: still the fallback
+    hooks.onSegmentRate('seg-3', 24_000);
+    socket.message(frameMessage({ output_id: 'turn-2', epoch: 2, segment_id: 'seg-3', offset: 0 }, 8));
+    await flush();
+    expect(portrait.getSnapshot().status).toBe('ready');
+  });
+
+  it('never releases a transition the compositor is still playing when the next one arrives', async () => {
+    const { portrait, sockets, images } = setup();
+    const context = { currentTime: 1 };
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(fakeSession(context).session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage({ output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 },
+        20 + offset));
+    }
+    sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
+    for (const offset of [0, 1]) {
+      sockets[0].message(frameMessage(
+        { output_id: 'transition', epoch: 1, segment_id: 'transition', offset, count: 2, frame_ms: 40 }, 30 + offset));
+    }
+    await flush();
+    hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
+    context.currentTime = 1.01;
+    portrait.picture(1_000);
+    hooks.onWorkletEvent({ type: 'segment_completed', segment_id: 'seg-1', segment_played_samples: 960, audio_context_time_seconds: 1.02 });
+    hooks.onWorkletEvent({ type: 'idle', audio_context_time_seconds: 1.02 });
+    context.currentTime = 1.05;
+    expect((portrait.picture(1_100).under as unknown as FakeImage).id).toBe(30); // turn 1's transition plays
+    for (const offset of [0, 1]) { // turn 2's arrives meanwhile
+      sockets[0].message(frameMessage(
+        { output_id: 'transition', epoch: 2, segment_id: 'transition', offset, count: 2, frame_ms: 40 }, 40 + offset));
+    }
+    await flush();
+    expect(images.filter((image) => image.id === 30 || image.id === 31).some((image) => image.closed)).toBe(false);
+    expect((portrait.picture(1_140).under as unknown as FakeImage).id).toBe(31); // still drawable
+    portrait.picture(1_180); // played out: the loop again
+    portrait.picture(1_200);
+    expect(images.filter((image) => image.id === 30 || image.id === 31).every((image) => image.closed)).toBe(true);
+  });
+
   it('falls back when the service refuses or the stream is lost', () => {
     const { portrait, sockets } = setup();
     portrait.begin('chat:maya').onHello({ callKey: 'call-1', avatarToken: 'token' });
@@ -339,6 +412,20 @@ describe('the live portrait client', () => {
     sockets[1].message(JSON.stringify({ type: 'loading' }));
     sockets[1].emit('close', {});
     expect(portrait.getSnapshot()).toMatchObject({ status: 'unavailable', reason: 'portrait_lost' });
+  });
+
+  it('ignores an audio session that finished opening after its call ended', () => {
+    // Review finding (2026-10-31): attaching after end() started a hello timer that recorded a false no_hello and
+    // left the portrait unavailable rather than off.
+    const { portrait } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    portrait.begin('chat:maya');
+    portrait.end();
+    portrait.attachSession(session);
+    vi.advanceTimersByTime(2_000);
+    expect(portrait.getSnapshot().status).toBe('off');
+    expect(session.setPortraitClock).not.toHaveBeenCalled();
+    expect(release.counter).not.toHaveBeenCalled();
   });
 
   it('ignores a previous call once it has ended', () => {

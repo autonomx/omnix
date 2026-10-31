@@ -47,6 +47,13 @@ export class PortraitFrameBuffer<T> {
     const frames = segment.frames;
     let index = frames.length;
     while (index > 0 && frames[index - 1].offset > header.offset) index -= 1;
+    const same = frames[index - 1];
+    if (same && same.offset === header.offset) {
+      // The same position again: the service made it again from other audio (a speculation's prefix cut short).
+      this.release(same.image);
+      frames[index - 1] = { offset: header.offset, epoch: header.epoch, image };
+      return true;
+    }
     frames.splice(index, 0, { offset: header.offset, epoch: header.epoch, image });
     return true;
   }
