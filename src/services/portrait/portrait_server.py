@@ -544,9 +544,9 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             for index, jpeg in enumerate(frames):
                 idle_box.append(pack({"output_id": IDLE_OUTPUT_ID, "epoch": 0, "segment_id": IDLE_SEGMENT_ID,
                                       "offset": index, "count": len(frames), "frame_ms": frame_ms}, jpeg))
-            for index, jpeg in enumerate(blink):  # after the loop: the browser plays it while the loop holds
+            for index, jpeg in enumerate(blink):  # after the loop: each loop frame with its eyes shut
                 idle_box.append(pack({"output_id": BLINK_OUTPUT_ID, "epoch": 0, "segment_id": BLINK_OUTPUT_ID,
-                                      "offset": index, "count": len(blink), "frame_ms": 40}, jpeg))
+                                      "offset": index, "count": len(blink), "frame_ms": frame_ms}, jpeg))
             queue_frame(b"")
 
         sender = asyncio.create_task(send_frames())

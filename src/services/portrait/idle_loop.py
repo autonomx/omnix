@@ -28,30 +28,16 @@ IDLE_SEGMENT_ID = "idle"
 # faces tried, and past -8 distorts the face.
 EYELID_DIRECTION = 14
 EYELID_CLOSED = -6.5
-# A blink's closure frame by frame at 25 frames a second (about 280 ms): shut fast, open slower.
-BLINK_ENVELOPE = (0.35, 0.8, 1.0, 0.95, 0.7, 0.4, 0.15)
-# A blink at the loop's first frame, sent after the loop: the browser plays it while it holds the face near there.
+# Each idle frame with its eyes shut, sent after the loop: the browser blinks wherever the loop is by fading a frame
+# into its shut twin and back (the same pose, so only the eyelids differ).
 BLINK_OUTPUT_ID = "blink"
 
 
-def blink(latents: Any, eyelid: Any, center: int) -> Any:
-    """``latents`` (frames x dim, a tensor or an array) with a blink fullest at ``center``.
-
-    Each frame's eyelid coordinate moves toward closed by the envelope's weight; the rest of its motion is kept.
-    """
-    out = latents.clone() if hasattr(latents, "clone") else latents.copy()
-    first = center - BLINK_ENVELOPE.index(1.0)
-    for offset, weight in enumerate(BLINK_ENVELOPE):
-        index = first + offset
-        if 0 <= index < out.shape[0]:
-            out[index] = out[index] + weight * (EYELID_CLOSED - float(out[index] @ eyelid)) * eyelid
-    return out
-
-
-def loop_blink_center(frames: int, step: int) -> int:
-    """Where the loop blinks: near its middle, away from the first frames the browser sways over and from the wrap,
-    on a frame every quality level sends (a multiple of the largest idle frame step)."""
-    return (frames // (2 * step)) * step
+def eyes_shut(latents: Any, eyelid: Any) -> Any:
+    """``latents`` (frames x dim, a tensor or an array) with each frame's eyelid coordinate set to closed; the rest of
+    its motion is kept."""
+    coordinates = latents @ eyelid
+    return latents + (EYELID_CLOSED - coordinates)[:, None] * eyelid[None, :]
 
 
 def idle_frame_step(level: int) -> int:
@@ -85,6 +71,5 @@ def choose_loop(latents: np.ndarray, *, span: int = IDLE_SPAN_FRAMES,
     return base + best[1], base + best[2]
 
 
-__all__ = ["BLINK_ENVELOPE", "BLINK_OUTPUT_ID", "EYELID_CLOSED", "EYELID_DIRECTION", "IDLE_MIN_LOOP_FRAMES",
-           "IDLE_OUTPUT_ID", "IDLE_RENDER_FRAMES", "IDLE_SEGMENT_ID", "IDLE_SPAN_FRAMES", "blink", "choose_loop",
-           "idle_frame_step", "loop_blink_center"]
+__all__ = ["BLINK_OUTPUT_ID", "EYELID_CLOSED", "EYELID_DIRECTION", "IDLE_MIN_LOOP_FRAMES", "IDLE_OUTPUT_ID",
+           "IDLE_RENDER_FRAMES", "IDLE_SEGMENT_ID", "IDLE_SPAN_FRAMES", "choose_loop", "eyes_shut", "idle_frame_step"]

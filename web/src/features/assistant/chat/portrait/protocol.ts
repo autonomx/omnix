@@ -19,7 +19,7 @@ export type PortraitFrameHeader = {
 export const IDLE_OUTPUT_ID = 'idle';
 /** A reply's frames back to the idle loop's first frame (sent when it ends; `count` and `frame_ms` as the loop's). */
 export const TRANSITION_OUTPUT_ID = 'transition';
-/** A blink at the idle loop's first frame, sent after the loop (`count` and `frame_ms` as the loop's). */
+/** Each idle loop frame with its eyes shut, sent after the loop in the same order (`count` and `frame_ms` as its). */
 export const BLINK_OUTPUT_ID = 'blink';
 
 export type PortraitFrameMessage = {

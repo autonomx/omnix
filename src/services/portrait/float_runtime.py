@@ -273,8 +273,8 @@ class Portrait:
     s_r: torch.Tensor
     s_r_feats: list[torch.Tensor]
     r_s: torch.Tensor
-    # The idle loop's motion latents (with a blink), and its JPEG frames by quality level (made on first use); a blink
-    # at the loop's first frame, likewise.
+    # The idle loop's motion latents, and its JPEG frames by quality level (made on first use); its frames with the
+    # eyes shut, likewise.
     idle: torch.Tensor | None = None
     idle_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
     blink_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
@@ -411,9 +411,8 @@ class FloatRuntime:
 
     @torch.no_grad()
     def idle_latents(self, portrait: Portrait) -> torch.Tensor:
-        """The portrait's idle loop: silence rendered window after window from the rest pose, then cut, with a blink
-        near its middle."""
-        from services.portrait.idle_loop import IDLE_RENDER_FRAMES, blink, choose_loop, idle_frame_step, loop_blink_center
+        """The portrait's idle loop: silence rendered window after window from the rest pose, then cut."""
+        from services.portrait.idle_loop import IDLE_RENDER_FRAMES, choose_loop
 
         if portrait.idle is not None:
             return portrait.idle
@@ -430,9 +429,7 @@ class FloatRuntime:
             prev_x, prev_wa = sample[-carry:], silence[-carry:]
         latents = torch.cat(windows)
         start, stop = choose_loop(latents.cpu().numpy())
-        loop = latents[start:stop]
-        step = max(idle_frame_step(level) for level in range(len(QUALITY_LEVELS)))
-        portrait.idle = blink(loop, self.eyelid, loop_blink_center(loop.shape[0], step))
+        portrait.idle = latents[start:stop].clone()
         portrait.idle_wa = silence[-carry:].clone()
         return portrait.idle
 
@@ -446,14 +443,13 @@ class FloatRuntime:
         return portrait.idle_jpegs[level]
 
     def blink_frames(self, portrait: Portrait, level: int = 0) -> list[bytes]:
-        """A blink at the idle loop's first frame (25 frames a second), which the browser plays while it holds the
-        face near there; it starts and ends on that frame."""
-        from services.portrait.idle_loop import BLINK_ENVELOPE, blink
+        """Each idle loop frame with its eyes shut, in the same order: the browser blinks by fading a loop frame into
+        its twin and back."""
+        from services.portrait.idle_loop import eyes_shut, idle_frame_step
 
         if level not in portrait.blink_jpegs:
-            first = self.idle_latents(portrait)[:1].repeat(len(BLINK_ENVELOPE), 1)
-            latents = blink(first, self.eyelid, BLINK_ENVELOPE.index(1.0))
-            portrait.blink_jpegs[level] = self.render(portrait, latents, level)
+            loop = self.idle_latents(portrait)[::idle_frame_step(level)]
+            portrait.blink_jpegs[level] = self.render(portrait, eyes_shut(loop, self.eyelid), level)
         return portrait.blink_jpegs[level]
 
     @torch.no_grad()

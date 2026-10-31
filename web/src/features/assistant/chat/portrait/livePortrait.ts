@@ -329,7 +329,7 @@ export class LivePortrait {
     }
     this.blinkFrames[header.offset] = image;
     this.blinkReceived += 1;
-    if (this.blinkReceived === count) this.compositor.setBlink(this.blinkFrames.slice(0, count), header.frame_ms);
+    if (this.blinkReceived === count) this.compositor.setBlink(this.blinkFrames.slice(0, count));
   }
 
   private addTransitionFrame(header: PortraitFrameHeader, image: ImageBitmap): void {

@@ -183,23 +183,31 @@ describe('the portrait compositor', () => {
     expect(midSway.picture(11_090, null, false)).toEqual({ under: 'i6', over: null, alpha: 0 });
   });
 
-  it('blinks while settled, every few seconds, as the sway passes back through the first frame', () => {
+  it('blinks every few seconds wherever the loop is, fading the frame on screen into its eyes-shut twin and back', () => {
     const compositor = new PortraitCompositor<string>(() => 0); // the shortest gap: 2.5 s
     compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
-    compositor.setBlink(['b0', 'b1', 'b2'], 40);
-    compositor.settle(0);
-    expect(compositor.picture(0, null, false).under).toBe('i0'); // reached at 0: a blink is due from 2.5 s
-    expect(compositor.picture(2_600, null, false).under).toBe('i2'); // due, but the sway is out: it waits
-    expect(compositor.picture(4_000, null, false)).toEqual({ under: 'b0', over: null, alpha: 0 }); // back at i0
-    expect(compositor.picture(4_040, null, false).under).toBe('b1');
-    expect(compositor.picture(4_080, null, false).under).toBe('b2');
-    // The blink over, the sway goes on from where it paused, and the next blink is 2.5 s off.
-    expect(compositor.picture(4_120, null, false).under).toBe('i0');
-    expect(compositor.picture(4_720, null, false).under).toBe('i2');
-    expect(compositor.picture(6_120, null, false).under).toBe('i0'); // at rest, but not due until 6.62 s
-    expect(compositor.picture(8_120, null, false).under).toBe('b0');
-    // A reply cuts in, even mid-blink.
-    expect(compositor.picture(8_140, 's1', false)).toEqual({ under: 's1', over: null, alpha: 0 });
+    compositor.setBlink(['s0', 's1', 's2', 's3', 's4']);
+    expect(compositor.picture(0, null, false).under).toBe('i0'); // a blink is due from 2.5 s
+    expect(compositor.picture(2_000, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    expect(compositor.picture(2_500, null, false)).toEqual({ under: 'i2', over: 's2', alpha: 0 }); // mid-loop
+    expect(compositor.picture(2_540, null, false)).toEqual({ under: 'i3', over: 's3', alpha: 0.5 }); // shutting
+    // On the wrap's blend, the nearer frame blinks; shut from 80 to 120 ms, then opening.
+    expect(compositor.picture(2_590, null, false)).toEqual({ under: 'i0', over: 's0', alpha: 1 });
+    const opening = compositor.picture(2_700, null, false);
+    expect(opening).toMatchObject({ under: 'i2', over: 's2' });
+    expect(opening.alpha).toBeCloseTo(1 / 3);
+    // Over after 240 ms; the next one 2.5 s later.
+    expect(compositor.picture(2_740, null, false)).toEqual({ under: 'i3', over: null, alpha: 0 });
+    expect(compositor.picture(5_200, null, false).over).toBeNull();
+    expect(compositor.picture(5_240, null, false).over).toBe('s1');
+    // A reply cuts in, even mid-blink, and the shut twins are never shown with speech.
+    expect(compositor.picture(5_260, 's', false).over).not.toBe('s1');
+
+    const incomplete = new PortraitCompositor<string>(() => 0);
+    incomplete.setIdleLoop(['i0', 'i1'], 0, 40);
+    incomplete.setBlink(['s0']); // not one twin a frame: no blinks
+    incomplete.picture(0, null, false);
+    expect(incomplete.picture(2_500, null, false).over).toBeNull();
   });
 
   it('plays a transition only as its own reply ends, though it arrived before that reply played', () => {

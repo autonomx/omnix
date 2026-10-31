@@ -5,9 +5,9 @@
  * While a phrase is heard, its frame for the heard position. A reply's motion starts from the idle loop's first
  * frame, so once the user stops speaking the loop is steered there (the shorter way, at its own pace) and then sways
  * slowly over its first few frames, which stay close to it in motion (rated 2026-10-31: a face held dead still
- * while the reply was thought of looked frozen). Every few seconds, as the sway passes back through that first frame
- * (where it is momentarily still), it pauses for the service's blink there. The reply then cuts in with no blend,
- * from whichever of those frames is on screen. The free-running loop has a blink of its own. A pause inside a reply
+ * while the reply was thought of looked frozen). The reply then cuts in with no blend, from whichever of those
+ * frames is on screen. Wherever the idle loop is, free or swaying, the face blinks every 2.5-6 s: the frame on
+ * screen fades into its eyes-shut twin (the same pose, rendered by the service) and back. A pause inside a reply
  * (a clause silence, a late phrase, an underrun) holds the last frame. When the reply's audio has drained, the
  * service's transition frames take the face back to the loop's first frame, and the loop resumes from there. A
  * pixel crossfade, which shows two poses at once, is left only as the fallback: a reply that comes before the loop
@@ -26,24 +26,17 @@ export const SETTLE_HOLD_MS = 10_000;
 // eased, every 2 s (more of it, as rated 2026-10-31, than the 240 ms first tried).
 export const SWAY_LOOP_MS = 400;
 export const SWAY_PERIOD_MS = 2_000;
-// A blink while settled every 2.5-6 s (and at the sway's next pass through the first frame, within 0.05 of a frame).
+// A blink every 2.5-6 s while the idle loop shows: shut over 80 ms, held 40 ms, open over 120 ms.
 export const BLINK_GAP_MIN_MS = 2_500;
 export const BLINK_GAP_MAX_MS = 6_000;
-const SWAY_AT_REST = 0.05;
+export const BLINK_MS = 240;
+const BLINK_SHUT_MS = 80;
+const BLINK_HELD_MS = 40;
 
 /** Draw `under`, then `over` (when set) at `alpha` on top of it. */
 export type PortraitPicture<T> = { under: T | null; over: T | null; alpha: number };
 
-// `paused`: how long the sway has stood still for blinks; `blinkSince`, while one plays.
-type Settle = {
-  from: number;
-  direction: 1 | -1;
-  since: number;
-  reachedAt: number | null;
-  paused: number;
-  blinkSince: number | null;
-  nextBlinkAt: number;
-};
+type Settle = { from: number; direction: 1 | -1; since: number; reachedAt: number | null };
 type Transition<T> = { frames: T[]; frameMs: number; since: number };
 
 export class PortraitCompositor<T> {
@@ -60,7 +53,10 @@ export class PortraitCompositor<T> {
   private transition: { frames: T[]; frameMs: number; epoch: number | null } | null = null;
   private playing: Transition<T> | null = null;
   private speechEpoch: number | null = null;
-  private blink: { frames: T[]; frameMs: number } | null = null;
+  // Each idle frame with its eyes shut (the loop's order), when the next blink is due, and since when one shows.
+  private shut: T[] = [];
+  private nextBlinkAt: number | null = null;
+  private blinkSince: number | null = null;
 
   /** `random` spaces the blinks (in [0, 1), as Math.random). */
   constructor(private readonly random: () => number = Math.random) {}
@@ -82,15 +78,12 @@ export class PortraitCompositor<T> {
       direction: this.idle.length - position <= position ? 1 : -1,
       since: now,
       reachedAt: null,
-      paused: 0,
-      blinkSince: null,
-      nextBlinkAt: 0,
     };
   }
 
-  /** A blink at the idle loop's first frame (it starts and ends on it), played now and then while settled. */
-  setBlink(frames: T[], frameMs = IDLE_FRAME_MS): void {
-    this.blink = frames.length ? { frames, frameMs: frameMs > 0 ? frameMs : IDLE_FRAME_MS } : null;
+  /** The idle loop's frames with the eyes shut, in its order: the face blinks into them now and then. */
+  setBlink(frames: T[]): void {
+    this.shut = frames;
   }
 
   /** A reply's frames back to the idle loop's first frame: played once that reply's audio has drained. */
@@ -108,11 +101,13 @@ export class PortraitCompositor<T> {
     this.settling = null;
     this.transition = null;
     this.playing = null;
+    this.blinkSince = null;
   }
 
   reset(): void {
     this.idle = [];
-    this.blink = null;
+    this.shut = [];
+    this.nextBlinkAt = null;
     this.interrupt(0);
   }
 
@@ -129,6 +124,7 @@ export class PortraitCompositor<T> {
         this.mode = 'speech';
         this.settling = null;
         this.playing = null;
+        this.blinkSince = null;
       }
       this.lastSpeech = speech;
       this.speechEpoch = epoch;
@@ -166,8 +162,28 @@ export class PortraitCompositor<T> {
     const alpha = this.fade(now);
     if (alpha < 1 && this.lastSpeech) return { under: this.lastSpeech, over: idleFrame, alpha };
     if (idleFrame === null) return { under: this.lastSpeech, over: null, alpha: 0 };
-    if (this.settling) return this.swaying(now) ?? { under: idleFrame, over: null, alpha: 0 };
-    return this.wrapping(now) ?? { under: idleFrame, over: null, alpha: 0 };
+    const picture = (this.settling ? this.swaying(now) : this.wrapping(now)) ?? { under: idleFrame, over: null, alpha: 0 };
+    return this.blinking(now, picture);
+  }
+
+  /** The idle picture, or while a blink shows, its nearer frame fading into that frame's eyes-shut twin and back. */
+  private blinking(now: number, picture: PortraitPicture<T>): PortraitPicture<T> {
+    if (this.shut.length !== this.idle.length) return picture;
+    this.nextBlinkAt ??= now + this.blinkGap();
+    if (this.blinkSince === null) {
+      if (now < this.nextBlinkAt) return picture;
+      this.blinkSince = now;
+    }
+    const elapsed = now - this.blinkSince;
+    if (elapsed >= BLINK_MS) {
+      this.blinkSince = null;
+      this.nextBlinkAt = now + this.blinkGap();
+      return picture;
+    }
+    const shown = picture.over !== null && picture.alpha >= 0.5 ? picture.over : picture.under;
+    const index = shown === null ? -1 : this.idle.indexOf(shown);
+    if (index < 0) return picture;
+    return { under: this.idle[index], over: this.shut[index], alpha: blinkClosure(elapsed) };
   }
 
   /** Whether the idle loop has reached its first frame and sways near it (where a reply's motion starts). */
@@ -186,25 +202,10 @@ export class PortraitCompositor<T> {
     return { under: this.idle[index], over: this.idle[0], alpha: position - Math.floor(position) };
   }
 
-  /**
-   * Settled: between the two loop frames either side of the sway's position, blended by how far it is between them;
-   * or, when a blink is due and the sway is back at the first frame, the blink, with the sway paused until it ends.
-   */
+  /** Settled: between the two loop frames either side of the sway's position, blended by how far it is between them. */
   private swaying(now: number): PortraitPicture<T> | null {
-    const settling = this.settling;
-    if (!settling || settling.reachedAt === null) return null;
-    if (settling.blinkSince !== null) {
-      const frame = this.blink ? Math.floor((now - settling.blinkSince) / this.blink.frameMs) : Infinity;
-      if (this.blink && frame < this.blink.frames.length) return { under: this.blink.frames[frame], over: null, alpha: 0 };
-      settling.paused += now - settling.blinkSince;
-      settling.blinkSince = null;
-      settling.nextBlinkAt = now + this.blinkGap();
-    }
+    if (!this.settling || this.settling.reachedAt === null) return null;
     const position = this.swayPosition(now);
-    if (this.blink && now >= settling.nextBlinkAt && position < SWAY_AT_REST) {
-      settling.blinkSince = now;
-      return { under: this.blink.frames[0], over: null, alpha: 0 };
-    }
     const index = Math.floor(position);
     const alpha = position - index;
     return alpha > 0 && index + 1 < this.idle.length
@@ -212,13 +213,11 @@ export class PortraitCompositor<T> {
       : { under: this.idle[index], over: null, alpha: 0 };
   }
 
-  /** Where the sway is, in loop frames from the first (fractional): out and back, eased, from when the loop got
-   * there, less the time it stood still for blinks. */
+  /** Where the sway is, in loop frames from the first (fractional): out and back, eased, from when the loop got there. */
   private swayPosition(now: number): number {
-    const settling = this.settling;
-    if (!settling || settling.reachedAt === null) return 0;
-    const blinking = settling.blinkSince === null ? 0 : now - settling.blinkSince;
-    const elapsed = Math.max(0, now - settling.reachedAt - settling.paused - blinking);
+    const reachedAt = this.settling?.reachedAt;
+    if (reachedAt === null || reachedAt === undefined) return 0;
+    const elapsed = Math.max(0, now - reachedAt);
     const span = Math.min(this.idle.length - 1, Math.max(1, Math.round(SWAY_LOOP_MS / this.idleFrameMs)));
     return (span * (1 - Math.cos((2 * Math.PI * elapsed) / SWAY_PERIOD_MS))) / 2;
   }
@@ -244,10 +243,7 @@ export class PortraitCompositor<T> {
     if (!settling) return Math.floor(this.loopPosition(now));
     const position = settling.from + settling.direction * ((now - settling.since) / this.idleFrameMs);
     if (settling.direction > 0 ? position < this.idle.length : position > 0) return Math.floor(position);
-    if (settling.reachedAt === null) {
-      settling.reachedAt = now;
-      settling.nextBlinkAt = now + this.blinkGap();
-    }
+    settling.reachedAt ??= now;
     const sway = Math.floor(this.swayPosition(now));
     if (now - settling.reachedAt > SETTLE_HOLD_MS) {
       // No reply came: the loop runs on from the frame the sway is on.
@@ -261,4 +257,11 @@ export class PortraitCompositor<T> {
     if (!this.idle.length) return null;
     return this.idle[this.idleIndex(now)];
   }
+}
+
+/** How shut the eyes are `elapsed` ms into a blink (0 open, 1 shut). */
+function blinkClosure(elapsed: number): number {
+  if (elapsed < BLINK_SHUT_MS) return elapsed / BLINK_SHUT_MS;
+  if (elapsed < BLINK_SHUT_MS + BLINK_HELD_MS) return 1;
+  return Math.max(0, 1 - (elapsed - BLINK_SHUT_MS - BLINK_HELD_MS) / (BLINK_MS - BLINK_SHUT_MS - BLINK_HELD_MS));
 }
