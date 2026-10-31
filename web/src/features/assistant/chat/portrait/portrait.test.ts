@@ -138,16 +138,21 @@ describe('the portrait compositor', () => {
     expect(compositor.picture(2_380, null, false, true)).toEqual({ under: 'i0', over: null, alpha: 0 });
   });
 
-  it('settles the idle loop on its first frame the shorter way, holds it, then cuts into the reply', () => {
+  it('settles the idle loop on its first frame the shorter way, sways near it, then cuts into the reply', () => {
     const compositor = new PortraitCompositor<string>();
     compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
     expect(compositor.picture(140, null, false).under).toBe('i3');
     compositor.settle(140); // at 3.5 of 5: forward to the wrap is shorter
     expect(compositor.picture(160, null, false).under).toBe('i4');
-    expect(compositor.picture(200, null, false).under).toBe('i0');
-    expect(compositor.picture(5_000, null, false).under).toBe('i0'); // held for the reply
-    // Settled: the reply's first frame continues from i0, so it cuts in with no blend.
-    expect(compositor.picture(5_010, 's1', false)).toEqual({ under: 's1', over: null, alpha: 0 });
+    expect(compositor.picture(200, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    // Reached at 200: out over the first frames and back, eased, every 2 s (here every frame but the last).
+    expect(compositor.picture(450, null, false)).toMatchObject({ under: 'i0', over: 'i1' });
+    expect(compositor.picture(750, null, false)).toMatchObject({ under: 'i2', over: 'i3' });
+    expect(compositor.picture(1_200, null, false)).toEqual({ under: 'i4', over: null, alpha: 0 });
+    expect(compositor.picture(2_200, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    // Settled: the reply's motion starts within a few idle frames of the one on screen, so it cuts in with no blend.
+    expect(compositor.picture(2_750, null, false).under).toBe('i2');
+    expect(compositor.picture(2_760, 's1', false)).toEqual({ under: 's1', over: null, alpha: 0 });
 
     const backward = new PortraitCompositor<string>();
     backward.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
@@ -168,6 +173,14 @@ describe('the portrait compositor', () => {
     expect(idle.picture(1_000, null, false).under).toBe('i0');
     expect(idle.picture(11_100, null, false).under).toBe('i0'); // the hold ends: the loop runs on from i0
     expect(idle.picture(11_150, null, false).under).toBe('i1');
+
+    // It ends mid-sway: the loop runs on from the frame the sway is on, not back at i0.
+    const midSway = new PortraitCompositor<string>();
+    midSway.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4', 'i5'], 0, 80); // 80 ms frames: the sway spans three
+    midSway.settle(0);
+    expect(midSway.picture(0, null, false).under).toBe('i0');
+    expect(midSway.picture(11_000, null, false).under).toBe('i3'); // 11 s is half a sway: its far end
+    expect(midSway.picture(11_090, null, false)).toEqual({ under: 'i4', over: null, alpha: 0 });
   });
 
   it('plays a transition only as its own reply ends, though it arrived before that reply played', () => {

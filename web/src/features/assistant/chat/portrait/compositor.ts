@@ -3,8 +3,10 @@
  * transitions as rated 2026-10-30).
  *
  * While a phrase is heard, its frame for the heard position. A reply's motion starts from the idle loop's first
- * frame, so once the user stops speaking the loop is steered there (the shorter way, at its own pace) and held:
- * the reply then cuts in with no blend, one step of motion from the frame on screen. A pause inside a reply (a
+ * frame, so once the user stops speaking the loop is steered there (the shorter way, at its own pace) and then sways
+ * slowly over its first few frames, which stay within about one step of speech motion of it (rated 2026-10-31: a
+ * face held dead still while the reply was thought of looked frozen). The reply then cuts in with no blend, from
+ * whichever of those frames is on screen. A pause inside a reply (a
  * clause silence, a late phrase, an underrun) holds the last frame. When the reply's audio has drained, the
  * service's transition frames take the face back to the loop's first frame, and the loop resumes from there. A
  * pixel crossfade, which shows two poses at once, is left only as the fallback: a reply that comes before the loop
@@ -18,6 +20,10 @@ export const HOLD_MAX_MS = 1_500;
 export const CROSSFADE_MS = 80;
 export const IDLE_FRAME_MS = 40;
 export const SETTLE_HOLD_MS = 10_000;
+// The sway while settled: out over the loop's first 240 ms of motion (three idle frames, about six rendered frames
+// of idle motion at a quarter of a speech step each) and back, eased, every 2 s.
+export const SWAY_LOOP_MS = 240;
+export const SWAY_PERIOD_MS = 2_000;
 
 /** Draw `under`, then `over` (when set) at `alpha` on top of it. */
 export type PortraitPicture<T> = { under: T | null; over: T | null; alpha: number };
@@ -48,7 +54,7 @@ export class PortraitCompositor<T> {
     this.settling = null;
   }
 
-  /** The user stopped speaking: steer the idle loop to its first frame, the shorter way, and hold it there. */
+  /** The user stopped speaking: steer the idle loop to its first frame, the shorter way, and sway near it. */
   settle(now: number): void {
     if (this.mode !== 'idle' || this.idle.length < 2 || this.settling) return;
     const position = this.loopPosition(now);
@@ -132,11 +138,11 @@ export class PortraitCompositor<T> {
     const alpha = this.fade(now);
     if (alpha < 1 && this.lastSpeech) return { under: this.lastSpeech, over: idleFrame, alpha };
     if (idleFrame === null) return { under: this.lastSpeech, over: null, alpha: 0 };
-    if (this.settling) return { under: idleFrame, over: null, alpha: 0 };
+    if (this.settling) return this.swaying(now) ?? { under: idleFrame, over: null, alpha: 0 };
     return this.wrapping(now) ?? { under: idleFrame, over: null, alpha: 0 };
   }
 
-  /** Whether the idle loop is held on its first frame (where a reply's motion starts). */
+  /** Whether the idle loop has reached its first frame and sways near it (where a reply's motion starts). */
   private settledAt(now: number): boolean {
     if (!this.settling) return false;
     this.idleIndex(now);
@@ -150,6 +156,25 @@ export class PortraitCompositor<T> {
     const index = Math.floor(position) % this.idle.length;
     if (index !== this.idle.length - 1) return null;
     return { under: this.idle[index], over: this.idle[0], alpha: position - Math.floor(position) };
+  }
+
+  /** Settled: between the two loop frames either side of the sway's position, blended by how far it is between them. */
+  private swaying(now: number): PortraitPicture<T> | null {
+    const reachedAt = this.settling?.reachedAt;
+    if (reachedAt === null || reachedAt === undefined) return null;
+    const position = this.swayPosition(now, reachedAt);
+    const index = Math.floor(position);
+    const alpha = position - index;
+    return alpha > 0 && index + 1 < this.idle.length
+      ? { under: this.idle[index], over: this.idle[index + 1], alpha }
+      : { under: this.idle[index], over: null, alpha: 0 };
+  }
+
+  /** Where the sway is, in loop frames from the first (fractional): out and back, eased, from `reachedAt`. */
+  private swayPosition(now: number, reachedAt: number): number {
+    const span = Math.min(this.idle.length - 1, Math.max(1, Math.round(SWAY_LOOP_MS / this.idleFrameMs)));
+    const phase = (2 * Math.PI * Math.max(0, now - reachedAt)) / SWAY_PERIOD_MS;
+    return (span * (1 - Math.cos(phase))) / 2;
   }
 
   private fade(now: number): number {
@@ -170,12 +195,13 @@ export class PortraitCompositor<T> {
     const position = settling.from + settling.direction * ((now - settling.since) / this.idleFrameMs);
     if (settling.direction > 0 ? position < this.idle.length : position > 0) return Math.floor(position);
     settling.reachedAt ??= now;
+    const sway = Math.floor(this.swayPosition(now, settling.reachedAt));
     if (now - settling.reachedAt > SETTLE_HOLD_MS) {
-      // No reply came: the loop runs on from its first frame.
+      // No reply came: the loop runs on from the frame the sway is on.
       this.settling = null;
-      this.idleSince = now;
+      this.idleSince = now - sway * this.idleFrameMs;
     }
-    return 0;
+    return sway;
   }
 
   private idleFrame(now: number): T | null {
