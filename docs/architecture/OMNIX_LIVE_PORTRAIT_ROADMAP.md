@@ -1,6 +1,6 @@
 # Omnix Live Portrait — Plan & Roadmap
 
-**Status:** Reviewed, plan revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30, D-9 and D-10 on 2026-10-31. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
+**Status:** Built and merged to `main` (2026-10-31). Plan: reviewed, revision 4 (four review rounds; the last found no blocker or major issue). Owner decisions D-1 to D-6 and Q-1 settled 2026-10-29, D-7 and D-8 on 2026-10-30, D-9 and D-10 on 2026-10-31. Phase 0 has started: the standalone pass, its optimizations and lip-sync scores are done (see Phase 0 status). Phase 0 decides whether the rest goes ahead.
 **Date:** 2026-10-29
 **Primary route:** live calls in Chat and Character Mode (`web/src/features/assistant`, `src/app/platform/live_voice`)
 **Model:** FLOAT, "Generative Motion Latent Flow Matching for Audio-driven Talking Portrait" (ICCV 2025): [paper](https://arxiv.org/abs/2412.01064), [code](https://github.com/deepbrainai-research/float)
@@ -35,9 +35,47 @@ We don't adopt fast-float. We build FLOAT into the stack live calls already run 
 - recording or exporting call video
 - a WebRTC or LiveKit stack
 
-## Where it stands (2026-10-30)
+## Where it stands (2026-10-31)
 
-Phases 1–5 are built, with their tests, on branch `live-portrait`; Phase 0's standalone measurements passed.
+Phases 1–5 are built, with their tests, and merged to `main`; Phase 0's standalone measurements passed. The portrait
+loads on demand (D-9) and is opt-in by its avatar pack: every way it can fail shows the pack's fallback, and calls
+without a portrait run as before.
+
+**2026-10-31.** Transitions back to the idle loop are rendered in motion space (no pixel blend), the idle face sways
+near the loop's first frame while a reply is thought of, and blinks (FLOAT never does: the motion decoder's eyelid
+direction, every 2.5-6 s anywhere in the loop). A three-reviewer code review found 26 defects, all fixed with tests.
+The first call after a cold start that never began (several in five) was a call started before Chat's runtime had
+installed its live-voice controllers; calls now wait for them (`ea9c7c87fd`), and six cold starts in a row passed.
+The on-demand load was verified mid-call (ready in 13.6 s, the fallback until then, the audio never held).
+
+Paired `character-normal`, 40 replies a side, one boot:
+
+| Check | Baseline (`ea9c7c87fd`) | Render-ahead (`9abae43624`) |
+| --- | --- | --- |
+| Speech end -> first playback | +129 ms (106%), pass | +137 ms (107%), pass |
+| First token -> first audio | +78 ms (112%), **fail** | +58 ms (109%), pass |
+| Final -> first playback | +125 ms (109%), pass | +109 ms (108%), pass |
+| STT finalize | -36 ms, pass | +21 ms (115%), **fail** by 1 ms |
+| LLM tokens/s | 107%, pass | 91%, pass |
+| Underruns per reply | -0.025, pass | +0.025, pass under D-10 |
+| Start hold p50 / A/V offset p95 | 0 ms / 17.3 ms, pass | 0 ms / 18.7 ms, pass |
+
+STT finalize moved +-30 ms between runs on the same code (a third run: +32 ms; the baseline's on side was faster);
+the gate now sits at its bounds, a different check tripping by a few milliseconds from run to run. Rendering only
+the first speculative pass did not lower it and is not kept.
+
+Still open (follow-ups, not blockers):
+
+| Item | Why open |
+| --- | --- |
+| `correction-overlap`, `sustained-overlap`, `tts-failure`, `provider-reconnect`, `browser-reload`, `rapid-interruption-soak` | Not implemented in the benchmark driver: a run under their names plays an ordinary conversation. Each needs its behaviour in the driver (a TTS fault, a provider drop, a reload mid-call, talk over the reply) before its paired run. The paths are unit-tested; `hard-stop` ran live with the portrait on. |
+| STT finalize with the portrait on | +21-32 ms in two of three runs, under the +20 ms allowance in the third; within run-to-run noise but not yet shown to pass reliably |
+| Remote clients over throttled links | Needs a second machine |
+| Blinks while speaking | The idle face blinks; speech frames do not yet |
+
+The earlier status, kept for its measurements:
+
+### 2026-10-30
 
 **Loaded runs and the paired gate, `character-normal` (2026-10-30).** The whole stack on the 4090 (STT, TTS, the
 portrait, the gateway, the web app and LM Studio's `liquid/lfm2.5-1.2b` on the same card), scratch database
