@@ -277,6 +277,10 @@ def load_launch_gate_source_from_postgres(session_id: str) -> dict[str, Any] | N
     with unit_of_work(database) as work:
         source = work.rpg.launch_gate_source(context, session_id)
         work.rollback()
+    if source is not None:  # the turn this gate opens folds in proposals only if any are pending (EV-11, F2)
+        from app.apps.rpg.session.turn.proposals import note_pending
+
+        note_pending(session_id, bool(source.pop("proposals_pending", True)))
     return source
 
 

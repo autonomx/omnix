@@ -318,7 +318,8 @@ class PostgresRpgRepository:
         ``campaign_launch_readiness`` asks whether the setup's world forge is a
         non-empty object, whether the state has a (truthy) campaign bible, and
         reads the runtime's launch gate; the truthiness is evaluated here. The turn route also reads
-        whether the campaign has ended (a hardcore defeat, RQ-5.1).
+        whether the campaign has ended (a hardcore defeat, RQ-5.1), and whether any proposal waits to be
+        folded in (EV-11: a turn with none reads no proposals, F2).
         """
         row = self.connection.execute(
             """
@@ -327,8 +328,11 @@ class PostgresRpgRepository:
                    COALESCE(state_jsonb #> '{state,campaign_bible}' NOT IN
                             ('null'::jsonb, 'false'::jsonb, '0'::jsonb, '""'::jsonb, '{}'::jsonb, '[]'::jsonb), FALSE),
                    state_jsonb #> '{runtime_state,campaign_launch_gate}',
-                   state_jsonb #> '{simulation_state,campaign_end}'
-              FROM omnix_rpg_campaigns WHERE id = %s AND workspace_id = %s
+                   state_jsonb #> '{simulation_state,campaign_end}',
+                   EXISTS (SELECT 1 FROM omnix_rpg_proposals proposals
+                            WHERE proposals.workspace_id = campaigns.workspace_id
+                              AND proposals.campaign_id = campaigns.id AND proposals.status = 'pending')
+              FROM omnix_rpg_campaigns campaigns WHERE id = %s AND workspace_id = %s
             """,
             (campaign_id, context.workspace_id),
         ).fetchone()
@@ -340,6 +344,7 @@ class PostgresRpgRepository:
             "state": {"campaign_bible": True if row[1] else None},
             "runtime_state": {"campaign_launch_gate": dict(gate)},
             "simulation_state": {"campaign_end": dict(row[3]) if isinstance(row[3], dict) else {}},
+            "proposals_pending": bool(row[4]),  # not the campaign's: the session layer takes it off
         }
 
     def stored_version(self, context: TenantContext, campaign_id: str) -> tuple[int, str] | None:

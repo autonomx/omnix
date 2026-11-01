@@ -48,6 +48,8 @@ def test_turns_beyond_the_hourly_ceiling_are_refused_until_the_window_moves(monk
     campaign_id = f"campaign:budget-{uuid4().hex}"
     _commit_turns(campaign_id, 3)
 
+    # A player other than the install's owner (a guest, an invited player): the ceiling holds.
+    monkeypatch.setattr(turn_budget, "is_install_owner", lambda _context: False)
     monkeypatch.setenv(turn_budget.TURNS_PER_HOUR_ENV, str(before + 4))
     turn_budget.require_turn_budget()  # three played, one left
 
@@ -56,3 +58,9 @@ def test_turns_beyond_the_hourly_ceiling_are_refused_until_the_window_moves(monk
         turn_budget.require_turn_budget()
     assert refused.value.used == before + 3
     assert 1 <= refused.value.retry_after_seconds <= turn_budget.WINDOW_SECONDS + 1
+
+    # The install's owner is never limited (owner decision 2026-10-31).
+    monkeypatch.undo()
+    monkeypatch.setenv(turn_budget.TURNS_PER_HOUR_ENV, str(before + 3))
+    assert turn_budget.is_install_owner(current_tenant())
+    turn_budget.require_turn_budget()

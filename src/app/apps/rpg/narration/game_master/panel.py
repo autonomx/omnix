@@ -64,8 +64,15 @@ def known_view(document: Mapping[str, Any]) -> dict[str, Any]:
     quests = [{"title": _d(row).get("title"), "status": _d(row).get("status"), "objective": _d(row).get("objective")}
               for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))
               if _s(_d(row).get("quest_id") or _d(row).get("id")) in known]
+    here = hero_location(simulation)
+    places = _d(world.get("locations"))
+    roads = sorted({_s(_d(places.get(end)).get("name")) for start, end in (
+        (_s(_d(route).get("from")), _s(_d(route).get("to"))) for route in _l(world.get("routes")))
+        for end in ((end,) if start == here else (start,) if end == here else ())
+        if _s(_d(places.get(end)).get("name")) and _d(places.get(end)).get("hidden") is not True})
     view = {
         "known": met, "told": told, "quests": quests,
+        "roads": roads,  # the places the roads from here lead to, as the scene shows them
         "learned": [row.get("told") for row in world_facts(simulation).values()
                     if row.get("known") is True and row.get("told")],
         "at": hero_location(simulation), "present": [npc for npc in present_now(simulation)[1] if npc in known],
@@ -90,8 +97,10 @@ def _unknown_names(document: Mapping[str, Any]) -> list[str]:
     return names
 
 
-def answer_is_safe(document: Mapping[str, Any], answer: str) -> bool:
-    """Code's check of an answer before it is shown: no secret named, no entry the hero does not know named."""
+def answer_is_safe(document: Mapping[str, Any], answer: str, question: str = "") -> bool:
+    """Code's check of an answer before it is shown: no secret named, and no entry named that the hero neither knows
+    nor has been shown (a name in what they know, a quest's "Reach Starfall Village", a road from here, is theirs, and
+    so is one the player used in the question: "Who is Archon Malrec?" may be told that it is not known yet)."""
     from app.apps.rpg.rules.contracts import secrets_held
     from app.apps.rpg.rules.secrets import names_a_secret
 
@@ -99,8 +108,9 @@ def answer_is_safe(document: Mapping[str, Any], answer: str) -> bool:
     if names_a_secret(answer, list(secrets_held(world.get("npcs")))):
         return False
     lowered = answer.casefold()
+    shown = json.dumps(known_view(document), ensure_ascii=False).casefold() + " " + question.casefold()
     return not any(re.search(rf"(?<![\w']){re.escape(name.casefold())}(?![\w'])", lowered)
-                   for name in _unknown_names(document))
+                   and name.casefold() not in shown for name in _unknown_names(document))
 
 
 def ask(document: Mapping[str, Any], question: str) -> dict[str, Any]:
@@ -125,7 +135,7 @@ def ask(document: Mapping[str, Any], question: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         payload = {"answer": raw}
     answer = _s(payload.get("answer")).strip()[:1500]
-    safe = bool(answer) and answer_is_safe(document, answer)
+    safe = bool(answer) and answer_is_safe(document, answer, question)
     wish = _d(payload.get("wish"))
     simulation = _d(_sections.simulation_state_of(document))
     offered = None

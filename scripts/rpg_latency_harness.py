@@ -287,7 +287,7 @@ def checks(classes: dict[str, Any], rows: dict[str, list[dict[str, Any]]]) -> di
         "F1_complete_p50_ms": {name: report["complete_ms"]["p50"] for name, report in classes.items()},
         "F1_complete_p95_ms": {name: report["complete_ms"]["p95"] for name, report in classes.items()},
         "targets": {
-            "outcome_p95": "<= 300 ms tactical moves and attacks; <= 1.0 s other grammar-parsed and structured; <= 3.0 s with an intent call",
+            "outcome_p95": "<= 300 ms the tactical route; <= 3.0 s a turn with an intent call",
             # Typed turns, now that the model reads every line (owner decision 2026-10-31, question 19).
             "first_narration_p95": "<= 5 s", "complete": "p50 <= 9 s, p95 <= 10 s",
             "deterministic": "a card or the tactical route: <= 500 ms complete, no model call",

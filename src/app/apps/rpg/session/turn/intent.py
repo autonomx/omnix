@@ -64,7 +64,7 @@ CHECK_KINDS = frozenset(_CHECK_KINDS)  # the checks the rules resolve (rules/che
 # Readings of a line that asks or supposes rather than does: an answer, the hero's standing, a look at what is here.
 _ASKING = frozenset({"talk", "status", "look"})
 _PROMPT = prompt_template(
-    "rpg.turn_intent.readings", "3",
+    "rpg.turn_intent.readings", "4",
     "Read what the player means, as up to three readings, most likely first. Each is one of FAMILIES and, when it is "
     "aimed at something, the id of a thing in SCENE (never one that is not listed). Reply with JSON only: "
     "{{\"readings\": [{{\"family\": \"...\", \"target_id\": \"...\", \"second_target_id\": \"...\", \"check\": \"...\", "
@@ -74,7 +74,7 @@ _PROMPT = prompt_template(
     "slots hold only what the line says: quantity (a number), everything (true: all of them), wait_minutes, or "
     "until_hour (0-23) with tomorrow, rest (while, sleep or camp), status (of STATUS_TOPICS), order (of ORDERS), "
     "parting (true: leaving the party), choice (of LEVEL_CHOICES), topics (the ids of what a line asks the person "
-    "about: their topics in SCENE, or a place, group or person in SCENE), step (from the person's steps in "
+    "about: their topics in SCENE, or a place, group, person or thing in SCENE), step (from the person's steps in "
     "SCENE, only when the line plainly does what that step asks), and weakness (of the target's weaknesses in SCENE, "
     "when an attack uses it). When the line is unclear and no reading fits, "
     "question is the one short question to ask the player, and question_about the family it is about. Idioms and figures of speech mean what they mean "
@@ -168,7 +168,7 @@ def _slots(raw: Mapping[str, Any], *, target: str, scene: SceneView, choices: li
     if kept.get("topics"):
         # Of what the person may be asked (never a secret), or anything the world names that anyone may know of.
         theirs = {topic for topic, _ in (asked_of.topics if asked_of else ())}
-        known = {entity.entity_id for entity in scene.entities if entity.kind in {"place", "group", "person"}}
+        known = {entity.entity_id for entity in scene.entities if entity.kind in {"place", "group", "person", "item"}}
         kept["topics"] = tuple(topic for topic in dict.fromkeys(kept["topics"]) if topic in theirs | known)
     if kept.get("step") and kept["step"] not in {address for address, _ in (asked_of.steps if asked_of else ())}:
         kept.pop("step")
@@ -194,8 +194,6 @@ def valid_readings(rows: list[dict[str, Any]], scene: SceneView, *,
             target, kind = "", ""  # target is dropped, not the reading
         if target and target not in kinds or kind not in FAMILIES[family][1]:
             continue
-        if family == "look" and kind == "creature" and target not in here and row.get("asks") is not True:
-            continue  # no creature not here is looked at (a person away is told where they are; asked of, a question)
         reason = "model_reading"
         if family == "check":
             check = _s(row.get("check"))

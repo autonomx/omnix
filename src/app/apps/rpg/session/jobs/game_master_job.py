@@ -28,6 +28,7 @@ class RpgGameMasterJobInput(BaseModel):
 # may head to is filled before the one they stand in, and both before the game master's direction (EV-10's gate: a
 # fill queued behind the direction jobs of a run of short moves was not done by the hero's arrival).
 DIRECTION_PRIORITY, AREA_PRIORITY, AREA_HERE_PRIORITY = 5, 8, 7
+AREA_START_PRIORITY = 9  # at launch, the area the hero starts in: the first turns' searches read it
 
 
 def enqueue_game_master(session_id: str, revision: int, why: str, *, job_store: Any = None,
@@ -64,15 +65,17 @@ def after_commit(session_id: str, result: Mapping[str, Any], document: Mapping[s
         logger.warning("rpg_game_master_enqueue_failed session=%s", session_id, exc_info=True)
 
 
-def fill_areas_ahead(session_id: str, document: Mapping[str, Any], revision: int) -> None:
+def fill_areas_ahead(session_id: str, document: Mapping[str, Any], revision: int, *, at_launch: bool = False) -> None:
     """The larger areas next to the hero that are still open, each filled in by a job once a campaign (EV-10): on
-    arriving somewhere, and at launch, so the starting area and its neighbours are under way before the first turn."""
+    arriving somewhere (the areas ahead first), and at launch (the starting area first), so both are under way before
+    the first turn."""
     from app.apps.rpg.narration.game_master.area_call import open_areas
 
-    for index, area in enumerate(open_areas(document)):
+    here = _here_area(document)
+    for area in open_areas(document):
         enqueue_game_master(session_id, revision, f"fill:{area}", key=f"{JOB_TYPE}:area:{session_id}:{area}",
-                            priority=AREA_HERE_PRIORITY if index == 0 and area == _here_area(document)
-                            else AREA_PRIORITY)
+                            priority=AREA_PRIORITY if area != here else
+                            AREA_START_PRIORITY if at_launch else AREA_HERE_PRIORITY)
 
 
 def fill_areas_at_launch(session_id: str) -> None:
@@ -83,8 +86,8 @@ def fill_areas_at_launch(session_id: str) -> None:
 
         document = load_session_from_postgres(session_id) if session_id else None
         if document:
-            revision = int((sections.runtime_state_of(document) or {}).get("state_revision") or 0)
-            fill_areas_ahead(session_id, document, revision)
+            revision = int(sections.state_revision_of(sections.runtime_state_of(document)) or 0)
+            fill_areas_ahead(session_id, document, revision, at_launch=True)
     except Exception:
         logger.warning("rpg_game_master_launch_fill_failed session=%s", session_id, exc_info=True)
 

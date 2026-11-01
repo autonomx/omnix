@@ -155,6 +155,14 @@ _FOLDED: ContextVar[FoldRecord | None] = ContextVar("RPG_TURN_FOLDED", default=N
 
 
 _REPLAY: dict[str, list[Proposal]] = {}  # a campaign's next turn's recorded set, when it is being re-executed
+# Whether the turn's own gate read found a proposal pending for its campaign (``note_pending``): a turn with none
+# reads no proposals (F2). One recorded after the gate read is folded in by the next turn.
+_PENDING: ContextVar[tuple[str, bool] | None] = ContextVar("rpg_proposals_pending", default=None)
+
+
+def note_pending(session_id: str, pending: bool) -> None:
+    """What the turn's gate read found: whether a proposal is pending for ``session_id``."""
+    _PENDING.set((session_id, pending))
 
 
 def replay_folded(session_id: str, recorded: list[Mapping[str, Any]]) -> None:
@@ -168,7 +176,10 @@ def fold_at_load(session_id: str, document: dict[str, Any]) -> dict[str, Any]:
     """Step 1's fold-in: the turn-start campaign with its pending proposals folded in (or, re-executed, the set its
     turn row recorded); the record is kept for the turn to report (``take_folded``)."""
     replayed = _REPLAY.pop(session_id, None) if session_id else None
-    proposals = replayed if replayed is not None else pending_proposals(session_id, document) if session_id else []
+    hint, _ = _PENDING.get(), _PENDING.set(None)  # once a gate read: a later load reads the store again
+    none_pending = hint is not None and hint == (session_id, False)
+    proposals = (replayed if replayed is not None else [] if none_pending
+                 else pending_proposals(session_id, document) if session_id else [])
     document, record = fold_in(document, proposals) if proposals else (document, FoldRecord())
     if replayed is not None:
         record = FoldRecord(folded=record.folded, dropped=record.dropped, changes=record.changes, replayed=True)
@@ -199,6 +210,6 @@ def settle_folded(work: Any, context: Any, *, campaign_id: str, turn_id: str, re
     return {"folded": folded, "dropped": [str(row["proposal_id"]) for row in dropped]}
 
 
-__all__ = ["FOLD_IN_OWNERS", "FoldRecord", "fold_at_load", "fold_in", "pending_proposals", "record_proposals",
-           "replay_folded",
+__all__ = ["FOLD_IN_OWNERS", "FoldRecord", "fold_at_load", "fold_in", "note_pending", "pending_proposals",
+           "record_proposals", "replay_folded",
            "settle_folded", "take_folded"]

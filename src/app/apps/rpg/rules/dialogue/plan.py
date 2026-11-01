@@ -162,10 +162,12 @@ def _goal_words(goal: Mapping[str, Any]) -> set[str]:
 
 
 def _common_knowledge(world: Mapping[str, Any], topics: tuple[str, ...], speaker_id: str) -> tuple[dict[str, Any], ...]:
-    """What anyone here may know of the places, groups and people the line asks about: a place's own description and
-    who lives there; a person's calling and where they are found (the playtest: Liora, asked about the Moonroot Ruins,
-    knew "not much beyond the name"). Never a secret: only what the world states openly."""
+    """What anyone here may know of the places, groups, people and things the line asks about: a place's own
+    description and who lives there; a person's calling and where they are found (the playtest: Liora, asked about the
+    Moonroot Ruins, knew "not much beyond the name"); a thing's kind and what it does. Never a secret: only what the
+    world states openly."""
     places, people, groups = _d(world.get("locations")), _d(world.get("npcs")), _d(world.get("groups"))
+    things = {_s(_d(row).get("id")): _d(row) for row in _l(world.get("items")) if _s(_d(row).get("id"))}
     known: list[dict[str, Any]] = []
     for topic in topics:
         if topic in places:
@@ -181,6 +183,10 @@ def _common_knowledge(world: Mapping[str, Any], topics: tuple[str, ...], speaker
             found = _s(_d(places.get(_s(person.get("location_id")))).get("name"))
             known.append({"person": _s(person.get("name")), "is": _s(person.get("role")),
                           **({"found_at": found} if found else {})})
+        elif topic in things:  # "could I sell my bread somewhere?", "what is the oathblade?" (M2, 2026-10-31)
+            thing = things[topic]
+            known.append({"thing": _s(thing.get("name")), "is": _s(thing.get("type")),
+                          **({"does": _s(thing.get("effect"))} if _s(thing.get("effect")) else {})})
     return tuple(known[:3])
 
 

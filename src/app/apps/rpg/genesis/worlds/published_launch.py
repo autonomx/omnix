@@ -237,7 +237,9 @@ def _apply_published_opening_state(
     epoch = str(scenario.starting_epoch or "Day 1, 08:00")
     state = _record(session.get("state"))
     player = _record(state.get("player"))
-    if not player.get("starter_gear"):  # the build's default kit, as the world's kind has it (a world to come: no dagger)
+    # The gear the player chose, as the new game keeps it (its metadata; the hero's sheet has the items themselves).
+    chosen = bool(_record(state.get("metadata")).get("starter_gear"))
+    if not chosen:  # the build's default kit, as the world's kind has it (a world to come: no dagger)
         from app.apps.rpg.rules.contracts import gear_of_kind, genre_kind
 
         inventory, equipment = gear_of_kind(genre_kind(str(world.get("genre") or "")),
@@ -250,7 +252,7 @@ def _apply_published_opening_state(
         equipment=[_record(item) for item in player.get("equipment") or ()],
         inventory=[_record(item) for item in player.get("inventory") or ()],
     )
-    if player.get("starter_gear"):
+    if chosen:
         # The player chose their own starting gear and purse: they set out with that, not the opening's kit.
         kit = {**kit, "inventory": [_record(item) for item in player.get("inventory") or ()],
                "currency": dict(_record(player.get("currency")))}

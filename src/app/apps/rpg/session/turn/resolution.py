@@ -211,6 +211,9 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
 
             sellers = sellers_here(simulation)
             target = _s(sellers[0].get("provider_id")) if len(sellers) == 1 else ""
+        away = _not_here(session, simulation, target) if target else None
+        if away is not None:  # persuading, intimidating, deceiving someone away: they are told where they are
+            return away
         tried = check(simulation, planned.reason, target, turn_key=str(_counted(session).turn_count))
         return Resolution(_timed(session, tried.changes, tried.minutes), tried.lines, minutes=tried.minutes,
                           needs="standard_turn", action_result={"kind": "check", **tried.record})

@@ -140,11 +140,12 @@ def _create_new_game_from_payload(
     legacy_request: RpgNewGameRequest | None = None,
 ) -> dict[str, Any]:
     try:
-        if _has_genesis_contract(payload):
-            return create_new_game_from_genesis_payload(payload, sessions=SESSION_CAMPAIGN_SESSIONS)
-        request = legacy_request or RpgNewGameRequest.model_validate(payload)
-        created = create_new_game_session(_preserve_seed_zero(request))
-        if created.get("ok") is not False:
+        if _has_genesis_contract(payload):  # the web client's (``withRpgGenesisContract``)
+            created = create_new_game_from_genesis_payload(payload, sessions=SESSION_CAMPAIGN_SESSIONS)
+        else:
+            request = legacy_request or RpgNewGameRequest.model_validate(payload)
+            created = create_new_game_session(_preserve_seed_zero(request))
+        if isinstance(created, dict) and created.get("ok") is not False:
             from app.apps.rpg.session.jobs.game_master_job import fill_areas_at_launch
 
             fill_areas_at_launch(str(created.get("session_id") or ""))  # the start's areas, filled in ahead (EV-10)

@@ -126,10 +126,10 @@ def test_a_stall_asks_the_game_master_once_each_stretch_not_every_turn() -> None
     assert asked == [direction.STALL_TURNS, 2 * direction.STALL_TURNS, 3 * direction.STALL_TURNS]
 
 
-def test_the_areas_ahead_are_queued_at_launch_neighbours_first(monkeypatch) -> None:
+def test_the_areas_ahead_are_queued_at_launch(monkeypatch) -> None:
     """EV-10's timed gate: an area queued behind the game master's direction, or only after the first turn, was not
-    filled by the hero's arrival. At launch the starting area and its neighbours are queued, the neighbours (where
-    the hero may go) ahead of the area the hero stands in, and both ahead of the direction."""
+    filled by the hero's arrival. At launch the starting area and its neighbours are queued, the starting area first
+    (the first turns' searches read it), and all ahead of the direction; on arriving, the areas ahead come first."""
     from app.apps.rpg.narration.game_master.area_call import open_areas
     from app.apps.rpg.session.jobs import game_master_job as job
 
@@ -142,7 +142,28 @@ def test_the_areas_ahead_are_queued_at_launch_neighbours_first(monkeypatch) -> N
     job.fill_areas_at_launch("rpg_session")
     areas = open_areas(document)
     assert [why for why, _ in asked] == [f"fill:{area}" for area in areas] and areas
-    here = job._here_area(document)
-    assert all(priority == (job.AREA_HERE_PRIORITY if why == f"fill:{here}" else job.AREA_PRIORITY)
+    here = job._here_area(document)  # at launch the area the hero starts in comes first; on arriving, those ahead
+    assert all(priority == (job.AREA_START_PRIORITY if why == f"fill:{here}" else job.AREA_PRIORITY)
                for why, priority in asked)
-    assert job.DIRECTION_PRIORITY < job.AREA_HERE_PRIORITY < job.AREA_PRIORITY
+    assert job.DIRECTION_PRIORITY < job.AREA_HERE_PRIORITY < job.AREA_PRIORITY < job.AREA_START_PRIORITY
+
+
+def test_an_answer_may_name_what_the_hero_has_been_shown() -> None:
+    """The panel gate (2026-10-31): "Where am I?" and "What quests do I have?" were withheld at the grove, because the
+    answer named Starfall Village, which the hero's quest names ("Reach Starfall Village") but they had not visited.
+    A name the hero has been shown (in what they know, or a road from here) is theirs; one they have not, is not."""
+    document = _document()
+    view = known_view(document)
+    shown = next(name for name in view["roads"] if name)
+    assert answer_is_safe(document, f"You could take the road to {shown}.")
+    assert not answer_is_safe(document, "The Hollow Meridian waits for you beneath the ruins.")
+
+
+def test_an_answer_may_say_back_a_name_the_player_used() -> None:
+    """The panel gate (2026-10-31): "Who is Archon Malrec?" was withheld even when the answer only said he is not known
+    yet. The player named him; saying the name back tells nothing. A name they did not use stays withheld."""
+    document = _document()
+    answer = "Nothing you have learned tells who Archon Malrec is."
+    assert not answer_is_safe(document, answer)
+    assert answer_is_safe(document, answer, "Who is Archon Malrec?")
+    assert not answer_is_safe(document, "Ask about the Hollow Meridian.", "Who is Archon Malrec?")

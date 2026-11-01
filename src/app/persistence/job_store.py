@@ -179,7 +179,8 @@ class PostgresJobStoreAdapter:
                 record['created_at'] = work.jobs.set_created_at_now(
                     self.context, job_id=record['id']
                 ) or record['created_at']
-            record["logs"] = work.jobs.list_job_logs(
+            # A job created in this transaction has no logs yet; one created before (create_job_once) may.
+            record["logs"] = [] if created else work.jobs.list_job_logs(
                 self.context, job_id=str(record["id"])
             )
             work.commit()

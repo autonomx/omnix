@@ -22,7 +22,7 @@ class RpgGameMasterQuestionBody(BaseModel):
 
 def _within_budget() -> None:
     from app.apps.rpg.session.persistence.session_records import _context, _database
-    from app.apps.rpg.session.turn_budget import WINDOW_SECONDS, turns_per_hour
+    from app.apps.rpg.session.turn_budget import WINDOW_SECONDS, is_install_owner, turns_per_hour
     from app.persistence.unit_of_work import unit_of_work
 
     limit = turns_per_hour()
@@ -30,6 +30,8 @@ def _within_budget() -> None:
         return
     database = _database()
     context = _context(database)
+    if is_install_owner(context):  # the install's owner is never limited (owner decision 2026-10-31)
+        return
     with unit_of_work(database) as work:
         turns, _ = work.rpg.recent_turns_by_owner(context, window_seconds=WINDOW_SECONDS)
         asked = work.rpg_game_master_panel.asked_by_owner(context, window_seconds=WINDOW_SECONDS)

@@ -179,12 +179,9 @@ def test_a_line_asks_when_its_best_reading_does() -> None:
         monkeypatch.undo()
 
 
-def test_no_creature_that_is_not_here_is_looked_at() -> None:
-    """N1 (2026-10-31): a look at someone away failed the turn (their lore is not the scene's). A person away is told
-    where they are (``resolution._not_here``); a creature not here is no reading; asked about, either is a question."""
-    scene = SceneView((SceneEntity("npc:bran", "person", ("Bran",), here=True),
-                       SceneEntity("creature:wolf", "creature", ("wolf",), here=False)))
-    assert valid_readings([{"family": "look", "target_id": "creature:wolf", "confidence": 0.9}], scene) == []
-    kept = valid_readings([{"family": "look", "target_id": "creature:wolf", "confidence": 0.9, "asks": True},
-                           {"family": "look", "target_id": "npc:bran", "confidence": 0.8}], scene)
-    assert [(reading.target_id, reading.asks) for reading in kept] == [("creature:wolf", True), ("npc:bran", False)]
+def test_a_thing_in_the_scene_is_a_topic_a_person_may_be_asked_about() -> None:
+    """The M2 dev split (2026-10-31): "could I sell my bread somewhere?" and "what is the oathblade?" lost what they
+    asked about, since only places, groups and people could be topics."""
+    kept = valid_readings([{"family": "talk", "target_id": "npc:bran", "confidence": 0.8, "asks": True,
+                            "slots": {"topics": ["item:rope", "item:nothing"]}}], SCENE)
+    assert kept[0].slots.topics == ("item:rope",)

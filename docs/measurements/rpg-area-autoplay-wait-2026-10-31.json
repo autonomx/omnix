@@ -1,0 +1,140 @@
+{
+  "area_fill_s": {
+    "max": 29.6,
+    "n": 5,
+    "p50": 20.7,
+    "p95": 29.6
+  },
+  "area_fills": 5,
+  "arrivals": [
+    {
+      "area": "region:cloudspine",
+      "at_s": 119.3,
+      "entries": 12,
+      "filled": true,
+      "fills_finished": 1,
+      "turn": 7
+    },
+    {
+      "area": "region:moonroot-deep",
+      "at_s": 309.5,
+      "entries": 9,
+      "filled": true,
+      "fills_finished": 1,
+      "turn": 13
+    },
+    {
+      "area": "region:ashen-east",
+      "at_s": 374.0,
+      "entries": 13,
+      "filled": true,
+      "fills_finished": 1,
+      "turn": 19
+    },
+    {
+      "area": "region:meridian-heartland",
+      "at_s": 686.6,
+      "entries": 20,
+      "filled": true,
+      "fills_finished": 1,
+      "turn": 43
+    }
+  ],
+  "checks": {
+    "filled_on_arrival": {
+      "arrivals": 4,
+      "filled": 4,
+      "passed": true,
+      "rate": 1.0,
+      "target": 0.95
+    },
+    "jobs_finished": {
+      "attempts": 52,
+      "jobs": 52,
+      "passed": true,
+      "statuses": [
+        "completed"
+      ]
+    },
+    "within_budgets": {
+      "entries_by_area": {
+        "region:ashen-east": {
+          "creature": 2,
+          "item": 1,
+          "lore": 2,
+          "person": 3,
+          "place": 2,
+          "rumour": 2,
+          "site": 1
+        },
+        "region:cloudspine": {
+          "creature": 1,
+          "item": 1,
+          "lore": 2,
+          "person": 3,
+          "place": 2,
+          "rumour": 2,
+          "site": 1
+        },
+        "region:meridian-heartland": {
+          "creature": 3,
+          "item": 2,
+          "lore": 3,
+          "person": 3,
+          "place": 4,
+          "rumour": 3,
+          "site": 2
+        },
+        "region:moonroot-deep": {
+          "creature": 2,
+          "item": 1,
+          "lore": 2,
+          "place": 1,
+          "rumour": 2,
+          "site": 1
+        },
+        "region:starfall-march": {
+          "creature": 1,
+          "item": 1,
+          "lore": 2,
+          "rumour": 2,
+          "site": 1
+        }
+      },
+      "over_budget": [],
+      "passed": true
+    }
+  },
+  "elapsed_s": 1909.1,
+  "jobs_by_type": {
+    "rpg.game_master": 47,
+    "rpg.scene_lore": 5
+  },
+  "measured_on": "2026-10-31",
+  "measurement": "RPG areas filled in on arrival (EV-10)",
+  "passed": true,
+  "provider": {
+    "effort": "low",
+    "model": "sonnet",
+    "provider": "claude_cli"
+  },
+  "refusals": 0,
+  "regions_reached": [
+    "region:ashen-east",
+    "region:cloudspine",
+    "region:meridian-heartland",
+    "region:moonroot-deep",
+    "region:starfall-march"
+  ],
+  "schema_version": 1,
+  "session_id": "rpg_hGEo_Mf7TpPyP12r",
+  "turn_ms": {
+    "max": 16716.8,
+    "n": 200,
+    "p50": 5183.5,
+    "p95": 9498.4
+  },
+  "turns": 200,
+  "wait": true,
+  "world": "aurelia"
+}

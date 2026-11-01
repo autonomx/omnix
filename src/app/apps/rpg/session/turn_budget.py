@@ -3,7 +3,9 @@
 Every turn makes at most a couple of model calls, so turns per hour bound a
 player's model spend. The count is the caller's committed turns in the last
 hour (PostgreSQL, so every gateway process sees the same count).
-``OMNIX_RPG_TURNS_PER_HOUR`` sets the ceiling; 0 turns it off.
+``OMNIX_RPG_TURNS_PER_HOUR`` sets the ceiling; 0 turns it off. The install's owner is
+never limited (owner decision 2026-10-31): the ceiling guards the owner's model account
+against guests, invited players and runaway scripts.
 """
 from __future__ import annotations
 
@@ -44,6 +46,13 @@ def _retry_after(oldest: Any, *, now: datetime) -> int:
     return max(1, int(WINDOW_SECONDS - (now - oldest).total_seconds()) + 1)
 
 
+def is_install_owner(context: Any) -> bool:
+    """Whether the caller is the install's owner (``auth.service``: the local user), whom no ceiling limits."""
+    from app.runtime.tenant_context import LOCAL_USER_ID
+
+    return str(getattr(context, "user_id", "") or "") == LOCAL_USER_ID
+
+
 def require_turn_budget(*, now: datetime | None = None) -> None:
     """Raise ``TurnBudgetExceeded`` when the caller has no turn left this hour (PostgreSQL runtime only)."""
     limit = turns_per_hour()
@@ -58,6 +67,8 @@ def require_turn_budget(*, now: datetime | None = None) -> None:
 
     database = _database()
     context = _context(database)
+    if is_install_owner(context):
+        return
     with unit_of_work(database) as work:
         used, oldest = work.rpg.recent_turns_by_owner(context, window_seconds=WINDOW_SECONDS)
         work.rollback()
@@ -73,6 +84,7 @@ __all__ = [
     "DEFAULT_TURNS_PER_HOUR",
     "TURNS_PER_HOUR_ENV",
     "TurnBudgetExceeded",
+    "is_install_owner",
     "require_turn_budget",
     "turns_per_hour",
 ]

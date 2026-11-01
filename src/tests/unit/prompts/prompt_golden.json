@@ -456,8 +456,8 @@
     "version": "1"
   },
   "rpg.turn_intent.readings": {
-    "sha256": "60c0a201e80c2ea9cffa19ed89b7874b0f185785a422e38f7cca354ff4edc280",
-    "version": "3"
+    "sha256": "205064495b5932f430d00b9a0432d27162d6b1db01e050375fbf0c4e39bcc72e",
+    "version": "4"
   },
   "rpg.worlds_generation_first_pass_provider.authored_registry_system_prompt": {
     "sha256": "f5665ee7a037b9dfbe15cbe15b93f5d70842f50947d76f9d0e33cc4429a4cfce",

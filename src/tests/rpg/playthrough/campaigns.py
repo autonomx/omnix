@@ -68,7 +68,7 @@ def _import_and_adopt(source_dir: Path, tmp_path, monkeypatch, *, name: str) -> 
 
 
 def _launch_scenario(world_id: str, scenario_match: str, player: dict[str, Any],
-                     gameplay: dict[str, Any] | None = None) -> str:
+                     gameplay: dict[str, Any] | None = None, new_game: dict[str, Any] | None = None) -> str:
     from app.persistence.unit_of_work import unit_of_work
     from app.runtime.tenant_context import current_tenant
     from app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes import SESSION_CAMPAIGN_SESSIONS
@@ -90,6 +90,7 @@ def _launch_scenario(world_id: str, scenario_match: str, player: dict[str, Any],
         player=player,
         gameplay=gameplay,
         features={"llm_narration": True, "image_generation": False},
+        new_game=new_game,
     )
     return str(launched["session_id"])
 
@@ -101,7 +102,7 @@ def launch_aurelia(tmp_path, monkeypatch, *, opening: str = "gateborn",
     return _launch_scenario(world_id, opening, {"name": "Wren", "pronouns": "they/them"}, gameplay), world_id
 
 
-def launch_vesper(tmp_path, monkeypatch, *, opening: str = "") -> tuple[str, str]:
+def launch_vesper(tmp_path, monkeypatch, *, opening: str = "", new_game: dict[str, Any] | None = None) -> tuple[str, str]:
     """Vesper-9 from its bundle. It carries lore only, so its authored openings are prepared for launch first
     (deterministically, without World Forge), then the first prepared one launches: (session, world)."""
     from app.apps.rpg.genesis.worlds.launch_repair_service import prepare_opening_scenarios_for_launch
@@ -111,7 +112,7 @@ def launch_vesper(tmp_path, monkeypatch, *, opening: str = "") -> tuple[str, str
     scenario_ids = [str(row["scenario_id"]) for row in prepared.get("prepared") or ()]
     assert scenario_ids, prepared
     match = next((scenario_id for scenario_id in scenario_ids if opening and opening in scenario_id), scenario_ids[0])
-    return _launch_scenario(world_id, match, {"name": "Wren", "pronouns": "they/them"}), world_id
+    return _launch_scenario(world_id, match, {"name": "Wren", "pronouns": "they/them"}, new_game=new_game), world_id
 
 
 def new_starter_game(seed: int = 7) -> str:

@@ -147,7 +147,8 @@ class Explorer:
         if _d(simulation.get("combat_state")).get("active") is True:  # a fight is fought, or broken away from
             losing = bool(seen["hp"] and seen["hp_max"] and seen["hp"] < 0.3 * seen["hp_max"])
             return "I break away and flee." if losing else "attack"
-        if seen["hp"] is not None and seen["hp_max"] and seen["hp"] < 0.4 * seen["hp_max"]:
+        if seen["hp"] is not None and seen["hp_max"] and seen["hp"] < 0.4 * seen["hp_max"] \
+                and "rest until morning" not in refused:
             return "rest until morning"
         places = _d(_d(simulation.get("world_model")).get("locations"))
         names = {str(_d(row).get("name") or ""): str(_d(row).get("region_id") or "") for row in places.values()}
@@ -251,10 +252,14 @@ def play(turns: int, seed: int, *, wait: bool) -> dict[str, Any]:
         began = time.perf_counter()
         response = client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": command})
         elapsed = (time.perf_counter() - began) * 1000
-        accepted = response.status_code == 200
+        body = response.json() if response.status_code == 200 else {}
+        outcome = body.get("outcome") if isinstance(body.get("outcome"), dict) else {}
+        # The game's own refusal is a 200 with the outcome refused ("the road is barred", "you cannot rest here").
+        accepted = response.status_code == 200 and not _d(outcome.get("presentation")).get("refused")
         document = worlds.load(session_id)
         after = view(document)
-        rows.append({"turn": index, "command": command, "status": response.status_code, "ms": round(elapsed, 1)})
+        rows.append({"turn": index, "command": command, "status": response.status_code, "accepted": accepted,
+                     "ms": round(elapsed, 1), "at": after["location_id"]})
         (refused.discard if accepted else refused.add)(command)
         region = _region(document, after["location_id"])
         if region and region not in visited:
@@ -292,7 +297,8 @@ def play(turns: int, seed: int, *, wait: bool) -> dict[str, Any]:
         "area_fill_s": summary([job["s"] for job in fills]), "area_fills": len(fills),
         "jobs_by_type": {kind: sum(1 for job in worker.ran if job["type"] == kind)
                          for kind in sorted({job["type"] for job in worker.ran})},
-        "refusals": sum(1 for row in rows if row["status"] != 200),
+        "refusals": sum(1 for row in rows if not row["accepted"]),
+        "rows": rows,  # each turn: what was said, whether it was played, where the hero then stood
         "checks": checks, "passed": all(check["passed"] for check in checks.values()),
     }
 
