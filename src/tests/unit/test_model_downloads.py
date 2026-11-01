@@ -133,6 +133,48 @@ def test_a_refused_direct_download_says_where_to_save_the_file_by_hand(tmp_path,
     assert "403" in message and "https://example.org/weights.pth" in message and str(target) in message
 
 
+def test_a_direct_file_falls_back_to_its_mirrors_in_order(tmp_path, monkeypatch):
+    # FLOAT's weights: our release mirror first, the authors' Google Drive file when it fails (D-1, 2026-11-01).
+    from app.models import packs
+    from app.models.catalog import ModelFile
+    from app.models.downloads import fetch_direct_file
+
+    tried: list[str] = []
+
+    def host(url, target, **_kwargs):
+        tried.append(url)
+        if url != "https://mirror-two.example/weights.pth":
+            raise packs.PackError(f"download failed (503): {url}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(WEIGHTS)
+        return target
+
+    monkeypatch.setattr(packs, "download_file", host)
+    item = ModelFile(path="weights.pth", sha256="0" * 64, size=len(WEIGHTS), url="https://primary.example/weights.pth",
+                     mirrors=("https://mirror-one.example/weights.pth", "https://mirror-two.example/weights.pth"))
+    assert fetch_direct_file(item, tmp_path / "weights.pth").read_bytes() == WEIGHTS
+    assert tried == [item.url, *item.mirrors]
+
+    def gone(url, target, **_kwargs):
+        tried.append(url)
+        raise packs.PackError(f"download failed (404): {url}")
+
+    tried.clear()
+    monkeypatch.setattr(packs, "download_file", gone)
+    with pytest.raises(ModelDownloadError) as raised:
+        fetch_direct_file(item, tmp_path / "again.pth")
+    assert tried == [item.url, *item.mirrors] and all(url in str(raised.value) for url in tried)
+
+
+def test_a_mirror_must_be_https(tmp_path):
+    path = _direct_catalog(tmp_path / "catalog.json")
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["models"]["direct-model"]["files"]["weights.pth"]["mirrors"] = ["http://insecure.example/weights.pth"]
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ModelDownloadError, match="https"):
+        load_catalog(path)
+
+
 def test_verify_reports_a_changed_file(tmp_path):
     entry = load_catalog(_catalog(tmp_path / "catalog.json"))["test-model"]
     cache = tmp_path / "hub"

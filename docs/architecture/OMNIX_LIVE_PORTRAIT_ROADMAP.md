@@ -475,7 +475,7 @@ The first pass ran `scripts/portrait_spike.py` with FLOAT alone on an otherwise 
     - `platform/voice/model_catalog.py`: `requires_acceptance` true for `direct` as well as `huggingface`, so the licence is always shown (D-1).
     - `model_packs._pack_status`: count `direct` models as installed, not only Hugging Face ones.
 - **Five entries (done 2026-10-29), to be grouped as one desktop bundle, `live-portrait`, once the runtime pack exists.** The bundle gets a new `capability`, `min_vram_mb` and `min_commit_mb`, and a `portrait` runtime pack of dependencies only:
-    1. `float` (`direct`, folder `float-weights`): `float.pth` from the authors' Google Drive file. `drive.usercontent.google.com/download?...&confirm=t` serves it as a plain, resumable HTTPS download, checked by its SHA-256. The terms text shows both licence statements.
+    1. `float` (`direct`, folder `float-weights`): `float.pth` from an unmodified copy in Omnix's GitHub release `model-float-3b5b2dfc3e` (D-1, revised 2026-11-01), with the authors' Google Drive file as its mirror (`drive.usercontent.google.com/download?...&confirm=t` serves it as a plain, resumable HTTPS download). One SHA-256 checks both; a `direct` file's `mirrors` are tried in order when its URL fails. The terms text shows both licence statements.
     2. `float-code` (`direct`, folder `float-code`): the ten upstream source files at commit `3b5b2dfc3e`, each from `raw.githubusercontent.com` with its own SHA-256. The digests are of the bytes GitHub serves; a Windows clone's line endings differ.
     3. `wav2vec2-base-960h` (Hugging Face, pinned, Apache-2.0)
     4. `wav2vec-english-speech-emotion-recognition` (Hugging Face, pinned, Apache-2.0). Optional: the spike's wrapper runs FLOAT without it when the emotion is a label, saving 1.2 GB. Only `auto` emotion needs it, so it becomes a bundle option, not a default.
@@ -809,6 +809,11 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 ## Owner decisions (settled 2026-10-29)
 
 - **D-1 Licence: accepted.** Omnix is non-commercial, so the CC BY-NC-ND 4.0 terms are acceptable, including for the desktop releases. The catalog shows the licence and asks for acceptance at install, like every model; `direct` entries require it too. Neither the weights nor the code are shipped or modified: both are downloaded per install from upstream at pinned digests, and our behaviour lives in our own wrapper.
+  **Revised 2026-11-01 (owner):** the weights are also hosted, unmodified, as a release asset of `autonomx/omnix`
+  (`model-float-3b5b2dfc3e`, with the authors' attribution and both licence statements), and installs download from it
+  first: the authors publish them only as a Google Drive file, whose download quota can stop installs for a day. The
+  Drive file stays the fallback, and one SHA-256 checks both. Both licences allow sharing unmodified copies
+  non-commercially with attribution. The code is still fetched from GitHub at its pinned commit and never hosted by Omnix.
 - **D-2 Weights: downloaded from the official sources, pinned.**
     - `float.pth` comes from the authors' Google Drive link through the new `direct` source, with a SHA-256 pin and a manual drop-in fallback.
     - The audio encoders come from Hugging Face. The face detector's weights are pinned too.

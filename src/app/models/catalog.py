@@ -42,6 +42,8 @@ class ModelFile:
     size: int
     # Where a direct model's file is fetched from; empty for Hugging Face files.
     url: str = ""
+    # Other hosts of the same bytes, tried in order when ``url`` fails (the digest is the same for all).
+    mirrors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -267,7 +269,8 @@ def _model(model_id: str, raw: Mapping[str, Any]) -> ModelEntry:
         raise CatalogError(f"{where}: source must be huggingface, package or direct")
     revision = str(_require(raw, "revision", where))
     files = tuple(
-        ModelFile(path=name, sha256=str(item["sha256"]), size=int(item["size"]), url=str(item.get("url") or ""))
+        ModelFile(path=name, sha256=str(item["sha256"]), size=int(item["size"]), url=str(item.get("url") or ""),
+                  mirrors=tuple(str(mirror) for mirror in item.get("mirrors") or ()))
         for name, item in sorted(dict(raw.get("files") or {}).items())
     )
     if source == "huggingface" and (
@@ -283,7 +286,8 @@ def _model(model_id: str, raw: Mapping[str, Any]) -> ModelEntry:
         if bad:
             raise CatalogError(f"{model_id}: files without a SHA-256 and size: {bad}")
     if source == "direct":
-        unfetchable = [item.path for item in files if not item.url.startswith("https://")]
+        unfetchable = [item.path for item in files
+                       if not all(url.startswith("https://") for url in (item.url, *item.mirrors))]
         if unfetchable:
             raise CatalogError(f"{model_id}: direct files need an https URL: {unfetchable}")
         escaping = [item.path for item in files if item.path.startswith(("/", "\\")) or ".." in Path(item.path).parts]

@@ -102,15 +102,20 @@ FetchUrl = Callable[[ModelFile, Path], Path]
 def fetch_direct_file(item: ModelFile, target: Path) -> Path:
     """Download a direct model's file to ``target``, resuming a partial download; the digest is checked.
 
-    A host that refuses scripted downloads leaves the file to be saved by hand; the message says where."""
+    Its URL first, then each mirror in turn (the same bytes: a partial download from one resumes from the next). A
+    host that refuses scripted downloads leaves the file to be saved by hand; the message says where."""
     from app.models.packs import PackError, download_file
 
-    try:
-        return download_file(item.url, target, sha256=item.sha256, size=item.size, progress=lambda _count: None,
-                             cancelled=lambda: False)
-    except PackError as exc:
-        raise ModelDownloadError(f"{item.path} did not download ({exc}). If its host refuses scripted downloads, "
-                                 f"save {item.url} as {target} and try again; it is checked by its SHA-256") from exc
+    failures: list[str] = []
+    for url in (item.url, *item.mirrors):
+        try:
+            return download_file(url, target, sha256=item.sha256, size=item.size, progress=lambda _count: None,
+                                 cancelled=lambda: False)
+        except PackError as exc:
+            failures.append(f"{url}: {exc}")
+            logger.warning("%s did not download from %s (%s)", item.path, url, exc)
+    raise ModelDownloadError(f"{item.path} did not download ({'; '.join(failures)}). If its hosts refuse scripted "
+                             f"downloads, save {item.url} as {target} and try again; it is checked by its SHA-256")
 
 
 def download(entry: ModelEntry, *, cache_dir: str | Path | None = None, fetch: Fetch = _hub_fetch,

@@ -1088,7 +1088,10 @@
         "float.pth": {
           "sha256": "f5cd815510908284eca7c5b9e81bdd63fc4cbef761f83bfb8fbe5e2880b2b830",
           "size": 826739645,
-          "url": "https://drive.usercontent.google.com/download?id=1rvWuM12cyvNvBQNCLmG4Fr2L1rpjQBF0&export=download&confirm=t"
+          "url": "https://github.com/autonomx/omnix/releases/download/model-float-3b5b2dfc3e/float.pth",
+          "mirrors": [
+            "https://drive.usercontent.google.com/download?id=1rvWuM12cyvNvBQNCLmG4Fr2L1rpjQBF0&export=download&confirm=t"
+          ]
         }
       },
       "licence": {
@@ -1096,7 +1099,7 @@
         "url": "https://raw.githubusercontent.com/deepbrainai-research/float/3b5b2dfc3e65df26e7fbba17d9adb3f43747851c/LICENSE.md",
         "commercial_use": false,
         "gated": false,
-        "output_terms": "Non-commercial use only. LICENSE.md is CC BY-NC 4.0; the README states CC BY-NC-ND 4.0 and research use. Omnix downloads the files unmodified and does not redistribute them."
+        "output_terms": "Non-commercial use only. LICENSE.md is CC BY-NC 4.0; the README states CC BY-NC-ND 4.0 and research use. The weights are downloaded unmodified, from an unmodified copy in Omnix's GitHub release (with attribution) or the authors' own Google Drive file, and checked against the same SHA-256."
       },
       "vram_gb": 0.8,
       "residency": "helper",
@@ -1170,7 +1173,7 @@
         "url": "https://raw.githubusercontent.com/deepbrainai-research/float/3b5b2dfc3e65df26e7fbba17d9adb3f43747851c/LICENSE.md",
         "commercial_use": false,
         "gated": false,
-        "output_terms": "Non-commercial use only. LICENSE.md is CC BY-NC 4.0; the README states CC BY-NC-ND 4.0 and research use. Omnix downloads the files unmodified and does not redistribute them."
+        "output_terms": "Non-commercial use only. LICENSE.md is CC BY-NC 4.0; the README states CC BY-NC-ND 4.0 and research use. The weights are downloaded unmodified, from an unmodified copy in Omnix's GitHub release (with attribution) or the authors' own Google Drive file, and checked against the same SHA-256."
       },
       "vram_gb": 0.0,
       "residency": "helper",
