@@ -480,10 +480,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--records", type=Path, help="also write every item's reading (JSONL)")
+    parser.add_argument("--corpus", type=Path, help="another frozen set of items over the corpus's scenes, in place of "
+                        "--split (EV-9's idiom set: resources/benchmarks/rpg/idiom_set/idioms.jsonl)")
     args = parser.parse_args(argv)
     require_frozen_held_out()
     catalog = json.loads((CORPUS / "catalog.json").read_text(encoding="utf-8"))
-    items = load_items(args.split)
+    if args.corpus:
+        items = [json.loads(line) for line in args.corpus.read_text(encoding="utf-8").splitlines() if line.strip()]
+        args.split = f"corpus:{args.corpus.name}"
+    else:
+        items = load_items(args.split)
     if args.limit:
         items = items[: args.limit]
     started = time.perf_counter()

@@ -1,6 +1,6 @@
 # RPG: current state
 
-As of 2026-10-29, branch `rpg-production` after `dfa6815f9e` (with Aurelia's gear and Valecourt content). This page holds only the latest state: each gate's
+As of 2026-11-01, on the evolution roadmap's results (`docs/RPG_EVOLUTION_ROADMAP_2026-10-29.md`, §7 and §8). This page holds only the latest state: each gate's
 number, what is open and who it waits on. The history behind each line is in the roadmap's status log
 ([§11](../RPG_PRODUCTION_ROADMAP_2026-10-23.md#11-status)); the targets are its scorecard (§2).
 
@@ -23,7 +23,7 @@ playtests continue to find content and wiring problems, not missing systems
 | A4 Content in code | No world's names in the engine (AL021) | 0 | Met (§11) | A4 part 2 |
 | P1 Persistence | Crash-mid-turn test; versioned, pinned upgrades; newer documents refused | Built, and export/import (stretch) | Met (§11) | RQ-8.5, RQ-1.1, RQ-1.7, RQ-8.6 |
 | M1 Mechanics | Playthrough suite 100% on three worlds; golden matches | Playthrough: 133 pass, 4 strict xfail (below). Golden: matches at `835946e514`. Route autoplay 3 x 150 turns, 0 findings | Open (the xfails) | Playthrough run 2026-10-26 on a working tree with uncommitted RPG changes; `rpg-autoplay-2026-10-26-route.json` |
-| M2 Intent | Family and target lower ≥ 0.95; false stateful upper ≤ 1.0% | Haiku low, the gates' model since 2026-11-01: family lower 0.802, target lower 0.821, false stateful upper 1.1% (`rpg-intent-route-haiku-low-2026-11-01.json`). Sonnet low, 2026-10-31: family lower 0.868, target lower 0.862 (rescored), false stateful upper 1.5%. Since EV-9's first run (0.783, 0.774): a question none of whose readings may be done is put to someone here, a status aimed at a quest keeps its reading, a thing may be what a question asks about | Not met. Left: questions and remarks played as free actions or asked back; prompt rules for them were tried on the dev split and did not help (0.888 against 0.894 on 555 items) | the files named |
+| M2 Intent | Family and target lower ≥ 0.80; false stateful upper ≤ 1.5% (owner, 2026-11-01; ≥ 0.95 and ≤ 1.0% before) | Haiku low, the gates' model since 2026-11-01: family lower 0.802, target lower 0.821, false stateful upper 1.1% (`rpg-intent-route-haiku-low-2026-11-01.json`). Sonnet low, 2026-10-31: family lower 0.868, target lower 0.862 (rescored), false stateful upper 1.5%. Since EV-9's first run (0.783, 0.774): a question none of whose readings may be done is put to someone here, a status aimed at a quest keeps its reading, a thing may be what a question asks about | Met against the reset targets, by little. Left: questions and remarks played as free actions or asked back; prompt rules for them were tried on the dev split and did not help (0.888 against 0.894 on 555 items) | the files named |
 | G1 Gameplay depth | RQ-5.1-5.4 and 5.7 built; balance bands; rubric ≥ 4 on stakes, choice, progression | All built (5.5 and 5.6 too); rubric not scored | Waits on owner | [playtest-rq-9.2.md](playtest-rq-9.2.md) is blank |
 | W1 Evolving world | The 200-turn Aurelia run's checks | All pass | Met | `rpg-living-world-2026-10-26.json` |
 | D1 Determinism | AL013 = 0; 1,000-turn replay identical | Both, and re-executed (2026-10-31) | Met | `rpg-living-world-1000-reexecuted-2026-10-31.json` |
@@ -32,7 +32,7 @@ playtests continue to find content and wiring problems, not missing systems
 | F3 Model calls | No turn more than two calls, but for one revision of its narration; cards and the tactical route none (owner decisions 2026-10-29) | Most two; four of 160 Haiku turns revised once; deterministic 0 (2026-10-31) | Met | the F1 runs above |
 | U1 Play screen | Player-first layout; core tasks; axe 0 serious; 360 px; keyboard | 11 core tasks pass at 360 and 1,440 px, axe 0 | Met, except the owner's unaided run | `rpg-core-tasks-2026-10-25.json` |
 | U2 Web code health | No RPG web file over 600 lines; one stylesheet per component | 0 files over 600 | Met (§11) | RQ-7.5 |
-| N1 Narration | Contradictions upper ≤ 2.0%; speaker lower ≥ 0.985; grounded lower ≥ 0.93 (calibrated judge); near-duplicates ≤ 5% | 900 turns over three worlds (2026-10-31, Sonnet low): contradictions upper 0.6%; speaker lower 0.961 (19 of 744 wrong: a line to someone read as a look, a person named by what they do read as no one or the wrong one); near-duplicates 0.45%; grounded lower 0.84 by the uncalibrated judge. Four turns failed with a server error, a look at someone away (fixed, `test_absent_people.py`) | Contradictions and near-duplicates met; speaker not met | `rpg-narration-2026-10-31.json` |
+| N1 Narration | Contradictions upper ≤ 2.0%; speaker lower ≥ 0.95 (owner, 2026-11-01; ≥ 0.985 before); grounded lower ≥ 0.93 (calibrated judge); near-duplicates ≤ 5% | 900 turns over three worlds (2026-10-31, Sonnet low): contradictions upper 0.6%; speaker lower 0.961 (19 of 744 wrong: a line to someone read as a look, a person named by what they do read as no one or the wrong one); near-duplicates 0.45%; grounded lower 0.84 by the uncalibrated judge. Four turns failed with a server error, a look at someone away (fixed, `test_absent_people.py`) | Met on Sonnet low, against the reset target; not rerun on Haiku; grounded not gated | `rpg-narration-2026-10-31.json` |
 | S1 Trust and safety | Injection corpus, SVG/CSP, model budget, tenant isolation, retention | All built | Met (§11) | RQ-3.4/8.1, 8.7, 8.2, 8.3, 8.10 |
 | O1 Operability | Failure ≤ 0.5%; operations view; outage behaviour; crash mid-turn | Built; autoplay 0 failures | Met (§11) | RQ-8.4, 8.8, 8.5 |
 | T1 Tests | Every §6 harness exists and is in the gate set | Yes | Met (§11) | §6 |
@@ -50,7 +50,9 @@ The four strict xfails in the playthrough suite:
 - A spot check of the intent held-out set's labels: most of M2's remaining misses are label questions
   ([rpg-intent-label-review-2026-10-26.md](../measurements/rpg-intent-label-review-2026-10-26.md): 22 items).
 - Permission to run the web typecheck.
-- Publishing Aurelia's new bundle to the community world catalog.
+- A spot check of the model-written sample sets (`resources/benchmarks/rpg/idiom_set`, `slot_set`, `step_set`).
+- Migration 0171 hard-deletes archived campaigns 30 days after their last update, at the first retention sweep after
+  a live start: count them before that start.
 - The LM Studio World Forge run, at the very end.
 
 ## Open engineering work
@@ -58,6 +60,12 @@ The four strict xfails in the playthrough suite:
 - Rerun F2 after `9f5c9e3b46` (one campaign read a turn) on a quiet machine; 1 MB p95 and statements are over.
 - Rerun N1 after the eval fix; near-duplicates (35%) and the correct speaker are the gaps.
 - Rerun M2 once the labels are checked (and for the lore-world reading in `46fb76145c`, not yet measured).
+- EV-9's idiom set: 11 of 844 lines acted on, upper 2.3%, against ≤ 0.5%. A prompt rule for reported advice brought it
+  to 3 of 844 but waits on an M2 rerun on that prompt.
+- Not run, for the account's limit: the slot set, EV-3's steps, EV-12's link samples, EV-13's quote sample (the
+  harnesses are built; `rpg_reading_eval.py` and `rpg_lore_voice_eval.py` have not yet read a real model's answers).
+- RPG speech shares the realtime lane with live calls: a sentence may be silent during a call, and a call may be
+  refused while a sentence is synthesized.
 - F1: arrive p50 (6.5 s against 6 s) and a question's outcome (3.3 s against 3.0 s).
 - Vesper-9's conversations copy its large bible three times a turn; the fix is one read-only view per canon
   revision (§11, F2 memo). Not done.
@@ -144,8 +152,12 @@ a campaign's own map definitions, the spoken-audio cache).
 - **Voices** (EV-13, built 2026-10-30). The castable list (`resources/voice_clones/casting.json`; only two voices
   castable: the library's clones of real people and other works' characters are left off), a deterministic cast kept
   outside the document, the player's choice, quotes inside narration in their speaker's voice, a play button on each
-  finished response, a Voices tab and auto-play off by default, spoken by sentence from a tenant-scoped audio cache.
-  Not run: the speed, quote-sample and UI gates.
+  finished response, a Voices tab and auto-play off by default, spoken by sentence from a tenant-scoped audio cache
+  or streamed from the speech service as it is synthesized, on the CUDA-graph decode, through the read-aloud
+  player's worklet. First audio met (2026-11-01, RTX 4090): p50 250 ms, p95 313 ms, no runaway and no wait in
+  simulated playback. The speed gate found the route calling a speech route that does not exist, and live speech over
+  HTTP decoding in the slow parity mode (fixed for both). Not run: the quote sample, the UI gates, and speech heard
+  in a real browser.
 - **The proposal record** (EV-11, built 2026-10-29, migration 0187). Work done off the turn is a typed proposal; the
   next turn folds it in at its load through the rule that owns its kind, and its commit settles it exactly once and
   records it on the turn row. A rewind drops the undone timeline's pending proposals; the re-executing replay folds
