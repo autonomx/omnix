@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.apps.rpg.edge.api.web_contracts import RpgVoiceCastResponse, documented
+from app.apps.rpg.edge.api.web_contracts import RpgSpeechPlanResponse, RpgVoiceCastResponse, documented
 from app.conversation.tts_stream_contract import CHAT_STREAM_MIN_REPETITION_PENALTY
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ class RpgVoiceChoiceBody(BaseModel):
 
 def _response(work: Any, context: Any, session_id: str, document: Any) -> dict[str, Any]:
     from app.apps.rpg.session.voice_cast import cast_for
-    from app.platform.voice.voice_casting import castable_voices
+    from app.platform.voice.contracts import castable_voices
 
     return {"ok": True, "session_id": session_id, "cast": cast_for(work, context, session_id, document),
             "voices": [{key: row[key] for key in ("voice_id", "name", "description")} for row in castable_voices()]}
@@ -98,7 +98,8 @@ def register_rpg_voice_routes(router: APIRouter, state) -> None:
             work.commit()
         return payload
 
-    @router.post("/api/rpg/sessions/{session_id}/speech-plan", tags=["rpg-session"])
+    @router.post("/api/rpg/sessions/{session_id}/speech-plan", tags=["rpg-session"],
+                 responses=documented(RpgSpeechPlanResponse))
     def rpg_speech_plan(session_id: str, request_body: RpgSpeechPlanBody) -> dict[str, Any]:
         """How a final response is spoken: only its shown text, block by block in each speaker's cast voice."""
         from app.apps.rpg.session.persistence.session_records import _context, _database, load_session_from_postgres
@@ -123,7 +124,7 @@ def register_rpg_voice_routes(router: APIRouter, state) -> None:
         from app.apps.rpg.session.voice_cast import cast_for
         from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens
         from app.persistence.unit_of_work import unit_of_work
-        from app.platform.voice.voice_casting import DEFAULT_VOICE, as_wav, castable_voices, pcm_of, render_key
+        from app.platform.voice.contracts import DEFAULT_VOICE, as_wav, castable_voices, pcm_of, render_key
         from app.providers import tts_service
         from app.providers.service import selected_tts_provider_id
         from app.runtime.config import get_runtime_config
@@ -204,7 +205,7 @@ def register_rpg_voice_routes(router: APIRouter, state) -> None:
 def _speech_plan(cast: list[dict[str, Any]], blocks: list[RpgSpeechBlock]) -> list[dict[str, Any]]:
     """A final response's blocks as they are spoken: each in its speaker's voice (the narrator's for anyone not
     cast), sentence by sentence."""
-    from app.platform.voice.voice_casting import DEFAULT_VOICE, split_sentences
+    from app.platform.voice.contracts import DEFAULT_VOICE, split_sentences
 
     voices = {row["speaker_id"]: row.get("voice_id") or DEFAULT_VOICE for row in cast}
     return [{"speaker_id": block.speaker_id, "voice_id": voices.get(block.speaker_id) or voices.get("narrator")

@@ -16,4 +16,4 @@ def test_rpg_turn_jobs_are_registered_by_the_rpg_feature() -> None:
     assert report.input_model.__name__ == "RpgReportJobInput"
     assert narration.input_model.__name__ == "RpgNarrationJobInput"
     assert scene_lore.input_model.__name__ == "RpgSceneLoreJobInput"
-    assert registry.types() == ("rpg.narration", "rpg.report.last10", "rpg.scene_lore", "rpg.turn")
+    assert registry.types() == ("rpg.game_master", "rpg.narration", "rpg.report.last10", "rpg.scene_lore", "rpg.turn")

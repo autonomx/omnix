@@ -1631,6 +1631,55 @@
     "type": "string"
   },
   {
+    "default": "1",
+    "description": "Controls portrait enabled for launcher.",
+    "feature": "launcher",
+    "name": "OMNIX_PORTRAIT_ENABLED",
+    "type": "boolean"
+  },
+  {
+    "default": "600",
+    "description": "Controls portrait idle unload seconds for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS",
+    "type": "integer"
+  },
+  {
+    "default": "1",
+    "description": "Controls portrait max streams for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_MAX_STREAMS",
+    "type": "integer"
+  },
+  {
+    "default": "5501",
+    "description": "Controls portrait port for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_PORT",
+    "type": "integer"
+  },
+  {
+    "default": "false",
+    "description": "Controls portrait preload for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_PRELOAD",
+    "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls portrait url for launcher, live-voice, voice.",
+    "feature": "launcher, live-voice, voice",
+    "name": "OMNIX_PORTRAIT_URL",
+    "type": "string"
+  },
+  {
+    "default": "4096",
+    "description": "Controls portrait vram cap mb for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_VRAM_CAP_MB",
+    "type": "integer"
+  },
+  {
     "default": null,
     "description": "Controls private browser for launcher.",
     "feature": "launcher",

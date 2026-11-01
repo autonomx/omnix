@@ -237,6 +237,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_PACKS_DIR` | string | — | models | Controls packs dir for models. |
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
+| `OMNIX_PORTRAIT_ENABLED` | boolean | `1` | launcher | Controls portrait enabled for launcher. |
+| `OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS` | integer | `600` | tooling | Controls portrait idle unload seconds for tooling. |
+| `OMNIX_PORTRAIT_MAX_STREAMS` | integer | `1` | tooling | Controls portrait max streams for tooling. |
+| `OMNIX_PORTRAIT_PORT` | integer | `5501` | tooling | Controls portrait port for tooling. |
+| `OMNIX_PORTRAIT_PRELOAD` | boolean | `false` | tooling | Controls portrait preload for tooling. |
+| `OMNIX_PORTRAIT_URL` | string | — | launcher, live-voice, voice | Controls portrait url for launcher, live-voice, voice. |
+| `OMNIX_PORTRAIT_VRAM_CAP_MB` | integer | `4096` | tooling | Controls portrait vram cap mb for tooling. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
 | `OMNIX_PRODUCT_NAME` | string | — | kernel | Controls product name for kernel. |
 | `OMNIX_PROVIDER_SECRETS_PATH` | string | — | security | Controls provider secrets path for security. |

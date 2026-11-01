@@ -168,7 +168,7 @@ def checked(document: Mapping[str, Any], rows: list[dict[str, Any]]) -> tuple[li
 def direct(session_id: str, document: Mapping[str, Any], why: str, *, revision: int) -> dict[str, Any]:
     """Ask the game master, check what it proposes, and store what passes as proposals for the next turn."""
     from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
-    from app.apps.rpg.session.turn.proposals import record_proposals
+    from app.apps.rpg.foundation.persistence.rpg_proposal_repository import record_proposals
 
     gateway = build_app_llm_gateway()
     if gateway is None:

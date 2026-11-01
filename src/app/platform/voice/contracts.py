@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from .jobs import clone_voice, wait_for_engine
     from .loudness import integrated_loudness, normalize_loudness
     from .output_settings import NEUTRAL, sampling_overrides, time_stretch
+    from .voice_casting import DEFAULT_VOICE, as_wav, castable_voices, pcm_of, render_key, split_sentences
     from .transcription import transcribe_timed_audio
     from .transcripts import TranscriptDocument, export_transcript, speaker_sample_spans
     from .watermarking import mark as watermark_render
@@ -133,9 +134,15 @@ _ASSEMBLY = frozenset({
     "ASSEMBLY_VERSION", "AssembledChapter", "AudioSpan", "PausePolicy", "TimelineEntry",
     "active_energy", "assemble_chapter", "normalization_gains",
 })
+# Who may be cast and how a sentence is identified and spoken (the RPG's voices).
+_CASTING = frozenset({"DEFAULT_VOICE", "as_wav", "castable_voices", "pcm_of", "render_key", "split_sentences"})
 
 
 def __getattr__(name: str) -> Any:
+    if name in _CASTING:
+        from . import voice_casting
+
+        return getattr(voice_casting, name)
     if name in _OUTPUT_SETTINGS:
         from . import output_settings
 
@@ -153,6 +160,12 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "DEFAULT_VOICE",
+    "as_wav",
+    "castable_voices",
+    "pcm_of",
+    "render_key",
+    "split_sentences",
     "ASSEMBLY_VERSION",
     "NEUTRAL",
     "AssembledChapter",

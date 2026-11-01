@@ -194,7 +194,7 @@ def propose_heard_of(session_id: str, document: Mapping[str, Any] | None, links:
                      revision: int) -> int:
     """The hero's having heard of what the response named, as narration proposals for the next turn (EV-11)."""
     from app.apps.rpg.foundation.state.proposals import Proposal
-    from app.apps.rpg.session.turn.proposals import record_proposals
+    from app.apps.rpg.foundation.persistence.rpg_proposal_repository import record_proposals
 
     if not isinstance(document, Mapping):
         return 0

@@ -9071,6 +9071,24 @@ export interface components {
             /** Blocks */
             blocks: components["schemas"]["RpgSpeechBlock"][];
         };
+        /** RpgSpeechPlanResponse */
+        RpgSpeechPlanResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Segments */
+            segments: components["schemas"]["RpgSpeechSegment"][];
+            /** Session Id */
+            session_id: string;
+        };
+        /** RpgSpeechSegment */
+        RpgSpeechSegment: {
+            /** Sentences */
+            sentences: string[];
+            /** Speaker Id */
+            speaker_id: string;
+            /** Voice Id */
+            voice_id: string;
+        };
         /** RpgSpeechSentence */
         RpgSpeechSentence: {
             /**
@@ -14894,15 +14912,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSpeechPlanResponse"];
                 };
             };
             /** @description Validation Error */

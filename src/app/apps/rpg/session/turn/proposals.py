@@ -16,6 +16,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from pydantic import ValidationError
 
+from app.apps.rpg.foundation.persistence.rpg_proposal_repository import record_proposals
 from app.apps.rpg.foundation.safe_values import safe_dict as _d
 from app.apps.rpg.foundation.state import access as _sections
 from app.apps.rpg.foundation.state.changes import StateChange
@@ -133,22 +134,6 @@ def pending_proposals(session_id: str, document: Mapping[str, Any]) -> list[Prop
         except ValidationError:  # a row the record cannot read is not folded in, and stays for review
             logger.warning("rpg_proposal_unreadable session=%s proposal=%s", session_id, row.get("proposal_id"))
     return proposals
-
-
-def record_proposals(session_id: str, proposals: Iterable[Proposal]) -> int:
-    """Store proposals for a later turn to fold in; how many were new (a source's retry stores nothing again)."""
-    from app.persistence.unit_of_work import unit_of_work
-    from app.runtime.tenant_context import current_tenant
-
-    stored = 0
-    with unit_of_work() as work:
-        for proposal in proposals:
-            stored += work.rpg_proposals.put(
-                current_tenant(), campaign_id=session_id, proposal_id=proposal.proposal_id, kind=proposal.kind,
-                source=proposal.source, after_revision=proposal.after_revision, payload=dict(proposal.payload),
-                reason=proposal.reason)
-        work.commit()
-    return stored
 
 
 _FOLDED: ContextVar[FoldRecord | None] = ContextVar("RPG_TURN_FOLDED", default=None)

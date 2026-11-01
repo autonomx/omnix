@@ -104,7 +104,7 @@ def test_time_and_needs_drifting_are_not_material():
 
 def test_the_turn_is_scored_on_the_reading_it_ran_on():
     ran = {"mechanic": "talk", "family": "ask", "target_ref": "npc:liora"}
-    assert intent.turn_reading(ran) == {"family": "ask", "target_ref": "npc:liora"}
+    assert intent.turn_reading(ran) == {"family": "ask", "target_ref": "npc:liora", "topics": []}
     question = {"mechanic": "clarify", "family": "buy", "target_ref": "item:rope"}
     assert intent.turn_reading(question) == {"family": "clarify", "target_ref": None}
 

@@ -103,8 +103,8 @@ FEATURE = FeatureModule(
     tier="app",
     # The Hermes routes in app/apps/rpg/edge/hermes read assist mode through app.platform.chat.contracts.
     depends_on=("chat",),
-    # World images use image providers; RPG runs without the image feature.
-    uses=("image",),
+    # World images use image providers, a campaign's voices the voice platform; RPG runs without either.
+    uses=("image", "voice"),
     routers=(_rpg_routes_router, _compatibility_router),
     repositories=RPG_REPOSITORY_SPECS,
     job_observers=(rpg_debug_job_observer,),

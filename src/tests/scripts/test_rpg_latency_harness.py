@@ -34,13 +34,18 @@ def test_class_report_gives_p50_and_p95_and_counts_published_drafts():
 
 
 def test_f3_checks_count_calls_per_turn():
-    rows = {"look": [_row(10.0, calls=1), _row(10.0, calls=3)], "status": [_row(5.0, calls=1)],
-            "wait": [_row(5.0, calls=0)]}
+    rows = {"look": [_row(10.0, calls=1), _row(10.0, calls=3)], "tactical_move": [_row(5.0, calls=1)]}
     classes = {name: latency.class_report(group) for name, group in rows.items()}
     checks = latency.checks(classes, rows)
-    assert checks["F3_turns_with_at_most_one_call"] == 0.75
+    assert checks["F3_met"] is False
     assert checks["F3_max_calls_per_turn"] == 3
     assert checks["F3_deterministic_turns_with_a_call"] == 1
+    # One revision of the narration is forgiven: its own call beyond the two.
+    revised = _row(10.0, calls=3, roles=("semantic_intent", "narrative_writer", "narrative_writer"))
+    rows = {"look": [_row(10.0, calls=2), revised], "tactical_move": [_row(5.0, calls=0)]}
+    checks = latency.checks({name: latency.class_report(group) for name, group in rows.items()}, rows)
+    assert checks["F3_met"] is True and checks["F3_turns_revised"] == 1
+    assert checks["F3_max_calls_per_turn_but_a_revision"] == 2
 
 
 def test_clock_marks_reset_per_turn():

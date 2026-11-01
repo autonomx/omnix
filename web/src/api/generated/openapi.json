@@ -53646,6 +53646,58 @@
         "title": "RpgSpeechPlanBody",
         "type": "object"
       },
+      "RpgSpeechPlanResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/RpgSpeechSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "segments"
+        ],
+        "title": "RpgSpeechPlanResponse",
+        "type": "object"
+      },
+      "RpgSpeechSegment": {
+        "properties": {
+          "sentences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sentences",
+            "type": "array"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "voice_id",
+          "sentences"
+        ],
+        "title": "RpgSpeechSegment",
+        "type": "object"
+      },
       "RpgSpeechSentence": {
         "additionalProperties": false,
         "properties": {
@@ -94585,13 +94637,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSpeechPlanResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Speech Plan Api Rpg Sessions  Session Id  Speech Plan Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {

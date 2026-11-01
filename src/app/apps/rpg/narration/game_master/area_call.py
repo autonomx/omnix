@@ -116,7 +116,7 @@ def fill_area(session_id: str, document: Mapping[str, Any], area_id: str, *, rev
     from app.apps.rpg.rules.budgets import budget
     from app.apps.rpg.rules.contracts import secrets_held
     from app.apps.rpg.rules.secrets import for_the_model
-    from app.apps.rpg.session.turn.proposals import record_proposals
+    from app.apps.rpg.foundation.persistence.rpg_proposal_repository import record_proposals
 
     gateway = build_app_llm_gateway()
     if gateway is None:

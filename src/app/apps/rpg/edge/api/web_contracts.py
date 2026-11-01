@@ -1209,6 +1209,18 @@ class RpgVoiceCastResponse(TypedDict, total=False):
     voices: Required[list[RpgCastableVoice]]
 
 
+class RpgSpeechSegment(TypedDict):
+    speaker_id: str
+    voice_id: str
+    sentences: list[str]
+
+
+class RpgSpeechPlanResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    segments: Required[list[RpgSpeechSegment]]
+
+
 class RpgLoreEntryResponse(TypedDict, total=False):
     ok: Required[bool]
     session_id: Required[str]

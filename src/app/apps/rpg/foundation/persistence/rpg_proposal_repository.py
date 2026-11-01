@@ -106,3 +106,19 @@ class PostgresRpgProposalRepository:
             ).fetchone()
             if row is None:
                 raise ProposalAlreadySettled(f"proposal {proposal_id} of campaign {campaign_id} is no longer pending")
+
+
+def record_proposals(session_id: str, proposals: Iterable[Any]) -> int:
+    """Store proposals for a later turn to fold in; how many were new (a source's retry stores nothing again)."""
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    stored = 0
+    with unit_of_work() as work:
+        for proposal in proposals:
+            stored += work.rpg_proposals.put(
+                current_tenant(), campaign_id=session_id, proposal_id=proposal.proposal_id, kind=proposal.kind,
+                source=proposal.source, after_revision=proposal.after_revision, payload=dict(proposal.payload),
+                reason=proposal.reason)
+        work.commit()
+    return stored

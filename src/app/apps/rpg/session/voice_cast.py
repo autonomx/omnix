@@ -68,7 +68,7 @@ def auto_cast(campaign_id: str, people: Iterable[Mapping[str, str]], voices: lis
 
 def cast_for(work: Any, context: Any, campaign_id: str, document: Mapping[str, Any]) -> list[dict[str, Any]]:
     """The campaign's cast, the people first heard or met since cast now: each speaker with their voice."""
-    from app.platform.voice.voice_casting import castable_voices
+    from app.platform.voice.contracts import castable_voices
 
     voices = castable_voices()
     revisions = {row["voice_id"]: row["revision"] for row in voices}
@@ -87,7 +87,7 @@ def choose(work: Any, context: Any, campaign_id: str, speaker_id: str, voice_id:
            document: Mapping[str, Any]) -> dict[str, str] | None:
     """The player's choice of a castable voice for someone who speaks in the campaign (None: the voice may not be
     offered to them, or no such speaker)."""
-    from app.platform.voice.voice_casting import castable_voices
+    from app.platform.voice.contracts import castable_voices
 
     voice = next((row for row in castable_voices() if row["voice_id"] == voice_id), None)
     if voice is None or speaker_id not in {row["speaker_id"] for row in speakers(document)}:
