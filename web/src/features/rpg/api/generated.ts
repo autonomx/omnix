@@ -1682,8 +1682,9 @@ export interface paths {
         put?: never;
         /**
          * Rpg Speech Audio
-         * @description A sentence of a final response in its speaker's cast voice, as WAV: from the campaign's audio cache, else
-         *     synthesized once and kept (EV-13). With the speech service down, 503: the text stands, silent.
+         * @description A sentence of a final response in its speaker's cast voice, as PCM16 (``PCM16``): from the campaign's audio
+         *     cache, else streamed from the speech service as it is synthesized and kept once it is whole (EV-13). With the
+         *     speech service down, 503: the text stands, silent.
          */
         post: operations["rpg_speech_audio_api_rpg_sessions__session_id__speech_audio_post"];
         delete?: never;
