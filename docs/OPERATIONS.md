@@ -513,7 +513,9 @@ The scheduler deletes old rows every hour, in small batches, following
 | Audit events | 365 days, maintenance only |
 | Trading strategy events | 180 days, disabled by default |
 | RPG narration events | 1 day |
-| RPG snapshots | Each campaign's newest 20 and every 100th revision; others after 1 day |
+| RPG snapshots | Each campaign's newest 20 and every 100th revision, and every pinned snapshot (pre-upgrade backups, compaction bases); others after 1 day |
+| Deleted RPG campaigns | 30 days after deletion; then the campaign and everything of its own (turns, player text, narration, snapshots, maps, NPC runtime) |
+| RPG turns of long campaigns | Every turn up to 5,000 revisions; beyond that the newest 1,000, behind a pinned snapshot that replay starts from |
 
 Change a policy by updating its row (`retention_days`, `enabled`). Audit
 retention runs only through `python -m app.persistence retention`, which

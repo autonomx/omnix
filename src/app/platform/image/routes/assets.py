@@ -83,6 +83,9 @@ def create_image_asset_file_router(asset_store: AssetService) -> APIRouter:
             "Last-Modified": last_modified,
             "X-Content-Type-Options": "nosniff",
         }
+        if asset.mime_type.lower() == "image/svg+xml":
+            # Even a trusted SVG opened on its own runs no script and loads nothing (RQ-8.7).
+            headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         if _not_modified(request, etag, stat_result.st_mtime):
             return Response(status_code=304, headers=headers)
 

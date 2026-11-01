@@ -1,8 +1,9 @@
 """Fast deterministic campaign launch from certified world releases."""
 from __future__ import annotations
 
+import json
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
@@ -132,17 +133,25 @@ def _opening_environment(
     epoch: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """A live environment (weather, calendar, light) for the opening's own place and region."""
-    from app.apps.rpg.session.environment import DEFAULT_REGION_ID, build_initial_environment_seed_state
+    from app.apps.rpg.world.environment import DEFAULT_REGION_ID, build_initial_environment_seed_state
 
     state = _record(session.get("state"))
     metadata = _record(state.get("metadata"))
+    region_id = str(location.get("region_id") or DEFAULT_REGION_ID)
+    authored = _record(location.get("environment"))
+    place_environment = {
+        "region_id": region_id,
+        "climate_profile_id": str(authored.get("climate_profile_id") or ""),
+        "scene": {"exposure": authored.get("exposure"), "shelter": authored.get("shelter"),
+                  "light_override": authored.get("light")},
+    } if authored else None
     seeded = build_initial_environment_seed_state(
         campaign_seed=int(metadata.get("seed") or 0),
         campaign_contract={"location_id": location_id},
         location_id=location_id,
-        location={"time_label": epoch, "location": location_name, "weather": "clear"},
+        location={"time_label": epoch, "location": location_name, "weather": str(authored.get("weather") or "clear")},
+        place_environment=place_environment,
     )
-    region_id = str(location.get("region_id") or DEFAULT_REGION_ID)
     environment = {
         **seeded["environment"],
         "region_id": region_id,
@@ -160,6 +169,54 @@ def _opening_environment(
     return environment, context
 
 
+def _continue_in_progress(session: dict[str, Any], scenario: Any, world_model: Mapping[str, Any]) -> None:
+    """An opening that starts a campaign already under way (a demo): the turn it starts at, the journal so far, the
+    quests already taken up, who travels with the hero, and how the hero stands with people. All of it is the
+    scenario's ``starting_resources``; an opening without them starts at the beginning."""
+    resources = _record(scenario.starting_resources)
+    state = _record(session.get("state"))
+    npcs = _record(world_model.get("npcs"))
+    turn = int(resources.get("turn") or 0)
+    if turn:  # the sheet's count, which the next turn counts on from (not the campaign's revision, which is 0)
+        state["current_turn"] = state["turn_count"] = turn
+    journal = [_record(entry) for entry in resources.get("journal") or () if _record(entry).get("title")]
+    if journal:
+        timeline = [*journal, *[_record(entry) for entry in state.get("timeline") or ()]]
+        state["timeline"] = timeline
+        state["journal"] = {"entries": timeline}
+    active = {str(quest_id) for quest_id in resources.get("active_quest_ids") or ()}
+    if active:
+        state["quests"] = [{**quest, "status": "active"} if quest.get("id") in active else quest
+                           for quest in (_record(row) for row in state.get("quests") or ())]
+    standing = {str(npc_id): int(trust) for npc_id, trust in _record(resources.get("standing")).items() if npc_id in npcs}
+    simulation = _record(session.get("simulation_state"))
+    player_state = _record(simulation.get("player_state"))
+    level = int(resources.get("level") or 0)
+    if level:  # the simulation's own record of the hero, as the sheet shows them
+        player_state.update(level=level, xp=0, xp_to_next=100 * level)
+    party = [str(npc_id) for npc_id in resources.get("party") or () if str(npc_id) in npcs]
+    if party:
+        location_id = str(scenario.starting_location_id)
+        player_state["party_state"] = {
+            **_record(player_state.get("party_state")), "max_size": max(3, len(party)),
+            "companions": [{"npc_id": npc_id, "name": str(_record(npcs[npc_id]).get("name") or npc_id),
+                            "role": str(_record(npcs[npc_id]).get("role") or "companion"), "hp": 100, "max_hp": 100,
+                            "status": "active", "follow_mode": "following_player", "location_id": location_id,
+                            "trust": standing.get(npc_id, 50)} for npc_id in party],
+        }
+        state["party"] = [{"name": str(_record(npcs[npc_id]).get("name") or npc_id),
+                           "class": str(_record(npcs[npc_id]).get("role") or "companion")} for npc_id in party]
+    if standing:
+        simulation["relationship_state"] = {**_record(simulation.get("relationship_state")),
+                                            **{npc_id: {"trust": trust} for npc_id, trust in standing.items()}}
+        state["relationships"] = [{"name": str(_record(npcs[npc_id]).get("name") or npc_id),
+                                   "stance": "Ally" if npc_id in party else "Neutral", "score": trust}
+                                  for npc_id, trust in standing.items()]
+    simulation["player_state"] = player_state
+    session["simulation_state"] = simulation
+    session["state"] = state
+
+
 def _apply_published_opening_state(
     session: dict[str, Any],
     *,
@@ -167,6 +224,7 @@ def _apply_published_opening_state(
     scenario: Any,
     world: Mapping[str, Any],
     present_at_start: tuple[str, ...],
+    lead_seed_id: str = "",
 ) -> None:
     """Replace the new-game bootstrap with the published world: its place, people, kit, quests and weather."""
 
@@ -179,12 +237,30 @@ def _apply_published_opening_state(
     epoch = str(scenario.starting_epoch or "Day 1, 08:00")
     state = _record(session.get("state"))
     player = _record(state.get("player"))
+    # The gear the player chose, as the new game keeps it (its metadata; the hero's sheet has the items themselves).
+    chosen = bool(_record(state.get("metadata")).get("starter_gear"))
+    if not chosen:  # the build's default kit, as the world's kind has it (a world to come: no dagger)
+        from app.apps.rpg.rules.contracts import gear_of_kind, genre_kind
+
+        inventory, equipment = gear_of_kind(genre_kind(str(world.get("genre") or "")),
+                                            [_record(item) for item in player.get("inventory") or ()],
+                                            [_record(item) for item in player.get("equipment") or ()])
+        player.update(inventory=inventory, equipment=equipment)
     kit = opening_kit(
         revision,
         scenario,
         equipment=[_record(item) for item in player.get("equipment") or ()],
         inventory=[_record(item) for item in player.get("inventory") or ()],
     )
+    if chosen:
+        # The player chose their own starting gear and purse: they set out with that, not the opening's kit.
+        kit = {**kit, "inventory": [_record(item) for item in player.get("inventory") or ()],
+               "currency": dict(_record(player.get("currency")))}
+    elif not _record(_record(scenario.starting_resources).get("currency")):
+        # An opening that names no purse: the build's (the playtest: a hero of Vesper-9 set out with nothing).
+        kit = {**kit, "currency": dict(_record(player.get("currency"))) or kit["currency"]}
+    if kit["equipment"]:
+        player["equipment"] = kit["equipment"]
     player.update(
         {
             "inventory": kit["inventory"],
@@ -223,7 +299,10 @@ def _apply_published_opening_state(
             "current_location_id": location_id,
             "current_location_name": location_name,
             "summary": description,
-            "quests": opening_quests(revision, scenario),
+            # The quest the opening starts on is taken up now: a deadline it has runs from the opening's clock.
+            "quests": [{**quest, "accepted_at_minute": int(environment.get("absolute_minutes") or 0)}
+                       if quest["status"] == "active" else quest
+                       for quest in opening_quests(revision, scenario, lead_seed_id=lead_seed_id)],
             "relationships": [],
             "party": [],
             "quick_actions": quick_actions,
@@ -233,8 +312,11 @@ def _apply_published_opening_state(
         }
     )
     state.pop("environment_snapshot", None)
+    authored_environment = _record(location.get("environment"))
     state["world"] = {
-        **_record(state.get("world")),
+        **{key: value for key, value in _record(state.get("world")).items() if key != "temperature"},
+        "weather": str(authored_environment.get("weather") or "Clear"),
+        **({"temperature": authored_environment["temperature"]} if "temperature" in authored_environment else {}),
         "time": epoch,
         "region": str(location.get("region_name") or ""),
         "environment": environment,
@@ -251,14 +333,18 @@ def _apply_published_opening_state(
         "suggested_actions": quick_actions,
     }
     metadata = _record(state.get("metadata"))
+    # The hook the opening leads with: the story seed the player chose, or the opening's own.
+    lead_hook = next((str(_record(seed).get("opening_hook") or "") for seed in revision.adventure_seeds or ()
+                      if lead_seed_id and str(_record(seed).get("id") or "") == lead_seed_id), "")
     state["metadata"] = {
         **metadata,
         "starting_location_id": location_id,
         "starting_location_name": location_name,
         "opening_source": "published_scenario",
-        "opening_hook": "published_opening",
+        "opening_hook": lead_hook or "published_opening",
     }
     session["state"] = state
+    _continue_in_progress(session, scenario, world_model)
     setup = creator_setup(revision, scenario, world_model, world)
     first_quest = _record((state.get("quests") or [{}])[0])
     setup["opening"] = {
@@ -331,7 +417,31 @@ def _apply_published_opening_state(
     mechanics = bestiary_mechanics(revision)
     if mechanics:
         simulation["campaign_mechanics"] = {**_record(simulation.get("campaign_mechanics")), **mechanics}
+    # The world's clock: its pressures (or the danger of its creatures) tick from the first turn (RQ-4.2).
+    from .published_pressures import published_causal_runtime
+
+    causal_runtime = published_causal_runtime(_record(getattr(revision, "canon", None)))
+    if causal_runtime:
+        simulation["causal_world_runtime"] = causal_runtime
     session["simulation_state"] = simulation
+
+
+def _seed(new_game: Mapping[str, Any] | None, world: Mapping[str, Any]) -> int:
+    """The new game's own seed when it names one (0 included), else the world's."""
+    seed = dict(new_game or {}).get("seed")
+    return int(seed) if seed is not None else int(world.get("seed") or 0)
+
+
+def _with_completed_creation(session: dict[str, Any], session_id: str) -> dict[str, Any]:
+    from app.apps.rpg.genesis.creation_progress import (
+        attach_creation_metadata,
+        build_creation_job,
+        build_creation_progress_snapshot,
+    )
+
+    job = build_creation_job(session_id=session_id, status="completed")
+    return attach_creation_metadata(session, job, build_creation_progress_snapshot(session_id=session_id,
+                                                                                   status="completed"))
 
 
 def launch_published_scenario(
@@ -345,9 +455,19 @@ def launch_published_scenario(
     player: Mapping[str, Any] | None = None,
     gameplay: Mapping[str, Any] | None = None,
     features: Mapping[str, Any] | None = None,
+    new_game: Mapping[str, Any] | None = None,
+    lead_seed_id: str = "",
+    prepare: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    session_id: str = "",
     database: Any | None = None,
 ) -> dict[str, Any]:
-    """Create a playable campaign without invoking World Forge or any model provider."""
+    """Create a playable campaign without invoking World Forge or any model provider.
+
+    ``new_game`` is the rest of a new game's request (the hero's class, stats and chosen gear), kept under what the
+    world decides; ``lead_seed_id`` is the opening's story seed the player chose to start with; ``prepare`` adds
+    the caller's own records to the campaign (the creation wizard's genesis) before its one save; ``session_id``
+    is the campaign's id when the caller already gave the player one (the wizard's, while its world was made).
+    """
 
     revision, release, scenario = load_published_resources(
         world_id=world_id,
@@ -387,8 +507,11 @@ def launch_published_scenario(
     player_payload.setdefault("pronouns", "they/them")
     player_payload.setdefault("background", "World Traveler")
     player_payload.setdefault("build", "balanced_adventurer")
+    opening_level = int(_record(scenario.starting_resources).get("level") or 0)
     request = sessions.new_game_request(
         {
+            **dict(new_game or {}),
+            **({"level": opening_level} if opening_level else {}),
             "campaign_template": str(
                 canon.get("campaign_template") or "classic_fantasy"
             ),
@@ -411,15 +534,20 @@ def launch_published_scenario(
                 gameplay_payload.get("companions_enabled", True)
             ),
             "permadeath": bool(gameplay_payload.get("permadeath", False)),
-            "seed": int(world.get("seed") or 0),
+            "seed": _seed(new_game, world),
             "features": dict(features or {}),
         }
     )
-    created = sessions.create_new_game(request)
-    session_id = str(created.get("session_id") or "")
-    session = raw_session if isinstance(raw_session := created.get("session"), dict) else None
-    if not session_id or session is None:
+    # Built, not saved: the campaign is saved once, opened in its world (and with the creation's progress).
+    session = sessions.build_new_game(request)
+    built_id = str(_record(session.get("manifest")).get("session_id") or "")
+    if not built_id:
         raise RuntimeError("published_scenario_session_creation_failed")
+    if session_id and session_id != built_id:
+        # The new game was built under a fresh id; the campaign keeps the one the player was given.
+        session = json.loads(json.dumps(session).replace(json.dumps(built_id)[1:-1], json.dumps(session_id)[1:-1]))
+    session_id = session_id or built_id
+    session = _with_completed_creation(session, session_id)
 
     binding = resolve_campaign_binding(
         campaign_id=session_id,
@@ -442,6 +570,7 @@ def launch_published_scenario(
         revision=revision,
         scenario=scenario,
         world=world,
+        lead_seed_id=lead_seed_id,
         present_at_start=tuple(
             actor.actor_id for actor in starting_snapshot.actors if actor.actor_id != protagonist_actor_id
         ),
@@ -496,9 +625,11 @@ def launch_published_scenario(
         campaign_id=session_id,
         topology=revision.topology,
     )
+    if prepare is not None:
+        session = prepare(session)
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))
-    saved = sessions.save(session, compact=True)
+    saved = sessions.save_created(session)["session"]
 
     try:
         with unit_of_work(database) as work:

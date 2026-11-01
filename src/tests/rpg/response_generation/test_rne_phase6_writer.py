@@ -8,9 +8,10 @@ from app.apps.rpg.narration.narrative_engine import (
     PresentationProfile,
     StructuredNarrativeWriter,
     TurnPresentationRequest,
-    bran_fixture_evidence,
     writer_payload,
 )
+from app.apps.rpg.narration.narrative_engine.writer import evidence_handles, parse_structured_blocks
+from tests.support.narrative_evidence_fixtures import bran_fixture_evidence
 
 
 def _request() -> TurnPresentationRequest:
@@ -32,9 +33,30 @@ def test_writer_payload_contains_only_approved_evidence() -> None:
     plan = DeterministicBeatPlanner().plan(request, evidence)
     payload = writer_payload(request, plan, evidence)
     approved = {ref for beat in plan.beats for ref in beat.evidence_refs}
-    assert {row["evidence_id"] for row in payload["approved_evidence"]}.issubset(approved)
+    ids = {handle: ref for ref, handle in evidence_handles(plan).items()}
+    cited = {row["evidence_id"] for beat in payload["beats"] for row in beat["approved_evidence"]}
+    assert cited and all(handle.startswith("E") for handle in cited)  # by handle, not by id (RQ-6.5)
+    assert {ids[handle] for handle in cited}.issubset(approved)
+    assert "evidence_by_beat" not in payload and "approved_evidence" not in payload  # once, in its beat (RQ-6.5)
     assert payload["player_input"] == request.player_input
     assert payload["beats"][0]["sequence"] == 1
+
+
+def test_a_claim_citing_a_handle_cites_its_evidence() -> None:
+    request = _request()
+    evidence = bran_fixture_evidence()
+    plan = DeterministicBeatPlanner().plan(request, evidence)
+    beat = plan.beats[0]
+    handle = evidence_handles(plan)[beat.evidence_refs[0]]
+    row = {"beat_id": beat.beat_id, "sequence": beat.sequence, "kind": beat.kind.value, "purpose": beat.purpose.value,
+           "speaker_id": beat.speaker_id, "text": "The road is open.",
+           "claims": [{"claim_id": "claim:road", "text": "The road is open.", "authority": "objective_canon",
+                       "evidence_refs": [handle]}]}
+    rows = [row] + [{"beat_id": other.beat_id, "sequence": other.sequence, "kind": other.kind.value,
+                     "purpose": other.purpose.value, "speaker_id": other.speaker_id, "text": f"Beat {other.sequence}.",
+                     "claims": []} for other in plan.beats[1:]]
+    blocks = parse_structured_blocks({"blocks": rows}, plan)
+    assert blocks[0].claims[0].evidence_refs == (beat.evidence_refs[0],)
 
 
 def test_structured_writer_maps_exactly_one_block_per_beat() -> None:
@@ -142,3 +164,17 @@ def test_deterministic_writer_never_has_a_character_recite_their_dossier() -> No
     spoken = [block.text for block in result.blocks if block.speaker_id]
     assert spoken
     assert not any("Keeps the Flagon" in text or "Name:" in text for text in spoken)
+
+
+def test_a_dialogue_no_one_here_speaks_is_planned_as_the_action_it_is() -> None:
+    """The narration eval (Vesper-9, no model): "what if I punched the union leader?" asks no one present, and a
+    dialogue beat with no speaker failed validation (invalid_speaker) instead of telling the turn."""
+    from app.apps.rpg.narration.narrative_engine import BeatKind
+
+    request = TurnPresentationRequest(
+        request_id="request:nobody", turn_id="turn:nobody", campaign_id="campaign:writer",
+        player_input="what if I punched the union leader?", presentation_profile=PresentationProfile.FAST,
+        metadata={"response_mode": "dialogue"},
+    )
+    plan = DeterministicBeatPlanner().plan(request, bran_fixture_evidence())
+    assert plan.beats and all(beat.kind is not BeatKind.DIALOGUE for beat in plan.beats)

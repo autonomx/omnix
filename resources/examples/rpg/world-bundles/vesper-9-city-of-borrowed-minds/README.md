@@ -12,11 +12,22 @@ This writes:
 
 `resources/examples/rpg/world-bundles/vesper-9-city-of-borrowed-minds.omnix-world.zip`
 
-Bundle SHA-256: `26ec674aa8fb1d6b73422224713319f4d1388734f4b97b841d938f53b2c6b1f6`
+Bundle SHA-256: `9b46b923337ac7d7b897b7d8907238e161f6a3e3d8fa2ce0445fd2be870e6519`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:vesper-9-city-of-borrowed-minds`, or provide another ID to create a clone.
 
 The import is an authoring world with all lore topics ready. It intentionally does not include compiled maps, releases, runtime scenarios, or image files; those can be produced in the normal World Forge workflow after import.
+
+## Author additions
+
+Two files beside the catalogue are applied when the bundle is built (`materialize.py`):
+
+- `lore-additions.json`: lore the catalogue lacks, appended to its topics. Three people at Black Rain Station (Ines
+  Okoro, a guide who will join the hero; Pell Sato, a platform vendor; Dex Marlowe, a bunkhouse keeper) and two
+  consumables (the Stim Patch and the Ration Bar).
+- `play-sections.json`: how the world plays, as the world editor's draft, which publishing writes into the revision.
+  Today, its economy: Pell's goods, Dex's bunks and noodles, Brother Static's repairs and Tamsin Rho's news. The
+  other sections are still inferred from the lore.
 
 ## Included content
 

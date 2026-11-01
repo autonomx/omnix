@@ -9,6 +9,7 @@ from .migrations import (
     migrate_v4_to_v5,
     migrate_v5_to_v6,
     migrate_v6_to_v7,
+    migrate_v7_to_v8,
 )
 from .save_schema import CURRENT_RPG_SCHEMA_VERSION
 
@@ -23,6 +24,12 @@ def _safe_int(v: Any, default: int = 1) -> int:
 def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
     package = dict(package or {})
     version = _safe_int(package.get("schema_version"), 1)
+    if version > CURRENT_RPG_SCHEMA_VERSION:
+        # A package from a newer Omnix is refused, never imported as if it were current (RQ-1.7).
+        raise ValueError(
+            f"save package version {version} is newer than this Omnix supports ({CURRENT_RPG_SCHEMA_VERSION}); "
+            "update Omnix to import it"
+        )
 
     while version < CURRENT_RPG_SCHEMA_VERSION:
         prev_version = version
@@ -38,6 +45,8 @@ def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
             package = migrate_v5_to_v6(package)
         elif version == 6:
             package = migrate_v6_to_v7(package)
+        elif version == 7:
+            package = migrate_v7_to_v8(package)
         else:
             raise ValueError(f"Unsupported schema migration path from version {version}")
         version = _safe_int(package.get("schema_version"), version + 1)

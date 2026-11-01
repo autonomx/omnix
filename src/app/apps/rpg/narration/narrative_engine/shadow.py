@@ -12,6 +12,7 @@ from .contracts import EvidenceRecord, TurnPresentationRequest
 from .evidence import EvidenceBroker, InMemoryEvidenceSource
 from .renderer import CanonicalNarrativeRenderer
 from .service import NarrativeEngineService
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -53,8 +54,8 @@ def shadow_selected(turn_id: str, sample_rate: float | None = None) -> bool:
 
 def _scene(result: Mapping[str, Any]) -> dict[str, Any]:
     session = _mapping(result.get("session"))
-    state = _mapping(result.get("simulation_state") or session.get("simulation_state") or session.get("state"))
-    runtime = _mapping(result.get("runtime_state") or session.get("runtime_state"))
+    state = _mapping(_sections.simulation_state_of(result) or _sections.simulation_state_of(session) or session.get("state"))
+    runtime = _mapping(_sections.runtime_state_of(result) or _sections.runtime_state_of(session))
     return _mapping(
         result.get("scene")
         or state.get("scene")
@@ -66,11 +67,11 @@ def _scene(result: Mapping[str, Any]) -> dict[str, Any]:
 def _world_place(result: Mapping[str, Any], scene: Mapping[str, Any]) -> Mapping[str, Any]:
     """The world model's entry for the place the player is in (the scene's, or the player's location)."""
     session = _mapping(result.get("session"))
-    simulation = _mapping(result.get("simulation_state") or session.get("simulation_state"))
-    locations = _mapping(_mapping(simulation.get("world_model")).get("locations"))
+    simulation = _mapping(_sections.simulation_state_of(result) or _sections.simulation_state_of(session))
+    locations = _mapping(_mapping(_sections.world_model_of(simulation)).get("locations"))
     location_id = _first_text(
         scene.get("location_id"),
-        _mapping(simulation.get("player_state")).get("location_id"),
+        _mapping(_sections.player_state_of(simulation)).get("location_id"),
     )
     return _mapping(locations.get(location_id))
 
@@ -162,10 +163,10 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
     if not profiles:
         session = _mapping(result.get("session"))
         simulation = _mapping(
-            result.get("simulation_state") or session.get("simulation_state")
+            _sections.simulation_state_of(result) or _sections.simulation_state_of(session)
         )
         profile_containers = (
-            _mapping(simulation.get("npc_index")),
+            _mapping(_sections.npc_index_of(simulation)),
             _mapping(simulation.get("npcs")),
         )
         for candidate_id in result.get("dialogue_speaker_ids") or ():

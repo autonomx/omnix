@@ -12,6 +12,11 @@ from .causal_reducer import (
 )
 
 _PRESSURE_STATUSES = frozenset({"active", "escalated", "contained", "resolved"})
+# The world answers its own pressures (roadmap §7 Q-10): a rising pressure that escalates is contained for a while (it
+# falls as a contained one does) and stirs again this far below its escalation threshold, so it keeps turning; the
+# hero's levers push it as before.
+_RISING = frozenset({"escalating", "volatile"})
+WORLD_ANSWER_SPAN = 10.0
 
 
 class PressureEffectRecord(BaseModel):
@@ -87,6 +92,16 @@ def _status_after(
     return "active"
 
 
+def _answered_status(projected: float, *, escalation_threshold: float, resolution_threshold: float) -> str:
+    """A rising pressure the world is answering: held in check until it has fallen ``WORLD_ANSWER_SPAN`` below its
+    escalation threshold, then active again (it stirs); resolved if it falls that far."""
+    if projected <= resolution_threshold:
+        return "resolved"
+    if projected <= escalation_threshold - WORLD_ANSWER_SPAN:
+        return "active"
+    return "contained"
+
+
 def pressure_deltas_for_tick(
     pressure_plan: Mapping[str, Any],
     state: Mapping[str, Any],
@@ -132,7 +147,9 @@ def pressure_deltas_for_tick(
             )
             continue
 
-        severity_delta = _severity_change(trend, tick)
+        answering = status_before in {"escalated", "contained"} and trend in _RISING
+        moving = "contained" if answering else trend  # how it moves this hour: as the world answers it, or its own way
+        severity_delta = _severity_change(moving, tick)
         effect_delta_ids: list[str] = []
         severity_delta_id = f"delta:pressure:{tick}:{pressure_id}:severity"
         deltas.append(
@@ -166,7 +183,7 @@ def pressure_deltas_for_tick(
                     target_id=str(planned["target_id"]),
                     dimension_id=str(planned["dimension"]),
                     operation=str(planned.get("operation") or "decrease"),  # type: ignore[arg-type]
-                    value=_region_change(trend, base_value, tick),
+                    value=_region_change(moving, base_value, tick),
                     source_event_id=f"event:pressure:{tick}:{pressure_id}",
                     source_kind="pressure_tick",
                 )
@@ -174,21 +191,27 @@ def pressure_deltas_for_tick(
             effect_delta_ids.append(region_delta_id)
 
         projected = max(0.0, min(100.0, severity_before + severity_delta))
-        status_after = _status_after(
-            status_before,
-            trend=trend,
-            projected=projected,
-            escalation_threshold=float(
-                cast(Any, pressure.get("escalation_threshold"))
-                if pressure.get("escalation_threshold") is not None
-                else 101
-            ),
-            resolution_threshold=float(
-                cast(Any, pressure.get("resolution_threshold"))
-                if pressure.get("resolution_threshold") is not None
-                else -1
-            ),
+        escalation_threshold = float(
+            cast(Any, pressure.get("escalation_threshold"))
+            if pressure.get("escalation_threshold") is not None
+            else 101
         )
+        resolution_threshold = float(
+            cast(Any, pressure.get("resolution_threshold"))
+            if pressure.get("resolution_threshold") is not None
+            else -1
+        )
+        if answering:
+            status_after = _answered_status(projected, escalation_threshold=escalation_threshold,
+                                            resolution_threshold=resolution_threshold)
+        else:
+            status_after = _status_after(
+                status_before,
+                trend=trend,
+                projected=projected,
+                escalation_threshold=escalation_threshold,
+                resolution_threshold=resolution_threshold,
+            )
         transitioned = status_after != status_before
         effects.append(
             PressureEffectRecord(

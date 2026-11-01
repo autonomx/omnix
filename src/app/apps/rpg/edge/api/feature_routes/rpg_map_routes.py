@@ -1,6 +1,7 @@
 """Cache-aware RPG map definition, overlay, and authoritative action routes."""
 
 from __future__ import annotations
+from app.apps.rpg.edge.api.payloads.player_view import player_session_view
 from fastapi import APIRouter
 
 import json
@@ -154,10 +155,23 @@ def register_rpg_map_routes(router: APIRouter, state) -> None:
         except MapDefinitionNotFound as exc:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         except MapActionError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=map_action_error_payload(exc, map_id)) from exc
+            from app.apps.rpg.edge.api.stale_view import stale_refusal
 
-        result_session = result.get("session")
-        saved = save_session(result_session, compact=False) if isinstance(result_session, dict) else session
+            raise HTTPException(status_code=exc.status_code,
+                                detail=stale_refusal(session_id, map_action_error_payload(exc, map_id))) from exc
+
+        action_result = dict(result.get("action_result") or {})
+        world_places = ((session.get("simulation_state") or {}).get("world_model") or {}).get("locations") or {}
+        destination = str(action_result.get("current_location_id") or action_result.get("target_location_id") or "")
+        if (action_request.action in {"travel", "enter"} and not result.get("idempotent") and destination in world_places):
+            # A journey in the campaign's own world is a turn (the travel rule moves the hero; the map follows).
+            saved = _map_travel_turn(session_id, destination, action_request)
+            action_result = {**action_result, "current_location_id": destination, "changed": True}
+        else:
+            # Looking (inspect) or a suggestion changes nothing; a fixture map's moves keep their older record.
+            result_session = result.get("session")
+            changed = isinstance(result_session, dict) and action_result.get("changed") is True
+            saved = save_session(result_session, compact=False) if changed else session
         active_map_id = str(result.get("map_id") or map_id)
         definition, overlay = _definition_and_overlay(saved, active_map_id)
         overlay_payload = _project_overlay_payload(saved, definition, overlay)
@@ -169,11 +183,27 @@ def register_rpg_map_routes(router: APIRouter, state) -> None:
             "overlay_revision": overlay.overlay_revision,
             "session_turn_index": overlay.session_turn_index,
             "idempotent": bool(result.get("idempotent")),
-            "action_result": result.get("action_result", {}),
-            "session": saved,
+            "action_result": action_result,
+            "session": player_session_view(saved),
             "game": saved.get("state", {}),
             "overlay": overlay_payload,
         }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL})
+
+
+def _map_travel_turn(session_id: str, destination: str, action_request: Any) -> dict[str, Any]:
+    """The journey as a structured-action turn; the campaign as it stands after it."""
+    import uuid
+
+    from app.apps.rpg.edge.api.turn_pipeline import submit_rpg_turn
+
+    payload = submit_rpg_turn(
+        session_id=session_id, command=f"I travel to {destination} by the map.",
+        submission_id=f"map:{getattr(action_request, 'client_action_id', None) or uuid.uuid4().hex}", source="world_map",
+        action={"turn_kind": "structured_action", "type": "map_travel", "location_id": destination})
+    if payload.get("ok") is False:
+        detail = {key: value for key, value in payload.items() if key != "status_code"}
+        raise HTTPException(status_code=int(payload.get("status_code") or 409), detail=detail)
+    return load_session(session_id)
 
 
 def _project_overlay_payload(session: dict[str, Any], definition: Any, overlay: Any) -> dict[str, Any]:

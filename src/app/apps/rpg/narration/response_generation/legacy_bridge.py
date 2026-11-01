@@ -5,7 +5,6 @@ from typing import Any, Callable, Mapping
 
 from app.apps.rpg.narration.ai.world_scene_narrator_runtime import (
     SceneNarrator as _LegacySceneNarrator,
-    apply_legacy_narration_emphasis,
     narrate_scene as _legacy_narrate_scene,
 )
 
@@ -326,10 +325,4 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-__all__ = [
-    "CANONICAL_NARRATION_SOURCE",
-    "SceneNarrator",
-    "apply_legacy_narration_emphasis",
-    "narrate_scene_canonical",
-    "play_scene",
-]
+__all__ = ["CANONICAL_NARRATION_SOURCE", "SceneNarrator", "narrate_scene_canonical", "play_scene"]

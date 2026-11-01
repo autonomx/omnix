@@ -18,10 +18,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _clamp_int(value: Any, minimum: int = 0, maximum: int = 100) -> int:
-    return max(minimum, min(maximum, _safe_int(value, minimum)))
-
-
 _MINUTES_PER_TURN = 15
 _SEASONS = ("spring", "summer", "autumn", "winter")
 _WEATHER_BY_SEASON = {
@@ -29,11 +25,6 @@ _WEATHER_BY_SEASON = {
     "summer": ("warm sun", "dry wind", "clear sky", "humid haze"),
     "autumn": ("cold drizzle", "leaf wind", "low cloud", "pale sun"),
     "winter": ("snow flurries", "hard frost", "grey sleet", "clear cold"),
-}
-_SURVIVAL_DELTAS_PER_TURN = {
-    "hunger": 1,
-    "thirst": 2,
-    "fatigue": 1,
 }
 
 
@@ -94,128 +85,6 @@ def _survival_warnings(hunger: int, thirst: int, fatigue: int, temperature: int)
     elif temperature >= 30:
         warnings.append("heat_risk")
     return warnings
-
-
-def _survival_effects(warnings: List[str]) -> List[Dict[str, Any]]:
-    effects: List[Dict[str, Any]] = []
-    if "hunger_high" in warnings:
-        effects.append({"effect_id": "survival_hunger_high", "kind": "survival_pressure", "stat": "hunger", "severity": "warning"})
-    if "thirst_high" in warnings:
-        effects.append({"effect_id": "survival_thirst_high", "kind": "survival_pressure", "stat": "thirst", "severity": "warning"})
-    if "fatigue_high" in warnings:
-        effects.append({"effect_id": "survival_fatigue_high", "kind": "survival_pressure", "stat": "fatigue", "severity": "warning"})
-    if "freezing_conditions" in warnings:
-        effects.append({"effect_id": "climate_freezing_conditions", "kind": "climate_pressure", "stat": "temperature", "severity": "warning"})
-    if "heat_risk" in warnings:
-        effects.append({"effect_id": "climate_heat_risk", "kind": "climate_pressure", "stat": "temperature", "severity": "warning"})
-    return effects
-
-
-def apply_climate_survival_turn_effects(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    """Mutate live state with one deterministic climate/survival turn tick.
-
-    This is intentionally LLM-free and bounded.  The authoritative turn loop can
-    call it once per turn; tests can also call it directly.  It persists state in
-    both ``simulation_state['climate_survival']`` and
-    ``simulation_state['player_state']['resources']`` so N122.2 payloads and
-    older player-resource surfaces stay in sync.
-    """
-
-    state = simulation_state if isinstance(simulation_state, dict) else {}
-    runtime_state = _safe_dict(runtime_state)
-    player_state = raw_player_state if isinstance(raw_player_state := state.get("player_state"), dict) else {}
-    state["player_state"] = player_state
-    resources = raw_resources if isinstance(raw_resources := player_state.get("resources"), dict) else {}
-    player_state["resources"] = resources
-
-    existing = raw_climate_survival if isinstance(raw_climate_survival := state.get("climate_survival"), dict) else {}
-    existing_survival = _safe_dict(existing.get("survival"))
-
-    base_tick = max(
-        _safe_int(existing.get("tick"), 0),
-        _safe_int(runtime_state.get("tick"), 0),
-        _safe_int(state.get("tick"), 0),
-    )
-    next_tick = base_tick + 1
-    before = {
-        "hunger": _clamp_int(existing_survival.get("hunger", resources.get("hunger", 0))),
-        "thirst": _clamp_int(existing_survival.get("thirst", resources.get("thirst", 0))),
-        "fatigue": _clamp_int(existing_survival.get("fatigue", resources.get("fatigue", 0))),
-    }
-    after = {
-        key: _clamp_int(before[key] + delta)
-        for key, delta in _SURVIVAL_DELTAS_PER_TURN.items()
-    }
-    action_count = _safe_int(existing_survival.get("action_count"), _safe_int(resources.get("action_count"), 0)) + 1
-
-    time_weather = _derive_time_weather(next_tick, existing.get("weather") or existing)
-    warnings = _survival_warnings(
-        after["hunger"],
-        after["thirst"],
-        after["fatigue"],
-        _safe_int(time_weather.get("temperature_c"), 10),
-    )
-    effects = _survival_effects(warnings)
-
-    climate_survival = {
-        "format_version": "n1231_climate_survival_state_v1",
-        "runtime_enforced": True,
-        "source": "deterministic_authoritative_turn_tick",
-        "tick": next_tick,
-        "minutes_per_turn": _MINUTES_PER_TURN,
-        "time": {
-            "day": time_weather["day"],
-            "hour": time_weather["hour"],
-            "minute": time_weather["minute"],
-            "phase": time_weather["phase"],
-            "season": time_weather["season"],
-        },
-        "weather": {
-            "season": time_weather["season"],
-            "weather": time_weather["weather"],
-            "temperature_c": time_weather["temperature_c"],
-        },
-        "survival": {
-            "hunger": after["hunger"],
-            "thirst": after["thirst"],
-            "fatigue": after["fatigue"],
-            "action_count": action_count,
-            "warnings": warnings,
-        },
-    }
-    state["climate_survival"] = climate_survival
-    resources.update({
-        "hunger": after["hunger"],
-        "thirst": after["thirst"],
-        "fatigue": after["fatigue"],
-        "action_count": action_count,
-    })
-
-    resource_changes = {
-        "source": "n1231_climate_survival_tick",
-        "hunger_delta": after["hunger"] - before["hunger"],
-        "thirst_delta": after["thirst"] - before["thirst"],
-        "fatigue_delta": after["fatigue"] - before["fatigue"],
-        "before": before,
-        "after": after,
-        "warnings": warnings,
-    }
-    effect_result = {
-        "source": "n1231_climate_survival_tick",
-        "applied": bool(effects),
-        "effects": effects,
-        "warnings": warnings,
-    }
-    return {
-        "ok": True,
-        "simulation_state": state,
-        "climate_survival": climate_survival,
-        "resource_changes": resource_changes,
-        "effect_result": effect_result,
-    }
 
 
 def build_climate_survival_runtime_payload(
@@ -455,32 +324,3 @@ def build_runtime_promotion_panel_payload(
             },
         ],
     }
-
-
-def attach_runtime_promotion_payloads(
-    payload: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    payload = _safe_dict(payload)
-    runtime_state = _safe_dict(runtime_state)
-    climate = build_climate_survival_runtime_payload(simulation_state, runtime_state)
-    audit = build_runtime_promotion_summary(simulation_state, runtime_state)
-    panel = build_runtime_promotion_panel_payload(simulation_state, runtime_state)
-
-    payload["climate_survival"] = climate
-    payload["climate_survival_runtime_payload"] = climate
-    payload["runtime_promotion_summary"] = audit
-    payload["runtime_promotion_panel"] = panel
-
-    live_runtime_state = _safe_dict(payload.get("runtime_state"))
-    live_runtime_state["climate_survival"] = climate
-    live_runtime_state["runtime_promotion_summary"] = audit
-    payload["runtime_state"] = live_runtime_state
-
-    presentation = _safe_dict(payload.get("presentation"))
-    presentation["climate_survival"] = climate
-    presentation["runtime_promotion_panel"] = panel
-    payload["presentation"] = presentation
-
-    return payload

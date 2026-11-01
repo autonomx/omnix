@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from app.apps.rpg.session.environment import build_initial_environment_seed_state
-from app.apps.rpg.session.environment_snapshot import derive_environment_snapshot
+from app.apps.rpg.world.environment import build_initial_environment_seed_state
+from app.apps.rpg.world.environment_snapshot import derive_environment_snapshot
 
 
 def _tavern_seed_state() -> dict[str, object]:
@@ -12,6 +12,9 @@ def _tavern_seed_state() -> dict[str, object]:
         campaign_contract={"campaign_template": "classic_fantasy", "tone": "heroic adventure"},
         location_id="rusty_flagon_tavern",
         location={"time_label": "Day 1 • 08:00", "weather": "Rainy", "location": "Rusty Flagon Tavern"},
+        # How the world's place is met (a published world's place says so; the engine has no places of its own).
+        place_environment={"region_id": "market_road", "climate_profile_id": "temperate_hills", "weather_condition": "rain",
+                           "scene": {"exposure": "indoor", "shelter": "sheltered", "light_override": "tavern_lit"}},
     )
 
 
@@ -21,6 +24,8 @@ def _mountain_seed_state() -> dict[str, object]:
         campaign_contract={"campaign_template": "classic_fantasy", "tone": "mountain mystery"},
         location_id="glimmerdeep_pass",
         location={"time_label": "Day 18 • 09:42", "weather": "Cold, Windy", "location": "Glimmerdeep Pass"},
+        place_environment={"region_id": "mountain_pass", "climate_profile_id": "northern_mountains",
+                           "weather_condition": "windy", "scene": {"exposure": "outdoor", "shelter": "exposed"}},
     )
 
 

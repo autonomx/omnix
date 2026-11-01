@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import re
+from collections.abc import Iterator
 from typing import Any
 
 
@@ -59,6 +60,34 @@ def generate_audio_bytes(
         raise RuntimeError(
             f"Real TTS generation failed for speaker '{speaker}': {exc}"
         ) from exc
+
+
+def stream_audio_pcm16(
+    text: str,
+    *,
+    speaker: str,
+    language: str = "en",
+    generation: dict[str, Any] | None = None,
+) -> Iterator[tuple[bytes, int]]:
+    """``text`` spoken as it is synthesized: mono little-endian PCM16 pieces with their sample rate, as live speech
+    streams them (``generation`` holds the chunk size and the decode)."""
+    from app.conversation.tts_stream_contract import audio_chunk_to_pcm16_bytes
+    from app.providers.service import get_tts_provider
+
+    provider = get_tts_provider()
+    if provider is None or not hasattr(provider, "generate_audio_stream"):
+        raise RuntimeError("Configured TTS provider cannot stream")
+    stream = provider.generate_audio_stream(text=text, speaker=speaker, language=tts_language_code(language),
+                                            **(generation or {}))
+    try:
+        for samples, sample_rate, _timing in stream:
+            pcm = audio_chunk_to_pcm16_bytes(samples)
+            if pcm:
+                yield pcm, int(sample_rate)
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
 
 
 def tts_language_code(value: Any) -> str:

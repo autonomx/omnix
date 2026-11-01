@@ -1,4 +1,4 @@
-from app.apps.rpg.session.environment_narration import (
+from app.apps.rpg.world.environment_narration import (
     build_environment_narration_contract,
     environment_narration_prompt_block,
 )

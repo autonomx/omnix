@@ -248,3 +248,100 @@ def test_rpg_snapshots_keep_the_newest_twenty_and_every_hundredth_revision(datab
         with _admin() as admin:
             for campaign_id in (long_game, short_game, recent_game):
                 admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))
+
+
+def test_pinned_rpg_snapshots_are_never_deleted(database) -> None:
+    with _admin() as admin:
+        campaign_id = _campaign_with_snapshots(admin, range(1, 61), days_ago=3)
+        # A pre-upgrade backup and an upcast boundary (RQ-1.7), both outside the newest 20.
+        admin.execute(
+            "UPDATE omnix_rpg_snapshots SET pinned = true WHERE campaign_id = %s AND revision IN (7, 8)",
+            (campaign_id,),
+        )
+    try:
+        RetentionWorker(database, batch_size=50).run_once()
+        with _admin() as admin:
+            assert _snapshot_revisions(admin, campaign_id) == [7, 8, *range(41, 61)]
+    finally:
+        with _admin() as admin:
+            admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))
+
+
+def _campaign_with_turns(admin, *, revision: int, status: str = "active", days_ago: int = 0) -> str:
+    from app.runtime.tenant_context import LOCAL_USER_ID
+
+    campaign_id = f"campaign:retention:{uuid.uuid4().hex}"
+    admin.execute(
+        """INSERT INTO omnix_rpg_campaigns (id, workspace_id, owner_user_id, title, revision, state_jsonb,
+                                             state_hash, engine_version, schema_version, seed, status, updated_at)
+           VALUES (%s, %s, %s, 'Retention', %s, '{}'::jsonb, %s, 'test', 'test', 'seed', %s,
+                   now() - make_interval(days => %s))""",
+        (campaign_id, WORKSPACE, LOCAL_USER_ID, revision, "0" * 64, status, days_ago),
+    )
+    admin.execute(
+        """INSERT INTO omnix_rpg_turns (id, workspace_id, campaign_id, sequence, submission_id, expected_revision,
+                                         resulting_revision, command_jsonb, state_hash_before, state_hash_after,
+                                         engine_version, schema_version, interaction_id, compact_response)
+           SELECT %s || ':' || n, %s, %s, n, 'submit:' || n, n - 1, n, '{}'::jsonb, %s, %s,
+                  'test', 'test', 'interaction:' || %s || ':' || n, '{}'::jsonb
+             FROM generate_series(1, %s) AS n""",
+        (f"turn:{campaign_id}", WORKSPACE, campaign_id, "0" * 64, "0" * 64, campaign_id, revision),
+    )
+    admin.execute(
+        """INSERT INTO omnix_rpg_snapshots (id, workspace_id, campaign_id, revision, snapshot_jsonb, state_hash,
+                                             engine_version, schema_version, created_at)
+           SELECT %s || ':' || n, %s, %s, n, '{}'::jsonb, %s, 'test', 'test', now() - make_interval(days => 3)
+             FROM generate_series(20, %s, 20) AS n""",
+        (f"snapshot:{campaign_id}", WORKSPACE, campaign_id, "0" * 64, revision),
+    )
+    return campaign_id
+
+
+def _turn_revisions(admin, campaign_id: str) -> tuple[int, int, int]:
+    row = admin.execute(
+        "SELECT min(resulting_revision), max(resulting_revision), count(*) FROM omnix_rpg_turns WHERE campaign_id = %s",
+        (campaign_id,),
+    ).fetchone()
+    return int(row[0] or 0), int(row[1] or 0), int(row[2])
+
+
+def test_a_long_campaign_keeps_its_newest_thousand_turns_behind_a_pinned_snapshot(database) -> None:
+    with _admin() as admin:
+        long_game = _campaign_with_turns(admin, revision=5_210)
+        under_threshold = _campaign_with_turns(admin, revision=4_990)
+    try:
+        report = RetentionWorker(database, batch_size=50).run_once()
+        with _admin() as admin:
+            # The newest snapshot at least 1,000 revisions old is 4,200: replay starts there.
+            assert _turn_revisions(admin, long_game) == (4_201, 5_210, 1_010)
+            pinned = admin.execute(
+                "SELECT revision FROM omnix_rpg_snapshots WHERE campaign_id = %s AND pinned", (long_game,)
+            ).fetchall()
+            assert [int(row[0]) for row in pinned] == [4_200]
+            assert min(_snapshot_revisions(admin, long_game)) == 4_200
+            assert _turn_revisions(admin, under_threshold) == (1, 4_990, 4_990)
+        assert report.deleted["rpg_turn_compaction"] >= 4_200
+    finally:
+        with _admin() as admin:
+            for campaign_id in (long_game, under_threshold):
+                admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))
+
+
+def test_a_deleted_campaign_goes_with_its_turns_after_thirty_days(database) -> None:
+    with _admin() as admin:
+        deleted_long_ago = _campaign_with_turns(admin, revision=40, status="archived", days_ago=31)
+        deleted_recently = _campaign_with_turns(admin, revision=40, status="archived", days_ago=3)
+        played_long_ago = _campaign_with_turns(admin, revision=40, days_ago=90)
+    try:
+        RetentionWorker(database, batch_size=50).run_once()
+        with _admin() as admin:
+            assert not _exists(admin, "omnix_rpg_campaigns", "id", deleted_long_ago)
+            assert _turn_revisions(admin, deleted_long_ago)[2] == 0
+            assert _snapshot_revisions(admin, deleted_long_ago) == []
+            assert _exists(admin, "omnix_rpg_campaigns", "id", deleted_recently)
+            assert _exists(admin, "omnix_rpg_campaigns", "id", played_long_ago)
+            assert _turn_revisions(admin, played_long_ago)[2] == 40
+    finally:
+        with _admin() as admin:
+            for campaign_id in (deleted_long_ago, deleted_recently, played_long_ago):
+                admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))

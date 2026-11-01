@@ -1,0 +1,1342 @@
+{
+  "schema_version": 2,
+  "measurement": "RPG first audio after a final response (EV-13)",
+  "measured_on": "2026-11-01",
+  "world": "aurelia",
+  "transport": "the RPG's /speech-audio over HTTP: PCM16 streamed from the speech service's live-call stream",
+  "speech_service": {
+    "url": "http://127.0.0.1:5101",
+    "provider": "faster-qwen3-tts",
+    "model": "F:/LLM/omnix/resources/models/tts/Qwen3-TTS-12Hz-0.6B-Base",
+    "device": "NVIDIA GeForce RTX 4090"
+  },
+  "target": "first audio p95 <= 1500 ms (starting target)",
+  "responses": 75,
+  "failed": 0,
+  "first_audio_ms": {
+    "p50": 249.9,
+    "p95": 312.7,
+    "max": 431.9,
+    "mean": 267.8
+  },
+  "by_voice": {
+    "Asian-male": {
+      "responses": 25,
+      "p50": 305.9,
+      "p95": 330.9
+    },
+    "default": {
+      "responses": 50,
+      "p50": 245.4,
+      "p95": 256.9
+    }
+  },
+  "runaways": 0,
+  "first_byte_ms_p95": 312.1,
+  "playback": {
+    "responses_with_a_wait": 0,
+    "waits": 0,
+    "waited_ms_p95": 0.0,
+    "audio_s_total": 603.1
+  },
+  "from_cache_ms": {
+    "p50": 35.2,
+    "p95": 38.5,
+    "hits": 75
+  },
+  "passed": true,
+  "rows": [
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 200,
+      "sentences": 2,
+      "first_sentence": "Liora was raised by gatewardens who vanished during the last Meridian flare.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 248.5,
+      "first_audio_ms": 249.2,
+      "runaways": 0,
+      "audio_s": 12.0,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 249.2
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 182,
+      "sentences": 3,
+      "first_sentence": "Vael commanded the Ashen Host during the Nine-Banner War.",
+      "statuses": [
+        200,
+        200,
+        200
+      ],
+      "first_byte_ms": 431.1,
+      "first_audio_ms": 431.9,
+      "runaways": 0,
+      "audio_s": 15.84,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 431.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 199,
+      "sentences": 2,
+      "first_sentence": "Cassia has kept the royal gate engine running in its hall at Valecourt for twelve years.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 243.5,
+      "first_audio_ms": 244.1,
+      "runaways": 0,
+      "audio_s": 11.6,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 244.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 221,
+      "sentences": 2,
+      "first_sentence": "Hollis runs the oldest forge on Valecourt's foundry row, where aether is poured like molten glass.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 244.6,
+      "first_audio_ms": 245.4,
+      "runaways": 0,
+      "audio_s": 14.0,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 245.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 117,
+      "sentences": 1,
+      "first_sentence": "Miri maintains the Earthborn Registry and can estimate a newcomer's affinity from the objects that crossed with them.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 244.3,
+      "first_audio_ms": 244.8,
+      "runaways": 0,
+      "audio_s": 6.64,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 244.8
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 190,
+      "sentences": 2,
+      "first_sentence": "Malrec leads the Glass Synod, a cult that harvests memories from Earthborn arrivals to reopen the original Meridian.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 304.7,
+      "first_audio_ms": 305.3,
+      "runaways": 0,
+      "audio_s": 17.68,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 305.3
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 137,
+      "sentences": 2,
+      "first_sentence": "Elyra grew from the archive tree beneath Moonroot.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 254.3,
+      "first_audio_ms": 254.9,
+      "runaways": 0,
+      "audio_s": 7.28,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 254.9
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 132,
+      "sentences": 2,
+      "first_sentence": "Orik helped seal Moonroot after the Memory Plague.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 307.2,
+      "first_audio_ms": 307.9,
+      "runaways": 0,
+      "audio_s": 14.16,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 307.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 131,
+      "sentences": 2,
+      "first_sentence": "Brindle turns broken Earth electronics into aether tools.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 239.6,
+      "first_audio_ms": 240.1,
+      "runaways": 0,
+      "audio_s": 7.44,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 240.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 203,
+      "sentences": 2,
+      "first_sentence": "Second heir of the Meridian Crown, Seraphine rebuilds ancient gateworks and secretly sponsors the Wayfarers' Guild.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 256.6,
+      "first_audio_ms": 257.4,
+      "runaways": 0,
+      "audio_s": 12.4,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 257.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 102,
+      "sentences": 1,
+      "first_sentence": "Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 249.3,
+      "first_audio_ms": 249.9,
+      "runaways": 0,
+      "audio_s": 5.68,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 249.9
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 157,
+      "sentences": 2,
+      "first_sentence": "Naia is the only known Earthborn who arrived eighty years ago and has not aged.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 305.8,
+      "first_audio_ms": 306.4,
+      "runaways": 0,
+      "audio_s": 15.12,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 306.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 90,
+      "sentences": 1,
+      "first_sentence": "Hollis reworks a blade's edge or an armour's plates, a tier at a time, with Aether Shards.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 245.7,
+      "first_audio_ms": 246.4,
+      "runaways": 0,
+      "audio_s": 5.92,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 246.4
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 83,
+      "sentences": 1,
+      "first_sentence": "Brindle tunes the coils of a weapon, the Arc Baton above all, with an Aether Shard.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 300.0,
+      "first_audio_ms": 300.8,
+      "runaways": 0,
+      "audio_s": 7.2,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 300.8
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 62,
+      "sentences": 1,
+      "first_sentence": "The watch's spare blades, for a Wayfarer going past the grove.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 240.8,
+      "first_audio_ms": 241.4,
+      "runaways": 0,
+      "audio_s": 4.72,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 241.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 85,
+      "sentences": 1,
+      "first_sentence": "The Meridian Gate is closed for good; no Earthborn will wake in Starfall Grove again.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 248.0,
+      "first_audio_ms": 248.8,
+      "runaways": 0,
+      "audio_s": 4.64,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 248.8
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 161,
+      "sentences": 2,
+      "first_sentence": "The Meridian Gate closes behind its last light.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 241.0,
+      "first_audio_ms": 241.5,
+      "runaways": 0,
+      "audio_s": 10.32,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 241.5
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 71,
+      "sentences": 1,
+      "first_sentence": "The Meridian Gate stands open; Earth's lights spill into Aurelia's sky.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 301.8,
+      "first_audio_ms": 302.4,
+      "runaways": 0,
+      "audio_s": 7.52,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 302.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 179,
+      "sentences": 2,
+      "first_sentence": "The gate is thrown open and kept so.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 255.0,
+      "first_audio_ms": 255.6,
+      "runaways": 0,
+      "audio_s": 11.52,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 255.6
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 87,
+      "sentences": 1,
+      "first_sentence": "The Meridian Gate is a guarded bridge between the worlds, kept by wardens at both ends.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 312.2,
+      "first_audio_ms": 312.7,
+      "runaways": 0,
+      "audio_s": 8.8,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 312.7
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 151,
+      "sentences": 1,
+      "first_sentence": "The gate becomes a guarded bridge between the worlds: wardens at both ends, a crossing for those who give their names, and no memory taken as its toll.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 249.4,
+      "first_audio_ms": 249.9,
+      "runaways": 0,
+      "audio_s": 8.32,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 249.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 219,
+      "sentences": 3,
+      "first_sentence": "Elyra listens to the phone and goes still.",
+      "statuses": [
+        200,
+        200,
+        200
+      ],
+      "first_byte_ms": 247.1,
+      "first_audio_ms": 247.8,
+      "runaways": 0,
+      "audio_s": 12.56,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 247.8
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 60,
+      "sentences": 1,
+      "first_sentence": "The memory the Loom took from Orik's daughter is hers again.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 240.9,
+      "first_audio_ms": 241.5,
+      "runaways": 0,
+      "audio_s": 3.04,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 241.5
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 82,
+      "sentences": 1,
+      "first_sentence": "The Rootbound Knights lie broken among the roots, and the way to the Loom is open.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 306.0,
+      "first_audio_ms": 306.6,
+      "runaways": 0,
+      "audio_s": 6.96,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 306.6
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 71,
+      "sentences": 1,
+      "first_sentence": "The Rootbound Knights were named and released from the oath they broke.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 256.3,
+      "first_audio_ms": 256.9,
+      "runaways": 0,
+      "audio_s": 3.84,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 256.9
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 107,
+      "sentences": 1,
+      "first_sentence": "Named aloud, the oath they broke stills the Rootbound Knights; they kneel among the roots and let you pass.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 330.3,
+      "first_audio_ms": 330.9,
+      "runaways": 0,
+      "audio_s": 10.48,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 330.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 123,
+      "sentences": 1,
+      "first_sentence": "Cassia walks you through the engine hall: a cathedral of aether coils, stalled and humming, its core sealed by royal order.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 241.5,
+      "first_audio_ms": 242.1,
+      "runaways": 0,
+      "audio_s": 8.48,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 242.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 122,
+      "sentences": 1,
+      "first_sentence": "Seraphine sets her engineers to mend the royal engine as it was; the crown keeps its power, and the court breathes easier.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 249.5,
+      "first_audio_ms": 250.1,
+      "runaways": 0,
+      "audio_s": 7.2,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 250.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 68,
+      "sentences": 1,
+      "first_sentence": "The royal engine was taken apart, and the memories it held set free.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 243.0,
+      "first_audio_ms": 243.7,
+      "runaways": 0,
+      "audio_s": 4.0,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 243.7
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 132,
+      "sentences": 1,
+      "first_sentence": "Seraphine orders the royal engine taken apart, stone by stone, and the memories it held set free; the crown loses its greatest tool.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 305.6,
+      "first_audio_ms": 306.1,
+      "runaways": 0,
+      "audio_s": 12.48,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 306.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 67,
+      "sentences": 1,
+      "first_sentence": "The royal engine is kept by a council of the guilds and the people.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 251.1,
+      "first_audio_ms": 251.9,
+      "runaways": 0,
+      "audio_s": 4.0,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 251.9
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 119,
+      "sentences": 1,
+      "first_sentence": "Seraphine gives the engine's keeping to a council of the guilds and the people; no crown or faction will hold it alone.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 308.7,
+      "first_audio_ms": 309.5,
+      "runaways": 0,
+      "audio_s": 10.56,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 309.5
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 68,
+      "sentences": 1,
+      "first_sentence": "Vael Ardyn's vow was kept on the Skybridge, with you as its witness.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 250.0,
+      "first_audio_ms": 250.6,
+      "runaways": 0,
+      "audio_s": 4.56,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 250.6
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 83,
+      "sentences": 1,
+      "first_sentence": "The gale hears the vow for what it is and falls quiet; the bridge stills underfoot.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 252.3,
+      "first_audio_ms": 252.9,
+      "runaways": 0,
+      "audio_s": 5.44,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 252.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 105,
+      "sentences": 1,
+      "first_sentence": "Hand over hand through the gale, the vow is kept to the far side, and the spirit lets the crossing stand.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 241.7,
+      "first_audio_ms": 242.2,
+      "runaways": 0,
+      "audio_s": 6.96,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 242.2
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 93,
+      "sentences": 1,
+      "first_sentence": "With its mantas driven off, the gale spirit has nothing more to throw; the bridge is crossed.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 300.4,
+      "first_audio_ms": 301.0,
+      "runaways": 0,
+      "audio_s": 8.64,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 301.0
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 87,
+      "sentences": 1,
+      "first_sentence": "Liora Fen has marked a safe path through the grove with blue lanterns for new arrivals.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 247.5,
+      "first_audio_ms": 248.0,
+      "runaways": 0,
+      "audio_s": 5.2,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 248.0
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 88,
+      "sentences": 1,
+      "first_sentence": "Seraphine Valecourt has called every engine-wright in Valecourt to the palace workshops.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 296.5,
+      "first_audio_ms": 297.1,
+      "runaways": 0,
+      "audio_s": 7.6,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 297.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 84,
+      "sentences": 1,
+      "first_sentence": "The Wayfarers' Guild has posted new rules: every contract now needs a signed report.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 249.3,
+      "first_audio_ms": 250.0,
+      "runaways": 0,
+      "audio_s": 5.2,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 250.0
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 109,
+      "sentences": 1,
+      "first_sentence": "Lights were seen moving in the Moonroot Ruins at night, and Elyra Moonroot has not come out of them for days.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 252.6,
+      "first_audio_ms": 253.2,
+      "runaways": 0,
+      "audio_s": 6.88,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 253.2
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 89,
+      "sentences": 1,
+      "first_sentence": "Orik Stonewake has started teaching the village youths to hold a spear in the forge yard.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 256.7,
+      "first_audio_ms": 257.4,
+      "runaways": 0,
+      "audio_s": 4.56,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 257.4
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 76,
+      "sentences": 1,
+      "first_sentence": "Brindle Gearwing swears the radio hissed with a voice from Earth last night.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 305.4,
+      "first_audio_ms": 306.0,
+      "runaways": 0,
+      "audio_s": 6.88,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 306.0
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 87,
+      "sentences": 1,
+      "first_sentence": "Patent collectors were seen leaving Brindle Gearwing's workbench with a crate of parts.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 244.5,
+      "first_audio_ms": 245.0,
+      "runaways": 0,
+      "audio_s": 4.24,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 245.0
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 66,
+      "sentences": 1,
+      "first_sentence": "Masons have gone up to Skybridge Pass to raise the old wall again.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 305.7,
+      "first_audio_ms": 306.5,
+      "runaways": 0,
+      "audio_s": 5.28,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 306.5
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 108,
+      "sentences": 1,
+      "first_sentence": "Captain Sunward has been asking quiet questions about who stood watch the night the pass gate was left open.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 247.2,
+      "first_audio_ms": 247.8,
+      "runaways": 0,
+      "audio_s": 5.68,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 247.8
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 64,
+      "sentences": 1,
+      "first_sentence": "Captain Sunward named the guardsman who left the pass gate open.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 238.3,
+      "first_audio_ms": 238.9,
+      "runaways": 0,
+      "audio_s": 3.84,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 238.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 93,
+      "sentences": 1,
+      "first_sentence": "The captain has named the guardsman who left the pass gate open; he slipped away before dawn.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 242.7,
+      "first_audio_ms": 243.2,
+      "runaways": 0,
+      "audio_s": 4.48,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 243.2
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 77,
+      "sentences": 1,
+      "first_sentence": "The Valecourt foundry has banked half its fires; shard coal is running short.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 302.2,
+      "first_audio_ms": 302.9,
+      "runaways": 0,
+      "audio_s": 7.12,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 302.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 303,
+      "sentences": 2,
+      "first_sentence": "The voice in the phone is the hero's own: the last call they made as the blackout took them, torn loose at the crossing and caught in the Memory Loom beneath Moonroot, which plays it back toward Earth.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 239.1,
+      "first_audio_ms": 239.7,
+      "runaways": 0,
+      "audio_s": 17.12,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 239.7
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 129,
+      "sentences": 1,
+      "first_sentence": "Brindle's Impossible Radio catches the same voice as the phone, only in storms and only when it points toward the Moonroot Ruins.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 312.1,
+      "first_audio_ms": 312.7,
+      "runaways": 0,
+      "audio_s": 12.24,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 312.7
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 69,
+      "sentences": 1,
+      "first_sentence": "Brindle buys aether shards; unstable Echoes shed them when they fall.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 241.5,
+      "first_audio_ms": 242.1,
+      "runaways": 0,
+      "audio_s": 4.16,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 242.1
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 104,
+      "sentences": 1,
+      "first_sentence": "Captain Rhea sells the watch's spare blades, leathers and bucklers to any Wayfarer going past the grove.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 245.0,
+      "first_audio_ms": 245.7,
+      "runaways": 0,
+      "audio_s": 6.56,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 245.7
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 155,
+      "sentences": 1,
+      "first_sentence": "Hollis forges the best blades and plate in the Heartland on Valecourt's foundry row, and pays for every aether shard a Wayfarer brings back from the ruins.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 240.7,
+      "first_audio_ms": 241.2,
+      "runaways": 0,
+      "audio_s": 8.56,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 241.2
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 140,
+      "sentences": 1,
+      "first_sentence": "The Ashen Oathblade was forged to be carried across Skybridge Pass by someone keeping a vow; the gale spirit there gives it to whoever does.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 302.9,
+      "first_audio_ms": 303.4,
+      "runaways": 0,
+      "audio_s": 13.12,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 303.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 129,
+      "sentences": 1,
+      "first_sentence": "The royal gate engine has stalled three times this season, and each time a new Earthborn came through at Starfall the same night.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 247.3,
+      "first_audio_ms": 247.9,
+      "runaways": 0,
+      "audio_s": 7.2,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 247.9
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 109,
+      "sentences": 2,
+      "first_sentence": "The engine's core is sealed by royal order.",
+      "statuses": [
+        200,
+        200
+      ],
+      "first_byte_ms": 301.6,
+      "first_audio_ms": 302.4,
+      "runaways": 0,
+      "audio_s": 11.52,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 302.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 100,
+      "sentences": 1,
+      "first_sentence": "Valecourt, in Meridian Heartland: royal roads, aether foundries, and the capital's suspended towers.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 237.8,
+      "first_audio_ms": 238.3,
+      "runaways": 0,
+      "audio_s": 6.16,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 238.3
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 82,
+      "sentences": 1,
+      "first_sentence": "Cinderhold, in Ashen East: volcanic plains where war machines sleep beneath glass.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 245.2,
+      "first_audio_ms": 245.8,
+      "runaways": 0,
+      "audio_s": 5.84,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 245.8
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 87,
+      "sentences": 1,
+      "first_sentence": "Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 242.4,
+      "first_audio_ms": 243.1,
+      "runaways": 0,
+      "audio_s": 8.8,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 243.1
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 88,
+      "sentences": 1,
+      "first_sentence": "Moonroot Ruins, in Moonroot Deep: forests grown over memory vaults and abandoned cities.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 306.9,
+      "first_audio_ms": 307.6,
+      "runaways": 0,
+      "audio_s": 8.88,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 307.6
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 91,
+      "sentences": 1,
+      "first_sentence": "Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 242.8,
+      "first_audio_ms": 243.5,
+      "runaways": 0,
+      "audio_s": 7.44,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 243.5
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 89,
+      "sentences": 1,
+      "first_sentence": "Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 302.2,
+      "first_audio_ms": 302.8,
+      "runaways": 0,
+      "audio_s": 9.04,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 302.8
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 89,
+      "sentences": 1,
+      "first_sentence": "Hollow Meridian, in Moonroot Deep: forests grown over memory vaults and abandoned cities.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 241.9,
+      "first_audio_ms": 242.6,
+      "runaways": 0,
+      "audio_s": 5.84,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 242.6
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 89,
+      "sentences": 1,
+      "first_sentence": "Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 247.7,
+      "first_audio_ms": 248.4,
+      "runaways": 0,
+      "audio_s": 8.32,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 248.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 108,
+      "sentences": 1,
+      "first_sentence": "Echo Wolves mimic lost voices along the roads out of Starfall Grove and drag off travellers who answer them.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 242.1,
+      "first_audio_ms": 242.7,
+      "runaways": 0,
+      "audio_s": 6.16,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 242.7
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 122,
+      "sentences": 1,
+      "first_sentence": "The court of Valecourt is splitting over the broken Meridian Gate as the story opens, and the heirs' factions gather arms.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 302.8,
+      "first_audio_ms": 303.4,
+      "runaways": 0,
+      "audio_s": 10.32,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 303.4
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 107,
+      "sentences": 1,
+      "first_sentence": "Deserters of the Nine-Banner War raid the ash roads, and Glass Wights walk among them wearing stolen faces.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 241.3,
+      "first_audio_ms": 242.0,
+      "runaways": 0,
+      "audio_s": 6.72,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 242.0
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 106,
+      "sentences": 1,
+      "first_sentence": "Beneath Moonroot the Memory Loom pulls at the minds of the living; the Rootbound Knights wake to guard it.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 299.0,
+      "first_audio_ms": 299.6,
+      "runaways": 0,
+      "audio_s": 9.28,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 299.6
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 106,
+      "sentences": 1,
+      "first_sentence": "Sky Mantas nest on the aether currents of the pass, and Echo Wolves hunt the travellers the storms strand.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 244.5,
+      "first_audio_ms": 245.0,
+      "runaways": 0,
+      "audio_s": 6.64,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 245.0
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 78,
+      "sentences": 1,
+      "first_sentence": "The engine hall hums again, and the crown's banners hang fresh over its doors.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 243.7,
+      "first_audio_ms": 244.3,
+      "runaways": 0,
+      "audio_s": 5.28,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 244.3
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 90,
+      "sentences": 1,
+      "first_sentence": "Where the engine hall stood, workmen cart away dead coils; the towers sway a little lower.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 239.0,
+      "first_audio_ms": 239.6,
+      "runaways": 0,
+      "audio_s": 6.4,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 239.6
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 74,
+      "sentences": 1,
+      "first_sentence": "A council of guild masters and commoners meets on the engine hall's steps.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 298.8,
+      "first_audio_ms": 299.3,
+      "runaways": 0,
+      "audio_s": 7.12,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 299.3
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 70,
+      "sentences": 1,
+      "first_sentence": "Orik's daughter sits by the Lantern Below's hearth, remembering aloud.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 239.5,
+      "first_audio_ms": 240.3,
+      "runaways": 0,
+      "audio_s": 7.44,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 240.3
+    },
+    {
+      "speaker_id": "npc:liora-fen",
+      "voice_id": "Asian-male",
+      "chars": 74,
+      "sentences": 1,
+      "first_sentence": "Earth's lights spill through the grove, and strangers wander in, blinking.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 305.2,
+      "first_audio_ms": 305.9,
+      "runaways": 0,
+      "audio_s": 7.84,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 305.9
+    },
+    {
+      "speaker_id": "narrator",
+      "voice_id": "default",
+      "chars": 74,
+      "sentences": 1,
+      "first_sentence": "Wardens keep the grove's arrival stones, and ask each newcomer their name.",
+      "statuses": [
+        200
+      ],
+      "first_byte_ms": 249.6,
+      "first_audio_ms": 250.2,
+      "runaways": 0,
+      "audio_s": 4.16,
+      "waits": 0,
+      "waited_ms": 0.0,
+      "start_ms": 250.2
+    }
+  ]
+}

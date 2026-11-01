@@ -67,6 +67,15 @@ class RpgScenarioLifecycleResponse(TypedDict):
     idempotent: bool
 
 
+class RpgCampaignPackage(TypedDict, total=False):
+    """A campaign as a save package (format 8) with its ``transfer`` section (RQ-8.6): a file to keep or carry."""
+
+    package_type: Required[str]
+    schema_version: Required[int]
+    campaign: Required[dict[str, Any]]
+    transfer: Required[dict[str, Any]]
+
+
 class RpgStoredWorldRevision(RpgWorldRevision):
     workspace_id: str
     world_id: str
@@ -521,91 +530,27 @@ class RpgLocalDialogueFixtureResponse(TypedDict):
     created: bool
 
 
-# -- NPC spatial simulation ----------------------------------------------------
+# -- the world's people through the day ----------------------------------------
 
 
-class RpgSpatialClock(TypedDict):
-    campaign_id: str
-    world_tick: int
-    policy: dict[str, Any]
-    aggregate_metrics: dict[str, Any]
-    created_at: str
-    updated_at: str
-
-
-class RpgSpatialGoal(TypedDict):
-    goal_id: str
-    goal_revision: int
-    campaign_id: str
-    actor_id: str
-    map_instance_id: str
-    goal_type: str
-    target_cell: list[int] | None
-    portal_id: str | None
-    target_map_instance_id: str | None
-    priority: int
-    issued_tick: int
-    not_before_tick: int
-    expires_after_tick: int | None
-    status: str
-    routine_id: str | None
-    blocked_attempts: int
-    last_decision: dict[str, Any]
-    metadata: dict[str, Any]
-    created_at: str
-    updated_at: str
-
-
-class RpgSpatialRoutineState(TypedDict):
-    routine_id: str
-    routine_revision: int
-    actor_id: str
-    enabled: bool
-    interval_ticks: int
-    steps: list[dict[str, Any]]
-    next_step_index: int
-    emission_count: int
-    next_due_tick: int
-    last_issued_tick: int | None
-    metadata: dict[str, Any]
-    created_at: str
-    updated_at: str
-
-
-class RpgSpatialRoutine(RpgSpatialRoutineState):
-    campaign_id: str
-
-
-class RpgSpatialGoalResponse(TypedDict):
-    ok: bool
-    goal: RpgSpatialGoal
-
-
-class RpgSpatialRoutineResponse(TypedDict):
-    ok: bool
-    routine: RpgSpatialRoutine
-
-
-class RpgSpatialClockResponse(TypedDict):
-    ok: bool
-    clock: RpgSpatialClock
-
-
-class RpgSpatialTickResponse(TypedDict):
-    """One simulation tick: the advanced clock, the tick's result and its metrics."""
-
-    ok: bool
-    clock: RpgSpatialClock
-    result: dict[str, Any]
-    metrics: dict[str, Any]
+class RpgPersonWhereabouts(TypedDict):
+    npc_id: str
+    name: str
+    location_id: str
+    location_name: str
+    activity: str
 
 
 class RpgSpatialStateResponse(TypedDict):
+    """Where each of the world's people is, and what they are doing, at the campaign clock's time (RQ-2.7)."""
+
     ok: bool
-    clock: RpgSpatialClock
-    goals: list[RpgSpatialGoal]
-    routines: list[RpgSpatialRoutineState]
-    recent_ticks: list[dict[str, Any]]
+    campaign_id: str
+    revision: int
+    absolute_minutes: int
+    hero_location_id: str
+    present_npc_ids: list[str]
+    people: list[RpgPersonWhereabouts]
 
 
 # -- map observers and tactical play -------------------------------------------
@@ -713,6 +658,15 @@ NARRATIVE_DELIVERY_STREAM: dict[int | str, dict[str, Any]] = {
 }
 
 
+TURN_STREAM: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "Server-sent turn events (``text/event-stream``): accepted, committed, outcome, "
+                       "narration.delta, narration.final, error (RQ-6.2).",
+        "content": {"text/event-stream": {"schema": {"type": "string"}}},
+    }
+}
+
+
 # -- debug logging -------------------------------------------------------------
 
 
@@ -729,6 +683,33 @@ class RpgDebugLogStatusResponse(TypedDict):
     retention_days: int
     max_field_chars: int
     files: list[RpgDebugLogFile]
+
+
+class RpgOperationsTurnClass(TypedDict):
+    turn_class: str
+    turns: int
+    p50_ms: float | None
+    p95_ms: float | None
+
+
+class RpgOperationsDay(TypedDict):
+    """One day of the workspace's turns (RQ-8.4)."""
+
+    day: str
+    turns: int
+    failed: int
+    degraded: int
+    failure_rate: float
+    degraded_rate: float
+    model_calls: int
+    model_failures: int
+    model_calls_per_turn: float
+    classes: list[RpgOperationsTurnClass]
+
+
+class RpgOperationsResponse(TypedDict):
+    ok: bool
+    days: list[RpgOperationsDay]
 
 
 class RpgDebugClientEventResponse(TypedDict):

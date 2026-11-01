@@ -81,24 +81,6 @@ class PostgresRpgNarrativeRetirementRepository:
                 "retirement record requires a passing legacy deletion audit"
             )
 
-        response = self.connection.execute(
-            """
-            SELECT content_hash
-              FROM omnix_rpg_narrative_responses
-             WHERE workspace_id = %s AND response_id = %s
-             FOR SHARE
-            """,
-            (context.workspace_id, response_id),
-        ).fetchone()
-        if response is None:
-            raise NarrativeRetirementConflict(
-                f"canonical response must exist before retirement proof: {response_id}"
-            )
-        if str(response[0]) != content_hash:
-            raise NarrativeRetirementConflict(
-                f"retirement content hash differs from canonical response: {response_id}"
-            )
-
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_rpg_narrative_retirement_records (
@@ -108,10 +90,13 @@ class PostgresRpgNarrativeRetirementRepository:
                 compatibility_projection_only, delivery_mode,
                 production_certification_jsonb, deletion_audit_jsonb,
                 metadata_jsonb
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s::jsonb, %s::jsonb, %s::jsonb
             )
+            -- Only for the canonical response with this hash, read and held (FOR SHARE) by the same statement (F2).
+            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                   %s::jsonb, %s::jsonb, %s::jsonb
+              FROM omnix_rpg_narrative_responses
+             WHERE workspace_id = %s AND response_id = %s AND content_hash = %s
+               FOR SHARE
             ON CONFLICT (workspace_id, response_id) DO UPDATE
                SET publisher = EXCLUDED.publisher,
                    canonical_publish_count = GREATEST(
@@ -147,13 +132,34 @@ class PostgresRpgNarrativeRetirementRepository:
                 canonical_json(dict(production_certification)),
                 canonical_json(dict(deletion_audit)),
                 canonical_json(dict(metadata or {})),
+                context.workspace_id,
+                response_id,
+                content_hash,
             ),
         ).fetchone()
-        if row is None:
+        if row is not None:
+            return _row(row)
+        response = self.connection.execute(
+            """
+            SELECT content_hash
+              FROM omnix_rpg_narrative_responses
+             WHERE workspace_id = %s AND response_id = %s
+             FOR SHARE
+            """,
+            (context.workspace_id, response_id),
+        ).fetchone()
+        if response is None:
             raise NarrativeRetirementConflict(
-                f"retirement response identity changed: {response_id}"
+                f"canonical response must exist before retirement proof: {response_id}"
             )
-        return _row(row)
+        if str(response[0]) != content_hash:
+            raise NarrativeRetirementConflict(
+                f"retirement content hash differs from canonical response: {response_id}"
+            )
+
+        raise NarrativeRetirementConflict(
+            f"retirement response identity changed: {response_id}"
+        )
 
     def get(
         self,

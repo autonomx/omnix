@@ -7,7 +7,6 @@ from app.jobs.models import CreateJobRequest
 from app.persistence.tenant import LOCAL_USER_ID
 
 RPG_TURN_JOB_TYPE = "rpg.turn"
-RPG_FOREGROUND_RECORD_TYPE = "rpg.turn.foreground_record"
 
 
 def rpg_turn_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
@@ -18,7 +17,7 @@ def rpg_turn_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
         compat.setdefault("subject_owner_id", owner_id)
         request = request.model_copy(update={"owner_id": LOCAL_USER_ID})
 
-    if request.type not in {RPG_TURN_JOB_TYPE, RPG_FOREGROUND_RECORD_TYPE}:
+    if request.type != RPG_TURN_JOB_TYPE:
         return request.model_copy(update={"compat": compat})
 
     payload = _dict_value(request.input_payload)

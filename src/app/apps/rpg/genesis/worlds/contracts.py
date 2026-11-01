@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 WORLD_CONTRACT_VERSION: Final = "rpg_world_contract_v1"
 WORLD_RELEASE_VERSION: Final = "rpg_world_release_v1"
 SCENARIO_CONTRACT_VERSION: Final = "rpg_scenario_contract_v1"
-CAMPAIGN_LAUNCH_VERSION: Final = "rpg_campaign_launch_v1"
 WorldArtifactStage = Literal[
     "canon_validated",
     "runtime_seeded",
@@ -181,19 +180,3 @@ class CampaignWorldBinding(FrozenContract):
     scenario_revision: int = Field(ge=1)
     scenario_revision_hash: str = Field(pattern=r"^sha256:")
     map_definition_pins: dict[str, str] = Field(default_factory=dict)
-
-
-class CampaignLaunchContract(FrozenContract):
-    contract_version: Literal["rpg_campaign_launch_v1"] = CAMPAIGN_LAUNCH_VERSION
-    campaign_id: str = Field(min_length=1)
-    campaign_title: str = Field(min_length=1)
-    world_id: str = Field(min_length=1)
-    world_revision: int = Field(ge=1)
-    world_release: int = Field(ge=1)
-    scenario_id: str = Field(min_length=1)
-    scenario_revision: int = Field(ge=1)
-    protagonist: dict[str, Any] = Field(default_factory=dict)
-    gameplay: dict[str, Any] = Field(default_factory=dict)
-    runtime_features: dict[str, bool] = Field(default_factory=dict)
-
-

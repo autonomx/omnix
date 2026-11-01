@@ -233,9 +233,9 @@ class PostgresDatabase:
                 with transaction_scope():
                     yield connection
 
-    @contextmanager
-    def dedicated_connection(self) -> Iterator[Any]:
-        """A connection outside the pool, for session-long holders such as advisory locks."""
+    def open_dedicated_connection(self) -> Any:
+        """A configured connection outside the pool that the caller owns and closes (a holder that keeps one open
+        across uses, such as a pool of advisory-lock connections)."""
         import psycopg
 
         from .tenant_scope import apply_session_scope
@@ -254,6 +254,16 @@ class PostgresDatabase:
         try:
             self._configure_connection(connection)
             apply_session_scope(connection)
+        except Exception:
+            connection.close()
+            raise
+        return connection
+
+    @contextmanager
+    def dedicated_connection(self) -> Iterator[Any]:
+        """A connection outside the pool, for session-long holders such as advisory locks."""
+        connection = self.open_dedicated_connection()
+        try:
             yield connection
         finally:
             connection.close()

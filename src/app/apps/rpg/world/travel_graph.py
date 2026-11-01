@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
+from app.apps.rpg.foundation.state import access as _sections
 
 
 @dataclass(frozen=True)
@@ -96,10 +97,7 @@ def _reverse_direction(direction: str) -> str:
     }.get(value, "")
 
 
-def _normalize_text(value: Any) -> str:
-    text = str(value or "").lower()
-    text = re.sub(r"[^a-z0-9:_\-\s]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+# Words of route labels and place names that say nothing about where a route goes ("travel to X").
 
 
 def _state_flags(state: Mapping[str, Any]) -> set[str]:
@@ -128,96 +126,8 @@ def _edge_is_available(edge: TravelEdge, state: Mapping[str, Any]) -> bool:
     return True
 
 
-def build_default_travel_graph(seed: Optional[str] = None) -> TravelGraph:
-    """Small deterministic starter graph for 100-turn readiness.
-
-    Keep this intentionally compact. Future bundles can load this from scenario packs.
-    """
-    graph = TravelGraph()
-
-    graph.add_location(
-        "location:rusty_flagon_tavern",
-        name="The Rusty Flagon Tavern",
-        aliases=["tavern", "rusty flagon", "inn", "bran's tavern"],
-        kind="settlement",
-    )
-    graph.add_location(
-        "location:village_square",
-        name="Village Square",
-        aliases=["square", "village", "market square", "outside"],
-        kind="settlement",
-    )
-    graph.add_location(
-        "location:north_road",
-        name="North Road",
-        aliases=["road", "north road", "trail", "path"],
-        kind="road",
-    )
-    graph.add_location(
-        "location:old_mill",
-        name="Old Mill",
-        aliases=["mill", "old mill", "haunted mill", "abandoned mill"],
-        kind="quest_site",
-    )
-    graph.add_location(
-        "location:forest_edge",
-        name="Forest Edge",
-        aliases=["forest", "woods", "forest edge", "tree line"],
-        kind="wilderness",
-    )
-    graph.add_location(
-        "location:river_crossing",
-        name="River Crossing",
-        aliases=["river", "crossing", "bridge", "ford"],
-        kind="road",
-    )
-
-    graph.add_edge(
-        "location:rusty_flagon_tavern",
-        "location:village_square",
-        label="step outside to the village square",
-        direction="outside",
-        aliases=["outside", "leave tavern", "village square", "square"],
-        travel_time_ticks=1,
-    )
-    graph.add_edge(
-        "location:village_square",
-        "location:north_road",
-        label="take the north road",
-        direction="north",
-        aliases=["north", "north road", "road", "follow the road"],
-        travel_time_ticks=1,
-    )
-    graph.add_edge(
-        "location:north_road",
-        "location:old_mill",
-        label="follow the track to the old mill",
-        direction="east",
-        aliases=["mill", "old mill", "haunted mill", "track"],
-        travel_time_ticks=2,
-    )
-    graph.add_edge(
-        "location:north_road",
-        "location:forest_edge",
-        label="turn toward the forest edge",
-        direction="west",
-        aliases=["forest", "woods", "west", "tree line"],
-        travel_time_ticks=1,
-    )
-    graph.add_edge(
-        "location:forest_edge",
-        "location:river_crossing",
-        label="follow the game trail to the river crossing",
-        direction="north",
-        aliases=["river", "crossing", "bridge", "ford"],
-        travel_time_ticks=2,
-    )
-
-    return graph
-
-
 def _world_model(state: Mapping[str, Any]) -> Mapping[str, Any]:
-    world_model = state.get("world_model") if isinstance(state, Mapping) else None
+    world_model = _sections.world_model_of(state) if isinstance(state, Mapping) else None
     return world_model if isinstance(world_model, Mapping) and world_model.get("locations") else {}
 
 
@@ -231,11 +141,11 @@ def _travel_ticks(travel_time: str) -> int:
 
 
 def travel_graph_for_state(state: Mapping[str, Any]) -> TravelGraph:
-    """The session's own routes (a published world's) when it has them, else the starter graph."""
+    """The campaign's routes: its world model's (every campaign plays from a world; the engine has none of its own)."""
     world_model = _world_model(state)
-    if not world_model:
-        return build_default_travel_graph()
     graph = TravelGraph()
+    if not world_model:
+        return graph
     for location_id, location in dict(world_model.get("locations") or {}).items():
         if isinstance(location, Mapping):
             graph.add_location(
@@ -244,214 +154,25 @@ def travel_graph_for_state(state: Mapping[str, Any]) -> TravelGraph:
                 aliases=list(location.get("aliases") or []),
                 kind="published_location",
             )
+    linked: set[tuple[str, str]] = set()
     for route in world_model.get("routes") or ():
         if not isinstance(route, Mapping):
             continue
         origin, target = str(route.get("from") or ""), str(route.get("to") or "")
-        if origin in graph.locations and target in graph.locations:
+        if origin not in graph.locations or target not in graph.locations:
+            continue
+        # A route runs both ways; each way is named by where it leads (a reversed edge would keep the
+        # other end's name as its alias, so "go to Starfall Village" in the village led back out of it).
+        for start, end in ((origin, target), (target, origin)):
+            if (start, end) in linked:
+                continue
+            linked.add((start, end))
             graph.add_edge(
-                origin,
-                target,
-                label=f"travel to {graph.location_name(target)}",
-                aliases=[graph.location_name(target).lower()],
+                start,
+                end,
+                label=f"travel to {graph.location_name(end)}",
+                aliases=[graph.location_name(end).lower()],
                 travel_time_ticks=_travel_ticks(str(route.get("travel_time") or "")),
+                bidirectional=False,
             )
     return graph
-
-
-def get_current_location(state: Mapping[str, Any]) -> str:
-    player_state = state.get("player_state") if isinstance(state.get("player_state"), Mapping) else {}
-    return str(
-        state.get("current_location")
-        or state.get("current_location_id")
-        or (_world_model(state) and player_state.get("location_id"))
-        or state.get("location")
-        or _world_model(state).get("start_location_id")
-        or "location:rusty_flagon_tavern"
-    )
-
-
-def list_available_routes(
-    *,
-    state: Mapping[str, Any],
-    graph: Optional[TravelGraph] = None,
-) -> List[Dict[str, Any]]:
-    graph = graph or travel_graph_for_state(state)
-    current = get_current_location(state)
-    routes: List[Dict[str, Any]] = []
-    for edge in graph.outgoing(current):
-        if not _edge_is_available(edge, state):
-            continue
-        routes.append(
-            {
-                "from_location": edge.from_location,
-                "to_location": edge.to_location,
-                "to_name": graph.location_name(edge.to_location),
-                "label": edge.label,
-                "direction": edge.direction,
-                "aliases": list(edge.aliases),
-                "travel_time_ticks": edge.travel_time_ticks,
-                "difficulty": edge.difficulty,
-            }
-        )
-    return routes
-
-
-def resolve_travel_destination(
-    *,
-    player_input: str,
-    state: Mapping[str, Any],
-    graph: Optional[TravelGraph] = None,
-) -> Dict[str, Any]:
-    graph = graph or travel_graph_for_state(state)
-    current = get_current_location(state)
-    normalized = _normalize_text(player_input)
-
-    travel_intent = bool(
-        re.search(
-            r"\b(go|travel|walk|head|leave|enter|follow|move|continue|take|return|north|south|east|west|outside|inside)\b",
-            normalized,
-        )
-    )
-
-    if not travel_intent:
-        return {
-            "ok": False,
-            "reason": "not_travel_intent",
-            "current_location": current,
-            "available_routes": list_available_routes(state=state, graph=graph),
-        }
-
-    candidates: List[Tuple[int, TravelEdge]] = []
-
-    for edge in graph.outgoing(current):
-        if not _edge_is_available(edge, state):
-            continue
-
-        score = 0
-        to_meta = graph.locations.get(edge.to_location) or {}
-        names = [
-            edge.to_location,
-            graph.location_name(edge.to_location),
-            edge.direction,
-            edge.label,
-            *(edge.aliases or ()),
-            *list(to_meta.get("aliases") or []),
-        ]
-
-        for raw_name in names:
-            name = _normalize_text(raw_name)
-            if not name:
-                continue
-            if name == normalized:
-                score += 100
-            elif name in normalized:
-                score += 50
-            elif any(part and part in normalized for part in name.split()):
-                score += 8
-
-        if edge.direction and re.search(rf"\b{re.escape(edge.direction.lower())}\b", normalized):
-            score += 35
-
-        if score > 0:
-            candidates.append((score, edge))
-
-    if not candidates:
-        return {
-            "ok": False,
-            "reason": "unknown_or_unreachable_destination",
-            "current_location": current,
-            "current_location_name": graph.location_name(current),
-            "available_routes": list_available_routes(state=state, graph=graph),
-        }
-
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    score, edge = candidates[0]
-
-    return {
-        "ok": True,
-        "reason": "route_resolved",
-        "score": score,
-        "from_location": edge.from_location,
-        "from_location_name": graph.location_name(edge.from_location),
-        "to_location": edge.to_location,
-        "to_location_name": graph.location_name(edge.to_location),
-        "label": edge.label,
-        "direction": edge.direction,
-        "travel_time_ticks": edge.travel_time_ticks,
-        "difficulty": edge.difficulty,
-        "available_routes": list_available_routes(state=state, graph=graph),
-    }
-
-
-def apply_travel_result_to_state(
-    *,
-    state: Mapping[str, Any],
-    travel_result: Mapping[str, Any],
-) -> Dict[str, Any]:
-    next_state = dict(state or {})
-    if not travel_result.get("ok"):
-        return next_state
-
-    to_location = str(travel_result.get("to_location") or "")
-    if not to_location:
-        return next_state
-
-    previous = get_current_location(next_state)
-    next_state["previous_location"] = previous
-    next_state["current_location"] = to_location
-    next_state["current_location_id"] = to_location
-    next_state["current_location_name"] = str(travel_result.get("to_location_name") or to_location)
-
-    if _world_model(next_state):
-        # The location registry reads the player's place; keep it with the route the party took.
-        player_state = dict(next_state.get("player_state") or {})
-        player_state["location_id"] = to_location
-        next_state["player_state"] = player_state
-        next_state["location_id"] = to_location
-
-    visited = list(next_state.get("visited_locations") or [])
-    if previous and previous not in visited:
-        visited.append(previous)
-    if to_location and to_location not in visited:
-        visited.append(to_location)
-    next_state["visited_locations"] = visited
-
-    tick = int(next_state.get("tick") or 0)
-    next_state["tick"] = tick + int(travel_result.get("travel_time_ticks") or 1)
-
-    return next_state
-
-
-def build_travel_state_delta(travel_result: Mapping[str, Any]) -> Dict[str, Any]:
-    if not travel_result.get("ok"):
-        return {}
-
-    return {
-        "location_changed": True,
-        "from_location": travel_result.get("from_location"),
-        "from_location_name": travel_result.get("from_location_name"),
-        "to_location": travel_result.get("to_location"),
-        "to_location_name": travel_result.get("to_location_name"),
-        "travel_time_ticks": travel_result.get("travel_time_ticks") or 1,
-        "travel_label": travel_result.get("label"),
-    }
-
-
-def build_travel_world_event(travel_result: Mapping[str, Any]) -> Dict[str, Any]:
-    if not travel_result.get("ok"):
-        return {}
-
-    return {
-        "type": "travel",
-        "subtype": "location_changed",
-        "from_location": travel_result.get("from_location"),
-        "to_location": travel_result.get("to_location"),
-        "title": f"Travel to {travel_result.get('to_location_name') or travel_result.get('to_location')}",
-        "summary": (
-            f"The party travels from {travel_result.get('from_location_name') or travel_result.get('from_location')} "
-            f"to {travel_result.get('to_location_name') or travel_result.get('to_location')}."
-        ),
-        "meaningful_progress": True,
-        "progress_category": "location_progression",
-    }

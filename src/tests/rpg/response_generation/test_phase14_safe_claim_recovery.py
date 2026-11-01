@@ -5,9 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.apps.rpg.session.jobs.turn_job_mirror import _apply_turn_with_job_mirror
 from app.apps.rpg.session.jobs.foreground_submission_store import RpgForegroundSubmissionStore
-from tests.support.in_memory_jobs import InMemoryJobStore
+from app.apps.rpg.session.jobs.foreground_turn import execute_foreground_turn
 
 
 def _time(second: int = 0) -> datetime:
@@ -56,13 +55,6 @@ def test_started_claim_is_never_taken_over_after_expiry(tmp_path: Path) -> None:
         lease_seconds=10,
         now=_time(),
     )
-    assert store.attach_job(
-        "session:started",
-        "submit:started",
-        str(first.claim_token),
-        "job:started",
-        now=_time() + timedelta(seconds=1),
-    ) is True
     assert store.mark_execution_started(
         "session:started",
         "submit:started",
@@ -181,7 +173,6 @@ def test_gateway_recovers_abandoned_pre_execution_claim(
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "jobs.sqlite"
-    job_store = InMemoryJobStore(db_path)
     submission_store = RpgForegroundSubmissionStore(db_path)
     old_claim = submission_store.claim(
         "session:gateway-recovery",
@@ -189,7 +180,6 @@ def test_gateway_recovers_abandoned_pre_execution_claim(
         lease_seconds=1,
         now=datetime.now(timezone.utc) - timedelta(minutes=1),
     )
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: job_store)
     monkeypatch.setenv("OMNIX_RPG_SUBMISSION_LEASE_SECONDS", "30")
     calls: list[str] = []
 
@@ -202,11 +192,12 @@ def test_gateway_recovers_abandoned_pre_execution_claim(
             "final_narration": "Bran answers after ownership is recovered.",
         }
 
-    result = _apply_turn_with_job_mirror(
+    result = execute_foreground_turn(
         apply_turn,
         "session:gateway-recovery",
         "I ask Bran how business is doing.",
         submission_id="submit:gateway-recovery",
+        submissions=submission_store,
     )
 
     assert calls == [

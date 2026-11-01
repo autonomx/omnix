@@ -16,7 +16,6 @@ from app.jobs.inline_execution import require_execution_authority
 from .last10_report_artifacts import write_rpg_last10_report
 from .last10_report_debug import build_turn_debug_payload
 
-RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
 RPG_LAST10_REPORT_FORMAT_VERSION = "rpg_last10_turn_debug_report_v2"
 DEFAULT_TURN_LIMIT = 10
 MAX_TURN_LIMIT = 100

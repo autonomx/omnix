@@ -1,37 +1,47 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VirtualList } from '../../design/VirtualList';
+import { RpgGameMasterPanel } from './RpgGameMasterPanel';
 import { RpgLorePanel } from './RpgLorePanel';
-import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiState';
+import { RpgLinkedText } from './rpgLoreLinks';
+import { RpgVoicesPanel } from './RpgVoicesPanel';
+import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiTypes';
+import { emptyWorldChanges, type RpgWorldChangesPreview } from './rpgWorldChanges';
 
-type RpgNarrativeTab = 'journal' | 'lore' | 'dialogue' | 'turns';
+type RpgNarrativeTab = 'journal' | 'changes' | 'lore' | 'dialogue' | 'turns' | 'game-master' | 'voices';
 
 interface RpgNarrativeTabsProps {
   journalEntries: RpgJournalEntryPreview[];
   logEntries: RpgJournalEntryPreview[];
   journalDetail: RpgJournalDetailPreview;
   recentEvents: string[];
+  worldChanges?: RpgWorldChangesPreview;
 }
 
 const tabs: Array<{ id: RpgNarrativeTab; label: string }> = [
   { id: 'journal', label: 'Journal' },
+  { id: 'changes', label: 'What has changed' },
   { id: 'lore', label: 'Lore' },
   { id: 'dialogue', label: 'Dialogue log' },
-  { id: 'turns', label: 'Turn history' },
+  { id: 'turns', label: 'What you did' },
+  { id: 'game-master', label: 'Game master' },
+  { id: 'voices', label: 'Voices' },
 ];
 
 const emptyDialogueRow: RpgJournalEntryPreview = {
   time: 'Dialogue',
-  title: 'No dialogue captured yet',
-  detail: 'Dialogue appears here after NPC, narrator, or player messages are recorded for this campaign.',
+  title: 'No conversations yet',
+  detail: 'What people say to you is kept here.',
 };
 
 const emptyTurnRow: RpgJournalEntryPreview = {
   time: 'Turn history',
-  title: 'No replayed turns yet',
-  detail: 'Submit a command to start recording replay-safe turn history for this campaign.',
+  title: 'Nothing done yet',
+  detail: 'What you do is kept here, turn by turn.',
 };
 
-export function RpgNarrativeTabs({ journalEntries, logEntries, journalDetail, recentEvents }: RpgNarrativeTabsProps) {
+export function RpgNarrativeTabs({
+  journalEntries, logEntries, journalDetail, recentEvents, worldChanges = emptyWorldChanges,
+}: RpgNarrativeTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgNarrativeTab>('journal');
   const [selectedJournalIndex, setSelectedJournalIndex] = useState(0);
   const dialogueRows = useMemo(() => buildDialogueRows(logEntries, recentEvents), [logEntries, recentEvents]);
@@ -67,9 +77,16 @@ export function RpgNarrativeTabs({ journalEntries, logEntries, journalDetail, re
           selectedIndex={selectedJournalIndex}
         />
       ) : null}
+      {activeTab === 'changes' ? <WorldChangesPanel worldChanges={worldChanges} /> : null}
       {activeTab === 'lore' ? <RpgLorePanel /> : null}
       {activeTab === 'dialogue' ? <DialoguePanel dialogueRows={dialogueRows} /> : null}
       {activeTab === 'turns' ? <TurnHistoryPanel turnRows={turnRows} /> : null}
+      {activeTab === 'game-master' ? (
+        <div aria-labelledby="rpg-game-master-tab" id="rpg-game-master-panel" role="tabpanel"><RpgGameMasterPanel /></div>
+      ) : null}
+      {activeTab === 'voices' ? (
+        <div aria-labelledby="rpg-voices-tab" id="rpg-voices-panel" role="tabpanel"><RpgVoicesPanel /></div>
+      ) : null}
     </section>
   );
 }
@@ -128,10 +145,39 @@ function JournalPanel({
         <ul>
           {journalDetail.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
         </ul>
-        <div className="rpg-chip-row">
-          {journalDetail.tags.map((tag) => <span key={tag}>{tag}</span>)}
-        </div>
+        {journalDetail.tags.length ? (
+          <div className="rpg-chip-row">
+            {journalDetail.tags.map((tag) => <span key={tag}>{tag}</span>)}
+          </div>
+        ) : null}
       </article>
+    </div>
+  );
+}
+
+/** What the hero's decisions changed, as the world's author tells it, where the hero stands with each group, and the
+ * word they have heard of what people are about. */
+function WorldChangesPanel({ worldChanges }: { worldChanges: RpgWorldChangesPreview }) {
+  return (
+    <div aria-labelledby="rpg-changes-tab" className="rpg-journal-grid" id="rpg-changes-panel" role="tabpanel">
+      <article className="rpg-journal-detail">
+        <h3>What has changed</h3>
+        {worldChanges.lines.length
+          ? <ul>{worldChanges.lines.map((line) => <li key={line}><RpgLinkedText text={line} /></li>)}</ul>
+          : <p>Nothing you have done has changed the world yet.</p>}
+      </article>
+      <article className="rpg-journal-detail">
+        <h3>Standing</h3>
+        {worldChanges.standing.length
+          ? <ul>{worldChanges.standing.map((row) => <li key={row.groupId}><strong>{row.name}</strong>: {row.band}</li>)}</ul>
+          : <p>No group has taken notice of you yet.</p>}
+      </article>
+      {worldChanges.word.length ? (
+        <article className="rpg-journal-detail">
+          <h3>Word going about</h3>
+          <ul>{worldChanges.word.map((line) => <li key={line}><RpgLinkedText text={line} /></li>)}</ul>
+        </article>
+      ) : null}
     </div>
   );
 }
@@ -149,9 +195,8 @@ function DialoguePanel({ dialogueRows }: { dialogueRows: RpgJournalEntryPreview[
       </div>
       <article className="rpg-journal-detail">
         <h3>Dialogue log</h3>
-        <p>Conversation-facing messages from the selected RPG session. Setup notes and ambient world events stay in the Journal tab.</p>
+        <p>What people have said to you.</p>
         <ul>{dialogueRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
-        <div className="rpg-chip-row"><span>Conversation</span><span>Messages only</span><span>Replay-safe</span></div>
       </article>
     </div>
   );
@@ -169,10 +214,9 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
         ))}
       </div>
       <article className="rpg-journal-detail">
-        <h3>Turn history</h3>
-        <p>Replay-safe player commands and queued turn requests for the selected RPG session.</p>
+        <h3>What you did</h3>
+        <p>Your latest turns, newest first.</p>
         <ul>{turnRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
-        <div className="rpg-chip-row"><span>Deterministic</span><span>Commands only</span><span>Checkpoint aware</span></div>
       </article>
     </div>
   );

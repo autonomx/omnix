@@ -565,57 +565,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/rpg/campaigns/{campaign_id}/spatial-goals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rpg Save Campaign Spatial Goal */
-        post: operations["rpg_save_campaign_spatial_goal_api_rpg_campaigns__campaign_id__spatial_goals_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/rpg/campaigns/{campaign_id}/spatial-policy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rpg Configure Campaign Spatial Policy */
-        post: operations["rpg_configure_campaign_spatial_policy_api_rpg_campaigns__campaign_id__spatial_policy_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/rpg/campaigns/{campaign_id}/spatial-routines": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rpg Save Campaign Spatial Routine */
-        post: operations["rpg_save_campaign_spatial_routine_api_rpg_campaigns__campaign_id__spatial_routines_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/rpg/campaigns/{campaign_id}/spatial-state": {
         parameters: {
             query?: never;
@@ -642,7 +591,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rpg Advance Campaign Spatial Tick */
+        /**
+         * Rpg Advance Campaign Spatial Tick
+         * @description The world goes on for ``ticks`` ticks (10 in-game minutes each), as a world_tick turn.
+         */
         post: operations["rpg_advance_campaign_spatial_tick_api_rpg_campaigns__campaign_id__spatial_ticks_post"];
         delete?: never;
         options?: never;
@@ -1025,6 +977,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rpg Operations
+         * @description The workspace's turns by day (RQ-8.4): failure and degraded rates, latency per turn class, model calls.
+         */
+        get: operations["rpg_operations_api_rpg_operations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/player/codex": {
         parameters: {
             query?: never;
@@ -1280,6 +1252,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Import Session */
+        post: operations["rpg_import_session_api_rpg_sessions_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/sessions/{session_id}": {
         parameters: {
             query?: never;
@@ -1365,6 +1354,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/{session_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Export Session */
+        get: operations["rpg_export_session_api_rpg_sessions__session_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/game-master": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Game Master Log */
+        get: operations["rpg_game_master_log_api_rpg_sessions__session_id__game_master_get"];
+        put?: never;
+        /** Rpg Ask Game Master */
+        post: operations["rpg_ask_game_master_api_rpg_sessions__session_id__game_master_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/sessions/{session_id}/loadout-action": {
         parameters: {
             query?: never;
@@ -1425,6 +1449,40 @@ export interface paths {
         };
         /** Rpg Campaign Lore Document */
         get: operations["rpg_campaign_lore_document_api_rpg_sessions__session_id__lore_document_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/lore/entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Lore Entry */
+        get: operations["rpg_lore_entry_api_rpg_sessions__session_id__lore_entries__entry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/lore/linkable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Lore Linkable */
+        get: operations["rpg_lore_linkable_api_rpg_sessions__session_id__lore_linkable_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1535,6 +1593,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/{session_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Resume Session
+         * @description The player returns after time away: the world moves on, as a world_tick turn with a recap (RQ-2.7).
+         */
+        post: operations["rpg_resume_session_api_rpg_sessions__session_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/rewind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Rewind Session
+         * @description Undo the last turn, or return to a save point, as a new revision (rewind.md).
+         */
+        post: operations["rpg_rewind_session_api_rpg_sessions__session_id__rewind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/save-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg List Save Points */
+        get: operations["rpg_list_save_points_api_rpg_sessions__session_id__save_points_get"];
+        put?: never;
+        /**
+         * Rpg Create Save Point
+         * @description Name this moment a save point: the campaign's current state, pinned (no turn, no change to the game).
+         */
+        post: operations["rpg_create_save_point_api_rpg_sessions__session_id__save_points_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/save-points/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Rpg Delete Save Point */
+        delete: operations["rpg_delete_save_point_api_rpg_sessions__session_id__save_points__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/speech-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Speech Audio
+         * @description A sentence of a final response in its speaker's cast voice, as WAV: from the campaign's audio cache, else
+         *     synthesized once and kept (EV-13). With the speech service down, 503: the text stands, silent.
+         */
+        post: operations["rpg_speech_audio_api_rpg_sessions__session_id__speech_audio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/speech-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Speech Plan
+         * @description How a final response is spoken: only its shown text, block by block in each speaker's cast voice.
+         */
+        post: operations["rpg_speech_plan_api_rpg_sessions__session_id__speech_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/sessions/{session_id}/turn": {
         parameters: {
             query?: never;
@@ -1565,6 +1742,40 @@ export interface paths {
          */
         get: operations["rpg_turn_draft_api_rpg_sessions__session_id__turn_draft_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Voice Cast */
+        get: operations["rpg_voice_cast_api_rpg_sessions__session_id__voices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/voices/{speaker_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rpg Choose Voice */
+        put: operations["rpg_choose_voice_api_rpg_sessions__session_id__voices__speaker_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2324,6 +2535,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/worlds/{world_id}/lore-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Lore Review Queue */
+        get: operations["rpg_lore_review_queue_api_rpg_worlds__world_id__lore_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/lore-review/{draft_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Lore Review Check */
+        post: operations["rpg_lore_review_check_api_rpg_worlds__world_id__lore_review__draft_id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/lore-review/{draft_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Lore Review Decide */
+        post: operations["rpg_lore_review_decide_api_rpg_worlds__world_id__lore_review__draft_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/worlds/{world_id}/map-blueprints": {
         parameters: {
             query?: never;
@@ -2403,6 +2665,58 @@ export interface paths {
         put?: never;
         /** Rpg Schedule World Materialization */
         post: operations["rpg_schedule_world_materialization_api_rpg_worlds__world_id__materialization_jobs_schedule_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/play-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Read World Play Sections */
+        get: operations["rpg_read_world_play_sections_api_rpg_worlds__world_id__play_sections_get"];
+        /** Rpg Save World Play Sections */
+        put: operations["rpg_save_world_play_sections_api_rpg_worlds__world_id__play_sections_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/play-sections/draft-from-lore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Draft World Play Sections */
+        post: operations["rpg_draft_world_play_sections_api_rpg_worlds__world_id__play_sections_draft_from_lore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/play-sections/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Publish World Play Sections */
+        post: operations["rpg_publish_world_play_sections_api_rpg_worlds__world_id__play_sections_publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2614,6 +2928,26 @@ export interface paths {
         patch: operations["rpg_update_world_topic_api_rpg_worlds__world_id__topics__topic_id__patch"];
         trace?: never;
     };
+    "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Add World Entity
+         * @description An author adds an entity to a topic (EV-6).
+         */
+        post: operations["rpg_add_world_entity_api_rpg_worlds__world_id__topics__topic_id__entities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}": {
         parameters: {
             query?: never;
@@ -2721,6 +3055,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AbilityUsed
+         * @description An ability of the hero's used: ready again from ``ready_at_turn`` (its cooldown, in the hero's turns).
+         */
+        AbilityUsed: {
+            /** Ability Id */
+            ability_id: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Ready At Turn */
+            ready_at_turn: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "ability_used";
+        };
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
         /** ActivateLive2DAvatarRequest */
@@ -2757,6 +3111,32 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * AreaDetailed
+         * @description An entry of a larger area filled in as the hero approaches it (evolution roadmap EV-10): its id (an invention
+         *     beside it, ``InventionAdded``), its kind, and for a rumour or a piece of lore its line.
+         */
+        AreaDetailed: {
+            /** Area Id */
+            area_id: string;
+            /** Entry Id */
+            entry_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "place" | "site" | "person" | "creature" | "item" | "service" | "quest" | "rumour" | "lore";
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "area_detailed";
+        };
         /** AssetContentResponse */
         AssetContentResponse: core["schemas"]["AssetContentResponse"];
         /** AssetLegacyRootScan */
@@ -2792,6 +3172,100 @@ export interface components {
         AuthSessionResponse: core["schemas"]["AuthSessionResponse"];
         /** AuthSessionSummary */
         AuthSessionSummary: core["schemas"]["AuthSessionSummary"];
+        /** Band */
+        Band: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+        };
+        /**
+         * BeatAdvanced
+         * @description A person takes the next step toward a goal (EV-4, ``rules/routines.py``): the beat reached, and, when it moves
+         *     them, where they keep to now (``location_id`` empty and ``gone``: they have left).
+         */
+        BeatAdvanced: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /** At Minute */
+            at_minute?: number | null;
+            /** Beat */
+            beat: string;
+            /** Goal Id */
+            goal_id: string;
+            /**
+             * Gone
+             * @default false
+             */
+            gone: boolean;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /** Person Id */
+            person_id: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "beat_advanced";
+        };
+        /**
+         * BeatMove
+         * @description Where a beat takes its person: a place they keep to from then on, or, with none, away for good.
+         */
+        BeatMove: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+        };
+        /** BuyBack */
+        BuyBack: {
+            /**
+             * Item Types
+             * @default []
+             */
+            item_types: string[];
+            /**
+             * Price Fraction
+             * @default 0.5
+             */
+            price_fraction: number;
+        };
+        /**
+         * CampaignEnded
+         * @description The campaign is over (a hardcore hero fell).
+         */
+        CampaignEnded: {
+            /**
+             * Defeated By
+             * @default []
+             */
+            defeated_by: string[];
+            /** Reason */
+            reason: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "campaign_ended";
+        };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
@@ -2832,6 +3306,66 @@ export interface components {
          */
         ChatUiAction: core["schemas"]["ChatUiAction"];
         /**
+         * CheckResolved
+         * @description A check outside a fight (checks.md): the roll against the difficulty, and its band.
+         */
+        CheckResolved: {
+            /**
+             * Band
+             * @enum {string}
+             */
+            band: "strong" | "success" | "cost" | "failure";
+            /**
+             * Bonus
+             * @default 0
+             */
+            bonus: number;
+            /**
+             * Difficulty
+             * @default 0
+             */
+            difficulty: number;
+            /** Kind */
+            kind: string;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /**
+             * Margin
+             * @default 0
+             */
+            margin: number;
+            /**
+             * Minute
+             * @default 0
+             */
+            minute: number;
+            /** Natural */
+            natural: number;
+            /**
+             * Skill
+             * @default
+             */
+            skill: string;
+            /**
+             * Target Id
+             * @default
+             */
+            target_id: string;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "check_resolved";
+        };
+        /**
          * CheckpointBundleRequest
          * @description Extensible state bundle with explicit checkpoint control fields.
          */
@@ -2846,16 +3380,165 @@ export interface components {
         ClientErrorAccepted: core["schemas"]["ClientErrorAccepted"];
         /** ClientErrorReport */
         ClientErrorReport: core["schemas"]["ClientErrorReport"];
+        /** ClosesEffect */
+        ClosesEffect: {
+            /** Provider */
+            provider: string;
+        };
         /** CodexAuthStatus */
         CodexAuthStatus: core["schemas"]["CodexAuthStatus"];
         /** CoinMarketCapCredentialStatus */
         CoinMarketCapCredentialStatus: core["schemas"]["CoinMarketCapCredentialStatus"];
         /** CoinMarketCapCredentialUpdate */
         CoinMarketCapCredentialUpdate: core["schemas"]["CoinMarketCapCredentialUpdate"];
+        /**
+         * CombatAdvanced
+         * @description The fight as a turn of it leaves it: who stands at what health, the initiative order and whose turn it is,
+         *     the round, and the log of blows. The combat section is the fight rule's own (``rules/combat/fight.py``).
+         */
+        CombatAdvanced: {
+            /** Combat State */
+            combat_state?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combat_advanced";
+        };
+        /** CombatEnded */
+        CombatEnded: {
+            /**
+             * Outcome
+             * @default ended
+             * @enum {string}
+             */
+            outcome: "victory" | "defeat" | "fled" | "ended";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combat_ended";
+        };
+        /**
+         * CombatStarted
+         * @description A fight begins, with each participant's health.
+         */
+        CombatStarted: {
+            /**
+             * Combat Id
+             * @default
+             */
+            combat_id: string;
+            /** Participants */
+            participants?: {
+                [key: string]: number;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combat_started";
+        };
+        /** CombatantHpChanged */
+        CombatantHpChanged: {
+            /** Actor Id */
+            actor_id: string;
+            /** Delta */
+            delta: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combatant_hp_changed";
+        };
+        /**
+         * CompanionHpChanged
+         * @description A companion's health, as a fight leaves it.
+         */
+        CompanionHpChanged: {
+            /** Hp */
+            hp: number;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_hp_changed";
+        };
+        /** CompanionJoined */
+        CompanionJoined: {
+            /** Name */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Role
+             * @default companion
+             */
+            role: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_joined";
+        };
+        /** CompanionLeft */
+        CompanionLeft: {
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_left";
+        };
+        /**
+         * CompanionOrdered
+         * @description A standing order a companion keeps until given another: keep watch, stay here, follow.
+         */
+        CompanionOrdered: {
+            /** Npc Id */
+            npc_id: string;
+            /** Order */
+            order: string;
+            /**
+             * Stance
+             * @default
+             */
+            stance: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_ordered";
+        };
         /** CompatibilityHandoffPayload */
         CompatibilityHandoffPayload: core["schemas"]["CompatibilityHandoffPayload"];
         /** CompleteJobRequest */
         CompleteJobRequest: core["schemas"]["CompleteJobRequest"];
+        /**
+         * ConditionsChanged
+         * @description An actor's lingering conditions (battered, wounded), as the rule left them: the hero or a companion.
+         */
+        ConditionsChanged: {
+            /** Actor Id */
+            actor_id: string;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "conditions_changed";
+        };
         /**
          * CreateChatSessionRequest
          * @description Client selection; trusted identity/profile content is intentionally absent.
@@ -2863,6 +3546,104 @@ export interface components {
         CreateChatSessionRequest: core["schemas"]["CreateChatSessionRequest"];
         /** CreateJobRequest */
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
+        /** CreatureBudget */
+        CreatureBudget: {
+            damage_max: components["schemas"]["Band"];
+            defense: components["schemas"]["Band"];
+            hp: components["schemas"]["Band"];
+        };
+        /**
+         * CreaturePhase
+         * @description A stage of a boss fight (EV-2): below ``at`` of its health it fights harder, may call an ally, or lays its
+         *     weakness bare; ``told`` is said when it begins.
+         */
+        CreaturePhase: {
+            /** At */
+            at: number;
+            /**
+             * Calls Ally
+             * @default false
+             */
+            calls_ally: boolean;
+            /**
+             * Damage Bonus
+             * @default 0
+             */
+            damage_bonus: number;
+            /**
+             * Defense Bonus
+             * @default 0
+             */
+            defense_bonus: number;
+            /**
+             * Exposes Weakness
+             * @default false
+             */
+            exposes_weakness: boolean;
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+        };
+        /**
+         * CreaturePlay
+         * @description How one of the world's creatures fights; a field left out is taken from its lore.
+         */
+        CreaturePlay: {
+            /** Behaviour */
+            behaviour?: ("fights" | "flees_when_hurt" | "calls_allies" | "guards" | "ambushes") | null;
+            /** Id */
+            id: string;
+            /**
+             * Loot
+             * @default []
+             */
+            loot: components["schemas"]["LootDrop"][];
+            /**
+             * No Escape
+             * @default false
+             */
+            no_escape: boolean;
+            /**
+             * Phases
+             * @default []
+             */
+            phases: components["schemas"]["CreaturePhase"][];
+            /** Recovers */
+            recovers?: number | null;
+            /**
+             * Resists
+             * @default []
+             */
+            resists: string[];
+            stats?: components["schemas"]["CreatureStats"] | null;
+            /** Weakness Effect */
+            weakness_effect?: ("stun" | "damage" | "morale") | null;
+        };
+        /** CreatureStats */
+        CreatureStats: {
+            /**
+             * Accuracy Bonus
+             * @default 0
+             */
+            accuracy_bonus: number;
+            /** Damage Max */
+            damage_max: number;
+            /** Damage Min */
+            damage_min: number;
+            /** Defense */
+            defense: number;
+            /** Hp */
+            hp: number;
+            /** Level */
+            level: number;
+            /**
+             * Xp Value
+             * @default 25
+             */
+            xp_value: number;
+        };
         /** DefaultChoice */
         DefaultChoice: core["schemas"]["DefaultChoice"];
         /** DefaultModels */
@@ -2872,6 +3653,19 @@ export interface components {
          * @description The downloaded models that can be this default, and the current one ('' when none of them is).
          */
         DefaultSlot: core["schemas"]["DefaultSlot"];
+        /**
+         * DefeatRecorded
+         * @description The hero lost a fight: how many they have lost.
+         */
+        DefeatRecorded: {
+            /** Defeats */
+            defeats: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "defeat_recorded";
+        };
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DesktopGoogleHandoffRequest */
@@ -2887,13 +3681,111 @@ export interface components {
         DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /**
+         * DialogueExchanged
+         * @description What was said between the hero and someone, kept for the conversation's continuity; they are now the one the
+         *     hero is talking to.
+         */
+        DialogueExchanged: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Npc Line
+             * @default
+             */
+            npc_line: string;
+            /**
+             * Player Line
+             * @default
+             */
+            player_line: string;
+            /**
+             * Step
+             * @default
+             */
+            step: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "dialogue_exchanged";
+        };
+        /**
+         * DirectionTracked
+         * @description The game master's bookkeeping (EV-0): the turn of the last meaningful event; and, for one of its own events,
+         *     the day it is counted against (``day``) and the scene a complication was had in.
+         */
+        DirectionTracked: {
+            /**
+             * Complication Scene
+             * @default
+             */
+            complication_scene: string;
+            /** Day */
+            day?: number | null;
+            /** Last Event Turn */
+            last_event_turn: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "direction_tracked";
+        };
+        /** EconomyDraft */
+        EconomyDraft: {
+            /**
+             * Providers
+             * @default []
+             */
+            providers: components["schemas"]["ProviderEconomy"][];
+        };
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
+        /**
+         * EntryMet
+         * @description An entry of the world the hero now knows (evolution roadmap EV-1): a person or creature met, a place
+         *     visited, a thing held, a quest or group heard of. A stronger kind replaces a weaker one, never the reverse.
+         */
+        EntryMet: {
+            /** Entry Id */
+            entry_id: string;
+            /**
+             * Kind
+             * @default met
+             * @enum {string}
+             */
+            kind: "heard_of" | "met" | "visited";
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "entry_met";
+        };
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
          */
         EventReaderDiagnostics: core["schemas"]["EventReaderDiagnostics"];
+        /** ExperienceGained */
+        ExperienceGained: {
+            /** Amount */
+            amount: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "experience_gained";
+        };
         /** ExportDefinitionRequestBody */
         ExportDefinitionRequestBody: {
             /** Context */
@@ -2908,6 +3800,96 @@ export interface components {
             filename?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * FactEffect
+         * @description What the world's facts change (EV-1): while ``when`` holds (every fact at its value; empty, always), one effect,
+         *     read by the rule that owns it (``rules/consequences.py``); ``told`` is said when it comes to hold.
+         */
+        FactEffect: {
+            closes?: components["schemas"]["ClosesEffect"] | null;
+            place?: components["schemas"]["PlaceEffect"] | null;
+            price?: components["schemas"]["PriceEffect"] | null;
+            quest?: components["schemas"]["QuestEffect"] | null;
+            standing?: components["schemas"]["StandingEffect"] | null;
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+            waive?: components["schemas"]["WaiveEffect"] | null;
+            /** When */
+            when?: {
+                [key: string]: boolean | number | string;
+            };
+            whereabouts?: components["schemas"]["WhereaboutsEffect"] | null;
+        };
+        /**
+         * FactLearned
+         * @description The hero comes to know a fact that holds, by seeing it or being told.
+         */
+        FactLearned: {
+            /** Fact Id */
+            fact_id: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "fact_learned";
+        };
+        /**
+         * FactSet
+         * @description A world fact's value (EV-1, ``rules/consequences.py``): what a decision, an ending or an outcome left
+         *     behind. ``known``: the hero saw it happen.
+         */
+        FactSet: {
+            /** Fact Id */
+            fact_id: string;
+            /**
+             * Known
+             * @default true
+             */
+            known: boolean;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "fact_set";
+            /** Value */
+            value: string | number | boolean;
+        };
+        /**
+         * FactWrite
+         * @description A world fact a way or an ending leaves (EV-1), and the author's line for it ("What has changed").
+         */
+        FactWrite: {
+            /** Fact */
+            fact: string;
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+            /**
+             * Value
+             * @default true
+             */
+            value: boolean | number | string;
         };
         /** FailJobRequest */
         FailJobRequest: core["schemas"]["FailJobRequest"];
@@ -2928,8 +3910,79 @@ export interface components {
             /** Terrain Code */
             terrain_code?: string | null;
         };
+        /**
+         * GoalBeat
+         * @description A step toward a goal (evolution roadmap EV-4, ``rules/routines.py``). Beats are reached in order, each with
+         *     ``chance`` a day once its condition holds: the facts of ``when``, a place the hero has been (``visited``), and the
+         *     day of the campaign (``after_day``). It may set facts, move its person (``move``) and send word about
+         *     (``rumour``, told at ``told_at``: by default where its person keeps and the goal's place).
+         */
+        GoalBeat: {
+            /**
+             * After Day
+             * @default 0
+             */
+            after_day: number;
+            /**
+             * Chance
+             * @default 0.5
+             */
+            chance: number;
+            /** Id */
+            id: string;
+            move?: components["schemas"]["BeatMove"] | null;
+            /**
+             * Rumour
+             * @default
+             */
+            rumour: string;
+            /**
+             * Sets
+             * @default []
+             */
+            sets: components["schemas"]["FactWrite"][];
+            /**
+             * Told At
+             * @default []
+             */
+            told_at: string[];
+            /**
+             * Visited
+             * @default
+             */
+            visited: string;
+            /** When */
+            when?: {
+                [key: string]: boolean | number | string;
+            };
+        };
         /** GpuResidencyPolicy */
         GpuResidencyPolicy: core["schemas"]["GpuResidencyPolicy"];
+        /**
+         * GroupMembers
+         * @description Who answers for a group in conversation, where the lore does not say (EV-1).
+         */
+        GroupMembers: {
+            /** Group Id */
+            group_id: string;
+            /** Members */
+            members: string[];
+        };
+        /**
+         * GuardSet
+         * @description One of the party guards another (EV-2): the blows aimed at the one guarded fall on the guard.
+         */
+        GuardSet: {
+            /** Guard Id */
+            guard_id: string;
+            /** Guarded Id */
+            guarded_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "guard_set";
+        };
         /** GuestUpgradeRequest */
         GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
@@ -3692,6 +4745,37 @@ export interface components {
             /** Response */
             response?: string;
         };
+        /**
+         * HotbarChanged
+         * @description A hotbar slot set to one of the hero's abilities, or cleared (``ability_id`` empty): the play screen's.
+         */
+        HotbarChanged: {
+            /**
+             * Ability Id
+             * @default
+             */
+            ability_id: string;
+            /** Slot */
+            slot: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hotbar_changed";
+        };
+        /**
+         * HpChanged
+         * @description The hero's health, kept between 0 and its maximum.
+         */
+        HpChanged: {
+            /** Delta */
+            delta: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hp_changed";
+        };
         /** HubTokenWrite */
         HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
@@ -3716,6 +4800,99 @@ export interface components {
         IbkrWebApiStatus: core["schemas"]["IbkrWebApiStatus"];
         /** InstallLive2DModelRequest */
         InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
+        /**
+         * InteractionPresented
+         * @description How a recent interaction is presented (the narrative engine's canonical projection): ``fields`` set on the
+         *     recent interaction of ``turn_id`` or ``response_id``, else on the latest.
+         */
+        InteractionPresented: {
+            /** Fields */
+            fields: {
+                [key: string]: unknown;
+            };
+            /**
+             * Response Id
+             * @default
+             */
+            response_id: string;
+            /**
+             * Turn Id
+             * @default
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interaction_presented";
+        };
+        /**
+         * InteractionRecorded
+         * @description The turn's interaction on the campaign's timeline (its bookkeeping, roadmap §4.1 step 9): the event appended
+         *     (the timeline keeps the last 50), the sequence and state revision it carries the campaign's, the recent
+         *     interactions the last 12, and the event the last interaction.
+         */
+        InteractionRecorded: {
+            /** Event */
+            event: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interaction_recorded";
+        };
+        /**
+         * InteractionsReplayed
+         * @description Interactions the campaign's event log holds, merged into its timeline on load (one per interaction id, in
+         *     sequence order, the last 50 kept); the sequence and revision never go back.
+         */
+        InteractionsReplayed: {
+            /** Events */
+            events: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interactions_replayed";
+        };
+        /**
+         * InventionAdded
+         * @description Something the game master invented, played from now on (evolution roadmap EV-0, part 2; ``rules/inventions.py``):
+         *     a person, place, item, creature or quest, its lore ``row`` in the world model's shape and its ``play`` data, kept
+         *     in the campaign's lore layer with its ``provenance`` (the campaign, the turn, the game master's reason).
+         */
+        InventionAdded: {
+            /** Entry Id */
+            entry_id: string;
+            /**
+             * Family
+             * @enum {string}
+             */
+            family: "person" | "place" | "item" | "creature" | "quest";
+            /** Name */
+            name: string;
+            /** Play */
+            play?: {
+                [key: string]: unknown;
+            };
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            };
+            /** Row */
+            row?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "invention_added";
+        };
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -3726,6 +4903,146 @@ export interface components {
         InviteResponse: core["schemas"]["InviteResponse"];
         /** InviteSummaryResponse */
         InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
+        /**
+         * ItemAdded
+         * @description Stacks into the pack: onto the stack with the same item id, else a new stack.
+         */
+        ItemAdded: {
+            /**
+             * Category
+             * @default
+             */
+            category: string;
+            /** Fields */
+            fields?: {
+                [key: string]: unknown;
+            };
+            /** Item Id */
+            item_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_added";
+        };
+        /** ItemBudget */
+        ItemBudget: {
+            armor?: components["schemas"]["Band"] | null;
+            damage_max?: components["schemas"]["Band"] | null;
+            price_copper: components["schemas"]["Band"];
+        };
+        /**
+         * ItemDropped
+         * @description From the pack to the ground where the hero stands.
+         */
+        ItemDropped: {
+            /** Item Id */
+            item_id: string;
+            /** Location Id */
+            location_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_dropped";
+        };
+        /** ItemEquipped */
+        ItemEquipped: {
+            /** Item Id */
+            item_id: string;
+            /** Slot */
+            slot: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_equipped";
+        };
+        /**
+         * ItemImproved
+         * @description A carried piece of gear improved by one tier (evolution roadmap EV-5, the trade rule's ``upgrade``): its tier
+         *     and the numbers it fights with now.
+         */
+        ItemImproved: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Slot
+             * @default
+             */
+            slot: string;
+            /** Stats */
+            stats?: {
+                [key: string]: number;
+            };
+            /** Tier */
+            tier: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_improved";
+        };
+        /**
+         * ItemPickedUp
+         * @description From the ground back into the pack, onto its own stack.
+         */
+        ItemPickedUp: {
+            /** Item Id */
+            item_id: string;
+            /** Location Id */
+            location_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_picked_up";
+        };
+        /**
+         * ItemRemoved
+         * @description Taken from the pack's stack (used, sold, given); the stack goes when it is empty.
+         */
+        ItemRemoved: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_removed";
+        };
+        /** ItemUnequipped */
+        ItemUnequipped: {
+            /** Slot */
+            slot: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_unequipped";
+        };
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -3752,7 +5069,65 @@ export interface components {
          * @enum {string}
          */
         JobStatus: core["schemas"]["JobStatus"];
+        /**
+         * JournalWritten
+         * @description The turn in the player's journal and on the campaign calendar, as the journal keeper left them.
+         */
+        JournalWritten: {
+            /** Calendar */
+            calendar?: {
+                [key: string]: unknown;
+            };
+            /** Journal */
+            journal?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "journal_written";
+        };
         JsonValue: unknown;
+        /** KnowledgeFact */
+        KnowledgeFact: {
+            /** Fact Id */
+            fact_id: string;
+            price?: components["schemas"]["Price"] | null;
+            /**
+             * Shares
+             * @default freely
+             * @enum {string}
+             */
+            shares: "freely" | "for_price" | "when_trusted" | "never";
+            /** Text */
+            text: string;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: string[];
+            /**
+             * Trust Needed
+             * @default 0
+             */
+            trust_needed: number;
+        };
+        /**
+         * KnowledgeShared
+         * @description Something a person knows, now known to the hero.
+         */
+        KnowledgeShared: {
+            /** Fact Id */
+            fact_id: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "knowledge_shared";
+        };
         /** LegacyGenerateTitleRequest */
         LegacyGenerateTitleRequest: core["schemas"]["LegacyGenerateTitleRequest"];
         /** LegacyGenerateTitleResponse */
@@ -3769,6 +5144,119 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /**
+         * LevelBudget
+         * @description What a hero of ``level`` should meet, carry and earn.
+         */
+        LevelBudget: {
+            creature: components["schemas"]["CreatureBudget"];
+            danger: components["schemas"]["Band"];
+            group_member: components["schemas"]["CreatureBudget"];
+            /** Items */
+            items: {
+                [key: string]: components["schemas"]["ItemBudget"];
+            };
+            /** Level */
+            level: number;
+            quest_reward: components["schemas"]["RewardBudget"];
+            site_reward: components["schemas"]["RewardBudget"];
+        };
+        /**
+         * LevelChoiceMade
+         * @description A level's choice made (progression.md): an attribute raised, an ability learned, or two skills a rank.
+         */
+        LevelChoiceMade: {
+            /**
+             * Ability Id
+             * @default
+             */
+            ability_id: string;
+            /**
+             * Attribute
+             * @default
+             */
+            attribute: string;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "attribute" | "ability" | "skills";
+            /**
+             * Skills
+             * @default []
+             */
+            skills: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "level_choice_made";
+            /**
+             * Value
+             * @default 0
+             */
+            value: number;
+        };
+        /**
+         * LevelReached
+         * @description The hero rose a level (or several): where their progression now stands.
+         */
+        LevelReached: {
+            /**
+             * Choices Pending
+             * @default 0
+             */
+            choices_pending: number;
+            /** Level */
+            level: number;
+            /**
+             * Max Hp Gain
+             * @default 0
+             */
+            max_hp_gain: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "level_reached";
+            /**
+             * Unspent Points
+             * @default 0
+             */
+            unspent_points: number;
+            /**
+             * Unspent Skill Points
+             * @default 0
+             */
+            unspent_skill_points: number;
+            /** Xp */
+            xp: number;
+            /** Xp To Next */
+            xp_to_next: number;
+        };
+        /**
+         * LifecycleRecorded
+         * @description An interaction's lifecycle (resolved, narrated): kept by its id (the last 64), its turn's interaction by the
+         *     turn id, and the interaction's timeline event carrying it.
+         */
+        LifecycleRecorded: {
+            /** Interaction Id */
+            interaction_id: string;
+            /** Lifecycle */
+            lifecycle: {
+                [key: string]: unknown;
+            };
+            /**
+             * Turn Id
+             * @default
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lifecycle_recorded";
+        };
         /** Live2DAvatarActionResponse */
         Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
@@ -3777,6 +5265,49 @@ export interface components {
         Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
+        /**
+         * LocalMapEntered
+         * @description The local map the hero now stands on (its instance, "" where the place has none): the play screen's grid.
+         */
+        LocalMapEntered: {
+            /**
+             * Map Instance Id
+             * @default
+             */
+            map_instance_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "local_map_entered";
+        };
+        /** LocationChanged */
+        LocationChanged: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * Location Name
+             * @default
+             */
+            location_name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "location_changed";
+        };
+        /** LootDrop */
+        LootDrop: {
+            /** Chance */
+            chance: number;
+            /** Item Id */
+            item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+        };
         /** LoreDiscoveryRequest */
         LoreDiscoveryRequest: {
             /** Document Id */
@@ -3904,6 +5435,46 @@ export interface components {
             type: "set_object_state" | "place_actor" | "set_route_state" | "set_hazard_state";
         };
         /**
+         * MapStateProjected
+         * @description The world map the play screen shows, projected from where the hero stands (``map_world_integration``): the
+         *     sheet's map state, and its place on the sheet.
+         */
+        MapStateProjected: {
+            /** Location Id */
+            location_id: string;
+            /** Map State */
+            map_state: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "map_state_projected";
+        };
+        /** Material */
+        Material: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+        };
+        /** ModelCalls */
+        ModelCalls: {
+            /** By Kind */
+            by_kind?: {
+                [key: string]: number;
+            };
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
          * ModelPacksStatus
          * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
          */
@@ -3921,6 +5492,24 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** NarrationReference */
+        NarrationReference: {
+            /**
+             * Response Id
+             * @default
+             */
+            response_id: string;
+            /**
+             * Speaker Ids
+             * @default []
+             */
+            speaker_ids: string[];
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+        };
         /** NarrativeDeliveryCancelRequest */
         NarrativeDeliveryCancelRequest: {
             /**
@@ -3931,37 +5520,99 @@ export interface components {
             /** Semantic Hash */
             semantic_hash: string;
         };
-        /** NpcSpatialRoutineStep */
-        NpcSpatialRoutineStep: {
-            /** Expires After Ticks */
-            expires_after_ticks?: number | null;
+        /**
+         * NeedsChanged
+         * @description Hunger, thirst and fatigue, each kept at zero or above.
+         */
+        NeedsChanged: {
             /**
-             * Goal Type
-             * @enum {string}
-             */
-            goal_type: "move_to_cell" | "transition_via_portal";
-            /** Map Instance Id */
-            map_instance_id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Portal Id */
-            portal_id?: string | null;
-            /**
-             * Priority
+             * Fatigue
              * @default 0
              */
-            priority?: number;
-            /** Step Id */
-            step_id: string;
-            /** Target Cell */
-            target_cell?: [
-                number,
-                number
-            ] | null;
-            /** Target Map Instance Id */
-            target_map_instance_id?: string | null;
+            fatigue: number;
+            /**
+             * Hunger
+             * @default 0
+             */
+            hunger: number;
+            /**
+             * Thirst
+             * @default 0
+             */
+            thirst: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "needs_changed";
+        };
+        /** NpcGoal */
+        NpcGoal: {
+            /**
+             * Beats
+             * @default []
+             */
+            beats: components["schemas"]["GoalBeat"][];
+            /** Goal Id */
+            goal_id: string;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /**
+             * Priority
+             * @default 1
+             */
+            priority: number;
+            /** Summary */
+            summary: string;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: string[];
+        };
+        /** NpcKnowledge */
+        NpcKnowledge: {
+            /**
+             * Facts
+             * @default []
+             */
+            facts: components["schemas"]["KnowledgeFact"][];
+            /** Npc Id */
+            npc_id: string;
+        };
+        /** NpcRoutine */
+        NpcRoutine: {
+            /**
+             * Goals
+             * @default []
+             */
+            goals: components["schemas"]["NpcGoal"][];
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Schedule
+             * @default []
+             */
+            schedule: components["schemas"]["RoutineStep"][];
+        };
+        /** OutcomeFact */
+        OutcomeFact: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "coin" | "item" | "health" | "condition" | "experience" | "level" | "quest" | "offer" | "check" | "regard" | "fight";
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @default neutral
+             * @enum {string}
+             */
+            tone: "gain" | "loss" | "neutral";
         };
         /** PackModelLicence */
         PackModelLicence: core["schemas"]["PackModelLicence"];
@@ -3991,6 +5642,242 @@ export interface components {
         PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
+        /** PersonWhereabouts */
+        PersonWhereabouts: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /** Location Id */
+            location_id: string;
+            /** Npc Id */
+            npc_id: string;
+        };
+        /**
+         * PhaseEntered
+         * @description A boss's fight enters its next phase (EV-2): it fights harder, calls an ally, or lays its weakness bare.
+         */
+        PhaseEntered: {
+            /** Actor Id */
+            actor_id: string;
+            /** Phase */
+            phase: number;
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "phase_entered";
+        };
+        /** PlaceEffect */
+        PlaceEffect: {
+            /** Line */
+            line: string;
+            /** Location */
+            location: string;
+        };
+        /**
+         * PlaySectionsDraft
+         * @description What a world's author wrote of how it plays, as the world editor keeps it. Once saved it is the whole of
+         *     it: a section left empty is played from the world's lore.
+         */
+        PlaySectionsDraft: {
+            /**
+             * Bestiary
+             * @default []
+             */
+            bestiary: components["schemas"]["CreaturePlay"][];
+            /**
+             * Budgets
+             * @default []
+             */
+            budgets: components["schemas"]["LevelBudget"][];
+            /**
+             * @default {
+             *       "providers": []
+             *     }
+             */
+            economy: components["schemas"]["EconomyDraft"];
+            /**
+             * Fact Effects
+             * @default []
+             */
+            fact_effects: components["schemas"]["FactEffect"][];
+            /**
+             * Group Members
+             * @default []
+             */
+            group_members: components["schemas"]["GroupMembers"][];
+            /**
+             * Knowledge
+             * @default []
+             */
+            knowledge: components["schemas"]["NpcKnowledge"][];
+            /**
+             * Pressures
+             * @default []
+             */
+            pressures: components["schemas"]["WorldPressure"][];
+            /** Quests */
+            quests?: components["schemas"]["QuestPlay"][] | null;
+            /**
+             * Routines
+             * @default []
+             */
+            routines: components["schemas"]["NpcRoutine"][];
+        };
+        /**
+         * PreferenceNoted
+         * @description A wish of the player's for the story (EV-0's panel): its kind and value; the latest of a kind stands.
+         */
+        PreferenceNoted: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pace" | "danger" | "tone" | "focus";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "preference_noted";
+            /** Value */
+            value: string;
+        };
+        /**
+         * PresenceChanged
+         * @description Who is present where the hero is.
+         */
+        PresenceChanged: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * Present Npc Ids
+             * @default []
+             */
+            present_npc_ids: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "presence_changed";
+        };
+        /**
+         * PresentationHints
+         * @description What the play screen needs to show the turn without reading the document.
+         */
+        PresentationHints: {
+            /**
+             * Changed Sections
+             * @default []
+             */
+            changed_sections: string[];
+            /**
+             * Choices
+             * @default []
+             */
+            choices: components["schemas"]["Suggestion"][];
+            /**
+             * Facts
+             * @default []
+             */
+            facts: components["schemas"]["OutcomeFact"][];
+            /**
+             * Location Name
+             * @default
+             */
+            location_name: string;
+            /**
+             * Refused
+             * @default false
+             */
+            refused: boolean;
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: components["schemas"]["Suggestion"][];
+        };
+        /** PressureLever */
+        PressureLever: {
+            /** Action */
+            action: string;
+            /** Amount */
+            amount: number;
+            /**
+             * Effect
+             * @enum {string}
+             */
+            effect: "lower" | "raise";
+        };
+        /**
+         * PressuresMoved
+         * @description What the hero did to the world's pressures (their levers, quests.md): each one's severity before and after, and
+         *     the causal runtime as the pull left it (one replayable event, ``cause``).
+         */
+        PressuresMoved: {
+            /**
+             * Cause
+             * @default
+             */
+            cause: string;
+            /** Moves */
+            moves?: {
+                [key: string]: unknown;
+            }[];
+            /** Runtime */
+            runtime?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pressures_moved";
+        };
+        /** Price */
+        Price: {
+            /**
+             * Copper
+             * @default 0
+             */
+            copper: number;
+            /**
+             * Gold
+             * @default 0
+             */
+            gold: number;
+            /**
+             * Silver
+             * @default 0
+             */
+            silver: number;
+        };
+        /** PriceEffect */
+        PriceEffect: {
+            /** Percent */
+            percent: number;
+            /**
+             * Provider
+             * @default
+             */
+            provider: string;
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
         /** PromptRenderRequest */
         PromptRenderRequest: core["schemas"]["PromptRenderRequest"];
         /** PromptTemplate */
@@ -4000,6 +5887,22 @@ export interface components {
          * @enum {string}
          */
         ProviderCapability: core["schemas"]["ProviderCapability"];
+        /** ProviderEconomy */
+        ProviderEconomy: {
+            buys?: components["schemas"]["BuyBack"] | null;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /** Provider Id */
+            provider_id: string;
+            /**
+             * Sells
+             * @default []
+             */
+            sells: components["schemas"]["ShopOffer"][];
+        };
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
         /**
@@ -4032,8 +5935,253 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /**
+         * PurseChanged
+         * @description Coin gained (positive) or spent (negative), in copper.
+         */
+        PurseChanged: {
+            /** Delta Copper */
+            delta_copper: number;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "purse_changed";
+        };
+        /**
+         * QuestCondition
+         * @description One thing a quest's step asks: ``reach`` a place, ``talk`` to someone (about one of ``about``'s words, when
+         *     given), ``hold`` an item, ``defeat`` ``count`` of a creature, pass a ``check`` (its kind, ``rules/checks.py``,
+         *     against ``target`` when named), or have a ``companion`` (someone, or ``anyone``) in the party.
+         */
+        QuestCondition: {
+            /**
+             * About
+             * @default []
+             */
+            about: string[];
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "reach" | "talk" | "hold" | "defeat" | "check" | "companion";
+            /** Subject */
+            subject: string;
+            /**
+             * Target
+             * @default
+             */
+            target: string;
+        };
+        /** QuestEffect */
+        QuestEffect: {
+            /**
+             * Closes
+             * @default
+             */
+            closes: string;
+            /**
+             * Opens
+             * @default
+             */
+            opens: string;
+        };
+        /**
+         * QuestOffered
+         * @description A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest
+         *     a pressure raised, quests.md) comes with its row.
+         */
+        QuestOffered: {
+            /** Npc Id */
+            npc_id: string;
+            /** Quest */
+            quest?: {
+                [key: string]: unknown;
+            };
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_offered";
+        };
+        /** QuestPlaceReached */
+        QuestPlaceReached: {
+            /** Location Id */
+            location_id: string;
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_place_reached";
+        };
+        /**
+         * QuestPlay
+         * @description How one of the world's quests is done; its title, objective, places and rewards stay its lore's.
+         */
+        QuestPlay: {
+            /** Deadline Hours */
+            deadline_hours?: number | null;
+            /** Forbids */
+            forbids?: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Giver Id
+             * @default
+             */
+            giver_id: string;
+            /** Id */
+            id: string;
+            /** Requires */
+            requires?: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Sets
+             * @default []
+             */
+            sets: components["schemas"]["FactWrite"][];
+            /**
+             * Steps
+             * @default []
+             */
+            steps: components["schemas"]["QuestStep"][];
+        };
+        /**
+         * QuestProgressed
+         * @description A quest's running tallies (the creatures of a "defeat" step felled so far).
+         */
+        QuestProgressed: {
+            /** Counts */
+            counts?: {
+                [key: string]: number;
+            };
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_progressed";
+        };
+        /** QuestStatusChanged */
+        QuestStatusChanged: {
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "active" | "completed" | "failed";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_status_changed";
+        };
+        /**
+         * QuestStep
+         * @description A stage of a quest, done by any one of its ways (more than one: the quest branches there).
+         */
+        QuestStep: {
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /** Summary */
+            summary: string;
+            /** Ways */
+            ways: components["schemas"]["QuestWay"][];
+        };
+        /**
+         * QuestStepCompleted
+         * @description A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the
+         *     branch, when the stage had more than one), and what it asks next.
+         */
+        QuestStepCompleted: {
+            /** Branch */
+            branch?: number | null;
+            /**
+             * Next Objective
+             * @default
+             */
+            next_objective: string;
+            /** Quest Id */
+            quest_id: string;
+            /** Stage */
+            stage: number;
+            /**
+             * Step Id
+             * @default
+             */
+            step_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_step_completed";
+        };
+        /**
+         * QuestWay
+         * @description One way to do a step: all of its conditions, what is told when it is taken (an ending's branch), and the facts
+         *     it leaves.
+         */
+        QuestWay: {
+            /** Conditions */
+            conditions: components["schemas"]["QuestCondition"][];
+            /**
+             * Sets
+             * @default []
+             */
+            sets: components["schemas"]["FactWrite"][];
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+        };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
+        /**
+         * RegardChanged
+         * @description How far someone trusts the hero moved (an attack, seen or suffered), from -100 to 100.
+         */
+        RegardChanged: {
+            /** Delta */
+            delta: number;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "regard_changed";
+        };
         /** RegisterRequest */
         RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
@@ -4068,6 +6216,45 @@ export interface components {
          */
         ResourceClass: core["schemas"]["ResourceClass"];
         /**
+         * ResourcesChanged
+         * @description The hero's stamina and mana spent (an ability) or restored (a rest), within their pools.
+         */
+        ResourcesChanged: {
+            /**
+             * Mana
+             * @default 0
+             */
+            mana: number;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Stamina
+             * @default 0
+             */
+            stamina: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resources_changed";
+        };
+        /**
+         * RestTaken
+         * @description A full rest: where the hero last rested, and so where a beaten hero wakes.
+         */
+        RestTaken: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rest_taken";
+        };
+        /**
          * RetentionRunDiagnostics
          * @description The newest retention run; the error is reported by class only.
          */
@@ -4078,10 +6265,74 @@ export interface components {
         RetryState: core["schemas"]["RetryState"];
         /** RetryState */
         "RetryState-Input": core["schemas"]["RetryState-Input"];
+        /**
+         * RevisionRestored
+         * @description The game as it stood at an earlier revision, restored as a new revision (rewind.md): the sheet, the simulation
+         *     and the game's runtime sections are the earlier document's; the campaign's bookkeeping (its revision, its
+         *     interactions and narrations) goes on, so history is never rewritten.
+         */
+        RevisionRestored: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Source Revision */
+            source_revision: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "revision_restored";
+        };
         /** RevokeSessionsRequest */
         RevokeSessionsRequest: core["schemas"]["RevokeSessionsRequest"];
         /** RevokeSessionsResponse */
         RevokeSessionsResponse: core["schemas"]["RevokeSessionsResponse"];
+        /** RewardBudget */
+        RewardBudget: {
+            copper: components["schemas"]["Band"];
+            /**
+             * Items
+             * @default 1
+             */
+            items: number;
+            xp: components["schemas"]["Band"];
+        };
+        /**
+         * RoomCleared
+         * @description A room of a site whose encounter is beaten or whose loot is taken (EV-10).
+         */
+        RoomCleared: {
+            /**
+             * How
+             * @default beaten
+             * @enum {string}
+             */
+            how: "beaten" | "looted" | "passed";
+            /** Room Id */
+            room_id: string;
+            /** Site Id */
+            site_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "room_cleared";
+        };
+        /** RoutineStep */
+        RoutineStep: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /** From Hour */
+            from_hour: number;
+            /** Location Id */
+            location_id: string;
+            /** To Hour */
+            to_hour: number;
+        };
         /**
          * RpgAbilityCoverage
          * @description ``RpgAbilityCoverageReport`` without its observations.
@@ -4134,25 +6385,29 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
-        /** RpgAdvanceCampaignSpatialTickRequestBody */
-        RpgAdvanceCampaignSpatialTickRequestBody: {
-            /**
-             * Active Map Instance Ids
-             * @default []
-             */
-            active_map_instance_ids?: string[];
-            /**
-             * Coarse Map Instance Ids
-             * @default []
-             */
-            coarse_map_instance_ids?: string[];
-            /** Expected World Tick */
-            expected_world_tick: number;
+        /** RpgAddWorldEntityRequestBody */
+        RpgAddWorldEntityRequestBody: {
+            /** Collection */
+            collection?: unknown;
+            /** Entity */
+            entity?: unknown;
         } & {
             [key: string]: unknown;
         };
+        /** RpgAdvanceCampaignSpatialTickRequestBody */
+        RpgAdvanceCampaignSpatialTickRequestBody: {
+            /**
+             * Ticks
+             * @default 1
+             */
+            ticks?: number;
+        };
         /** RpgApplyTurnRequestBody */
         RpgApplyTurnRequestBody: {
+            /** Card */
+            card?: {
+                [key: string]: unknown;
+            } | null;
             /** Command */
             command?: string | {
                 [key: string]: unknown;
@@ -4163,6 +6418,10 @@ export interface components {
             } | null;
             /** Player Input */
             player_input?: string | {
+                [key: string]: unknown;
+            } | null;
+            /** Preference */
+            preference?: {
                 [key: string]: unknown;
             } | null;
             /** Text */
@@ -4620,6 +6879,20 @@ export interface components {
             storage: components["schemas"]["RpgLoreStorage"];
         };
         /**
+         * RpgCampaignImportResponse
+         * @description A campaign imported from a save package (RQ-8.6), as it now loads.
+         */
+        RpgCampaignImportResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Session */
+            session: {
+                [key: string]: unknown;
+            };
+            /** Session Id */
+            session_id: string;
+        };
+        /**
          * RpgCampaignLoreResponse
          * @description The campaign bible: the lore panel reads the documents and dossiers, the world editor the cards.
          */
@@ -4657,6 +6930,24 @@ export interface components {
             locations?: components["schemas"]["RpgAuthoringEntityCard"][];
         };
         /**
+         * RpgCampaignPackage
+         * @description A campaign as a save package (format 8) with its ``transfer`` section (RQ-8.6): a file to keep or carry.
+         */
+        RpgCampaignPackage: {
+            /** Campaign */
+            campaign: {
+                [key: string]: unknown;
+            };
+            /** Package Type */
+            package_type: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Transfer */
+            transfer: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * RpgCampaignWorldBindingResponse
          * @description ``binding`` is the stored ``CampaignWorldBinding`` document.
          */
@@ -4667,6 +6958,15 @@ export interface components {
             };
             /** Ok */
             ok: boolean;
+        };
+        /** RpgCastableVoice */
+        RpgCastableVoice: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Voice Id */
+            voice_id: string;
         };
         /**
          * RpgCompatibilityRequest
@@ -4681,38 +6981,6 @@ export interface components {
          */
         RpgCompatibilityResponse: {
             [key: string]: components["schemas"]["JsonValue"];
-        };
-        /** RpgConfigureCampaignSpatialPolicyRequestBody */
-        RpgConfigureCampaignSpatialPolicyRequestBody: {
-            /**
-             * Active Actor Budget
-             * @default 16
-             */
-            active_actor_budget?: number;
-            /**
-             * Coarse Actor Budget
-             * @default 4
-             */
-            coarse_actor_budget?: number;
-            /**
-             * Coarse Tick Interval
-             * @default 5
-             */
-            coarse_tick_interval?: number;
-            /** Expected World Tick */
-            expected_world_tick: number;
-            /**
-             * Max Blocked Attempts
-             * @default 3
-             */
-            max_blocked_attempts?: number;
-            /**
-             * Transition Actor Budget
-             * @default 4
-             */
-            transition_actor_budget?: number;
-        } & {
-            [key: string]: unknown;
         };
         /** RpgCreateScenarioRequestBody */
         RpgCreateScenarioRequestBody: {
@@ -4974,6 +7242,48 @@ export interface components {
             validator?: boolean;
         };
         /**
+         * RpgGameMasterEntry
+         * @description One question to the game master, and the answer shown (EV-0).
+         */
+        RpgGameMasterEntry: {
+            /** Answer */
+            answer: string;
+            /** Asked At */
+            asked_at?: string;
+            /** Id */
+            id: number;
+            /** Question */
+            question: string;
+            wish?: components["schemas"]["RpgGameMasterWish"] | null;
+            /** Withheld */
+            withheld: boolean;
+        };
+        /** RpgGameMasterQuestionBody */
+        RpgGameMasterQuestionBody: {
+            /** Question */
+            question: string;
+        };
+        /** RpgGameMasterResponse */
+        RpgGameMasterResponse: {
+            /** Entries */
+            entries?: components["schemas"]["RpgGameMasterEntry"][];
+            entry?: components["schemas"]["RpgGameMasterEntry"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * RpgGameMasterWish
+         * @description A wish for the story the game master proposes, for the player to confirm (EV-0): its kind and value.
+         */
+        RpgGameMasterWish: {
+            /** Kind */
+            kind: string;
+            /** Value */
+            value: string;
+        };
+        /**
          * RpgGeometryPatchResponse
          * @description The map event the patch recorded and the resulting map snapshot.
          */
@@ -5108,21 +7418,11 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "inspect" | "use" | "equip" | "drop" | "salvage" | "craft" | "modify" | "use_ability" | "hotbar" | "unlock_ability" | "upgrade_ability" | "assign_hotbar" | "remove_hotbar";
+            action: "use" | "equip" | "unequip" | "drop" | "use_ability" | "hotbar" | "unlock_ability" | "assign_hotbar" | "remove_hotbar";
             /** Hotbar Slot */
             hotbar_slot?: string | number | null;
             /** Item Name */
             item_name?: string | null;
-            /** Mod Id */
-            mod_id?: string | null;
-            /** Mod Name */
-            mod_name?: string | null;
-            /** Recipe Id */
-            recipe_id?: string | null;
-            /** Recipe Name */
-            recipe_name?: string | null;
-            /** Station */
-            station?: string | null;
             /** Target */
             target?: string | null;
         };
@@ -5326,6 +7626,88 @@ export interface components {
             /** Locations */
             locations: components["schemas"]["RpgLoreDossier"][];
         };
+        /**
+         * RpgLoreDraft
+         * @description One of the game master's inventions filed for its world's review (EV-0, part 2).
+         */
+        RpgLoreDraft: {
+            /** Campaign Id */
+            campaign_id: string;
+            /** Canon Id */
+            canon_id: string;
+            /** Created At */
+            created_at: string;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Entry */
+            entry: {
+                [key: string]: unknown;
+            };
+            /** Entry Id */
+            entry_id: string;
+            /** Family */
+            family: string;
+            /** Findings */
+            findings?: {
+                [key: string]: unknown;
+            } | null;
+            /** Group Key */
+            group_key: string;
+            /** Id */
+            id: number;
+            /** Linked To */
+            linked_to?: number | null;
+            /** Name */
+            name: string;
+            /** Provenance */
+            provenance: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgLoreDraftGroup */
+        RpgLoreDraftGroup: {
+            /** Drafts */
+            drafts: components["schemas"]["RpgLoreDraft"][];
+            /** Group Key */
+            group_key: string;
+        };
+        /** RpgLoreEntryLinks */
+        RpgLoreEntryLinks: {
+            /** Lore */
+            lore: components["schemas"]["RpgLoreLink"][];
+            /** Text */
+            text: string;
+        };
+        /** RpgLoreEntryResponse */
+        RpgLoreEntryResponse: {
+            entry: components["schemas"]["RpgLoreEntryView"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * RpgLoreEntryView
+         * @description What a link opens (EV-12): the entry's public lore, what the hero has learned of it, and links onward.
+         */
+        RpgLoreEntryView: {
+            /** Entry Id */
+            entry_id: string;
+            /** Family */
+            family: string;
+            learned: components["schemas"]["RpgLoreLearned"];
+            links: components["schemas"]["RpgLoreEntryLinks"];
+            /** Lore */
+            lore: {
+                [key: string]: string;
+            };
+            /** Name */
+            name: string;
+        };
         /** RpgLoreGeneration */
         RpgLoreGeneration: {
             /** Completed Jobs */
@@ -5358,6 +7740,48 @@ export interface components {
             /** Topic Id */
             topic_id?: string;
         };
+        /** RpgLoreLearned */
+        RpgLoreLearned: {
+            /** Facts */
+            facts: string[];
+            /** Known As */
+            known_as: string;
+            /** Told */
+            told: string[];
+        };
+        /**
+         * RpgLoreLink
+         * @description A name in a text that opens its entry's lore (EV-12): the entry, and where the name stands in the text.
+         */
+        RpgLoreLink: {
+            /** End */
+            end: number;
+            /** Entry Id */
+            entry_id: string;
+            /** Start */
+            start: number;
+        };
+        /**
+         * RpgLoreLinkable
+         * @description An entry a text may link (EV-12): its family and names. None the hero may not be shown.
+         */
+        RpgLoreLinkable: {
+            /** Entry Id */
+            entry_id: string;
+            /** Family */
+            family: string;
+            /** Names */
+            names: string[];
+        };
+        /** RpgLoreLinkablesResponse */
+        RpgLoreLinkablesResponse: {
+            /** Entries */
+            entries: components["schemas"]["RpgLoreLinkable"][];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+        };
         /**
          * RpgLoreMaterializationResponse
          * @description A lore document generated in play; ``definition`` is the entity it describes.
@@ -5384,6 +7808,34 @@ export interface components {
             /** Session Id */
             session_id: string;
             storage: components["schemas"]["RpgLoreStorage"];
+        };
+        /** RpgLoreReviewDecisionBody */
+        RpgLoreReviewDecisionBody: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject" | "link" | "withdraw";
+            /** Link To */
+            link_to?: number | null;
+            /** Play */
+            play?: {
+                [key: string]: unknown;
+            } | null;
+            /** Row */
+            row?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** RpgLoreReviewResponse */
+        RpgLoreReviewResponse: {
+            draft?: components["schemas"]["RpgLoreDraft"];
+            /** Groups */
+            groups?: components["schemas"]["RpgLoreDraftGroup"][];
+            /** Ok */
+            ok: boolean;
+            /** World Id */
+            world_id: string;
         };
         /** RpgLoreStorage */
         RpgLoreStorage: {
@@ -5761,7 +8213,7 @@ export interface components {
             seed?: number | null;
             /**
              * Starting Location
-             * @default rusty_flagon_tavern
+             * @default
              */
             starting_location?: string;
             /**
@@ -5851,6 +8303,180 @@ export interface components {
             tactical: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * RpgOperationsDay
+         * @description One day of the workspace's turns (RQ-8.4).
+         */
+        RpgOperationsDay: {
+            /** Classes */
+            classes: components["schemas"]["RpgOperationsTurnClass"][];
+            /** Day */
+            day: string;
+            /** Degraded */
+            degraded: number;
+            /** Degraded Rate */
+            degraded_rate: number;
+            /** Failed */
+            failed: number;
+            /** Failure Rate */
+            failure_rate: number;
+            /** Model Calls */
+            model_calls: number;
+            /** Model Calls Per Turn */
+            model_calls_per_turn: number;
+            /** Model Failures */
+            model_failures: number;
+            /** Turns */
+            turns: number;
+        };
+        /** RpgOperationsResponse */
+        RpgOperationsResponse: {
+            /** Days */
+            days: components["schemas"]["RpgOperationsDay"][];
+            /** Ok */
+            ok: boolean;
+        };
+        /** RpgOperationsTurnClass */
+        RpgOperationsTurnClass: {
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Turn Class */
+            turn_class: string;
+            /** Turns */
+            turns: number;
+        };
+        /** RpgPersonWhereabouts */
+        RpgPersonWhereabouts: {
+            /** Activity */
+            activity: string;
+            /** Location Id */
+            location_id: string;
+            /** Location Name */
+            location_name: string;
+            /** Name */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+        };
+        /**
+         * RpgPlaySectionsDraftResponse
+         * @description World Forge's first draft from the world's lore; not kept until the author saves it.
+         */
+        RpgPlaySectionsDraftResponse: {
+            document: components["schemas"]["PlaySectionsDraft"];
+            /** Ok */
+            ok: boolean;
+            /** World Id */
+            world_id: string;
+        };
+        /**
+         * RpgPlaySectionsReadiness
+         * @description Each section (``world_play_sections.SECTIONS``): written by the world, or inferred from its lore at launch.
+         */
+        RpgPlaySectionsReadiness: {
+            /**
+             * Bestiary
+             * @enum {string}
+             */
+            bestiary: "authored" | "derived";
+            /**
+             * Budgets
+             * @enum {string}
+             */
+            budgets: "authored" | "derived";
+            /**
+             * Economy
+             * @enum {string}
+             */
+            economy: "authored" | "derived";
+            /**
+             * Fact Effects
+             * @enum {string}
+             */
+            fact_effects: "authored" | "derived";
+            /**
+             * Group Members
+             * @enum {string}
+             */
+            group_members: "authored" | "derived";
+            /**
+             * Knowledge
+             * @enum {string}
+             */
+            knowledge: "authored" | "derived";
+            /**
+             * Pressures
+             * @enum {string}
+             */
+            pressures: "authored" | "derived";
+            /**
+             * Quests
+             * @enum {string}
+             */
+            quests: "authored" | "derived";
+            /**
+             * Routines
+             * @enum {string}
+             */
+            routines: "authored" | "derived";
+        };
+        /** RpgPlaySectionsReadinessView */
+        RpgPlaySectionsReadinessView: {
+            draft: components["schemas"]["RpgPlaySectionsReadiness"];
+            published: components["schemas"]["RpgPlaySectionsReadiness"] | null;
+        };
+        /** RpgPlaySectionsReference */
+        RpgPlaySectionsReference: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * RpgPlaySectionsReferences
+         * @description What a section may name: the world's people, places, items, creatures, regions and quests.
+         */
+        RpgPlaySectionsReferences: {
+            /** Creatures */
+            creatures: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Items */
+            items: components["schemas"]["RpgPlaySectionsReference"][];
+            /** People */
+            people: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Places */
+            places: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Quests */
+            quests: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Regions */
+            regions: components["schemas"]["RpgPlaySectionsReference"][];
+        };
+        /**
+         * RpgPlaySectionsResponse
+         * @description How a world plays, in the world editor (RQ-4.1): the author's draft (else what the latest revision carries),
+         *     the hash a save must name, whether a draft is kept and not yet published, readiness as published and as drafted,
+         *     the references the next publication would refuse, and what the sections may name.
+         */
+        RpgPlaySectionsResponse: {
+            /** Content Hash */
+            content_hash: string;
+            document: components["schemas"]["PlaySectionsDraft"];
+            /** Findings */
+            findings: string[];
+            /** Ok */
+            ok: boolean;
+            /** Published Revision */
+            published_revision: number | null;
+            readiness: components["schemas"]["RpgPlaySectionsReadinessView"];
+            references: components["schemas"]["RpgPlaySectionsReferences"];
+            /** Saved */
+            saved: boolean;
+            /** Unpublished */
+            unpublished: boolean;
+            /** World Id */
+            world_id: string;
         };
         /** RpgPlayerOptions */
         RpgPlayerOptions: {
@@ -6205,130 +8831,60 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** RpgSaveCampaignSpatialGoalRequestBody */
-        RpgSaveCampaignSpatialGoalRequestBody: {
-            /** Actor Id */
-            actor_id: string;
+        /** RpgResumeRequestBody */
+        RpgResumeRequestBody: {
             /**
-             * Blocked Attempts
+             * Elapsed Seconds
              * @default 0
              */
-            blocked_attempts?: number;
-            /**
-             * Expected Revision
-             * @default 0
-             */
-            expected_revision?: number;
-            /** Expires After Tick */
-            expires_after_tick?: number | null;
-            /** Goal Id */
-            goal_id: string;
-            /**
-             * Goal Revision
-             * @default 1
-             */
-            goal_revision?: number;
-            /**
-             * Goal Type
-             * @enum {string}
-             */
-            goal_type: "move_to_cell" | "transition_via_portal";
-            /**
-             * Issued Tick
-             * @default 0
-             */
-            issued_tick?: number;
-            /** Last Decision */
-            last_decision?: {
-                [key: string]: unknown;
-            };
-            /** Map Instance Id */
-            map_instance_id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Not Before Tick
-             * @default 0
-             */
-            not_before_tick?: number;
-            /** Portal Id */
-            portal_id?: string | null;
-            /**
-             * Priority
-             * @default 0
-             */
-            priority?: number;
-            /** Routine Id */
-            routine_id?: string | null;
-            /**
-             * Status
-             * @default active
-             * @enum {string}
-             */
-            status?: "active" | "completed" | "blocked" | "canceled" | "expired";
-            /** Target Cell */
-            target_cell?: [
-                number,
-                number
-            ] | null;
-            /** Target Map Instance Id */
-            target_map_instance_id?: string | null;
+            elapsed_seconds?: number;
         } & {
             [key: string]: unknown;
         };
-        /** RpgSaveCampaignSpatialRoutineRequestBody */
-        RpgSaveCampaignSpatialRoutineRequestBody: {
-            /** Actor Id */
-            actor_id: string;
-            /**
-             * Emission Count
-             * @default 0
-             */
-            emission_count?: number;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled?: boolean;
-            /**
-             * Expected Revision
-             * @default 0
-             */
-            expected_revision?: number;
-            /**
-             * Interval Ticks
-             * @default 1
-             */
-            interval_ticks?: number;
-            /** Last Issued Tick */
-            last_issued_tick?: number | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Next Due Tick
-             * @default 0
-             */
-            next_due_tick?: number;
-            /**
-             * Next Step Index
-             * @default 0
-             */
-            next_step_index?: number;
-            /** Routine Id */
-            routine_id: string;
-            /**
-             * Routine Revision
-             * @default 1
-             */
-            routine_revision?: number;
-            /** Steps */
-            steps: components["schemas"]["NpcSpatialRoutineStep"][];
+        /** RpgRewindRequestBody */
+        RpgRewindRequestBody: {
+            /** Save Point */
+            save_point?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgSavePlaySectionsRequestBody */
+        RpgSavePlaySectionsRequestBody: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Expected Content Hash */
+            expected_content_hash: string;
+        };
+        /**
+         * RpgSavePoint
+         * @description A named moment of a campaign to return to (rewind.md).
+         */
+        RpgSavePoint: {
+            /** Created At */
+            created_at: string;
+            /** Name */
+            name: string;
+            /** Revision */
+            revision: number;
+        };
+        /** RpgSavePointRequestBody */
+        RpgSavePointRequestBody: {
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RpgSavePointsResponse */
+        RpgSavePointsResponse: {
+            /** Ok */
+            ok: boolean;
+            save_point?: components["schemas"]["RpgSavePoint"];
+            /** Save Points */
+            save_points: components["schemas"]["RpgSavePoint"][];
+            /** Session Id */
+            session_id: string;
         };
         /** RpgScenarioLifecycleResponse */
         RpgScenarioLifecycleResponse: {
@@ -6479,188 +9035,50 @@ export interface components {
             /** World Id */
             world_id: string;
         };
-        /** RpgSpatialClock */
-        RpgSpatialClock: {
-            /** Aggregate Metrics */
-            aggregate_metrics: {
-                [key: string]: unknown;
-            };
-            /** Campaign Id */
-            campaign_id: string;
-            /** Created At */
-            created_at: string;
-            /** Policy */
-            policy: {
-                [key: string]: unknown;
-            };
-            /** Updated At */
-            updated_at: string;
-            /** World Tick */
-            world_tick: number;
-        };
-        /** RpgSpatialClockResponse */
-        RpgSpatialClockResponse: {
-            clock: components["schemas"]["RpgSpatialClock"];
-            /** Ok */
-            ok: boolean;
-        };
-        /** RpgSpatialGoal */
-        RpgSpatialGoal: {
-            /** Actor Id */
-            actor_id: string;
-            /** Blocked Attempts */
-            blocked_attempts: number;
-            /** Campaign Id */
-            campaign_id: string;
-            /** Created At */
-            created_at: string;
-            /** Expires After Tick */
-            expires_after_tick: number | null;
-            /** Goal Id */
-            goal_id: string;
-            /** Goal Revision */
-            goal_revision: number;
-            /** Goal Type */
-            goal_type: string;
-            /** Issued Tick */
-            issued_tick: number;
-            /** Last Decision */
-            last_decision: {
-                [key: string]: unknown;
-            };
-            /** Map Instance Id */
-            map_instance_id: string;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Not Before Tick */
-            not_before_tick: number;
-            /** Portal Id */
-            portal_id: string | null;
-            /** Priority */
-            priority: number;
-            /** Routine Id */
-            routine_id: string | null;
-            /** Status */
-            status: string;
-            /** Target Cell */
-            target_cell: number[] | null;
-            /** Target Map Instance Id */
-            target_map_instance_id: string | null;
-            /** Updated At */
-            updated_at: string;
-        };
-        /** RpgSpatialGoalResponse */
-        RpgSpatialGoalResponse: {
-            goal: components["schemas"]["RpgSpatialGoal"];
-            /** Ok */
-            ok: boolean;
-        };
-        /** RpgSpatialRoutine */
-        RpgSpatialRoutine: {
-            /** Actor Id */
-            actor_id: string;
-            /** Campaign Id */
-            campaign_id: string;
-            /** Created At */
-            created_at: string;
-            /** Emission Count */
-            emission_count: number;
-            /** Enabled */
-            enabled: boolean;
-            /** Interval Ticks */
-            interval_ticks: number;
-            /** Last Issued Tick */
-            last_issued_tick: number | null;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Next Due Tick */
-            next_due_tick: number;
-            /** Next Step Index */
-            next_step_index: number;
-            /** Routine Id */
-            routine_id: string;
-            /** Routine Revision */
-            routine_revision: number;
-            /** Steps */
-            steps: {
-                [key: string]: unknown;
-            }[];
-            /** Updated At */
-            updated_at: string;
-        };
-        /** RpgSpatialRoutineResponse */
-        RpgSpatialRoutineResponse: {
-            /** Ok */
-            ok: boolean;
-            routine: components["schemas"]["RpgSpatialRoutine"];
-        };
-        /** RpgSpatialRoutineState */
-        RpgSpatialRoutineState: {
-            /** Actor Id */
-            actor_id: string;
-            /** Created At */
-            created_at: string;
-            /** Emission Count */
-            emission_count: number;
-            /** Enabled */
-            enabled: boolean;
-            /** Interval Ticks */
-            interval_ticks: number;
-            /** Last Issued Tick */
-            last_issued_tick: number | null;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Next Due Tick */
-            next_due_tick: number;
-            /** Next Step Index */
-            next_step_index: number;
-            /** Routine Id */
-            routine_id: string;
-            /** Routine Revision */
-            routine_revision: number;
-            /** Steps */
-            steps: {
-                [key: string]: unknown;
-            }[];
-            /** Updated At */
-            updated_at: string;
-        };
-        /** RpgSpatialStateResponse */
-        RpgSpatialStateResponse: {
-            clock: components["schemas"]["RpgSpatialClock"];
-            /** Goals */
-            goals: components["schemas"]["RpgSpatialGoal"][];
-            /** Ok */
-            ok: boolean;
-            /** Recent Ticks */
-            recent_ticks: {
-                [key: string]: unknown;
-            }[];
-            /** Routines */
-            routines: components["schemas"]["RpgSpatialRoutineState"][];
-        };
         /**
-         * RpgSpatialTickResponse
-         * @description One simulation tick: the advanced clock, the tick's result and its metrics.
+         * RpgSpatialStateResponse
+         * @description Where each of the world's people is, and what they are doing, at the campaign clock's time (RQ-2.7).
          */
-        RpgSpatialTickResponse: {
-            clock: components["schemas"]["RpgSpatialClock"];
-            /** Metrics */
-            metrics: {
-                [key: string]: unknown;
-            };
+        RpgSpatialStateResponse: {
+            /** Absolute Minutes */
+            absolute_minutes: number;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Hero Location Id */
+            hero_location_id: string;
             /** Ok */
             ok: boolean;
-            /** Result */
-            result: {
-                [key: string]: unknown;
-            };
+            /** People */
+            people: components["schemas"]["RpgPersonWhereabouts"][];
+            /** Present Npc Ids */
+            present_npc_ids: string[];
+            /** Revision */
+            revision: number;
+        };
+        /** RpgSpeechBlock */
+        RpgSpeechBlock: {
+            /**
+             * Speaker Id
+             * @default narrator
+             */
+            speaker_id?: string;
+            /** Text */
+            text: string;
+        };
+        /** RpgSpeechPlanBody */
+        RpgSpeechPlanBody: {
+            /** Blocks */
+            blocks: components["schemas"]["RpgSpeechBlock"][];
+        };
+        /** RpgSpeechSentence */
+        RpgSpeechSentence: {
+            /**
+             * Speaker Id
+             * @default narrator
+             */
+            speaker_id?: string;
+            /** Text */
+            text: string;
         };
         /** RpgStarterBubblePromotionResponse */
         RpgStarterBubblePromotionResponse: {
@@ -6738,6 +9156,7 @@ export interface components {
             document: {
                 [key: string]: unknown;
             };
+            play_sections?: components["schemas"]["RpgPlaySectionsReadiness"];
             /** Revision */
             revision: number;
             /** Workspace Id */
@@ -6760,8 +9179,7 @@ export interface components {
             /** Expected Campaign Revision */
             expected_campaign_revision: number;
             /** Expected Map State Revision */
-            expected_map_state_revision: number;
-            policy?: components["schemas"]["TacticalSpatialPolicy"] | null;
+            expected_map_state_revision?: number | null;
             /** Submission Id */
             submission_id: string;
             /** Target Id */
@@ -6783,8 +9201,7 @@ export interface components {
             /** Expected Campaign Revision */
             expected_campaign_revision: number;
             /** Expected Map State Revision */
-            expected_map_state_revision: number;
-            policy?: components["schemas"]["TacticalSpatialPolicy"] | null;
+            expected_map_state_revision?: number | null;
             /** Submission Id */
             submission_id: string;
         } & {
@@ -6864,8 +9281,13 @@ export interface components {
             interaction_id?: string | null;
             /** Job Id */
             job_id?: string | null;
+            /** Notices */
+            notices?: {
+                [key: string]: string;
+            }[];
             /** Ok */
             ok: boolean;
+            outcome?: components["schemas"]["TurnOutcome"] | null;
             /** Response */
             response?: string | null;
             result: components["schemas"]["RpgTurnResult"];
@@ -6951,6 +9373,10 @@ export interface components {
         RpgTurnVisibleResponse: {
             /** Format Version */
             format_version?: string | null;
+            /** Links */
+            links?: {
+                [key: string]: unknown;
+            } | null;
             /** Messages */
             messages?: {
                 [key: string]: unknown;
@@ -6963,6 +9389,10 @@ export interface components {
             } | null;
             /** Plain Text */
             plain_text?: string | null;
+            /** Voices */
+            voices?: {
+                [key: string]: unknown;
+            } | null;
         } & {
             [key: string]: unknown;
         };
@@ -7039,6 +9469,38 @@ export interface components {
             generation_lock?: boolean | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * RpgVoiceCastEntry
+         * @description The narrator or a person who speaks, and their voice (EV-13).
+         */
+        RpgVoiceCastEntry: {
+            /** Chosen By */
+            chosen_by?: string;
+            /** Name */
+            name: string;
+            /** Speaker Id */
+            speaker_id: string;
+            /** Voice Id */
+            voice_id?: string;
+            /** Voice Revision */
+            voice_revision?: string;
+        };
+        /** RpgVoiceCastResponse */
+        RpgVoiceCastResponse: {
+            /** Cast */
+            cast: components["schemas"]["RpgVoiceCastEntry"][];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+            /** Voices */
+            voices: components["schemas"]["RpgCastableVoice"][];
+        };
+        /** RpgVoiceChoiceBody */
+        RpgVoiceChoiceBody: {
+            /** Voice Id */
+            voice_id: string;
         };
         /** RpgWorldAdoptRequestBody */
         RpgWorldAdoptRequestBody: {
@@ -8296,6 +10758,7 @@ export interface components {
             document: {
                 [key: string]: unknown;
             };
+            play_sections?: components["schemas"]["RpgPlaySectionsReadiness"];
             /** Revision */
             revision: number;
         };
@@ -8568,6 +11031,55 @@ export interface components {
             topic: components["schemas"]["RpgWorldTopic"];
         };
         /**
+         * RumourHeard
+         * @description The hero is told a rumour (EV-4): by someone of its place, or for a price.
+         */
+        RumourHeard: {
+            /** Rumour Id */
+            rumour_id: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rumour_heard";
+        };
+        /**
+         * RumourSpread
+         * @description Word the people of a place come to know and will tell (EV-4, ``rules/rumours.py``). ``text_id`` names its
+         *     authored line (a beat's rumour); ``text`` holds one no author wrote (the game master's).
+         */
+        RumourSpread: {
+            /** Place Id */
+            place_id: string;
+            /** Rumour Id */
+            rumour_id: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Text Id
+             * @default
+             */
+            text_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rumour_spread";
+        };
+        /**
          * RuntimeDiagnostics
          * @description One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.
          */
@@ -8582,6 +11094,54 @@ export interface components {
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
         SendChatMessageResponse: core["schemas"]["SendChatMessageResponse"];
+        /**
+         * ServiceReserved
+         * @description A service paid for and kept for later: a room for the night.
+         */
+        ServiceReserved: {
+            /**
+             * Duration
+             * @default
+             */
+            duration: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Offer Id */
+            offer_id: string;
+            /**
+             * Provider Id
+             * @default
+             */
+            provider_id: string;
+            /**
+             * Provider Name
+             * @default
+             */
+            provider_name: string;
+            /** Service Kind */
+            service_kind: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "service_reserved";
+        };
+        /**
+         * ServiceUsed
+         * @description A service paid for and kept, used now: the room slept in.
+         */
+        ServiceUsed: {
+            /** Offer Id */
+            offer_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "service_used";
+        };
         /** SetDefaultModels */
         SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SettingsPatch */
@@ -8600,41 +11160,321 @@ export interface components {
         SettingsProfileSaveRequest: core["schemas"]["SettingsProfileSaveRequest"];
         /** SettingsSaveResponse */
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
+        /** ShopOffer */
+        ShopOffer: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Item Id
+             * @default
+             */
+            item_id: string;
+            /** Name */
+            name: string;
+            /** Offer Key */
+            offer_key: string;
+            price: components["schemas"]["Price"];
+            recipe?: components["schemas"]["UpgradeRecipe"] | null;
+            /**
+             * Restock Per Day
+             * @default 0
+             */
+            restock_per_day: number;
+            /**
+             * Service
+             * @enum {string}
+             */
+            service: "lodging" | "meal" | "drink" | "shop_goods" | "repair" | "paid_information" | "upgrade";
+            /** Stock */
+            stock?: number | null;
+        };
+        /**
+         * SiteFound
+         * @description A hidden place found by exploring (EV-10, ``rules/exploration.py``): it joins the roads, and the hero can go.
+         */
+        SiteFound: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * Told
+             * @default
+             */
+            told: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "site_found";
+        };
+        /**
+         * SkillProgressed
+         * @description A skill's progress as the rules computed it (level-ups are the rules' decision, not the reducer's).
+         */
+        SkillProgressed: {
+            /** Level */
+            level: number;
+            /** Skill Id */
+            skill_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "skill_progressed";
+            /** Xp */
+            xp: number;
+            /** Xp To Next */
+            xp_to_next: number;
+        };
         /** SpeechModelListResponse */
         SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
         /** SpeechModelStatus */
         SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
+        /**
+         * StandingChanged
+         * @description A group's standing with the hero moved, from -100 to 100.
+         */
+        StandingChanged: {
+            /** Delta */
+            delta: number;
+            /** Group Id */
+            group_id: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "standing_changed";
+        };
+        /** StandingEffect */
+        StandingEffect: {
+            /** Delta */
+            delta: number;
+            /** Group */
+            group: string;
+        };
         /** StateHashRequest */
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
-        /** TacticalSpatialPolicy */
-        TacticalSpatialPolicy: {
+        /**
+         * StockTaken
+         * @description What an offer has left after a sale, and the campaign day of it (stock grows back from there).
+         */
+        StockTaken: {
             /**
-             * Default Action Budget
+             * Day
+             * @default 0
+             */
+            day: number;
+            /** Offer Id */
+            offer_id: string;
+            /** Remaining */
+            remaining: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stock_taken";
+        };
+        /**
+         * Suggestion
+         * @description Something the play screen offers to do next (RQ-7.3): a label, the command its log shows, and the card's action
+         *     (evolution roadmap EV-9): the reading it carries (``family``, ``target_id``, ``second_target_id``, ``check``,
+         *     ``slots``) and the turn it was offered at, played with no model call.
+         */
+        Suggestion: {
+            /** Action */
+            action?: {
+                [key: string]: unknown;
+            };
+            /** Command */
+            command: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * TimeAdvanced
+         * @description The turn's ticks of the campaign clock, and the in-game minutes they took (the world tick moves the clock).
+         */
+        TimeAdvanced: {
+            /**
+             * Minutes
+             * @default 0
+             */
+            minutes: number;
+            /**
+             * Ticks
              * @default 1
              */
-            default_action_budget?: number;
+            ticks: number;
             /**
-             * Default Movement Budget
-             * @default 60
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            default_movement_budget?: number;
+            type: "time_advanced";
+        };
+        /**
+         * TradeRemembered
+         * @description A trade in the campaign's ledger, which the trader's later dialogue can recall.
+         */
+        TradeRemembered: {
             /**
-             * Full Cover Bonus
-             * @default 5
+             * Copper
+             * @default 0
              */
-            full_cover_bonus?: number;
+            copper: number;
             /**
-             * Half Cover Bonus
-             * @default 2
+             * Deal
+             * @enum {string}
              */
-            half_cover_bonus?: number;
+            deal: "bought" | "sold";
+            /** Provider Id */
+            provider_id: string;
             /**
-             * Max Reactions Per Move
-             * @default 8
+             * Provider Name
+             * @default
              */
-            max_reactions_per_move?: number;
+            provider_name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade_remembered";
+            /**
+             * What
+             * @default
+             */
+            what: string;
+        };
+        /** TurnCounted */
+        TurnCounted: {
+            /** Turn Count */
+            turn_count: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "turn_counted";
+        };
+        /**
+         * TurnIntent
+         * @description What the turn took the player to mean, and who decided it (the game's own rules or a model).
+         */
+        TurnIntent: {
+            /**
+             * Action Type
+             * @default
+             */
+            action_type: string;
+            /**
+             * Semantic Action Type
+             * @default
+             */
+            semantic_action_type: string;
+            /**
+             * Semantic Family
+             * @default
+             */
+            semantic_family: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Target Id
+             * @default
+             */
+            target_id: string;
+        };
+        /** TurnOutcome */
+        TurnOutcome: {
+            /** Action Result */
+            action_result?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Applied Changes
+             * @default []
+             */
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["HotbarChanged"] | components["schemas"]["MapStateProjected"] | components["schemas"]["InteractionRecorded"] | components["schemas"]["InteractionsReplayed"] | components["schemas"]["LifecycleRecorded"] | components["schemas"]["InteractionPresented"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"] | components["schemas"]["LocalMapEntered"] | components["schemas"]["EntryMet"] | components["schemas"]["FactSet"] | components["schemas"]["FactLearned"] | components["schemas"]["StandingChanged"] | components["schemas"]["PhaseEntered"] | components["schemas"]["GuardSet"] | components["schemas"]["DirectionTracked"] | components["schemas"]["PreferenceNoted"] | components["schemas"]["BeatAdvanced"] | components["schemas"]["RumourSpread"] | components["schemas"]["RumourHeard"] | components["schemas"]["InventionAdded"] | components["schemas"]["AreaDetailed"] | components["schemas"]["SiteFound"] | components["schemas"]["RoomCleared"] | components["schemas"]["ItemImproved"])[];
+            /** Dialogue Plan */
+            dialogue_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /** Document Version */
+            document_version?: number | null;
+            /**
+             * Format Version
+             * @default rpg_turn_outcome_v1
+             * @constant
+             */
+            format_version: "rpg_turn_outcome_v1";
+            intent?: components["schemas"]["TurnIntent"];
+            /**
+             * Kind
+             * @default player_text
+             * @enum {string}
+             */
+            kind: "player_text" | "structured_action" | "world_tick" | "system";
+            model_calls?: components["schemas"]["ModelCalls"];
+            narration?: components["schemas"]["NarrationReference"];
+            /** Planned Action */
+            planned_action?: string | null;
+            presentation?: components["schemas"]["PresentationHints"];
+            /** Revision */
+            revision?: number | null;
+            /**
+             * Submission Id
+             * @default
+             */
+            submission_id: string;
+            /** Timings */
+            timings?: {
+                [key: string]: number;
+            };
+            /**
+             * Turn Id
+             * @default
+             */
+            turn_id: string;
+            /**
+             * World Events
+             * @default []
+             */
+            world_events: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * UpgradeRecipe
+         * @description What an ``upgrade`` takes (evolution roadmap EV-5): the gear it improves (by slot), the materials each tier
+         *     takes, what each tier adds, and the last tier. The level's budgets bound the result (``rules/budgets.py``).
+         */
+        UpgradeRecipe: {
+            /**
+             * Materials
+             * @default []
+             */
+            materials: components["schemas"]["Material"][];
+            /**
+             * Max Tier
+             * @default 3
+             */
+            max_tier: number;
+            /** Per Tier */
+            per_tier?: {
+                [key: string]: number;
+            };
+            /** Slots */
+            slots: string[];
         };
         /** ValidateDefinitionRequestBody */
         ValidateDefinitionRequestBody: {
@@ -8653,6 +11493,46 @@ export interface components {
         ValidationError: core["schemas"]["ValidationError"];
         /** VersionDiagnostics */
         VersionDiagnostics: core["schemas"]["VersionDiagnostics"];
+        /** WaiveEffect */
+        WaiveEffect: {
+            /** Offer */
+            offer: string;
+            /** Provider */
+            provider: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
+        /**
+         * WhereaboutsChanged
+         * @description Where the world's people went as time passed, and what they are doing there (their routines, RQ-2.7).
+         */
+        WhereaboutsChanged: {
+            /** People */
+            people: components["schemas"]["PersonWhereabouts"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "whereabouts_changed";
+        };
+        /** WhereaboutsEffect */
+        WhereaboutsEffect: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /** Npc */
+            npc: string;
+        };
         /** WorkerHealth */
         WorkerHealth: core["schemas"]["WorkerHealth"];
         /** WorkerHealthPayload */
@@ -8661,6 +11541,75 @@ export interface components {
         WorkerHealthSummary: core["schemas"]["WorkerHealthSummary"];
         /** WorkerPayloadPolicy */
         WorkerPayloadPolicy: core["schemas"]["WorkerPayloadPolicy"];
+        /** WorldPressure */
+        WorldPressure: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Dimension
+             * @default political_stability
+             * @enum {string}
+             */
+            dimension: "political_stability" | "trade_access" | "resource_access" | "population_index";
+            /**
+             * Escalation Threshold
+             * @default 75
+             */
+            escalation_threshold: number;
+            /**
+             * Levers
+             * @default []
+             */
+            levers: components["schemas"]["PressureLever"][];
+            /** Name */
+            name: string;
+            /** Pressure Id */
+            pressure_id: string;
+            /** Region Id */
+            region_id: string;
+            /**
+             * Resolution Threshold
+             * @default 15
+             */
+            resolution_threshold: number;
+            /**
+             * Severity
+             * @default 40
+             */
+            severity: number;
+            /**
+             * Trend
+             * @default escalating
+             * @enum {string}
+             */
+            trend: "escalating" | "contained" | "volatile" | "stable";
+        };
+        /**
+         * WorldTicked
+         * @description The world moved on: the sections the world tick owns, as it left them.
+         */
+        WorldTicked: {
+            /** Runtime */
+            runtime?: {
+                [key: string]: unknown;
+            };
+            /** Simulation */
+            simulation?: {
+                [key: string]: unknown;
+            };
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "world_ticked";
+        };
     };
     responses: never;
     parameters: never;
@@ -9711,116 +12660,9 @@ export interface operations {
             };
         };
     };
-    rpg_save_campaign_spatial_goal_api_rpg_campaigns__campaign_id__spatial_goals_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RpgSaveCampaignSpatialGoalRequestBody"];
-            };
-        };
-        responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RpgSpatialGoalResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rpg_configure_campaign_spatial_policy_api_rpg_campaigns__campaign_id__spatial_policy_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RpgConfigureCampaignSpatialPolicyRequestBody"];
-            };
-        };
-        responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RpgSpatialClockResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rpg_save_campaign_spatial_routine_api_rpg_campaigns__campaign_id__spatial_routines_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RpgSaveCampaignSpatialRoutineRequestBody"];
-            };
-        };
-        responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RpgSpatialRoutineResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     rpg_read_campaign_spatial_state_api_rpg_campaigns__campaign_id__spatial_state_get: {
         parameters: {
-            query?: {
-                tick_limit?: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 campaign_id: string;
@@ -9864,13 +12706,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
+            /** @description The world_tick turn's rpg_turn_response_v2 contract. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RpgSpatialTickResponse"];
+                    "application/json": components["schemas"]["RpgTurnResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10647,6 +13489,37 @@ export interface operations {
             };
         };
     };
+    rpg_operations_api_rpg_operations_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgOperationsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_player_codex_api_rpg_player_codex_post: {
         parameters: {
             query?: never;
@@ -11113,6 +13986,41 @@ export interface operations {
             };
         };
     };
+    rpg_import_session_api_rpg_sessions_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgCampaignImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_read_session_api_rpg_sessions__session_id__get: {
         parameters: {
             query?: never;
@@ -11268,6 +14176,103 @@ export interface operations {
             };
         };
     };
+    rpg_export_session_api_rpg_sessions__session_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgCampaignPackage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_game_master_log_api_rpg_sessions__session_id__game_master_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgGameMasterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_ask_game_master_api_rpg_sessions__session_id__game_master_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgGameMasterQuestionBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgGameMasterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_loadout_action_api_rpg_sessions__session_id__loadout_action_post: {
         parameters: {
             query?: never;
@@ -11389,6 +14394,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgLoreDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_lore_entry_api_rpg_sessions__session_id__lore_entries__entry_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgLoreEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_lore_linkable_api_rpg_sessions__session_id__lore_linkable_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgLoreLinkablesResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11609,6 +14677,244 @@ export interface operations {
             };
         };
     };
+    rpg_resume_session_api_rpg_sessions__session_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgResumeRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The world_tick turn's rpg_turn_response_v2 contract. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_rewind_session_api_rpg_sessions__session_id__rewind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgRewindRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The rewind turn's rpg_turn_response_v2 contract. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_list_save_points_api_rpg_sessions__session_id__save_points_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgSavePointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_create_save_point_api_rpg_sessions__session_id__save_points_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgSavePointRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgSavePointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_delete_save_point_api_rpg_sessions__session_id__save_points__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgSavePointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_speech_audio_api_rpg_sessions__session_id__speech_audio_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgSpeechSentence"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_speech_plan_api_rpg_sessions__session_id__speech_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgSpeechPlanBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_apply_turn_api_rpg_sessions__session_id__turn_post: {
         parameters: {
             query?: never;
@@ -11664,6 +14970,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgTurnDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_voice_cast_api_rpg_sessions__session_id__voices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgVoiceCastResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_choose_voice_api_rpg_sessions__session_id__voices__speaker_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgVoiceChoiceBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgVoiceCastResponse"];
                 };
             };
             /** @description Validation Error */
@@ -13200,6 +16573,107 @@ export interface operations {
             };
         };
     };
+    rpg_lore_review_queue_api_rpg_worlds__world_id__lore_review_get: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgLoreReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_lore_review_check_api_rpg_worlds__world_id__lore_review__draft_id__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgLoreReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_lore_review_decide_api_rpg_worlds__world_id__lore_review__draft_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgLoreReviewDecisionBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgLoreReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_world_map_blueprints_api_rpg_worlds__world_id__map_blueprints_get: {
         parameters: {
             query?: {
@@ -13355,6 +16829,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgMaterializationScheduleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_read_world_play_sections_api_rpg_worlds__world_id__play_sections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_save_world_play_sections_api_rpg_worlds__world_id__play_sections_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgSavePlaySectionsRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_draft_world_play_sections_api_rpg_worlds__world_id__play_sections_draft_from_lore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_publish_world_play_sections_api_rpg_worlds__world_id__play_sections_publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -13796,6 +17398,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgAuthoringTopicMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_add_world_entity_api_rpg_worlds__world_id__topics__topic_id__entities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgAddWorldEntityRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgAuthoringEntityMutationResponse"];
                 };
             };
             /** @description Validation Error */

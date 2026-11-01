@@ -1,158 +1,10 @@
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
 import { jobProgressPercent } from '../../api/jobProgress';
-
-export interface RpgHeroSummaryPreview {
-  avatar: string;
-  name: string;
-  subtitle: string;
-  origin: string;
-  xpLabel: string;
-  xpPercent: number;
-  gold: string;
-  renown: string;
-  source: 'live' | 'preview';
-}
-
-export interface RpgStatPreview {
-  label: string;
-  value: string;
-  percent: number;
-  tone: 'danger' | 'success' | 'mana';
-}
-
-export interface RpgSurvivalNeedPreview {
-  id: 'hunger' | 'thirst' | 'fatigue';
-  label: string;
-  percent: number;
-  severity: 'stable' | 'warning' | 'critical';
-  value: string;
-}
-
-export interface RpgSurvivalPreview {
-  actions: RpgQuickActionPreview[];
-  detail: string;
-  needs: RpgSurvivalNeedPreview[];
-  source: 'live' | 'preview';
-  status: 'Stable' | 'Warning' | 'Critical';
-  warnings: string[];
-}
-
-export interface RpgGearPreview {
-  icon: string;
-  name: string;
-  slot: string;
-}
-
-export interface RpgPartyMemberPreview {
-  avatar: string;
-  name: string;
-  role: string;
-  hp: string;
-  percent: number;
-}
-
-export interface RpgQuestPreview {
-  icon: string;
-  title: string;
-  detail: string;
-}
-
-export interface RpgQuickActionPreview {
-  label: string;
-  icon: string;
-  command: string;
-}
-
-export interface RpgJournalEntryPreview {
-  time: string;
-  title: string;
-  detail: string;
-}
-
-export interface RpgJournalDetailPreview {
-  title: string;
-  detail: string;
-  bullets: string[];
-  tags: string[];
-}
-
-export interface RpgInventoryItemPreview {
-  icon: string;
-  count: string;
-  label: string;
-}
-
-export interface RpgHotbarAbilityPreview {
-  key: string;
-  icon: string;
-  label: string;
-  abilityId?: string;
-  description?: string;
-}
-
-export interface RpgWorldStateRowPreview {
-  icon: string;
-  label: string;
-  value: string;
-}
-
-export interface RpgNpcRelationshipPreview {
-  name: string;
-  stance: string;
-  score: number;
-}
-
-export interface RpgEncounterPreview {
-  icon: string;
-  title: string;
-  detail: string;
-  source: 'live' | 'preview';
-}
-
-export interface RpgJobCardPreview {
-  id: string;
-  title: string;
-  status: string;
-  progress: number;
-  detail: string;
-  errorDetail?: string;
-  source: 'live' | 'preview';
-}
-
-export interface RpgSessionSummaryPreview {
-  id: string;
-  worldId?: string;
-  title: string;
-  location: string;
-  summary: string;
-  updatedAt: string;
-  turnLabel: string;
-  checkpointLabel: string;
-  sortRank: number;
-  source: 'live' | 'preview';
-}
-
-export interface RpgCheckpointSummaryPreview {
-  label: string;
-  detail: string;
-  source: 'live' | 'preview';
-}
-
-export interface RpgStoryMessagePreview {
-  id?: string;
-  interactionId?: string;
-  messageKind?: string;
-  messageIndex?: number;
-  avatar: string;
-  speaker: string;
-  text: string;
-  tone: 'player' | 'npc' | 'narrator';
-}
-
-type RpgSession = Record<string, unknown>;
-type RpgJob = JobListResponse['jobs'][number];
-type RpgAsset = AssetListResponse['assets'][number];
-type RpgReport = NonNullable<ReportListResponse['reports']>[number];
+import { buildInteractionStoryMessages, buildJournalDetail, buildJournalEntries, buildRecentEvents, buildRpgTurnJobTimelineEvents, buildStoryMessages, buildTimelineEvents } from './rpgStoryState';
+import { NOT_TRACKED, activeQuests, equippedGear, heroStats, hotbarAbilities, inventoryItems, npcRelationships, partyMembers, previewHeroSummary, previewJobs, previewSessionSummary, previewSurvival, previewWorldStateRows, quickActions } from './rpgUiPreview';
+import { compactTimestamp, emptyHeroStats, emptyStat, firstArray, firstNumber, firstRecord, firstString, formatCurrency, formatNumber, getEnvironmentSnapshot, getPlayerRecord, getSessionRecords, iconForEquipment, iconForInventory, initialFor, metricLabel, metricPercent, questIcon, quickActionIcon, quickActionLabel, readMetric, recordValue, relationshipScore, stanceForScore, timestampRank, titleCase, toStat } from './rpgUiRecords';
+import { buildWorldChanges, type RpgWorldChangesPreview } from './rpgWorldChanges';
+import type { RpgAsset, RpgCheckpointSummaryPreview, RpgGearPreview, RpgHeroSummaryPreview, RpgHotbarAbilityPreview, RpgInventoryItemPreview, RpgJob, RpgJobCardPreview, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgNpcRelationshipPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgQuickActionPreview, RpgReport, RpgSession, RpgSessionSummaryPreview, RpgStatPreview, RpgStoryMessagePreview, RpgSurvivalNeedPreview, RpgSurvivalPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
 
 export interface RpgWorkspaceState {
   heroSummary: RpgHeroSummaryPreview;
@@ -167,11 +19,11 @@ export interface RpgWorkspaceState {
   journalEntries: RpgJournalEntryPreview[];
   narrativeLogEntries: RpgJournalEntryPreview[];
   journalDetail: RpgJournalDetailPreview;
+  worldChanges: RpgWorldChangesPreview;
   inventoryItems: RpgInventoryItemPreview[];
   hotbarAbilities: RpgHotbarAbilityPreview[];
   worldStateRows: RpgWorldStateRowPreview[];
   npcRelationships: RpgNpcRelationshipPreview[];
-  encounter: RpgEncounterPreview;
   sessionSummaries: RpgSessionSummaryPreview[];
   selectedSessionSummary: RpgSessionSummaryPreview;
   checkpointSummary: RpgCheckpointSummaryPreview;
@@ -190,166 +42,6 @@ export interface RpgWorkspaceStateSources {
   selectedSessionId?: string;
   selectedSession?: RpgSession;
 }
-
-interface TimelineEvent {
-  time: string;
-  title: string;
-  detail: string;
-  actor?: string;
-  kind?: string;
-}
-
-const NOT_TRACKED = 'Not tracked yet';
-const EMPTY_VISIBLE_RESPONSE_TEXT = new Set(['', '[]', '{}', '[ ]', '{ }', 'null', 'none', 'false', 'true']);
-
-export const previewHeroSummary: RpgHeroSummaryPreview = {
-  avatar: 'A',
-  name: 'Alyndra',
-  subtitle: 'Level 14 • Ranger',
-  origin: 'Wanderer of the North',
-  xpLabel: '7,450 / 12,000',
-  xpPercent: 62,
-  gold: '1,248',
-  renown: 'Honored (35)',
-  source: 'preview',
-};
-
-export const heroStats: RpgStatPreview[] = [
-  { label: 'HP', value: '86 / 110', percent: 78, tone: 'danger' },
-  { label: 'Stamina', value: '72 / 100', percent: 72, tone: 'success' },
-  { label: 'Mana', value: '64 / 120', percent: 53, tone: 'mana' },
-];
-
-export const equippedGear: RpgGearPreview[] = [
-  { icon: '🏹', name: 'Longbow of the Boreal Wind', slot: 'Weapon' },
-  { icon: '🛡️', name: 'Shadow Leather Armor +2', slot: 'Armor' },
-  { icon: '🦉', name: 'Cloak of the Owl', slot: 'Cloak' },
-  { icon: '💍', name: 'Band of Keen Senses', slot: 'Ring' },
-];
-
-export const partyMembers: RpgPartyMemberPreview[] = [
-  { avatar: 'T', name: 'Thorin Ironfist', role: 'Lv. 14 Warrior', hp: '112 / 140', percent: 80 },
-  { avatar: 'E', name: 'Elandra', role: 'Lv. 13 Mage', hp: '78 / 90', percent: 87 },
-  { avatar: 'K', name: 'Kael', role: 'Lv. 12 Rogue', hp: '68 / 85', percent: 80 },
-];
-
-export const activeQuests: RpgQuestPreview[] = [
-  { icon: '◆', title: 'The Frostbound Relic', detail: 'Find the relic in Glimmerdeep.' },
-  { icon: '▲', title: 'Secrets in the Snow', detail: 'Investigate the old watchtower.' },
-  { icon: '⬟', title: 'Bounty: Icefang Alpha', detail: 'Track down the alpha beast.' },
-];
-
-export const quickActions: RpgQuickActionPreview[] = [
-  { label: 'Talk', icon: '☯', command: 'Talk to Thorin about the tracks near the archway.' },
-  { label: 'Travel', icon: '🧭', command: 'Travel deeper into Glimmerdeep Pass toward the watchtower.' },
-  { label: 'Investigate', icon: '⌕', command: 'Investigate the clawed tracks and torn Northern Watch banner.' },
-  { label: 'Rest', icon: '♨', command: 'Make a short camp and let the party recover.' },
-  { label: 'Inventory', icon: '▣', command: 'Open inventory and check supplies before moving on.' },
-  { label: 'Attack', icon: '⚔', command: 'Prepare an ambush in case Icefang scouts are nearby.' },
-];
-
-export const previewRecentEvents = [
-  'You arrived at Glimmerdeep Pass.',
-  'Thorin Ironfist: “Best keep our eyes open. This place gives me the chills.”',
-  'You gained 120 XP.',
-];
-
-export const previewJournalEntries: RpgJournalEntryPreview[] = [
-  { time: 'Day 18 • 09:42', title: 'Arrived at Glimmerdeep Pass', detail: 'Reached the ancient archway.' },
-  { time: 'Day 18 • 08:15', title: 'Left Frostpine Hollow', detail: 'Followed the northern trail.' },
-  { time: 'Day 17 • 21:30', title: 'Long Rest at Frostpine', detail: 'Recovered after the Icefang fight.' },
-];
-
-export const previewJournalDetail: RpgJournalDetailPreview = {
-  title: 'Arrived at Glimmerdeep Pass',
-  detail: 'The party makes its way through the winding mountain trail and reaches the ancient pass.',
-  bullets: ['Discovered location: Glimmerdeep Pass', 'Weather: Cold, Windy', 'Detected tracks near the northern archway'],
-  tags: ['Exploration', 'Discovery', 'Travel'],
-};
-
-export const inventoryItems: RpgInventoryItemPreview[] = [
-  { icon: '🧪', count: '12', label: 'Healing potion' },
-  { icon: '💧', count: '7', label: 'Mana tonic' },
-  { icon: '🥩', count: '5', label: 'Trail rations' },
-  { icon: '🔮', count: '3', label: 'Focus crystal' },
-  { icon: '🪢', count: '2', label: 'Rope coil' },
-  { icon: '🔥', count: '9', label: 'Torch' },
-  { icon: '🍃', count: '4', label: 'Keenleaf' },
-  { icon: '📜', count: '6', label: 'Scroll' },
-];
-
-export const hotbarAbilities: RpgHotbarAbilityPreview[] = [
-  { key: '1', icon: '✦', label: 'Aimed Shot', abilityId: 'recon_aimed_shot', description: 'Take careful aim and turn position into a decisive opening.' },
-  { key: '2', icon: '↯', label: 'Frost Arrow', abilityId: 'recon_frost_arrow', description: 'Slow a dangerous target and create a safer window to move.' },
-  { key: '3', icon: '☘', label: 'Camouflage', abilityId: 'recon_camouflage', description: 'Blend into terrain and improve stealth or ambush positioning.' },
-  { key: '4', icon: '✹', label: 'Radiant Flare', abilityId: 'recon_radiant_flare', description: 'Reveal threats and briefly control the surrounding ground.' },
-  { key: '5', icon: '⟡', label: 'Volley', abilityId: 'recon_volley', description: 'Pressure several targets with a rapid spread of arrows.' },
-  { key: '6', icon: '⇥', label: 'Dash', abilityId: 'recon_dash', description: 'Spend stamina to cross dangerous ground quickly.' },
-];
-
-export const previewSurvival: RpgSurvivalPreview = {
-  actions: [
-    { label: 'Eat', icon: 'E', command: 'I eat rations' },
-    { label: 'Drink', icon: 'D', command: 'I drink water' },
-    { label: 'Rest', icon: 'R', command: 'I rest' },
-  ],
-  detail: 'Needs rise with authoritative turns. Food, water, and rest provide deterministic relief.',
-  needs: [
-    { id: 'hunger', label: 'Hunger', percent: 24, severity: 'stable', value: '24 / 100' },
-    { id: 'thirst', label: 'Thirst', percent: 18, severity: 'stable', value: '18 / 100' },
-    { id: 'fatigue', label: 'Fatigue', percent: 31, severity: 'stable', value: '31 / 100' },
-  ],
-  source: 'preview',
-  status: 'Stable',
-  warnings: [],
-};
-
-export const previewWorldStateRows: RpgWorldStateRowPreview[] = [
-  { icon: '☀', label: 'Calendar / Season', value: 'Early Spring' },
-  { icon: '◷', label: 'Day / Time', value: 'Day 18 • 09:42' },
-  { icon: '⌖', label: 'Region', value: 'mountain_pass' },
-  { icon: '≋', label: 'Weather', value: 'Moderate Windy' },
-  { icon: '❄', label: 'Temperature', value: '-12°C' },
-  { icon: '↝', label: 'Wind', value: 'Strong' },
-  { icon: '◌', label: 'Visibility', value: 'Clear' },
-  { icon: '✦', label: 'Light', value: 'Daylight' },
-  { icon: '▧', label: 'Terrain', value: 'Dry' },
-  { icon: '⌂', label: 'Context', value: 'Outdoor • Exposed' },
-  { icon: '⚠', label: 'Hazards', value: NOT_TRACKED },
-];
-
-export const npcRelationships: RpgNpcRelationshipPreview[] = [
-  { name: 'Thorin Ironfist', stance: 'Ally', score: 78 },
-  { name: 'Elandra', stance: 'Ally', score: 64 },
-  { name: 'Kael', stance: 'Ally', score: 52 },
-  { name: 'Captain Bryn', stance: 'Neutral', score: 10 },
-];
-
-export const previewEncounter: RpgEncounterPreview = {
-  icon: '⚔',
-  title: 'No active combat',
-  detail: 'All quiet for now.',
-  source: 'preview',
-};
-
-export const previewJobs: RpgJobCardPreview[] = [
-  { id: 'preview-turn', title: 'rpg.turn', status: 'Running', progress: 68, detail: 'Load / Apply turn / Narrate / Checkpoint', source: 'preview' },
-  { id: 'preview-narration', title: 'narration.generate', status: 'Running', progress: 42, detail: 'Generating presentation text', source: 'preview' },
-  { id: 'preview-world', title: 'world.state.update', status: 'Queued', progress: 0, detail: 'Waiting for turn output', source: 'preview' },
-];
-
-export const previewSessionSummary: RpgSessionSummaryPreview = {
-  id: 'preview-session',
-  title: 'Preview campaign',
-  location: 'Glimmerdeep Pass',
-  summary:
-    'The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts.',
-  updatedAt: 'Day 18 • 09:42',
-  turnLabel: 'Turn 12',
-  checkpointLabel: 'Saved 2m ago',
-  sortRank: 0,
-  source: 'preview',
-};
 
 export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgWorkspaceState {
   const sessions = sources.inventory?.sessions ?? [];
@@ -409,11 +101,11 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     journalEntries,
     narrativeLogEntries,
     journalDetail,
+    worldChanges: buildWorldChanges(selectedSession),
     inventoryItems: buildInventoryItems(selectedSession),
     hotbarAbilities: buildHotbarAbilities(selectedSession),
     worldStateRows,
     npcRelationships: buildNpcRelationships(selectedSession),
-    encounter: buildEncounter(selectedSession),
     sessionSummaries,
     selectedSessionSummary,
     checkpointSummary,
@@ -491,9 +183,10 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     state?.location,
     payload?.location
   ) ?? NOT_TRACKED;
+  // The place as the scene describes it now (the sheet's summary is the opening's); nothing rather than filler.
   const summary =
-    firstString(latestTimeline?.detail, session.summary, session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ??
-    'Live replay-persistence session indexed by the backend.';
+    firstString(recordValue(recordValue(session.runtime_state)?.current_scene)?.summary, latestTimeline?.detail, session.summary,
+      session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ?? '';
 
   return {
     id,
@@ -511,6 +204,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     turnLabel: typeof turnCount === 'number' && turnCount > 0 ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
     checkpointLabel,
     sortRank: timestampRank(updatedRaw),
+    lastPlayedMs: timestampRank(updatedRaw) || undefined,
     source: 'live',
   };
 }
@@ -527,13 +221,11 @@ function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPrevie
       xpLabel: NOT_TRACKED,
       xpPercent: 0,
       gold: NOT_TRACKED,
-      renown: NOT_TRACKED,
       source: 'live',
     };
   }
   const stats = recordValue(player.stats);
   const resources = recordValue(player.resources);
-  const reputation = recordValue(player.reputation);
   const name = firstString(player.name, player.character_name, player.characterName, player.hero_name, player.id) ?? 'Unnamed hero';
   const level = firstNumber(player.level, stats?.level);
   const role = firstString(player.class, player.role, player.archetype, player.job) ?? 'Adventurer';
@@ -543,12 +235,7 @@ function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPrevie
   const xpLabel = xpMetric ? metricLabel(xpMetric.current, xpMetric.max) : xpCurrent !== undefined ? formatNumber(xpCurrent) : NOT_TRACKED;
   const xpPercent = xpMetric ? metricPercent(xpMetric.current, xpMetric.max) : 0;
   const gold = formatCurrency(player.currency, player.gold, player.money, resources?.gold, resources?.currency);
-  const renown =
-    firstString(player.renown, player.reputation, player.reputation_label, reputation?.label, reputation?.standing, reputation?.name) ??
-    (firstNumber(player.renown, player.reputation_score, reputation?.score) !== undefined
-      ? `Renown ${formatNumber(firstNumber(player.renown, player.reputation_score, reputation?.score) ?? 0)}`
-      : NOT_TRACKED);
-  return { avatar: initialFor(name), name, subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '), origin, xpLabel, xpPercent, gold, renown, source: 'live' };
+  return { avatar: initialFor(name), name, subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '), origin, xpLabel, xpPercent, gold, source: 'live' };
 }
 
 function buildHeroStats(session: RpgSession | undefined): RpgStatPreview[] {
@@ -614,7 +301,7 @@ function buildSurvivalState(session: RpgSession | undefined): RpgSurvivalPreview
       ? 'Immediate survival relief is recommended.'
       : status === 'Warning'
         ? 'One or more needs are creating survival pressure.'
-        : 'Needs rise with authoritative turns. Relief actions are resolved deterministically.',
+        : 'Hunger, thirst and fatigue rise as time passes; eat, drink and rest to ease them.',
     needs: [need('hunger', 'Hunger'), need('thirst', 'Thirst'), need('fatigue', 'Fatigue')],
     source: 'live',
     status,
@@ -669,6 +356,8 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
   const roots = getSessionRecords(session);
   const inventoryState = recordValue(player?.inventory_state);
   const inventory = firstArray(
+    // The sheet's pack first: each thing with what the rules let the hero do with it (the player view's).
+    recordValue(recordValue(session.state)?.player)?.inventory,
     inventoryState?.items,
     player?.inventory_items,
     player?.inventory,
@@ -676,11 +365,19 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
     ...roots.map((root) => recordValue(root.inventory)?.items ?? root.items),
   );
   if (!inventory.length) return [];
-  return inventory.slice(0, 8).map((item, index) => {
+  return inventory.map((item, index) => {
     const record = recordValue(item) ?? { name: item };
     const label = firstString(record.name, record.label, record.id) ?? `Item ${index + 1}`;
     const count = firstNumber(record.count, record.quantity, record.qty, record.amount);
-    return { icon: iconForInventory(label), count: count !== undefined ? formatNumber(count) : '1', label };
+    return {
+      icon: iconForInventory(label),
+      count: count !== undefined ? formatNumber(count) : '1',
+      label,
+      actions: Array.isArray(record.actions) ? record.actions.filter((action): action is string => typeof action === 'string') : undefined,
+      category: firstString(record.category, record.type),
+      description: firstString(record.description),
+      worn: typeof record.worn === 'boolean' ? record.worn : undefined,
+    };
   });
 }
 
@@ -732,67 +429,6 @@ function buildHotbarAbilities(session: RpgSession | undefined): RpgHotbarAbility
     });
 }
 
-function buildRecentEvents(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): string[] {
-  if (selectedSession.source === 'preview') return previewRecentEvents;
-  if (timeline.length) return timeline.slice(0, 4).map((event) => formatTimelineEvent(event));
-  return [`Loaded ${selectedSession.title}.`, `Current location: ${selectedSession.location}.`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}.`];
-}
-
-function buildJournalEntries(selectedSession: RpgSessionSummaryPreview, session: RpgSession | undefined): RpgJournalEntryPreview[] {
-  if (selectedSession.source === 'preview') return previewJournalEntries;
-  const roots = getSessionRecords(session);
-  const journal = firstRecord(
-    ...roots.flatMap((root) => [root.player_journal, recordValue(root.runtime_state)?.player_journal]),
-  );
-  const seenDays = new Set<string>();
-  const entries = firstArray(journal?.entries)
-    .map((value) => recordValue(value))
-    .filter((value): value is Record<string, unknown> => Boolean(value))
-    .map((entry, index) => {
-      const time = recordValue(entry.time);
-      const voice = recordValue(entry.voice);
-      const day = firstNumber(entry.day, time?.absolute_day) ?? index + 1;
-      const dayLabel = firstString(entry.day_label) ?? `Day ${day}`;
-      const timeLabel = firstString(time?.time_label);
-      const voiceLabel = firstString(voice?.label);
-      return {
-        time: [dayLabel, timeLabel].filter(Boolean).join(' • '),
-        title: firstString(entry.title) ?? (voiceLabel ? `${voiceLabel}'s journal` : 'My journal'),
-        detail: firstString(entry.text, entry.summary, entry.detail) ?? 'No account has been written for this day yet.',
-      };
-    })
-    .reverse()
-    .filter((entry) => {
-      const dayKey = entry.time.split(' • ')[0];
-      if (seenDays.has(dayKey)) return false;
-      seenDays.add(dayKey);
-      return true;
-    });
-  if (entries.length) return entries;
-  return [
-    { time: 'Day 1', title: 'My journal', detail: 'The first daily account will be written after the next turn.' },
-  ];
-}
-
-function buildJournalDetail(selectedSession: RpgSessionSummaryPreview, entries: RpgJournalEntryPreview[]): RpgJournalDetailPreview {
-  if (selectedSession.source === 'preview') return previewJournalDetail;
-  const latest = entries[0];
-  if (latest) {
-    return {
-      title: latest.title,
-      detail: latest.detail,
-      bullets: [`Session id: ${selectedSession.id}`, `Location: ${selectedSession.location}`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`, `Checkpoint: ${selectedSession.checkpointLabel}`],
-      tags: ['Player perspective', 'Daily journal', 'Character voice'],
-    };
-  }
-  return {
-    title: `Live session: ${selectedSession.title}`,
-    detail: selectedSession.summary,
-    bullets: [`Session id: ${selectedSession.id}`, `Location: ${selectedSession.location}`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`, `Checkpoint: ${selectedSession.checkpointLabel}`],
-    tags: ['Player perspective', 'Daily journal', 'Character voice'],
-  };
-}
-
 function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session: RpgSession | undefined): RpgWorldStateRowPreview[] {
   if (selectedSession.source === 'preview' || !session) return previewWorldStateRows;
   const snapshot = getEnvironmentSnapshot(session);
@@ -815,30 +451,26 @@ function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session:
     light: firstString(display?.light, snapshot.light_level),
     terrain: firstString(display?.terrain, snapshot.terrain_condition),
     context: firstString(display?.context, context?.label, context?.exposure),
-    hazards: hazards.length ? hazards.map((hazard) => firstString(recordValue(hazard)?.id, hazard)).filter(Boolean).join(', ') : undefined,
+    hazards: hazards.length ? hazards.map((hazard) => firstString(recordValue(hazard)?.label, recordValue(hazard)?.name, recordValue(hazard)?.id, hazard)).filter(Boolean).join(', ') : undefined,
   });
 }
 
+/** The world as the campaign knows it now: what it does not know is left out, not shown as missing. */
 function environmentRowsFromValues(values: Record<string, string | undefined>): RpgWorldStateRowPreview[] {
-  return [
-    { icon: '☀', label: 'Calendar / Season', value: values.season ?? NOT_TRACKED },
-    { icon: '◷', label: 'Day / Time', value: values.dayTime ?? NOT_TRACKED },
-    { icon: '⌖', label: 'Region', value: values.region ?? NOT_TRACKED },
-    { icon: '≋', label: 'Weather', value: values.weather ?? NOT_TRACKED },
-    { icon: '❄', label: 'Temperature', value: values.temperature ?? NOT_TRACKED },
-    { icon: '↝', label: 'Wind', value: values.wind ?? NOT_TRACKED },
-    { icon: '◌', label: 'Visibility', value: values.visibility ?? NOT_TRACKED },
-    { icon: '✦', label: 'Light', value: values.light ?? NOT_TRACKED },
-    { icon: '▧', label: 'Terrain', value: values.terrain ?? NOT_TRACKED },
-    { icon: '⌂', label: 'Context', value: values.context ?? NOT_TRACKED },
-    { icon: '⚠', label: 'Hazards', value: values.hazards ?? NOT_TRACKED },
+  const rows: Array<[string, string, string | undefined]> = [
+    ['☀', 'Calendar / Season', values.season],
+    ['◷', 'Day / Time', values.dayTime],
+    ['⌖', 'Region', values.region],
+    ['≋', 'Weather', values.weather],
+    ['❄', 'Temperature', values.temperature],
+    ['↝', 'Wind', values.wind],
+    ['◌', 'Visibility', values.visibility],
+    ['✦', 'Light', values.light],
+    ['▧', 'Terrain', values.terrain],
+    ['⌂', 'Context', values.context],
+    ['⚠', 'Hazards', values.hazards],
   ];
-}
-
-function getEnvironmentSnapshot(session: RpgSession | undefined): Record<string, unknown> | undefined {
-  const state = recordValue(session?.state);
-  const payload = recordValue(session?.payload);
-  return firstRecord(session?.environment_snapshot, state?.environment_snapshot, payload?.environment_snapshot);
+  return rows.filter((row): row is [string, string, string] => Boolean(row[2])).map(([icon, label, value]) => ({ icon, label, value }));
 }
 
 function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelationshipPreview[] {
@@ -860,25 +492,6 @@ function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelations
     const stance = firstString(record.stance, record.status, record.relationship_label, record.label) ?? stanceForScore(score);
     return { name, stance, score };
   });
-}
-
-function buildEncounter(session: RpgSession | undefined): RpgEncounterPreview {
-  const roots = getSessionRecords(session);
-  const encounter = firstRecord(...roots.flatMap((root) => [root.encounter, root.encounter_state, root.current_encounter, root.combat, root.combat_state, recordValue(root.state)?.combat]));
-  if (!encounter) {
-    return session
-      ? { icon: '◇', title: 'No encounter data', detail: 'The live session does not currently expose encounter state.', source: 'live' }
-      : previewEncounter;
-  }
-  const status = firstString(encounter.status, encounter.state, encounter.phase, encounter.mode);
-  const enemies = firstArray(encounter.enemies, encounter.opponents, encounter.hostiles, encounter.combatants)
-    .map((enemy, index) => firstString(recordValue(enemy)?.name, recordValue(enemy)?.id, enemy) ?? `Combatant ${index + 1}`)
-    .slice(0, 3);
-  const statusText = String(status ?? '').toLowerCase();
-  const active = Boolean(status && !['none', 'idle', 'inactive', 'resolved', 'complete', 'completed'].some((token) => statusText.includes(token)));
-  const title = firstString(encounter.title, encounter.name, encounter.label) ?? (active ? 'Active encounter' : 'Encounter indexed');
-  const detail = firstString(encounter.summary, encounter.detail, encounter.description, encounter.objective) ?? (enemies.length ? `Combatants: ${enemies.join(', ')}` : status ? `Status: ${status}` : 'Encounter state indexed from live session.');
-  return { icon: active ? '⚔' : '◇', title, detail, source: 'live' };
 }
 
 function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionSummaryPreview): RpgCheckpointSummaryPreview {
@@ -930,395 +543,4 @@ function jobErrorDetail(job: RpgJob): string | undefined {
     stageError?.message,
     stageError?.code,
   );
-}
-
-function toStat(label: string, metric: { current: number; max: number }, tone: RpgStatPreview['tone']): RpgStatPreview {
-  return { label, value: metricLabel(metric.current, metric.max), percent: metricPercent(metric.current, metric.max), tone };
-}
-
-function emptyStat(label: string, tone: RpgStatPreview['tone']): RpgStatPreview {
-  return { label, value: NOT_TRACKED, percent: 0, tone };
-}
-
-function emptyHeroStats(): RpgStatPreview[] {
-  return [emptyStat('HP', 'danger'), emptyStat('Stamina', 'success'), emptyStat('Mana', 'mana')];
-}
-
-function buildTimelineEvents(session: RpgSession | undefined): TimelineEvent[] {
-  const roots = getSessionRecords(session);
-  if (!roots.length) return [];
-  const items = firstArray(
-    ...roots.flatMap((root) => [root.timeline, root.recent_events, root.events, root.event_log, root.turn_history, root.turns, root.history, root.dialogue_log, root.dialogue, root.logs, recordValue(root.journal)?.entries])
-  );
-  return items
-    .map(toTimelineEvent)
-    .filter((event): event is TimelineEvent => Boolean(event))
-    .slice(0, 8);
-}
-
-function toTimelineEvent(item: unknown, index: number): TimelineEvent | undefined {
-  if (typeof item === 'string' && item.trim()) return { time: `Event ${index + 1}`, title: item.trim(), detail: item.trim(), kind: 'event' };
-  const record = recordValue(item);
-  if (!record) return undefined;
-  const actor = firstString(record.actor, record.speaker, record.character, record.npc, record.source);
-  const command = firstString(record.command, record.action, record.player_action, record.playerAction, record.input);
-  const narration = firstString(record.narration, record.response, record.output, record.summary, record.result, record.text, record.message, record.description);
-  const detail = narration ?? command ?? firstString(record.detail, record.title, record.label, record.event) ?? 'RPG event indexed from live session.';
-  const title = firstString(record.title, record.label, record.event, record.kind, record.type) ?? (command ? 'Player command' : actor ? `${actor} speaks` : `Session event ${index + 1}`);
-  const time = firstString(record.time, record.timestamp, record.created_at, record.updated_at, record.turn_label) ?? turnLabelFor(record, index);
-  const kind = firstString(record.kind, record.type, record.category, command ? 'command' : undefined);
-  return { time: compactTimestamp(time) ?? time, title, detail, actor, kind };
-}
-
-function formatTimelineEvent(event: TimelineEvent): string {
-  return event.actor && !event.detail.startsWith(`${event.actor}:`) ? `${event.actor}: ${event.detail}` : event.detail;
-}
-
-function turnLabelFor(record: Record<string, unknown>, index: number): string {
-  const turn = firstNumber(record.turn, record.turn_count, record.index, record.sequence);
-  return turn !== undefined ? `Turn ${turn}` : `Event ${index + 1}`;
-}
-
-function getPlayerRecord(session: RpgSession | undefined): Record<string, unknown> | undefined {
-  const canonicalPlayer = recordValue(recordValue(session?.simulation_state)?.player_state);
-  const roots = getSessionRecords(session);
-  const projectedPlayer = firstRecord(...roots.flatMap((root) => [root.player, root.hero, root.character, root.player_state, root.character_state, recordValue(root.state)?.player]));
-  if (canonicalPlayer && projectedPlayer) {
-    return {
-      ...projectedPlayer,
-      ...canonicalPlayer,
-      resources: {
-        ...recordValue(projectedPlayer.resources),
-        ...recordValue(canonicalPlayer.resources),
-      },
-    };
-  }
-  return canonicalPlayer ?? projectedPlayer;
-}
-
-function getSessionRecords(session: RpgSession | undefined): Record<string, unknown>[] {
-  if (!session) return [];
-  return [
-    session,
-    recordValue(session.simulation_state),
-    recordValue(session.metadata),
-    recordValue(session.state),
-    recordValue(session.payload),
-    recordValue(session.runtime_state),
-  ].filter((record): record is Record<string, unknown> => Boolean(record));
-}
-
-function readMetric(records: Array<Record<string, unknown> | undefined>, currentKeys: string[], maxKeys: string[]): { current: number; max: number } | undefined {
-  for (const record of records) {
-    if (!record) continue;
-    const nestedMetric = firstRecord(...currentKeys.map((key) => recordValue(record[key])));
-    const nestedCurrent = firstNumber(nestedMetric?.current, nestedMetric?.value, nestedMetric?.amount);
-    const nestedMax = firstNumber(nestedMetric?.max, nestedMetric?.total, nestedMetric?.maximum);
-    if (nestedCurrent !== undefined && nestedMax !== undefined) return { current: nestedCurrent, max: nestedMax };
-    const current = firstNumber(...currentKeys.flatMap((key) => [record[key], record[`current_${key}`], record[`current${titleCase(key)}`]]));
-    const max = firstNumber(...maxKeys.flatMap((key) => [record[key], record[`maximum_${key}`]]));
-    if (current !== undefined && max !== undefined) return { current, max };
-  }
-  return undefined;
-}
-
-function formatCurrency(...values: unknown[]): string {
-  const currencyRecord = firstRecord(...values.map((value) => recordValue(value)));
-  if (currencyRecord) {
-    const gold = firstNumber(currencyRecord.gold, currencyRecord.gp, currencyRecord.coins);
-    const silver = firstNumber(currencyRecord.silver, currencyRecord.sp);
-    const copper = firstNumber(currencyRecord.copper, currencyRecord.cp);
-    if (gold !== undefined || silver !== undefined || copper !== undefined) {
-      return [gold !== undefined ? `${formatNumber(gold)}g` : undefined, silver !== undefined ? `${formatNumber(silver)}s` : undefined, copper !== undefined ? `${formatNumber(copper)}c` : undefined]
-        .filter(Boolean)
-        .join(' ');
-    }
-  }
-  const numeric = firstNumber(...values);
-  if (numeric !== undefined) return formatNumber(numeric);
-  return firstString(...values) ?? NOT_TRACKED;
-}
-
-function buildRpgTurnJobTimelineEvents(jobs: RpgJob[], sessionId: string, playerName: string): TimelineEvent[] {
-  if (!sessionId || sessionId === previewSessionSummary.id) return [];
-  return jobs
-    .filter((job) => {
-      const inputRef = recordValue(job.input_ref);
-      return (job.type === 'rpg.turn' || job.type === 'rpg.turn.foreground_record')
-        && firstString(inputRef?.session_id) === sessionId;
-    })
-    .flatMap((job) => {
-      const inputPayload = recordValue(job.input_payload);
-      const command = firstString(inputPayload?.command)?.trim();
-      const output = firstArray(job.output_refs)
-        .map(recordValue)
-        .find((candidate) => candidate && firstString(candidate.type, candidate.kind) === 'rpg_turn_response');
-      const response = cleanRpgTurnResponse(rpgTurnOutputText(output));
-      const events: TimelineEvent[] = [];
-      if (command) {
-        events.push({
-          actor: playerName,
-          detail: command,
-          kind: 'player_message',
-          time: compactTimestamp(firstString(job.created_at)) ?? 'Queued turn',
-          title: 'Player message',
-        });
-      }
-      if (response) {
-        const speaker = inferResponseSpeaker(response);
-        events.push({
-          actor: speaker,
-          detail: response,
-          kind: speaker === 'Omnix' ? 'narrator_message' : 'npc_message',
-          time: compactTimestamp(firstString(job.completed_at, job.updated_at)) ?? 'Completed turn',
-          title: speaker === 'Omnix' ? 'Narrator message' : `${speaker} response`,
-        });
-      }
-      return events;
-    });
-}
-
-/**
- * The reply text of an `rpg_turn_response` job output: the gateway's foreground
- * record carries the turn response (`turn_response`); older outputs carry the text.
- */
-export function rpgTurnOutputText(output: Record<string, unknown> | undefined): string | undefined {
-  const turn = recordValue(output?.turn_response);
-  return firstString(output?.content, output?.text, turn?.response, turn?.content, recordValue(turn?.visible_response)?.plain_text);
-}
-
-function cleanRpgTurnResponse(response: string | undefined): string | undefined {
-  if (!response) return undefined;
-  const paragraphs = response.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
-  const narrativeParagraphs = paragraphs.filter((paragraph) => !/^(?:Action|Result):\s*/i.test(paragraph));
-  const visibleParagraphs = narrativeParagraphs.length ? narrativeParagraphs : paragraphs;
-  const text = visibleParagraphs
-    .map((paragraph) => paragraph.replace(/,['’](?=\s)/g, ',"').replace(/(\s)['’](?=[A-Z])/g, '$1"'))
-    .join('\n\n');
-  return text && !EMPTY_VISIBLE_RESPONSE_TEXT.has(text.toLowerCase()) ? text : undefined;
-}
-
-function buildStoryMessages(events: TimelineEvent[], hero: RpgHeroSummaryPreview): RpgStoryMessagePreview[] {
-  const turns: TimelineEvent[][] = [];
-  for (const event of events) {
-    if (event.kind === 'player_message' || !turns.length) {
-      turns.push([event]);
-    } else {
-      turns[turns.length - 1].push(event);
-    }
-  }
-
-  return turns.slice(0, 3).reverse().flat().map((event) => {
-    if (event.kind === 'player_message') {
-      return { avatar: hero.avatar, speaker: `${hero.name} (You)`, text: event.detail, tone: 'player' };
-    }
-    const speaker = event.actor ?? 'Omnix';
-    const isNarrator = speaker === 'Omnix';
-    return {
-      avatar: speaker.charAt(0).toUpperCase() || 'O',
-      speaker: isNarrator ? 'Omnix (Narrator)' : speaker,
-      text: event.detail,
-      tone: isNarrator ? 'narrator' : 'npc',
-    };
-  });
-}
-
-function buildInteractionStoryMessages(
-  session: RpgSession | undefined,
-  hero: RpgHeroSummaryPreview,
-): RpgStoryMessagePreview[] {
-  const runtime = recordValue(session?.runtime_state);
-  const interactions = firstArray(runtime?.recent_interactions);
-  if (!interactions.length) return [];
-  return interactions.slice(-12).flatMap((item) => {
-    const event = recordValue(item);
-    if (!event) return [];
-    const interactionId = firstString(event.interaction_id);
-    const playerInput = firstString(event.player_input);
-    const visible = recordValue(event.visible_response);
-    const narration = firstString(visible?.narration, event.narration);
-    const visibleMessages = firstArray(visible?.messages).map(recordValue).filter(Boolean) as Record<string, unknown>[];
-    const result: RpgStoryMessagePreview[] = [];
-    if (playerInput) {
-      result.push({
-        id: interactionId ? `${interactionId}:player` : undefined,
-        interactionId,
-        messageKind: 'player',
-        messageIndex: 0,
-        avatar: hero.avatar,
-        speaker: `${hero.name} (You)`,
-        text: playerInput,
-        tone: 'player',
-      });
-    }
-    if (narration) {
-      result.push({
-        id: interactionId ? `${interactionId}:narration` : undefined,
-        interactionId,
-        messageKind: 'narration',
-        messageIndex: 0,
-        avatar: 'O',
-        speaker: 'Omnix (Narrator)',
-        text: narration,
-        tone: 'narrator',
-      });
-    }
-    visibleMessages.forEach((message, index) => {
-      const text = firstString(message.text);
-      if (!text) return;
-      const speaker = firstString(message.speaker, event.speaker) ?? 'Omnix';
-      result.push({
-        id: interactionId ? `${interactionId}:message:${index}` : undefined,
-        interactionId,
-        messageKind: firstString(message.kind) ?? 'npc_dialogue',
-        messageIndex: index,
-        avatar: speaker.charAt(0).toUpperCase() || 'O',
-        speaker: speaker === 'Omnix' ? 'Omnix (Narrator)' : speaker,
-        text,
-        tone: speaker === 'Omnix' ? 'narrator' : 'npc',
-      });
-    });
-    return result;
-  }).slice(-40);
-}
-
-function inferResponseSpeaker(response: string): string {
-  const match = response.match(/^([A-Z][A-Za-z'’-]*(?:\s+[A-Z][A-Za-z'’-]*){0,2})\s+(?=[a-z])/);
-  const candidate = match?.[1];
-  if (!candidate || /^(?:A|An|He|Her|His|I|It|Its|She|The|Their|They|This|We|You|Your)$/i.test(candidate)) {
-    return 'Omnix';
-  }
-  return candidate;
-}
-
-function quickActionLabel(command: string): string {
-  const [verb = 'Action'] = command.trim().split(/\s+/);
-  return titleCase(verb);
-}
-
-function quickActionIcon(command: string): string {
-  const normalized = command.toLowerCase();
-  if (normalized.startsWith('talk') || normalized.startsWith('ask')) return '☯';
-  if (normalized.startsWith('travel') || normalized.startsWith('go')) return '🧭';
-  if (/(look|listen|check|search|investigate|inspect)/.test(normalized)) return '⌕';
-  if (/(rest|camp)/.test(normalized)) return '♨';
-  if (/(attack|fight|ambush)/.test(normalized)) return '⚔';
-  return '◇';
-}
-
-function metricLabel(current: number, max: number): string {
-  return `${formatNumber(current)} / ${formatNumber(max)}`;
-}
-
-function metricPercent(current: number, max: number): number {
-  if (max <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
-}
-
-function relationshipScore(value: number | undefined): number {
-  if (value === undefined) return 50;
-  if (value > 0 && value <= 1) return Math.round(value * 100);
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function stanceForScore(score: number): string {
-  if (score >= 75) return 'Ally';
-  if (score >= 55) return 'Friendly';
-  if (score >= 35) return 'Neutral';
-  if (score >= 15) return 'Wary';
-  return 'Hostile';
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  for (const value of values) {
-    if (typeof value === 'string' && value.trim()) return value;
-    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
-}
-
-function firstNumber(...values: unknown[]): number | undefined {
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim()) {
-      const parsed = Number(value.replace(/,/g, ''));
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return undefined;
-}
-
-function firstRecord(...values: unknown[]): Record<string, unknown> | undefined {
-  return values.map(recordValue).find(Boolean);
-}
-
-function firstArray(...values: unknown[]): unknown[] {
-  for (const value of values) {
-    if (Array.isArray(value)) return value;
-  }
-  return [];
-}
-
-function recordValue(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;
-  return undefined;
-}
-
-function compactTimestamp(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  if (!value.includes('T')) return value;
-  const [date, time = ''] = value.split('T');
-  const [hour = '00', minute = '00'] = time.split(':');
-  return `${date} ${hour}:${minute} UTC`;
-}
-
-function timestampRank(value: string | undefined): number {
-  if (!value) return 0;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('en-US').format(value);
-}
-
-function initialFor(name: string): string {
-  return name.trim().charAt(0).toUpperCase() || 'A';
-}
-
-function titleCase(value: string): string {
-  return value
-    .replace(/[_-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function iconForEquipment(slot: string, name: string): string {
-  const text = `${slot} ${name}`.toLowerCase();
-  if (text.includes('bow')) return '🏹';
-  if (text.includes('armor') || text.includes('shield')) return '🛡️';
-  if (text.includes('ring')) return '💍';
-  if (text.includes('cloak')) return '🦉';
-  if (text.includes('sword') || text.includes('blade')) return '⚔';
-  return '◇';
-}
-
-function iconForInventory(label: string): string {
-  const text = label.toLowerCase();
-  if (text.includes('potion') || text.includes('heal')) return '🧪';
-  if (text.includes('mana')) return '💧';
-  if (text.includes('ration') || text.includes('food')) return '🥩';
-  if (text.includes('rope')) return '🪢';
-  if (text.includes('torch') || text.includes('fire')) return '🔥';
-  if (text.includes('scroll') || text.includes('letter')) return '📜';
-  return '▣';
-}
-
-function questIcon(status: unknown): string {
-  const text = String(status ?? '').toLowerCase();
-  if (text.includes('complete')) return '✓';
-  if (text.includes('failed')) return '×';
-  if (text.includes('urgent')) return '▲';
-  return '◆';
 }

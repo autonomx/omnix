@@ -21,10 +21,7 @@ from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import list_map_blueprints
 from .profile_authoring import require_approved_profile
 from .profile_generation_jobs import profile_manifest_run, profile_resolution_from_world
-
-
-def _database(value: Any | None) -> Any | None:
-    return value
+from .world_play_sections import authorship, parse_play_sections
 
 
 def _world_generation_context(
@@ -143,7 +140,11 @@ def read_world_detail(
         "world": world,
         "topics": topics,
         "map_blueprints": list_map_blueprints(world_id, database=database),
-        "revisions": revisions,
+        # Launch readiness of how each revision plays: each section authored by the world or derived (RQ-4.1).
+        "revisions": [
+            {**row, "play_sections": authorship(parse_play_sections(dict(row["document"]).get("canon") or {})[0])}
+            for row in revisions
+        ],
         "releases": releases,
         "scenarios": scenarios,
         "scenario_revisions": scenario_revisions,

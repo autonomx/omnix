@@ -141,14 +141,6 @@ def list_active_conversations(simulation_state: Dict[str, Any], location_id: str
     return [dict(x) for x in rows if isinstance(x, dict) and _safe_str(x.get("location_id")) == _safe_str(location_id)]
 
 
-def list_recent_conversations(simulation_state: Dict[str, Any], location_id: str = "") -> List[Dict[str, Any]]:
-    ensure_conversation_state(simulation_state)
-    rows = _safe_list(simulation_state["social_state"]["conversations"]["recent"])
-    if not location_id:
-        return [dict(x) for x in rows if isinstance(x, dict)]
-    return [dict(x) for x in rows if isinstance(x, dict) and _safe_str(x.get("location_id")) == _safe_str(location_id)]
-
-
 def upsert_conversation(simulation_state: Dict[str, Any], conversation: Dict[str, Any]) -> Dict[str, Any]:
     ensure_conversation_state(simulation_state)
     conversation = _safe_dict(conversation)

@@ -231,6 +231,31 @@ def test_live_call_endpoint_streams_binary_pcm_while_holding_device_permit(monke
     assert events == ["acquired", "released"]
 
 
+def test_live_call_endpoint_passes_the_requested_decode_and_keeps_the_providers_otherwise(monkeypatch):
+    import numpy as np
+    from services.tts import tts_server
+
+    seen = []
+
+    class FakeProvider:
+        def generate_audio_stream(self, **kwargs):
+            seen.append({key: kwargs[key] for key in ("parity_mode",) if key in kwargs})
+            return iter(((np.array([0.0, 0.5], dtype=np.float32), 24000, {}),))
+
+    @contextmanager
+    def permit_slot(*_args, **_kwargs):
+        yield object()
+
+    monkeypatch.setattr(tts_server, "_TTS_PROVIDER", FakeProvider())
+    monkeypatch.setattr(tts_server, "_TTS_PROVIDER_ERROR", "")
+    monkeypatch.setattr(tts_server, "device_permit_slot", permit_slot)
+    client = TestClient(tts_server.app, base_url="http://127.0.0.1", headers=service_headers())
+    for extra in ({"parity_mode": False}, {}):
+        response = client.post("/api/tts/live-call/stream", json={"text": "hello", "speaker": "default", **extra})
+        assert response.status_code == 200
+    assert seen == [{"parity_mode": False}, {}]
+
+
 def test_live_call_endpoint_rejects_saturation_with_retry_after(monkeypatch):
     from contextlib import contextmanager
 

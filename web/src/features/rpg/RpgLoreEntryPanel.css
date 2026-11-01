@@ -1,0 +1,60 @@
+.rpg-lore-entry {
+  border: 1px solid var(--color-border, rgba(127, 127, 127, 0.35));
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.rpg-lore-entry-head {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.rpg-lore-entry-head h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.rpg-lore-entry-close {
+  min-height: 2.25rem;
+  min-width: 2.25rem;
+}
+
+.rpg-lore-entry-lore {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.rpg-lore-entry-lore dt {
+  font-weight: 600;
+}
+
+.rpg-lore-entry-lore dd {
+  margin: 0;
+}
+
+.rpg-lore-entry-learned h3 {
+  font-size: 0.95rem;
+  margin: 0.25rem 0;
+}
+
+.rpg-lore-link {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+.rpg-lore-link:focus-visible {
+  outline: 2px solid var(--color-focus, #3b82f6);
+  outline-offset: 2px;
+}

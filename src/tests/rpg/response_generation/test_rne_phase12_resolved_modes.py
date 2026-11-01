@@ -48,13 +48,15 @@ def test_transaction_is_presented_without_mutating_authoritative_effects() -> No
     )
     canonical = result["canonical_narrative_response"]
     purposes = [block["purpose"] for block in canonical["blocks"]]
-    assert purposes[:2] == ["resolved_action", "consequence"]
+    assert purposes[0] == "resolved_action" and set(purposes) <= {"resolved_action", "consequence", "offered_choice"}
+    texts = [block["text"] for block in canonical["blocks"]]
+    assert len(texts) == len(set(texts)) and not any(text.startswith("Consequence:") for text in texts)  # no repeats
     assert result["canonical_effects"] == before
     assert canonical["validation"]["passed"] is True
     assert result["source"] == "narrative_engine_resolved_turn_v1"
 
 
-def test_combat_uses_resolved_action_and_consequence_only() -> None:
+def test_combat_tells_the_resolved_action_and_never_repeats_it() -> None:
     result = _result(
         "combat",
         {
@@ -74,10 +76,11 @@ def test_combat_uses_resolved_action_and_consequence_only() -> None:
     )
     canonical = result["canonical_narrative_response"]
     assert canonical["metadata"]["mode"] == "combat"
-    assert [block["purpose"] for block in canonical["blocks"]][:2] == [
-        "resolved_action",
-        "consequence",
-    ]
+    purposes = [block["purpose"] for block in canonical["blocks"]]
+    # The action, then a consequence only when the facts hold more than the action itself (it never repeats it).
+    assert purposes[0] == "resolved_action" and set(purposes) <= {"resolved_action", "consequence", "offered_choice"}
+    texts = [block["text"] for block in canonical["blocks"]]
+    assert len(texts) == len(set(texts))
     assert canonical["validation"]["passed"] is True
     assert result["canonical_effects"]["combat"]["damage"] == 4
 

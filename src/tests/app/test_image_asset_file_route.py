@@ -189,6 +189,8 @@ def test_image_asset_file_allows_only_trusted_svg(tmp_path, monkeypatch) -> None
 
     assert accepted.status_code == 200
     assert accepted.headers["content-type"] == "image/svg+xml"
+    # Opened on its own, even a trusted SVG runs no script and loads nothing (RQ-8.7).
+    assert accepted.headers["content-security-policy"] == "default-src 'none'; style-src 'unsafe-inline'; sandbox"
 
 
 def test_image_asset_file_allows_legacy_curated_svg(tmp_path, monkeypatch) -> None:

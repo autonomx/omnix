@@ -51,6 +51,43 @@ class PostgresRpgNarrativeDeliveryRepository:
         block_ids: tuple[str, ...],
         metadata: Mapping[str, Any] | None = None,
     ) -> NarrativeDeliveryRecord:
+        complete = mode is DeliveryMode.BLOCKING
+        # The canonical response must be persisted with this hash: the insert reads it, and holds it (FOR SHARE), in
+        # the same statement (F2). When nothing is inserted, the reads below say why.
+        row = self.connection.execute(
+            f"""
+            INSERT INTO omnix_rpg_narrative_deliveries (
+                workspace_id, response_id, semantic_hash, mode, status,
+                block_ids_jsonb, delivered_block_ids_jsonb, next_index,
+                metadata_jsonb, completed_at
+            )
+            SELECT %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s,
+                   %s::jsonb, CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END
+              FROM omnix_rpg_narrative_responses
+             WHERE workspace_id = %s AND response_id = %s AND content_hash = %s
+               FOR SHARE
+            ON CONFLICT DO NOTHING
+            RETURNING {_COLUMNS}
+            """,
+            (
+                context.workspace_id,
+                response_id,
+                semantic_hash,
+                mode.value,
+                "complete" if complete else "pending",
+                canonical_json(list(block_ids)),
+                canonical_json(list(block_ids) if complete else []),
+                len(block_ids) if complete else 0,
+                canonical_json(dict(metadata or {})),
+                complete,
+                context.workspace_id,
+                response_id,
+                semantic_hash,
+            ),
+        ).fetchone()
+        if row is not None:
+            return _record(row)
+
         response = self.connection.execute(
             """
             SELECT content_hash
@@ -68,36 +105,6 @@ class PostgresRpgNarrativeDeliveryRepository:
             raise NarrativeDeliveryConflict(
                 f"semantic hash differs from persisted response: {response_id}"
             )
-
-        complete = mode is DeliveryMode.BLOCKING
-        row = self.connection.execute(
-            f"""
-            INSERT INTO omnix_rpg_narrative_deliveries (
-                workspace_id, response_id, semantic_hash, mode, status,
-                block_ids_jsonb, delivered_block_ids_jsonb, next_index,
-                metadata_jsonb, completed_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s,
-                %s::jsonb, CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END
-            )
-            ON CONFLICT DO NOTHING
-            RETURNING {_COLUMNS}
-            """,
-            (
-                context.workspace_id,
-                response_id,
-                semantic_hash,
-                mode.value,
-                "complete" if complete else "pending",
-                canonical_json(list(block_ids)),
-                canonical_json(list(block_ids) if complete else []),
-                len(block_ids) if complete else 0,
-                canonical_json(dict(metadata or {})),
-                complete,
-            ),
-        ).fetchone()
-        if row is not None:
-            return _record(row)
 
         existing = self._get_for_update(context, response_id)
         if existing is None:

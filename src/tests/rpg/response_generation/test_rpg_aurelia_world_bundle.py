@@ -74,10 +74,14 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
 
     assert len(payload.topics) == 11
     assert len(payload.topic_history) == 11
-    assert len(payload.map_blueprints) == 5
-    assert len(payload.map_definitions) == 5
-    assert len(payload.scenario_revisions) == 3
-    assert len(manifest["characters"]) == 10
+    assert len(payload.map_blueprints) == 7  # with Valecourt's and Cinderhold's (EV-8)
+    # Five world revisions: as released, as adopted, with the author's routines (play-sections.json), with its gear
+    # and Valecourt's people (now its own topics, as the editor edits them), and with its consequences (EV-1:
+    # fact_effects, group_members); a map definition and a scenario revision belong to one world revision.
+    assert [row["revision"] for row in payload.world_revisions] == [1, 2, 3, 4, 5]
+    assert len(payload.map_definitions) == 35
+    assert len(payload.scenario_revisions) == 15
+    assert len(manifest["characters"]) == 12  # with Valecourt's foundry master and engine warden
     assert len(manifest["factions"]) == 6
     assert len(revision["adventure_seeds"]) == 5
     assert len(quest_topic["content"]["quests"]) == 6
@@ -89,8 +93,20 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
         "map:aurelia:wayfarer-guild",
         "map:aurelia:skybridge-pass",
         "map:aurelia:moonroot-ruins",
+        "map:aurelia:valecourt",
+        "map:aurelia:cinderhold",
     }
     assert all(row["status"] == "ready" for row in payload.map_blueprints)
+    latest = payload.world_revisions[-1]["document"]
+    assert len(latest["canon"]["routines"]) == 12  # a day for each of its twelve people
+    assert len(latest["canon"]["economy"]["providers"]) == 6  # its shops, Valecourt's forge among them
+    assert len(latest["canon"]["fact_effects"]) == 23 and len(latest["canon"]["group_members"]) == 5  # EV-1
+    assert {row["simulation_readiness"] for row in latest["blueprint_requirements"]} == {"certified"}
+    newest = {}
+    for row in payload.scenario_revisions:
+        newest[row["document"]["scenario_id"]] = max(newest.get(row["document"]["scenario_id"], 0), row["revision"])
+    assert {row["document"]["world_revision"] for row in payload.scenario_revisions
+            if row["revision"] == newest[row["document"]["scenario_id"]]} == {5}  # every opening plays the latest
     assert payload.world_releases[0]["document"]["certification"]["launch_ready"] is True
     assert all(
         row["document"]["compatible_release"] == 1

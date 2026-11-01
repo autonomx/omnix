@@ -1,0 +1,2896 @@
+{
+  "checks": {
+    "F1_complete_p50_ms": {
+      "arrive": 1075.4,
+      "buy": 2287.0,
+      "fight": 2103.6,
+      "look": 2151.0,
+      "question": 2368.1,
+      "status": 941.6,
+      "tactical_move": 31.9,
+      "wait": 2232.1
+    },
+    "F1_complete_p95_ms": {
+      "arrive": 2419.2,
+      "buy": 2365.0,
+      "fight": 2215.9,
+      "look": 2198.6,
+      "question": 2461.5,
+      "status": 1134.9,
+      "tactical_move": 37.6,
+      "wait": 2300.7
+    },
+    "F1_first_narration_p95_ms": {
+      "arrive": null,
+      "buy": null,
+      "fight": null,
+      "look": null,
+      "question": null,
+      "status": null,
+      "tactical_move": null,
+      "wait": null
+    },
+    "F3_deterministic_turns_with_a_call": 0,
+    "F3_max_calls_per_turn": 4,
+    "F3_max_calls_per_turn_but_a_revision": 3,
+    "F3_met": false,
+    "F3_turns_revised": 98,
+    "targets": {
+      "F3": "no turn more than two calls, but for one revision of its narration; deterministic turns none (owner decisions 2026-10-29)",
+      "complete": "p50 <= 9 s, p95 <= 10 s",
+      "deterministic": "a card or the tactical route: <= 500 ms complete, no model call",
+      "first_narration_p95": "<= 5 s",
+      "outcome_p95": "<= 300 ms the tactical route; <= 3.0 s a turn with an intent call"
+    }
+  },
+  "classes": {
+    "arrive": {
+      "complete_ms": {
+        "max": 2433.3,
+        "n": 20,
+        "p50": 1075.4,
+        "p95": 2419.2
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 2.0,
+        "p95": 4.0
+      },
+      "model_ms": {
+        "max": 2291.6,
+        "n": 20,
+        "p50": 893.8,
+        "p95": 2288.1
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 301.0,
+        "n": 20,
+        "p50": 243.6,
+        "p95": 282.6
+      },
+      "outcome_visible_ms": {
+        "max": 339.0,
+        "n": 20,
+        "p50": 277.6,
+        "p95": 315.1
+      },
+      "overhead_ms": {
+        "max": 181.6,
+        "n": 20,
+        "p50": 138.9,
+        "p95": 178.9
+      },
+      "runs": 20
+    },
+    "buy": {
+      "complete_ms": {
+        "max": 2369.8,
+        "n": 20,
+        "p50": 2287.0,
+        "p95": 2365.0
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 4.0,
+        "p95": 4.0
+      },
+      "model_ms": {
+        "max": 2241.6,
+        "n": 20,
+        "p50": 2152.9,
+        "p95": 2225.4
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 178.1,
+        "n": 20,
+        "p50": 132.8,
+        "p95": 176.4
+      },
+      "outcome_visible_ms": {
+        "max": 215.2,
+        "n": 20,
+        "p50": 169.1,
+        "p95": 206.1
+      },
+      "overhead_ms": {
+        "max": 172.4,
+        "n": 20,
+        "p50": 142.9,
+        "p95": 164.0
+      },
+      "runs": 20
+    },
+    "fight": {
+      "complete_ms": {
+        "max": 2237.4,
+        "n": 20,
+        "p50": 2103.6,
+        "p95": 2215.9
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 4.0,
+        "p95": 4.0
+      },
+      "model_ms": {
+        "max": 2100.1,
+        "n": 20,
+        "p50": 1980.6,
+        "p95": 2078.7
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 257.6,
+        "n": 20,
+        "p50": 166.7,
+        "p95": 251.9
+      },
+      "outcome_visible_ms": {
+        "max": 286.8,
+        "n": 20,
+        "p50": 196.7,
+        "p95": 281.8
+      },
+      "overhead_ms": {
+        "max": 166.7,
+        "n": 20,
+        "p50": 122.3,
+        "p95": 158.7
+      },
+      "runs": 20
+    },
+    "look": {
+      "complete_ms": {
+        "max": 2224.6,
+        "n": 20,
+        "p50": 2151.0,
+        "p95": 2198.6
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 4.0,
+        "p95": 4.0
+      },
+      "model_ms": {
+        "max": 2108.8,
+        "n": 20,
+        "p50": 2021.0,
+        "p95": 2078.3
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 218.0,
+        "n": 20,
+        "p50": 188.2,
+        "p95": 195.5
+      },
+      "outcome_visible_ms": {
+        "max": 248.7,
+        "n": 20,
+        "p50": 219.9,
+        "p95": 242.8
+      },
+      "overhead_ms": {
+        "max": 153.3,
+        "n": 20,
+        "p50": 119.3,
+        "p95": 152.7
+      },
+      "runs": 20
+    },
+    "question": {
+      "complete_ms": {
+        "max": 2476.5,
+        "n": 20,
+        "p50": 2368.1,
+        "p95": 2461.5
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 4.0,
+        "p95": 4.0
+      },
+      "model_ms": {
+        "max": 2340.9,
+        "n": 20,
+        "p50": 2235.3,
+        "p95": 2319.0
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 384.3,
+        "n": 20,
+        "p50": 350.4,
+        "p95": 367.2
+      },
+      "outcome_visible_ms": {
+        "max": 414.6,
+        "n": 20,
+        "p50": 378.9,
+        "p95": 397.8
+      },
+      "overhead_ms": {
+        "max": 158.4,
+        "n": 20,
+        "p50": 122.2,
+        "p95": 152.2
+      },
+      "runs": 20
+    },
+    "status": {
+      "complete_ms": {
+        "max": 2356.5,
+        "n": 20,
+        "p50": 941.6,
+        "p95": 1134.9
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 2.0,
+        "p95": 2.0
+      },
+      "model_ms": {
+        "max": 2217.3,
+        "n": 20,
+        "p50": 807.3,
+        "p95": 922.3
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 296.6,
+        "n": 20,
+        "p50": 184.0,
+        "p95": 295.6
+      },
+      "outcome_visible_ms": {
+        "max": 420.1,
+        "n": 20,
+        "p50": 212.6,
+        "p95": 341.2
+      },
+      "overhead_ms": {
+        "max": 218.9,
+        "n": 20,
+        "p50": 119.8,
+        "p95": 172.4
+      },
+      "runs": 20
+    },
+    "tactical_move": {
+      "complete_ms": {
+        "max": 46.4,
+        "n": 20,
+        "p50": 31.9,
+        "p95": 37.6
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        409
+      ],
+      "model_calls": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_ms": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_roles": [],
+      "outcome_known_ms": {
+        "max": 46.4,
+        "n": 20,
+        "p50": 31.9,
+        "p95": 37.6
+      },
+      "outcome_visible_ms": {
+        "max": 46.4,
+        "n": 20,
+        "p50": 31.9,
+        "p95": 37.6
+      },
+      "overhead_ms": {
+        "max": 46.4,
+        "n": 20,
+        "p50": 31.9,
+        "p95": 37.6
+      },
+      "runs": 20
+    },
+    "wait": {
+      "complete_ms": {
+        "max": 2302.0,
+        "n": 20,
+        "p50": 2232.1,
+        "p95": 2300.7
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 4.0,
+        "n": 20,
+        "p50": 4.0,
+        "p95": 4.0
+      },
+      "model_ms": {
+        "max": 2176.8,
+        "n": 20,
+        "p50": 2103.0,
+        "p95": 2157.4
+      },
+      "model_roles": [
+        "narrative_writer",
+        "semantic_intent"
+      ],
+      "outcome_known_ms": {
+        "max": 274.5,
+        "n": 20,
+        "p50": 237.0,
+        "p95": 273.7
+      },
+      "outcome_visible_ms": {
+        "max": 315.7,
+        "n": 20,
+        "p50": 268.5,
+        "p95": 302.8
+      },
+      "overhead_ms": {
+        "max": 161.7,
+        "n": 20,
+        "p50": 123.9,
+        "p95": 156.1
+      },
+      "runs": 20
+    }
+  },
+  "database": "omnix_latency_gate",
+  "elapsed_s": 277.3,
+  "measured_on": "2026-10-31",
+  "measurement": "RPG turn latency per turn class (RQ-0.5)",
+  "notes": [
+    "outcome_visible_ms equals complete_ms: today the outcome reaches the play screen with the turn's response.",
+    "first_narration_ms is when the narrative writer first publishes a non-empty draft on the server; the play screen polls GET .../turn-draft, which adds up to its poll interval.",
+    "Each run starts from the class's scene snapshot, restored by an out-of-turn save."
+  ],
+  "provider": {
+    "model": "liquid/lfm2.5-1.2b",
+    "provider": "lmstudio",
+    "resolved_models": [
+      "liquid/lfm2.5-1.2b"
+    ]
+  },
+  "revision": "9fa8bcf0cc",
+  "rows": {
+    "arrive": [
+      {
+        "complete_ms": 2302.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2183.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 235.5,
+        "outcome_visible_ms": 267.1,
+        "overhead_ms": 118.6
+      },
+      {
+        "complete_ms": 2326.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2205.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 231.5,
+        "outcome_visible_ms": 262.6,
+        "overhead_ms": 120.7
+      },
+      {
+        "complete_ms": 979.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 862.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.1,
+        "outcome_visible_ms": 274.6,
+        "overhead_ms": 117.2
+      },
+      {
+        "complete_ms": 1000.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 876.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.6,
+        "outcome_visible_ms": 276.4,
+        "overhead_ms": 123.9
+      },
+      {
+        "complete_ms": 2303.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2185.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 236.4,
+        "outcome_visible_ms": 265.3,
+        "overhead_ms": 117.9
+      },
+      {
+        "complete_ms": 2433.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2288.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 276.1,
+        "outcome_visible_ms": 304.8,
+        "overhead_ms": 145.2
+      },
+      {
+        "complete_ms": 1002.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 881.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.6,
+        "outcome_visible_ms": 277.6,
+        "overhead_ms": 120.9
+      },
+      {
+        "complete_ms": 2278.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2159.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 231.5,
+        "outcome_visible_ms": 265.3,
+        "overhead_ms": 119.1
+      },
+      {
+        "complete_ms": 2419.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2291.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 234.2,
+        "outcome_visible_ms": 263.6,
+        "overhead_ms": 127.6
+      },
+      {
+        "complete_ms": 1075.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 893.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 301.0,
+        "outcome_visible_ms": 339.0,
+        "overhead_ms": 181.6
+      },
+      {
+        "complete_ms": 1013.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 871.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 242.0,
+        "outcome_visible_ms": 278.4,
+        "overhead_ms": 142.0
+      },
+      {
+        "complete_ms": 1007.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 875.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 244.2,
+        "outcome_visible_ms": 281.4,
+        "overhead_ms": 131.9
+      },
+      {
+        "complete_ms": 1014.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 865.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.2,
+        "outcome_visible_ms": 277.6,
+        "overhead_ms": 149.1
+      },
+      {
+        "complete_ms": 2361.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2182.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 248.2,
+        "outcome_visible_ms": 283.8,
+        "overhead_ms": 178.9
+      },
+      {
+        "complete_ms": 2350.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2209.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 245.0,
+        "outcome_visible_ms": 281.5,
+        "overhead_ms": 140.8
+      },
+      {
+        "complete_ms": 2350.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2209.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 246.4,
+        "outcome_visible_ms": 281.9,
+        "overhead_ms": 140.5
+      },
+      {
+        "complete_ms": 1007.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 866.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 247.7,
+        "outcome_visible_ms": 280.1,
+        "overhead_ms": 141.6
+      },
+      {
+        "complete_ms": 1044.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 867.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 282.6,
+        "outcome_visible_ms": 315.1,
+        "overhead_ms": 176.3
+      },
+      {
+        "complete_ms": 1007.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 863.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 245.5,
+        "outcome_visible_ms": 283.5,
+        "overhead_ms": 143.8
+      },
+      {
+        "complete_ms": 2340.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2201.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.4,
+        "outcome_visible_ms": 277.5,
+        "overhead_ms": 138.9
+      }
+    ],
+    "buy": [
+      {
+        "complete_ms": 2365.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2241.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 178.1,
+        "outcome_visible_ms": 215.2,
+        "overhead_ms": 123.4
+      },
+      {
+        "complete_ms": 2268.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2145.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 121.8,
+        "outcome_visible_ms": 152.4,
+        "overhead_ms": 122.9
+      },
+      {
+        "complete_ms": 2287.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2165.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 126.4,
+        "outcome_visible_ms": 155.4,
+        "overhead_ms": 121.8
+      },
+      {
+        "complete_ms": 937.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 786.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 127.6,
+        "outcome_visible_ms": 156.6,
+        "overhead_ms": 150.7
+      },
+      {
+        "complete_ms": 920.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 800.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 125.0,
+        "outcome_visible_ms": 154.8,
+        "overhead_ms": 120.1
+      },
+      {
+        "complete_ms": 2286.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2165.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 125.5,
+        "outcome_visible_ms": 155.1,
+        "overhead_ms": 120.8
+      },
+      {
+        "complete_ms": 2287.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2161.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 126.0,
+        "outcome_visible_ms": 155.4,
+        "overhead_ms": 125.2
+      },
+      {
+        "complete_ms": 2304.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2132.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 176.4,
+        "outcome_visible_ms": 206.1,
+        "overhead_ms": 172.4
+      },
+      {
+        "complete_ms": 2284.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2164.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 129.3,
+        "outcome_visible_ms": 159.7,
+        "overhead_ms": 120.5
+      },
+      {
+        "complete_ms": 2316.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2195.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 126.8,
+        "outcome_visible_ms": 156.8,
+        "overhead_ms": 120.6
+      },
+      {
+        "complete_ms": 2354.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2225.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 130.8,
+        "outcome_visible_ms": 162.0,
+        "overhead_ms": 129.4
+      },
+      {
+        "complete_ms": 2309.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2152.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 136.5,
+        "outcome_visible_ms": 180.5,
+        "overhead_ms": 156.5
+      },
+      {
+        "complete_ms": 2291.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2144.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 135.5,
+        "outcome_visible_ms": 175.0,
+        "overhead_ms": 147.2
+      },
+      {
+        "complete_ms": 2174.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2030.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 133.9,
+        "outcome_visible_ms": 169.1,
+        "overhead_ms": 144.8
+      },
+      {
+        "complete_ms": 939.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 796.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 134.9,
+        "outcome_visible_ms": 172.5,
+        "overhead_ms": 142.9
+      },
+      {
+        "complete_ms": 2272.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2122.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 132.8,
+        "outcome_visible_ms": 173.1,
+        "overhead_ms": 150.1
+      },
+      {
+        "complete_ms": 2318.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2154.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 137.5,
+        "outcome_visible_ms": 175.9,
+        "overhead_ms": 164.0
+      },
+      {
+        "complete_ms": 2313.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2162.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 135.3,
+        "outcome_visible_ms": 171.6,
+        "overhead_ms": 150.6
+      },
+      {
+        "complete_ms": 953.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 804.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 135.1,
+        "outcome_visible_ms": 170.4,
+        "overhead_ms": 149.1
+      },
+      {
+        "complete_ms": 2369.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2223.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 137.4,
+        "outcome_visible_ms": 171.9,
+        "overhead_ms": 146.6
+      }
+    ],
+    "fight": [
+      {
+        "complete_ms": 2160.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2002.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 158.1,
+        "outcome_visible_ms": 195.2,
+        "overhead_ms": 157.8
+      },
+      {
+        "complete_ms": 966.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 846.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 179.7,
+        "outcome_visible_ms": 209.0,
+        "overhead_ms": 119.3
+      },
+      {
+        "complete_ms": 1513.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 3,
+        "model_ms": 1392.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 251.9,
+        "outcome_visible_ms": 281.8,
+        "overhead_ms": 121.5
+      },
+      {
+        "complete_ms": 2176.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2049.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 216.4,
+        "outcome_visible_ms": 247.6,
+        "overhead_ms": 126.5
+      },
+      {
+        "complete_ms": 1466.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 3,
+        "model_ms": 1310.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 207.2,
+        "outcome_visible_ms": 237.2,
+        "overhead_ms": 156.1
+      },
+      {
+        "complete_ms": 2103.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 1980.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 152.1,
+        "outcome_visible_ms": 183.9,
+        "overhead_ms": 123.0
+      },
+      {
+        "complete_ms": 2155.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2009.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 206.5,
+        "outcome_visible_ms": 234.9,
+        "overhead_ms": 145.6
+      },
+      {
+        "complete_ms": 2106.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 1980.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 155.6,
+        "outcome_visible_ms": 186.9,
+        "overhead_ms": 126.1
+      },
+      {
+        "complete_ms": 2152.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2030.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 180.6,
+        "outcome_visible_ms": 215.6,
+        "overhead_ms": 121.3
+      },
+      {
+        "complete_ms": 2111.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 1988.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 153.8,
+        "outcome_visible_ms": 188.2,
+        "overhead_ms": 123.1
+      },
+      {
+        "complete_ms": 2169.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2003.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 226.4,
+        "outcome_visible_ms": 258.1,
+        "overhead_ms": 166.7
+      },
+      {
+        "complete_ms": 1420.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 3,
+        "model_ms": 1299.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 151.6,
+        "outcome_visible_ms": 184.7,
+        "overhead_ms": 121.4
+      },
+      {
+        "complete_ms": 951.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 833.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 154.4,
+        "outcome_visible_ms": 184.3,
+        "overhead_ms": 118.7
+      },
+      {
+        "complete_ms": 930.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 809.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 151.4,
+        "outcome_visible_ms": 182.4,
+        "overhead_ms": 121.3
+      },
+      {
+        "complete_ms": 1447.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 3,
+        "model_ms": 1294.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 153.8,
+        "outcome_visible_ms": 186.0,
+        "overhead_ms": 153.8
+      },
+      {
+        "complete_ms": 2098.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 1977.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 151.1,
+        "outcome_visible_ms": 180.8,
+        "overhead_ms": 120.8
+      },
+      {
+        "complete_ms": 1525.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 3,
+        "model_ms": 1402.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 185.4,
+        "outcome_visible_ms": 216.1,
+        "overhead_ms": 122.3
+      },
+      {
+        "complete_ms": 2115.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 1997.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 166.7,
+        "outcome_visible_ms": 196.7,
+        "overhead_ms": 118.8
+      },
+      {
+        "complete_ms": 2237.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2078.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 257.6,
+        "outcome_visible_ms": 286.8,
+        "overhead_ms": 158.7
+      },
+      {
+        "complete_ms": 2215.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2100.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 212.5,
+        "outcome_visible_ms": 243.8,
+        "overhead_ms": 115.8
+      }
+    ],
+    "look": [
+      {
+        "complete_ms": 2175.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2044.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 190.8,
+        "outcome_visible_ms": 222.4,
+        "overhead_ms": 130.8
+      },
+      {
+        "complete_ms": 2151.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2019.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 178.3,
+        "outcome_visible_ms": 214.5,
+        "overhead_ms": 131.1
+      },
+      {
+        "complete_ms": 2146.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2021.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 187.9,
+        "outcome_visible_ms": 220.1,
+        "overhead_ms": 125.3
+      },
+      {
+        "complete_ms": 943.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 823.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 184.7,
+        "outcome_visible_ms": 216.7,
+        "overhead_ms": 119.8
+      },
+      {
+        "complete_ms": 2165.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2019.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 170.9,
+        "outcome_visible_ms": 231.1,
+        "overhead_ms": 146.2
+      },
+      {
+        "complete_ms": 2143.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2024.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 192.8,
+        "outcome_visible_ms": 223.5,
+        "overhead_ms": 119.1
+      },
+      {
+        "complete_ms": 2132.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2015.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 175.7,
+        "outcome_visible_ms": 206.7,
+        "overhead_ms": 116.9
+      },
+      {
+        "complete_ms": 880.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 765.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 190.2,
+        "outcome_visible_ms": 219.9,
+        "overhead_ms": 115.0
+      },
+      {
+        "complete_ms": 2193.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2040.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 185.0,
+        "outcome_visible_ms": 216.8,
+        "overhead_ms": 153.3
+      },
+      {
+        "complete_ms": 2137.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2018.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 195.5,
+        "outcome_visible_ms": 222.7,
+        "overhead_ms": 119.2
+      },
+      {
+        "complete_ms": 2159.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2045.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 190.5,
+        "outcome_visible_ms": 217.0,
+        "overhead_ms": 114.4
+      },
+      {
+        "complete_ms": 2153.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2032.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 191.2,
+        "outcome_visible_ms": 225.4,
+        "overhead_ms": 121.2
+      },
+      {
+        "complete_ms": 2171.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2025.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 180.1,
+        "outcome_visible_ms": 242.8,
+        "overhead_ms": 146.8
+      },
+      {
+        "complete_ms": 2161.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2043.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 193.3,
+        "outcome_visible_ms": 225.6,
+        "overhead_ms": 118.6
+      },
+      {
+        "complete_ms": 2132.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2014.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 188.2,
+        "outcome_visible_ms": 216.3,
+        "overhead_ms": 118.2
+      },
+      {
+        "complete_ms": 2119.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2000.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 187.4,
+        "outcome_visible_ms": 218.6,
+        "overhead_ms": 118.9
+      },
+      {
+        "complete_ms": 1002.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 849.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 218.0,
+        "outcome_visible_ms": 248.7,
+        "overhead_ms": 152.7
+      },
+      {
+        "complete_ms": 2224.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2108.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 190.6,
+        "outcome_visible_ms": 218.3,
+        "overhead_ms": 115.8
+      },
+      {
+        "complete_ms": 2178.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2058.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 173.2,
+        "outcome_visible_ms": 202.6,
+        "overhead_ms": 119.3
+      },
+      {
+        "complete_ms": 2198.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2078.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 190.0,
+        "outcome_visible_ms": 220.0,
+        "overhead_ms": 120.3
+      }
+    ],
+    "question": [
+      {
+        "complete_ms": 2416.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2274.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 354.9,
+        "outcome_visible_ms": 386.7,
+        "overhead_ms": 142.3
+      },
+      {
+        "complete_ms": 2476.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2340.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 363.5,
+        "outcome_visible_ms": 397.8,
+        "overhead_ms": 135.6
+      },
+      {
+        "complete_ms": 2348.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2227.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 350.4,
+        "outcome_visible_ms": 380.0,
+        "overhead_ms": 121.2
+      },
+      {
+        "complete_ms": 2436.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2316.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 350.1,
+        "outcome_visible_ms": 378.2,
+        "overhead_ms": 120.1
+      },
+      {
+        "complete_ms": 2352.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2235.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 352.0,
+        "outcome_visible_ms": 380.7,
+        "overhead_ms": 117.5
+      },
+      {
+        "complete_ms": 2362.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2246.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 350.8,
+        "outcome_visible_ms": 378.9,
+        "overhead_ms": 116.4
+      },
+      {
+        "complete_ms": 2368.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2245.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 355.7,
+        "outcome_visible_ms": 387.7,
+        "overhead_ms": 122.9
+      },
+      {
+        "complete_ms": 2441.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2319.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 357.3,
+        "outcome_visible_ms": 388.0,
+        "overhead_ms": 122.3
+      },
+      {
+        "complete_ms": 2425.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2305.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 352.8,
+        "outcome_visible_ms": 383.0,
+        "overhead_ms": 119.9
+      },
+      {
+        "complete_ms": 2392.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2270.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 345.2,
+        "outcome_visible_ms": 374.9,
+        "overhead_ms": 122.2
+      },
+      {
+        "complete_ms": 2461.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2309.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 367.2,
+        "outcome_visible_ms": 395.2,
+        "overhead_ms": 152.2
+      },
+      {
+        "complete_ms": 2424.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2302.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 346.4,
+        "outcome_visible_ms": 375.7,
+        "overhead_ms": 121.5
+      },
+      {
+        "complete_ms": 1116.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 996.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 354.5,
+        "outcome_visible_ms": 385.0,
+        "overhead_ms": 119.5
+      },
+      {
+        "complete_ms": 1001.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 886.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 286.2,
+        "outcome_visible_ms": 315.4,
+        "overhead_ms": 114.9
+      },
+      {
+        "complete_ms": 2393.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2234.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 384.3,
+        "outcome_visible_ms": 414.6,
+        "overhead_ms": 158.4
+      },
+      {
+        "complete_ms": 2310.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2182.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 293.6,
+        "outcome_visible_ms": 324.8,
+        "overhead_ms": 128.2
+      },
+      {
+        "complete_ms": 2368.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2219.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 314.7,
+        "outcome_visible_ms": 349.7,
+        "overhead_ms": 148.9
+      },
+      {
+        "complete_ms": 2355.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2226.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 294.6,
+        "outcome_visible_ms": 327.2,
+        "overhead_ms": 128.5
+      },
+      {
+        "complete_ms": 2312.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2193.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 292.2,
+        "outcome_visible_ms": 322.1,
+        "overhead_ms": 118.8
+      },
+      {
+        "complete_ms": 2333.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2210.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 286.1,
+        "outcome_visible_ms": 319.2,
+        "overhead_ms": 122.9
+      }
+    ],
+    "status": [
+      {
+        "complete_ms": 931.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 815.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 184.0,
+        "outcome_visible_ms": 212.6,
+        "overhead_ms": 116.1
+      },
+      {
+        "complete_ms": 886.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 758.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 135.3,
+        "outcome_visible_ms": 172.1,
+        "overhead_ms": 127.4
+      },
+      {
+        "complete_ms": 1134.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 916.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 287.8,
+        "outcome_visible_ms": 420.1,
+        "overhead_ms": 218.9
+      },
+      {
+        "complete_ms": 951.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 837.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 221.3,
+        "outcome_visible_ms": 251.7,
+        "overhead_ms": 114.3
+      },
+      {
+        "complete_ms": 897.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 764.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 136.2,
+        "outcome_visible_ms": 178.3,
+        "overhead_ms": 132.9
+      },
+      {
+        "complete_ms": 1031.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 913.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 295.6,
+        "outcome_visible_ms": 324.5,
+        "overhead_ms": 117.8
+      },
+      {
+        "complete_ms": 980.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 855.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 228.5,
+        "outcome_visible_ms": 257.4,
+        "overhead_ms": 124.7
+      },
+      {
+        "complete_ms": 941.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 783.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 175.8,
+        "outcome_visible_ms": 207.0,
+        "overhead_ms": 158.0
+      },
+      {
+        "complete_ms": 1039.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 922.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 292.2,
+        "outcome_visible_ms": 324.7,
+        "overhead_ms": 117.4
+      },
+      {
+        "complete_ms": 965.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 838.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 221.9,
+        "outcome_visible_ms": 251.3,
+        "overhead_ms": 127.1
+      },
+      {
+        "complete_ms": 883.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 763.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 132.7,
+        "outcome_visible_ms": 164.2,
+        "overhead_ms": 119.5
+      },
+      {
+        "complete_ms": 1031.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 913.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 286.1,
+        "outcome_visible_ms": 315.4,
+        "overhead_ms": 117.9
+      },
+      {
+        "complete_ms": 1017.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 854.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 221.0,
+        "outcome_visible_ms": 251.1,
+        "overhead_ms": 163.5
+      },
+      {
+        "complete_ms": 892.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 765.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 134.3,
+        "outcome_visible_ms": 164.1,
+        "overhead_ms": 127.0
+      },
+      {
+        "complete_ms": 2356.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2217.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 296.6,
+        "outcome_visible_ms": 341.2,
+        "overhead_ms": 139.2
+      },
+      {
+        "complete_ms": 876.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 760.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 136.5,
+        "outcome_visible_ms": 164.2,
+        "overhead_ms": 116.0
+      },
+      {
+        "complete_ms": 979.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 807.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 223.8,
+        "outcome_visible_ms": 254.0,
+        "overhead_ms": 172.4
+      },
+      {
+        "complete_ms": 924.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 806.7,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 165.4,
+        "outcome_visible_ms": 194.0,
+        "overhead_ms": 117.7
+      },
+      {
+        "complete_ms": 919.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 799.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 169.5,
+        "outcome_visible_ms": 203.2,
+        "overhead_ms": 119.8
+      },
+      {
+        "complete_ms": 919.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 801.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 168.6,
+        "outcome_visible_ms": 197.9,
+        "overhead_ms": 117.7
+      }
+    ],
+    "tactical_move": [
+      {
+        "complete_ms": 46.4,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 46.4,
+        "outcome_visible_ms": 46.4,
+        "overhead_ms": 46.4
+      },
+      {
+        "complete_ms": 33.8,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 33.8,
+        "outcome_visible_ms": 33.8,
+        "overhead_ms": 33.8
+      },
+      {
+        "complete_ms": 37.6,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 37.6,
+        "outcome_visible_ms": 37.6,
+        "overhead_ms": 37.6
+      },
+      {
+        "complete_ms": 35.1,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 35.1,
+        "outcome_visible_ms": 35.1,
+        "overhead_ms": 35.1
+      },
+      {
+        "complete_ms": 32.1,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 32.1,
+        "outcome_visible_ms": 32.1,
+        "overhead_ms": 32.1
+      },
+      {
+        "complete_ms": 33.0,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 33.0,
+        "outcome_visible_ms": 33.0,
+        "overhead_ms": 33.0
+      },
+      {
+        "complete_ms": 31.8,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.8,
+        "outcome_visible_ms": 31.8,
+        "overhead_ms": 31.8
+      },
+      {
+        "complete_ms": 32.6,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 32.6,
+        "outcome_visible_ms": 32.6,
+        "overhead_ms": 32.6
+      },
+      {
+        "complete_ms": 31.1,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.1,
+        "outcome_visible_ms": 31.1,
+        "overhead_ms": 31.1
+      },
+      {
+        "complete_ms": 31.8,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.8,
+        "outcome_visible_ms": 31.8,
+        "overhead_ms": 31.8
+      },
+      {
+        "complete_ms": 31.8,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.8,
+        "outcome_visible_ms": 31.8,
+        "overhead_ms": 31.8
+      },
+      {
+        "complete_ms": 31.9,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.9,
+        "outcome_visible_ms": 31.9,
+        "overhead_ms": 31.9
+      },
+      {
+        "complete_ms": 31.4,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.4,
+        "outcome_visible_ms": 31.4,
+        "overhead_ms": 31.4
+      },
+      {
+        "complete_ms": 32.7,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 32.7,
+        "outcome_visible_ms": 32.7,
+        "overhead_ms": 32.7
+      },
+      {
+        "complete_ms": 31.8,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.8,
+        "outcome_visible_ms": 31.8,
+        "overhead_ms": 31.8
+      },
+      {
+        "complete_ms": 31.9,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.9,
+        "outcome_visible_ms": 31.9,
+        "overhead_ms": 31.9
+      },
+      {
+        "complete_ms": 33.6,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 33.6,
+        "outcome_visible_ms": 33.6,
+        "overhead_ms": 33.6
+      },
+      {
+        "complete_ms": 32.7,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 32.7,
+        "outcome_visible_ms": 32.7,
+        "overhead_ms": 32.7
+      },
+      {
+        "complete_ms": 31.3,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.3,
+        "outcome_visible_ms": 31.3,
+        "overhead_ms": 31.3
+      },
+      {
+        "complete_ms": 31.2,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.2,
+        "outcome_visible_ms": 31.2,
+        "overhead_ms": 31.2
+      }
+    ],
+    "wait": [
+      {
+        "complete_ms": 2296.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2146.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 273.7,
+        "outcome_visible_ms": 300.7,
+        "overhead_ms": 149.8
+      },
+      {
+        "complete_ms": 2248.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2125.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 197.2,
+        "outcome_visible_ms": 227.0,
+        "overhead_ms": 122.9
+      },
+      {
+        "complete_ms": 2232.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2111.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 236.7,
+        "outcome_visible_ms": 268.5,
+        "overhead_ms": 120.3
+      },
+      {
+        "complete_ms": 2183.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2066.3,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 151.4,
+        "outcome_visible_ms": 180.8,
+        "overhead_ms": 116.9
+      },
+      {
+        "complete_ms": 2180.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2047.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 151.7,
+        "outcome_visible_ms": 199.3,
+        "overhead_ms": 132.9
+      },
+      {
+        "complete_ms": 2283.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2121.5,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 274.5,
+        "outcome_visible_ms": 315.7,
+        "overhead_ms": 161.7
+      },
+      {
+        "complete_ms": 2302.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2155.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 267.9,
+        "outcome_visible_ms": 302.8,
+        "overhead_ms": 146.6
+      },
+      {
+        "complete_ms": 2224.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2099.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 240.9,
+        "outcome_visible_ms": 270.0,
+        "overhead_ms": 125.8
+      },
+      {
+        "complete_ms": 2248.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2120.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 190.4,
+        "outcome_visible_ms": 220.7,
+        "overhead_ms": 128.2
+      },
+      {
+        "complete_ms": 2283.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2127.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 239.2,
+        "outcome_visible_ms": 269.9,
+        "overhead_ms": 156.1
+      },
+      {
+        "complete_ms": 2220.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2100.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.4,
+        "outcome_visible_ms": 272.9,
+        "overhead_ms": 120.0
+      },
+      {
+        "complete_ms": 2199.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2079.9,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 186.8,
+        "outcome_visible_ms": 216.1,
+        "overhead_ms": 119.3
+      },
+      {
+        "complete_ms": 2221.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2103.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 241.8,
+        "outcome_visible_ms": 271.0,
+        "overhead_ms": 118.6
+      },
+      {
+        "complete_ms": 2239.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2086.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 219.5,
+        "outcome_visible_ms": 249.4,
+        "overhead_ms": 152.8
+      },
+      {
+        "complete_ms": 2291.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2157.4,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 241.3,
+        "outcome_visible_ms": 285.3,
+        "overhead_ms": 134.5
+      },
+      {
+        "complete_ms": 2277.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2153.0,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 243.7,
+        "outcome_visible_ms": 274.0,
+        "overhead_ms": 124.3
+      },
+      {
+        "complete_ms": 993.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 874.2,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 237.0,
+        "outcome_visible_ms": 266.2,
+        "overhead_ms": 118.8
+      },
+      {
+        "complete_ms": 2206.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2086.6,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 220.0,
+        "outcome_visible_ms": 248.3,
+        "overhead_ms": 119.9
+      },
+      {
+        "complete_ms": 2211.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2087.1,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 233.0,
+        "outcome_visible_ms": 263.0,
+        "overhead_ms": 123.9
+      },
+      {
+        "complete_ms": 2300.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 4,
+        "model_ms": 2176.8,
+        "model_roles": [
+          "semantic_intent",
+          "narrative_writer",
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 240.3,
+        "outcome_visible_ms": 268.6,
+        "overhead_ms": 123.9
+      }
+    ]
+  },
+  "runs_per_class": 20,
+  "scenes": {
+    "fight": {
+      "combat_active": false,
+      "location": "location:aurelia:arrival-grove"
+    },
+    "grove": {
+      "combat_active": false,
+      "location": "location:aurelia:arrival-grove"
+    },
+    "pass": {
+      "combat_active": false,
+      "location": "location:aurelia:arrival-grove"
+    },
+    "village": {
+      "combat_active": false,
+      "location": "location:aurelia:arrival-grove"
+    }
+  },
+  "schema_version": 1,
+  "world": "aurelia"
+}

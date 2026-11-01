@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
@@ -451,7 +452,26 @@ def _personality_reflection(voice: Dict[str, Any]) -> str:
         return "I showed only what served me and kept the sharper part of my purpose hidden."
     if any(token in markers for token in ("wild", "chaotic", "impulsive", "unpredictable")):
         return "The straight road looked dull, so I trusted instinct and let the day surprise me."
-    return "I tried to read the day clearly and make each choice count."
+    return ""  # no voice to speak of: the day's own record says enough
+
+
+# The game's lines are written to the player ("you"); the journal is the hero's own account ("I").
+_FIRST_PERSON = (
+    (re.compile(r"\bYou are\b"), "I am"), (re.compile(r"\byou are\b"), "I am"),
+    (re.compile(r"\bYou were\b"), "I was"), (re.compile(r"\byou were\b"), "I was"),
+    (re.compile(r"\bYou're\b"), "I'm"), (re.compile(r"\byou're\b"), "I'm"),
+    (re.compile(r"\bYourself\b"), "Myself"), (re.compile(r"\byourself\b"), "myself"),
+    (re.compile(r"\bYour\b"), "My"), (re.compile(r"\byour\b"), "my"),
+    (re.compile(r"\bYou\b"), "I"),
+    (re.compile(r"(?<=; )you\b"), "I"),  # "...; you escape"
+    (re.compile(r"\byou\b"), "me"),  # "hits you", "follows you"
+)
+
+
+def _first_person(text: str) -> str:
+    for pattern, replacement in _FIRST_PERSON:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def _daily_journal_text(
@@ -462,16 +482,16 @@ def _daily_journal_text(
     voice: Dict[str, Any],
 ) -> str:
     clean_actions = [_clean_journal_text(value, max_len=220) for value in actions[-6:]]
-    clean_results = [_clean_journal_text(value, max_len=340) for value in results[-6:]]
+    clean_results = [_clean_journal_text(_first_person(_safe_str(value)), max_len=340) for value in results[-6:]]
     clean_actions = [value for value in clean_actions if value]
     clean_results = [value for value in clean_results if value]
     paragraphs = [_personality_reflection(voice)]
-    action_text = _sentence_join(clean_actions, max_items=4)
-    if action_text:
-        paragraphs.append(action_text)
-    result_text = _sentence_join(clean_results, max_items=3)
+    # What happened, as the game decided it, in the hero's words; what was typed only when nothing else was kept.
+    result_text = _sentence_join(clean_results, max_items=5)
     if result_text:
         paragraphs.append(result_text)
+    else:
+        paragraphs.append(_sentence_join(clean_actions, max_items=4))
     next_text = _sentence_join(
         _quest_progress_lines(runtime_state) + _infer_next_lines(clean_actions, clean_results),
         max_items=2,
@@ -550,14 +570,15 @@ def advance_campaign_journal_for_turn(
     calendar_snapshot: Dict[str, Any] | None = None,
     player_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """Advance the calendar and upsert one player-perspective entry per day.
-
-    This mutates runtime_state only. It does not mutate authoritative
-    simulation facts.
-    """
-    runtime_state = campaign_journal_runtime_state(runtime_state)
-    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
-    journal = _safe_dict(runtime_state.get("player_journal"))
+    """The calendar advanced and the day's player-perspective entry written, as a new calendar and journal
+    (``{"campaign_calendar": ..., "player_journal": ...}``): ``runtime_state`` is only read; the turn records what
+    comes back as its ``JournalWritten`` change, which the reducer applies."""
+    kept = campaign_journal_runtime_state({
+        key: deepcopy(runtime_state[key]) for key in ("campaign_calendar", "player_journal")
+        if isinstance(runtime_state, dict) and isinstance(runtime_state.get(key), dict)
+    })
+    calendar = kept["campaign_calendar"]
+    journal = kept["player_journal"]
     journal["format_version"] = PLAYER_JOURNAL_VERSION
 
     if minutes_per_turn is None:
@@ -572,7 +593,7 @@ def advance_campaign_journal_for_turn(
     history = _safe_list(calendar.get("history"))
     if not history or _safe_dict(history[-1]).get("turn_index") != time_info["turn_index"]:
         history.append(time_info)
-    calendar["history"] = history[-500:]
+    calendar["history"] = history[-24:]  # only its last entry is read: a day's worth is kept (F2)
 
     action = _extract_player_action(
         player_input=player_input,
@@ -649,8 +670,6 @@ def advance_campaign_journal_for_turn(
 
     max_entries = int(journal.get("max_entries") or 100)
     journal["entries"] = entries[-max_entries:]
-    runtime_state["campaign_calendar"] = calendar
-    runtime_state["player_journal"] = journal
-    return runtime_state
+    return {"campaign_calendar": calendar, "player_journal": journal}
 
 

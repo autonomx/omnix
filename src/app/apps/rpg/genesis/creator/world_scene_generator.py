@@ -38,13 +38,6 @@ SCENE_TYPE_POLITICAL = "political"
 SCENE_TYPE_INVESTIGATION = "investigation"
 SCENE_TYPE_NEGOTIATION = "negotiation"
 
-VALID_SCENE_TYPES = frozenset({
-    SCENE_TYPE_CONFLICT,
-    SCENE_TYPE_ENCOUNTER,
-    SCENE_TYPE_POLITICAL,
-    SCENE_TYPE_INVESTIGATION,
-    SCENE_TYPE_NEGOTIATION,
-})
 
 # Maximum number of scenes returned to avoid overwhelming the UI
 _MAX_SCENES = 20
@@ -597,5 +590,3 @@ def generate_scenes_from_simulation(
         )
 
     return scenes[:max_scenes]
-
-

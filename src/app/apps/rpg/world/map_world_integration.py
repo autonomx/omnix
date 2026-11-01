@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import threading
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import ceil, sqrt
@@ -22,6 +26,8 @@ from app.apps.rpg.world.map_repository import MapDefinitionRepository, default_m
 from app.apps.rpg.world.map_serialization import with_definition_revision
 from app.apps.rpg.world.map_settlement_assembler import assemble_settlement_map
 from app.apps.rpg.world.world_graph import RpgLocationNode, RpgRegionGraph, RpgRoute
+from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.state.changes import MapStateProjected
 
 WORLD_GRAPH_SCHEMA_VERSION = 1
 _REGION_WIDTH = 12000
@@ -45,9 +51,38 @@ class CanonicalWorldMapModel:
     map_bindings: Mapping[str, str]
 
 
+def world_graph_source(session: Mapping[str, Any]) -> dict[str, Any]:
+    """The campaign's world graph: the one a generated campaign keeps (``state.world_graph``), else its world
+    model's places and roads, where the hero stands and where they have been (a published world's)."""
+    state = _mapping(session.get("state"))
+    kept = _mapping(state.get("world_graph"))
+    if kept:
+        return dict(kept)
+    simulation = _mapping(_sections.simulation_state_of(session))
+    world = _mapping(_sections.world_model_of(simulation))
+    places = _mapping(world.get("locations"))
+    if not places:
+        return {}
+    here = _first_text(_mapping(_sections.player_state_of(simulation)).get("location_id"), simulation.get("location_id"))
+    return {
+        "schema_version": WORLD_GRAPH_SCHEMA_VERSION,
+        "seed": _int(simulation.get("seed"), fallback=0),
+        "locations": {key: {"name": _mapping(row).get("name"), "region_id": _mapping(row).get("region_id"),
+                            "services": list(_string_sequence(_mapping(row).get("services")))}
+                      for key, row in places.items()},
+        "routes": [route for route in _sequence(world.get("routes")) if _mapping(route).get("id")],
+        "current_location_id": here if here in places else "",
+        # Where the hero has been, and where the roads from here lead (known, as the place's exits are in play).
+        "discovered_location_ids": [place for place in (*_string_sequence(simulation.get("visited_locations")),
+                                                        *_mapping(_mapping(places.get(here)).get("exits")).values())
+                                    if place in places],
+        "source": "world_model",
+    }
+
+
 def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapModel | None:
     state = _mapping(session.get("state"))
-    raw = _mapping(state.get("world_graph"))
+    raw = world_graph_source(session)
     if not raw:
         return None
     version = _int(raw.get("schema_version"), fallback=-1)
@@ -57,7 +92,7 @@ def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapMo
     locations = _locations(raw.get("locations"))
     routes = _routes(raw.get("routes"))
     graph = RpgRegionGraph(locations={item.id: item for item in locations}, routes=routes)
-    current_location_id = _first_text(
+    current_location_id = _first_text(raw.get("current_location_id")) if raw.get("source") == "world_model" else _first_text(
         raw.get("current_location_id"),
         state.get("current_location_id"),
         _mapping(state.get("player")).get("location_id"),
@@ -85,13 +120,49 @@ def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapMo
     )
 
 
+# A campaign's map definitions follow from its world graph alone (places, roads, bindings, seed), and building them
+# hashes every definition: each campaign load asked for them twice (RQ-6.4). Repositories are read-only once built.
+_REPOSITORIES: dict[str, tuple[float, MapDefinitionRepository]] = {}  # (when built, the repository)
+_REPOSITORY_LOCK = threading.Lock()
+_MAX_REPOSITORIES = 64
+_REPOSITORY_TTL_SECONDS = 3600.0
+
+
+def clear_map_repositories() -> None:
+    """Forget the campaigns' built map repositories (each is rebuilt from its world graph when next asked for)."""
+    with _REPOSITORY_LOCK:
+        _REPOSITORIES.clear()
+
+
+def _repository_key(session: Mapping[str, Any]) -> str:
+    raw = world_graph_source(session)
+    inputs = {key: raw.get(key) for key in ("schema_version", "seed", "locations", "routes", "map_bindings")}
+    text = json.dumps({"inputs": inputs}, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepository:
     model = canonical_world_map_model(session)
     if model is None:
         return default_map_repository()
 
-    definitions = list(default_map_repository().list())
-    existing_ids = {definition.map_id for definition in definitions}
+    key = _repository_key(session)
+    with _REPOSITORY_LOCK:
+        kept = _REPOSITORIES.get(key)
+    if kept is not None and time.monotonic() - kept[0] < _REPOSITORY_TTL_SECONDS:
+        return kept[1]
+    repository = _build_repository(model)
+    with _REPOSITORY_LOCK:
+        _REPOSITORIES[key] = (time.monotonic(), repository)
+        while len(_REPOSITORIES) > _MAX_REPOSITORIES:
+            _REPOSITORIES.pop(next(iter(_REPOSITORIES)))
+    return repository
+
+
+def _build_repository(model: CanonicalWorldMapModel) -> MapDefinitionRepository:
+    """The campaign's maps: its world's own, region and settlement maps drawn from its graph where it has none."""
+    definitions: list[MapDefinition] = []
+    existing_ids: set[str] = set()
     region_ids = sorted({node.region_id for node in model.graph.locations.values()})
     for region_id in region_ids:
         map_id = _region_map_id(region_id)
@@ -144,17 +215,21 @@ def canonical_route_id_for_locations(
     return routes[0].id if routes else None
 
 
-def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, Any]:
+def projected_map_state(session: Mapping[str, Any]) -> MapStateProjected | None:
+    """The world map the play screen shows, from where the hero stands in the campaign's world graph: the map of
+    their place, what is discovered and visible on it, and the roads' states; ``None`` when the campaign has no world
+    map or the projection it keeps is already this one. The turn (``session/turn/run.py``) and a campaign's creation
+    apply it as a change, so the reducer is its one writer."""
     model = canonical_world_map_model(session)
     if model is None or not model.current_location_id:
-        return session
+        return None
     repository = map_repository_for_session(session)
     map_id = resolve_map_id_for_location(session, model.current_location_id, repository)
     if not map_id:
-        return session
+        return None
 
-    state = raw_state if isinstance(raw_state := session.get("state"), dict) else {}
-    current = raw_map_state if isinstance(raw_map_state := state.get("map_state"), dict) else {}
+    state = _mapping(session.get("state"))
+    current = _mapping(state.get("map_state"))
     definition = repository.get(map_id)
     discovered_locations = set(model.discovered_location_ids)
     visible_object_ids = {
@@ -186,13 +261,11 @@ def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, An
         "map_history": _append_unique(_string_sequence(current.get("map_history")), map_id),
         "source": "canonical_world_graph",
     }
-    state["map_state"] = map_state
-    state["current_location_id"] = model.current_location_id
-    player = raw_player if isinstance(raw_player := state.get("player"), dict) else {}
-    player["location_id"] = model.current_location_id
-    state["player"] = player
-    session["state"] = state
-    return session
+    player = _mapping(state.get("player"))
+    if (map_state == current and state.get("current_location_id") == model.current_location_id
+            and (not player or player.get("location_id") == model.current_location_id)):
+        return None
+    return MapStateProjected(map_state=map_state, location_id=model.current_location_id)
 
 
 def _canonical_settlement_definition(

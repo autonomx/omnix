@@ -16,6 +16,7 @@ from typing import Any, Iterator
 
 from app.caching.bounded_cache import bounded_lru_cache
 from app.runtime.paths import resources_root
+from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,6 @@ _LOGGER_NAMES = (
     "app.composition.gateway.rpg",
     "app.apps.rpg.edge.api.feature_routes.rpg_session_routes",
     "app.composition.gateway.rpg_direct_turn_routes",
-    "app.apps.rpg.session.jobs.turn_job_mirror",
 )
 _STANDARD_LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 _REDACTED_KEY_PARTS = (
@@ -242,12 +242,12 @@ def summarize_session(session: Any) -> dict[str, Any]:
     root = _dict(session)
     manifest = _dict(root.get("manifest"))
     state = _dict(root.get("state"))
-    simulation = _dict(root.get("simulation_state")) or state
-    runtime = _dict(root.get("runtime_state"))
+    simulation = _dict(_sections.simulation_state_of(root)) or state
+    runtime = _dict(_sections.runtime_state_of(root))
     scene = _dict(simulation.get("scene")) or _dict(state.get("scene"))
     world = _dict(simulation.get("world")) or _dict(state.get("world"))
     player = _dict(simulation.get("player")) or _dict(state.get("player"))
-    combat = _dict(runtime.get("combat_state")) or _dict(simulation.get("combat"))
+    combat = _dict(_sections.combat_state_of(runtime)) or _dict(simulation.get("combat"))
     inventory = player.get("inventory")
     if not isinstance(inventory, list):
         inventory = simulation.get("inventory")

@@ -168,6 +168,8 @@ The RPG workspace is a deterministic simulation with AI used for presentation/in
 
 > **Work in progress:** the RPG route is actively expanding. The deterministic session, structured turn flow, persistence/replay projections, world/campaign surfaces, and authoring tools are present, while content completeness, generated artwork, and some world-enrichment/editor workflows continue to evolve. Treat placeholder presentation or optional generated media as non-authoritative until the corresponding backend state is accepted.
 
+Guides: [playing](rpg/player-guide.md), [writing worlds](rpg/world-author-guide.md) and [operator notes](rpg/operator-notes.md).
+
 ### First-session workflow
 
 1. Create or select a world/campaign and confirm the active session.

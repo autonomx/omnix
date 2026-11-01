@@ -1,0 +1,2475 @@
+{
+  "checks": {
+    "F1_complete_p50_ms": {
+      "arrive": 7599.9,
+      "buy": 5838.4,
+      "fight": 6828.3,
+      "look": 5760.0,
+      "question": 3402.9,
+      "status": 75.5,
+      "tactical_move": 94.5,
+      "wait": 79.5
+    },
+    "F1_complete_p95_ms": {
+      "arrive": 7862.9,
+      "buy": 6205.3,
+      "fight": 7677.1,
+      "look": 6117.0,
+      "question": 4598.7,
+      "status": 80.7,
+      "tactical_move": 103.4,
+      "wait": 83.6
+    },
+    "F1_first_narration_p95_ms": {
+      "arrive": 2374.4,
+      "buy": 2223.4,
+      "fight": 2619.2,
+      "look": 2437.8,
+      "question": null,
+      "status": null,
+      "tactical_move": null,
+      "wait": null
+    },
+    "F3_deterministic_turns_with_a_call": 0,
+    "F3_max_calls_per_turn": 1,
+    "F3_turns_with_at_most_one_call": 1.0,
+    "targets": {
+      "F3": ">= 80% of turns at most one call; deterministic turns none; no turn more than two",
+      "complete": "p50 <= 6 s, p95 <= 10 s",
+      "deterministic": "status, equip, inventory, wait <= 500 ms complete, no model call",
+      "first_narration_p95": "<= 2.5 s",
+      "outcome_p95": "<= 300 ms tactical moves and attacks; <= 1.0 s other grammar-parsed and structured; <= 3.0 s with an intent call"
+    }
+  },
+  "classes": {
+    "arrive": {
+      "complete_ms": {
+        "max": 7865.8,
+        "n": 20,
+        "p50": 7599.9,
+        "p95": 7862.9
+      },
+      "first_narration_ms": {
+        "max": 2565.3,
+        "n": 20,
+        "p50": 2091.7,
+        "p95": 2374.4
+      },
+      "first_narration_published": 20,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 20,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 7720.7,
+        "n": 20,
+        "p50": 7449.5,
+        "p95": 7717.7
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 72.0,
+        "n": 20,
+        "p50": 37.9,
+        "p95": 64.8
+      },
+      "outcome_visible_ms": {
+        "max": 113.3,
+        "n": 20,
+        "p50": 81.9,
+        "p95": 111.2
+      },
+      "overhead_ms": {
+        "max": 177.5,
+        "n": 20,
+        "p50": 144.7,
+        "p95": 177.1
+      },
+      "runs": 20
+    },
+    "buy": {
+      "complete_ms": {
+        "max": 6275.9,
+        "n": 20,
+        "p50": 5838.4,
+        "p95": 6205.3
+      },
+      "first_narration_ms": {
+        "max": 2242.9,
+        "n": 20,
+        "p50": 2085.9,
+        "p95": 2223.4
+      },
+      "first_narration_published": 20,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 20,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 6144.7,
+        "n": 20,
+        "p50": 5705.4,
+        "p95": 6073.2
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 33.1,
+        "n": 20,
+        "p50": 29.8,
+        "p95": 32.8
+      },
+      "outcome_visible_ms": {
+        "max": 97.5,
+        "n": 20,
+        "p50": 74.0,
+        "p95": 82.6
+      },
+      "overhead_ms": {
+        "max": 157.4,
+        "n": 20,
+        "p50": 134.3,
+        "p95": 152.2
+      },
+      "runs": 20
+    },
+    "fight": {
+      "complete_ms": {
+        "max": 9804.4,
+        "n": 20,
+        "p50": 6828.3,
+        "p95": 7677.1
+      },
+      "first_narration_ms": {
+        "max": 5575.0,
+        "n": 20,
+        "p50": 2031.3,
+        "p95": 2619.2
+      },
+      "first_narration_published": 20,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 20,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 9662.1,
+        "n": 20,
+        "p50": 6686.3,
+        "p95": 7532.6
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 40.0,
+        "n": 20,
+        "p50": 37.7,
+        "p95": 39.8
+      },
+      "outcome_visible_ms": {
+        "max": 109.0,
+        "n": 20,
+        "p50": 82.9,
+        "p95": 94.2
+      },
+      "overhead_ms": {
+        "max": 171.2,
+        "n": 20,
+        "p50": 144.1,
+        "p95": 167.2
+      },
+      "runs": 20
+    },
+    "look": {
+      "complete_ms": {
+        "max": 6174.3,
+        "n": 20,
+        "p50": 5760.0,
+        "p95": 6117.0
+      },
+      "first_narration_ms": {
+        "max": 2444.5,
+        "n": 20,
+        "p50": 2047.0,
+        "p95": 2437.8
+      },
+      "first_narration_published": 20,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 20,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 6045.8,
+        "n": 20,
+        "p50": 5626.4,
+        "p95": 5984.0
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 38.6,
+        "n": 20,
+        "p50": 29.3,
+        "p95": 32.5
+      },
+      "outcome_visible_ms": {
+        "max": 77.9,
+        "n": 20,
+        "p50": 66.4,
+        "p95": 76.6
+      },
+      "overhead_ms": {
+        "max": 149.9,
+        "n": 20,
+        "p50": 126.4,
+        "p95": 148.5
+      },
+      "runs": 20
+    },
+    "question": {
+      "complete_ms": {
+        "max": 5075.7,
+        "n": 20,
+        "p50": 3402.9,
+        "p95": 4598.7
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 20,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 4962.2,
+        "n": 20,
+        "p50": 3314.3,
+        "p95": 4512.5
+      },
+      "model_roles": [
+        "unscripted"
+      ],
+      "outcome_known_ms": {
+        "max": 5022.7,
+        "n": 20,
+        "p50": 3346.5,
+        "p95": 4545.8
+      },
+      "outcome_visible_ms": {
+        "max": 5075.6,
+        "n": 20,
+        "p50": 3402.6,
+        "p95": 4598.5
+      },
+      "overhead_ms": {
+        "max": 122.6,
+        "n": 20,
+        "p50": 87.8,
+        "p95": 113.5
+      },
+      "runs": 20
+    },
+    "status": {
+      "complete_ms": {
+        "max": 105.4,
+        "n": 20,
+        "p50": 75.5,
+        "p95": 80.7
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_ms": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_roles": [],
+      "outcome_known_ms": {
+        "max": 30.2,
+        "n": 20,
+        "p50": 27.1,
+        "p95": 28.7
+      },
+      "outcome_visible_ms": {
+        "max": 105.3,
+        "n": 20,
+        "p50": 75.4,
+        "p95": 80.6
+      },
+      "overhead_ms": {
+        "max": 105.4,
+        "n": 20,
+        "p50": 75.5,
+        "p95": 80.7
+      },
+      "runs": 20
+    },
+    "tactical_move": {
+      "complete_ms": {
+        "max": 123.1,
+        "n": 20,
+        "p50": 94.5,
+        "p95": 103.4
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200,
+        409
+      ],
+      "model_calls": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_ms": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_roles": [],
+      "outcome_known_ms": {
+        "max": 123.1,
+        "n": 20,
+        "p50": 94.5,
+        "p95": 103.4
+      },
+      "outcome_visible_ms": {
+        "max": 123.1,
+        "n": 20,
+        "p50": 94.5,
+        "p95": 103.4
+      },
+      "overhead_ms": {
+        "max": 123.1,
+        "n": 20,
+        "p50": 94.5,
+        "p95": 103.4
+      },
+      "runs": 20
+    },
+    "wait": {
+      "complete_ms": {
+        "max": 106.4,
+        "n": 20,
+        "p50": 79.5,
+        "p95": 83.6
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_ms": {
+        "max": 0.0,
+        "n": 20,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_roles": [],
+      "outcome_known_ms": {
+        "max": 56.4,
+        "n": 20,
+        "p50": 30.0,
+        "p95": 32.9
+      },
+      "outcome_visible_ms": {
+        "max": 106.3,
+        "n": 20,
+        "p50": 79.4,
+        "p95": 83.5
+      },
+      "overhead_ms": {
+        "max": 106.4,
+        "n": 20,
+        "p50": 79.5,
+        "p95": 83.6
+      },
+      "runs": 20
+    }
+  },
+  "database": "omnix_rq_main",
+  "elapsed_s": 649.9,
+  "measured_on": "2026-10-25",
+  "measurement": "RPG turn latency per turn class (RQ-0.5)",
+  "notes": [
+    "outcome_visible_ms equals complete_ms: today the outcome reaches the play screen with the turn's response.",
+    "first_narration_ms is when the narrative writer first publishes a non-empty draft on the server; the play screen polls GET .../turn-draft, which adds up to its poll interval.",
+    "Each run starts from the class's scene snapshot, restored by an out-of-turn save."
+  ],
+  "provider": {
+    "effort": "low",
+    "model": "sonnet",
+    "provider": "claude_cli",
+    "resolved_models": [
+      "claude-sonnet-5-5",
+      "sonnet"
+    ]
+  },
+  "revision": "f2a96759d1",
+  "rows": {
+    "arrive": [
+      {
+        "complete_ms": 7742.0,
+        "first_narration_ms": 2217.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7574.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 64.8,
+        "outcome_visible_ms": 106.7,
+        "overhead_ms": 167.8
+      },
+      {
+        "complete_ms": 7636.7,
+        "first_narration_ms": 1997.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7501.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 35.7,
+        "outcome_visible_ms": 75.1,
+        "overhead_ms": 135.6
+      },
+      {
+        "complete_ms": 7383.6,
+        "first_narration_ms": 2071.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7242.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 39.2,
+        "outcome_visible_ms": 80.0,
+        "overhead_ms": 141.6
+      },
+      {
+        "complete_ms": 7660.5,
+        "first_narration_ms": 2175.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7522.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 36.9,
+        "outcome_visible_ms": 77.7,
+        "overhead_ms": 137.7
+      },
+      {
+        "complete_ms": 7827.3,
+        "first_narration_ms": 2374.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7688.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 36.6,
+        "outcome_visible_ms": 77.9,
+        "overhead_ms": 138.4
+      },
+      {
+        "complete_ms": 7513.0,
+        "first_narration_ms": 2195.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7366.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.5,
+        "outcome_visible_ms": 81.9,
+        "overhead_ms": 146.5
+      },
+      {
+        "complete_ms": 7510.3,
+        "first_narration_ms": 2063.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7332.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 41.5,
+        "outcome_visible_ms": 111.2,
+        "overhead_ms": 177.5
+      },
+      {
+        "complete_ms": 7648.5,
+        "first_narration_ms": 2085.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7499.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 40.4,
+        "outcome_visible_ms": 82.5,
+        "overhead_ms": 148.7
+      },
+      {
+        "complete_ms": 7865.8,
+        "first_narration_ms": 2565.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7720.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.3,
+        "outcome_visible_ms": 82.4,
+        "overhead_ms": 145.1
+      },
+      {
+        "complete_ms": 7298.9,
+        "first_narration_ms": 2081.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7157.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.2,
+        "outcome_visible_ms": 77.1,
+        "overhead_ms": 141.2
+      },
+      {
+        "complete_ms": 7514.4,
+        "first_narration_ms": 2266.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7363.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.8,
+        "outcome_visible_ms": 86.3,
+        "overhead_ms": 151.0
+      },
+      {
+        "complete_ms": 7638.4,
+        "first_narration_ms": 2022.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7493.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 35.5,
+        "outcome_visible_ms": 80.2,
+        "overhead_ms": 144.7
+      },
+      {
+        "complete_ms": 7502.3,
+        "first_narration_ms": 2192.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7344.6,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 48.7,
+        "outcome_visible_ms": 96.2,
+        "overhead_ms": 157.7
+      },
+      {
+        "complete_ms": 7646.8,
+        "first_narration_ms": 2045.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7469.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 72.0,
+        "outcome_visible_ms": 113.3,
+        "overhead_ms": 177.1
+      },
+      {
+        "complete_ms": 7599.9,
+        "first_narration_ms": 2091.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7449.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 43.5,
+        "outcome_visible_ms": 88.2,
+        "overhead_ms": 150.4
+      },
+      {
+        "complete_ms": 7776.5,
+        "first_narration_ms": 2243.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7635.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.4,
+        "outcome_visible_ms": 80.6,
+        "overhead_ms": 141.3
+      },
+      {
+        "complete_ms": 7297.1,
+        "first_narration_ms": 2060.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7155.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 35.9,
+        "outcome_visible_ms": 82.3,
+        "overhead_ms": 141.4
+      },
+      {
+        "complete_ms": 7417.5,
+        "first_narration_ms": 1991.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7275.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 36.6,
+        "outcome_visible_ms": 79.8,
+        "overhead_ms": 142.3
+      },
+      {
+        "complete_ms": 7397.3,
+        "first_narration_ms": 2177.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7257.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.0,
+        "outcome_visible_ms": 81.8,
+        "overhead_ms": 140.2
+      },
+      {
+        "complete_ms": 7862.9,
+        "first_narration_ms": 2254.6,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7717.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.9,
+        "outcome_visible_ms": 83.5,
+        "overhead_ms": 145.2
+      }
+    ],
+    "buy": [
+      {
+        "complete_ms": 5536.1,
+        "first_narration_ms": 1996.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5401.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.0,
+        "outcome_visible_ms": 75.2,
+        "overhead_ms": 134.3
+      },
+      {
+        "complete_ms": 6150.0,
+        "first_narration_ms": 2044.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6018.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.3,
+        "outcome_visible_ms": 71.3,
+        "overhead_ms": 131.6
+      },
+      {
+        "complete_ms": 5400.1,
+        "first_narration_ms": 2215.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5269.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.1,
+        "outcome_visible_ms": 72.1,
+        "overhead_ms": 130.7
+      },
+      {
+        "complete_ms": 5197.5,
+        "first_narration_ms": 1991.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5064.3,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.2,
+        "outcome_visible_ms": 72.8,
+        "overhead_ms": 133.2
+      },
+      {
+        "complete_ms": 5616.2,
+        "first_narration_ms": 2056.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5479.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 32.8,
+        "outcome_visible_ms": 76.8,
+        "overhead_ms": 137.2
+      },
+      {
+        "complete_ms": 5030.8,
+        "first_narration_ms": 2076.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4896.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 73.4,
+        "overhead_ms": 134.7
+      },
+      {
+        "complete_ms": 6092.2,
+        "first_narration_ms": 2223.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5953.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.7,
+        "outcome_visible_ms": 78.6,
+        "overhead_ms": 138.4
+      },
+      {
+        "complete_ms": 5246.9,
+        "first_narration_ms": 2087.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5106.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 32.8,
+        "outcome_visible_ms": 80.4,
+        "overhead_ms": 140.0
+      },
+      {
+        "complete_ms": 6109.0,
+        "first_narration_ms": 2025.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5951.6,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.2,
+        "outcome_visible_ms": 97.5,
+        "overhead_ms": 157.4
+      },
+      {
+        "complete_ms": 5411.0,
+        "first_narration_ms": 1973.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5258.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 33.1,
+        "outcome_visible_ms": 82.6,
+        "overhead_ms": 152.2
+      },
+      {
+        "complete_ms": 5617.1,
+        "first_narration_ms": 2242.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5476.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 76.8,
+        "overhead_ms": 140.4
+      },
+      {
+        "complete_ms": 5573.2,
+        "first_narration_ms": 2185.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5435.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 31.4,
+        "outcome_visible_ms": 74.9,
+        "overhead_ms": 137.5
+      },
+      {
+        "complete_ms": 6108.8,
+        "first_narration_ms": 2110.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5970.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.8,
+        "outcome_visible_ms": 74.6,
+        "overhead_ms": 138.4
+      },
+      {
+        "complete_ms": 5864.4,
+        "first_narration_ms": 2096.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5731.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.7,
+        "outcome_visible_ms": 74.0,
+        "overhead_ms": 132.9
+      },
+      {
+        "complete_ms": 5863.3,
+        "first_narration_ms": 2085.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5732.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.3,
+        "outcome_visible_ms": 70.9,
+        "overhead_ms": 130.4
+      },
+      {
+        "complete_ms": 5957.0,
+        "first_narration_ms": 2094.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5827.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.6,
+        "outcome_visible_ms": 69.0,
+        "overhead_ms": 129.5
+      },
+      {
+        "complete_ms": 5914.5,
+        "first_narration_ms": 2113.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5779.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 32.0,
+        "outcome_visible_ms": 75.1,
+        "overhead_ms": 135.5
+      },
+      {
+        "complete_ms": 5838.4,
+        "first_narration_ms": 2062.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5705.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.5,
+        "outcome_visible_ms": 71.2,
+        "overhead_ms": 133.0
+      },
+      {
+        "complete_ms": 6205.3,
+        "first_narration_ms": 2104.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6073.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.6,
+        "outcome_visible_ms": 72.5,
+        "overhead_ms": 132.1
+      },
+      {
+        "complete_ms": 6275.9,
+        "first_narration_ms": 2033.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6144.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 71.8,
+        "overhead_ms": 131.2
+      }
+    ],
+    "fight": [
+      {
+        "complete_ms": 7423.3,
+        "first_narration_ms": 2011.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7267.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 39.8,
+        "outcome_visible_ms": 94.2,
+        "overhead_ms": 155.9
+      },
+      {
+        "complete_ms": 6207.4,
+        "first_narration_ms": 2031.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6068.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 36.7,
+        "outcome_visible_ms": 80.6,
+        "overhead_ms": 139.2
+      },
+      {
+        "complete_ms": 6153.8,
+        "first_narration_ms": 1708.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5986.6,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.9,
+        "outcome_visible_ms": 109.0,
+        "overhead_ms": 167.2
+      },
+      {
+        "complete_ms": 7444.8,
+        "first_narration_ms": 2138.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7294.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.5,
+        "outcome_visible_ms": 84.7,
+        "overhead_ms": 150.4
+      },
+      {
+        "complete_ms": 7055.1,
+        "first_narration_ms": 2070.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6909.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.0,
+        "outcome_visible_ms": 82.9,
+        "overhead_ms": 145.2
+      },
+      {
+        "complete_ms": 7677.1,
+        "first_narration_ms": 2018.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7532.6,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.2,
+        "outcome_visible_ms": 81.5,
+        "overhead_ms": 144.5
+      },
+      {
+        "complete_ms": 5686.2,
+        "first_narration_ms": 1581.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5543.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 36.6,
+        "outcome_visible_ms": 82.5,
+        "overhead_ms": 142.8
+      },
+      {
+        "complete_ms": 6020.7,
+        "first_narration_ms": 1992.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5849.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.6,
+        "outcome_visible_ms": 80.9,
+        "overhead_ms": 171.2
+      },
+      {
+        "complete_ms": 7012.4,
+        "first_narration_ms": 2066.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6856.3,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 40.0,
+        "outcome_visible_ms": 91.5,
+        "overhead_ms": 156.1
+      },
+      {
+        "complete_ms": 6444.1,
+        "first_narration_ms": 2427.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6305.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.1,
+        "outcome_visible_ms": 82.1,
+        "overhead_ms": 138.9
+      },
+      {
+        "complete_ms": 6626.9,
+        "first_narration_ms": 2304.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6480.3,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.8,
+        "outcome_visible_ms": 87.9,
+        "overhead_ms": 146.6
+      },
+      {
+        "complete_ms": 6856.9,
+        "first_narration_ms": 2008.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6709.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.7,
+        "outcome_visible_ms": 83.7,
+        "overhead_ms": 147.0
+      },
+      {
+        "complete_ms": 6827.1,
+        "first_narration_ms": 1775.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6683.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 39.2,
+        "outcome_visible_ms": 85.2,
+        "overhead_ms": 144.1
+      },
+      {
+        "complete_ms": 7456.8,
+        "first_narration_ms": 2304.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7313.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.6,
+        "outcome_visible_ms": 82.3,
+        "overhead_ms": 143.8
+      },
+      {
+        "complete_ms": 9804.4,
+        "first_narration_ms": 5575.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 9662.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 39.2,
+        "outcome_visible_ms": 85.3,
+        "overhead_ms": 142.3
+      },
+      {
+        "complete_ms": 5637.2,
+        "first_narration_ms": 1635.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5493.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.0,
+        "outcome_visible_ms": 85.8,
+        "overhead_ms": 143.8
+      },
+      {
+        "complete_ms": 6731.4,
+        "first_narration_ms": 2191.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6589.2,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.1,
+        "outcome_visible_ms": 83.2,
+        "overhead_ms": 142.2
+      },
+      {
+        "complete_ms": 7295.9,
+        "first_narration_ms": 2619.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7147.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 36.6,
+        "outcome_visible_ms": 80.7,
+        "overhead_ms": 148.0
+      },
+      {
+        "complete_ms": 6853.1,
+        "first_narration_ms": 2050.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6709.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.1,
+        "outcome_visible_ms": 82.2,
+        "overhead_ms": 143.3
+      },
+      {
+        "complete_ms": 6828.3,
+        "first_narration_ms": 2023.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6686.3,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 37.7,
+        "outcome_visible_ms": 82.9,
+        "overhead_ms": 142.0
+      }
+    ],
+    "look": [
+      {
+        "complete_ms": 5778.2,
+        "first_narration_ms": 2101.6,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5658.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 27.6,
+        "outcome_visible_ms": 63.1,
+        "overhead_ms": 119.7
+      },
+      {
+        "complete_ms": 5513.9,
+        "first_narration_ms": 1704.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5395.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 27.9,
+        "outcome_visible_ms": 63.7,
+        "overhead_ms": 118.2
+      },
+      {
+        "complete_ms": 6036.0,
+        "first_narration_ms": 2349.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5914.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 67.0,
+        "overhead_ms": 121.2
+      },
+      {
+        "complete_ms": 5538.5,
+        "first_narration_ms": 2037.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5407.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.8,
+        "outcome_visible_ms": 65.7,
+        "overhead_ms": 130.6
+      },
+      {
+        "complete_ms": 5828.2,
+        "first_narration_ms": 2005.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5703.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.6,
+        "outcome_visible_ms": 64.9,
+        "overhead_ms": 124.3
+      },
+      {
+        "complete_ms": 5828.4,
+        "first_narration_ms": 2437.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5703.6,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.5,
+        "outcome_visible_ms": 66.9,
+        "overhead_ms": 124.8
+      },
+      {
+        "complete_ms": 5446.2,
+        "first_narration_ms": 2028.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5297.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.0,
+        "outcome_visible_ms": 65.9,
+        "overhead_ms": 148.5
+      },
+      {
+        "complete_ms": 6174.3,
+        "first_narration_ms": 2001.9,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 6045.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 27.6,
+        "outcome_visible_ms": 65.2,
+        "overhead_ms": 128.5
+      },
+      {
+        "complete_ms": 6117.0,
+        "first_narration_ms": 2183.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5984.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.3,
+        "outcome_visible_ms": 64.8,
+        "overhead_ms": 133.0
+      },
+      {
+        "complete_ms": 5904.8,
+        "first_narration_ms": 2248.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5782.9,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 66.4,
+        "overhead_ms": 121.9
+      },
+      {
+        "complete_ms": 5373.4,
+        "first_narration_ms": 2045.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5246.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.6,
+        "outcome_visible_ms": 67.1,
+        "overhead_ms": 126.9
+      },
+      {
+        "complete_ms": 5481.9,
+        "first_narration_ms": 2019.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5360.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.8,
+        "outcome_visible_ms": 66.3,
+        "overhead_ms": 121.5
+      },
+      {
+        "complete_ms": 5849.4,
+        "first_narration_ms": 2156.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5723.0,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 31.6,
+        "outcome_visible_ms": 69.7,
+        "overhead_ms": 126.4
+      },
+      {
+        "complete_ms": 6053.7,
+        "first_narration_ms": 2444.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5903.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.7,
+        "outcome_visible_ms": 66.2,
+        "overhead_ms": 149.9
+      },
+      {
+        "complete_ms": 5760.0,
+        "first_narration_ms": 2047.0,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5626.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 38.6,
+        "outcome_visible_ms": 76.6,
+        "overhead_ms": 133.6
+      },
+      {
+        "complete_ms": 5715.2,
+        "first_narration_ms": 2033.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5580.3,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 30.1,
+        "outcome_visible_ms": 70.9,
+        "overhead_ms": 134.9
+      },
+      {
+        "complete_ms": 5314.1,
+        "first_narration_ms": 1971.6,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5171.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 32.5,
+        "outcome_visible_ms": 77.9,
+        "overhead_ms": 142.4
+      },
+      {
+        "complete_ms": 5703.5,
+        "first_narration_ms": 2082.4,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5574.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.8,
+        "outcome_visible_ms": 70.0,
+        "overhead_ms": 128.7
+      },
+      {
+        "complete_ms": 5933.8,
+        "first_narration_ms": 2174.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5807.5,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 29.7,
+        "outcome_visible_ms": 70.3,
+        "overhead_ms": 126.3
+      },
+      {
+        "complete_ms": 5714.3,
+        "first_narration_ms": 2113.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 5591.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 28.2,
+        "outcome_visible_ms": 66.6,
+        "overhead_ms": 123.2
+      }
+    ],
+    "question": [
+      {
+        "complete_ms": 5075.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4962.2,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 5022.7,
+        "outcome_visible_ms": 5075.6,
+        "overhead_ms": 113.5
+      },
+      {
+        "complete_ms": 2955.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2870.1,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2902.4,
+        "outcome_visible_ms": 2955.5,
+        "overhead_ms": 85.5
+      },
+      {
+        "complete_ms": 4598.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4512.5,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 4545.8,
+        "outcome_visible_ms": 4598.5,
+        "overhead_ms": 86.2
+      },
+      {
+        "complete_ms": 2543.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2450.8,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2485.6,
+        "outcome_visible_ms": 2543.5,
+        "overhead_ms": 92.8
+      },
+      {
+        "complete_ms": 3411.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3318.6,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3352.7,
+        "outcome_visible_ms": 3411.2,
+        "overhead_ms": 92.8
+      },
+      {
+        "complete_ms": 3832.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3744.8,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3779.4,
+        "outcome_visible_ms": 3832.5,
+        "overhead_ms": 87.8
+      },
+      {
+        "complete_ms": 4440.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4354.0,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 4387.2,
+        "outcome_visible_ms": 4440.8,
+        "overhead_ms": 86.9
+      },
+      {
+        "complete_ms": 2798.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2708.4,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2742.5,
+        "outcome_visible_ms": 2798.1,
+        "overhead_ms": 89.8
+      },
+      {
+        "complete_ms": 3402.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3314.3,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3346.5,
+        "outcome_visible_ms": 3402.6,
+        "overhead_ms": 88.6
+      },
+      {
+        "complete_ms": 3948.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3861.8,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3894.7,
+        "outcome_visible_ms": 3948.3,
+        "overhead_ms": 86.6
+      },
+      {
+        "complete_ms": 4437.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4351.4,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 4384.6,
+        "outcome_visible_ms": 4437.4,
+        "overhead_ms": 86.2
+      },
+      {
+        "complete_ms": 4296.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4174.2,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 4240.5,
+        "outcome_visible_ms": 4296.6,
+        "overhead_ms": 122.6
+      },
+      {
+        "complete_ms": 3280.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3193.7,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3227.3,
+        "outcome_visible_ms": 3280.0,
+        "overhead_ms": 86.4
+      },
+      {
+        "complete_ms": 2863.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2777.5,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2809.7,
+        "outcome_visible_ms": 2863.0,
+        "overhead_ms": 85.6
+      },
+      {
+        "complete_ms": 2720.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2632.8,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2666.0,
+        "outcome_visible_ms": 2720.8,
+        "overhead_ms": 88.1
+      },
+      {
+        "complete_ms": 4400.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4311.9,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 4345.5,
+        "outcome_visible_ms": 4400.2,
+        "overhead_ms": 88.5
+      },
+      {
+        "complete_ms": 2888.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2802.9,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2835.7,
+        "outcome_visible_ms": 2888.6,
+        "overhead_ms": 85.8
+      },
+      {
+        "complete_ms": 4142.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 4030.1,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 4087.5,
+        "outcome_visible_ms": 4142.0,
+        "overhead_ms": 112.0
+      },
+      {
+        "complete_ms": 2095.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2005.2,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2039.3,
+        "outcome_visible_ms": 2095.0,
+        "overhead_ms": 90.0
+      },
+      {
+        "complete_ms": 3098.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3013.9,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3046.3,
+        "outcome_visible_ms": 3098.5,
+        "overhead_ms": 84.7
+      }
+    ],
+    "status": [
+      {
+        "complete_ms": 80.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.2,
+        "outcome_visible_ms": 80.6,
+        "overhead_ms": 80.7
+      },
+      {
+        "complete_ms": 74.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.5,
+        "outcome_visible_ms": 74.7,
+        "overhead_ms": 74.8
+      },
+      {
+        "complete_ms": 74.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.7,
+        "outcome_visible_ms": 74.0,
+        "overhead_ms": 74.1
+      },
+      {
+        "complete_ms": 76.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.3,
+        "outcome_visible_ms": 76.4,
+        "overhead_ms": 76.5
+      },
+      {
+        "complete_ms": 75.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.0,
+        "outcome_visible_ms": 75.0,
+        "overhead_ms": 75.1
+      },
+      {
+        "complete_ms": 80.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 28.4,
+        "outcome_visible_ms": 80.4,
+        "overhead_ms": 80.5
+      },
+      {
+        "complete_ms": 79.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.8,
+        "outcome_visible_ms": 79.8,
+        "overhead_ms": 79.9
+      },
+      {
+        "complete_ms": 77.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.3,
+        "outcome_visible_ms": 77.7,
+        "overhead_ms": 77.8
+      },
+      {
+        "complete_ms": 78.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 28.2,
+        "outcome_visible_ms": 78.5,
+        "overhead_ms": 78.6
+      },
+      {
+        "complete_ms": 74.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.1,
+        "outcome_visible_ms": 74.4,
+        "overhead_ms": 74.5
+      },
+      {
+        "complete_ms": 74.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.3,
+        "outcome_visible_ms": 74.0,
+        "overhead_ms": 74.1
+      },
+      {
+        "complete_ms": 75.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.1,
+        "outcome_visible_ms": 75.4,
+        "overhead_ms": 75.5
+      },
+      {
+        "complete_ms": 76.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 28.7,
+        "outcome_visible_ms": 76.8,
+        "overhead_ms": 76.9
+      },
+      {
+        "complete_ms": 76.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.2,
+        "outcome_visible_ms": 76.4,
+        "overhead_ms": 76.5
+      },
+      {
+        "complete_ms": 105.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.8,
+        "outcome_visible_ms": 105.3,
+        "overhead_ms": 105.4
+      },
+      {
+        "complete_ms": 75.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.5,
+        "outcome_visible_ms": 75.3,
+        "overhead_ms": 75.4
+      },
+      {
+        "complete_ms": 75.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 25.9,
+        "outcome_visible_ms": 75.4,
+        "overhead_ms": 75.5
+      },
+      {
+        "complete_ms": 77.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 27.7,
+        "outcome_visible_ms": 77.3,
+        "overhead_ms": 77.4
+      },
+      {
+        "complete_ms": 74.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 26.7,
+        "outcome_visible_ms": 74.5,
+        "overhead_ms": 74.7
+      },
+      {
+        "complete_ms": 73.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 25.9,
+        "outcome_visible_ms": 73.4,
+        "overhead_ms": 73.5
+      }
+    ],
+    "tactical_move": [
+      {
+        "complete_ms": 45.4,
+        "first_narration_ms": null,
+        "http": 409,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 45.4,
+        "outcome_visible_ms": 45.4,
+        "overhead_ms": 45.4
+      },
+      {
+        "complete_ms": 123.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 123.1,
+        "outcome_visible_ms": 123.1,
+        "overhead_ms": 123.1
+      },
+      {
+        "complete_ms": 92.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 92.0,
+        "outcome_visible_ms": 92.0,
+        "overhead_ms": 92.0
+      },
+      {
+        "complete_ms": 94.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 94.8,
+        "outcome_visible_ms": 94.8,
+        "overhead_ms": 94.8
+      },
+      {
+        "complete_ms": 96.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 96.3,
+        "outcome_visible_ms": 96.3,
+        "overhead_ms": 96.3
+      },
+      {
+        "complete_ms": 98.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 98.4,
+        "outcome_visible_ms": 98.4,
+        "overhead_ms": 98.4
+      },
+      {
+        "complete_ms": 94.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 94.7,
+        "outcome_visible_ms": 94.7,
+        "overhead_ms": 94.7
+      },
+      {
+        "complete_ms": 90.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 90.8,
+        "outcome_visible_ms": 90.8,
+        "overhead_ms": 90.8
+      },
+      {
+        "complete_ms": 92.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 92.4,
+        "outcome_visible_ms": 92.4,
+        "overhead_ms": 92.4
+      },
+      {
+        "complete_ms": 91.2,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 91.2,
+        "outcome_visible_ms": 91.2,
+        "overhead_ms": 91.2
+      },
+      {
+        "complete_ms": 94.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 94.8,
+        "outcome_visible_ms": 94.8,
+        "overhead_ms": 94.8
+      },
+      {
+        "complete_ms": 97.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 97.1,
+        "outcome_visible_ms": 97.1,
+        "overhead_ms": 97.1
+      },
+      {
+        "complete_ms": 97.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 97.1,
+        "outcome_visible_ms": 97.1,
+        "overhead_ms": 97.1
+      },
+      {
+        "complete_ms": 94.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 94.5,
+        "outcome_visible_ms": 94.5,
+        "overhead_ms": 94.5
+      },
+      {
+        "complete_ms": 91.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 91.7,
+        "outcome_visible_ms": 91.7,
+        "overhead_ms": 91.7
+      },
+      {
+        "complete_ms": 93.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 93.1,
+        "outcome_visible_ms": 93.1,
+        "overhead_ms": 93.1
+      },
+      {
+        "complete_ms": 92.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 92.9,
+        "outcome_visible_ms": 92.9,
+        "overhead_ms": 92.9
+      },
+      {
+        "complete_ms": 103.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 103.4,
+        "outcome_visible_ms": 103.4,
+        "overhead_ms": 103.4
+      },
+      {
+        "complete_ms": 94.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 94.6,
+        "outcome_visible_ms": 94.6,
+        "overhead_ms": 94.6
+      },
+      {
+        "complete_ms": 94.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 94.5,
+        "outcome_visible_ms": 94.5,
+        "overhead_ms": 94.5
+      }
+    ],
+    "wait": [
+      {
+        "complete_ms": 79.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.7,
+        "outcome_visible_ms": 79.4,
+        "overhead_ms": 79.5
+      },
+      {
+        "complete_ms": 80.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 31.4,
+        "outcome_visible_ms": 80.7,
+        "overhead_ms": 80.9
+      },
+      {
+        "complete_ms": 80.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.4,
+        "outcome_visible_ms": 80.3,
+        "overhead_ms": 80.4
+      },
+      {
+        "complete_ms": 80.9,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.2,
+        "outcome_visible_ms": 80.8,
+        "overhead_ms": 80.9
+      },
+      {
+        "complete_ms": 78.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.2,
+        "outcome_visible_ms": 78.7,
+        "overhead_ms": 78.8
+      },
+      {
+        "complete_ms": 82.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.5,
+        "outcome_visible_ms": 82.0,
+        "overhead_ms": 82.3
+      },
+      {
+        "complete_ms": 78.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.0,
+        "outcome_visible_ms": 78.5,
+        "overhead_ms": 78.6
+      },
+      {
+        "complete_ms": 77.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.5,
+        "outcome_visible_ms": 77.7,
+        "overhead_ms": 77.8
+      },
+      {
+        "complete_ms": 79.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 79.3,
+        "overhead_ms": 79.4
+      },
+      {
+        "complete_ms": 106.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 56.4,
+        "outcome_visible_ms": 106.3,
+        "overhead_ms": 106.4
+      },
+      {
+        "complete_ms": 80.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.6,
+        "outcome_visible_ms": 80.2,
+        "overhead_ms": 80.3
+      },
+      {
+        "complete_ms": 81.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.6,
+        "outcome_visible_ms": 81.4,
+        "overhead_ms": 81.5
+      },
+      {
+        "complete_ms": 78.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.6,
+        "outcome_visible_ms": 78.6,
+        "overhead_ms": 78.7
+      },
+      {
+        "complete_ms": 77.3,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 28.9,
+        "outcome_visible_ms": 77.2,
+        "overhead_ms": 77.3
+      },
+      {
+        "complete_ms": 83.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 32.9,
+        "outcome_visible_ms": 83.5,
+        "overhead_ms": 83.6
+      },
+      {
+        "complete_ms": 78.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.6,
+        "outcome_visible_ms": 78.7,
+        "overhead_ms": 78.8
+      },
+      {
+        "complete_ms": 78.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.4,
+        "outcome_visible_ms": 78.6,
+        "overhead_ms": 78.7
+      },
+      {
+        "complete_ms": 80.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.3,
+        "outcome_visible_ms": 80.7,
+        "overhead_ms": 80.8
+      },
+      {
+        "complete_ms": 78.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 29.3,
+        "outcome_visible_ms": 78.5,
+        "overhead_ms": 78.6
+      },
+      {
+        "complete_ms": 80.5,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 30.7,
+        "outcome_visible_ms": 80.4,
+        "overhead_ms": 80.5
+      }
+    ]
+  },
+  "runs_per_class": 20,
+  "scenes": {
+    "fight": {
+      "combat_active": true,
+      "location": "location:aurelia:skybridge-pass"
+    },
+    "grove": {
+      "combat_active": false,
+      "location": "location:aurelia:arrival-grove"
+    },
+    "pass": {
+      "combat_active": false,
+      "location": "location:aurelia:skybridge-pass"
+    },
+    "village": {
+      "combat_active": false,
+      "location": "location:aurelia:starfall-village"
+    }
+  },
+  "schema_version": 1,
+  "world": "aurelia"
+}

@@ -30,6 +30,8 @@ export interface RpgTurnDiagnosticsSnapshot {
   };
   serverPayloadTiming?: Record<string, number>;
   serverPerformance?: Record<string, unknown>;
+  /** The model calls the turn made, from its outcome (RQ-1.3). */
+  serverModelCalls?: number;
 }
 
 interface CompleteDiagnosticsInput {
@@ -42,6 +44,8 @@ interface CompleteDiagnosticsInput {
   changedDomains?: string[];
   serverPayloadTiming?: Record<string, number>;
   serverPerformance?: Record<string, unknown>;
+  /** The model calls the turn made, from its outcome (RQ-1.3). */
+  serverModelCalls?: number;
 }
 
 const diagnosticsBySession = new Map<string, RpgTurnDiagnosticsSnapshot[]>();
@@ -89,6 +93,7 @@ export function completeRpgTurnDiagnostics(input: CompleteDiagnosticsInput): voi
     client: withDurations(milestones),
     serverPayloadTiming: input.serverPayloadTiming,
     serverPerformance: input.serverPerformance,
+    serverModelCalls: input.serverModelCalls,
   };
   setDiagnostics(input.sessionId, [
     ...current.filter((item) => item.submissionId !== input.submissionId),
@@ -129,17 +134,18 @@ export function resetRpgTurnDiagnosticsForTests(): void {
   listeners.clear();
 }
 
+/** Turn diagnostics asked for by address or a stored flag; the play screen also shows them with Developer tools on.
+ * (Omnix runs on this machine, so being on localhost says nothing about who is playing.) */
 export function rpgDiagnosticsEnabled(): boolean {
   if (typeof window === 'undefined') return false;
   const queryEnabled = new URLSearchParams(window.location.search).get('rpgDiagnostics') === '1';
-  const localDevelopment = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
   let stored = false;
   try {
     stored = window.localStorage.getItem('omnix:rpg-diagnostics') === '1';
   } catch {
     stored = false;
   }
-  return localDevelopment || queryEnabled || stored;
+  return queryEnabled || stored;
 }
 
 function markMilestone(

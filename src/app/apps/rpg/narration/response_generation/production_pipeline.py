@@ -53,16 +53,6 @@ _HARD_CLAIM_KEYWORDS: dict[str, tuple[str, ...]] = {
     "quest": ("quest", "objective", "mission", "completed", "complete"),
     "relationship": ("trust", "loyalty", "reputation", "relationship", "faction"),
 }
-_SOURCE_TO_TRUTH = {
-    "resolved_turn": "confirmed_fact",
-    "scene": "confirmed_fact",
-    "speaker": "npc_belief",
-    "party": "npc_belief",
-    "journal": "retrieved_lore",
-    "campaign": "retrieved_lore",
-    "lorebook": "retrieved_lore",
-    "approved_proposal": "generated_proposal",
-}
 
 
 class ProfileBoundProvider:

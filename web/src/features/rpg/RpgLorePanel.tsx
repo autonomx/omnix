@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from './api/gateway';
 
 import type { components } from './api/generated';
+import './RpgLorePanel.css';
 type LoreDocumentSummary = components['schemas']['RpgLoreDocumentSummary'];
 
 interface LoreDocumentDetail extends LoreDocumentSummary {

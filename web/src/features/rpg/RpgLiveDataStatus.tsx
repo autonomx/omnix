@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import './RpgLiveDataStatus.css';
 
 export type RpgLiveDataStatusState = 'loading' | 'refreshing' | 'empty' | 'error' | 'ready';
 

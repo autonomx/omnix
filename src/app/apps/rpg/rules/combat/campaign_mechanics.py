@@ -5,10 +5,7 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping
 
-from app.apps.rpg.rules.combat.conditions import (
-    add_status_effect_to_participant,
-    build_condition_effect,
-)
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -24,7 +21,7 @@ def _slug(value: str) -> str:
 
 
 def campaign_mechanics_catalog(simulation_state: Mapping[str, Any]) -> dict[str, Any]:
-    return _mapping(simulation_state.get("campaign_mechanics"))
+    return _mapping(_sections.campaign_mechanics_of(simulation_state))
 
 
 def campaign_creature_definition(
@@ -93,138 +90,14 @@ def instantiate_campaign_creature(
             definition.get("condition_immunities") or ()
         ),
         "vulnerabilities": deepcopy(list(definition.get("vulnerabilities") or ())),
+        # EV-2: copied into the fight when the creature joins it, as its behaviour is.
+        "resists": [_text(tag).casefold() for tag in definition.get("resists") or () if _text(tag)],
+        "phases": deepcopy(list(definition.get("phases") or ())),
+        "no_escape": definition.get("no_escape") is True,
+        "recovers": float(definition.get("recovers") if definition.get("recovers") is not None else 1.0),
+        "behaviour": _text(definition.get("behaviour")) or "fights",
+        "speaks": definition.get("speaks") is True,
         "status": "active",
         "status_effects": [],
         "mechanics_source": "campaign_mechanics_catalog",
-    }
-
-
-def _matching_participant_id(
-    participants: Mapping[str, Any],
-    target_ref: str,
-) -> str:
-    wanted = _text(target_ref).casefold()
-    wanted_slug = _slug(wanted)
-    for actor_id, raw in participants.items():
-        row = _mapping(raw)
-        names = {
-            _text(actor_id).casefold(),
-            _text(row.get("name")).casefold(),
-            _slug(_text(row.get("name"))),
-            _text(row.get("definition_id")).casefold(),
-        }
-        if wanted in names or wanted_slug in names:
-            return _text(actor_id)
-    return ""
-
-
-def campaign_vulnerability_trigger(
-    simulation_state: Mapping[str, Any],
-    *,
-    target_ref: str,
-    trigger_ref: str,
-) -> dict[str, Any] | None:
-    """Resolve a trigger without changing encounter state."""
-
-    combat_state = _mapping(simulation_state.get("combat_state"))
-    if combat_state.get("active") is not True:
-        return None
-    participants = _mapping(combat_state.get("participants"))
-    target_id = _matching_participant_id(participants, target_ref)
-    target = _mapping(participants.get(target_id))
-    if not target:
-        return None
-
-    trigger = _text(trigger_ref).casefold()
-    trigger_tokens = set(re.findall(r"[a-z0-9]+", trigger))
-    for raw in target.get("vulnerabilities") or ():
-        rule = _mapping(raw)
-        aliases = [
-            _text(rule.get("trigger_tag")),
-            *[_text(value) for value in rule.get("aliases") or ()],
-        ]
-        if any(
-            alias
-            and (
-                alias.casefold() in trigger
-                or set(re.findall(r"[a-z0-9]+", alias.casefold())).issubset(
-                    trigger_tokens
-                )
-            )
-            for alias in aliases
-        ):
-            return {
-                "target_id": target_id,
-                "target": target,
-                "rule": rule,
-            }
-    return None
-
-
-def apply_campaign_vulnerability_trigger(
-    simulation_state: dict[str, Any],
-    *,
-    target_ref: str,
-    trigger_ref: str,
-    actor_id: str = "player",
-) -> dict[str, Any]:
-    """Apply one validated weakness trigger to an active copied encounter."""
-
-    combat_state = _mapping(simulation_state.get("combat_state"))
-    if combat_state.get("active") is not True:
-        return {"applied": False, "reason": "combat_not_active"}
-    resolved = campaign_vulnerability_trigger(
-        simulation_state,
-        target_ref=target_ref,
-        trigger_ref=trigger_ref,
-    )
-    if resolved is None:
-        return {"applied": False, "reason": "no_matching_vulnerability"}
-    participants = _mapping(combat_state.get("participants"))
-    target_id = _text(resolved.get("target_id"))
-    target = _mapping(resolved.get("target"))
-    matched = _mapping(resolved.get("rule"))
-
-    condition = _text(matched.get("condition")).casefold()
-    immunities = {
-        _text(value).casefold()
-        for value in target.get("condition_immunities") or ()
-    }
-    if condition in immunities:
-        return {
-            "applied": False,
-            "reason": "condition_immune",
-            "target_id": target_id,
-            "condition": condition,
-        }
-    effect = build_condition_effect(
-        kind=condition,
-        source_actor_id=actor_id,
-        target_actor_id=target_id,
-        duration_turns=int(matched.get("duration_turns") or 1),
-        magnitude=int(matched.get("magnitude") or 1),
-        source="campaign_creature_vulnerability",
-    )
-    target, condition_result = add_status_effect_to_participant(target, effect)
-    participants[target_id] = target
-    combat_state["participants"] = participants
-    combat_state["last_vulnerability_result"] = {
-        **condition_result,
-        "target_id": target_id,
-        "trigger": trigger_ref,
-        "rule": deepcopy(matched),
-        "definition_id": _text(target.get("definition_id")),
-        "definition_revision": int(target.get("definition_revision") or 1),
-    }
-    simulation_state["combat_state"] = combat_state
-    return {
-        "applied": condition_result.get("applied") is True,
-        "reason": _text(condition_result.get("reason")),
-        "target_id": target_id,
-        "trigger": trigger_ref,
-        "condition": condition,
-        "rule": deepcopy(matched),
-        "condition_result": condition_result,
-        "combat_state": deepcopy(combat_state),
-        "source": "campaign_mechanics_catalog",
     }

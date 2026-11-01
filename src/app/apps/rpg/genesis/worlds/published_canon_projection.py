@@ -5,6 +5,8 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping
 
+from app.apps.rpg.rules.contracts import public_canon
+
 
 # Entities the world's author wrote: runtime lore never generates over them.
 AUTHORED_CANON = "published_world"
@@ -94,7 +96,9 @@ def project_published_canon(
     bible["canon_revision"] = int(bible.get("canon_revision") or canon_revision or 1)
     existing_documents = _rows(bible.get("documents"))
     if existing_documents:
-        return bible
+        # Without a sentence of any secret outside the secrets' own fields (rules/secrets.py; the review: a world
+        # compiled from lore kept each hidden truth in its facts and descriptions, and the lore panel showed them).
+        return public_canon(bible)
 
     revision = int(bible["canon_revision"])
     pages: list[dict[str, Any]] = []
@@ -261,4 +265,4 @@ def project_published_canon(
             "discovery_state": discovery,
         }
     )
-    return bible
+    return public_canon(bible)

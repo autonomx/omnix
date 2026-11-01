@@ -1,6 +1,6 @@
 import type { HermesRpgSequenceRequest } from './api/hermesRpgSequenceClient';
 import type { HermesRpgSuggestion } from './api/hermesClient';
-import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
+import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiTypes';
 
 interface BuildHermesSequenceReviewRequestInput {
   assistMode?: string;

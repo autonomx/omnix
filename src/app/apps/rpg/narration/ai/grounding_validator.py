@@ -524,7 +524,6 @@ def _npc_line_repeats_prior_day_prompt(value: str) -> bool:
         "usual mix",
         "rowdy adventurers",
         "bard practicing",
-        "elara fussing",
         "moon-berries",
         "moon berries",
     )

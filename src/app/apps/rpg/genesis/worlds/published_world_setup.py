@@ -16,6 +16,9 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping
 
+from .lore_sections import joined_routes, lore_location_rows, lore_routes, lore_rows
+from .world_play_sections import ProviderEconomy, ShopOffer, authorship, parse_play_sections
+
 WORLD_MODEL_SCHEMA = "rpg_session_world_model_v1"
 
 # NPC roles that offer a service where they are found (the location registry's service kinds).
@@ -49,8 +52,20 @@ def _label_from_id(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in re.split(r"[-_]+", tail) if part) or entity_id
 
 
+_STARTER_REGION = re.compile(r"^region:.+:starter$")
+
+
+def _part_name(location_id: str, names: Mapping[str, str]) -> str:
+    """A place the opening derives from another ("<place>:interior", "<place>:outskirts:frontier"): named after the
+    place it belongs to ("Black Rain Station Interior"), never only by its id's last word ("Interior")."""
+    parent, _, part = location_id.rpartition(":")
+    if parent in names and part:
+        return f"{names[parent]} {_label_from_id(part)}"
+    return _label_from_id(location_id)
+
+
 def _regions(canon: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    return {_text(row.get("id")): row for row in _rows(canon.get("regions")) if _text(row.get("id"))}
+    return {_text(row.get("id")): row for row in lore_rows(canon, "regions") if _text(row.get("id"))}
 
 
 def published_locations(
@@ -60,17 +75,19 @@ def published_locations(
 ) -> list[dict[str, Any]]:
     """The world's places with their display name, region and a description (the region's, when they have none)."""
     regions = _regions(canon)
-    rows = _rows(_mapping(topology).get("locations"))
+    rows = lore_location_rows(canon, topology)  # a lore world's places by bare id are filled in from their entities
     known = {row.get("id") for row in rows}
     rows += [{"id": location_id} for location_id in manifest_location_ids
              if isinstance(location_id, str) and location_id not in known]
+    names = {_text(row.get("id")): _text(row.get("name")) for row in rows if _text(row.get("name"))}
     places: list[dict[str, Any]] = []
-    for row in rows:
+    for row in sorted(rows, key=lambda row: len(_text(row.get("id")))):  # a place before the parts named after it
         location_id = _text(row.get("id"))
-        if not location_id:
-            continue
+        if not location_id or _STARTER_REGION.match(location_id):
+            continue  # the starter bubble's region holds the opening's places: it is none itself
         region = regions.get(_text(row.get("region_id")), {})
-        name = _text(row.get("name")) or _label_from_id(location_id)
+        name = _text(row.get("name")) or _part_name(location_id, names)
+        names[location_id] = name
         places.append({
             **row,
             "id": location_id,
@@ -155,6 +172,12 @@ def _npc_homes(
     return homes
 
 
+def _rows_or_texts(value: Any) -> list[Any]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    return [row for row in value if row] if isinstance(value, list) else []
+
+
 def _role_services(role: str) -> list[str]:
     role = role.casefold()
     services: list[str] = []
@@ -214,7 +237,7 @@ def _service_offers(canon: Mapping[str, Any], provider: Mapping[str, Any]) -> li
         offers.append(_offer(provider, "drink", "drink", "A drink", "A drink of the house.",
                              _typical_price(canon, ("drink", "ale"), {"copper": 8}), {"drink_consumed": True}))
     if "shop_goods" in kinds:
-        for item in _rows(canon.get("items")):
+        for item in lore_rows(canon, "items"):
             item_id, kind = _text(item.get("id")), _text(item.get("type")).casefold()
             if not item_id or _text(item.get("rarity")).casefold() not in {"", "common"}:
                 continue
@@ -242,13 +265,69 @@ def _service_offers(canon: Mapping[str, Any], provider: Mapping[str, Any]) -> li
     return offers
 
 
+_SERVICE_EFFECTS: dict[str, dict[str, Any]] = {
+    "lodging": {"lodging_reserved": True, "rest_quality": "basic", "duration": "one_night"},
+    "meal": {"meal_consumed": True, "morale": 1},
+    "drink": {"drink_consumed": True},
+    "repair": {"repair_quality": "basic"},
+    "paid_information": {"rumor_added": True},
+}
+
+
+def _authored_offer(canon: Mapping[str, Any], provider: Mapping[str, Any], offer: ShopOffer) -> dict[str, Any]:
+    effects: dict[str, Any] = dict(_SERVICE_EFFECTS.get(offer.service, {}))
+    if offer.service == "shop_goods":
+        item = next((row for row in lore_rows(canon, "items") if _text(row.get("id")) == offer.item_id), {})
+        effects = {"items_added": [{"item_id": offer.item_id, "name": offer.name, "quantity": 1,
+                                    "type": _text(item.get("type")).casefold() or "goods",
+                                    "description": _text(item.get("effect") or item.get("description")),
+                                    **({"equipment": dict(_mapping(item.get("equipment")))}
+                                       if _mapping(item.get("equipment")) else {})}]}
+    priced = {"gold": offer.price.gold, "silver": offer.price.silver, "copper": offer.price.copper}
+    built = _offer(provider, offer.service, offer.offer_key, offer.name, offer.description or offer.name,
+                   priced, effects, stock=offer.stock)
+    if offer.stock is not None:
+        built["restock_per_day"] = offer.restock_per_day  # as the world wrote it: 0 never restocks (economy.md)
+    if offer.recipe is not None:  # an upgrade: what it improves and takes (EV-5)
+        built["recipe"] = offer.recipe.model_dump(mode="json")
+    return built
+
+
+def _authored_providers(
+    canon: Mapping[str, Any],
+    authored: tuple[ProviderEconomy, ...],
+    npcs: Mapping[str, Mapping[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    """The world's own economy: its sellers where it puts them, with its prices, stock and buy-back terms."""
+    providers: dict[str, dict[str, Any]] = {}
+    offers: dict[str, list[dict[str, Any]]] = {}
+    for entry in authored:
+        npc = _mapping(npcs.get(entry.provider_id))
+        location_id = entry.location_id or _text(npc.get("location_id"))
+        if not npc or not location_id:
+            continue
+        name = _text(npc.get("name")) or _label_from_id(entry.provider_id)
+        provider: dict[str, Any] = {
+            "provider_id": entry.provider_id,
+            "provider_name": name,
+            "aliases": sorted({name.casefold(), name.split()[0].casefold(), _text(npc.get("role")).casefold()} - {""}),
+            "location_id": location_id,
+            "service_kinds": sorted({offer.service for offer in entry.sells}),
+        }
+        if entry.buys is not None:
+            provider["buys"] = {"item_types": list(entry.buys.item_types), "price_fraction": entry.buys.price_fraction}
+        providers[entry.provider_id] = provider
+        offers[entry.provider_id] = [_authored_offer(canon, provider, offer) for offer in entry.sells]
+    return providers, offers
+
+
 def session_world_model(revision: Any, scenario: Any, *, present_at_start: Iterable[str] = ()) -> dict[str, Any]:
     """The per-session world the location registry and travel graph read for a published campaign."""
 
     canon = _mapping(getattr(revision, "canon", None))
     locations = _locations(revision)
     start = _text(getattr(scenario, "starting_location_id", ""))
-    characters = _rows(canon.get("characters"))
+    characters = lore_rows(canon, "characters")
     start_region = next((_text(row.get("region_id")) for row in locations if _text(row.get("id")) == start), "")
     capital_id = _text(_regions(canon).get(start_region, {}).get("capital"))
     homes = _npc_homes(characters, locations, start_location_id=start, present_at_start=present_at_start,
@@ -265,6 +344,19 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "role": _text(character.get("role")),
             "description": _text(character.get("biography") or character.get("description")),
             "location_id": homes.get(npc_id, ""),
+            # Who they are, as dialogue plays them (RQ-2.2): their voice and what they want, and what they keep to
+            # themselves, which stays on the server (edge/api/payloads/player_view.py).
+            **{key: value for key, value in {
+                "species": _text(character.get("species")),
+                "personality": [_text(trait) for trait in _rows_or_texts(character.get("personality"))],
+                "speech_style": _text(character.get("speech_style")),
+                "goals": [_text(goal) for goal in _rows_or_texts(character.get("goals"))],
+                "relationships": dict(_mapping(character.get("relationships"))),
+                "secrets": [_text(secret) for secret in _rows_or_texts(character.get("secrets"))],
+                # What else they are called ("the barkeep"), as the author wrote it: commands may name them so.
+                "aliases": [_text(alias) for alias in _rows_or_texts(character.get("aliases")) if _text(alias)],
+                "group_id": _text(character.get("group_id")),  # the group they answer for (EV-6)
+            }.items() if value},
         }
     routes: list[dict[str, Any]] = []
     for route in _rows(_mapping(getattr(revision, "topology", None)).get("routes")):
@@ -272,6 +364,27 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         if origin in by_id and target in by_id:
             routes.append({"id": _text(route.get("id")), "from": origin, "to": target,
                            "travel_time": _text(route.get("travel_time"))})
+    if not routes:  # a world that names no roads: roads by its regions (lore_sections.py)
+        routes = lore_routes(locations, lore_rows(canon, "regions"))
+    routes = joined_routes(routes, locations, lore_rows(canon, "regions"), start=start)  # none left unreached
+    sections, _findings = parse_play_sections(canon)
+    providers: dict[str, dict[str, Any]] = {}
+    if sections.providers:
+        # The world wrote its economy: play it as written, not as inferred from people's roles.
+        providers, offers = _authored_providers(canon, sections.providers, npcs)
+    else:
+        for npc in npcs.values():
+            kinds = _role_services(npc["role"])
+            if kinds and npc["location_id"]:
+                name = npc["name"]
+                providers[npc["id"]] = {
+                    "provider_id": npc["id"],
+                    "provider_name": name,
+                    "aliases": sorted({name.casefold(), name.split()[0].casefold(), npc["role"].casefold()}),
+                    "location_id": npc["location_id"],
+                    "service_kinds": kinds,
+                }
+        offers = {provider_id: _service_offers(canon, provider) for provider_id, provider in providers.items()}
     world_locations: dict[str, dict[str, Any]] = {}
     for location_id, row in by_id.items():
         name = _text(row.get("name"))
@@ -281,8 +394,9 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             if npc["location_id"] == location_id
         ]
         services: list[str] = []
-        for npc in present:
-            services.extend(kind for kind in _role_services(npc["role"]) if kind not in services)
+        for provider in providers.values():
+            if provider["location_id"] == location_id:
+                services.extend(kind for kind in provider["service_kinds"] if kind not in services)
         exits: dict[str, str] = {}
         for route in routes:
             other = route["to"] if route["from"] == location_id else route["from"] if route["to"] == location_id else ""
@@ -293,7 +407,8 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "location_id": location_id,
             "name": name,
             "short_name": name.casefold(),
-            "aliases": sorted({name.casefold(), _label_from_id(location_id).casefold()}),
+            "aliases": sorted({name.casefold(), _label_from_id(location_id).casefold(),
+                               *(_text(alias).casefold() for alias in row.get("aliases") or () if _text(alias))}),
             "description": row["description"],
             "region_id": row["region_id"],
             "region_name": row["region_name"],
@@ -302,36 +417,53 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "present_npcs": present,
             "services": services,
             "exits": exits,
+            # How the world says the place is met: its climate, its weather at an opening, indoors or out.
+            **({"environment": dict(_mapping(row.get("environment")))} if _mapping(row.get("environment")) else {}),
         }
-    providers: dict[str, dict[str, Any]] = {}
-    for npc in npcs.values():
-        kinds = _role_services(npc["role"])
-        if kinds and npc["location_id"]:
-            name = npc["name"]
-            providers[npc["id"]] = {
-                "provider_id": npc["id"],
-                "provider_name": name,
-                "aliases": sorted({name.casefold(), name.split()[0].casefold(), npc["role"].casefold()}),
-                "location_id": npc["location_id"],
-                "service_kinds": kinds,
-            }
     return {
         "schema_version": WORLD_MODEL_SCHEMA,
         "source": "published_world",
         "providers": providers,
         "items": [
             {"id": _text(item.get("id")), "name": _text(item.get("name")), "type": _text(item.get("type")),
-             "effect": _text(item.get("effect") or item.get("description"))}
-            for item in _rows(canon.get("items"))
+             "effect": _text(item.get("effect") or item.get("description")),
+             # How it is worn or wielded and fights, as the world wrote it (a slot and its numbers): a world's own
+             # gear, not only the kinds the engine knows by name.
+             **({"equipment": dict(_mapping(item.get("equipment")))} if _mapping(item.get("equipment")) else {})}
+            for item in lore_rows(canon, "items")  # as authored, else the lore's (a world written as lore)
             if _text(item.get("id"))
         ],
-        "offers": {provider_id: _service_offers(canon, provider) for provider_id, provider in providers.items()},
+        # The world's groups (its factions, unions, networks), by what the world says of them, for a question about
+        # one ("what is the union?": the intent gate found none named in a world written as lore).
+        "groups": {_text(row.get("id")): {"name": _text(row.get("name")),
+                                          "summary": _text(row.get("summary") or row.get("agenda")
+                                                           or row.get("description"))}
+                   for row in [*_rows(canon.get("factions")), *lore_rows(canon, "groups")]
+                   if _text(row.get("id")) and _text(row.get("name"))},
+        "offers": offers,
         "world_id": _text(getattr(revision, "world_id", "")),
         "world_revision": int(getattr(revision, "revision", 0) or 0),
         "start_location_id": start,
         "locations": world_locations,
         "routes": routes,
         "npcs": npcs,
+        # Which parts of how the world plays its author wrote, and which launch inferred (RQ-2.0).
+        "authorship": authorship(sections),
+        "routines": [routine.model_dump(mode="json") for routine in sections.routines],
+        "knowledge": [entry.model_dump(mode="json") for entry in sections.knowledge],
+        "pressures": [pressure.model_dump(mode="json") for pressure in sections.pressures],
+        # What the world's facts change, and who answers for its groups (EV-1, rules/consequences.py).
+        **({"fact_effects": [effect.model_dump(mode="json", exclude_none=True) for effect in sections.fact_effects]}
+           if sections.fact_effects else {}),
+        **({"group_members": [row.model_dump(mode="json") for row in sections.group_members]}
+           if sections.group_members else {}),
+        # Its level budgets (EV-2, rules/budgets.py); a world that writes none plays from the derived table.
+        **({"budgets": [row.model_dump(mode="json") for row in sections.budgets]} if sections.budgets else {}),
+        # The game master's palette (EV-0, EV-10): what its areas hold and favour, as its author wrote it.
+        **({"gm_guide": dict(_mapping(canon.get("gm_guide")))} if _mapping(canon.get("gm_guide")) else {}),
+        # Every quest the world has, as the log would keep it: one not in the log yet can be offered in play.
+        "quests": {_text(quest.get("id")): world_quest_row(quest, start) for quest in _rows(canon.get("quests"))
+                   if _text(quest.get("id"))},
     }
 
 
@@ -348,22 +480,65 @@ _THREAT_STATS: dict[str, dict[str, int]] = {
     "extreme": {"level": 8, "hp": 45, "defense": 15, "damage_min": 4, "damage_max": 10, "accuracy_bonus": 4, "xp_value": 250},
 }
 _THREAT_ALIASES = {"minor": "low", "moderate": "medium", "severe": "high", "boss": "extreme", "legendary": "extreme",
-                   "mythic": "extreme", "deadly": "extreme"}
+                   "mythic": "extreme", "deadly": "extreme", "situational": "low", "variable": "medium",
+                   "dangerous": "medium", "elite": "high"}
+
+
+def threat_stats(threat: str) -> dict[str, int]:
+    """A creature's fighting numbers for the world's threat rating of it (an unknown rating is a medium threat)."""
+    threat = threat.casefold()
+    return dict(_THREAT_STATS.get(_THREAT_ALIASES.get(threat, threat), _THREAT_STATS["medium"]))
+
+
+# A creature's behaviour as its lore tells it, where the world names none (encounters.md): the first that fits.
+_BEHAVIOUR_WORDS = (
+    ("guards", ("guard", "guardian", "sentinel", "warden", "oath", "oaths", "post", "territorial", "keeper")),
+    ("ambushes", ("ambush", "ambushes", "lurk", "lurks", "stalk", "stalks", "stolen face", "disguise", "camouflage")),
+    ("calls_allies", ("pack", "swarm", "horde", "splits", "summons", "calls", "hive", "brood")),
+    ("flees_when_hurt", ("wolf", "hound", "jackal", "fox", "docile", "skittish", "timid", "cowardly", "scavenger")),
+)
+
+
+# Creatures that can be talked to, where the world does not say (encounters.md): people of a kind, and the knowing.
+_SPEAKING_WORDS = ("bandit", "brigand", "thief", "raider", "smuggler", "pirate", "cultist", "knight", "soldier",
+                   "guard", "warrior", "mage", "witch", "goblin", "orc", "ogre", "troll", "giant", "archon", "oath",
+                   "oaths", "speaks", "talks", "bargains")
+
+
+def derived_speaks(row: Mapping[str, Any]) -> bool:
+    """Whether a creature can be talked to, from its name and traits."""
+    lore = " ".join([_text(row.get("name")), *map(_text, row.get("traits") or ())]).casefold()
+    words = f" {' '.join(re.findall(r'[a-z]+', lore))} "
+    return any(f" {cue} " in words for cue in _SPEAKING_WORDS)
+
+
+def derived_behaviour(row: Mapping[str, Any]) -> str:
+    """How a creature fights, from its name and traits; ``fights`` when they say nothing of it."""
+    lore = " ".join([_text(row.get("name")), *map(_text, row.get("traits") or ())]).casefold()
+    words = f" {' '.join(re.findall(r'[a-z]+', lore))} "
+    return next((behaviour for behaviour, cues in _BEHAVIOUR_WORDS if any(f" {cue} " in words for cue in cues)), "fights")
 
 
 def bestiary_mechanics(revision: Any) -> dict[str, Any]:
-    """The world's creatures as combat definitions: numbers by threat, and its weakness stuns it for a turn."""
+    """The world's creatures as combat definitions: numbers by threat, its weakness stuns it for a turn, and it
+    behaves as the world says (else as its lore tells, ``derived_behaviour``)."""
 
     canon = _mapping(getattr(revision, "canon", None))
+    played = {entry.id: entry for entry in parse_play_sections(canon)[0].bestiary}
     creatures: dict[str, Any] = {}
-    for row in _rows(canon.get("bestiary")):
+    for row in lore_rows(canon, "bestiary"):
         creature_id = _text(row.get("id"))
         if not creature_id:
             continue
         threat = _text(row.get("threat")).casefold()
-        stats = _THREAT_STATS.get(_THREAT_ALIASES.get(threat, threat), _THREAT_STATS["medium"])
+        stats = threat_stats(threat)
+        play = played.get(creature_id)
+        if play is not None and play.stats is not None:
+            stats = play.stats.model_dump()
         weakness = _text(row.get("weakness"))
         aliases = [part.strip() for part in re.split(r",|\band\b|\bor\b", weakness) if part.strip()]
+        boss = threat in {"boss", "extreme", "legendary"} or bool(play is not None and play.phases)
+        effect = (play.weakness_effect if play is not None and play.weakness_effect else "stun")
         creatures[creature_id] = {
             "definition_id": creature_id,
             "definition_revision": int(getattr(revision, "revision", 1) or 1),
@@ -375,9 +550,21 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
             "tags": [_text(trait) for trait in row.get("traits") or () if _text(trait)],
             "budget_cost": stats["xp_value"],
             "vulnerabilities": (
-                [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1}]
+                [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1,
+                  "effect": effect}]
                 if weakness else []
             ),
+            # EV-2: what blunts its hurt, a boss's phases, a fight with no escape, and what it regains when left (a
+            # boss half of what it lost, by default; another all of it, as before).
+            "resists": list(play.resists) if play is not None else [],
+            "phases": [phase.model_dump() for phase in play.phases] if play is not None else [],
+            "no_escape": bool(play is not None and play.no_escape),
+            "recovers": (play.recovers if play is not None and play.recovers is not None else 0.5 if boss else 1.0),
+            "boss": boss,
+            "behaviour": play.behaviour if play is not None and row.get("behaviour") else derived_behaviour(row),
+            "threat": threat,
+            "speaks": row["speaks"] is True if "speaks" in row else derived_speaks(row),
+            "loot": [drop.model_dump() for drop in play.loot] if play is not None else [],
             "source": "published_world_bestiary",
         }
     return {"creatures": creatures} if creatures else {}
@@ -453,7 +640,7 @@ def creator_setup(revision: Any, scenario: Any, world_model: Mapping[str, Any], 
 
 
 def _canon_item(canon: Mapping[str, Any], item_id: str) -> dict[str, Any]:
-    return next((row for row in _rows(canon.get("items")) if _text(row.get("id")) == item_id), {})
+    return next((row for row in lore_rows(canon, "items") if _text(row.get("id")) == item_id), {})
 
 
 def opening_kit(
@@ -463,12 +650,24 @@ def opening_kit(
     equipment: Iterable[Mapping[str, Any]],
     inventory: Iterable[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """The opening's starting items and purse, keeping the build's equipped gear so the hero can still fight."""
+    """The opening's starting items and purse, keeping the build's equipped gear so the hero can still fight; an
+    opening that equips the hero itself (``equipment``: slot and item) carries that gear instead."""
 
     canon = _mapping(getattr(revision, "canon", None))
     resources = _mapping(getattr(scenario, "starting_resources", None))
+    authored = [_mapping(row) for row in resources.get("equipment") or () if _text(_mapping(row).get("id"))]
     equipped = {_text(item.get("name")).casefold() for item in equipment}
-    items: list[dict[str, Any]] = [dict(item) for item in inventory if _text(item.get("name")).casefold() in equipped]
+    items: list[dict[str, Any]] = [] if authored else [
+        dict(item) for item in inventory if _text(item.get("name")).casefold() in equipped]
+    worn: list[dict[str, str]] = []
+    for row in authored:
+        canon_item = _canon_item(canon, _text(row.get("id")))
+        name = _text(canon_item.get("name")) or _label_from_id(_text(row.get("id")))
+        worn.append({"slot": _text(row.get("slot")) or "Gear", "name": name})
+        items.append({"id": _text(row.get("id")), "name": name, "quantity": 1,
+                      "type": _text(canon_item.get("type")) or "misc",
+                      "description": _text(canon_item.get("effect") or canon_item.get("description")),
+                      "rarity": _text(canon_item.get("rarity"))})
     for raw in resources.get("inventory") or ():
         item_id = _text(raw if isinstance(raw, str) else _mapping(raw).get("id"))
         if not item_id:
@@ -495,14 +694,19 @@ def opening_kit(
     return {
         "inventory": items,
         "currency": currency,
+        "equipment": worn,
         "health": int(stats.get("health") or 0),
         "aether": int(stats.get("aether") or stats.get("mana") or 0),
         "knowledge": [_text(value) for value in resources.get("knowledge") or () if _text(value)],
     }
 
 
-def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
-    """The quest log at the opening: the world's intro quests, then the quests the opening's story seeds lead to."""
+def opening_quests(revision: Any, scenario: Any, *, lead_seed_id: str = "") -> list[dict[str, Any]]:
+    """The quest log at the opening: the world's intro quests, then the quests the opening's story seeds lead to.
+
+    ``lead_seed_id`` names the seed the player chose to start with (a classic new game's opening hook): its quest
+    leads the log, and is the active one.
+    """
 
     canon = _mapping(getattr(revision, "canon", None))
     quests = {_text(row.get("id")): row for row in _rows(canon.get("quests")) if _text(row.get("id"))}
@@ -512,29 +716,52 @@ def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
         (quest, "") for quest in quests.values()
         if _text(quest.get("tier")) == "intro" and start in (quest.get("locations") or ())
     ]
-    for seed_id in getattr(scenario, "opening_seed_ids", ()) or ():
-        seed = _mapping(seeds.get(_text(seed_id)))
+    seed_ids = [_text(seed_id) for seed_id in getattr(scenario, "opening_seed_ids", ()) or ()]
+    if lead_seed_id in seeds:
+        seed_ids = [lead_seed_id, *(seed_id for seed_id in seed_ids if seed_id != lead_seed_id)]
+        lead = quests.get(_text(_mapping(seeds[lead_seed_id]).get("quest_id")))
+        if lead is not None:
+            ordered = [(quest, hook) for quest, hook in ordered if quest is not lead]
+            ordered.insert(0, (lead, _text(_mapping(seeds[lead_seed_id]).get("hook"))))
+    for seed_id in seed_ids:
+        seed = _mapping(seeds.get(seed_id))
         quest = quests.get(_text(seed.get("quest_id")))
         if quest and all(quest is not existing for existing, _ in ordered):
             ordered.append((quest, _text(seed.get("hook"))))
-    log: list[dict[str, Any]] = []
-    for index, (quest, hook) in enumerate(ordered):
-        quest_id = _text(quest.get("id"))
-        places = [_text(place) for place in quest.get("locations") or () if _text(place)]
-        log.append({
-            "id": quest_id,
-            "quest_id": quest_id,
-            "title": _text(quest.get("title")) or _label_from_id(quest_id),
-            "status": "active" if index == 0 else "available",
-            "objective": _text(quest.get("objective")),
-            "hook": hook,
-            "rewards": [_text(reward) for reward in quest.get("rewards") or () if _text(reward)],
-            "locations": places,
-            # The player starts at the opening's place, so a quest that names it has already been there.
-            "visited_locations": [start] if start in places else [],
-            "source": "published_world",
-        })
-    return log
+    return [{**world_quest_row(quest, start, hook=hook), "status": "active" if index == 0 else "available"}
+            for index, (quest, hook) in enumerate(ordered)]
+
+
+def world_quest_row(quest: Mapping[str, Any], start: str, *, hook: str = "") -> dict[str, Any]:
+    """A world's quest as a campaign's log keeps it (without its status): the opening's log, and a quest offered in
+    play that the log does not have yet."""
+    quest_id = _text(quest.get("id"))
+    places = [_text(place) for place in quest.get("locations") or () if _text(place)]
+    return {
+        "id": quest_id,
+        "quest_id": quest_id,
+        "title": _to_the_hero(_text(quest.get("title"))) or _label_from_id(quest_id),
+        "objective": _to_the_hero(_text(quest.get("objective"))),
+        "hook": _to_the_hero(hook),
+        "rewards": [_text(reward) for reward in quest.get("rewards") or () if _text(reward)],
+        "locations": places,
+        # The player starts at the opening's place, so a quest that names it has already been there.
+        "visited_locations": [start] if start in places else [],
+        # A quest of steps, its deadline and who gave it, and its kind (an intro, a finale), as the world wrote them.
+        **{key: quest[key] for key in ("steps", "deadline_hours", "giver_id", "tier", "sets", "requires", "forbids")
+           if quest.get(key)},
+        **({"objective": _to_the_hero(_text(_mapping(quest["steps"][0]).get("summary")) or _text(quest.get("objective")))}
+           if quest.get("steps") else {}),
+        "source": "published_world",
+    }
+
+
+def _to_the_hero(text: str) -> str:
+    """A quest's words as the hero reads them: an author's "the protagonist" is the hero ("Repair the protagonist's
+    phone" is "Repair your phone"). Only where the words read as written (a possessive, an object); a sentence that
+    opens with it keeps it, its verb being the author's."""
+    text = re.sub(r"\b[Tt]he protagonist's\b", lambda match: "Your" if match.group(0)[0] == "T" else "your", text)
+    return re.sub(r"(?<=[a-z,;] )the protagonist\b", "you", text)
 
 
 __all__ = [
@@ -547,4 +774,5 @@ __all__ = [
     "opening_quests",
     "published_locations",
     "session_world_model",
+    "world_quest_row",
 ]

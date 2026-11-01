@@ -103,3 +103,36 @@ def test_entity_patch_requires_changes_and_concurrency_tokens() -> None:
 
     assert missing_tokens.status_code == 422
     assert missing_changes.status_code == 422
+
+
+def test_an_author_adds_an_entity_to_a_topic(monkeypatch) -> None:
+    """EV-6: the editor can add an entity, not only change one."""
+    calls: list[dict[str, object]] = []
+
+    def fake_add(world_id: str, topic_id: str, **kwargs):
+        calls.append({"world_id": world_id, "topic_id": topic_id, **kwargs})
+        return {"ok": True, "topic": {"content_hash": "sha256:new"}, "entity": dict(kwargs["entity"]),
+                "stale_topic_ids": [], "stale_entity_ids": []}
+
+    monkeypatch.setattr("app.apps.rpg.edge.api.feature_routes.rpg_world_authoring_routes.add_world_entity", fake_add)
+    app = FastAPI()
+    include_router_registrar(app, register_rpg_world_authoring_routes)
+    client = TestClient(app)
+    added = client.post("/api/rpg/worlds/world:aurelia/topics/npcs/entities", json={
+        "expected_draft_revision": 3, "expected_content_hash": "sha256:old",
+        "entity": {"id": "npc:hollis", "kind": "npc", "name": "Hollis", "location_id": "loc:valecourt"}})
+    assert added.status_code == 200 and added.json()["entity"]["id"] == "npc:hollis"
+    assert calls[0]["entity"] == {"id": "npc:hollis", "kind": "npc", "name": "Hollis", "location_id": "loc:valecourt"}
+    refused = client.post("/api/rpg/worlds/world:aurelia/topics/npcs/entities", json={
+        "expected_draft_revision": 3, "expected_content_hash": "sha256:old"})
+    assert refused.status_code == 422
+
+
+def test_adding_an_entity_keeps_its_id_new_and_its_references_the_worlds() -> None:
+    import pytest
+
+    from app.apps.rpg.genesis.worlds.entity_authoring import validate_entity_references
+
+    validate_entity_references({"id": "npc:new", "location_id": "loc:known"}, {"npc:new", "loc:known"})
+    with pytest.raises(ValueError):
+        validate_entity_references({"id": "npc:new", "location_id": "loc:nowhere"}, {"npc:new", "loc:known"})

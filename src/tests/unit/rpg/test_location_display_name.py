@@ -4,9 +4,12 @@ from __future__ import annotations
 from app.apps.rpg.session.combat_intent import _apply_grounded_scene_overlay, _resolve_location_name
 
 
-def test_the_registry_names_a_location_whose_state_entry_has_no_name() -> None:
-    simulation = {"locations": {"loc_tavern": {"heat": 3, "status": "active"}}}
-    assert _resolve_location_name(simulation, "loc_tavern", "loc_tavern") == "The Rusty Flagon Tavern"
+def test_the_world_names_a_location_whose_state_entry_has_no_name() -> None:
+    simulation = {
+        "world_model": {"locations": {"location:harbor": {"location_id": "location:harbor", "name": "The Grey Harbor"}}},
+        "locations": {"location:harbor": {"heat": 3, "status": "active"}},
+    }
+    assert _resolve_location_name(simulation, "location:harbor", "location:harbor") == "The Grey Harbor"
 
 
 def test_an_unknown_location_reads_as_words_not_as_its_id() -> None:

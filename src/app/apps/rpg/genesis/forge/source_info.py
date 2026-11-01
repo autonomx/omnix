@@ -7,9 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 
 WIZARD_SOURCE_KIND = "wizard_v2"
-LEGACY_SOURCE_KIND = "legacy_v1"
 WIZARD_SOURCE_NAME = "rpg_create_campaign_wizard"
-LEGACY_SOURCE_NAME = "legacy_new_game_payload"
 DEFAULT_SOURCE_BUILD = "657"
 
 

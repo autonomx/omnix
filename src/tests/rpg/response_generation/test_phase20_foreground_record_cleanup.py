@@ -5,12 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from app.apps.rpg.session.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
-from app.apps.rpg.session.jobs.turn_job_mirror import (
-    _apply_turn_with_job_mirror,
-)
-from app.apps.rpg.session.jobs.last10_report_debug import build_turn_debug_payload
+from app.apps.rpg.session.jobs.foreground_submission_store import InMemoryForegroundSubmissionStore
+from app.apps.rpg.session.jobs.foreground_turn import execute_foreground_turn
 from app.apps.rpg.narration.presentation.turn_response import build_turn_response_v2
-from tests.support.in_memory_jobs import InMemoryJobStore
 
 _FORBIDDEN_GRAPH_KEYS = {
     "session",
@@ -59,27 +56,22 @@ def _contains_forbidden_graph_key(value: Any) -> bool:
     return False
 
 
-def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path: Path) -> None:
-    store = InMemoryJobStore(tmp_path / "jobs")
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
+def test_the_submission_claim_keeps_only_a_bounded_v2_record(tmp_path: Path) -> None:
+    submissions = InMemoryForegroundSubmissionStore(tmp_path / "submissions")
 
-    result = _apply_turn_with_job_mirror(
+    result = execute_foreground_turn(
         lambda *_args, **_kwargs: _turn_result(),
         "session:record",
         "I buy road supplies from Bran.",
         submission_id="submit:record",
+        submissions=submissions,
     )
 
-    jobs = store.list_jobs()
-    assert len(jobs) == 1
-    output = jobs[0].output_refs[0]
-    record = output["turn_response"]
+    record = submissions.get("session:record", "submit:record").result
     encoded = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    report_debug = build_turn_debug_payload(jobs[0])
 
     assert result["interaction_id"] == "interaction:1"
-    assert output["record_version"] == "rpg_foreground_turn_record_v1"
-    assert "raw_turn_result" not in output
+    assert "raw_turn_result" not in record
     assert len(encoded) <= FOREGROUND_TURN_RECORD_MAX_BYTES
     assert _contains_forbidden_graph_key(record) is False
     assert record["contract_version"] == "rpg_turn_response_v2"
@@ -87,13 +79,10 @@ def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path
     assert record["state"]["revision"] == 11
     assert record["state"]["changed_domains"] == ["conversation", "inventory", "currency"]
     assert record["result"]["stateful"] is True
-    assert report_debug["turn_response_record"]["interaction_id"] == "interaction:1"
-    assert "raw_turn_result" not in report_debug
 
 
-def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -> None:
-    store = InMemoryJobStore(tmp_path / "jobs")
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
+def test_compact_replay_is_projection_stable(tmp_path: Path) -> None:
+    submissions = InMemoryForegroundSubmissionStore(tmp_path / "submissions")
     calls = 0
 
     def apply_turn(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
@@ -101,18 +90,10 @@ def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -
         calls += 1
         return _turn_result(4)
 
-    first = _apply_turn_with_job_mirror(
-        apply_turn,
-        "session:record",
-        "I buy road supplies from Bran.",
-        submission_id="submit:stable",
-    )
-    replay = _apply_turn_with_job_mirror(
-        apply_turn,
-        "session:record",
-        "I buy road supplies from Bran.",
-        submission_id="submit:stable",
-    )
+    first = execute_foreground_turn(apply_turn, "session:record", "I buy road supplies from Bran.",
+                                    submission_id="submit:stable", submissions=submissions)
+    replay = execute_foreground_turn(apply_turn, "session:record", "I buy road supplies from Bran.",
+                                     submission_id="submit:stable", submissions=submissions)
     projected = build_turn_response_v2(
         replay,
         session_id="session:record",

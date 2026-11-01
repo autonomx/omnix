@@ -153,17 +153,6 @@ class CampaignTopicGraph:
 
 
 _GRAPH_VERSION = "rpg_campaign_topic_graph_v2"
-_LAUNCH_GENERATION_TOPIC_IDS = {
-    "realm",
-    "regions",
-    "factions",
-    "current_conflicts",
-    "hero_system",
-    "locations",
-    "npcs",
-    "opening_threads",
-}
-_PIPELINE_TOPIC_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
 
 def _target(profile: WorldForgeDepthProfile, category: str) -> int:

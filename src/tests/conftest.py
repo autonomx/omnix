@@ -55,6 +55,9 @@ def pytest_configure(config) -> None:
     # The trading research call budget is process-wide and durable; tests that
     # are about it construct their own budget.
     os.environ.setdefault("OMNIX_TRADING_AI_DAILY_CALL_BUDGET", "0")
+    # The RPG turn ceiling counts every turn on the shared test database in the
+    # last hour, which a suite exceeds; tests that are about it set it themselves.
+    os.environ.setdefault("OMNIX_RPG_TURNS_PER_HOUR", "0")
     # Before anything reads a database URL: each xdist worker gets its own database.
     from tests.conftest_databases import configure_worker_database
 

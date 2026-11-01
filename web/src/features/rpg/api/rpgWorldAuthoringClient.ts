@@ -202,6 +202,11 @@ export const rpgWorldAuthoringClient = {
     return request(entityPath(worldId, topicId, entityId));
   },
 
+  /** An entry added to a topic (EV-6). */
+  addEntity(worldId: string, topicId: string, body: Record<string, unknown>): Promise<RpgAuthoringEntityMutationResponse> {
+    return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/topics/${encodeURIComponent(topicId)}/entities`, jsonPost(body));
+  },
+
   updateEntity(
     worldId: string,
     topicId: string,

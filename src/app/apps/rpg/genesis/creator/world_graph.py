@@ -17,17 +17,6 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_li
 # Node / edge type constants
 # ---------------------------------------------------------------------------
 
-NODE_TYPES = ("faction", "npc", "location", "thread", "opening")
-
-EDGE_TYPES = (
-    "member_of",
-    "located_in",
-    "involves",
-    "pressures",
-    "connected_to",
-    "starts_at",
-)
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers

@@ -1,3 +1,4 @@
+import { RpgEntityPlayFields } from './RpgEntityPlayFields';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -318,6 +319,22 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
             )}
           </div>
         </section>
+
+        {(() => {
+          let draft: Record<string, unknown> | null = null;
+          try {
+            const parsed = JSON.parse(rawEntity) as unknown;
+            draft = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+          } catch {
+            draft = null;
+          }
+          return draft ? (
+            <RpgEntityPlayFields entity={draft} title={entity.title} onChange={(next) => {
+              setEntityDraftDirty(true);
+              replaceEntityDraft(JSON.stringify(next, null, 2));
+            }} />
+          ) : null;
+        })()}
 
         <details className="rpg-authoring-canonical-entity-editor">
           <summary>Canonical structured entity</summary>

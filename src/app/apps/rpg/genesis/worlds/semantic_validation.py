@@ -124,7 +124,26 @@ def release_launch_findings(
         readiness = str(requirement.get("simulation_readiness") or "semantic")
         if readiness in {"stub", "semantic", "failed"} or map_id not in bound:
             findings.append(f"map_not_launch_ready:{map_id}")
+    findings.extend(play_section_release_findings(world_revision))
     return tuple(sorted(set(findings)))
+
+
+def play_section_release_findings(world_revision: WorldRevisionDocument) -> tuple[str, ...]:
+    """How the world says it plays (economy, routines, knowledge, pressures, bestiary) must be valid and refer to
+    people, places and items it has (RQ-2.0); a world without those sections is played from its lore."""
+    from .lore_sections import lore_rows
+    from .published_world_setup import published_locations
+    from .world_play_sections import play_section_findings
+
+    canon = dict(world_revision.canon or {})
+    manifest = dict(world_revision.entity_manifest or {})
+    locations = published_locations(canon, dict(world_revision.topology or {}), manifest.get("locations") or ())
+    regions = {str(row.get("id") or "") for row in lore_rows(canon, "regions")} - {""}
+    return play_section_findings(
+        canon,
+        location_ids={str(row["id"]) for row in locations},
+        region_ids=regions,
+    )
 
 
 def certify_world_release(
@@ -235,18 +254,12 @@ def validate_scenario_against_release(
 
 
 def _default_spawn(definition: GridMapDefinition) -> GridPoint:
-    candidates = [spawn for spawn in definition.spawn_points if not spawn.secret]
-    if not candidates:
-        raise WorldSemanticError("scenario_player_spawn_missing", definition.map_id)
-    candidates.sort(
-        key=lambda spawn: (
-            0
-            if set(spawn.tags).intersection({"player", "start", "arrival"})
-            else 1,
-            spawn.spawn_point_id,
-        )
-    )
-    return candidates[0].cell
+    from app.apps.rpg.world.map_instance_runtime import MapMovementError, arrival_cell
+
+    try:
+        return arrival_cell(definition)
+    except MapMovementError as exc:
+        raise WorldSemanticError("scenario_player_spawn_missing", definition.map_id) from exc
 
 
 def initialize_starting_map_snapshot(

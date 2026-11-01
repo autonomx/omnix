@@ -11,6 +11,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
 from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 
+from .authoring_presentations import ENTRY_LISTS
 from .generation_jobs import canonical_hash
 from .targeted_generation_authorship import (
     attach_targeted_regeneration_authorship,
@@ -51,8 +52,48 @@ _REFERENCE_EXCLUSIONS = {
 }
 
 
+def _rows(content: Mapping[str, Any], key: str) -> list[dict[str, Any]]:
+    value = content.get(key)
+    return [dict(row) for row in value or () if isinstance(row, Mapping)] if isinstance(value, list) else []
+
+
 def _entities(content: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [dict(row) for row in content.get("entities") or () if isinstance(row, Mapping)]
+    """Every entry of a topic, in each of its lists the editor shows (``ENTRY_LISTS``)."""
+    return [row for key in ENTRY_LISTS for row in _rows(content, key)]
+
+
+def _row_id(row: Mapping[str, Any]) -> str:
+    return str(row.get("id") or row.get("entity_id") or "")
+
+
+def _list_holding(content: Mapping[str, Any], entity_id: str) -> str:
+    """The list of the topic that holds ``entity_id``: an entry is written back where it is kept."""
+    for key in ENTRY_LISTS:
+        if any(_row_id(row) == entity_id for row in _rows(content, key)):
+            return key
+    raise KeyError(f"world_entity_not_found:{entity_id}")
+
+
+def entry_list_for(content: Mapping[str, Any], collection: str = "") -> str:
+    """Where a new entry of a topic goes: the list named, else the one list of entries the topic keeps (a bundle's
+    ``characters``), else ``entities``."""
+    if collection:
+        if collection not in ENTRY_LISTS:
+            raise ValueError(f"world_entity_collection_unknown:{collection}")
+        return collection
+    kept = [key for key in ENTRY_LISTS if _rows(content, key)]
+    return kept[0] if len(kept) == 1 else "entities"
+
+
+def _world_topics(work: Any, context: Any, world_id: str) -> list[dict[str, Any]]:
+    """The world's topics as its editor holds them: a generated world's, those of its working draft (an earlier
+    draft's left behind is not one of them); a world with no generation run (written by hand or installed from a
+    bundle), each as last written, since its topics keep the draft they were installed at."""
+    world = work.world_scenarios.get_world(context, world_id) or {}
+    if work.world_library.list_generation_runs(context, world_id=world_id, limit=1):
+        return work.world_generation.list_topics(context, world_id=world_id,
+                                                 draft_revision=int(world.get("draft_revision") or 1))
+    return work.world_library.list_topics(context, world_id)
 
 
 def _entity(content: Mapping[str, Any], entity_id: str) -> dict[str, Any]:
@@ -141,19 +182,9 @@ def replace_entity_content(
     generated: GeneratedTopic | None = None,
 ) -> dict[str, Any]:
     payload = dict(content)
-    rows = _entities(content)
-    found = False
-    updated: list[dict[str, Any]] = []
-    for row in rows:
-        row_id = str(row.get("id") or row.get("entity_id") or "")
-        if row_id == entity_id:
-            updated.append(dict(replacement))
-            found = True
-        else:
-            updated.append(row)
-    if not found:
-        raise KeyError(f"world_entity_not_found:{entity_id}")
-    payload["entities"] = updated
+    key = _list_holding(content, entity_id)
+    payload[key] = [dict(replacement) if isinstance(row, Mapping) and _row_id(row) == entity_id else row
+                    for row in content[key]]  # what is not an entry (a list of plain ids) is kept as it is
     if generated is None:
         return payload
 
@@ -177,15 +208,22 @@ def _mark_sibling_entities_stale(
 ) -> tuple[dict[str, Any], list[str]]:
     payload = dict(content)
     stale: list[str] = []
-    entities: list[dict[str, Any]] = []
-    for row in _entities(content):
-        row_id = str(row.get("id") or "")
-        if row_id != changed_entity_id and _references(row, changed_entity_id):
-            row["authoring_status"] = "stale"
-            row["stale_reason"] = {"dependency_entity_id": changed_entity_id}
-            stale.append(row_id)
-        entities.append(row)
-    payload["entities"] = entities
+    for key in ENTRY_LISTS:
+        if not isinstance(content.get(key), list):
+            continue
+        entries: list[Any] = []
+        for row in content[key]:
+            if not isinstance(row, Mapping):  # not an entry (a plain id): kept as it is
+                entries.append(row)
+                continue
+            row = dict(row)
+            row_id = str(row.get("id") or "")
+            if row_id != changed_entity_id and _references(row, changed_entity_id):
+                row["authoring_status"] = "stale"
+                row["stale_reason"] = {"dependency_entity_id": changed_entity_id}
+                stale.append(row_id)
+            entries.append(row)
+        payload[key] = entries
     return payload, stale
 
 
@@ -199,11 +237,7 @@ def _mark_external_entity_dependents_stale(
 ) -> tuple[list[str], list[str]]:
     stale_topics: list[str] = []
     stale_entities: list[str] = []
-    rows = work.world_generation.list_topics(
-        context,
-        world_id=str(world["id"]),
-        draft_revision=int(world["draft_revision"]),
-    )
+    rows = _world_topics(work, context, str(world["id"]))
     for row in rows:
         candidate_topic_id = str(row.get("topic_id") or "")
         if candidate_topic_id == topic_id or bool(_authoring(row).get("generation_lock")):
@@ -335,11 +369,7 @@ def _store_replacement(
         prior_payload = _record(current.get("content"))
         before = _entity(prior_payload, entity_id)
         after = {**before, **dict(replacement), "id": entity_id}
-        topic_rows = work.world_generation.list_topics(
-            context,
-            world_id=world_id,
-            draft_revision=int(world["draft_revision"]),
-        )
+        topic_rows = _world_topics(work, context, world_id)
         validate_entity_references(after, _known_ids(topic_rows, world_id).union({entity_id}))
         payload = replace_entity_content(
             prior_payload, entity_id, after, generated=generated
@@ -427,6 +457,57 @@ def _store_replacement(
     }
 
 
+def add_world_entity(
+    world_id: str,
+    topic_id: str,
+    *,
+    expected_draft_revision: int,
+    expected_content_hash: str,
+    entity: Mapping[str, Any],
+    collection: str = "",
+    database: Any | None = None,
+) -> dict[str, Any]:
+    """An author adds an entity to a topic (evolution roadmap EV-6): a new id, references only to what the world has;
+    kept in the topic's draft as an edit is, in the list ``collection`` names (else the one the topic keeps,
+    ``entry_list_for``), with its history, and published with the world's next publication."""
+    entity_id = str(entity.get("id") or "").strip()
+    if not entity_id:
+        raise ValueError("world_entity_id_required")
+    context = current_tenant()
+    with unit_of_work(database) as work:
+        world, current = _assert_writable_topic(
+            work, context, world_id=world_id, topic_id=topic_id,
+            expected_draft_revision=expected_draft_revision, expected_content_hash=expected_content_hash)
+        prior_payload = _record(current.get("content"))
+        topic_rows = _world_topics(work, context, world_id)
+        known = _known_ids(topic_rows, world_id)
+        if entity_id in known:
+            raise ValueError(f"world_entity_exists:{entity_id}")
+        added = {**dict(entity), "id": entity_id}
+        validate_entity_references(added, known.union({entity_id}))
+        key = entry_list_for(prior_payload, collection)
+        kept = prior_payload.get(key)
+        payload = {**prior_payload, key: [*(kept if isinstance(kept, list) else ()), added]}
+        provenance = _record(current.get("provenance"))
+        provenance["authoring"] = {**_authoring(current), "edit_state": "manually_edited", "generation_lock": True,
+                                   "last_entity_edit": {"entity_id": entity_id, "operation": "manual_add",
+                                                        "edited_at": datetime.now(timezone.utc).isoformat(),
+                                                        "llm_changed_paths": []}}
+        stored = work.world_scenarios.put_topic(
+            context, world_id=world_id, topic_id=topic_id, draft_revision=int(world["draft_revision"]),
+            source="manual", status="ready", content=payload, directives=_record(current.get("directives")),
+            dependency_hashes=_record(current.get("dependency_hashes")),
+            input_hash=canonical_hash({"source": "manual_add", "content": payload}),
+            content_hash=canonical_hash(payload), provenance=provenance)
+        stored_hash = str(stored.get("content_hash") or canonical_hash(payload))
+        _record_history(work, context, world_id=world_id, topic_id=topic_id, entity_id=entity_id,
+                        operation="manual_add", before={}, after=added, topic_content_hash=stored_hash, metadata={})
+        downstream = _mark_downstream_stale(work, context, world=world, changed_topic_id=topic_id,
+                                            changed_content_hash=stored_hash)
+        work.commit()
+    return {"ok": True, "topic": stored, "entity": added, "stale_topic_ids": sorted(downstream), "stale_entity_ids": []}
+
+
 def update_world_entity(
     world_id: str,
     topic_id: str,
@@ -490,11 +571,7 @@ def regenerate_world_entity(
         before = _entity(_record(current.get("content")), entity_id)
         run = _latest_run(work, context, world_id)
         node = _topic_node(world, run, topic_id)
-        rows = work.world_generation.list_topics(
-            context,
-            world_id=world_id,
-            draft_revision=int(world["draft_revision"]),
-        )
+        rows = _world_topics(work, context, world_id)
         row_map = {str(row.get("topic_id") or ""): row for row in rows}
         dependencies = {
             dependency_id: GeneratedTopic.from_dict(_record(row_map[dependency_id].get("content")))

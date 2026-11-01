@@ -283,7 +283,7 @@
     font-size: 0.66rem;
   }
 
-  .rpg-world-state {
+  .rpg-world-lifecycle {
     padding: 0.34rem 0.58rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
     border-radius: 7px;
@@ -291,12 +291,12 @@
     font-size: 0.68rem;
   }
 
-  .rpg-world-state.is-published {
+  .rpg-world-lifecycle.is-published {
     border-color: color-mix(in srgb, var(--c-green-790-2) 24%, transparent);
     color: var(--fg-green-870);
   }
 
-  .rpg-world-state.is-generation-failed {
+  .rpg-world-lifecycle.is-generation-failed {
     border-color: color-mix(in srgb, var(--c-red-720) 24%, transparent);
     color: var(--fg-red-810);
   }
@@ -345,7 +345,7 @@
 
   @media (max-width: 1180px) {
     .rpg-world-profile-copy,
-    .rpg-world-state {
+    .rpg-world-lifecycle {
       display: none;
     }
   }

@@ -155,7 +155,8 @@ class QwenHttpGatewayProvider:
 
     def generate_audio_stream(self, text, speaker=None, language=None, **kwargs):
         started = time.perf_counter()
-        allowed = {'chunk_size', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'append_silence', 'max_new_tokens'}
+        allowed = {'chunk_size', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'append_silence', 'max_new_tokens',
+                   'parity_mode'}
         payload = {key: value for key, value in kwargs.items() if key in allowed and value is not None}
         payload.update(text=text, speaker=speaker or 'default', language=language or 'en',
                        provider=self.provider_name)

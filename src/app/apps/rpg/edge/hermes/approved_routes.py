@@ -25,14 +25,14 @@ from app.apps.rpg.edge.hermes.sequence_contract import hermes_sequence_contract_
 from app.apps.rpg.edge.hermes.sequence_gate import hermes_sequence_apply_gate
 from app.apps.rpg.edge.hermes.sequence_loop_guard import hermes_sequence_loop_guard
 from app.apps.rpg.edge.hermes.sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
-from app.apps.rpg.edge.api.web_contracts import (
-    documented,
+from app.apps.rpg.edge.api.hermes_web_contracts import (
     HermesRpgApprovedFlowConfig,
     HermesRpgApprovedFlowResponse,
     HermesRpgExecutionLedgerResponse,
     HermesRpgSequenceResponse,
     HermesRpgSequenceStateResponse,
 )
+from app.apps.rpg.edge.api.web_contracts import documented
 from app.apps.rpg.edge.api.route_contracts import (
     HermesNarrativeResearchResponse,
     HermesRpgContextPackResponse,

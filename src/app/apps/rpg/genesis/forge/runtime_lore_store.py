@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -10,6 +12,7 @@ from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.foundation.safe_values import copy_state
 
 from .campaign_lore_store import (
     _campaign_id,
@@ -59,6 +62,14 @@ def _campaign_exists(
     )
 
 
+# A published world revision never changes: its canon, as a campaign pins it, is projected once (RQ-6.4: each turn
+# read the revision's whole document and projected it twice).
+_PINNED: dict[tuple[str, str, str, int], tuple[float, dict[str, Any]]] = {}  # (when projected, the canon)
+_PINNED_LOCK = threading.Lock()
+_MAX_PINNED = 32
+_PINNED_TTL_SECONDS = 3600.0
+
+
 def _pinned_world_canon(
     work: Any,
     context: Any,
@@ -67,21 +78,29 @@ def _pinned_world_canon(
     binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
     if binding is None:
         return {}
-    revision = work.world_scenarios.get_world_revision(
-        context,
-        _text(binding.get("world_id")),
-        int(binding.get("world_revision") or 0),
-    )
+    world_id = _text(binding.get("world_id"))
+    world_revision = int(binding.get("world_revision") or 0)
+    key = (str(getattr(context, "workspace_id", "")), campaign_id, world_id, world_revision)
+    with _PINNED_LOCK:
+        kept = _PINNED.get(key)
+    if kept is not None and time.monotonic() - kept[0] < _PINNED_TTL_SECONDS:
+        return copy_state(kept[1])
+    revision = work.world_scenarios.get_world_revision(context, world_id, world_revision)
     document = _mapping((revision or {}).get("document"))
     canon = _mapping(document.get("canon"))
     if not canon:
         return {}
-    return project_published_canon(
+    projected = project_published_canon(
         canon,
         campaign_id=campaign_id,
         canon_revision=int(binding.get("world_revision") or 1),
         topology=_mapping(document.get("topology")),
     )
+    with _PINNED_LOCK:
+        _PINNED[key] = (time.monotonic(), copy_state(projected))
+        while len(_PINNED) > _MAX_PINNED:
+            _PINNED.pop(next(iter(_PINNED)))
+    return projected
 
 
 def _has_dossier_and_document(
@@ -184,14 +203,17 @@ def _pregenerate_scene_lore(
     return bundles
 
 
-def _enqueue_scene_lore_enrichment(campaign_id: str, targets: Sequence[SceneLoreTarget]) -> None:
+def _enqueue_scene_lore_enrichment(campaign_id: str, targets: Sequence[SceneLoreTarget]) -> bool:
+    """Whether the after-turn job that writes the full dossiers was queued."""
     try:
         from .scene_lore_job import enqueue_scene_lore_enrichment
 
         enqueue_scene_lore_enrichment(campaign_id, [target.as_dict() for target in targets])
+        return True
     except Exception:
         # The built-in dossiers stand; a later turn that meets the entity queues it again.
         logger.warning("scene lore enrichment was not queued for %s", campaign_id, exc_info=True)
+        return False
 
 
 def enrich_scene_lore(
@@ -253,6 +275,66 @@ def enrich_scene_lore(
     return {**report, "revision": int(stored["revision"])}
 
 
+# What each campaign's bible already covers (F2): the bible as stored (its revision, content hash and document), the
+# world the campaign was bound to, and each scene target a pass materialized against it with the canon entity it
+# resolved to ("Liora Fen" is ``npc:liora_fen``). A turn whose targets that bible already covers, unchanged since, is
+# grounded in it without the pass (two bible reads, the world canon merged twice, a materialization): one read of the
+# bible's version, then the session hydrated from the bible as remembered. Per process and bounded; a miss only costs
+# the full pass.
+_COVERED: dict[tuple[str, str], "_Covered"] = {}
+_COVERED_LOCK = threading.Lock()
+_COVERED_LIMIT = 128
+_COVERED_TTL_SECONDS = 3600.0
+
+
+class _Covered:
+    __slots__ = ("revision", "content_hash", "binding", "resolved", "document", "record", "at")
+
+    def __init__(self, revision: int, content_hash: str, binding: str, resolved: Mapping[str, str],
+                 document: Mapping[str, Any], record: Mapping[str, Any] | None = None) -> None:
+        self.revision, self.content_hash, self.binding = revision, content_hash, binding
+        self.resolved, self.document = dict(resolved), document
+        # The stored row as written (its provenance, consistency report and completeness beside the document): a
+        # covered turn's narration builds its snapshot from it rather than reading the row again (F2).
+        self.record = dict(record) if record is not None else None
+        self.at = time.monotonic()
+
+
+def clear_lore_memos() -> None:
+    """Forget the projected world canon and what each bible covers (both are rebuilt on the next turn's miss)."""
+    with _PINNED_LOCK:
+        _PINNED.clear()
+    with _COVERED_LOCK:
+        _COVERED.clear()
+
+
+def _target_keys(targets: Sequence[SceneLoreTarget]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(target.entity_id.casefold() for target in targets))
+
+
+def _already_covered(work: Any, context: Any, campaign_id: str, keys: Sequence[str]) -> tuple[_Covered, tuple[str, ...]] | None:
+    """The bible as remembered and the targets' resolved ids, when it covers ``keys`` and is still the stored one."""
+    with _COVERED_LOCK:
+        covered = _COVERED.get((str(context.workspace_id), campaign_id))
+    if covered is None or time.monotonic() - covered.at >= _COVERED_TTL_SECONDS or not set(keys) <= set(covered.resolved):
+        return None
+    version = work.campaign_bibles.version(context, campaign_id)
+    if version is None or version[1] != covered.content_hash or version[2] != covered.binding:
+        return None
+    return covered, tuple(dict.fromkeys(covered.resolved[key] for key in keys))
+
+
+def _remember_covered(workspace_id: str, campaign_id: str, covered: _Covered) -> None:
+    key = (workspace_id, campaign_id)
+    with _COVERED_LOCK:
+        previous = _COVERED.pop(key, None)
+        if previous is not None and (previous.content_hash, previous.binding) == (covered.content_hash, covered.binding):
+            covered.resolved = {**previous.resolved, **covered.resolved}
+        _COVERED[key] = covered
+        while len(_COVERED) > _COVERED_LIMIT:
+            _COVERED.pop(next(iter(_COVERED)))
+
+
 def ensure_turn_scene_lore(
     session_id: str,
     session: Mapping[str, Any],
@@ -287,9 +369,30 @@ def ensure_turn_scene_lore(
             "created_document_ids": [],
         }
 
+    keys = _target_keys(targets)
     try:
         db = database or default_database()
         context = current_tenant()
+        with unit_of_work(db) as work:
+            hit = _already_covered(work, context, campaign_id, keys)
+            work.rollback()
+        if hit is not None:
+            covered, target_entity_ids = hit
+            hydrated = _hydrate_session(session, covered.document, revision=covered.revision,
+                                        content_hash=covered.content_hash)
+            return hydrated, {
+                "mode": "postgresql_authority",
+                "persisted": True,
+                "changed": False,
+                "already_materialized": True,
+                **({"stored_record": covered.record} if covered.record is not None else {}),
+                "campaign_id": campaign_id,
+                "revision": covered.revision,
+                "content_hash": covered.content_hash,
+                "target_entity_ids": list(target_entity_ids),
+                "created_entity_ids": [],
+                "created_document_ids": [],
+            }
         # The model calls run before the campaign and bible rows are locked, so
         # other turns of this campaign do not wait on them (WP-8.6). The locked
         # pass merges those bundles into the current bible without a model call.
@@ -330,6 +433,8 @@ def ensure_turn_scene_lore(
                 pregenerated=bundles,
             )
             target_ids = _assert_materialized(bible, session, result, explicit_entity_ids)
+            entities = _mapping(bible.get("entities"))
+            resolved = {target.entity_id.casefold(): known_scene_entity(entities, target)[0] for target in targets}
             should_write = (
                 stored is None
                 or campaign_bible_hash(bible)
@@ -375,14 +480,22 @@ def ensure_turn_scene_lore(
                 )
             work.commit()
         assert stored is not None
-        if deferred:
-            _enqueue_scene_lore_enrichment(campaign_id, deferred)
+        queued = _enqueue_scene_lore_enrichment(campaign_id, deferred) if deferred else True
         hydrated = _hydrate_session(
             session,
             stored["document"],
             revision=int(stored["revision"]),
             content_hash=str(stored["content_hash"]),
         )
+        # A target with a provisional dossier is covered once its full one is queued: writing it changes the bible's
+        # hash, and the next turn takes the full pass. One whose job could not be queued is tried again next turn.
+        if queued:
+            with unit_of_work(db) as work:
+                version = work.campaign_bibles.version(context, campaign_id)
+                work.rollback()
+            if version is not None and version[1] == str(stored["content_hash"]):
+                _remember_covered(str(context.workspace_id), campaign_id, _Covered(
+                    int(stored["revision"]), version[1], version[2], resolved, stored["document"], stored))
         previous_hash = _text(
             _mapping(session.get("campaign_bible_projection")).get("content_hash")
         )

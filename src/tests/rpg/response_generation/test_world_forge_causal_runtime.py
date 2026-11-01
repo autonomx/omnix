@@ -84,8 +84,9 @@ def test_escalation_event_is_not_repeated_on_later_ticks() -> None:
         "pressure_tick",
         "pressure_escalated",
     ]
-    assert [event.event_type for event in later] == ["pressure_tick"]
-    assert second["pressure_statuses"]["pressure:001"] == "escalated"
+    # Not escalated again: the world answers it (roadmap §7 Q-10), and holds it in check.
+    assert [event.event_type for event in later] == ["pressure_tick", "pressure_contained"]
+    assert second["pressure_statuses"]["pressure:001"] == "contained"
 
 
 def test_resolved_pressure_stops_runtime_mutation() -> None:
@@ -144,3 +145,15 @@ def test_installed_runtime_publishes_to_existing_world_event_log_once() -> None:
     assert {row["event_id"] for row in world_events} == {
         event.event_id for event in emitted
     }
+
+
+def test_a_long_running_world_keeps_its_recent_history_and_still_replays() -> None:
+    from app.apps.rpg.world.causal_runtime import MAX_KEPT_EVENTS
+
+    runtime = bootstrap_causal_runtime(_planning_topics())
+    for tick in range(1, 60):
+        runtime, _ = advance_causal_runtime(runtime, tick=tick)
+    assert len(runtime["events"]) <= MAX_KEPT_EVENTS  # a thousand turns keep a bounded history (F2)
+    assert runtime["initial_state"] != bootstrap_causal_runtime(_planning_topics())["initial_state"]  # rolled forward
+    replayed = replay_causal_events(runtime["initial_state"], runtime["events"])
+    assert replayed["state_hash"] == runtime["state"]["state_hash"]

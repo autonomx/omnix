@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-import traceback
 from contextvars import ContextVar
 from typing import Any, Dict, List
 
@@ -27,16 +26,3 @@ def record_narration_trace(event: str, **fields: Any) -> None:
             **fields,
         }
     )
-
-
-def record_narration_trace_stack(event: str, **fields: Any) -> None:
-    if not narration_trace_enabled():
-        return
-    stack = traceback.format_stack(limit=12)
-    record_narration_trace(
-        event,
-        stack=[line.strip() for line in stack],
-        **fields,
-    )
-
-

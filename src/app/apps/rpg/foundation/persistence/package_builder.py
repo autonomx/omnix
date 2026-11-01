@@ -43,4 +43,18 @@ def build_save_package(setup_payload: Dict[str, Any], now: str | None = None) ->
             "snapshots": list(simulation_state.get("snapshots") or []),
             "timeline": dict(simulation_state.get("timeline") or {}),
         },
+        "campaign": {"document_version": None, "document": None},
     }
+
+
+def build_campaign_save_package(document: Dict[str, Any], now: str | None = None) -> Dict[str, Any]:
+    """A package (format 8) carrying a whole campaign document, with its setup and simulation as before."""
+    document = dict(document or {})
+    setup_payload = dict(_safe_dict(document.get("setup_payload")))
+    metadata = dict(_safe_dict(setup_payload.get("metadata")))
+    metadata["simulation_state"] = _safe_dict(document.get("simulation_state"))
+    setup_payload["metadata"] = metadata
+    package = build_save_package(setup_payload, now=now)
+    version = _safe_dict(document.get("manifest")).get("schema_version")
+    package["campaign"] = {"document_version": version, "document": document}
+    return package

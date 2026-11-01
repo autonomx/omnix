@@ -36,10 +36,6 @@ _STATE_PREFIXES = (
 )
 
 
-def _mapping(value: Any) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
-
-
 def claim_ledger(request: TurnPresentationRequest) -> Mapping[str, Mapping[str, Any]]:
     raw = request.authoritative_outcome.get("claim_ledger") or request.metadata.get("claim_ledger") or {}
     if not isinstance(raw, Mapping):

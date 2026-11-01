@@ -34,10 +34,8 @@ def persist_foreground_turn(
     submission_id: str,
     database: PostgresDatabase | None = None,
     submission_claim_token: str | None = None,
-    worker_id: str | None = None,
-    lease_token: str | None = None,
 ) -> dict[str, Any]:
-    """Commit campaign, turn, interaction, canon, job, and submission atomically."""
+    """Commit campaign, turn, interaction, canon and the submission's claim atomically."""
 
     if not submission_id:
         submission_id = f"submission:{event.get('interaction_id') or event.get('sequence')}"
@@ -69,7 +67,7 @@ def persist_foreground_turn(
     with unit_of_work(db) as work:
         submission = work.connection.execute(
             """
-            SELECT status, claim_token, job_id, response, execution_started_at
+            SELECT status, claim_token, response, execution_started_at
               FROM omnix_rpg_foreground_submissions
              WHERE workspace_id = %s AND session_id = %s AND submission_id = %s
              FOR UPDATE
@@ -95,14 +93,13 @@ def persist_foreground_turn(
                 claim_token=claim_token,
             ):
                 raise RuntimeError("foreground submission execution could not start")
-            job_id = None
         else:
             status = str(submission[0])
-            if status == "completed" and submission[3] is not None:
+            if status == "completed" and submission[2] is not None:
                 work.rollback()
                 return {
                     "idempotent_replay": True,
-                    "response": dict(submission[3]),
+                    "response": dict(submission[2]),
                     "interaction_id": interaction_id,
                     "submission_id": submission_id,
                 }
@@ -111,8 +108,7 @@ def persist_foreground_turn(
             if not submission_claim_token or submission_claim_token != str(submission[1]):
                 raise JobClaimConflict("foreground submission requires the original claim token")
             claim_token = submission_claim_token
-            job_id = str(submission[2]) if submission[2] is not None else None
-            if submission[4] is None:
+            if submission[3] is None:
                 if not work.foreground_submissions.start_execution(
                     context,
                     session_id=session_id,
@@ -121,10 +117,35 @@ def persist_foreground_turn(
                 ):
                     raise RuntimeError("foreground submission execution fence was rejected")
 
-        campaign = work.rpg.get_campaign(context, session_id, for_update=True)
+        campaign = work.rpg.get_campaign(context, session_id, for_update=True, read_only=True)  # the commit's "before"
         if campaign is None:
             raise RuntimeError(
                 f"RPG campaign {session_id} was not initialized in PostgreSQL before the turn"
+            )
+
+        for instance in result.get("map_instances") or ():  # a place's local map, on the hero's first visit
+            work.map_instances.create_instance(
+                context,
+                map_instance_id=str(instance["map_instance_id"]),
+                campaign_id=str(instance["campaign_id"]),
+                location_id=str(instance["location_id"]),
+                map_id=str(instance["map_id"]),
+                definition_revision=int(instance["definition_revision"]),
+                definition_hash=str(instance["definition_hash"]),
+                snapshot=dict(instance["snapshot"]),
+            )
+        for map_event in result.get("map_events") or ():  # a grid move's map change (session/turn/tactical.py)
+            work.map_instances.append_event(
+                context,
+                map_instance_id=str(map_event["map_instance_id"]),
+                command_id=str(map_event["command_id"]),
+                event_id=str(map_event["event_id"]),
+                event_type=str(map_event["event_type"]),
+                event_sequence=int(map_event["event_sequence"]),
+                revision_before=int(map_event["revision_before"]),
+                revision_after=int(map_event["revision_after"]),
+                event=dict(map_event["event"]),
+                snapshot=dict(map_event["snapshot"]),
             )
 
         stored_narrative = None
@@ -134,6 +155,24 @@ def persist_foreground_turn(
                 canonical_narrative,
             )
 
+        from app.apps.rpg.session.turn.proposals import settle_folded
+
+        pipeline = result.get("turn_pipeline") if isinstance(result.get("turn_pipeline"), dict) else {}
+        # What the turn folded in at its load (EV-11): settled only while still pending, else the commit fails.
+        folded = settle_folded(work, context, campaign_id=session_id, turn_id=turn_id, revision=state_revision,
+                               reported=pipeline.get("proposals") if isinstance(pipeline.get("proposals"), dict) else {})
+        undone = next((int(row.get("source_revision") or 0) for row in pipeline.get("changes") or ()
+                       if isinstance(row, dict) and row.get("type") == "revision_restored"), None)
+        if undone is not None:  # a rewind: what was proposed in the timeline undone never folds in (EV-11)
+            work.rpg_proposals.drop_undone(context, campaign_id=session_id, after_revision=undone, turn_id=turn_id,
+                                           revision=state_revision)
+        from app.apps.rpg.session.lore_review import file_inventions
+
+        # What the game master invented, filed for its world's review where question 15 says so (EV-0, part 2).
+        file_inventions(work, context, campaign_id=session_id, document=session, folded=folded)
+        from app.apps.rpg.session.site_maps import store_site_maps
+
+        store_site_maps(work, context, campaign_id=session_id, document=session, folded=folded)  # EV-10's rooms
         persisted = work.rpg.commit_turn(
             context,
             campaign_id=session_id,
@@ -141,7 +180,7 @@ def persist_foreground_turn(
             submission_id=submission_id,
             interaction_id=interaction_record_id,
             expected_revision=expected_revision,
-            command={"player_input": player_input},
+            command={"player_input": player_input, **_command_marks(result)},
             next_state=session,
             canonical_effects=_canonical_effects(result),
             interaction_event=event,
@@ -151,61 +190,10 @@ def persist_foreground_turn(
             create_snapshot=bool(event.get("stateful") is not False) and snapshot_due(state_revision),
             snapshot_id=f"snapshot:{session_id}:{state_revision}",
             locked_campaign=campaign,
+            submission_open=True,  # claimed above FOR UPDATE, so no turn of it is committed (F2)
+            maps_touched=bool(result.get("map_instances") or result.get("map_events")),
+            folded_proposals=folded,
         )
-
-        completed_job: dict[str, Any] | None = None
-        if job_id:
-            job = work.jobs.get_job(context, job_id)
-            if job is None:
-                raise RuntimeError(f"foreground RPG job disappeared: {job_id}")
-            if job["status"] == "completed":
-                completed_job = job
-            else:
-                metadata_value = job.get("metadata")
-                metadata = metadata_value if isinstance(metadata_value, dict) else {}
-                contract_value = metadata.get("compat_contract")
-                contract = contract_value if isinstance(contract_value, dict) else {}
-                compat_value = contract.get("compat")
-                compat = compat_value if isinstance(compat_value, dict) else {}
-                if job["job_type"] == "rpg.turn.foreground_record" and compat.get("record_only") is True:
-                    completed_job = work.jobs.complete_record_only(
-                        context,
-                        job_id=job_id,
-                        submission_claim_token=claim_token,
-                        output_refs=[
-                            {
-                                "type": "rpg_turn_response",
-                                "module": "rpg",
-                                "session_id": session_id,
-                                "submission_id": submission_id,
-                                "interaction_id": interaction_id,
-                                "turn_response": compact_response,
-                                "source": "postgresql_foreground_transaction",
-                            }
-                        ],
-                        progress={"current": 1, "total": 1, "message": "completed"},
-                    )
-                elif not worker_id or not lease_token:
-                    raise RuntimeError(f"foreground RPG job has no active lease: {job_id}")
-                else:
-                    completed_job = work.jobs.complete(
-                        context,
-                        job_id=job_id,
-                        worker_id=worker_id,
-                        lease_token=lease_token,
-                        output_refs=[
-                            {
-                                "type": "rpg_turn_response",
-                                "module": "rpg",
-                                "session_id": session_id,
-                                "submission_id": submission_id,
-                                "interaction_id": interaction_id,
-                                "turn_response": compact_response,
-                                "source": "postgresql_foreground_transaction",
-                            }
-                        ],
-                        progress={"current": 1, "total": 1, "message": "completed"},
-                    )
 
         if not work.foreground_submissions.complete(
             context,
@@ -242,13 +230,15 @@ def persist_foreground_turn(
 
     # Loads after the commit read the committed session, not the turn's shared pre-commit load.
     forget_turn_session(session_id)
+    from app.apps.rpg.session.jobs.game_master_job import after_commit
+
+    after_commit(session_id, result, session, state_revision)  # the game master, when the turn calls for it (EV-0)
 
     return {
         "idempotent_replay": bool(persisted.get("idempotent_replay")),
         "campaign": persisted.get("campaign"),
         "turn": persisted.get("turn"),
         "snapshot": persisted.get("snapshot"),
-        "job": completed_job,
         "response": compact_response,
         "submission_id": submission_id,
         "interaction_id": interaction_id,
@@ -262,6 +252,18 @@ def persist_foreground_turn(
         "narrative_atomic_with_turn": stored_narrative is not None,
         "transaction": "postgresql_unit_of_work",
     }
+
+
+def _command_marks(result: dict[str, Any]) -> dict[str, Any]:
+    """What the turn row records of the turn's kind beside the player's words: a world tick, a rewind and the
+    revision it restored (an undo walks these back, rewind.md)."""
+    pipeline = result.get("turn_pipeline") if isinstance(result.get("turn_pipeline"), dict) else {}
+    answer = pipeline.get("action_result") if isinstance(pipeline.get("action_result"), dict) else {}
+    if answer.get("kind") == "rewind":
+        return {"turn_kind": "rewind", "restored_revision": int(answer.get("restored_revision") or 0)}
+    if answer.get("kind") == "hotbar":
+        return {"turn_kind": "arrangement"}  # the play screen's hotbar: no turn of the hero's to undo
+    return {"turn_kind": str(pipeline["kind"])} if pipeline.get("kind") else {}
 
 
 def _canonical_narrative_response(

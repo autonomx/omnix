@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
-from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -19,8 +19,8 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
     public_state = _dict(session.get("state"))
     public_player = _dict(public_state.get("player"))
     public_world = _dict(public_state.get("world"))
-    simulation = _dict(session.get("simulation_state"))
-    player_state = _dict(simulation.get("player_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
+    player_state = _dict(_sections.player_state_of(simulation))
 
     if public_player:
         for key in ("currency", "resources", "stats", "skills", "location_id"):
@@ -31,7 +31,7 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
             player_state["name"] = str(public_player["name"])
 
         public_inventory = public_player.get("inventory")
-        inventory_state = _dict(player_state.get("inventory_state"))
+        inventory_state = _dict(_sections.inventory_state_of(player_state))
         if isinstance(public_inventory, list) and not inventory_state.get("items"):
             inventory_state["items"] = [_normalize_public_item(item) for item in public_inventory if isinstance(item, dict)]
         if player_state.get("currency") is not None and inventory_state.get("currency") is None:
@@ -44,25 +44,9 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
         simulation["player_state"] = player_state
     if not isinstance(simulation.get("environment"), dict) and isinstance(public_world.get("environment"), dict):
         simulation["environment"] = deepcopy(public_world["environment"])
-    if not isinstance(simulation.get("quest_state"), dict) and isinstance(public_state.get("quests"), list):
+    if not isinstance(_sections.quest_state_of(simulation), dict) and isinstance(public_state.get("quests"), list):
         simulation["quest_state"] = {"quests": deepcopy(public_state["quests"])}
     session["simulation_state"] = simulation
-    return session
-
-
-def count_player_turn(session: Dict[str, Any]) -> Dict[str, Any]:
-    """Count the turn the player is taking, whichever path resolves it.
-
-    Every stage of a turn loads the session as it was when the turn began (saves are deferred to the turn's
-    commit), so each stage that counts sets the same number: counting is idempotent within a turn.
-    """
-    state = _dict(session.get("state"))
-    manifest = _dict(session.get("manifest"))
-    count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
-    state["turn_count"] = state["current_turn"] = count
-    manifest["turn_count"] = manifest["current_turn"] = count
-    session["state"] = state
-    session["manifest"] = manifest
     return session
 
 
@@ -70,13 +54,13 @@ def project_authoritative_player(session: Dict[str, Any]) -> Dict[str, Any]:
     """Project authoritative wallet, resources, and inventory into public state."""
 
     session = session if isinstance(session, dict) else {}
-    simulation = _dict(session.get("simulation_state"))
-    player_state = _dict(simulation.get("player_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
+    player_state = _dict(_sections.player_state_of(simulation))
     public_state = _dict(session.get("state"))
     public_player = _dict(public_state.get("player"))
     public_world = _dict(public_state.get("world"))
 
-    inventory_state = _dict(player_state.get("inventory_state"))
+    inventory_state = _dict(_sections.inventory_state_of(player_state))
     currency = player_state.get("currency") or inventory_state.get("currency")
     if isinstance(currency, dict):
         public_player["currency"] = deepcopy(currency)
@@ -106,7 +90,7 @@ def project_authoritative_player(session: Dict[str, Any]) -> Dict[str, Any]:
         public_world["environment"] = deepcopy(environment)
         public_world["time"] = _format_environment_time(environment)
         public_state["world"] = public_world
-    quest_state = _dict(simulation.get("quest_state"))
+    quest_state = _dict(_sections.quest_state_of(simulation))
     if isinstance(quest_state.get("quests"), list):
         public_state["quests"] = deepcopy(quest_state["quests"])
     _project_world_location(public_state, simulation)
@@ -119,22 +103,22 @@ def _project_world_presence(session: Dict[str, Any], simulation: Dict[str, Any])
     """Who is here, for a session with its own world: when the player reaches another place, the people who live
     there (and the player's companions) are present, not the people of the place they left."""
 
-    locations = _dict(_dict(simulation.get("world_model")).get("locations"))
-    player_state = _dict(simulation.get("player_state"))
+    locations = _dict(_dict(_sections.world_model_of(simulation)).get("locations"))
+    player_state = _dict(_sections.player_state_of(simulation))
     location_id = str(player_state.get("location_id") or "")
     location = _dict(locations.get(location_id))
-    present_state = _dict(simulation.get("present_npc_state"))
+    present_state = _dict(_sections.present_npc_state_of(simulation))
     if not location or present_state.get("location_id") == location_id:
         return
     companions = [
         str(_dict(companion).get("npc_id") or "")
-        for companion in _dict(player_state.get("party_state")).get("companions") or ()
+        for companion in _dict(_sections.party_state_of(player_state)).get("companions") or ()
     ]
     present_ids = [str(_dict(npc).get("id") or "") for npc in location.get("present_npcs") or ()]
     present_ids = [npc_id for npc_id in dict.fromkeys(present_ids + companions) if npc_id]
     simulation["present_npc_state"] = {**present_state, "location_id": location_id, "present_npc_ids": present_ids}
     session["simulation_state"] = simulation
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     name = str(location.get("name") or location_id)
     runtime["current_scene"] = {
         **_dict(runtime.get("current_scene")),
@@ -153,8 +137,8 @@ def _project_world_location(public_state: Dict[str, Any], simulation: Dict[str, 
     """Where the player is, by name, for a session with its own world (a published one): travel moves the
     simulation's player, and the place, title, scene and region the player sees follow it."""
 
-    locations = _dict(_dict(simulation.get("world_model")).get("locations"))
-    location_id = str(_dict(simulation.get("player_state")).get("location_id") or "")
+    locations = _dict(_dict(_sections.world_model_of(simulation)).get("locations"))
+    location_id = str(_dict(_sections.player_state_of(simulation)).get("location_id") or "")
     location = _dict(locations.get(location_id))
     if not location or public_state.get("current_location_id") == location_id:
         return
@@ -188,87 +172,18 @@ def synchronize_player_projections(session: Dict[str, Any]) -> Dict[str, Any]:
     return project_authoritative_player(hydrate_simulation_player(session))
 
 
-def merge_authoritative_session_state(
-    base_session: Dict[str, Any],
-    authoritative_payload: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Carry mechanic-owned state through presentation wrappers without stale overwrite."""
-
-    base = copy_state(_dict(base_session))
-    payload = _dict(authoritative_payload)
-    nested = _dict(payload.get("result"))
-    authoritative_session = _dict(payload.get("session") or nested.get("session"))
-    if authoritative_session:
-        base = copy_state(authoritative_session)
-    authoritative_simulation = _dict(
-        payload.get("simulation_state")
-        or nested.get("simulation_state")
-        or authoritative_session.get("simulation_state")
-    )
-    if authoritative_simulation:
-        base["simulation_state"] = copy_state(authoritative_simulation)
-    return project_authoritative_player(hydrate_simulation_player(base))
-
-
-def carry_stage_changes(
-    turn_start: Dict[str, Any],
-    stage: Dict[str, Any],
-    onto: Dict[str, Any],
-) -> Dict[str, Any]:
-    """``onto`` (the authoritative simulation) with what one turn stage changed from the turn's start.
-
-    A stage that resolves part of the turn on its own copy (the general interaction: a blow, loot, an item
-    used) must not replace what the authoritative stage did meanwhile, so it carries only what it changed:
-    a changed record is followed a few levels down (player_state -> resources -> hp) before it is replaced.
-    """
-    return _carry(_dict(turn_start), _dict(stage), copy_state(_dict(onto)), depth=3)
-
-
-def _carry(before: Any, stage: Any, onto: Any, *, depth: int) -> Any:
-    if depth == 0 or not (isinstance(before, dict) and isinstance(stage, dict) and isinstance(onto, dict)):
-        return deepcopy(stage)
-    merged = dict(onto)
-    for key, value in stage.items():
-        if key not in before or before[key] != value:
-            merged[key] = _carry(before.get(key), value, onto.get(key), depth=depth - 1)
-    for key in before.keys() - stage.keys():
-        merged.pop(key, None)
-    return merged
-
-
-def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
-    """Make the player sheet's inventory and purse the simulation's, after an action changed the sheet directly
-    (dropping, using, equipping or crafting an item); otherwise the next projection would restore the old ones."""
-
-    session = session if isinstance(session, dict) else {}
-    public_player = _dict(_dict(session.get("state")).get("player"))
-    simulation = _dict(session.get("simulation_state"))
-    player_state = _dict(simulation.get("player_state"))
-    inventory_state = _dict(player_state.get("inventory_state"))
-    if isinstance(public_player.get("inventory"), list):
-        inventory_state["items"] = [
-            _normalize_public_item(item) for item in public_player["inventory"] if isinstance(item, dict)
-        ]
-    if isinstance(public_player.get("currency"), dict):
-        inventory_state["currency"] = deepcopy(public_player["currency"])
-        player_state["currency"] = deepcopy(public_player["currency"])
-    player_state["inventory_state"] = inventory_state
-    simulation["player_state"] = player_state
-    session["simulation_state"] = simulation
-    return session
-
-
-_SHEET_SLOTS = {"weapon": "main_hand", "main hand": "main_hand", "off hand": "off_hand", "shield": "off_hand"}
+_SHEET_SLOTS = {"weapon": "main_hand", "main hand": "main_hand", "off hand": "off_hand", "shield": "off_hand",
+                "armor": "body", "helmet": "head"}
 
 
 def _hydrate_equipped_gear(player_state: Dict[str, Any], sheet_equipment: Any) -> None:
-    """The gear the character sheet lists as worn, equipped where combat looks for it (while it is still carried)."""
-    gear = _dict(player_state.get("inventory"))
-    if _dict(gear.get("equipment")) or not isinstance(sheet_equipment, list):
+    """The gear the character sheet lists as worn, equipped in the one store (while it is still carried)."""
+    store = _dict(_sections.inventory_state_of(player_state))
+    if _dict(store.get("equipment")) or not isinstance(sheet_equipment, list) or not store:
         return
     carried = {
         str(item.get("name") or "").casefold(): item
-        for item in _dict(player_state.get("inventory_state")).get("items") or ()
+        for item in store.get("items") or ()
         if isinstance(item, dict) and item.get("name")
     }
     equipment: Dict[str, str] = {}
@@ -280,7 +195,7 @@ def _hydrate_equipped_gear(player_state: Dict[str, Any], sheet_equipment: Any) -
         slot = str(_dict(worn).get("slot") or "").strip().casefold()
         equipment[_SHEET_SLOTS.get(slot, slot.replace(" ", "_") or "main_hand")] = item_id
     if equipment:
-        player_state["inventory"] = {**gear, "equipment": equipment}
+        player_state["inventory_state"] = {**store, "equipment": equipment}
 
 
 def _normalize_public_item(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -321,9 +236,4 @@ def _format_environment_time(environment: Dict[str, Any]) -> str:
     return f"Day {day} • {minute // 60:02d}:{minute % 60:02d}"
 
 
-__all__ = [
-    "hydrate_simulation_player",
-    "project_authoritative_player",
-    "merge_authoritative_session_state",
-    "synchronize_player_projections",
-]
+__all__ = ["hydrate_simulation_player", "project_authoritative_player", "synchronize_player_projections"]

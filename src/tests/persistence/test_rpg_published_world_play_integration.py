@@ -63,6 +63,8 @@ class _ScriptedModel:
             answer = json.dumps({"format_version": "rpg_narration_candidates_v1", "primary": narration, "safe_fallback": narration})
         elif "materializes durable, player-safe RPG canon" in text:
             kind, answer = "canon_dossier", json.dumps({"entities": [], "documents": [], "facts": [], "relationships": []})
+        elif "Reply as the speaker in the PLAN" in text:  # the dialogue plan's one call for the line (RQ-2.2)
+            kind, answer = "dialogue_line", "Welcome, traveler."
         elif "first-call semantic intent router" in text:
             kind = "semantic_intent"
         elif "CONTEXT:" in text:
@@ -267,7 +269,7 @@ def test_item_actions_and_story_turns_share_one_inventory(tmp_path, monkeypatch)
         items, _ = sheet()
         assert items["Lantern Bread"] == 1 and items["Gateborn Compass"] == 1
         used = act("use", "Lantern Bread")
-        assert used["consumed"] is True
+        assert used["ok"] is True and used["event"]["title"] == "Use Lantern Bread"  # a turn of the pipeline (RQ-2.4)
         assert "Lantern Bread" not in sheet()[0]
         # "useful" is not "use": searching consumes nothing.
         turn("Search the area for useful supplies I can pick up")
@@ -352,18 +354,18 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
 
         # Practising a skill earns its experience, on the sheet too.
         turn("Practice swordsmanship with a careful training drill.")
-        assert stored()["simulation_state"]["player_state"]["skills"]["swordsmanship"]["xp"] == 10
-        assert public()["player"]["skills"]["swordsmanship"]["xp"] == 10
+        assert stored()["simulation_state"]["player_state"]["skills"]["swordsmanship"]["xp"] == 5  # an hour of practice
+        assert public()["player"]["skills"]["swordsmanship"]["xp"] == 5
 
-        # Reaching a place the quest names advances it.
-        assert quests()["First Night in Aurelia"]["visited_locations"] == ["location:aurelia:arrival-grove"]
+        # Reaching the place a quest's step names advances it (Aurelia's first night: the village, then the guild).
+        assert quests()["First Night in Aurelia"]["objective"] == "Reach Starfall Village"
         turn("go to Starfall Village")
         # Arriving, the narrator is told what the place is like, from the world's own description of it.
         village = stored()["simulation_state"]["world_model"]["locations"]["location:aurelia:starfall-village"]
         assert village["description"] and village["description"] in told[-1]
         first_night = quests()["First Night in Aurelia"]
-        assert first_night["status"] == "active"
-        assert "location:aurelia:starfall-village" in first_night["visited_locations"]
+        assert first_night["status"] == "active" and first_night["progress"]["stage"] == 1
+        assert first_night["objective"] == "Register with Miri Kestrel at the Wayfarers' Guild"
 
         # Time passes: needs rise.
         turn("wait")
@@ -373,7 +375,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # Asking someone present a question is one short model call for their line, not the full narrative writer.
         calls, writes = len(model.calls), len(told)
         turn("I ask Orik Stonewake what he thinks of the newcomers.")
-        assert model.calls[calls:] == ["turn_narration"] and len(told) == writes, model.calls[calls:]
+        assert model.calls[calls:] == ["dialogue_line"] and len(told) == writes, model.calls[calls:]
 
         # A meal at the inn costs coin and eases hunger.
         purse = public()["player"]["currency"]
@@ -383,7 +385,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert public()["turn_count"] == 7
         # The narrator is told what the turns did, so it cannot invent otherwise.
         assert any("You take on the quest Voices in the Phone" in text for text in told)
-        assert any("Your practice earns 10 experience in swordsmanship" in text for text in told)
+        assert any("Your practice earns 5 experience in swordsmanship" in text for text in told)
         assert "for A hot meal" in told[-1] and "It eases your hunger." in told[-1]
         # A shop sells this world's goods: the item is in the pack and every copy of the purse agrees, on later
         # turns too. Asking for something general names what is on offer and sells nothing.
@@ -417,7 +419,9 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # Renting a room is a purchase; sleeping in it is resting, and it eases fatigue.
         before = copper(public()["player"]["currency"])
         turn("I rent a room for the night from Orik Stonewake.")
-        assert copper(public()["player"]["currency"]) == before - 50
+        # Fifty copper as written, a fifth more where the roads choke trade (RQ-5.5, economy.md).
+        assert copper(public()["player"]["currency"]) == before - 60, told[-1]
+        assert "(the roads choke trade)" in told[-1]
         tired = stored()["simulation_state"]["survival"]["fatigue"]
         assert tired > 0  # paying for the room rests no one
         turn("I go to my room and sleep for the night.")
@@ -428,10 +432,18 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert "semantic_intent" not in model.calls and "dialogue" not in model.calls, model.calls
 
         # A fight goes blow by blow: the creature takes its turns, the narrator is told every blow, the
-        # sheet shows the wounds, and the rest of the turn (time passing) is kept.
+        # sheet shows the wounds, and the rest of the turn (time passing) is kept. Creatures are met where no
+        # one lives (encounters.md): the pass.
+        for _ in range(8):  # the road's danger is a chance (three in ten at the pass): walk it until a wolf bars it
+            turn("go to Skybridge Pass")
+            if "bars your way" in told[-1]:
+                break
+            turn("go to Starfall Village")
+        assert "The Echo Wolf bars your way" in told[-1], told[-1]
+        assert stored()["simulation_state"]["combat_state"]["current_actor_id"] == "player"  # the hero chooses first
         hunger, calls = stored()["simulation_state"]["survival"]["hunger"], len(model.calls)
         turn("I attack the Echo Wolf.")
-        assert "The fight begins: you against the Echo Wolf." in told[-1], told[-1]
+        assert "You hit the Echo Wolf" in told[-1] or "You miss the Echo Wolf" in told[-1], told[-1]
         combat = stored()["simulation_state"]["combat_state"]
         assert combat["active"] is True and combat["current_actor_id"] == "player"
         turn("I attack the Echo Wolf.")
@@ -448,5 +460,15 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert not (stored()["runtime_state"].get("combat_state") or {}).get("active")
         # The combat rules decide a blow at a creature and the narrator alone tells it: no other model call.
         assert model.calls[calls:] == [], model.calls[calls:]
+        # The world's clock runs from the first turn: Aurelia's creatures make its roads a growing danger (RQ-4.2).
+        clock = stored()["simulation_state"]["causal_world_runtime"]
+        # Not every turn ticks it yet: fast dialogue and fallback answers skip the advance until RQ-1.4 makes the
+        # world tick a step of every turn.
+        assert clock["last_tick"] >= 1
+        assert {row["pressure_id"] for row in clock["pressure_plan"]["pressures"]} >= {"pressure:echo-beasts"}  # its author's
+        # Each tick left an event; the campaign keeps the most recent of them (F2: causal_runtime.MAX_KEPT_EVENTS).
+        from app.apps.rpg.world.causal_runtime import MAX_KEPT_EVENTS
+
+        assert min(clock["last_tick"], MAX_KEPT_EVENTS) <= len(clock["events"]) <= MAX_KEPT_EVENTS
     finally:
         job_store.reset_default_job_store_factory_for_tests()

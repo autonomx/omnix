@@ -14,6 +14,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.genesis.forge.world_forge_contract import build_campaign_topic_graph
 
 from .authoring_presentations import (
+    ENTRY_LISTS,
     PIPELINE_CATEGORIES as _PIPELINE_CATEGORIES,
     SYSTEM_SECTIONS as _SYSTEM_SECTIONS,
     entity_card,
@@ -28,26 +29,6 @@ from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 from .world_bundle import RESERVED_WORLD_METADATA_KEYS
 
-_ENTITY_KEYS = (
-    "entities",
-    "regions",
-    "areas",
-    "points_of_interest",
-    "locations",
-    "characters",
-    "npcs",
-    "races",
-    "classes",
-    "factions",
-    "monsters",
-    "items",
-    "spells",
-    "feats",
-    "quests",
-    "encounter_seeds",
-    "one_shots",
-    "opening_scenarios",
-)
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -220,7 +201,7 @@ def _active_world_topic_progresses(
 def _topic_entity_rows(content: Mapping[str, Any]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     rows: list[dict[str, Any]] = []
-    for key in _ENTITY_KEYS:
+    for key in ENTRY_LISTS:
         for row in _rows(content.get(key)):
             identity = _text(
                 row.get("id")
@@ -328,6 +309,12 @@ def _system_status(section_id: str, detail: Mapping[str, Any]) -> tuple[str, int
     if section_id == "validation":
         releases = list(detail.get("releases") or [])
         return ("complete" if releases else "waiting"), len(releases)
+    if section_id == "play":  # how the latest revision plays: the sections its world wrote (RQ-4.1)
+        revisions = list(detail.get("revisions") or [])
+        if not revisions:
+            return "waiting", 0
+        sources = _record(_record(revisions[0]).get("play_sections")).values()
+        return "complete", sum(1 for source in sources if source == "authored")
     return "empty", 0
 
 

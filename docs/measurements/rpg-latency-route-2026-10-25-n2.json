@@ -1,0 +1,713 @@
+{
+  "checks": {
+    "F1_complete_p50_ms": {
+      "arrive": 20903.1,
+      "buy": 7598.2,
+      "fight": 13644.4,
+      "look": 13932.1,
+      "question": 2941.7,
+      "status": 167.1,
+      "tactical_move": 176.6,
+      "wait": 11285.7
+    },
+    "F1_complete_p95_ms": {
+      "arrive": 22634.4,
+      "buy": 12716.8,
+      "fight": 34709.7,
+      "look": 15613.0,
+      "question": 3248.8,
+      "status": 175.0,
+      "tactical_move": 184.4,
+      "wait": 12069.4
+    },
+    "F1_first_narration_p95_ms": {
+      "arrive": 9968.1,
+      "buy": 6700.6,
+      "fight": 16239.2,
+      "look": 12151.2,
+      "question": null,
+      "status": null,
+      "tactical_move": null,
+      "wait": 7646.6
+    },
+    "F3_deterministic_turns_with_a_call": 2,
+    "F3_max_calls_per_turn": 2,
+    "F3_turns_with_at_most_one_call": 0.938,
+    "targets": {
+      "F3": ">= 80% of turns at most one call; deterministic turns none; no turn more than two",
+      "complete": "p50 <= 6 s, p95 <= 10 s",
+      "deterministic": "status, equip, inventory, wait <= 500 ms complete, no model call",
+      "first_narration_p95": "<= 2.5 s",
+      "outcome_p95": "<= 300 ms tactical moves and attacks; <= 1.0 s other grammar-parsed and structured; <= 3.0 s with an intent call"
+    }
+  },
+  "classes": {
+    "arrive": {
+      "complete_ms": {
+        "max": 22634.4,
+        "n": 2,
+        "p50": 20903.1,
+        "p95": 22634.4
+      },
+      "first_narration_ms": {
+        "max": 9968.1,
+        "n": 2,
+        "p50": 9948.5,
+        "p95": 9968.1
+      },
+      "first_narration_published": 2,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 2,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 22367.1,
+        "n": 2,
+        "p50": 20633.8,
+        "p95": 22367.1
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 93.3,
+        "n": 2,
+        "p50": 87.2,
+        "p95": 93.3
+      },
+      "outcome_visible_ms": {
+        "max": 22634.4,
+        "n": 2,
+        "p50": 20903.1,
+        "p95": 22634.4
+      },
+      "overhead_ms": {
+        "max": 269.3,
+        "n": 2,
+        "p50": 267.3,
+        "p95": 269.3
+      },
+      "runs": 2
+    },
+    "buy": {
+      "complete_ms": {
+        "max": 12716.8,
+        "n": 2,
+        "p50": 7598.2,
+        "p95": 12716.8
+      },
+      "first_narration_ms": {
+        "max": 6700.6,
+        "n": 2,
+        "p50": 4970.8,
+        "p95": 6700.6
+      },
+      "first_narration_published": 2,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 2,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 12477.6,
+        "n": 2,
+        "p50": 7351.4,
+        "p95": 12477.6
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 78.2,
+        "n": 2,
+        "p50": 75.3,
+        "p95": 78.2
+      },
+      "outcome_visible_ms": {
+        "max": 12716.8,
+        "n": 2,
+        "p50": 7598.2,
+        "p95": 12716.8
+      },
+      "overhead_ms": {
+        "max": 246.8,
+        "n": 2,
+        "p50": 239.2,
+        "p95": 246.8
+      },
+      "runs": 2
+    },
+    "fight": {
+      "complete_ms": {
+        "max": 34709.7,
+        "n": 2,
+        "p50": 13644.4,
+        "p95": 34709.7
+      },
+      "first_narration_ms": {
+        "max": 16239.2,
+        "n": 2,
+        "p50": 9725.7,
+        "p95": 16239.2
+      },
+      "first_narration_published": 2,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 2.0,
+        "n": 2,
+        "p50": 1.0,
+        "p95": 2.0
+      },
+      "model_ms": {
+        "max": 34426.2,
+        "n": 2,
+        "p50": 13340.1,
+        "p95": 34426.2
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 113.7,
+        "n": 2,
+        "p50": 102.1,
+        "p95": 113.7
+      },
+      "outcome_visible_ms": {
+        "max": 34709.7,
+        "n": 2,
+        "p50": 13644.4,
+        "p95": 34709.7
+      },
+      "overhead_ms": {
+        "max": 304.3,
+        "n": 2,
+        "p50": 283.5,
+        "p95": 304.3
+      },
+      "runs": 2
+    },
+    "look": {
+      "complete_ms": {
+        "max": 15613.0,
+        "n": 2,
+        "p50": 13932.1,
+        "p95": 15613.0
+      },
+      "first_narration_ms": {
+        "max": 12151.2,
+        "n": 2,
+        "p50": 6997.3,
+        "p95": 12151.2
+      },
+      "first_narration_published": 2,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 2,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 15361.8,
+        "n": 2,
+        "p50": 13666.4,
+        "p95": 15361.8
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 96.3,
+        "n": 2,
+        "p50": 87.1,
+        "p95": 96.3
+      },
+      "outcome_visible_ms": {
+        "max": 15613.0,
+        "n": 2,
+        "p50": 13932.1,
+        "p95": 15613.0
+      },
+      "overhead_ms": {
+        "max": 265.7,
+        "n": 2,
+        "p50": 251.2,
+        "p95": 265.7
+      },
+      "runs": 2
+    },
+    "question": {
+      "complete_ms": {
+        "max": 3248.8,
+        "n": 2,
+        "p50": 2941.7,
+        "p95": 3248.8
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 2,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 3063.4,
+        "n": 2,
+        "p50": 2804.1,
+        "p95": 3063.4
+      },
+      "model_roles": [
+        "unscripted"
+      ],
+      "outcome_known_ms": {
+        "max": 3191.2,
+        "n": 2,
+        "p50": 2886.6,
+        "p95": 3191.2
+      },
+      "outcome_visible_ms": {
+        "max": 3248.8,
+        "n": 2,
+        "p50": 2941.7,
+        "p95": 3248.8
+      },
+      "overhead_ms": {
+        "max": 185.4,
+        "n": 2,
+        "p50": 137.6,
+        "p95": 185.4
+      },
+      "runs": 2
+    },
+    "status": {
+      "complete_ms": {
+        "max": 175.0,
+        "n": 2,
+        "p50": 167.1,
+        "p95": 175.0
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 0.0,
+        "n": 2,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_ms": {
+        "max": 0.0,
+        "n": 2,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_roles": [],
+      "outcome_known_ms": {
+        "max": 107.2,
+        "n": 2,
+        "p50": 106.1,
+        "p95": 107.2
+      },
+      "outcome_visible_ms": {
+        "max": 175.0,
+        "n": 2,
+        "p50": 167.1,
+        "p95": 175.0
+      },
+      "overhead_ms": {
+        "max": 175.0,
+        "n": 2,
+        "p50": 167.1,
+        "p95": 175.0
+      },
+      "runs": 2
+    },
+    "tactical_move": {
+      "complete_ms": {
+        "max": 184.4,
+        "n": 2,
+        "p50": 176.6,
+        "p95": 184.4
+      },
+      "first_narration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "first_narration_published": 0,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 0.0,
+        "n": 2,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_ms": {
+        "max": 0.0,
+        "n": 2,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "model_roles": [],
+      "outcome_known_ms": {
+        "max": 184.4,
+        "n": 2,
+        "p50": 176.6,
+        "p95": 184.4
+      },
+      "outcome_visible_ms": {
+        "max": 184.4,
+        "n": 2,
+        "p50": 176.6,
+        "p95": 184.4
+      },
+      "overhead_ms": {
+        "max": 184.4,
+        "n": 2,
+        "p50": 176.6,
+        "p95": 184.4
+      },
+      "runs": 2
+    },
+    "wait": {
+      "complete_ms": {
+        "max": 12069.4,
+        "n": 2,
+        "p50": 11285.7,
+        "p95": 12069.4
+      },
+      "first_narration_ms": {
+        "max": 7646.6,
+        "n": 2,
+        "p50": 6877.8,
+        "p95": 7646.6
+      },
+      "first_narration_published": 2,
+      "http_statuses": [
+        200
+      ],
+      "model_calls": {
+        "max": 1.0,
+        "n": 2,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "model_ms": {
+        "max": 11761.7,
+        "n": 2,
+        "p50": 10992.1,
+        "p95": 11761.7
+      },
+      "model_roles": [
+        "narrative_writer"
+      ],
+      "outcome_known_ms": {
+        "max": 110.2,
+        "n": 2,
+        "p50": 97.2,
+        "p95": 110.2
+      },
+      "outcome_visible_ms": {
+        "max": 12069.4,
+        "n": 2,
+        "p50": 11285.7,
+        "p95": 12069.4
+      },
+      "overhead_ms": {
+        "max": 307.7,
+        "n": 2,
+        "p50": 293.6,
+        "p95": 307.7
+      },
+      "runs": 2
+    }
+  },
+  "database": "omnix_rq_main",
+  "elapsed_s": 244.8,
+  "measured_on": "2026-10-24",
+  "measurement": "RPG turn latency per turn class (RQ-0.5)",
+  "note": "Preliminary, 2 runs per class (F1 needs 20), Claude Haiku through the Claude CLI, before RQ-6.1 made wait the game's own line (it made one narrative-writer call here). One fight turn's writer was asked twice.",
+  "notes": [
+    "outcome_visible_ms equals complete_ms: today the outcome reaches the play screen with the turn's response.",
+    "first_narration_ms is when the narrative writer first publishes a non-empty draft on the server; the play screen polls GET .../turn-draft, which adds up to its poll interval.",
+    "Each run starts from the class's scene snapshot, restored by an out-of-turn save."
+  ],
+  "provider": {
+    "model": "haiku",
+    "provider": "claude_cli",
+    "resolved_models": [
+      "claude-haiku-5-5",
+      "haiku"
+    ]
+  },
+  "revision": "4fe23463a6",
+  "rows": {
+    "arrive": [
+      {
+        "complete_ms": 22634.4,
+        "first_narration_ms": 9968.1,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 22367.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 93.3,
+        "outcome_visible_ms": 22634.4,
+        "overhead_ms": 267.3
+      },
+      {
+        "complete_ms": 20903.1,
+        "first_narration_ms": 9948.5,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 20633.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 87.2,
+        "outcome_visible_ms": 20903.1,
+        "overhead_ms": 269.3
+      }
+    ],
+    "buy": [
+      {
+        "complete_ms": 12716.8,
+        "first_narration_ms": 6700.6,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 12477.6,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 75.3,
+        "outcome_visible_ms": 12716.8,
+        "overhead_ms": 239.2
+      },
+      {
+        "complete_ms": 7598.2,
+        "first_narration_ms": 4970.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 7351.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 78.2,
+        "outcome_visible_ms": 7598.2,
+        "overhead_ms": 246.8
+      }
+    ],
+    "fight": [
+      {
+        "complete_ms": 34709.7,
+        "first_narration_ms": 16239.2,
+        "http": 200,
+        "model_calls": 2,
+        "model_ms": 34426.2,
+        "model_roles": [
+          "narrative_writer",
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 102.1,
+        "outcome_visible_ms": 34709.7,
+        "overhead_ms": 283.5
+      },
+      {
+        "complete_ms": 13644.4,
+        "first_narration_ms": 9725.7,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 13340.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 113.7,
+        "outcome_visible_ms": 13644.4,
+        "overhead_ms": 304.3
+      }
+    ],
+    "look": [
+      {
+        "complete_ms": 15613.0,
+        "first_narration_ms": 12151.2,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 15361.8,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 87.1,
+        "outcome_visible_ms": 15613.0,
+        "overhead_ms": 251.2
+      },
+      {
+        "complete_ms": 13932.1,
+        "first_narration_ms": 6997.3,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 13666.4,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 96.3,
+        "outcome_visible_ms": 13932.1,
+        "overhead_ms": 265.7
+      }
+    ],
+    "question": [
+      {
+        "complete_ms": 3248.8,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 3063.4,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 3191.2,
+        "outcome_visible_ms": 3248.8,
+        "overhead_ms": 185.4
+      },
+      {
+        "complete_ms": 2941.7,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 2804.1,
+        "model_roles": [
+          "unscripted"
+        ],
+        "outcome_known_ms": 2886.6,
+        "outcome_visible_ms": 2941.7,
+        "overhead_ms": 137.6
+      }
+    ],
+    "status": [
+      {
+        "complete_ms": 167.1,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 107.2,
+        "outcome_visible_ms": 167.1,
+        "overhead_ms": 167.1
+      },
+      {
+        "complete_ms": 175.0,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 106.1,
+        "outcome_visible_ms": 175.0,
+        "overhead_ms": 175.0
+      }
+    ],
+    "tactical_move": [
+      {
+        "complete_ms": 184.4,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 184.4,
+        "outcome_visible_ms": 184.4,
+        "overhead_ms": 184.4
+      },
+      {
+        "complete_ms": 176.6,
+        "first_narration_ms": null,
+        "http": 200,
+        "model_calls": 0,
+        "model_ms": 0,
+        "model_roles": [],
+        "outcome_known_ms": 176.6,
+        "outcome_visible_ms": 176.6,
+        "overhead_ms": 176.6
+      }
+    ],
+    "wait": [
+      {
+        "complete_ms": 12069.4,
+        "first_narration_ms": 7646.6,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 11761.7,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 97.2,
+        "outcome_visible_ms": 12069.4,
+        "overhead_ms": 307.7
+      },
+      {
+        "complete_ms": 11285.7,
+        "first_narration_ms": 6877.8,
+        "http": 200,
+        "model_calls": 1,
+        "model_ms": 10992.1,
+        "model_roles": [
+          "narrative_writer"
+        ],
+        "outcome_known_ms": 110.2,
+        "outcome_visible_ms": 11285.7,
+        "overhead_ms": 293.6
+      }
+    ]
+  },
+  "runs_per_class": 2,
+  "scenes": {
+    "fight": {
+      "combat_active": true,
+      "location": "location:aurelia:arrival-grove"
+    },
+    "grove": {
+      "combat_active": false,
+      "location": "location:aurelia:arrival-grove"
+    },
+    "village": {
+      "combat_active": false,
+      "location": "location:aurelia:starfall-village"
+    }
+  },
+  "schema_version": 1,
+  "world": "aurelia"
+}

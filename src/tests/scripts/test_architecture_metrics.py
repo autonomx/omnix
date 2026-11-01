@@ -21,6 +21,7 @@ spec.loader.exec_module(metrics)
 config = metrics.load_layers(SCRIPTS.parent / "resources/architecture/layers.toml")
 WEB = "web/src/"
 APP = "src/app/"
+RPG = APP + "apps/rpg/"
 
 
 def observed(sources, *, openapi=None):
@@ -123,6 +124,21 @@ CASES = [
                                       '"omnix_jobs": {"owner": "kernel", "created_by": "0002_more"}}}'}, 1),
     ("historical_owner_map_additions", {"resources/architecture/historical-table-owners.json":
                                         '{"frozen_after": "0001_platform", "tables": {"omnix_a": {"owner": "kernel", "created_by": "0002_new"}}}'}, 1),
+    # RPG production roadmap (RQ-0.1); scripts/rpg_scorecard.py and its tests hold the detail.
+    ("rpg_state_string_key_reads", {RPG + "session/a.py": "a = session.simulation_state['time']\nb = runtime_state.get('k')\nsimulation_state['w'] = 1"}, 2),
+    ("rpg_save_call_sites", {RPG + "session/a.py": "def save_session(s):\n    pass\nstore.save_session(s)\nsave_runtime_session(s)"}, 2),
+    ("rpg_dict_str_any", {RPG + "session/a.py": "a: dict[str, Any]\nb: Dict[str,Any]\nc: dict[str, int]"}, 2),
+    ("rpg_deepcopy_calls", {RPG + "session/a.py": "import copy\nfrom copy import deepcopy\ncopy.deepcopy(a)\ndeepcopy(b)"}, 2),
+    ("rpg_broad_excepts", {RPG + "session/a.py": "try:\n    x()\nexcept (ValueError, Exception):\n    raise\nexcept ValueError:\n    raise"}, 1),
+    ("rpg_world_specific_names", {RPG + "rules/a.py": "NAME = 'npc:Bran at the Rusty Flagon'\nOTHER = 'Brandon'",
+                                  RPG + "world/map_fixtures.py": "NAME = 'Bran'", RPG + "genesis/a.py": "NAME = 'Bran'"}, 2),
+    ("rpg_word_list_constants", {RPG + "rules/a.py": "STOP_WORDS = {'a'}\n_TRADE_VERBS = ('buy',)\ndef f():\n    LOCAL_WORDS = 1"}, 2),
+    ("rpg_nondeterminism_calls", {RPG + "edge/a.py": "import random\nimport uuid\nfrom datetime import datetime\nrandom.random()\nrandom.Random(7)\nuuid.uuid4()\ndatetime.now()"}, 3),
+    ("rpg_contract_bypass_imports", {RPG + "session/a.py": "from app.apps.rpg.world.contracts import Port\nfrom app.apps.rpg.world.graph import thing\nimport app.apps.rpg.session.b",
+                                     RPG + "world/contracts.py": "", RPG + "world/graph.py": "", RPG + "session/b.py": ""}, 1),
+    ("rpg_python_files_over_1200_lines", {RPG + "session/a.py": "# source\n" * 1201, RPG + "session/b.py": "# source\n" * 1200}, 1),
+    ("rpg_web_files_over_600_lines", {WEB + "features/rpg/Big.tsx": "x;\n" * 601, WEB + "features/rpg/Big.test.tsx": "x;\n" * 601,
+                                      WEB + "features/rpg/Small.ts": "x;\n" * 600}, 1),
 ]
 
 
@@ -204,6 +220,8 @@ def test_scorecard_covers_every_roadmap_metric():
     platform = (SCRIPTS.parent / "docs/PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.md").read_text(encoding="utf-8")
     for block in re.findall(r"- \*\*New metrics:\*\*\n((?:  - `[^`]+`.*\n)+)", platform):
         expected |= set(re.findall(r"  - `([^`]+)`", block))
+    # The RPG production roadmap (RQ-0.1) publishes its ratchets in its scorecard script.
+    expected |= set(metrics.RPG_RATCHETS)
     result = observed({})
     assert set(result["metrics"]) == expected
     exercised = {case[0] for case in CASES} | metrics.RUNTIME_METRICS | {"web_openapi_path_coverage_pct"}

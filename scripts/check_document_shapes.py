@@ -32,7 +32,6 @@ DOCUMENT_SCHEMA_OWNERS = (
     "app.platform.chat.legacy_session_api",
     "app.providers.persistence.model_refresh",
     "app.platform.research.persistence.source_store",
-    "app.apps.rpg.world.persistence.narrative_npc_stores",
     "app.apps.trading.repositories",
 )
 

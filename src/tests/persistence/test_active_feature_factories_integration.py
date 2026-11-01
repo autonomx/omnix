@@ -253,18 +253,6 @@ snapshot = refresh_store.record_snapshot(
 )
 assert refresh_store.latest_snapshot().id == snapshot.id
 
-from app.apps.rpg.world.npc_evolution import profile_store
-runtime_state = {
-    "npc_evolution": {
-        "arcs": {"npc:bran": {"arc_stage": "warming", "axes": {"trust": 1}}},
-        "signals": [],
-    }
-}
-persisted = profile_store.persist_npc_evolution_profiles(runtime_state=runtime_state)
-assert persisted["ok"] is True
-loaded = profile_store.load_npc_evolution_profiles_for_runtime(npc_ids=["npc:bran"])
-assert loaded["loaded_count"] == 1, (persisted, loaded)
-
 from app.platform.chat import compaction, history_search
 from app.platform.chat.models import ChatMessage, ChatSession
 from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter

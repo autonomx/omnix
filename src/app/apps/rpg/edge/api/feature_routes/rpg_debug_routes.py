@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from time import perf_counter
 from typing import Any, Callable
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 
 from app.apps.rpg.foundation.debug_logging import (
     configure_rpg_debug_logging,
@@ -17,6 +17,7 @@ from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRe
 from app.apps.rpg.edge.api.route_contracts import (
     RpgDebugClientEventResponse,
     RpgDebugLogStatusResponse,
+    RpgOperationsResponse,
 )
 from app.apps.rpg.edge.api.web_contracts import documented
 
@@ -44,6 +45,13 @@ def register_rpg_debug_routes(router: APIRouter, state) -> None:
     @router.get("/api/rpg/debug/log-status", tags=["rpg-debug"], responses=documented(RpgDebugLogStatusResponse))
     def rpg_debug_status() -> dict[str, Any]:
         return {"ok": True, **rpg_debug_log_status()}
+
+    @router.get("/api/rpg/operations", tags=["rpg-debug"], responses=documented(RpgOperationsResponse))
+    def rpg_operations(days: int = Query(default=14, ge=1, le=90)) -> dict[str, Any]:
+        """The workspace's turns by day (RQ-8.4): failure and degraded rates, latency per turn class, model calls."""
+        from app.apps.rpg.session.persistence.turn_metrics import operations
+
+        return {"ok": True, "days": operations(days)}
 
     @router.post("/api/rpg/debug/event", tags=["rpg-debug"], responses=documented(RpgDebugClientEventResponse))
     def rpg_debug_client_event(request: Request, request_body: RpgDebugClientEventRequestBody) -> dict[str, Any]:

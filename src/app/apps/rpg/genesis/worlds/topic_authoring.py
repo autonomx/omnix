@@ -121,7 +121,17 @@ def _assert_writable_topic(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     world = require_world_writable(work, context, world_id)
     current_revision = int(world["draft_revision"])
-    if current_revision != int(expected_draft_revision):
+    topic = work.world_generation.get_topic(
+        context,
+        world_id=world_id,
+        topic_id=topic_id,
+    )
+    # The draft the topic was read at: the world's; for a world with no generation run, also the topic's own (one
+    # installed from a bundle advances its draft on adoption and publication, its topics stay at theirs).
+    accepted = {current_revision}
+    if not work.world_library.list_generation_runs(context, world_id=world_id, limit=1):
+        accepted.add(int((topic or {}).get("draft_revision") or 0))
+    if int(expected_draft_revision) not in accepted:
         raise ValueError(
             "world_draft_revision_conflict:"
             f"expected={expected_draft_revision}:current={current_revision}"
@@ -134,11 +144,6 @@ def _assert_writable_topic(
     ).fetchone()
     if active is not None:
         raise ValueError(f"world_generation_active:{world_id}:{active[0]}")
-    topic = work.world_generation.get_topic(
-        context,
-        world_id=world_id,
-        topic_id=topic_id,
-    )
     if topic is None:
         raise KeyError(f"world_topic_not_found:{world_id}:{topic_id}")
     if str(topic.get("content_hash") or "") != str(expected_content_hash or ""):

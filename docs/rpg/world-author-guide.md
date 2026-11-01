@@ -1,0 +1,155 @@
+# Writing worlds
+
+Every campaign plays in a world. A world is its lore (places, people, groups, creatures, items, quests and history),
+its maps and openings, and, optionally, how it plays: who sells what, where people are through the day, what they
+know, the troubles its clock moves, and how its creatures fight. Omnix infers what a world does not say from its
+lore. Writing it down makes the world play the way you mean it to.
+
+Worlds live in the library: **RPG → Worlds & Campaigns**.
+
+## Making a world
+
+- **Generate one.** Create a world, describe it and approve its genre profile; **World Generation** writes its lore
+  topic by topic with the configured model (World Forge). Review the candidates, accept them, and publish. A
+  campaign started from the New Campaign wizard with World Forge on goes through these same steps itself.
+- **Import one.** A world bundle (`.omnix-world.zip`) carries a whole world, its maps and openings. Import it from
+  the library, or adopt one from the community catalog (`autonomx/omnix-worlds`). An imported world from someone
+  else is adopted before it can be launched.
+- **Write one by hand.** The bundled worlds are written as readable sources: The Market Road's is
+  `resources/examples/rpg/world-bundles/the-market-road/world.source.json`, compiled into a bundle by its
+  `materialize.py`. Copying it is the quickest way to start a world of your own in a file.
+
+## The world editor
+
+Open a world from the library. Its sections:
+
+| Section | What it holds |
+|---|---|
+| Overview | The world's title, summary, genre and tone |
+| World Generation | Each lore topic's generation, review and publication |
+| Images | Portraits, place and item art |
+| World / Lore topics | Regions, places, people, groups, creatures, items, history and the rest, entity by entity |
+| Map | The world map and its places |
+| Scenarios | Openings: where a campaign starts, who is there, what the hero carries |
+| How It Plays | Economy, routines, knowledge, pressures and bestiary (below) |
+| Map Blueprints | The grid maps of places, for fights and moving around |
+| Validation, Releases, Revision History | What publication checked, each certified release, earlier revisions |
+
+A person in the lore may list **aliases**: what else they are called ("the barkeep", "the bartender" for an
+innkeeper). Players can name them by any of these, as by their name or their role ("the innkeeper"). A place's
+aliases work the same way.
+
+A campaign plays from a published, certified release of the world. Editing the world changes its draft, and
+campaigns started later play the new release. Campaigns already under way keep the release they started with.
+
+## How It Plays
+
+Each of the six sections is optional. A section you leave empty is inferred from the lore when a campaign starts,
+and the editor's tabs and the campaign setup say which sections the world wrote ("Written") and which come from its
+lore ("From lore").
+
+Start with **Draft empty sections from lore**: World Forge writes each empty section from what the lore says (sellers
+by their roles, people at their places, what they say openly and what they keep, the world's pressures, creature
+numbers by threat). Read it, correct it, then **Save draft**. The draft is kept with the world; **Publish** writes it
+into a new revision and pins the world's openings to it.
+
+People, places, items, creatures, regions and quests are chosen from the world's own. A draft that names something
+the world does not have is saved, and listed in red ("Routines names a person the world does not have"), but it
+cannot be published until that is fixed.
+
+### Economy
+
+Each **seller** is a person of the world, at a place (by default, where they are found). Each **offer** has a name,
+a service (goods, lodging, a meal, a drink, repair or information), a price in gold, silver and copper (never free),
+and optionally a stock and how many it restocks each day. Goods name the item sold. **Buys back** lists the item
+types the seller buys (a seller always buys back what they sell; one that lists none buys anything) and the share of
+the price paid (0.5 is half). A sale that names no buyer goes to the one seller there who deals in the thing; with
+two who would buy it, the hero is asked which.
+
+Gear a world sells or gives is gear the hero can wear and fight with when its item says how: an item's `equipment`
+holds its `slot` (`main_hand`, `off_hand`, `body`, `head`, `cloak`, `ring`) and its `stats` (`damage_min`,
+`damage_max`, `accuracy_bonus`, `armor`). Armour takes its value off each blow, so a little goes a long way. An item
+without it is worn by what its name or type says (a "dagger", "armor"), at the engine's numbers for that kind.
+
+### Routines
+
+Each person's **day** is a list of hours: from which hour to which (0 to 24), where, and doing what. Between those
+hours they are elsewhere. **Goals** are what they are after, each with a priority (5 leads), the topics that touch it
+and, if it takes them somewhere, the place. A goal leads what they say and what they offer.
+
+### Knowledge
+
+What each person knows, as **facts**: the text, how they share it (freely, for a price, when trusted, or never), the
+price or the trust it needs (0 to 100), and its topics. Asked about a topic, they tell what they would; a secret
+("never") is not given away.
+
+### Pressures
+
+The troubles the world's clock moves: a name, a description, where it bears (a region or a place), what it wears
+down (who governs, trade, resources, or the people), its severity (0 to 100) and trend, and the levels at which it
+boils over or counts as resolved. **Levers** are what the hero can do about it: defeating a creature
+(`defeat:<creature>`, for each one felled) or finishing a quest (`quest:<quest>`), each easing or worsening it by an
+amount. A pressure that runs high makes travel in its region dangerous and raises side quests. The world answers its
+own troubles: a rising pressure that boils over is held in check for a while, eases until it is ten below the level at
+which it boiled over, and then stirs again, so a long campaign keeps turning; the hero's levers push it as before.
+
+### Bestiary
+
+For each creature: its **numbers** (level, health, defense, damage range, accuracy, experience), its **behaviour**
+(fights, flees when hurt, calls allies, guards, ambushes; or as its lore tells), and its **drops** (an item, the
+chance from 0 to 1, how many). A creature without numbers fights at the numbers its threat rating gives it, so a
+world whose creatures stop at a low level leaves a grown hero nothing to fear: give the deeper places stronger ones.
+
+### Quests
+
+What each quest takes, step by step (see Quests below): pick the quest, who gives it and an optional deadline, then
+its steps. Each step has a summary (what the hero is told) and one or more ways to do it; more than one way is a
+branch. A way is all of its conditions, each chosen by what it asks (a place to reach, a person to talk to, optionally
+about some words, an item to hold, a creature to defeat and how many, a check to pass, a companion to have), and may
+say what came of it ("The gate becomes a guarded bridge"), told when the hero takes that way. A quest left out is
+done by reaching its places. World Forge drafts no steps: they are yours.
+
+## Quests
+
+A quest's **steps** are done in order. Each step is a set of conditions that must all hold, or `any_of` branches
+where either way completes it. A condition is `reach` a place, `talk` to someone (optionally `about` topics),
+`hold` an item, `defeat` a creature (with a `count`), pass a `check` (its kind: persuade, intimidate, deceive,
+haggle, sneak, climb, pick_lock, recall_lore, search, notice), or have a `companion` (someone, or `anyone`). A way
+written `{"all_of": [...], "told": "..."}` among the `any_of` says what came of it. A quest with `deadline_hours` fails
+when that much time passes after it is taken up, and its giver trusts the hero less. A finale (`"tier": "finale"`) is
+offered only when someone is asked about it by its name. For example, from The Market Road:
+
+```json
+{
+  "id": "quest:market-road:tavern-rumor",
+  "title": "Rumor at the Rusty Flagon",
+  "giver_id": "npc:bran",
+  "steps": [
+    {"id": "ask", "summary": "Ask Bran or Mira which rumor is true",
+     "any_of": [{"talk": "npc:bran", "about": ["rumor", "story"]},
+                {"talk": "npc:mira", "about": ["rumor", "story"]}]}
+  ]
+}
+```
+
+A quest without steps advances as the hero reaches its places, and is done on reaching the last: write steps for
+any quest whose objective asks more than travel (a fight, a choice, a word with someone).
+
+Every place should be reachable by your roads; a place none reaches is joined to them at launch, from its region's
+capital, by a road of three hours.
+
+## In a world source file
+
+A hand-written source carries the same sections in its canon: `economy.providers`, `routines`, `knowledge`,
+`pressures`, and `bestiary` rows with `stats`, `behaviour` and `loot` beside their lore, using the same fields as the
+editor's forms. Publication checks them; `the-market-road/world.source.json` uses every one of them. Aurelia's bundle
+shows the same for a shared world: its people, items, gear and quest rewards are its own topics, as the editor edits
+them (a publication carries the editor's changes into its canon), and `lore-additions.json` (the game master's
+palette, and the maps of places that had none) and `play-sections.json` are written in by `author_play_sections.py`,
+through the world library's own publication.
+
+## Sharing
+
+Export a world as a bundle from the library to give it to someone. A bundle carries the world's published
+revisions, maps, openings and images; publish your How It Plays draft before exporting, so the sections travel in
+the revision.

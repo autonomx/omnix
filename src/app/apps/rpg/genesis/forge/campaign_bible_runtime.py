@@ -61,6 +61,20 @@ def _portable_snapshot(
     )
 
 
+def postgres_snapshot_of(record: Mapping[str, Any]) -> CampaignBibleSnapshot:
+    """The snapshot of a stored campaign bible row, as PostgreSQL's authority."""
+    snapshot = CampaignBibleSnapshot.from_record(record)
+    return CampaignBibleSnapshot(
+        campaign_id=snapshot.campaign_id,
+        revision=snapshot.revision,
+        content_hash=snapshot.content_hash,
+        document=snapshot.document,
+        provenance={**dict(snapshot.provenance), "runtime_source": "postgresql"},
+        consistency_report=snapshot.consistency_report,
+        completeness=snapshot.completeness,
+    )
+
+
 def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
     try:
         from app.security.tenant_context import current_tenant
@@ -70,16 +84,7 @@ def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
             record = work.campaign_bibles.get(current_tenant(), campaign_id)
             work.rollback()
         if record is not None:
-            snapshot = CampaignBibleSnapshot.from_record(record)
-            return CampaignBibleSnapshot(
-                campaign_id=snapshot.campaign_id,
-                revision=snapshot.revision,
-                content_hash=snapshot.content_hash,
-                document=snapshot.document,
-                provenance={**dict(snapshot.provenance), "runtime_source": "postgresql"},
-                consistency_report=snapshot.consistency_report,
-                completeness=snapshot.completeness,
-            )
+            return postgres_snapshot_of(record)
     except Exception:
         logger.debug("suppressed error in %s", "_postgres_snapshot", exc_info=True)
         return None

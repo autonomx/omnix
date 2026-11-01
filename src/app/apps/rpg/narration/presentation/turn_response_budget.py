@@ -6,6 +6,10 @@ from copy import deepcopy
 from typing import Any
 
 _DEFAULT_MAX_BYTES = 50_000
+# What a turn's reply carries that the play screen does not read: dropped first when the reply is over its budget (the
+# playtest: a journey's reply, 52 KB, fell to the last-resort fallback and lost its outcome: no card, no suggestions).
+_UNREAD_WHEN_LARGE = ("narrative_projections", "canonical_narrative_response", "narrative_production_certification",
+                      "narrative_publisher_telemetry", "narrative_engine_shadow")
 _SHORTENED_TEXT = (
     "The turn completed, but its presentation was shortened to keep the response safe."
 )
@@ -60,6 +64,10 @@ def _compact_payload(
     max_bytes: int,
 ) -> dict[str, Any]:
     compacted = deepcopy(payload)
+    for key in _UNREAD_WHEN_LARGE:
+        compacted.pop(key, None)
+    if isinstance(compacted.get("outcome"), dict):
+        compacted["outcome"] = _compact_outcome(compacted["outcome"])
     for key in (
         "session_id",
         "submission_id",
@@ -135,6 +143,7 @@ def _fallback_payload(
         },
         "response": text,
         "content": text,
+        "outcome": _compact_outcome(payload.get("outcome")),
         "state": _compact_state(payload.get("state")),
         "timing": _numeric_dict(payload.get("timing"), max_items=12),
         "response_budget": {
@@ -182,6 +191,27 @@ def _absolute_fallback(
             },
         }
     )
+
+
+def _compact_outcome(value: Any) -> dict[str, Any]:
+    """A turn's outcome as the play screen reads it: its presentation (the card's facts, the changed sections, the
+    suggestions and choices) and model calls whole, without the changes it applied (a change's own state, a fight's
+    or a map's, is the bulk of an outcome; the screen reads the presentation, and a change is whole or absent)."""
+    outcome = _dict(value)
+    if not outcome:
+        return {}
+    presentation = _dict(outcome.get("presentation"))
+    return _drop_empty({
+        **{key: outcome.get(key) for key in ("format_version", "kind", "turn_id", "submission_id", "revision",
+                                              "document_version", "planned_action") if outcome.get(key) is not None},
+        "intent": _bounded_dict(outcome.get("intent"), max_items=8, text_bytes=256),
+        "presentation": {
+            **_bounded_dict(presentation, max_items=12, text_bytes=512),
+            **{key: presentation[key] for key in ("facts", "changed_sections", "suggestions", "choices")
+               if isinstance(presentation.get(key), list)},
+        },
+        "model_calls": _dict(outcome.get("model_calls")),
+    })
 
 
 def _compact_visible_response(value: Any) -> dict[str, Any]:

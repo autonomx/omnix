@@ -9,7 +9,6 @@ from .authority import (
     BeatKind,
     BeatPurpose,
     DeliveryMode,
-    EvidenceLifetime,
     NarrativeSignificance,
     PresentationProfile,
     VisibilityClass,
@@ -18,12 +17,6 @@ from .campaign_bible import (
     CampaignBibleEvidenceSource,
     CampaignBibleSnapshot,
     campaign_bible_evidence,
-)
-from .certification import (
-    NarrativeCertificationReport,
-    certify_delivery_equivalence,
-    certify_narrative_persistence_and_delivery,
-    certify_narrative_roundtrip,
 )
 from .contracts import (
     CanonicalNarrativeResponse,
@@ -35,93 +28,32 @@ from .contracts import (
     NarrativeBlock,
     SceneChange,
     TurnPresentationRequest,
-    ValidationIssue,
     ValidationReport,
-    canonical_json,
-    ordered_blocks,
     stable_hash,
 )
-from .delivery import (
-    InMemoryNarrativeDeliveryRepository,
-    NarrativeDeliveryAdvance,
-    NarrativeDeliveryConflict,
-    NarrativeDeliveryCoordinator,
-    NarrativeDeliveryEvent,
-    NarrativeDeliveryRecord,
-    NarrativeDeliveryRepository,
-)
-from .evidence import (
-    EvidenceAccessContext,
-    EvidenceBroker,
-    EvidenceGrantSet,
-    EvidenceQuery,
-    EvidenceRetrievalResult,
-    InMemoryEvidenceSource,
-    RetrievalTrace,
-)
-from .fixtures import bran_fixture_evidence, narrative_fixture_evidence, vexira_fixture_evidence
+from .delivery import InMemoryNarrativeDeliveryRepository, NarrativeDeliveryConflict, NarrativeDeliveryCoordinator
+from .evidence import EvidenceAccessContext, EvidenceBroker, EvidenceGrantSet, EvidenceQuery, InMemoryEvidenceSource
 from .hermes_research import (
-    HermesNarrativeResearcher,
-    HermesResearchFinding,
     HermesResearchPolicy,
     HermesResearchRequest,
     HermesResearchResult,
-    HermesResearchSource,
     normalize_hermes_research,
     run_bounded_hermes_research,
 )
 from .idempotent_service import NarrativeEngineService, NarrativeTurnIdentityConflict
 from .planner import DeterministicBeatPlanner, NarrativePlan
-from .production_path import (
-    NarrativeProductionCertification,
-    NarrativeProductionPathError,
-    certify_production_narrative_result,
-    enforce_production_narrative_result,
-    retire_legacy_presentation_ownership,
-)
-from .profiles import NarrativeProfilePolicy, adaptive_profile, profile_policy
-from .projections import (
-    canonical_consumer_bundle,
-    journal_projection,
-    legacy_response_projection,
-    recap_projection,
-    replay_projection,
-    report_projection,
-    transcript_projection,
-    tts_projection,
-)
-from .publisher_audit import PublisherOwnershipAudit, audit_publisher_ownership
-from .publisher_guard import (
-    CANONICAL_PUBLISHER,
-    LegacyNarrativePublisherError,
-    NarrativePublisherGuard,
-    NarrativePublisherTelemetry,
-    publish_canonical_bundle,
-    publisher_guard,
-)
-from .renderer import CanonicalNarrativeRenderer, RenderedNarrative, deduplicate_blocks, render_plain_text
-from .repository import (
-    InMemoryNarrativeResponseRepository,
-    NarrativeResponseConflict,
-    NarrativeResponseRepository,
-)
-from .scene_change import SceneChangeReport, detect_scene_changes
+from .projections import canonical_consumer_bundle, legacy_response_projection, transcript_projection, tts_projection
+from .renderer import CanonicalNarrativeRenderer
+from .repository import InMemoryNarrativeResponseRepository, NarrativeResponseConflict
+from .scene_change import detect_scene_changes
 from .serialization import canonical_response_from_dict
-from .service import NarrativeEngineResult
-from .validation import NarrativeRepairer, NarrativeValidator, ValidatedWriterResult, write_validate_repair
-from .world_forge import (
-    WorldForgeAudit,
-    WorldForgeIssue,
-    WorldForgeProposal,
-    apply_world_forge_proposal,
-    audit_world_forge_proposal,
-)
+from .validation import NarrativeValidator, write_validate_repair
+from .world_forge import WorldForgeProposal, apply_world_forge_proposal, audit_world_forge_proposal
 from .writer import (
     DeterministicNarrativeWriter,
     NarrativeWriter,
     StructuredNarrativeWriter,
     WriterResult,
-    parse_structured_blocks,
     writer_payload,
 )
 
@@ -129,7 +61,6 @@ __all__ = [
     "AuthorityClass",
     "BeatKind",
     "BeatPurpose",
-    "CANONICAL_PUBLISHER",
     "CampaignBibleEvidenceSource",
     "CampaignBibleSnapshot",
     "CanonicalNarrativeRenderer",
@@ -142,96 +73,46 @@ __all__ = [
     "EvidenceAccessContext",
     "EvidenceBroker",
     "EvidenceGrantSet",
-    "EvidenceLifetime",
     "EvidenceQuery",
     "EvidenceRecord",
-    "EvidenceRetrievalResult",
     "GenerationMetadata",
-    "HermesNarrativeResearcher",
-    "HermesResearchFinding",
     "HermesResearchPolicy",
     "HermesResearchRequest",
     "HermesResearchResult",
-    "HermesResearchSource",
     "InMemoryEvidenceSource",
     "InMemoryNarrativeDeliveryRepository",
     "InMemoryNarrativeResponseRepository",
-    "LegacyNarrativePublisherError",
     "NarrativeBeat",
     "NarrativeBlock",
-    "NarrativeCertificationReport",
-    "NarrativeDeliveryAdvance",
     "NarrativeDeliveryConflict",
     "NarrativeDeliveryCoordinator",
-    "NarrativeDeliveryEvent",
-    "NarrativeDeliveryRecord",
-    "NarrativeDeliveryRepository",
-    "NarrativeEngineResult",
     "NarrativeEngineService",
     "NarrativePlan",
-    "NarrativeProductionCertification",
-    "NarrativeProductionPathError",
-    "NarrativeProfilePolicy",
-    "NarrativePublisherGuard",
-    "NarrativePublisherTelemetry",
-    "NarrativeRepairer",
     "NarrativeResponseConflict",
-    "NarrativeResponseRepository",
     "NarrativeSignificance",
     "NarrativeTurnIdentityConflict",
     "NarrativeValidator",
     "NarrativeWriter",
     "PresentationProfile",
-    "PublisherOwnershipAudit",
-    "RenderedNarrative",
-    "RetrievalTrace",
     "SceneChange",
-    "SceneChangeReport",
     "StructuredNarrativeWriter",
     "TurnPresentationRequest",
-    "ValidatedWriterResult",
-    "ValidationIssue",
     "ValidationReport",
     "VisibilityClass",
-    "WorldForgeAudit",
-    "WorldForgeIssue",
     "WorldForgeProposal",
     "WriterResult",
-    "adaptive_profile",
     "apply_world_forge_proposal",
-    "audit_publisher_ownership",
     "audit_world_forge_proposal",
-    "bran_fixture_evidence",
     "campaign_bible_evidence",
     "canonical_consumer_bundle",
-    "canonical_json",
     "canonical_response_from_dict",
-    "certify_delivery_equivalence",
-    "certify_narrative_persistence_and_delivery",
-    "certify_narrative_roundtrip",
-    "certify_production_narrative_result",
-    "deduplicate_blocks",
     "detect_scene_changes",
-    "enforce_production_narrative_result",
-    "journal_projection",
     "legacy_response_projection",
-    "narrative_fixture_evidence",
     "normalize_hermes_research",
-    "ordered_blocks",
-    "parse_structured_blocks",
-    "profile_policy",
-    "publish_canonical_bundle",
-    "publisher_guard",
-    "recap_projection",
-    "render_plain_text",
-    "replay_projection",
-    "report_projection",
-    "retire_legacy_presentation_ownership",
     "run_bounded_hermes_research",
     "stable_hash",
     "transcript_projection",
     "tts_projection",
-    "vexira_fixture_evidence",
     "write_validate_repair",
     "writer_payload",
 ]

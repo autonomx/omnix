@@ -4,15 +4,16 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def npc_profile_by_id(session: dict[str, Any], npc_id: str) -> dict[str, Any]:
-    simulation = as_dict(session.get("simulation_state"))
-    runtime = as_dict(session.get("runtime_state"))
+    simulation = as_dict(_sections.simulation_state_of(session))
+    runtime = as_dict(_sections.runtime_state_of(session))
     for container in (
-        as_dict(simulation.get("npc_index")),
+        as_dict(_sections.npc_index_of(simulation)),
         as_dict(simulation.get("npcs")),
-        as_dict(runtime.get("npc_index")),
+        as_dict(_sections.npc_index_of(runtime)),
         as_dict(as_dict(simulation.get("social_state")).get("profiles")),
         as_dict(as_dict(runtime.get("social_state")).get("profiles")),
     ):
@@ -56,14 +57,14 @@ def referenced_profiles_from_session(
 
 
 def all_npc_profiles(session: dict[str, Any]) -> list[dict[str, Any]]:
-    simulation = as_dict(session.get("simulation_state"))
-    runtime = as_dict(session.get("runtime_state"))
+    simulation = as_dict(_sections.simulation_state_of(session))
+    runtime = as_dict(_sections.runtime_state_of(session))
     profiles: list[dict[str, Any]] = []
     seen: set[str] = set()
     for container in (
-        as_dict(simulation.get("npc_index")),
+        as_dict(_sections.npc_index_of(simulation)),
         as_dict(simulation.get("npcs")),
-        as_dict(runtime.get("npc_index")),
+        as_dict(_sections.npc_index_of(runtime)),
         as_dict(as_dict(simulation.get("social_state")).get("profiles")),
         as_dict(as_dict(runtime.get("social_state")).get("profiles")),
     ):
@@ -79,10 +80,10 @@ def all_npc_profiles(session: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def present_npc_ids(session: dict[str, Any]) -> set[str]:
-    simulation = as_dict(session.get("simulation_state"))
-    runtime = as_dict(session.get("runtime_state"))
+    simulation = as_dict(_sections.simulation_state_of(session))
+    runtime = as_dict(_sections.runtime_state_of(session))
     scene = as_dict(runtime.get("current_scene")) or as_dict(runtime.get("scene")) or as_dict(simulation.get("scene"))
-    player = as_dict(simulation.get("player_state"))
+    player = as_dict(_sections.player_state_of(simulation))
     values = [
         *list(scene.get("present_npc_ids") or []),
         *list(player.get("nearby_npc_ids") or []),
@@ -98,7 +99,7 @@ def present_npc_ids(session: dict[str, Any]) -> set[str]:
 
 
 def recent_interactions(session: dict[str, Any]) -> list[dict[str, Any]]:
-    runtime = as_dict(session.get("runtime_state"))
+    runtime = as_dict(_sections.runtime_state_of(session))
     value = runtime.get("recent_interactions")
     if not isinstance(value, list):
         value = as_dict(runtime.get("interaction_timeline")).get("events")
@@ -107,7 +108,7 @@ def recent_interactions(session: dict[str, Any]) -> list[dict[str, Any]]:
 
 def location_name(session: dict[str, Any]) -> str:
     state = as_dict(session.get("state"))
-    simulation = as_dict(session.get("simulation_state"))
+    simulation = as_dict(_sections.simulation_state_of(session))
     scene = as_dict(state.get("scene")) or as_dict(simulation.get("scene"))
     return as_text(scene.get("location_name") or scene.get("location") or state.get("location"))
 

@@ -29,6 +29,7 @@ from architecture_analysis import (
     literal_string, load_layers, module_name, qualified_name, route_decorators, scoped_nodes,
     source_digest, tracked_sources,
 )
+from rpg_scorecard import RATCHETS as RPG_RATCHETS, ratchet_metrics as rpg_ratchet_metrics
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 1
@@ -69,6 +70,8 @@ LOWER_TARGETS: dict[str, int | str] = {
     "kernel_named_module_tables": 0, "cross_module_sql": 0,
     # PA-2.3: migrations live with their owning module.
     "app_migrations_in_kernel_dir": 0,
+    # RPG production roadmap (RQ-0.1): scripts/rpg_scorecard.py states each pattern.
+    **{name: target for name, (_, target) in RPG_RATCHETS.items()},
 }
 HIGHER_TARGETS: dict[str, int | str] = {
     "rls_coverage_pct": 100, "retention_policies_executed_pct": 100,
@@ -1237,6 +1240,8 @@ def measure(sources: dict[str, str], config: dict, *, openapi: dict | None = Non
         values[key] = value
     # After the web metrics, which zero-fill every web_* target they do not measure.
     values.update(platform_values)
+    rpg_values, evidence["rpg_scorecard"] = rpg_ratchet_metrics(analysis.sources, config)
+    values.update(rpg_values)
     values["functions_over_150_lines"] += sum(
         end - start + 1 > 150 for path, source in analysis.sources.items()
         if path.endswith((".ts", ".tsx")) for start, end in js_function_spans(source)

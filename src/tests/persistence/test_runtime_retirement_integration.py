@@ -349,7 +349,10 @@ loaded = load_session_from_postgres("campaign:runtime")
 from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
 assert loaded["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION
 assert {key: loaded["manifest"][key] for key in session["manifest"]} == session["manifest"]
-assert loaded["state"] == session["state"]
+# The scene loads with its environment context filled in (the starter world's).
+assert loaded["state"]["scene"]["location_name"] == session["state"]["scene"]["location_name"]
+# An unbound campaign of that age is the starter town's: it plays in the starter world (RQ-2.8 slice 2).
+assert loaded["state"]["world_binding"]["kind"] == "starter"
 
 from app import assets as assets_package
 from app.assets import store as asset_store_module

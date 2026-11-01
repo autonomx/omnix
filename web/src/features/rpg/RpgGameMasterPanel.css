@@ -1,0 +1,45 @@
+.rpg-gm-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rpg-gm-ask {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.rpg-gm-ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.rpg-gm-ask-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.rpg-gm-log {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rpg-gm-log p {
+  margin: 0.15rem 0;
+}
+
+.rpg-gm-withheld {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.rpg-gm-error {
+  color: var(--color-danger, #b3261e);
+}
+
+.rpg-gm-wish {
+  justify-self: start;
+}

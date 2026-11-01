@@ -43,45 +43,6 @@ def _dialogue_bucket(state: Dict[str, Any]) -> Dict[str, Any]:
     return bucket
 
 
-def get_dialogue_context(
-    state: Dict[str, Any],
-    *,
-    npc_id: str,
-    player_action: str,
-) -> Dict[str, Any]:
-    bucket = _dialogue_bucket(state)
-    topic = infer_dialogue_topic(player_action)
-    key = f"{npc_id}:{topic}"
-    topic_state = _safe_dict(_safe_dict(bucket.get("npc_topics")).get(key))
-    recent = [
-        row
-        for row in _safe_list(bucket.get("recent_exchanges"))[-10:]
-        if _safe_dict(row).get("npc_id") == npc_id
-    ]
-    repeat_count = int(topic_state.get("repeat_count") or 0)
-    last_player_question = _safe_str(topic_state.get("last_player_question"))
-    # Topic-level repeat detection matters more than exact string matching.
-    # The player may alternate between:
-    #   "where did the cloaked traveler go?"
-    #   "what danger does the road trail confirm?"
-    # Both are still the same Bran/road/witness loop once the topic has been answered.
-    if topic_state:
-        repeat_count += 1
-    else:
-        repeat_count = 0
-    return {
-        "npc_id": npc_id,
-        "topic": topic,
-        "topic_key": key,
-        "repeat_count": repeat_count,
-        "is_repeat": repeat_count >= 1,
-        "last_player_question": last_player_question,
-        "last_npc_answer": _safe_str(topic_state.get("last_npc_answer")),
-        "facts_already_revealed": _safe_list(topic_state.get("facts_already_revealed")),
-        "recent_exchanges": recent,
-    }
-
-
 def update_dialogue_state(
     state: Dict[str, Any],
     *,

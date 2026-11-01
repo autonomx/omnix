@@ -176,23 +176,3 @@ class ResponseProfileRegistry:
         if mode in {ResponseMode.DIALOGUE, ResponseMode.COMBAT}:
             return DeliveryMode.AUDIO_PHRASE
         return DeliveryMode.SENTENCE
-
-
-def validate_response_profile(profile: ResponseGenerationProfile) -> tuple[str, ...]:
-    issues: list[str] = []
-    if profile.max_tokens <= 0 or profile.max_tokens > 1200:
-        issues.append("invalid_max_tokens")
-    if profile.timeout_seconds <= 0 or profile.timeout_seconds > 12:
-        issues.append("invalid_timeout")
-    if profile.retry_count < 0 or profile.retry_count > 1:
-        issues.append("invalid_retry_count")
-    if profile.blocking_budget_ms <= 0 or profile.blocking_budget_ms > 6000:
-        issues.append("invalid_blocking_budget")
-    if not profile.use_provider and profile.provider != "deterministic":
-        issues.append("deterministic_profile_has_provider")
-    if profile.allow_hermes and profile.mode not in {
-        ResponseMode.INVESTIGATION,
-        ResponseMode.RECOVERY,
-    }:
-        issues.append("hermes_not_allowed_for_mode")
-    return tuple(issues)

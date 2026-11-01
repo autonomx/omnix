@@ -830,22 +830,6 @@ _TEMPLATES: dict[str, dict] = {
 }
 
 
-def build_setup_template(template_name: str) -> dict:
-    """Return a setup-data dict pre-populated from the named template.
-
-    The returned dict is ready for ``apply_adventure_defaults`` and then
-    ``AdventureSetup.from_dict`` after adding required ids/titles.
-
-    Raises ``ValueError`` if the template name is unknown.
-    """
-    if template_name not in _TEMPLATES:
-        raise ValueError(
-            f"Unknown template '{template_name}'. "
-            f"Available: {sorted(_TEMPLATES)}"
-        )
-    return dict(_TEMPLATES[template_name])
-
-
 _TEMPLATE_META: dict[str, dict] = {
     "fantasy_adventure": {
         "label": "Fantasy Adventure",

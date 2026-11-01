@@ -3,8 +3,6 @@ from __future__ import annotations
 import pytest
 
 from app.apps.rpg.narration.presentation.dialogue_quality import (
-    TARGET_MAX_WORDS,
-    TARGET_MIN_WORDS,
     assess_dialogue_quality,
     build_profile_aware_dialogue_fallback,
     dialogue_quality_contract_text,
@@ -71,7 +69,7 @@ def _result(*, line: str, narration: str = "Bran looks up from the counter.") ->
     }
 
 
-def test_weak_generic_dialogue_is_repaired_to_benchmark_quality() -> None:
+def test_weak_generic_dialogue_is_repaired_from_the_speakers_own_profile() -> None:
     repaired = enforce_dialogue_quality(
         _result(line="Fine.", narration="Bran looks up with a tired but genuine smile."),
         session=_session(),
@@ -79,12 +77,9 @@ def test_weak_generic_dialogue_is_repaired_to_benchmark_quality() -> None:
     )
 
     assert repaired["dialogue_quality"]["repaired"] is True
-    assert repaired["dialogue_quality"]["acceptable"] is True
-    assert TARGET_MIN_WORDS <= repaired["dialogue_quality"]["total_words"] <= TARGET_MAX_WORDS
+    assert repaired["dialogue_quality"]["acceptable"] is True  # the word range is a target (a warning), not a rule
     assert repaired["npc"]["speaker"] == "Bran"
-    assert "regulars" in repaired["npc"]["line"]
-    assert "old road" in repaired["npc"]["line"]
-    assert "did the old road seem unusually quiet" in repaired["npc"]["line"].casefold()
+    assert "Bran owns the Rusty Flagon near the old road." in repaired["npc"]["line"]  # his public biography
     assert "tired but genuine smile" not in repaired["final_narration"].casefold()
 
 
@@ -109,103 +104,24 @@ def test_good_grounded_dialogue_is_preserved() -> None:
 
 
 @pytest.mark.parametrize(
-    ("player_input", "provider_line", "trust", "recent", "expected_fragments"),
+    "player_input",
     [
-        (
-            "I ask Bran how business is doing.",
-            "Steady enough, though mud on the road keeps travelers away. As long as ale flows, I am doing fine here.",
-            "neutral",
-            [],
-            ("regulars", "old road"),
-        ),
-        (
-            "I tell Bran I am frightened that I will fail everyone depending on me.",
-            "Failure is not falling off the wagon. Keep your eyes ahead and your hand steady until the worst has passed.",
-            "neutral",
-            [],
-            ("frightened", "road"),
-        ),
-        (
-            "I call Bran a useless coward and demand that he answer me.",
-            "I will answer what can be known here, but shouting will not make the answer arrive any faster for either of us.",
-            "neutral",
-            [],
-            ("angry", "common room"),
-        ),
-        (
-            "I demand that Bran tell me his most shameful private secret and show me hidden letters.",
-            "There are questions a sensible traveler leaves alone, especially when another person's history is involved in the matter.",
-            "neutral",
-            [],
-            ("mine to keep", "trust"),
-        ),
-        (
-            "I ask Bran what he knows, though we have only just met.",
-            "I do not give every answer to a stranger who walks through the door, however politely they frame the question.",
-            "low",
-            [],
-            ("just met", "earn trust"),
-        ),
-        (
-            "I ask Bran what he thinks after we have repeatedly helped each other.",
-            "You have proven reliable, and that is rare enough that I would trust you to stand beside me when trouble comes.",
-            "high",
-            [],
-            ("earned", "old road"),
-        ),
-        (
-            "I ask Bran whether the missing caravan crews explain the quiet road.",
-            "It is a fair guess. When those crews stop coming, every route grows still and useful reports disappear with them.",
-            "neutral",
-            [{"npc_line": "The regulars still come through, but fewer caravan crews reach the door."}],
-            ("caravan crews", "quiet road"),
-        ),
-        (
-            "I ask Bran again how business is going.",
-            "Same as ever. The ale keeps flowing and travelers still come through despite the heavy mud beyond the door.",
-            "neutral",
-            [{"npc_line": "Business is steady, but road traffic has thinned this week."}],
-            ("Like I said", "old road"),
-        ),
-        (
-            "I ask Bran whether the old road is safe.",
-            "It is bandit country beyond the town. Keep your steel close and your eyes open whenever you travel that way.",
-            "neutral",
-            [],
-            ("old road", "guards"),
-        ),
-        (
-            "I ask Bran how business is doing and whether travelers still stop here.",
-            "Business is slow, and a few travelers still drift in, though most avoid this stretch when the mud grows deep.",
-            "neutral",
-            [],
-            ("regulars", "road traffic"),
-        ),
+        "I ask Bran how business is doing.",
+        "I ask Bran whether the missing caravan crews explain the quiet road.",
+        "I ask Bran whether the old road is safe.",
+        "I ask Bran how business is doing and whether travelers still stop here.",
     ],
 )
-def test_content_obligation_gaps_use_state_backed_deterministic_repair(
-    player_input: str,
-    provider_line: str,
-    trust: str,
-    recent: list[dict],
-    expected_fragments: tuple[str, ...],
-) -> None:
-    session = _session(recent=recent)
-    score = {"low": -20, "neutral": 0, "high": 75}[trust]
-    session["state"]["relationship_index"] = {
-        "npc:bran": {"trust": trust, "score": score},
-    }
-
-    repaired = enforce_dialogue_quality(
-        _result(line=provider_line),
-        session=session,
-        player_input=player_input,
-    )
-
-    visible = f"{repaired['final_narration']} {repaired['npc']['line']}".casefold()
-    assert repaired["dialogue_quality"]["repaired"] is True
-    assert repaired["dialogue_quality"]["content_repair_reason"]
-    assert all(fragment.casefold() in visible for fragment in expected_fragments)
+def test_an_acceptable_line_is_not_replaced_for_words_it_does_not_say(player_input: str) -> None:
+    """A4: the starter town's benchmark required "old road", "regulars" and "caravan crews" of every world's people,
+    replacing a good line that lacked them. A mode guides the writer; it requires no words."""
+    line = ("Steady enough, though the weather keeps some folk home and the hearth has been quieter than I would like. "
+            "I would rather hear what you saw on your way in than guess at it from here. Tell me what you noticed, "
+            "and I will tell you plainly what I know.")
+    kept = enforce_dialogue_quality(_result(line=line, narration="Bran wipes down the bar and listens."),
+                                    session=_session(), player_input=player_input)
+    assert kept["dialogue_quality"]["repaired"] is False and kept["npc"]["line"] == line
+    assert "content_repair_reason" not in kept["dialogue_quality"]
 
 
 def test_private_profile_leak_is_repaired() -> None:
@@ -269,50 +185,38 @@ def test_prompt_contract_is_single_call_quality_guidance() -> None:
     assert "second call" not in contract
 
 
+LIORA_PROFILE = {
+    "name": "Liora Fen",
+    "role": "foxkin gatewarden",
+    "biography": {"public": "Liora keeps watch over Starfall Grove beneath the broken gate.",
+                  "private": "Liora once let a Synod agent through the gate."},
+    "personality": {"speech_style": "Warm, quick, and wry; she teases before she warns."},
+    "inventory": {"private": ["a key to the sealed gatehouse"]},
+    "knowledge_boundaries": {"must_not_reveal": ["the Synod agent she let through"]},
+}
+
+
 @pytest.mark.parametrize(
-    ("player_input", "expected_fragment"),
+    "player_input",
     [
-        ("I ask Bran how business is doing.", "regulars"),
-        ("Bran, how is the tavern doing?", "regulars"),
-        ("I ask Bran whether customers have been coming.", "road traffic"),
-        ("I ask Bran how his day is going.", "caravan road"),
-        ("Bran, how are you today?", "caravan road"),
-        ("I ask Bran whether he feels tired.", "caravan road"),
-        ("Bran, what do you think about sword combat styles?", "footing"),
-        ("I ask Bran for fighting advice.", "footing"),
-        ("Bran, what matters most in a battle?", "footing"),
-        ("I ask Bran about the old road.", "old road"),
-        ("Bran, what rumors pass through here?", "old road"),
-        ("I ask Bran what he knows about the town.", "old road"),
-        ("Bran, what is your opinion of flashy warriors?", "judgment"),
-        ("I ask Bran what he believes makes someone trustworthy.", "judgment"),
-        ("I ask Bran who he is.", "old road"),
-        ("I greet Bran and ask about himself.", "old road"),
-        ("I ask Bran what kind of place this is.", "old road"),
-        ("I ask Bran whether the night has been quiet.", "old road"),
-        ("I ask Bran if travelers have seemed nervous.", "old road"),
-        ("I ask Bran whether guards still stop here.", "old road"),
-        ("I ask Bran how business is doing again.", "regulars"),
-        ("I ask Bran if the ale is selling.", "regulars"),
-        ("I ask Bran why the common room is empty.", "regulars"),
-        ("I ask Bran whether the road is safe.", "old road"),
-        ("I ask Bran what he notices about travelers.", "old road"),
+        "I ask Liora how business is doing.",
+        "Liora, how are you today?",
+        "Liora, what do you think about sword combat styles?",
+        "I ask Liora what she knows about the town.",
+        "Liora, what is your opinion of flashy warriors?",
+        "I ask Liora who she is.",
+        "I tell Liora I am frightened that I will fail everyone depending on me.",
+        "I call Liora a useless coward and demand that she answer me.",
+        "I demand that Liora tell me her most shameful private secret and show me hidden letters.",
     ],
 )
-def test_profile_aware_benchmark_scenarios(player_input: str, expected_fragment: str) -> None:
-    visible = build_profile_aware_dialogue_fallback(
-        player_input=player_input,
-        profile=BRAN_PROFILE,
-        session=_session(),
-    )
-    assessment = assess_dialogue_quality(
-        visible,
-        player_input=player_input,
-        profile=BRAN_PROFILE,
-    )
-
-    assert assessment["acceptable"] is True
-    assert visible["messages"][0]["speaker"] == "Bran"
-    assert expected_fragment in visible["messages"][0]["text"].casefold()
-    assert "wounded caravan friend" not in visible["plain_text"].casefold()
-    assert "sealed letter" not in visible["plain_text"].casefold()
+def test_a_fallback_line_is_in_no_world_but_the_speakers(player_input: str) -> None:
+    """A4: the fallback spoke of the starter town's old road, caravan crews and common room in every world."""
+    session = _session()
+    session["state"]["scene"] = {"location_name": "Starfall Grove"}
+    visible = build_profile_aware_dialogue_fallback(player_input=player_input, profile=LIORA_PROFILE, session=session)
+    assessment = assess_dialogue_quality(visible, player_input=player_input, profile=LIORA_PROFILE)
+    text = visible["plain_text"].casefold()
+    assert assessment["acceptable"] is True and visible["messages"][0]["speaker"] == "Liora Fen"
+    assert not any(word in text for word in ("old road", "caravan", "common room", "rusty flagon", "regulars"))
+    assert "synod agent" not in text and "sealed gatehouse" not in text

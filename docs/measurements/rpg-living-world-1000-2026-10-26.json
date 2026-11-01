@@ -1,0 +1,82 @@
+{
+  "checks": {
+    "every_named_person_has_a_routine": {
+      "passed": true,
+      "people": 10,
+      "without_routine": []
+    },
+    "presence_changes_with_time_of_day": {
+      "passed": true,
+      "places_changing_with_time": [
+        "location:aurelia:arrival-grove",
+        "location:aurelia:starfall-village",
+        "location:aurelia:wayfarer-guild"
+      ],
+      "places_seen": 4
+    },
+    "pressure_transition_every_50_turns": {
+      "missing": [
+        "50-99",
+        "100-149",
+        "200-249",
+        "250-299",
+        "300-349",
+        "350-399",
+        "400-449",
+        "450-499",
+        "500-549",
+        "550-599",
+        "600-649",
+        "650-699",
+        "700-749",
+        "750-799",
+        "800-849",
+        "850-899",
+        "900-949",
+        "950-999"
+      ],
+      "passed": false,
+      "turns_with_one": 5,
+      "windows": 20
+    },
+    "replays": {
+      "hash_chain_breaks": 0,
+      "map_instances_replayed": 4,
+      "maps": {
+        "rpg_Y143wu-vQhED6gTP:map:map:world-aurelia-harness-978f412fc3:map-aurelia-arrival-grove:1": true,
+        "rpg_Y143wu-vQhED6gTP:map:map:world-aurelia-harness-978f412fc3:map-aurelia-skybridge-pass:1": true,
+        "rpg_Y143wu-vQhED6gTP:map:map:world-aurelia-harness-978f412fc3:map-aurelia-starfall-village:1": true,
+        "rpg_Y143wu-vQhED6gTP:map:map:world-aurelia-harness-978f412fc3:map-aurelia-wayfarer-guild:1": true
+      },
+      "mismatched_turns": [],
+      "passed": true,
+      "reaches_and_matches_current": true,
+      "turns": 1008,
+      "verified_turns": 1008
+    },
+    "returns_list_only_real_changes": {
+      "false_lines": [],
+      "passed": true,
+      "returns": 39
+    },
+    "visible_world_event_every_20_turns": {
+      "missing": [
+        "0-19",
+        "40-59",
+        "80-99"
+      ],
+      "passed": false,
+      "turns_with_one": 197,
+      "windows": 50
+    }
+  },
+  "measured_on": "2026-10-25",
+  "measurement": "RPG living world (W1)",
+  "note": "1,000 turns for D1 (the replay); the W1 checks run over the same play",
+  "passed": false,
+  "refused_or_failed": [],
+  "revision": "071d15a833",
+  "schema_version": 1,
+  "turns": 1000,
+  "world": "aurelia"
+}

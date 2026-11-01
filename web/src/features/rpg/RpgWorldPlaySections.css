@@ -1,0 +1,185 @@
+/* How a world plays, in the world editor (RQ-4.1). */
+@layer features {
+  .rpg-play-sections {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .rpg-play-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: flex-end;
+  }
+
+  .rpg-play-toolbar button:disabled {
+    cursor: not-allowed;
+    filter: saturate(0.3);
+    opacity: 0.5;
+  }
+
+  .rpg-play-findings {
+    border: 1px solid color-mix(in srgb, var(--c-red-720) 45%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--c-red-720) 10%, transparent);
+    color: var(--fg-red-720);
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0.75rem 0.9rem 0.75rem 2rem;
+  }
+
+  .rpg-play-tabs {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  }
+
+  .rpg-play-tabs button {
+    background: color-mix(in srgb, var(--bg-slate-150-2) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
+    border-radius: 12px;
+    color: var(--fg-neutral-1000);
+    cursor: pointer;
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.65rem 0.8rem;
+    text-align: left;
+  }
+
+  .rpg-play-tabs button.is-active {
+    background: color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 60%, transparent);
+  }
+
+  .rpg-play-tabs small {
+    color: var(--fg-slate-730);
+    font-size: 0.72rem;
+  }
+
+  .rpg-play-section {
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-slate-150-2) 72%, transparent);
+    display: grid;
+    gap: 0.8rem;
+    min-width: 0;
+    padding: 1rem;
+  }
+
+  .rpg-play-section > p {
+    color: var(--fg-slate-730);
+    margin: 0;
+  }
+
+  .rpg-play-rows {
+    display: grid;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .rpg-play-row {
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 18%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-indigo-170) 55%, transparent);
+    min-width: 0;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .rpg-play-row > summary {
+    cursor: pointer;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rpg-play-row[open] > summary {
+    margin-bottom: 0.6rem;
+  }
+
+  .rpg-play-fields {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    min-width: 0;
+  }
+
+  .rpg-play-field {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .rpg-play-field.is-wide {
+    grid-column: 1 / -1;
+  }
+
+  .rpg-play-field > span {
+    color: var(--fg-violet-810);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .rpg-play-sections input,
+  .rpg-play-sections select,
+  .rpg-play-sections textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-indigo-170) 88%, transparent);
+    color: var(--fg-neutral-1000);
+    font: inherit;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .rpg-play-sections textarea {
+    resize: vertical;
+  }
+
+  .rpg-play-price,
+  .rpg-play-lever {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .rpg-play-price label {
+    align-items: center;
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .rpg-play-price input {
+    width: 4.5rem;
+  }
+
+  .rpg-play-price label span {
+    color: var(--fg-slate-730);
+    font-size: 0.75rem;
+  }
+
+  .rpg-play-lever select {
+    flex: 1 1 10rem;
+    width: auto;
+  }
+
+  .rpg-play-group {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .rpg-play-group > button,
+  .rpg-play-add {
+    justify-self: start;
+  }
+
+  .rpg-play-remove {
+    margin-top: 0.6rem;
+  }
+}

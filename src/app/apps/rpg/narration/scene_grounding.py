@@ -83,7 +83,7 @@ def _resolve_location_name(
 
     from app.apps.rpg.rules.location_registry import get_location
 
-    registered = _safe_str(get_location(location_id).get("name")).strip()
+    registered = _safe_str(get_location(location_id, simulation_state).get("name")).strip()
     if registered:
         return registered
     if fallback_name and not _is_location_id_text(fallback_name, location_id):

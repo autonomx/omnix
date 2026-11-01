@@ -73,14 +73,15 @@ def workspace():
             admin.execute("DELETE FROM omnix_users WHERE id = %s", (context.user_id,))
 
 
-def _insert(admin, context, campaign_id: str, state: dict, *, status: str, minutes_ago: int) -> None:
-    admin.execute(
+def _insert(admin, context, campaign_id: str, state: dict, *, status: str, minutes_ago: int) -> str:
+    return admin.execute(
         """INSERT INTO omnix_rpg_campaigns (id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash,
                                              engine_version, schema_version, seed, status, updated_at)
            VALUES (%s, %s, %s, 'List', 0, %s::jsonb, %s, 'test', 'test', 'seed', %s,
-                   now() - make_interval(mins => %s))""",
+                   now() - make_interval(mins => %s))
+           RETURNING updated_at""",
         (campaign_id, context.workspace_id, context.user_id, json.dumps(state), "0" * 64, status, minutes_ago),
-    )
+    ).fetchone()[0].isoformat()
 
 
 def test_session_list_reads_one_page_with_the_summaries_full_states_give(workspace) -> None:
@@ -95,13 +96,14 @@ def test_session_list_reads_one_page_with_the_summaries_full_states_give(workspa
         for index, (state, status) in enumerate([(state, "active") for state in STATES]
                                                 + [(STATES[0], "archived"), (STATES[1], "archived")]):
             campaign_id = f"rpg:list:{index}:{uuid.uuid4().hex[:6]}"
-            _insert(admin, workspace, campaign_id, state, status=status, minutes_ago=index)
+            updated_at = _insert(admin, workspace, campaign_id, state, status=status, minutes_ago=index)
             row = session_list_summary(_campaign_state_for_listing({"id": campaign_id, "state": state}))
             typed = _session_summary(state)  # the summary columns (migration 0157)
             row["manifest"].update(
                 turn_count=typed.get("turn_count"),
                 player_level=typed.get("player_level"),
                 location_name=typed.get("location"),
+                updated_at=updated_at,  # when it was last played is the row's time
             )
             expected.append(row)
 

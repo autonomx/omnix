@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiState';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiTypes';
 import {
   markRpgTurnReactCommitted,
   markRpgTurnVisible,
@@ -8,24 +8,31 @@ import {
   useLatestRpgTurnDiagnostics,
 } from './rpgTurnDiagnostics';
 import { storyMessageIdentity, useRpgTurnUiMessages } from './rpgTurnUiStore';
+import { RpgLinkedText } from './rpgLoreLinks';
+import { RpgLoreEntryPanel } from './RpgLoreEntryPanel';
+import { narrationBlocks, speakResponse, stopSpeaking, voiceAutoplay, type RpgSpeechOutcome } from './rpgVoices';
 import './RpgVisualAssets.css';
+import './RpgOutcomeFacts.css';
+import './RpgStoryScene.css';
 
 const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
 
 interface RpgStorySceneProps {
   children: ReactNode;
+  /** Developer tools on: the turn's diagnostics show under the story. */
+  developerTools?: boolean;
   heroSummary: RpgHeroSummaryPreview;
   recentEvents: string[];
   selectedSessionSummary: RpgSessionSummaryPreview;
   storyMessages?: RpgStoryMessagePreview[];
 }
 
-export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
+export function RpgStoryScene({ children, developerTools = false, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
   const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
   const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, [...storyMessages]);
   const diagnostics = useLatestRpgTurnDiagnostics(selectedSessionSummary.id);
-  const showDiagnostics = rpgDiagnosticsEnabled();
+  const showDiagnostics = developerTools || rpgDiagnosticsEnabled();
   const dialogueRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeight = useRef(0);
   const interactionIds = useMemo(
@@ -33,6 +40,33 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
     [visibleStoryMessages],
   );
   const interactionKey = interactionIds.join('|');
+  // Auto-play (EV-13), when switched on: a response is spoken once it is final ("complete"), and only then; what a
+  // campaign shows when it is opened or switched to (its history, once loaded) is not played again; a notice beside a
+  // response is not its narration.
+  const spoken = useRef<{ session: string; interaction: string } | null>(null);
+  const [speech, setSpeech] = useState<RpgSpeechOutcome | ''>('');
+  const finalMessages = visibleStoryMessages.filter((message) => message.tone !== 'player' && message.messageKind !== 'outcome'
+    && ((message as { status?: string }).status ?? 'complete') === 'complete' && message.text.trim()
+    && !String(message.id ?? '').includes(':notice:'));
+  const latest = finalMessages.length ? finalMessages[finalMessages.length - 1].interactionId ?? '' : '';
+  const stillWriting = visibleStoryMessages.some((message) => message.interactionId === latest
+    && (message as { status?: string }).status === 'pending');
+
+  useEffect(() => {
+    const sessionId = selectedSessionSummary.id;
+    if (spoken.current?.session !== sessionId) {
+      if (latest) spoken.current = { session: sessionId, interaction: latest };  // its history: nothing plays
+      return;
+    }
+    if (!latest || stillWriting || latest === spoken.current.interaction) return;
+    spoken.current = { session: sessionId, interaction: latest };
+    if (!voiceAutoplay()) return;
+    void speakResponse(sessionId, finalMessages.filter((message) => message.interactionId === latest)
+      .flatMap((message) => narrationBlocks(message.text, message.voices, message.speakerId ?? 'narrator')))
+      .then((outcome) => setSpeech(outcome));
+  }, [latest, stillWriting, selectedSessionSummary.id]);
+
+  useEffect(() => () => stopSpeaking(), [selectedSessionSummary.id]);  // a campaign left stops speaking
 
   useLayoutEffect(() => {
     const element = dialogueRef.current;
@@ -61,7 +95,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
       <div className="rpg-story-heading">
         <div>
           <p className="eyebrow">Story / scene</p>
-          <h3 id="rpg-story-scene-title">📍 {selectedSessionSummary.location}</h3>
+          <h1 id="rpg-story-scene-title">📍 {selectedSessionSummary.location}</h1>
           <div className="rpg-chip-row">
             <span>{selectedSessionSummary.title}</span>
             <span>{selectedSessionSummary.turnLabel}</span>
@@ -75,8 +109,9 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           </div>
         ) : null}
       </div>
-      <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
-      <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
+      {selectedSessionSummary.summary ? <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p> : null}
+      {/* Focusable, so the story can be scrolled from the keyboard (RQ-7.6). */}
+      <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite" tabIndex={0}>
         {isPreview ? (
           <>
             <article>
@@ -102,7 +137,26 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
               </span>
               <div>
                 <strong>{message.speaker}</strong>
-                <p>{message.text}</p>
+                {message.tone !== 'player' && message.messageKind !== 'outcome' && message.speakerId
+                  && ((message as { status?: string }).status ?? 'complete') === 'complete' ? (
+                  <button className="rpg-speak" type="button" aria-label={`Play ${message.speaker}'s words`}
+                    onClick={() => void speakResponse(selectedSessionSummary.id,
+                      narrationBlocks(message.text, message.voices, message.speakerId ?? 'narrator')).then(setSpeech)}>
+                    ▶
+                  </button>
+                ) : null}
+                {message.messageKind === 'outcome' && message.facts?.length ? (
+                  <ul className="rpg-outcome-facts" aria-label="What changed">
+                    {message.facts.map((fact, factIndex) => (
+                      <li key={`${fact.kind}:${factIndex}`} className={`rpg-outcome-fact rpg-outcome-fact-${fact.tone ?? 'neutral'}`}
+                        data-kind={fact.kind}>
+                        {fact.text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p><RpgLinkedText spans={message.links} text={message.text} /></p>
+                )}
               </div>
             </article>
           ))
@@ -118,6 +172,8 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           ))
         )}
       </div>
+      {speech === 'silent' ? <p className="rpg-speech-status" role="status">The voices are unavailable just now; the text stands.</p> : null}
+      <RpgLoreEntryPanel />
       {showDiagnostics && diagnostics ? (
         <details className="rpg-turn-diagnostics">
           <summary>Turn diagnostics</summary>

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "measurement": "RPG campaign replay and size audit (RQ-0.9), scratch database",
+  "date": "2026-10-23",
+  "database": "omnix_rq_a (scratch; campaigns created by the test suites)",
+  "command": "python scripts/rpg_replay_audit.py --database-url <scratch URL> --json <path>",
+  "summary": {
+    "campaigns": 10,
+    "campaigns_replaying_to_current": 0,
+    "campaigns_with_chain_breaks": 0,
+    "campaigns_with_missing_turn_rows": 0,
+    "campaigns_with_unpatched_turns": 0,
+    "mismatched_turns_total": 0,
+    "npc_related_bytes_max": 7097,
+    "revisions_total": 14,
+    "revisions_without_turn_row_total": 0,
+    "state_bytes_max": 1703167,
+    "state_bytes_median": 30842,
+    "verified_turns_total": 0
+  },
+  "findings": [
+    "No snapshot is written when a campaign is created (revision 0), and the first snapshot is at revision 20, so turns 1-19 of every campaign cannot be verified from a snapshot. RQ-1.1 writes a pinned snapshot at creation and at the upcast boundary.",
+    "A freshly created campaign is already 1.7 MB: runtime_state.bootstrap_snapshot and state.bootstrap_snapshot (358 KB each), runtime_state.compiled_genesis_snapshot and state.compiled_genesis_snapshot (195 KB each) and setup_payload (557 KB) are creation-time artifacts, stored twice. Moving them out of the document (RQ-1.1 extensions handling, RQ-6.4) takes a new campaign under 100 KB and is the main lever for F2's 1 MB budget.",
+    "NPC-related sections are small today (max 7 KB in this sample); the v6 npcs section's runtime cursors fit the budget.",
+    "The operator database was not audited: reading the live database needs the owner's permission. Run the command above with the operator's migration URL to record the operator baseline."
+  ],
+  "largest_campaign_sections": {
+    "runtime_state.bootstrap_snapshot": 358518,
+    "runtime_state.compiled_genesis_snapshot": 195144,
+    "runtime_state.creation_job": 2230,
+    "runtime_state.creation_progress": 2070,
+    "state.ability_tree": 15633,
+    "state.bootstrap_snapshot": 358518,
+    "state.compiled_genesis_snapshot": 195144,
+    "state.genesis_snapshot": 1452,
+    "state.journal": 908,
+    "state.map_state": 1275,
+    "state.mechanics": 1696,
+    "state.metadata": 1202,
+    "state.narrative_affordances": 2653,
+    "state.timeline": 896,
+    "state.world": 1041
+  },
+  "largest_campaign_top_level": {
+    "installed_packs": 2,
+    "manifest": 619,
+    "runtime_state": 558956,
+    "setup_payload": 556934,
+    "simulation_state": 322,
+    "state": 586239
+  }
+}
