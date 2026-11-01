@@ -95,6 +95,8 @@ class TtsGenerateStreamRequest(BaseModel):
     append_silence: bool = False
     max_new_tokens: int = 180
     trace_id: str = ""
+    # The decode: live speech asks for the CUDA-graph one (parity off); unset keeps the provider's setting.
+    parity_mode: bool | None = None
 
 
 _MAX_VOICE_CLONE_BYTES = 25 * 1024 * 1024
@@ -1132,6 +1134,7 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
 
     # Counted until the stream is finalized, so a switch lets it finish; live speech is never held back.
     _begin_generation(realtime=True)
+    decode = {} if request.parity_mode is None else {"parity_mode": request.parity_mode}
     try:
         stream = provider.generate_audio_stream(
             text=request.text,
@@ -1146,6 +1149,7 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
             max_new_tokens=request.max_new_tokens,
             voice_trace_id=trace_id,
             _device_permit_held=True,
+            **decode,
         )
     except Exception:
         _end_generation()

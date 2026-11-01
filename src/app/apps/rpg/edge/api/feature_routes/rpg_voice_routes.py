@@ -7,12 +7,48 @@ from __future__ import annotations
 
 from typing import Any
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.rpg.edge.api.web_contracts import RpgVoiceCastResponse, documented
+from app.conversation.tts_stream_contract import CHAT_STREAM_MIN_REPETITION_PENALTY
 
+logger = logging.getLogger(__name__)
 _ROUTE_SENTINEL = "_omnix_rpg_voice_routes_registered"
+# A sentence is streamed as live speech streams it: the CUDA-graph decode (the parity decode runs slower than real
+# time on a 4090), in chunks as the read-aloud player takes them, with live chat's least repetition penalty and, per
+# sentence, its token budget. Part of the audio's identity in the campaign's cache.
+SPEECH_GENERATION: dict[str, Any] = {"chunk_size": 8, "parity_mode": False,
+                                     "repetition_penalty": CHAT_STREAM_MIN_REPETITION_PENALTY}
+PCM16 = "application/x-omnix-pcm16"  # mono little-endian 16-bit samples, at ``X-Omnix-Sample-Rate``
+CODEC_STEPS_PER_SECOND = 12.5  # the Qwen3-TTS tokenizer's: one codec step per 80 ms of audio
+RUNAWAY_FRACTION = 0.95  # audio this close to its budget ran into the cap instead of ending (as audiobook's check)
+
+
+def _first_piece(tts_service: Any, text: str, voice: str, generation: dict[str, Any]) -> tuple[Any, bytes, int]:
+    """The sentence's stream and its first piece, before the answer starts: a service down is a 503, not a silent
+    stream; a device busy for a moment (live speech or an audiobook on it) is tried once more after it says."""
+    import time
+
+    from app.providers.qwen_http_gateway import TtsServiceSaturated
+
+    for attempt in (1, 2):
+        pieces = tts_service.stream_audio_pcm16(text, speaker=voice, generation=generation)
+        try:
+            first, rate = next(pieces)
+            return pieces, first, rate
+        except TtsServiceSaturated as busy:
+            pieces.close()
+            if attempt == 1:
+                time.sleep(min(3.0, float(busy.retry_after or 1)))
+                continue
+        except Exception:  # StopIteration included: no audio at all
+            pieces.close()
+        break
+    raise HTTPException(status_code=503, detail={"ok": False, "error": "speech_unavailable"})
 
 
 class RpgSpeechBlock(BaseModel):
@@ -80,14 +116,17 @@ def register_rpg_voice_routes(router: APIRouter, state) -> None:
 
     @router.post("/api/rpg/sessions/{session_id}/speech-audio", tags=["rpg-session"], response_class=Response)
     def rpg_speech_audio(session_id: str, request_body: RpgSpeechSentence) -> Response:
-        """A sentence of a final response in its speaker's cast voice, as WAV: from the campaign's audio cache, else
-        synthesized once and kept (EV-13). With the speech service down, 503: the text stands, silent."""
+        """A sentence of a final response in its speaker's cast voice, as PCM16 (``PCM16``): from the campaign's audio
+        cache, else streamed from the speech service as it is synthesized and kept once it is whole (EV-13). With the
+        speech service down, 503: the text stands, silent."""
         from app.apps.rpg.session.persistence.session_records import _context, _database, load_session_from_postgres
         from app.apps.rpg.session.voice_cast import cast_for
-        from app.config.env import environment
+        from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens
         from app.persistence.unit_of_work import unit_of_work
-        from app.platform.live_speech.tts_adapters import create_synthesizer_from_env
-        from app.platform.voice.voice_casting import DEFAULT_VOICE, as_wav, castable_voices, render_key
+        from app.platform.voice.voice_casting import DEFAULT_VOICE, as_wav, castable_voices, pcm_of, render_key
+        from app.providers import tts_service
+        from app.providers.service import selected_tts_provider_id
+        from app.runtime.config import get_runtime_config
 
         document = load_session_from_postgres(session_id)
         if document is None:
@@ -100,25 +139,46 @@ def register_rpg_voice_routes(router: APIRouter, state) -> None:
             voice = row.get("voice_id") or DEFAULT_VOICE
             # The voice as it is now (its recording's revision), and the service that speaks it.
             revision = next((item["revision"] for item in castable_voices() if item["voice_id"] == voice), "")
-            provider = environment().get("LIVE_SPEECH_TTS_PROVIDER", "fake").strip().lower()
-            service = environment().get("LIVE_SPEECH_TTS_URL", "")
-            key = render_key(request_body.text, voice_id=voice, revision=revision, provider=provider, model=service)
+            runtime = get_runtime_config()
+            key = render_key(request_body.text, voice_id=voice, revision=revision, provider=selected_tts_provider_id(),
+                             model=runtime.tts.url if runtime.tts else "", parameters=SPEECH_GENERATION)
             cached = work.rpg_speech_audio.get(context, session_id, key)
             work.commit()
         if cached is not None:
-            return Response(content=cached[0], media_type=cached[1], headers={"X-Omnix-Speech-Cache": "hit"})
-        synthesizer = create_synthesizer_from_env()
-        try:
-            deltas = synthesizer.synthesize(request_body.text, voice=voice)
-        except Exception:
-            raise HTTPException(status_code=503, detail={"ok": False, "error": "speech_unavailable"}) from None
-        if not deltas:
-            raise HTTPException(status_code=503, detail={"ok": False, "error": "speech_unavailable"})
-        audio = as_wav(b"".join(delta.pcm for delta in deltas), sample_rate=int(deltas[0].sample_rate))
-        with unit_of_work(database) as work:
-            work.rpg_speech_audio.put(_context(database), session_id, key, voice_id=voice, audio=audio)
-            work.commit()
-        return Response(content=audio, media_type="audio/wav", headers={"X-Omnix-Speech-Cache": "miss"})
+            pcm, rate = pcm_of(cached[0])
+            return Response(content=pcm, media_type=PCM16,
+                            headers={"X-Omnix-Speech-Cache": "hit", "X-Omnix-Sample-Rate": str(rate)})
+        budget = estimate_chat_stream_max_new_tokens(request_body.text)  # a model that fails to stop is cut off
+        pieces, first, rate = _first_piece(tts_service, request_body.text, voice,
+                                           {**SPEECH_GENERATION, "max_new_tokens": budget})
+
+        def spoken() -> Any:
+            heard = [first]
+            try:
+                yield first
+                for piece, _ in pieces:
+                    heard.append(piece)
+                    yield piece
+            except Exception:  # the stream broke: what was heard stands, and nothing is kept
+                logger.warning("rpg_speech_stream_failed session=%s", session_id, exc_info=True)
+                return
+            finally:
+                pieces.close()
+            audio = b"".join(heard)
+            if len(audio) / 2 / rate >= RUNAWAY_FRACTION * budget / CODEC_STEPS_PER_SECOND:
+                # It ran out its budget instead of ending on its own: a model failure, not this sentence's audio.
+                logger.warning("rpg_speech_ran_out_its_budget session=%s chars=%s", session_id, len(request_body.text))
+                return
+            try:  # whole: kept, and played from the cache from now on
+                with unit_of_work(database) as work:
+                    work.rpg_speech_audio.put(context, session_id, key, voice_id=voice,
+                                              audio=as_wav(audio, sample_rate=rate))
+                    work.commit()
+            except Exception:  # the audio has been heard; not keeping it only costs a later synthesis
+                logger.warning("rpg_speech_not_kept session=%s", session_id, exc_info=True)
+
+        return StreamingResponse(spoken(), media_type=PCM16,
+                                 headers={"X-Omnix-Speech-Cache": "miss", "X-Omnix-Sample-Rate": str(rate)})
 
     @router.put("/api/rpg/sessions/{session_id}/voices/{speaker_id:path}", tags=["rpg-session"],
                 responses=documented(RpgVoiceCastResponse))

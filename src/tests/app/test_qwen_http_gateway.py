@@ -50,8 +50,9 @@ def test_streaming_pcm16_is_decoded_without_loading_a_gpu_model():
     assert sum(len(audio) for audio, _, _ in chunks) == 5000
     np.testing.assert_allclose(chunks[0][0][:2], [.25, -.25])
     assert chunks[0][1] == 24000
+    # The decode reaches the service: live speech asks for the CUDA-graph one (parity off).
     assert json.loads(calls[0].content) == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32,
-                                            'provider': 'faster-qwen3-tts'}
+                                            'parity_mode': False, 'provider': 'faster-qwen3-tts'}
     assert calls[0].headers['X-Omnix-Client'] == 'gateway'
     assert str(calls[0].url).endswith('/api/tts/live-call/stream')
     assert body.closed

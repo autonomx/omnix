@@ -1,11 +1,12 @@
 /**
  * A campaign's voices on the play screen (evolution roadmap EV-13): a finished response is spoken block by block, each
  * in its speaker's cast voice (a quote inside narration in its speaker's), sentence by sentence, each sentence's audio
- * from the campaign's cache or synthesized once. Only text shown as final is spoken; a response still being written
- * has nothing to play. Press to play by default; auto-play is a setting, off until the player switches it on. With the
+ * from the campaign's cache or streamed as it is synthesized (and kept), heard as one stream from its first audio.
+ * Only text shown as final is spoken; a response still being written has nothing to play. Press to play by default; auto-play is a setting, off until the player switches it on. With the
  * speech service down the text stands, silent, and the play button says so.
  */
 import { api } from './api/gateway';
+import { openPcmSink, type RpgPcmSink } from './rpgSpeechSink';
 
 const AUTOPLAY_KEY = 'omnix:rpg:voice-autoplay';
 
@@ -56,65 +57,82 @@ export function narrationBlocks(text: string, voices: RpgVoiceSpan[] = [], speak
 }
 
 let playing = 0;
-let current: HTMLAudioElement | null = null;
-let finishCurrent: (() => void) | null = null;  // a stopped sentence ends its run, and its audio is let go
+let stopCurrent: (() => void) | null = null;  // the response being heard, let go when another starts or it stops
 
-function play(audio: Blob, run: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (run !== playing || typeof Audio === 'undefined') {
-      resolve();
-      return;
-    }
-    const url = URL.createObjectURL(audio);
-    const element = new Audio(url);
-    current = element;
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      finishCurrent = null;
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-    finishCurrent = done;
-    element.addEventListener('ended', done, { once: true });
-    element.addEventListener('error', done, { once: true });
-    void element.play().catch(done);
+/** One sentence's audio, pushed into ``sink`` as it arrives; false when the service could not speak it. */
+async function streamSentence(sessionId: string, sentence: { speakerId: string; text: string }, sink: RpgPcmSink,
+  signal: AbortSignal): Promise<boolean> {
+  const { data, response } = await api.POST('/api/rpg/sessions/{session_id}/speech-audio', {
+    params: { path: { session_id: sessionId } },
+    body: { speaker_id: sentence.speakerId, text: sentence.text },
+    parseAs: 'stream',
+    signal,
   });
+  const body = data as ReadableStream<Uint8Array> | null | undefined;
+  if (!response.ok || !body) return false;
+  const rate = Number(response.headers.get('X-Omnix-Sample-Rate')) || 24_000;
+  const reader = body.getReader();
+  let carry = new Uint8Array(0);  // an odd byte waits for its sample's other half
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return true;
+    const bytes = new Uint8Array(carry.length + value.length);
+    bytes.set(carry);
+    bytes.set(value, carry.length);
+    const whole = bytes.length - (bytes.length % 2);
+    carry = bytes.slice(whole);
+    if (whole) sink.push(new Int16Array(bytes.buffer.slice(0, whole)), rate);
+  }
 }
 
-/** Speak ``blocks`` (a finished response's): each in its speaker's voice, a sentence at a time; a new call stops the
- * one before. */
+/** Speak ``blocks`` (a finished response's): each in its speaker's voice, sentence by sentence, as one stream heard
+ * from its first audio; a new call stops the one before, its requests too. Anything failing leaves the text silent. */
 export async function speakResponse(sessionId: string, blocks: RpgSpokenBlock[]): Promise<RpgSpeechOutcome> {
   const spoken = blocks.filter((block) => block.text.trim());
   if (!sessionId || !spoken.length) return 'silent';
   const run = ++playing;
-  current?.pause();
-  finishCurrent?.();
-  const { data, error } = await api.POST('/api/rpg/sessions/{session_id}/speech-plan', {
-    params: { path: { session_id: sessionId } },
-    body: { blocks: spoken.map((block) => ({ speaker_id: block.speakerId || 'narrator', text: block.text })) },
-  });
-  const segments = (data as { segments?: Array<{ speaker_id: string; sentences: string[] }> } | undefined)?.segments;
-  if (error || !segments) return 'silent';
-  for (const segment of segments) {
-    for (const sentence of segment.sentences) {
-      if (run !== playing) return 'stopped';
-      const { data: audio, response } = await api.POST('/api/rpg/sessions/{session_id}/speech-audio', {
-        params: { path: { session_id: sessionId } },
-        body: { speaker_id: segment.speaker_id, text: sentence },
-        parseAs: 'blob',
-      });
-      if (!response.ok || !(audio instanceof Blob)) return 'silent';
-      await play(audio, run);
+  stopCurrent?.();
+  const requests = new AbortController();
+  let sink: RpgPcmSink | null = null;
+  stopCurrent = () => {
+    requests.abort();
+    sink?.stop();
+  };
+  try {
+    const { data, error } = await api.POST('/api/rpg/sessions/{session_id}/speech-plan', {
+      params: { path: { session_id: sessionId } },
+      body: { blocks: spoken.map((block) => ({ speaker_id: block.speakerId || 'narrator', text: block.text })) },
+      signal: requests.signal,
+    });
+    const segments = (data as { segments?: Array<{ speaker_id: string; sentences: string[] }> } | undefined)?.segments;
+    if (error || !segments) return run === playing ? 'silent' : 'stopped';
+    const opened = await openPcmSink();
+    if (run !== playing) {
+      opened?.stop();
+      return 'stopped';
     }
+    if (!opened) return 'silent';
+    sink = opened;
+    // Each sentence is asked for when the one before has arrived, not when it has been heard: the service speaks
+    // faster than real time, so the stream stays ahead of what is heard.
+    for (const segment of segments) {
+      for (const text of segment.sentences) {
+        if (!await streamSentence(sessionId, { speakerId: segment.speaker_id, text }, opened, requests.signal)) {
+          opened.stop();
+          return run === playing ? 'silent' : 'stopped';
+        }
+      }
+    }
+    await opened.end();
+    return run === playing ? 'played' : 'stopped';
+  } catch {  // the service gone mid-sentence, or this response stopped: its requests aborted
+    sink?.stop();
+    return run === playing ? 'silent' : 'stopped';
   }
-  return run === playing ? 'played' : 'stopped';
 }
 
 export function stopSpeaking(): void {
   playing += 1;
-  current?.pause();
-  finishCurrent?.();
-  current = null;
+  stopCurrent?.();
+  stopCurrent = null;
 }

@@ -107,4 +107,13 @@ def as_wav(audio: bytes, *, sample_rate: int) -> bytes:
     return buffer.getvalue()
 
 
-__all__ = ["DEFAULT_VOICE", "as_wav", "castable_voices", "render_key", "split_sentences"]
+def pcm_of(audio: bytes) -> tuple[bytes, int]:
+    """A WAV file's 16-bit mono samples and sample rate (the campaign's cache keeps WAV; speech is played as PCM)."""
+    import io
+    import wave
+
+    with wave.open(io.BytesIO(audio), "rb") as source:
+        return source.readframes(source.getnframes()), source.getframerate()
+
+
+__all__ = ["DEFAULT_VOICE", "as_wav", "castable_voices", "pcm_of", "render_key", "split_sentences"]
