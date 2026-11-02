@@ -104,10 +104,11 @@ export function useChatWorkspaceState() {
     selectedProviderId,
   });
 
-  const { liveCallRuntime, setLiveCallRuntime, liveCallRuntimeRef } = useLiveCallRuntime({
+  const { liveCallRuntime, liveCallRuntimeLoading, setLiveCallRuntime, liveCallRuntimeRef } = useLiveCallRuntime({
     selectedSessionId,
     selectedSessionSummary,
     interaction,
+    characterName: selectedCharacter?.display_name,
     liveVoiceActiveRef,
   });
 
@@ -318,7 +319,7 @@ export function useChatWorkspaceState() {
     register, handleSubmit, reset, setValue, getValues, watch, control, errors, sendMutation, sendChatMessage,
     quickSearchProgress, pendingUserMessage, selectedProviderId, selectedModelId, providerPayload, chatProviders,
     chatModels, interaction, selectedCharacter, voiceProfiles, voiceProfilesLoading, liveCallRuntime,
-    setLiveCallRuntime, liveCallRuntimeRef, activeSession, activeMessageCount, providerLabel, modelLabel,
+    liveCallRuntimeLoading, setLiveCallRuntime, liveCallRuntimeRef, activeSession, activeMessageCount, providerLabel, modelLabel,
     recentMessages, sessionMessages, displayedMessages, displayedSessionId, messagesContainerRef, messagesEndRef,
     handleMessagesScroll, liveVoiceTranscript, livePresentation, pcmStream, liveChatMessages, liveCardRef,
     toolExecutionRows, refreshActivityPanel, recordActivityEvent, latestAssistantMessage, enabledToolCount,

@@ -225,6 +225,15 @@
     width: min(100%, 42rem);
   }
 
+  /* The whole portrait, however the stage is shaped: its frames are square and carry the head's motion. */
+  .live-chat-fullscreen-shell .live-chat-stage-avatar > .assistant-live-character-avatar[data-renderer='portrait'] img,
+  .live-chat-fullscreen-shell .live-chat-stage-avatar > .assistant-live-character-avatar[data-renderer='portrait'] canvas {
+    animation: none;
+    filter: none;
+    object-fit: contain;
+    object-position: center;
+  }
+
   .live-chat-character-stage > .assistant-live2d-zoom-control {
     justify-self: center;
     margin: 0.55rem 0 0.1rem;

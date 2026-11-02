@@ -35,6 +35,7 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
     from .transport.avatar_websocket import register_live_call_avatar_websocket
     from .portrait.calls import portrait_call_registry
     from .transport.diagnostics_routes import register_live_voice_diagnostics_routes
+    from .transport.portrait_load import register_portrait_load_routes
     from .transport.portrait_preview import register_portrait_preview_route
     from .transport.websocket import register_tts_live_call_websocket
 
@@ -56,6 +57,8 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
                                         chat_store_factory=lambda: context.services.chat)
     # Previewing a portrait in the character's avatar setup (Phase 4).
     register_portrait_preview_route(router, provider_factory=_live_preview_tts_provider)
+    # Loading the portrait model ahead of a call, from the call panel's button.
+    register_portrait_load_routes(router)
     register_live_voice_execution_lane_routes(router, state)
     register_live_voice_diagnostics_routes(router, state)
     register_live_voice_cue_asset_routes(router, state)

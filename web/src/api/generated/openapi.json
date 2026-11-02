@@ -40831,6 +40831,70 @@
         "title": "PortfolioScore",
         "type": "object"
       },
+      "PortraitLoadRequest": {
+        "properties": {
+          "asset_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "PortraitLoadRequest",
+        "type": "object"
+      },
+      "PortraitLoadResponse": {
+        "properties": {
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "loading",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "code",
+          "message"
+        ],
+        "title": "PortraitLoadResponse",
+        "type": "object"
+      },
+      "PortraitModelStatus": {
+        "properties": {
+          "status": {
+            "enum": [
+              "ready",
+              "loading",
+              "unloaded",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PortraitModelStatus",
+        "type": "object"
+      },
       "PortraitPreviewRequest": {
         "properties": {
           "asset_id": {
@@ -109187,6 +109251,66 @@
           }
         },
         "summary": "Get Voice Session Evaluation"
+      }
+    },
+    "/api/tts/live-call/portrait-load": {
+      "get": {
+        "operationId": "portrait_model_status_api_tts_live_call_portrait_load_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortraitModelStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portrait Model Status",
+        "tags": [
+          "live-voice"
+        ]
+      },
+      "post": {
+        "operationId": "portrait_load_api_tts_live_call_portrait_load_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortraitLoadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortraitLoadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portrait Load",
+        "tags": [
+          "live-voice"
+        ]
       }
     },
     "/api/tts/live-call/portrait-preview": {

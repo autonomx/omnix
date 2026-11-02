@@ -173,7 +173,7 @@ export function ChatInlineStatus({ ws }: { ws: ChatWorkspaceModel }) {
 export function ChatLiveVoicePanel({ ws }: { ws: ChatWorkspaceModel }) {
   const {
     autoSpeakResponses, callElapsedMs, chatJobInProgress, clearVoiceTranscript, control, currentLiveCallVoiceId,
-    isAssistantSpeaking, liveCallRuntime, liveCardRef, liveDraftText, liveIdentityLabel, liveVoiceActive,
+    isAssistantSpeaking, liveCallRuntime, liveCallRuntimeLoading, liveCardRef, liveDraftText, liveIdentityLabel, liveVoiceActive,
     sendMutation, sendVoiceTranscript, setAutoSpeakResponses, speechInputLabel, startVoiceInput,
     toggleLiveCallFromControls, ttsOutputLabel, visibleVoiceTranscriptMessages, voiceCaptureMode,
   } = ws;
@@ -183,6 +183,7 @@ export function ChatLiveVoicePanel({ ws }: { ws: ChatWorkspaceModel }) {
         cardRef={liveCardRef}
         voiceId={currentLiveCallVoiceId()}
         liveCallRuntime={liveCallRuntime}
+        liveCallRuntimeLoading={liveCallRuntimeLoading}
         identityLabel={liveIdentityLabel}
         liveVoiceActive={liveVoiceActive}
         voiceCaptureMode={voiceCaptureMode}

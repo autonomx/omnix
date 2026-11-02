@@ -20,12 +20,14 @@ import { Live2DMotionControl } from './Live2DMotionControl';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { CapabilityNotice } from '../../setup';
 import { LiveCallVisual } from './LiveCallVisual';
+import { LivePortraitLoadControl } from './portrait/LivePortraitLoadControl';
 
 type ChatLiveVoiceCardProps = {
   /** The capture controller binds its microphone stream to this card. */
   cardRef: RefObject<HTMLElement | null>;
   voiceId: string;
   liveCallRuntime: CharacterLiveCallRuntime | null;
+  liveCallRuntimeLoading: boolean;
   identityLabel: string;
   liveVoiceActive: boolean;
   voiceCaptureMode: VoiceCaptureMode;
@@ -51,6 +53,7 @@ export function ChatLiveVoiceCard({
   cardRef,
   voiceId,
   liveCallRuntime,
+  liveCallRuntimeLoading,
   identityLabel: liveIdentityLabel,
   liveVoiceActive,
   voiceCaptureMode,
@@ -99,7 +102,8 @@ export function ChatLiveVoiceCard({
       {liveCallRuntime?.avatar_pack?.renderer === 'live2d'
         ? <Live2DMotionControl rigAssetId={liveCallRuntime.avatar_pack.rig_asset_id} />
         : <div className="assistant-live-state" role="status" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
-      <LiveCallVisual voiceMode={liveVoiceVisualMode} thinking={thinking} />
+      <LivePortraitLoadControl />
+      <LiveCallVisual voiceMode={liveVoiceVisualMode} thinking={thinking} runtimeLoading={liveCallRuntimeLoading} />
       {liveCallRuntime?.avatar_pack?.renderer === 'live2d' ? <Live2DZoomControl /> : null}
       <div className="assistant-voice-input-indicator" aria-live="polite">
         <span>Mic input</span>

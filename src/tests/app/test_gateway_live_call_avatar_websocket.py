@@ -94,7 +94,8 @@ def test_an_unknown_token_is_refused(monkeypatch, portrait) -> None:
      "portrait_not_configured"),
     (lambda monkeypatch, state: state.update(pack=PORTRAIT.model_copy(update={"renderer": "sprite"})),
      "not_a_portrait"),
-    (lambda monkeypatch, state: state.update(prepare_error=PortraitUnavailable("model_busy", "short")), "model_busy"),
+    (lambda monkeypatch, state: state.update(prepare_error=PortraitUnavailable("model_missing", "missing")),
+     "model_missing"),
 ])
 def test_a_call_whose_portrait_cannot_serve_is_told_why(monkeypatch, portrait, setup, code: str) -> None:
     setup(monkeypatch, portrait.state)
@@ -134,6 +135,46 @@ def test_a_portrait_that_does_not_load_in_time_falls_back(monkeypatch, portrait)
             reply = avatar.receive_json()
     assert reply["type"] == "unavailable" and reply["code"] == "warming"
     assert portrait.opened == []
+
+
+def test_too_little_memory_says_so_and_the_portrait_starts_when_memory_frees(monkeypatch, portrait) -> None:
+    # Longer than any load wait: only the call's end stops this one. Then the load gets its own full wait.
+    monkeypatch.setattr(avatar_websocket, "MEMORY_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(avatar_websocket, "LOAD_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(avatar_websocket, "LOAD_WAIT_SECONDS", 0.1)
+    short = PortraitUnavailable("model_busy", "The portrait needs about 8 GB of host memory to load")
+    portrait.state["prepare_errors"] = [short] * 20 + [PortraitUnavailable("warming", "loading")] * 2
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with client.websocket_connect(_avatar_url(token)) as avatar:
+            assert avatar.receive_json() == {"type": "loading", "code": "model_busy"}
+            assert avatar.receive_json() == {"type": "loading"}  # memory freed: now it is loading
+            assert avatar.receive_json()["type"] == "ready"
+    assert portrait.opened[0]["latent_key"] == "latent-key"
+
+
+def test_a_call_that_ends_while_short_of_memory_stops_asking(monkeypatch, portrait) -> None:
+    monkeypatch.setattr(avatar_websocket, "MEMORY_POLL_SECONDS", 0.05)
+    portrait.state["prepare_error"] = PortraitUnavailable("model_busy", "short")
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with contextlib.ExitStack() as stack:
+        tts = stack.enter_context(client.websocket_connect("/api/tts/live-call/websocket?portrait=1"))
+        avatar = stack.enter_context(client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])))
+        assert avatar.receive_json() == {"type": "loading", "code": "model_busy"}
+        tts.close()
+        with pytest.raises(WebSocketDisconnect) as closed:
+            avatar.receive_json()
+    assert closed.value.code == 1000 and portrait.opened == []
+
+
+def test_a_refusal_for_a_browser_that_has_left_raises_nothing() -> None:
+    # Seen on a live call: the refusal came after the browser had gone, and the disconnect escaped the route.
+    class Gone:
+        async def send_json(self, _message: dict[str, Any]) -> None:
+            raise WebSocketDisconnect(code=1006)
+
+    asyncio.run(avatar_websocket._unavailable(Gone(), "model_failed", "gone"))
 
 
 def test_a_call_that_ends_while_its_portrait_loads_never_gets_a_link(monkeypatch, portrait) -> None:

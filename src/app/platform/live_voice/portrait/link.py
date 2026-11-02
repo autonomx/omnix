@@ -41,6 +41,22 @@ def portrait_url() -> str:
     return (env_str("OMNIX_PORTRAIT_URL", "") or "").strip().rstrip("/")
 
 
+async def portrait_health(base_url: str, *, client: Any = None) -> str:
+    """The model's state on the service (``unloaded``, ``warming``, ``ready``...), or ``""`` when it does not answer."""
+    import httpx
+
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=3.0, follow_redirects=False)
+    try:
+        response = await client.get(f"{base_url}/health")
+        return str(response.json().get("status") or "") if response.status_code == 200 else ""
+    except (httpx.HTTPError, ValueError):
+        return ""
+    finally:
+        if owned:
+            await client.aclose()
+
+
 async def prepare_portrait(base_url: str, tenant: str, image: bytes, *, client: Any = None) -> str:
     """Encode a portrait on the service; returns its latent key."""
     import httpx
@@ -206,4 +222,5 @@ class PortraitLink:
             await self._websocket.close()
 
 
-__all__ = ["PortraitLink", "PortraitUnavailable", "portrait_url", "prepare_portrait", "preview_portrait"]
+__all__ = ["PortraitLink", "PortraitUnavailable", "portrait_health", "portrait_url", "prepare_portrait",
+           "preview_portrait"]

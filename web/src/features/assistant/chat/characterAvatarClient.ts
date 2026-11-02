@@ -83,6 +83,13 @@ export const characterAvatarClient = {
   previewPortrait(input: PortraitPreviewRequest): Promise<PortraitPreviewResponse> {
     return avatar(api.POST('/api/tts/live-call/portrait-preview', { body: input }));
   },
+  /** Asks the portrait service to load its model for this image, ahead of a call: `loading` until asked again and ready. */
+  loadPortrait(assetId: string): Promise<components['schemas']['PortraitLoadResponse']> {
+    return avatar(api.POST('/api/tts/live-call/portrait-load', { body: { asset_id: assetId } }));
+  },
+  portraitModelStatus(): Promise<components['schemas']['PortraitModelStatus']> {
+    return avatar(api.GET('/api/tts/live-call/portrait-load'));
+  },
   backfillClonedVoices(input: components['schemas']['BackfillClonedVoiceCharactersRequest']): Promise<ClonedVoiceBackfillResponse> {
     return avatar(api.POST('/api/characters/backfill-cloned-voices', { body: input }));
   },

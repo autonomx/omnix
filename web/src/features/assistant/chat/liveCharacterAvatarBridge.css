@@ -216,6 +216,53 @@
     backdrop-filter: blur(8px);
   }
 
+  .assistant-live-portrait-notice {
+    position: absolute;
+    top: 0.75rem;
+    left: 50%;
+    z-index: 2;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100% - 1.5rem);
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    border-radius: 0.7rem;
+    background: color-mix(in srgb, var(--bg-slate-150-2) 82%, transparent);
+    color: var(--fg-slate-970-2);
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-align: center;
+    backdrop-filter: blur(8px);
+  }
+
+  .assistant-live-portrait-load {
+    align-items: center;
+    display: grid;
+    gap: 0.35rem;
+    justify-items: center;
+  }
+
+  .assistant-live-portrait-load button:disabled {
+    cursor: default;
+    opacity: 0.75;
+  }
+
+  .assistant-live-portrait-load small {
+    color: var(--fg-slate-970-2);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    text-align: center;
+  }
+
+  .assistant-live-portrait-notice.is-avatar-loading {
+    animation: assistant-live-avatar-loading 0.2s ease-out 0.4s backwards;
+  }
+
+  @keyframes assistant-live-avatar-loading {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
   .assistant-live-card .assistant-voice-transcript {
     background: color-mix(in srgb, var(--bg-slate-170-2) 72%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 22%, transparent);
@@ -274,7 +321,8 @@
 
 
   /* Omnix light appearance: Live Voice bridge */
-  :root[data-omnix-appearance='light'] .assistant-live-character-avatar figcaption {
+  :root[data-omnix-appearance='light'] .assistant-live-character-avatar figcaption,
+  :root[data-omnix-appearance='light'] .assistant-live-portrait-notice {
     border: 1px solid color-mix(in srgb, var(--c-blue-560) 18%, transparent);
   }
   :root[data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript-header {

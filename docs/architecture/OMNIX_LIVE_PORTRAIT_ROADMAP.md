@@ -43,7 +43,8 @@ without a portrait run as before.
 
 **2026-10-31.** Transitions back to the idle loop are rendered in motion space (no pixel blend), the idle face sways
 near the loop's first frame while a reply is thought of, and blinks (FLOAT never does: the motion decoder's eyelid
-direction, every 2.5-6 s anywhere in the loop). A three-reviewer code review found 26 defects, all fixed with tests.
+direction, every 2.5-6 s anywhere in the loop; revised 2026-11-01, rated too forced: that direction also presses the
+lips, so a blink now takes only the area around the eyes, at a milder -5, eased, every 3.5-8 s). A three-reviewer code review found 26 defects, all fixed with tests.
 The first call after a cold start that never began (several in five) was a call started before Chat's runtime had
 installed its live-voice controllers; calls now wait for them (`ea9c7c87fd`), and six cold starts in a row passed.
 The on-demand load was verified mid-call (ready in 13.6 s, the fallback until then, the audio never held).
@@ -844,7 +845,9 @@ During any of them the renderer holds the last speaking frame. If the gap passes
   never waits for frames. After 10 idle minutes the model unloads and the service exits with `IDLE_EXIT_CODE`
   (`app/runtime/process_control.py`); the launcher and the desktop supervisor start it again at once, light, since only
   the process's end releases its CUDA context (about 2.5 GB of commit). `OMNIX_PORTRAIT_PRELOAD=1` loads at start (the
-  benchmark runs and the end-to-end check measure a loaded portrait).
+  benchmark runs and the end-to-end check measure a loaded portrait). With too little VRAM or commit for the load
+  (`model_busy`), the gateway keeps asking every 5 s for as long as the call lasts, so the portrait starts once memory is
+  freed; the call says why it is not showing the portrait (added 2026-11-01, after a real call fell back silently).
 - **D-10 The paired gate's underrun bound: +0.1 per reply (settled 2026-10-31).** Underruns per reply may be at most
   0.1 higher with the portrait on than off (about 4 in 40 replies). Both runs underrun about 1.4 times a reply from TTS
   alone on this machine, and with no allowance one more in 40 replies failed the gate from run to run.

@@ -27,7 +27,9 @@ import {
  * drained. When the user stops speaking the loop settles on its first frame, where the reply's motion starts.
  * Anything that stops the portrait (no hello, a refusal, a lost stream) leaves the status `unavailable` and the
  * call shows the pack's fallback renderer. The model loads when a call first asks for it: until it is ready the
- * gateway says `loading`, the call shows the fallback and its audio never waits for frames.
+ * gateway says `loading`, the call shows the fallback and its audio never waits for frames. With too little memory
+ * to load, `loading` carries the reason and lasts until memory frees or the call ends. `portraitNotice` says why
+ * the portrait is not showing.
  *
  * Each `frame_ack` also says how many speech frames have arrived, how many came too late to draw and how long
  * decoding took; the gateway steps the call's quality level from them (`quality` messages). When frames are still
@@ -67,6 +69,7 @@ export class LivePortrait {
   private liveCallKey: string | null = null;
   private session: LiveVoicePcmSession | null = null;
   private socket: WebSocket | null = null;
+  private lastPicture: { now: number; picture: PortraitPicture<ImageBitmap> } | null = null;
   private clock: PortraitPlaybackClock | null = null;
   private buffer = new PortraitFrameBuffer<ImageBitmap>((image) => image.close());
   private readonly compositor = new PortraitCompositor<ImageBitmap>();
@@ -165,6 +168,14 @@ export class LivePortrait {
 
   /** What to draw at `now` (performance time, ms): speech, the held frame, or the idle loop, with crossfades. */
   picture(now: number): PortraitPicture<ImageBitmap> {
+    // Asked once a frame per canvas (the call panel stays mounted under fullscreen); one frame's canvases share a time.
+    if (this.lastPicture?.now === now) return this.lastPicture.picture;
+    const picture = this.computePicture(now);
+    this.lastPicture = { now, picture };
+    return picture;
+  }
+
+  private computePicture(now: number): PortraitPicture<ImageBitmap> {
     const position = this.heard();
     const speech = position && this.clock ? this.buffer.frameAt(position, this.clock.rate) : null;
     if (speech && speech !== this.lastMeasured) this.measureOffset(speech);
@@ -183,6 +194,7 @@ export class LivePortrait {
   }
 
   end(): void {
+    this.lastPicture = null; // its frames are released below
     this.generation += 1;
     this.flushOffsets();
     this.lastMeasured = null;
@@ -271,7 +283,7 @@ export class LivePortrait {
       this.ackTimer = setInterval(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
     } else if (message.type === 'loading') {
       this.session?.setPortraitClock(false); // no frames for a minute: the replies' audio never waits for them
-      this.publish({ status: 'loading', fallbackRenderer: this.snapshot.fallbackRenderer, reason: null });
+      this.publish({ status: 'loading', fallbackRenderer: this.snapshot.fallbackRenderer, reason: message.code ?? null });
     } else if (message.type === 'quality' && typeof message.level === 'number') {
       this.level = message.level;
     } else if (message.type === 'unavailable') {
@@ -431,6 +443,30 @@ export class LivePortrait {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener();
   }
+}
+
+const MEMORY_SHORT = 'model_busy';
+const NOT_ENOUGH_MEMORY = 'Live portrait unavailable: not enough memory. It starts on its own once you free some.';
+const UNAVAILABLE_NOTICES: Record<string, string> = {
+  [MEMORY_SHORT]: 'Live portrait unavailable: not enough memory. Free some and try again.',
+  model_missing: 'Live portrait unavailable: its models are not installed. Download them in Settings, Models.',
+  model_failed: 'Live portrait unavailable: its model failed to load.',
+  warming: 'Live portrait unavailable: its model took too long to load.',
+  portrait_not_configured: 'Live portrait unavailable: the portrait service is not set up.',
+  service_unreachable: 'Live portrait unavailable: the portrait service is not answering.',
+  portrait_busy: 'Live portrait unavailable: another live call is using it.',
+  no_face: 'Live portrait unavailable: no face was found in the portrait image.',
+  image_too_large: 'Live portrait unavailable: the portrait image is too large.',
+  image_unreadable: 'Live portrait unavailable: the portrait image could not be read.',
+  portrait_lost: 'Live portrait stopped during this call.',
+};
+
+/** Why a call is not showing its portrait, for the person on the call; null while it shows or is about to. */
+export function portraitNotice({ status, reason }: LivePortraitSnapshot): string | null {
+  if (status === 'loading') return reason === MEMORY_SHORT ? NOT_ENOUGH_MEMORY : 'Live portrait is loading…';
+  if (status === 'degraded') return 'Live portrait paused for this reply: its frames are arriving late.';
+  if (status !== 'unavailable') return null;
+  return UNAVAILABLE_NOTICES[reason ?? ''] ?? 'Live portrait unavailable for this call.';
 }
 
 /** `omnix.livePortrait.enabled` = '0' shows the pack's fallback instead (the release gate's portrait-off run). */

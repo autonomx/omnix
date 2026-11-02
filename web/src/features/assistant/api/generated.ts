@@ -2550,6 +2550,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tts/live-call/portrait-load": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portrait Model Status */
+        get: operations["portrait_model_status_api_tts_live_call_portrait_load_get"];
+        put?: never;
+        /** Portrait Load */
+        post: operations["portrait_load_api_tts_live_call_portrait_load_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tts/live-call/portrait-preview": {
         parameters: {
             query?: never;
@@ -7853,6 +7871,37 @@ export interface components {
         /** PlanningSubmitRequest */
         PlanningSubmitRequest: {
             plan: components["schemas"]["ImplementationPlanSubmission"];
+        };
+        /** PortraitLoadRequest */
+        PortraitLoadRequest: {
+            /** Asset Id */
+            asset_id: string;
+        };
+        /** PortraitLoadResponse */
+        PortraitLoadResponse: {
+            /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "loading" | "unavailable";
+        };
+        /** PortraitModelStatus */
+        PortraitModelStatus: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "loading" | "unloaded" | "unavailable";
         };
         /** PortraitPreviewRequest */
         PortraitPreviewRequest: {
@@ -15445,6 +15494,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VoiceSessionEvaluationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portrait_model_status_api_tts_live_call_portrait_load_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortraitModelStatus"];
+                };
+            };
+        };
+    };
+    portrait_load_api_tts_live_call_portrait_load_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortraitLoadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortraitLoadResponse"];
                 };
             };
             /** @description Validation Error */

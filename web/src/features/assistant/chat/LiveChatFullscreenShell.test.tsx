@@ -7,7 +7,23 @@ import { liveConversationStore } from '../workspace/live-conversation-store';
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import type { CharacterLiveCallRuntime } from './characterClient';
 import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+import { livePortrait } from './portrait/livePortrait';
 import { fixture } from '../../../test/fixture';
+
+const sockets: unknown[] = [];
+vi.stubGlobal('WebSocket', class {
+  static OPEN = 1;
+  readyState = 1;
+  binaryType = '';
+  private readonly listeners = new Map<string, ((event: unknown) => void)[]>();
+  constructor() { sockets.push(this); }
+  addEventListener(type: string, listener: (event: unknown) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+  emit(type: string, event: unknown): void { for (const listener of this.listeners.get(type) ?? []) listener(event); }
+  send(): void { /* nothing to send to */ }
+  close(): void { this.readyState = 3; }
+});
 
 const mayaRuntime: CharacterLiveCallRuntime = fixture({
   session_id: 'chat:maya',
@@ -48,6 +64,48 @@ function renderShell() {
 
 describe('LiveChatFullscreenShell', () => {
   let dispose: () => void;
+
+  it('draws a live portrait on the stage, and the pack\'s fallback with the reason when it cannot show', async () => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    resetLiveChatFullscreenStateForTests();
+    const disposeFullscreen = initializeLiveChatFullscreenController();
+    const pack = { ...mayaRuntime.avatar_pack, renderer: 'portrait', fallback_renderer: 'sprite', base_asset_id: 'image:maya-portrait' } as CharacterLiveCallRuntime['avatar_pack'];
+    const portraitRuntime = { ...mayaRuntime, avatar_pack: pack };
+    act(() => {
+      publishCharacterAvatarRuntime(portraitRuntime);
+      livePortrait.setPack(pack);
+    });
+    renderShell();
+    await act(async () => { await enterLiveChatFullscreen(); });
+
+    const stage = screen.getByRole('region', { name: 'Maya character stage' });
+    expect(stage.querySelector('figure')?.dataset.renderer).toBe('portrait');
+    expect(within(stage).getByAltText('Maya live portrait').getAttribute('src')).toBe('/api/assets/image%3Amaya-portrait/file');
+    expect(stage.querySelector('canvas')).not.toBeNull();
+    expect(within(stage).getByText('Live portrait linked')).toBeTruthy();
+    expect(within(stage).queryByLabelText('Maya visual placeholder')).toBeNull();
+
+    // The portrait cannot show: the pack's image, and why.
+    act(() => {
+      const hooks = livePortrait.begin('chat:maya');
+      hooks.onHello({ callKey: 'call', avatarToken: 'token' });
+    });
+    const socket = sockets.at(-1) as { emit: (type: string, event: unknown) => void };
+    act(() => socket.emit('message', { data: JSON.stringify({ type: 'unavailable', code: 'model_missing' }) }));
+    expect(stage.querySelector('canvas')).toBeNull();
+    expect(within(stage).getByAltText('Maya live avatar').getAttribute('src')).toBe('/api/assets/image%3Amaya-closed/file');
+    expect(within(stage).getByRole('status').textContent).toContain('models are not installed');
+
+    act(() => {
+      livePortrait.end();
+      livePortrait.setPack(null);
+    });
+    await act(async () => { await exitLiveChatFullscreen(); });
+    disposeFullscreen();
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   beforeEach(() => {
     sourceCallClick.mockClear();

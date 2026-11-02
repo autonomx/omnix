@@ -12,7 +12,9 @@ offset, then a JPEG; the idle loop's frames first). When the portrait cannot ser
 ``{"type": "unavailable", "code", "message"}`` and the socket closes; the browser shows the pack's fallback
 renderer. The portrait model loads on demand (about a minute, on the first call after the service started): while it
 does, ``{"type": "loading"}`` goes to the browser, which shows the fallback, and the gateway asks again every 2 s
-until it is ready (up to three minutes). From the browser, every 250 ms: ``frame_ack`` with the segment and offset it is playing (the play
+until it is ready (up to three minutes). When the machine has too little memory for the load, it is
+``{"type": "loading", "code": "model_busy"}`` and the gateway keeps asking, more slowly, for as long as the call
+lasts: the portrait starts once memory is freed. From the browser, every 250 ms: ``frame_ack`` with the segment and offset it is playing (the play
 position the service's phrase-end deadlines use), the speech frames it has ``received``, how many came ``late``
 and its average ``decode_ms``. Those step the call's quality level (``portrait/quality.py``); a change goes to
 the service and, as ``{"type": "quality", "level"}``, to the browser.
@@ -48,8 +50,12 @@ MAX_PORTRAIT_BYTES = 12 * 1024 * 1024
 LINK_CHECK_SECONDS = 0.5
 LOAD_WAIT_SECONDS = 180.0
 LOAD_POLL_SECONDS = 2.0
+# Too little memory to load can last the whole call; each ask sends the portrait's image.
+MEMORY_POLL_SECONDS = 5.0
 # The service restarts itself after an idle unload (a few seconds without it).
 RESTART_WAIT_SECONDS = 20.0
+# The service's refusal when VRAM or host commit cannot take the load (services.portrait.portrait_server).
+MEMORY_SHORT = "model_busy"
 # Above any offset or frame count a call reaches (about 12 hours of 48 kHz samples).
 MAX_ACK_COUNT = 2**31
 
@@ -60,28 +66,44 @@ def _load_session(chat_store_factory: Callable[[], Any], session_id: str) -> Any
 
 
 async def _unavailable(websocket: WebSocket, code: str, message: str) -> None:
-    await websocket.send_json({"type": "unavailable", "code": code, "message": message})
-    await websocket.close(code=4001, reason=code)
+    with contextlib.suppress(WebSocketDisconnect, RuntimeError):  # the browser may have left while this was decided
+        await websocket.send_json({"type": "unavailable", "code": code, "message": message})
+        await websocket.close(code=4001, reason=code)
+
+
+def _worth_waiting(code: str, waited: float) -> bool:
+    """Whether a refusal may pass on its own. Too little memory is worth waiting out for as long as the call lasts."""
+    if code == MEMORY_SHORT:
+        return True
+    return ((code == "warming" and waited < LOAD_WAIT_SECONDS)
+            or (code == "service_unreachable" and waited < RESTART_WAIT_SECONDS))
 
 
 async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str, image: bytes,
                                call_open: Callable[[], bool]) -> str | None:
     """The portrait's latent key, once its model has loaded; None when the browser left, or the call ended, while it
-    loaded. The service is asked again every ``LOAD_POLL_SECONDS`` whatever the browser sends meanwhile."""
+    loaded. The service is asked again at a steady pace whatever the browser sends meanwhile, and each kind of wait
+    gets its full time however long the one before it took."""
     started = time.monotonic()
-    told = False
+    waiting_for: str | None = None
+    told: dict[str, str] | None = None
     while True:
         try:
             return await prepare_portrait(base_url, tenant, image)
         except PortraitUnavailable as exc:
-            waited = time.monotonic() - started
-            if not ((exc.code == "warming" and waited < LOAD_WAIT_SECONDS)
-                    or (exc.code == "service_unreachable" and waited < RESTART_WAIT_SECONDS)):
+            if exc.code != waiting_for:
+                waiting_for, started = exc.code, time.monotonic()
+            if not _worth_waiting(exc.code, time.monotonic() - started):
                 raise
-        if not told:
-            await websocket.send_json({"type": "loading"})
-            told = True
-        poll_at = time.monotonic() + LOAD_POLL_SECONDS
+        short = waiting_for == MEMORY_SHORT
+        status = {"type": "loading", "code": MEMORY_SHORT} if short else {"type": "loading"}
+        if status != told:
+            try:
+                await websocket.send_json(status)
+            except WebSocketDisconnect:
+                return None
+            told = status
+        poll_at = time.monotonic() + (MEMORY_POLL_SECONDS if short else LOAD_POLL_SECONDS)
         while (left := poll_at - time.monotonic()) > 0:
             try:
                 await asyncio.wait_for(websocket.receive_text(), left)  # anything sent meanwhile is ignored

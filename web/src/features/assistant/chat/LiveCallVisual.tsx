@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   avatarBackgroundImage,
   avatarCaption,
   avatarFrameAsset,
   avatarPresentationState,
   characterAvatarAssetUrl,
-  drawnAvatarPack,
   useLiveAvatar,
 } from './liveCharacterAvatarBridge';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
-import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
-import { livePortrait, portraitEnabled } from './portrait/livePortrait';
+import { AvatarLoadingNotice, LivePortraitCanvas } from './portrait/LivePortraitCanvas';
+import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 
@@ -19,13 +18,15 @@ import { CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/b
  * live portrait, a sprite frame, or a host for the Live2D renderer), the voice
  * orb otherwise. A portrait that is unavailable shows its pack's fallback.
  */
-export function LiveCallVisual({ voiceMode, thinking }: { voiceMode: string; thinking: boolean }) {
+export function LiveCallVisual({ voiceMode, thinking, runtimeLoading = false }: {
+  voiceMode: string;
+  thinking: boolean;
+  /** The session's runtime, which names its avatar, is still on its way. */
+  runtimeLoading?: boolean;
+}) {
   const avatar = useLiveAvatar();
-  const portraitState = useSyncExternalStore(livePortrait.subscribe, livePortrait.getSnapshot, livePortrait.getSnapshot);
   const runtime = avatar.runtime;
-  const portraitUnavailable = portraitState.status === 'unavailable' || portraitState.status === 'degraded'
-    || portraitState.status === 'loading' || !portraitEnabled();
-  const pack = useMemo(() => drawnAvatarPack(runtime?.avatar_pack, portraitUnavailable), [runtime?.avatar_pack, portraitUnavailable]);
+  const { pack, portraitState, notice } = useDrawnAvatarPack(runtime?.avatar_pack);
   const portrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
   const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
   const state = avatarPresentationState(avatar.mouthFrame, voiceMode, thinking);
@@ -72,6 +73,8 @@ export function LiveCallVisual({ voiceMode, thinking }: { voiceMode: string; thi
       ) : (
         <LiveVoiceOrb voiceMode={voiceMode} />
       )}
+      {notice ? <p className="assistant-live-portrait-notice" role="status">{notice}</p> : null}
+      {!notice && runtimeLoading && !showAvatar ? <AvatarLoadingNotice /> : null}
     </div>
   );
 }

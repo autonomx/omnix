@@ -14,6 +14,8 @@ import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
 import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar } from './liveCharacterAvatarBridge';
+import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
+import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
 import './LiveChatFullscreenShell.css';
 import { CHARACTER_AVATAR_RUNTIME_EVENT, CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/bus';
@@ -216,7 +218,10 @@ function LiveCharacterStage({
   characterRuntime: CharacterLiveCallRuntime | null;
 }) {
   const live = useLiveAvatar();
-  const pack = characterRuntime?.avatar_pack;
+  // The runtime may be on its way when fullscreen opens; the avatar on screen is drawn from what the panel has.
+  const shownRuntime = characterRuntime ?? live.runtime;
+  const { pack, portraitState, notice } = useDrawnAvatarPack(shownRuntime?.avatar_pack);
+  const isPortrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
   const voiceMode = speaking ? 'speaking' : stageMode === 'listening' ? 'listening' : 'idle';
   const presentationState = avatarPresentationState(live.mouthFrame, voiceMode, stageMode === 'thinking');
   const assetId = avatarFrameAsset(pack, live, presentationState);
@@ -230,25 +235,38 @@ function LiveCharacterStage({
   const initial = identity.trim().charAt(0).toLocaleUpperCase() || 'O';
   const stageStyle = avatar.backgroundImage ? { backgroundImage: avatar.backgroundImage } : undefined;
   const live2dHostRef = useRef<HTMLElement | null>(null);
-  const isLive2D = characterRuntime?.avatar_pack?.renderer === 'live2d'
-    && Boolean(characterRuntime.avatar_pack.rig_asset_id);
+  const isLive2D = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
+  // A portrait pack's Live2D fallback is drawn from the pack as a Live2D one.
+  const live2dRuntime = useMemo(
+    () => (shownRuntime && pack && pack !== shownRuntime.avatar_pack ? { ...shownRuntime, avatar_pack: pack } : shownRuntime),
+    [shownRuntime, pack],
+  );
 
   useEffect(() => {
-    if (!isLive2D || !characterRuntime || !live2dHostRef.current) return;
-    emitOmnixEvent(CHARACTER_LIVE2D_RENDER_EVENT, { runtime: characterRuntime, host: live2dHostRef.current });
-  }, [characterRuntime, isLive2D]);
+    if (!isLive2D || !live2dRuntime || !live2dHostRef.current) return;
+    emitOmnixEvent(CHARACTER_LIVE2D_RENDER_EVENT, { runtime: live2dRuntime, host: live2dHostRef.current });
+  }, [live2dRuntime, isLive2D]);
 
   return (
     <section className="live-chat-character-stage" style={stageStyle} aria-label={`${identity} character stage`}>
       <div className="live-chat-stage-stars" aria-hidden="true" />
       <header><div><p className="eyebrow">Live room</p><h2>{identity}</h2></div><span>{title(stageMode)}</span></header>
       <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
-        {isLive2D ? <figure ref={live2dHostRef} className="assistant-live-character-avatar" data-renderer="live2d" aria-label={`${identity} Live2D avatar`} /> : avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div role="img" className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
+        {isPortrait ? (
+          <figure className="assistant-live-character-avatar" data-renderer="portrait" data-portrait-status={portraitState.status}>
+            <LivePortraitCanvas
+              key={portraitState.status === 'off' ? 'idle' : 'call'}
+              imageUrl={characterAvatarAssetUrl(pack?.base_asset_id ?? '')}
+              label={`${identity} live portrait`}
+            />
+          </figure>
+        ) : isLive2D ? <figure ref={live2dHostRef} className="assistant-live-character-avatar" data-renderer="live2d" aria-label={`${identity} Live2D avatar`} /> : avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div role="img" className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
+        {notice ? <p className="assistant-live-portrait-notice" role="status">{notice}</p> : null}
       </div>
-      {isLive2D ? <Live2DMotionControl rigAssetId={characterRuntime.avatar_pack?.rig_asset_id} /> : null}
+      {isLive2D ? <Live2DMotionControl rigAssetId={pack?.rig_asset_id} /> : null}
       {isLive2D ? <Live2DZoomControl /> : null}
       <div className="live-chat-stage-caption" aria-live="polite"><i aria-hidden="true" /><span>{status}</span></div>
-      <footer><span>Character-first mode</span><span>{avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>
+      <footer><span>Character-first mode</span><span>{isPortrait ? 'Live portrait linked' : avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>
     </section>
   );
 }

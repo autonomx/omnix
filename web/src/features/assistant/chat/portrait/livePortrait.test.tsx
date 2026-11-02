@@ -1,11 +1,11 @@
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from '../characterClient';
 import type { LiveVoicePcmSession } from '../../workspace/live-voice-pcm-session';
 import { drawnAvatarPack, publishCharacterAvatarRuntime } from '../liveCharacterAvatarBridge';
 import { LiveCallVisual } from '../LiveCallVisual';
 import { fixture } from '../../../../test/fixture';
-import { LivePortrait, livePortrait } from './livePortrait';
+import { LivePortrait, livePortrait, portraitNotice } from './livePortrait';
 
 const release = vi.hoisted(() => ({ samples: vi.fn(), counter: vi.fn(), portrait: vi.fn() }));
 vi.mock('../../workspace/live-voice-release-observer', () => ({
@@ -211,6 +211,8 @@ describe('the live portrait client', () => {
   it('shows the idle loop once all of it has arrived, and cuts back to it when a turn is interrupted', async () => {
     const { portrait, sockets, images } = setup();
     const context = { currentTime: 1 };
+    let now = performance.now();
+    const nextFrame = () => { now += 16; return portrait.picture(now); };
     const hooks = portrait.begin('chat:maya');
     portrait.attachSession(fakeSession(context).session);
     hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
@@ -219,26 +221,26 @@ describe('the live portrait client', () => {
       { output_id: 'idle', epoch: 0, segment_id: 'idle', offset, count: 2, frame_ms: 80 }, id);
     sockets[0].message(idle(1, 21));
     await flush();
-    expect(portrait.picture(performance.now()).under).toBeNull();
+    expect(nextFrame().under).toBeNull();
     sockets[0].message(idle(0, 20));
     await flush();
-    expect((portrait.picture(performance.now()).under as unknown as FakeImage).id).toBe(20);
+    expect((nextFrame().under as unknown as FakeImage).id).toBe(20);
     // The blink after the loop is kept for the settled sway: never drawn as speech or while the loop runs free.
     for (const offset of [0, 1]) {
       sockets[0].message(frameMessage({ output_id: 'blink', epoch: 0, segment_id: 'blink', offset, count: 2, frame_ms: 40 },
         30 + offset));
     }
     await flush();
-    expect([20, 21]).toContain((portrait.picture(performance.now()).under as unknown as FakeImage).id);
+    expect([20, 21]).toContain((nextFrame().under as unknown as FakeImage).id);
 
     sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset: 0 }, 5));
     await flush();
     hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 1 });
     context.currentTime = 1.01;
-    expect((portrait.picture(performance.now()).over as unknown as FakeImage).id).toBe(5);
+    expect((nextFrame().over as unknown as FakeImage).id).toBe(5);
     hooks.onWorkletEvent({ type: 'segment_interrupted', segment_id: 'seg-1', generation_epoch: 1, audio_context_time_seconds: 1.01 });
-    const after = portrait.picture(performance.now());
-    expect(after.over).toBeNull();
+    const after = nextFrame();
+    expect((after.over as unknown as FakeImage | null)?.id).not.toBe(5); // the loop's own wrap blend may show
     expect([20, 21]).toContain((after.under as unknown as FakeImage).id);
     expect(images.find((image) => image.id === 5)?.closed).toBe(true);
 
@@ -376,6 +378,20 @@ describe('the live portrait client', () => {
     expect(images.filter((image) => image.id === 30 || image.id === 31).every((image) => image.closed)).toBe(true);
   });
 
+  it('answers every canvas of one frame the same, moving on only with the next frame', () => {
+    // The call panel stays mounted under fullscreen, so two canvases ask each frame; playback state must step once.
+    const { portrait } = setup();
+    const compositorPicture = vi.spyOn(
+      (portrait as unknown as { compositor: { picture: (...args: unknown[]) => unknown } }).compositor, 'picture',
+    );
+    const first = portrait.picture(1_000);
+    expect(portrait.picture(1_000)).toBe(first);
+    expect(compositorPicture).toHaveBeenCalledTimes(1);
+    portrait.picture(1_016);
+    expect(compositorPicture).toHaveBeenCalledTimes(2);
+    compositorPicture.mockRestore();
+  });
+
   it('falls back when the service refuses or the stream is lost', () => {
     const { portrait, sockets } = setup();
     portrait.begin('chat:maya').onHello({ callKey: 'call-1', avatarToken: 'token' });
@@ -503,6 +519,80 @@ describe('the call visual for a portrait pack', () => {
     expect(view.container.querySelector('figure')?.dataset.renderer).toBe('sprite');
     expect(view.getByAltText('Maya live avatar').getAttribute('src')).toBe('/api/assets/image%3Amaya-portrait/file');
     vi.unstubAllGlobals();
+  });
+
+  it('says why the portrait is not showing, whichever fallback is drawn, and clears once it shows', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const sockets: FakeSocket[] = [];
+    const openSocket = vi.spyOn(window, 'WebSocket').mockImplementation(function fake(url: string | URL) {
+      const socket = new FakeSocket(String(url));
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    } as unknown as typeof WebSocket);
+    for (const pack of [portraitPack, { ...portraitPack, fallback_renderer: 'orb' as const }]) {
+      act(() => publishCharacterAvatarRuntime(portraitRuntime(pack)));
+      livePortrait.setPack(pack);
+      const view = render(<LiveCallVisual voiceMode="idle" thinking={false} />);
+      fireEvent.load(view.getByAltText('Maya live portrait'));
+      expect(view.queryByRole('status')).toBeNull();
+
+      let hooks = null as unknown as ReturnType<typeof livePortrait.begin>;
+      act(() => { hooks = livePortrait.begin('chat:maya'); });
+      act(() => hooks.onHello({ callKey: 'call', avatarToken: 'token' }));
+      fireEvent.load(view.getByAltText('Maya live portrait')); // the call's canvas shows the image afresh
+      expect(view.queryByRole('status')).toBeNull();
+
+      const socket = sockets.at(-1) as FakeSocket;
+      act(() => socket.message(JSON.stringify({ type: 'loading', code: 'model_busy' })));
+      expect(view.getByRole('status').textContent).toContain('not enough memory');
+      act(() => socket.message(JSON.stringify({ type: 'loading' })));
+      expect(view.getByRole('status').textContent).toBe('Live portrait is loading…');
+      act(() => socket.message(JSON.stringify({ type: 'ready', fallback_renderer: pack.fallback_renderer, level: 0 })));
+      fireEvent.load(view.getByAltText('Maya live portrait'));
+      expect(view.queryByRole('status')).toBeNull();
+      act(() => socket.message(JSON.stringify({ type: 'unavailable', code: 'model_missing' })));
+      expect(view.getByRole('status').textContent).toContain('models are not installed');
+
+      act(() => livePortrait.end());
+      fireEvent.load(view.getByAltText('Maya live portrait'));
+      expect(view.queryByRole('status')).toBeNull();
+      view.unmount();
+    }
+    openSocket.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('says the avatar is loading while its runtime is on the way, then until its image has loaded', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    act(() => publishCharacterAvatarRuntime(null));
+    livePortrait.setPack(null);
+    const view = render(<LiveCallVisual voiceMode="idle" thinking={false} runtimeLoading />);
+    expect(view.getByRole('status').textContent).toBe('Loading avatar…');
+
+    view.rerender(<LiveCallVisual voiceMode="idle" thinking={false} />);
+    expect(view.queryByRole('status')).toBeNull(); // no avatar after all: the orb, with nothing to wait for
+
+    act(() => publishCharacterAvatarRuntime(portraitRuntime(portraitPack)));
+    expect(view.getByRole('status').textContent).toBe('Loading avatar…');
+    fireEvent.load(view.getByAltText('Maya live portrait'));
+    expect(view.queryByRole('status')).toBeNull();
+
+    act(() => publishCharacterAvatarRuntime(portraitRuntime({ ...portraitPack, base_asset_id: 'image:other' })));
+    expect(view.getByRole('status').textContent).toBe('Loading avatar…');
+    fireEvent.error(view.getByAltText('Maya live portrait')); // a broken image never leaves it spinning
+    expect(view.queryByRole('status')).toBeNull();
+    view.unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it('never leaves a refusal unexplained, even one it has no words for', () => {
+    expect(portraitNotice({ status: 'unavailable', fallbackRenderer: 'sprite', reason: 'something_new' }))
+      .toBe('Live portrait unavailable for this call.');
+    for (const status of ['off', 'connecting', 'ready'] as const) {
+      expect(portraitNotice({ status, fallbackRenderer: 'sprite', reason: null })).toBeNull();
+    }
   });
 
   it('shows the orb when an unavailable portrait falls back to it', () => {

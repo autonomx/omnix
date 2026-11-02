@@ -6,13 +6,14 @@ import hashlib
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from app.platform.live_voice.portrait import cleanup
 from app.platform.live_voice.portrait.cleanup import PortraitCacheCleaner
 from app.platform.live_voice.portrait.link import PortraitUnavailable
-from app.platform.live_voice.transport import portrait_preview
+from app.platform.live_voice.transport import portrait_load, portrait_preview
 
 
 class SpeakingProvider:
@@ -68,6 +69,60 @@ def test_without_a_portrait_service_the_preview_says_so(monkeypatch) -> None:
     monkeypatch.setattr(portrait_preview, "portrait_url", lambda: "")
     assert client.post("/api/tts/live-call/portrait-preview",
                        json={"asset_id": "image:maya"}).json()["code"] == "portrait_not_configured"
+
+
+def _load_client(monkeypatch, outcome: Any = "latent-key", health: str = "unloaded") -> tuple[TestClient, list[bytes]]:
+    prepared: list[bytes] = []
+
+    async def prepare(base_url: str, tenant: str, image: bytes) -> str:
+        prepared.append(image)
+        if isinstance(outcome, PortraitUnavailable):
+            raise outcome
+        return outcome
+
+    async def service_health(base_url: str) -> str:
+        return health
+
+    monkeypatch.setattr(portrait_load, "portrait_url", lambda: "http://portrait.test")
+    monkeypatch.setattr(portrait_load, "_read_image", lambda asset_id: b"portrait bytes")
+    monkeypatch.setattr(portrait_load, "prepare_portrait", prepare)
+    monkeypatch.setattr(portrait_load, "portrait_health", service_health)
+    router = APIRouter()
+    portrait_load.register_portrait_load_routes(router)
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app), prepared
+
+
+@pytest.mark.parametrize(("outcome", "expected"), [
+    ("latent-key", {"status": "ready", "code": ""}),
+    (PortraitUnavailable("warming", "The portrait model is loading"), {"status": "loading", "code": "warming"}),
+    (PortraitUnavailable("service_unreachable", "restarting"), {"status": "loading", "code": "service_unreachable"}),
+    (PortraitUnavailable("model_busy", "needs 8 GB"), {"status": "unavailable", "code": "model_busy"}),
+    (PortraitUnavailable("model_missing", "not installed"), {"status": "unavailable", "code": "model_missing"}),
+])
+def test_loading_the_portrait_ahead_of_a_call_prepares_it_and_reports_the_services_answer(monkeypatch, outcome,
+                                                                                         expected) -> None:
+    client, prepared = _load_client(monkeypatch, outcome)
+    body = client.post(portrait_load.PORTRAIT_LOAD_PATH, json={"asset_id": "image:maya"}).json()
+    assert {key: body[key] for key in expected} == expected
+    assert prepared == [b"portrait bytes"]  # the same request a call makes, so the service's memory check applies
+
+
+@pytest.mark.parametrize(("health", "status"), [("ready", "ready"), ("warming", "loading"), ("unloaded", "unloaded"),
+                                                ("short", "unloaded"), ("failed", "unloaded"), ("", "unloaded")])
+def test_the_models_state_is_reported_without_loading_it(monkeypatch, health: str, status: str) -> None:
+    client, prepared = _load_client(monkeypatch, health=health)
+    assert client.get(portrait_load.PORTRAIT_LOAD_PATH).json() == {"status": status}
+    assert prepared == []
+
+
+def test_without_a_portrait_service_loading_says_so(monkeypatch) -> None:
+    client, _prepared = _load_client(monkeypatch)
+    monkeypatch.setattr(portrait_load, "portrait_url", lambda: "")
+    assert client.post(portrait_load.PORTRAIT_LOAD_PATH, json={"asset_id": "image:maya"}).json()["code"] == (
+        "portrait_not_configured")
+    assert client.get(portrait_load.PORTRAIT_LOAD_PATH).json() == {"status": "unavailable"}
 
 
 def test_a_released_portrait_is_forgotten_by_its_tenant_and_image_digest(monkeypatch) -> None:
