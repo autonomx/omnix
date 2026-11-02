@@ -12,6 +12,7 @@ from typing import Any, Callable, Generator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from app.providers.reference_audio import trim_trailing_quiet
 from app.providers.speaker_blend import mix_speaker_embeddings
 import soundfile as sf
 import torch
@@ -599,10 +600,15 @@ class FasterQwen3TTS:
         the reference ends with. Appending a short silence makes the last tokens
         encode silence instead, preventing that phoneme from bleeding into the start
         of the generated speech. Set silence_secs=0 to disable this behavior.
+
+        Omnix: quiet already at the clip's end is removed first, so the silence the model
+        sees is exactly ``silence_secs`` (a longer one made it generate silence, see
+        ``trim_trailing_quiet``).
         """
         audio, sr = sf.read(str(ref_audio), dtype="float32", always_2d=False)
         if audio.ndim > 1:
             audio = audio.mean(axis=1)  # convert to mono
+        audio = trim_trailing_quiet(audio, sr)
         if silence_secs > 0:
             silence = np.zeros(int(silence_secs * sr), dtype=np.float32)
             audio = np.concatenate([audio, silence])
