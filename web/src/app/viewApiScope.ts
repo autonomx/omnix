@@ -107,6 +107,11 @@ export function readCookie(name: string, source: string = typeof document === 'u
   return matches.length === 1 && matches[0] ? matches[0] : null;
 }
 
+/** A signed-in browser session: its CSRF cookie is the half of the pair the page can read. */
+export function hasBrowserSession(source?: string): boolean {
+  return readCookie(CSRF_COOKIE, source) !== null;
+}
+
 function isGatewayPath(pathname: string): boolean {
   return ['/api', '/events', '/ready', '/health'].some((prefix) => pathMatchesPrefix(pathname, prefix));
 }

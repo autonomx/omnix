@@ -1,4 +1,5 @@
 import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
+import { hasBrowserSession } from '../../../app/viewApiScope';
 import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 const MIDDLEWARE = 'live-speculation-direct-gateway';
@@ -175,6 +176,9 @@ function localDirectGatewayEnabled(
   explicit: boolean | undefined,
 ): boolean {
   if (explicit === false) return false;
+  // The gateway's CORS refuses credentials, so a direct call cannot carry the session and would get a 401. Signed in,
+  // calls stay same-origin, where the session cookie and CSRF header go with them.
+  if (hasBrowserSession()) return false;
   const hostname = locationLike.hostname.trim().toLowerCase();
   const localHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
   if (!localHost) return false;

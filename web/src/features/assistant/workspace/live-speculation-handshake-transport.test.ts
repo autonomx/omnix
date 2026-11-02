@@ -60,6 +60,22 @@ describe('live speculation direct gateway transport', () => {
     )).toBeNull();
   });
 
+  it('stays same-origin when signed in, because a direct call cannot carry the session', () => {
+    const chat = '/api/chat/sessions/session-test/messages/stream';
+    const cancel = '/api/live/speculation/sessions/session-test/spec-test/cancel';
+    const explicit = { VITE_LIVE_SPECULATION_DIRECT_GATEWAY: 'true', VITE_LIVE_CHAT_DIRECT_GATEWAY: 'true' };
+    document.cookie = 'omnix_csrf=csrf-token; path=/';
+    try {
+      expect(resolveDirectSpeculationUrl(cancel, viteLocation, {})).toBeNull();
+      expect(resolveDirectSpeculationUrl(cancel, viteLocation, explicit)).toBeNull();
+      expect(resolveDirectLiveChatUrl(chat, { method: 'POST', body: liveChatBody() }, viteLocation, {})).toBeNull();
+      expect(resolveDirectLiveChatUrl(chat, { method: 'POST', body: liveChatBody() }, viteLocation, explicit)).toBeNull();
+    } finally {
+      document.cookie = 'omnix_csrf=; path=/; max-age=0';
+    }
+    expect(resolveDirectSpeculationUrl(cancel, viteLocation, {})).toBe(`http://127.0.0.1:8000${cancel}`);
+  });
+
   it('routes accepted live voice chat directly without changing manual chat', () => {
     const path = '/api/chat/sessions/session-test/messages/stream';
     expect(liveChatDirectGatewayEnabled(viteLocation, {})).toBe(true);
