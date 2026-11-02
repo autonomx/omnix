@@ -13,7 +13,8 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.apps.rpg.edge.api.web_contracts import RpgSpeechPlanResponse, RpgVoiceCastResponse, documented
+from app.apps.rpg.edge.api.web_contracts import documented
+from app.apps.rpg.edge.api.web_contracts_voice import RpgSpeechPlanResponse, RpgVoiceCastResponse
 from app.conversation.tts_stream_contract import CHAT_STREAM_MIN_REPETITION_PENALTY
 
 logger = logging.getLogger(__name__)

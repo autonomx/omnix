@@ -97,6 +97,7 @@ VERBS = {"get", "post", "put", "patch", "delete", "head", "options", "request"}
 TRANSPORT_EXCEPTIONS_DOC = "docs/architecture/api-transport-exceptions.md"
 PROCESS_STATE_INVENTORY = "resources/architecture/process-local-state.json"
 PROCESS_STATE_DOC = "docs/architecture/PROCESS_LOCAL_STATE.md"
+DESIGN_TOKENS = "web/src/design/tokens.css"
 _PROCESS_STATE_CONSTRUCTORS = {
     "dict", "list", "set", "defaultdict", "OrderedDict", "deque",
     "Counter", "Lock", "RLock", "Semaphore", "BoundedSemaphore", "Condition",
@@ -1062,7 +1063,9 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
             api_paths.update(_normalize_api_path(match) for match in re.findall(r"['\"`](/(?:api|internal)/[^'\"`\s]*|/health|/ready|/events)(?:['\"`])", code))
         values["web_important"] += len(re.findall(r"!important\b", code, re.I)) if css else 0
         colors = r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b|\b(?:rgb|rgba|hsl|hsla|oklch|oklab)\s*\([^)]*\)"
-        if css:
+        if css and path == DESIGN_TOKENS:
+            pass  # defining a colour as a token is what the rule asks of everything else
+        elif css:
             # Only declaration values, not selectors such as #abc.
             declarations = " ".join(re.findall(r"[\w-]+\s*:\s*([^;{}]+)(?:;|(?=\}))", code))
             values["web_hardcoded_colors"] += len(re.findall(colors, declarations))

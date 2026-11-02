@@ -13,7 +13,7 @@ class PostgresRpgVoiceCastRepository:
     def cast(self, context: TenantContext, campaign_id: str) -> dict[str, dict[str, str]]:
         rows = self.connection.execute(
             "SELECT speaker_id, voice_id, voice_revision, chosen_by FROM omnix_rpg_voice_cast"
-            " WHERE workspace_id = %s AND campaign_id = %s",
+            " WHERE workspace_id = %s AND campaign_id = %s LIMIT 5000",
             (context.workspace_id, campaign_id),
         ).fetchall()
         return {str(row[0]): {"voice_id": str(row[1]), "voice_revision": str(row[2]), "chosen_by": str(row[3])}

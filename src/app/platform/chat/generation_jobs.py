@@ -40,13 +40,7 @@ _CHAT_PROVIDER_CALL_LIMIT = 2 * _CHAT_WORKER_COUNT
 # In-process cancellation wakes a turn at once; a cancel recorded by another
 # gateway process is seen through the job store at this interval.
 _CROSS_PROCESS_CANCEL_POLL_SECONDS = 1.0
-_ACTIVE_JOB_STATUSES = {
-    JobStatus.QUEUED,
-    JobStatus.LEASED,
-    JobStatus.RUNNING,
-    JobStatus.WAITING,
-    JobStatus.RETRYING,
-}
+_ACTIVE_JOB_STATUSES = {JobStatus.QUEUED, JobStatus.LEASED, JobStatus.RUNNING, JobStatus.WAITING, JobStatus.RETRYING}
 _registry_guard = threading.Lock()
 _submission_locks: WeakValueDictionary[str, Any] = WeakValueDictionary()
 _job_commit_locks: WeakValueDictionary[str, Any] = WeakValueDictionary()

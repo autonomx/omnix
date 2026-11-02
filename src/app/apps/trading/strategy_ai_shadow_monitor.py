@@ -572,6 +572,40 @@ def _mfe_mae(
     return mfe, mae
 
 
+async def _session_events(
+    repository: TradingStrategyRepository,
+    config: TradingStrategyConfigDocument,
+    *,
+    session_date,
+    now: datetime,
+) -> list[StrategyEvent]:
+    start_et = datetime(
+        session_date.year,
+        session_date.month,
+        session_date.day,
+        tzinfo=_ET,
+    )
+    end = min(now + timedelta(seconds=1), start_et + timedelta(days=1))
+    if hasattr(repository, "events_by_types_between"):
+        return await asyncio.to_thread(
+            repository.events_by_types_between,
+            config.strategy_id,
+            event_types=_EVENT_TYPES,
+            start_time=start_et.astimezone(timezone.utc),
+            end_time=end.astimezone(timezone.utc),
+            limit=20_000,
+        )
+    recent = await asyncio.to_thread(repository.recent_events, config.strategy_id, 20_000)
+    return [
+        event
+        for event in recent
+        if event.event_type in _EVENT_TYPES
+        and start_et.astimezone(timezone.utc)
+        <= event.observed_at.astimezone(timezone.utc)
+        < end.astimezone(timezone.utc)
+    ]
+
+
 class TradingAIShadowMonitor(ScheduledTradingMonitor):
     error_event = "ai_shadow_monitor_error"
 
@@ -647,40 +681,6 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 payload=payload,
             ),
         )
-
-    async def _session_events(
-        self,
-        repository: TradingStrategyRepository,
-        config: TradingStrategyConfigDocument,
-        *,
-        session_date,
-        now: datetime,
-    ) -> list[StrategyEvent]:
-        start_et = datetime(
-            session_date.year,
-            session_date.month,
-            session_date.day,
-            tzinfo=_ET,
-        )
-        end = min(now + timedelta(seconds=1), start_et + timedelta(days=1))
-        if hasattr(repository, "events_by_types_between"):
-            return await asyncio.to_thread(
-                repository.events_by_types_between,
-                config.strategy_id,
-                event_types=_EVENT_TYPES,
-                start_time=start_et.astimezone(timezone.utc),
-                end_time=end.astimezone(timezone.utc),
-                limit=20_000,
-            )
-        recent = await asyncio.to_thread(repository.recent_events, config.strategy_id, 20_000)
-        return [
-            event
-            for event in recent
-            if event.event_type in _EVENT_TYPES
-            and start_et.astimezone(timezone.utc)
-            <= event.observed_at.astimezone(timezone.utc)
-            < end.astimezone(timezone.utc)
-        ]
 
     async def _apply_decision(
         self,
@@ -2504,7 +2504,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         )
         if universe is None:
             return
-        events = await self._session_events(
+        events = await _session_events(
             repository,
             config,
             session_date=universe.session_date,
@@ -2679,7 +2679,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
 
         # Refresh events after ordinary policy decisions/fills before a possible
         # force-flat retry or session summary.
-        events = await self._session_events(
+        events = await _session_events(
             repository,
             config,
             session_date=universe.session_date,
@@ -2693,7 +2693,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             events=events,
             now=now,
         )
-        events = await self._session_events(
+        events = await _session_events(
             repository,
             config,
             session_date=universe.session_date,
@@ -2706,7 +2706,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             session_date=universe.session_date,
             now=now,
         )
-        events = await self._session_events(
+        events = await _session_events(
             repository,
             config,
             session_date=universe.session_date,
@@ -2719,7 +2719,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             session_date=universe.session_date,
             now=now,
         )
-        events = await self._session_events(
+        events = await _session_events(
             repository,
             config,
             session_date=universe.session_date,

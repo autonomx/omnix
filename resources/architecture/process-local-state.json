@@ -1715,6 +1715,129 @@
       "max_entries": 8,
       "ttl_seconds": 3600.0,
       "invalidation": "_revision.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/turn_grounding.py",
+      "symbol": "_SCENE_LORE",
+      "category": "coordination",
+      "reason": "Scene lore built once per scene and canon revision on this replica (EV-7), at most SCENE_LORE_KEPT entries, oldest out first. The key holds the canon revision, so an entry never goes stale, and a miss only builds it again."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/turn_grounding.py",
+      "symbol": "_SCENE_LORE_LOCK",
+      "category": "coordination",
+      "reason": "Serializes this process's threads around the value it guards; it carries nothing across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/session/turn/dialogue.py",
+      "symbol": "_REPLIES",
+      "category": "coordination",
+      "reason": "Fixed pool of four writing a held reply beside the intent call; the turn's durable record is its commit, and a lost reply is written again."
+    },
+    {
+      "path": "src/app/apps/rpg/session/turn/local_map.py",
+      "symbol": "_PREPARED",
+      "category": "coordination",
+      "reason": "An arrival's map read ahead while travel resolves (EV-7), one per campaign and at most _PREPARED_KEPT; a miss reads it on the turn's path, and the stored map stays the authority."
+    },
+    {
+      "path": "src/app/apps/rpg/session/turn/local_map.py",
+      "symbol": "_PREPARED_LOCK",
+      "category": "coordination",
+      "reason": "Serializes this process's threads around the value it guards; it carries nothing across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/session/turn/proposals.py",
+      "symbol": "_REPLAY",
+      "category": "coordination",
+      "reason": "A campaign's recorded proposals for its next turn while a re-executing replay runs in this process; set and taken within that replay, never in play."
+    },
+    {
+      "path": "src/app/apps/trading/trading_ai_budget.py",
+      "symbol": "_default_lock",
+      "category": "coordination",
+      "reason": "Guards building this process's default budget object once; the budget's counts are not held here alone."
+    },
+    {
+      "path": "src/app/models/catalog.py",
+      "symbol": "_CACHE",
+      "category": "coordination",
+      "reason": "The parsed model catalog, one entry per catalog file and re-read when the file's modified time changes; a miss only parses it again."
+    },
+    {
+      "path": "src/app/platform/voice/tts_engines.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "Serializes this process's threads around the value it guards; it carries nothing across replicas."
+    },
+    {
+      "path": "src/app/platform/voice/tts_engines.py",
+      "symbol": "_SWITCH",
+      "category": "coordination",
+      "reason": "The engine switch this process is running, one record reported to the settings page; the engine loaded is the speech service's own, and a restart finds it idle."
+    },
+    {
+      "path": "src/app/platform/voice/voice_casting.py",
+      "symbol": "_catalog.__cache__",
+      "category": "cache",
+      "reason": "The castable voice list read from its file, at most four roots for an hour; a miss only reads it again.",
+      "max_entries": 4,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_catalog.cache_clear"
+    },
+    {
+      "path": "src/services/audio/audio_server.py",
+      "symbol": "EXECUTOR",
+      "category": "coordination",
+      "reason": "One worker running this model service's audio work in turn; the service holds no durable state."
+    },
+    {
+      "path": "src/services/omnivoice/omnivoice_server.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "Serializes this process's threads around the value it guards; it carries nothing across replicas."
+    },
+    {
+      "path": "src/services/omnivoice/omnivoice_server.py",
+      "symbol": "_PROMPTS",
+      "category": "coordination",
+      "reason": "This child server's voice prompts, at most _PROMPT_CACHE_SIZE, oldest out first; a miss only prepares the prompt again."
+    },
+    {
+      "path": "src/services/omnivoice/omnivoice_server.py",
+      "symbol": "_STATE",
+      "category": "coordination",
+      "reason": "The one model this child server loaded, and why it could not; the process is the model's lifetime."
+    },
+    {
+      "path": "src/services/stt/timed_transcription.py",
+      "symbol": "BATCH_EXECUTOR",
+      "category": "coordination",
+      "reason": "One worker running timed transcription in turn, away from live speech; the job's durable record is its job row."
+    },
+    {
+      "path": "src/services/tts/tts_server.py",
+      "symbol": "_IN_FLIGHT",
+      "category": "coordination",
+      "reason": "Counts this service's generations on the loaded engine so a switch can let them finish; the engine is this process's own."
+    },
+    {
+      "path": "src/services/tts/tts_server.py",
+      "symbol": "_SWAP",
+      "category": "coordination",
+      "reason": "The swap this service is running, with its fence; the swap lease and its recovery live in PostgreSQL (migration 0164)."
+    },
+    {
+      "path": "src/services/tts/tts_server.py",
+      "symbol": "_SWAP_LOCK",
+      "category": "coordination",
+      "reason": "Serializes this process's threads around the value it guards; it carries nothing across replicas."
+    },
+    {
+      "path": "src/services/tts/tts_server.py",
+      "symbol": "_TTS_SWITCH_LOCK",
+      "category": "coordination",
+      "reason": "One engine switch at a time in this service, which loads one engine at a time."
     }
   ]
 }

@@ -721,9 +721,9 @@ class PostgresRpgRepository:
             """
             SELECT resulting_revision, state_delta_jsonb, state_hash_before, state_hash_after FROM omnix_rpg_turns
              WHERE workspace_id = %s AND campaign_id = %s AND resulting_revision > %s AND resulting_revision <= %s
-             ORDER BY resulting_revision
+             ORDER BY resulting_revision LIMIT %s
             """,
-            (context.workspace_id, campaign_id, at, int(revision)),
+            (context.workspace_id, campaign_id, at, int(revision), max(0, int(revision) - at)),
         ).fetchall():
             if int(resulting) != at + 1 or delta is None or str(before) != digest:
                 return None
@@ -783,7 +783,7 @@ class PostgresRpgRepository:
         rows = self.connection.execute(
             """
             SELECT save_point_name, revision, created_at FROM omnix_rpg_snapshots
-             WHERE workspace_id = %s AND campaign_id = %s AND save_point_name IS NOT NULL ORDER BY revision
+             WHERE workspace_id = %s AND campaign_id = %s AND save_point_name IS NOT NULL ORDER BY revision LIMIT 5000
             """,
             (context.workspace_id, campaign_id),
         ).fetchall()
@@ -878,7 +878,7 @@ class PostgresRpgRepository:
         rows = self.connection.execute(
             "SELECT map_instance_id, snapshot_jsonb FROM omnix_rpg_campaign_map_instances "
             "WHERE workspace_id = %s AND campaign_id = %s AND updated_at = CURRENT_TIMESTAMP "
-            "ORDER BY map_instance_id",
+            "ORDER BY map_instance_id LIMIT 5000",
             (context.workspace_id, campaign_id),
         ).fetchall()
         if not rows:

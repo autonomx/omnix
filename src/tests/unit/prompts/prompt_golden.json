@@ -139,6 +139,10 @@
     "sha256": "39c9128cd127e1cccccd4e54b61cf26abca0e8a6ff45e6fee1bcc43adf629bb9",
     "version": "1"
   },
+  "audiobook.performance_direction": {
+    "sha256": "574018a294604000a7f3926357d8dc6633c49dc2be068d1e2a5d57b222583c30",
+    "version": "1"
+  },
   "characters.avatar_generation_service.base_prompt": {
     "sha256": "90720d2fcc8db4318cd3e8c053c3359c7fc7bf733aa41eb04d52cd4bc2dc8b90",
     "version": "1"

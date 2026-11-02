@@ -41,7 +41,7 @@ class PostgresRpgLoreReviewRepository:
     def queue(self, context: TenantContext, world_id: str, *, status: str = "") -> list[dict[str, Any]]:
         rows = self.connection.execute(
             f"SELECT {_COLUMNS} FROM omnix_rpg_lore_review WHERE workspace_id = %s AND world_id = %s"
-            " AND (%s = '' OR status = %s) ORDER BY group_key, id",
+            " AND (%s = '' OR status = %s) ORDER BY group_key, id LIMIT 5000",
             (context.workspace_id, world_id, status, status),
         ).fetchall()
         return [_row(row) for row in rows]

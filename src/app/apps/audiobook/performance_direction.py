@@ -19,6 +19,7 @@ from typing import Any
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
+from app.prompts import prompt_template
 
 from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 
@@ -43,7 +44,8 @@ _MAX_DIRECTION_WORDS = 8
 _REQUEST_TIMEOUT_SECONDS = 180.0
 _PLAIN = {"", "none", "neutral", "normal", "plain", "default", "n/a", "na"}
 
-SYSTEM_PROMPT = (
+SYSTEM_TEMPLATE = prompt_template(
+    "audiobook.performance_direction", "1",
     "You are the performance director for an audiobook voiced by a text-to-speech model. "
     "Before each line the model can take one short bracketed direction that sets the "
     "emotion and delivery, for example [angry, shouting], [whispering, afraid], [warm], "
@@ -59,6 +61,7 @@ SYSTEM_PROMPT = (
     "{\"directions\": [{\"span_id\": \"...\", \"delivery\": \"...\"}]} with one entry per "
     "target span_id, copied verbatim. No markdown or explanation."
 )
+SYSTEM_PROMPT = SYSTEM_TEMPLATE.text
 
 
 def clean_direction(value: Any) -> str:

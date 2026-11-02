@@ -29,9 +29,11 @@ import secrets
 import uuid
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from .client_tools import VOICE_CLIENT_TOOLS, VoiceClientTool
+
+from .client_credential import VoiceClientCredential
 
 logger = logging.getLogger(__name__)
 
@@ -326,7 +328,7 @@ _AUDIO_TYPES = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".flac": "audio/flac"
                 ".opus": "audio/ogg", ".m4a": "audio/mp4", ".webm": "audio/webm", ".aac": "audio/aac"}
 
 
-def store_client_audio(credential: dict[str, Any], filename: str, stream: Any) -> dict[str, Any]:
+def store_client_audio(credential: VoiceClientCredential, filename: str, stream: Any) -> dict[str, Any]:
     """Store a client's recording as an audio asset in its workspace, for ``transcribe`` or ``isolate``."""
     from pathlib import Path
 
@@ -454,7 +456,7 @@ def check_arguments(schema: dict[str, Any], arguments: Any) -> dict[str, Any]:
     return arguments
 
 
-def call_tool(credential: dict[str, Any], name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def call_tool(credential: VoiceClientCredential, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Run a tool for a credential: its capability first, then the call; audited either way."""
     from app.security import audit
 
@@ -480,7 +482,7 @@ def call_tool(credential: dict[str, Any], name: str, arguments: dict[str, Any]) 
     return result
 
 
-async def bound_client(authorization: str | None) -> dict[str, Any]:
+async def bound_client(authorization: str | None) -> VoiceClientCredential:
     """For a route dependency: authenticate the bearer token and act in its workspace for the rest of the request.
 
     Async on purpose: the tenant is set in the request's own context, which the
@@ -506,7 +508,7 @@ async def bound_client(authorization: str | None) -> dict[str, Any]:
         logger.warning("Voice API clients are unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="voice_clients_unavailable") from exc
     push_tenant(context)
-    return credential
+    return cast(VoiceClientCredential, credential)
 
 
 __all__ = [

@@ -72,6 +72,7 @@ def operations(days: int = 14) -> list[dict[str, Any]]:
                                    - make_interval(days => %s - 1)) AT TIME ZONE 'UTC'
              GROUP BY day, turn_class
              ORDER BY day DESC, turn_class
+             LIMIT 5000
             """,
             (context.workspace_id, max(1, min(int(days), RETENTION_DAYS))),
         ).fetchall()

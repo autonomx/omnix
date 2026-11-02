@@ -74,6 +74,7 @@ CASES = [
     ("web_handwritten_api_types", {WEB + "api/a.ts": "interface SaveRequest { value: string; }"}, 1),
     ("web_important", {WEB + "styles.css": "a {color: red !important;}"}, 1),
     ("web_hardcoded_colors", {WEB + "styles.css": "#abc {color: #fff; background: rgba(0,0,0,1);}"}, 2),
+    ("web_hardcoded_colors", {WEB + "design/tokens.css": ":root {--c-a: #fff; --c-b: rgba(0,0,0,1);}"}, 0),
     ("web_hardcoded_colors", {WEB + "styles.css": "a {color: white; background: var(--pd-red); animation: pulse-green 1s;}"}, 1),
     ("web_mutation_observer_files", {WEB + "app/a.ts": "new MutationObserver(one); new MutationObserver(two);"}, 1),
     ("web_set_interval_files", {WEB + "app/a.ts": "setInterval(one, 1); window.setInterval(two, 1);"}, 1),

@@ -119,7 +119,9 @@ def _own_runtimes(catalog: Catalog, model_id: str) -> list[str]:
     own: list[str] = []
     for bundle in catalog.bundles.values():
         variant = bundle.variant(_platform())
-        option = variant.option(model_id) if variant is not None else None
+        if variant is None:
+            continue
+        option = variant.option(model_id)
         if option is None:
             continue
         shared = {pack.id for pack in catalog.runtime_closure(variant.runtimes)}

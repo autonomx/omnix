@@ -178,7 +178,7 @@ class PostgresRpgMapInstanceRepository:
             "map_definition_revision, definition_hash, map_state_revision, "
             "applied_event_sequence, snapshot_jsonb, created_at, updated_at "
             "FROM omnix_rpg_campaign_map_instances WHERE workspace_id = %s "
-            "AND campaign_id = %s ORDER BY map_instance_id",
+            "AND campaign_id = %s ORDER BY map_instance_id LIMIT 5000",
             (context.workspace_id, campaign_id),
         ).fetchall()
         return [_instance_row(row) for row in rows]

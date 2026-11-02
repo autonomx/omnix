@@ -68,6 +68,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.apps.rpg.genesis.worlds.providers.single_pass",
     "app.apps.rpg.genesis.worlds.providers.world_forge_foundation",
     "app.apps.rpg.genesis.worlds.world_images",
+    "app.apps.audiobook.performance_direction",
     "app.apps.story.jobs",
     "app.apps.trading.research.market_brief",
     "app.apps.trading.research.market_research",

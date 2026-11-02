@@ -80,6 +80,11 @@ def open_asset(asset: Any) -> BinaryIO:
     return path.open("rb")
 
 
+def asset_file_name(asset: Any, default: str) -> str:
+    """The asset's file name, for its suffix or a label; callers do not read where it is stored."""
+    return Path(asset.storage_path or asset.metadata.get("file_name") or default).name
+
+
 def read_asset_bytes(asset: Any, *, max_bytes: int | None = None) -> bytes:
     """Read the whole content, refusing anything larger than ``max_bytes``."""
     with open_asset(asset) as handle:

@@ -7,7 +7,6 @@ stem or a cleaned recording always says where it came from.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from .audio_service import AudioServiceClient, AudioToolRequestError
@@ -36,9 +35,9 @@ def _source(job: Any) -> Any:
 
 
 def _read(asset: Any) -> tuple[bytes, str]:
-    from app.assets.content import read_asset_bytes
+    from app.assets.content import asset_file_name, read_asset_bytes
 
-    name = Path(asset.storage_path or asset.metadata.get("file_name") or "audio.wav").name
+    name = asset_file_name(asset, "audio.wav")
     try:
         return read_asset_bytes(asset, max_bytes=_MAX_SOURCE_BYTES), name
     except ValueError as exc:

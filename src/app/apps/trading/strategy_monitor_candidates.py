@@ -16,9 +16,7 @@ from .research.policy import ResearchPolicyDecision
 from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackResult
-from .strategy_evaluability import (
-    assess_session_evaluability,
-)
+from .strategy_evaluability import assess_session_evaluability
 from .strategy_intraday_learning import (
     IntradayLearningSnapshot,
     build_intraday_learning_snapshot,
@@ -45,16 +43,10 @@ from .strategy_research_policy import (
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_stoch_execution_cost import (
     StochExecutionAction,
-    simulate_stoch_execution,
-)
-from .strategy_stoch_execution_cost import (
     action_for_snapshot as stoch_execution_action_for_snapshot,
-)
-from .strategy_stoch_execution_cost import (
     build_execution_summary as build_stoch_execution_summary,
-)
-from .strategy_stoch_execution_cost import (
     requested_fraction_for_action as stoch_requested_fraction_for_action,
+    simulate_stoch_execution,
 )
 from .strategy_monitor_leader_momentum import record_leader_momentum
 from .strategy_monitor_trend_t1 import record_trend_t1
@@ -63,9 +55,7 @@ from .strategy_stoch_trend_capture import (
     stoch_trend_capture_risk_decision,
 )
 from .strategy_timeframes import resample_final_bars
-from .strategy_v2_qualification import (
-    v2_profile_fingerprint,
-)
+from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
 
 

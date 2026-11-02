@@ -55,16 +55,14 @@ class PostgresRpgProposalRepository:
                     revision: int) -> int:
         """A rewind back to ``after_revision``: what was proposed after it belongs to the timeline undone, and is
         dropped (a name heard only there is not heard in the game restored). How many."""
-        rows = self.connection.execute(
+        return self.connection.execute(
             """
             UPDATE omnix_rpg_proposals
                SET status = 'dropped', settled_by_turn_id = %s, settled_revision = %s, drop_reason = 'rewound'
              WHERE workspace_id = %s AND campaign_id = %s AND status = 'pending' AND after_revision > %s
-            RETURNING proposal_id
             """,
             (turn_id, int(revision), context.workspace_id, campaign_id, int(after_revision)),
-        ).fetchall()
-        return len(rows)
+        ).rowcount
 
     def pending(self, context: TenantContext, campaign_id: str, *, through_revision: int,
                 limit: int = PENDING_READ_LIMIT) -> list[dict[str, Any]]:
@@ -92,7 +90,7 @@ class PostgresRpgProposalRepository:
                folded: Iterable[str], dropped: Iterable[tuple[str, str]]) -> None:
         """Mark what a committing turn folded in and what its rules dropped, each only while still pending; one that
         is not raises ``ProposalAlreadySettled`` and the commit rolls back."""
-        settled = [(proposal_id, "folded", None) for proposal_id in folded]
+        settled: list[tuple[str, str, str | None]] = [(proposal_id, "folded", None) for proposal_id in folded]
         settled += [(proposal_id, "dropped", reason[:500]) for proposal_id, reason in dropped]
         for proposal_id, status, drop_reason in settled:
             row = self.connection.execute(

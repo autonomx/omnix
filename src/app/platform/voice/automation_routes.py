@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Reque
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
+from .client_credential import VoiceClientCredential
+
 logger = logging.getLogger(__name__)
 
 _ROUTE_SENTINEL = "_omnix_voice_automation_routes_registered"
@@ -210,7 +212,7 @@ class CredentialFirstRoute(APIRoute):
         return guarded
 
 
-async def _client(request: Request, authorization: str | None = Header(default=None)) -> dict[str, Any]:  # noqa: B008
+async def _client(request: Request, authorization: str | None = Header(default=None)) -> VoiceClientCredential:  # noqa: B008
     """The credential the route already authenticated (``CredentialFirstRoute``)."""
     from .client_api import bound_client
 
@@ -218,7 +220,7 @@ async def _client(request: Request, authorization: str | None = Header(default=N
     return credential if credential is not None else await bound_client(authorization)
 
 
-def _call(credential: dict[str, Any], name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def _call(credential: VoiceClientCredential, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     from app.persistence.module_states import ModuleNotAcceptingWork
 
     from .client_api import ClientCapabilityRefused, call_tool
@@ -243,7 +245,7 @@ def _mcp_error(request_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
 
-def handle_mcp(credential: dict[str, Any], message: dict[str, Any]) -> dict[str, Any] | None:
+def handle_mcp(credential: VoiceClientCredential, message: dict[str, Any]) -> dict[str, Any] | None:
     """One MCP JSON-RPC message: initialize, ping, tools/list or tools/call (notifications get no answer)."""
     import json
 
@@ -387,18 +389,18 @@ def register_automation_routes(router: APIRouter, state: Any) -> None:
 
     # The client facade: credential-authenticated, in the credential's workspace.
     @facade.get("/api/voice/v1/tools", response_model=ToolList)
-    def client_tools(credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_tools(credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"tools": [{"name": tool.name, "description": tool.description, "capability": tool.capability,
                            "allowed": not tool.capability or tool.capability in credential["capabilities"],
                            "input_schema": tool.input_schema} for tool in client_api.registered_tools().values()]}
 
     @facade.post("/api/voice/v1/tools/{name}", response_model=ToolResult)
-    def client_call(name: str, call: ToolCall, credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_call(name: str, call: ToolCall, credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, name, call.arguments)}
 
     @facade.post("/api/voice/v1/audio", response_model=ClientAudio, status_code=201)
     def client_audio(file: UploadFile = File(...),  # noqa: B008
-                     credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+                     credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         """Store a recording for ``transcribe`` or ``isolate`` (a client holding either may upload)."""
         try:
             return client_api.store_client_audio(credential, file.filename or "audio.wav", file.file)
@@ -408,27 +410,27 @@ def register_automation_routes(router: APIRouter, state: Any) -> None:
             raise HTTPException(status_code=413 if "too large" in str(exc) else 422, detail=str(exc)) from exc
 
     @facade.post("/api/voice/v1/speak", response_model=ToolResult)
-    def client_speak(request: SpeakRequest, credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_speak(request: SpeakRequest, credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, "speak", request.model_dump())}
 
     @facade.post("/api/voice/v1/transcribe", response_model=ToolResult)
-    def client_transcribe(request: TranscribeRequest, credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_transcribe(request: TranscribeRequest, credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, "transcribe", request.model_dump())}
 
     @facade.get("/api/voice/v1/voices", response_model=ToolResult)
-    def client_voices(credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_voices(credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, "list_voices", {})}
 
     @facade.post("/api/voice/v1/design", response_model=ToolResult)
-    def client_design(request: DesignRequest, credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_design(request: DesignRequest, credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, "design_voice", request.model_dump())}
 
     @facade.post("/api/voice/v1/isolate", response_model=ToolResult)
-    def client_isolate(request: IsolateRequest, credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_isolate(request: IsolateRequest, credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, "isolate", request.model_dump())}
 
     @facade.get("/api/voice/v1/jobs/{job_id}", response_model=ToolResult)
-    def client_job(job_id: str, credential: dict[str, Any] = Depends(_client)) -> dict[str, Any]:  # noqa: B008
+    def client_job(job_id: str, credential: VoiceClientCredential = Depends(_client)) -> dict[str, Any]:  # noqa: B008
         return {"result": _call(credential, "job_status", {"job_id": job_id})}
 
     @facade.post("/mcp/voice", response_model=None, responses={
@@ -437,7 +439,7 @@ def register_automation_routes(router: APIRouter, state: Any) -> None:
         202: {"description": "Only notifications were sent: no body"},
     })
     def mcp_voice(body: dict[str, Any] | list[dict[str, Any]],
-                  credential: dict[str, Any] = Depends(_client)) -> Any:  # noqa: B008
+                  credential: VoiceClientCredential = Depends(_client)) -> Any:  # noqa: B008
         """MCP over streamable HTTP (JSON responses): initialize, tools/list, tools/call, ping."""
         from fastapi.responses import JSONResponse
 

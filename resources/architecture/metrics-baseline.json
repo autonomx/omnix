@@ -5125,7 +5125,7 @@
     "fixed_sleeps_in_tests": {
       "direction": "lower",
       "target": 5,
-      "value": 37
+      "value": 36
     },
     "foreign_attribute_assignments": {
       "direction": "lower",
@@ -5165,7 +5165,7 @@
     "largest_class_lines": {
       "direction": "lower",
       "target": 800,
-      "value": 2196
+      "value": 2187
     },
     "layer_violations": {
       "direction": "lower",
@@ -5395,7 +5395,7 @@
     "web_hardcoded_colors": {
       "direction": "lower",
       "target": 300,
-      "value": 259
+      "value": 51
     },
     "web_important": {
       "direction": "lower",

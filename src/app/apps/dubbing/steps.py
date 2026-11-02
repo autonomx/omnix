@@ -22,9 +22,8 @@ import wave
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
 
 STEPS = ("ingest", "separate", "transcribe", "translate", "cast", "synthesize", "mux")
 # Steps that chain on by themselves; review sits between synthesize and mux.
@@ -38,6 +37,10 @@ MAX_VIDEO_BYTES = 4 * 1024 ** 3
 MIN_CLONE_SECONDS = 4.0
 
 
+if TYPE_CHECKING:
+    import numpy as np
+
+
 class DubRequestError(ValueError):
     """The step cannot run as asked (a missing source, an unapproved line); retrying cannot help."""
 
@@ -47,6 +50,8 @@ class DubRequestError(ValueError):
 
 def resample(samples: np.ndarray, source: int, target: int) -> np.ndarray:
     """Linear-interpolation resampling: enough for speech moving between 24, 44.1 and 48 kHz."""
+    import numpy as np
+
     if source == target or not len(samples):
         return samples.astype(np.float32)
     length = max(1, int(round(len(samples) * target / source)))
@@ -63,6 +68,8 @@ def decode_wav(data: bytes) -> tuple[np.ndarray, int]:
 
 
 def encode_wav(samples: np.ndarray, rate: int) -> bytes:
+    import numpy as np
+
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as target:
         target.setnchannels(1)
@@ -169,11 +176,12 @@ class StepRun:
 def ingest(run: StepRun) -> dict[str, Any]:
     """The source video's audio, as 44.1 kHz stereo WAV."""
     from app.assets import default_asset_store
+    from app.assets.content import asset_file_name
 
     source = default_asset_store().get_asset(run.project["source_asset_id"])
     if source is None:
         raise DubRequestError("the source video is gone")
-    suffix = Path(source.storage_path or str(source.metadata.get("file_name") or "video.mp4")).suffix.lower()
+    suffix = Path(asset_file_name(source, "video.mp4")).suffix.lower()
     if suffix not in VIDEO_SUFFIXES:
         raise DubRequestError("the source must be an MP4, MOV, MKV or WebM video")
     with tempfile.TemporaryDirectory(prefix="omnix-dub-") as work:
@@ -270,6 +278,8 @@ def cast(run: StepRun, clone: Callable[..., str]) -> dict[str, Any]:
         if vocals is None:
             vocals = decode_wav(run.asset_bytes("vocals"))
         samples, rate = vocals
+        import numpy as np
+
         gap = np.zeros(int(0.25 * rate), dtype=np.float32)
         pieces: list[np.ndarray] = []
         for span in spans:
@@ -380,9 +390,10 @@ def mux(run: StepRun) -> dict[str, Any]:
         assets[fmt] = run.store(name=f"subtitles.{target}.{fmt}", data=text.encode("utf-8"), kind="dub_subtitles",
                                 mime=mime, title=f"{title} ({target} subtitles, {fmt.upper()})", parents=[mix_id])
     from app.assets import default_asset_store
+    from app.assets.content import asset_file_name
 
     source = default_asset_store().get_asset(run.project["source_asset_id"])
-    suffix = Path(str(getattr(source, "storage_path", "") or "video.mp4")).suffix.lower()
+    suffix = Path(asset_file_name(source, "video.mp4")).suffix.lower()
     suffix = suffix if suffix in VIDEO_SUFFIXES else ".mp4"
     audio_codec = ["-c:a", "libopus", "-b:a", "160k"] if suffix == ".webm" else ["-c:a", "aac", "-b:a", "192k"]
     with tempfile.TemporaryDirectory(prefix="omnix-dub-") as work:

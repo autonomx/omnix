@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
@@ -239,6 +238,8 @@ def waveform_peaks(wav_bytes: bytes, bins: int) -> tuple[list[float], float, int
     duration = len(samples) / rate if rate else 0.0
     if not len(samples):
         return [0.0] * bins, duration, rate
+    import numpy as np
+
     edges = np.linspace(0, len(samples), bins + 1).astype(int)
     peaks = [
         float(np.max(np.abs(samples[start:end]))) if end > start else 0.0
@@ -481,6 +482,8 @@ def register_voice_studio_routes(router: APIRouter, state: Any) -> None:
             raise HTTPException(status_code=404, detail="transcript_source_unavailable") from exc
         except Exception as exc:
             raise HTTPException(status_code=422, detail="transcript_source_unreadable") from exc
+        import numpy as np
+
         gap = np.zeros(int(_SAMPLE_GAP_SECONDS * rate))
         pieces = []
         for segment in spans:

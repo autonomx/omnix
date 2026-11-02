@@ -26,6 +26,7 @@ WebSocket routes are absent from OpenAPI by protocol definition. The gateway and
 | `src/app/platform/voice/stt_proxy_routes.py` | `/api/stt/ws/transcribe` |
 | `src/app/platform/voice/tts_pcm_websocket.py` | `/api/tts/stream/websocket` |
 | `src/app/platform/voice/tts_live_call_websocket.py` | `/api/tts/live-call/websocket` |
+| `src/app/platform/live_voice/transport/avatar_websocket.py` | `/api/tts/live-call/avatar-websocket` |
 | `src/app/apps/trading/api.py` | `/api/trading/stream` |
 
 HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI responses describe the actual media type, binary schema, redirect status, or empty body. They are documented separately from JSON response models.

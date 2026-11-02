@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app.assets.canonical_voice_clones import canonical_voice_clone_root
+from app.assets.canonical_voice_clones import canonical_voice_clone_root
+
+from app.caching.bounded_cache import bounded_lru_cache
 
 DEFAULT_VOICE = "default"
 
@@ -44,7 +45,7 @@ def _revision(root: Path, voice_id: str) -> str:
     return digest.hexdigest()[:16]
 
 
-@lru_cache(maxsize=4)
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _catalog(root: str) -> tuple[dict[str, Any], ...]:
     path = Path(root)
     voices = []

@@ -11,9 +11,10 @@ from __future__ import annotations
 import io
 import math
 import wave
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 # The default slider positions (Voice Studio's shipped defaults).
 NEUTRAL: dict[str, float] = {
@@ -100,6 +101,8 @@ def audio_adjustments(settings: dict[str, Any] | None) -> dict[str, float]:
 
 def adjust_wav(wav_bytes: bytes, adjustments: dict[str, float]) -> bytes:
     """Apply speed, pitch and volume to 16-bit PCM WAV audio."""
+    import numpy as np
+
     if not adjustments:
         return wav_bytes
     with wave.open(io.BytesIO(wav_bytes), "rb") as source:
@@ -146,6 +149,8 @@ def time_stretch(samples: np.ndarray, rate: int, factor: float) -> np.ndarray:
     Overlap-adds 30 ms Hann frames, each shifted by up to 10 ms to line up with
     the waveform already written, which keeps speech free of phasing artifacts.
     """
+    import numpy as np
+
     if abs(factor - 1.0) < 1e-6 or len(samples) == 0:
         return samples.copy()
     frame = max(16, int(rate * 0.03) // 2 * 2)
@@ -181,6 +186,8 @@ def time_stretch(samples: np.ndarray, rate: int, factor: float) -> np.ndarray:
 
 def _resample(samples: np.ndarray, length: int) -> np.ndarray:
     """Band-limited resampling to ``length`` samples (FFT method)."""
+    import numpy as np
+
     spectrum = np.fft.rfft(samples)
     resized = np.zeros(length // 2 + 1, dtype=complex)
     keep = min(len(spectrum), len(resized))

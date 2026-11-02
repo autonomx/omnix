@@ -49,7 +49,7 @@ def _source_asset(job: Any) -> Any:
 
 def execute_transcribe_job(job: Any, *, job_store: Any = None) -> dict[str, Any]:
     from app.assets import AssetRecord, AssetType, default_asset_store
-    from app.assets.content import read_asset_bytes
+    from app.assets.content import asset_file_name, read_asset_bytes
     from app.jobs.inline_execution import require_execution_authority
     from app.providers.service import get_stt_provider
     from app.runtime.paths import resources_data_root
@@ -57,7 +57,7 @@ def execute_transcribe_job(job: Any, *, job_store: Any = None) -> dict[str, Any]
     payload = job.input_payload or {}
     asset = _source_asset(job)
     audio = read_asset_bytes(asset, max_bytes=_MAX_TRANSCRIBE_BYTES)
-    suffix = Path(asset.storage_path or asset.metadata.get("file_name") or "audio.wav").suffix.lower()
+    suffix = Path(asset_file_name(asset, "audio.wav")).suffix.lower()
     if suffix not in _AUDIO_SUFFIXES:
         suffix = ".wav"
     provider = get_stt_provider(str(payload.get("provider_id") or "").removeprefix("stt:") or None)

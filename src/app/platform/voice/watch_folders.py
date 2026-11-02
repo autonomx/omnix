@@ -315,7 +315,7 @@ class WatchFolders:
             logger.warning("Watch folder %s: the output folder is not visible from this host", folder.id)
             return
         from app.assets import default_asset_store
-        from app.assets.content import open_asset
+        from app.assets.content import asset_file_name, open_asset
 
         store = default_asset_store()
         relative = Path(item["output_name"])
@@ -326,7 +326,7 @@ class WatchFolders:
             asset = store.get_asset(str(output.get("asset_id") or "")) if output.get("asset_id") else None
             if asset is None:
                 continue
-            suffix = Path(asset.storage_path or "").suffix or ".bin"
+            suffix = Path(asset_file_name(asset, "")).suffix or ".bin"
             tag = str(output.get("kind") or output.get("tool") or "output").replace("stem_", "").replace("subtitles_", "")
             name = f"{relative.stem}{suffix}" if tag in {"srt", "vtt", "txt"} else f"{relative.stem}.{tag}{suffix}"
             target = folder.output / relative.parent / name
