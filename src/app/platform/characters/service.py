@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.assets.protocol import AssetStore
 import logging
+import uuid
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -29,6 +30,7 @@ from .repository import (
     CharacterConflictError,
     CharacterNotFoundError,
     CharacterRepository,
+    _normalize_character_id,
 )
 from .voice_consent import governance_from_asset
 
@@ -106,7 +108,15 @@ class CharacterService:
         asset = self._validate_voice_asset(request.default_voice_asset_id)
         if asset is not None and request.default_voice_asset_id != asset.id:
             request = request.model_copy(update={"default_voice_asset_id": asset.id})
-        result = self.repository.create(request)
+        try:
+            result = self.repository.create(request)
+        except CharacterConflictError:
+            if request.id:
+                raise
+            # Only an id the caller chose can conflict: an id taken from the name is made unique (names may repeat, and
+            # the id is kept when a character is renamed).
+            unique_id = f"{_normalize_character_id(request.display_name)[:150]}-{uuid.uuid4().hex[:8]}"
+            result = self.repository.create(request.model_copy(update={"id": unique_id}))
         _invalidate_snapshot_caches(result.id)
         return result
 
@@ -147,6 +157,12 @@ class CharacterService:
         if not normalized_id:
             return None
 
+        # The usual case, the exact id, is one read of each source. Listing every asset took seconds, and a live call's
+        # runtime asks three times; the listing is only for the case-insensitive repair below.
+        exact = self._exact_voice_asset(normalized_id)
+        if exact is not None:
+            return exact
+
         candidates: dict[str, AssetRecord] = {}
         try:
             for item in iter_assets(self.asset_store_factory()):
@@ -167,12 +183,23 @@ class CharacterService:
                 exc,
             )
 
-        exact = candidates.get(normalized_id)
-        if exact is not None:
-            return exact
         folded_id = normalized_id.casefold()
         matches = [item for item in candidates.values() if item.id.casefold() == folded_id]
         return matches[0] if len(matches) == 1 else None
+
+    def _exact_voice_asset(self, asset_id: str) -> AssetRecord | None:
+        """The asset with exactly this id: the shared store's first, as in the listing it replaces."""
+        try:
+            asset = self.asset_store_factory().get_asset(asset_id)
+            if asset is not None:
+                return asset
+        except (OSError, TypeError, ValueError) as exc:
+            LOGGER.warning("[Character Voice] shared asset read failed asset_id=%s error=%s", asset_id, exc)
+        try:
+            return next((item for item in discover_canonical_voice_clone_assets() if item.id == asset_id), None)
+        except (OSError, TypeError, ValueError) as exc:
+            LOGGER.warning("[Character Voice] canonical voice discovery failed asset_id=%s error=%s", asset_id, exc)
+            return None
 
     def validate_voice_for_use(self, asset_id: str, use: str = "character") -> None:
         del use

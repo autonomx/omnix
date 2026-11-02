@@ -10,13 +10,15 @@ from app.platform.characters.models import (
 )
 from app.platform.characters.repository import CharacterConflictError, CharacterNotFoundError
 
-from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.database import PostgresConstraintError, PostgresDatabase, default_database
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.runtime.pagination import MAX_PAGE_SIZE
 from app.platform.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
+
+UNIQUE_VIOLATION = "23505"  # PostgreSQL's sqlstate for a duplicate key
 
 class PostgresCharacterRepositoryAdapter:
     context = RequestTenant()
@@ -37,8 +39,8 @@ class PostgresCharacterRepositoryAdapter:
                     enabled=request.enabled,
                 )
                 work.commit()
-        except Exception as exc:
-            if exc.__class__.__name__ in {"UniqueViolation", "IntegrityError"}:
+        except PostgresConstraintError as exc:
+            if exc.sqlstate == UNIQUE_VIOLATION:
                 raise CharacterConflictError(f"character already exists: {character_id}") from exc
             raise
         return self._profile(record)
