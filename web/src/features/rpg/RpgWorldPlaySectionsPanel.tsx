@@ -93,10 +93,11 @@ export function RpgWorldPlaySectionsPanel({ worldId }: RpgWorldPlaySectionsPanel
     onSuccess: (next) => accept(next, `Published as revision ${next.published_revision ?? ''}. New campaigns play it.`),
     onError: fail,
   });
-  const fromLore = useMutation({
+  // The draft comes with the click: this handler can be one from a render before the page had a draft.
+  const fromLore = useMutation<Awaited<ReturnType<typeof rpgWorldPlaySectionsClient.draftFromLore>>, Error, RpgPlaySectionsDraft>({
     mutationFn: () => rpgWorldPlaySectionsClient.draftFromLore(worldId),
-    onSuccess: (drafted) => {
-      const [next, filled] = filledFromLore(draft as RpgPlaySectionsDraft, drafted.document);
+    onSuccess: (drafted, current) => {
+      const [next, filled] = filledFromLore(current, drafted.document);
       setDraft(next);
       setFeedback(filled ? `World Forge drafted ${filled} empty section${filled === 1 ? '' : 's'} from the lore. Review, then save.` : 'Every section already has rows; nothing was drafted.');
     },
@@ -128,7 +129,7 @@ export function RpgWorldPlaySectionsPanel({ worldId }: RpgWorldPlaySectionsPanel
       {conflict ? <button className="rpg-secondary-button" type="button" onClick={() => void reload()}>Reload the saved draft</button> : null}
 
       <div className="rpg-play-toolbar">
-        <button className="rpg-secondary-button" disabled={busy || neverPublished} type="button" onClick={() => fromLore.mutate()}>{fromLore.isPending ? 'Drafting…' : 'Draft empty sections from lore'}</button>
+        <button className="rpg-secondary-button" disabled={busy || neverPublished} type="button" onClick={() => fromLore.mutate(draft)}>{fromLore.isPending ? 'Drafting…' : 'Draft empty sections from lore'}</button>
         <button className="rpg-secondary-button" disabled={busy || !dirty} type="button" onClick={() => { setDraft(view.document); setInvalid([]); setFeedback(''); }}>Discard changes</button>
         <button className="rpg-primary-button" disabled={busy || !dirty || neverPublished} type="button" onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save draft'}</button>
         <button className="rpg-primary-button" disabled={busy || dirty || !view.unpublished || view.findings.length > 0} type="button" onClick={() => publish.mutate()}>{publish.isPending ? 'Publishing…' : 'Publish'}</button>
