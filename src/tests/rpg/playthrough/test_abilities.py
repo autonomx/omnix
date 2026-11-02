@@ -6,6 +6,10 @@ level's choice, so only when one is waiting.
 """
 from __future__ import annotations
 
+from tests.rpg.playthrough.campaigns import POSTGRES
+
+pytestmark = POSTGRES
+
 
 def _ability(play, action: str, **fields):
     return play.client.post(f"/api/rpg/sessions/{play.session_id}/loadout-action", json={"action": action, **fields})

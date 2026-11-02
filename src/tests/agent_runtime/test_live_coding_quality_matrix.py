@@ -39,7 +39,6 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import subprocess
-import time
 from typing import Literal
 import uuid
 
@@ -60,6 +59,7 @@ from app.platform.agent_runtime.quality_evaluation import (
     write_evaluation_report,
 )
 from app.platform.agent_runtime.service import AgentRunService
+from tests.support.waiting import wait_until
 
 
 _TRUE = {"1", "true", "yes", "on"}
@@ -237,12 +237,12 @@ def _run_oracles(root: Path, scenario: LiveCodingScenario) -> tuple[int, int]:
 
 
 def _wait_for_terminal(service: AgentRunService, run_id: str, timeout_seconds: float = 900.0):
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        snapshot = service.get(run_id)
-        if snapshot is not None and snapshot.status in _TERMINAL:
-            return snapshot
-        time.sleep(1.0)
+    def finished(found) -> bool:
+        return found is not None and found.status in _TERMINAL
+
+    snapshot = wait_until(lambda: service.get(run_id), finished, timeout=timeout_seconds, interval=1.0)
+    if finished(snapshot):
+        return snapshot
     raise AssertionError(f"live coding quality run did not reach terminal state: {run_id}")
 
 

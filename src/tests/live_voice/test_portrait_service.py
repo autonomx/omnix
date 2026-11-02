@@ -15,6 +15,7 @@ from app.conversation.portrait_stream_contract import QUALITY_LEVELS, pack, unpa
 from services.portrait import portrait_server
 from services.portrait.portrait_image import PortraitImageError
 from services.portrait.scheduler import PassPlan, linear_resample
+from tests.support.waiting import wait_until
 
 IMAGE = b"portrait image bytes"
 IMAGE_SHA = hashlib.sha256(IMAGE).hexdigest()
@@ -91,10 +92,8 @@ def _ready_app(runtime: FakeRuntime, **options):
     app = portrait_server.create_app(load=lambda: runtime, installed=lambda: (True, ""),
                                      resources=lambda: (True, ""), preload=False, **options)
     app.state.host.ensure_loading()
-    for _ in range(200):
-        if app.state.host.status == "ready":
-            return app
-        time.sleep(0.01)
+    if wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01):
+        return app
     raise AssertionError("the fake runtime did not load")
 
 
@@ -263,10 +262,7 @@ def test_leases_expire_without_heartbeats() -> None:
 def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
     host = portrait_server.RuntimeHost(FakeRuntime, lambda: (True, ""), lambda: (True, ""))
     host.ensure_loading()
-    for _ in range(200):
-        if host.status == "ready":
-            break
-        time.sleep(0.01)
+    wait_until(lambda: host.status == "ready", bool, timeout=2, interval=0.01)
     assert not host.unload_if_idle(0.0, active_streams=1)
     assert host.unload_if_idle(0.0, active_streams=0) and host.status == "unloaded"
 
@@ -278,10 +274,7 @@ def test_the_model_loads_on_demand(monkeypatch, token: str) -> None:
     with _client(app, token) as client:  # runs the startup hook: nothing loads
         assert client.get("/health").json()["status"] == "unloaded"
         assert _prepare(client).get("code") in {"warming", None}  # a call's prepare starts the load
-        for _ in range(200):
-            if app.state.host.status == "ready":
-                break
-            time.sleep(0.01)
+        wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01)
         assert _prepare(client)["ok"] is True
         assert client.get("/health").json()["gpu"] == {"vram_free_bytes": 8 * 1024**3}
 
@@ -310,20 +303,14 @@ def test_an_unloaded_idle_model_asks_its_launcher_to_start_the_service_again_lig
     exits: list[int] = []
     app.state.request_exit = exits.append
     with _client(app, token):  # the housekeeping task runs once a second
-        for _ in range(300):
-            if exits:
-                break
-            time.sleep(0.01)
+        wait_until(lambda: exits, bool, timeout=3, interval=0.01)
     assert exits == [IDLE_EXIT_CODE] and app.state.host.status == "exiting"  # nothing loads before it exits
 
 
 def test_an_exiting_service_loads_nothing_and_says_it_is_restarting() -> None:
     host = portrait_server.RuntimeHost(FakeRuntime, lambda: (True, ""), lambda: (True, ""))
     host.ensure_loading()
-    for _ in range(200):
-        if host.status == "ready":
-            break
-        time.sleep(0.01)
+    wait_until(lambda: host.status == "ready", bool, timeout=2, interval=0.01)
     assert host.unload_if_idle(0.0, active_streams=0, exit_after=True) and host.status == "exiting"
     host.ensure_loading()  # a prepare in the moments before the process exits
     assert host.status == "exiting"
@@ -339,10 +326,7 @@ def test_a_failed_load_that_woke_cuda_exits_once_idle(monkeypatch) -> None:
 
     host = portrait_server.RuntimeHost(broken, lambda: (True, ""), lambda: (True, ""))
     host.ensure_loading()
-    for _ in range(200):
-        if host.status == "failed":
-            break
-        time.sleep(0.01)
+    wait_until(lambda: host.status == "failed", bool, timeout=2, interval=0.01)
     monkeypatch.setattr(portrait_server, "_cuda_initialized", lambda: False)
     assert not host.unload_if_idle(0.0, active_streams=0, exit_after=True)  # nothing held: stay up
     monkeypatch.setattr(portrait_server, "_cuda_initialized", lambda: True)
@@ -396,10 +380,7 @@ def test_a_malformed_control_message_closes_the_stream_and_cleans_up(token: str,
             while True:
                 websocket.receive_bytes()
     assert closed.value.code == 1003
-    for _ in range(100):
-        if app.state.admission.active == 0 and not app.state.host._workers:
-            break
-        time.sleep(0.01)
+    wait_until(lambda: app.state.admission.active == 0 and not app.state.host._workers, bool, timeout=1, interval=0.01)
     assert app.state.admission.active == 0 and app.state.host._workers == []
 
 

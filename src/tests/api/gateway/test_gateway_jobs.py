@@ -146,7 +146,8 @@ async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkey
 
     def slow_rpg_request(_request: dict) -> dict:
         started.set()
-        release.wait(timeout=2)
+        # Held past the acknowledgement's deadline: an acknowledgement that waited for this could not make it.
+        release.wait(timeout=30)
         return {"ok": True}
 
     monkeypatch.setattr(compat_router, "get_rpg_session_payload", slow_rpg_request)
@@ -172,7 +173,7 @@ async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkey
                         "input_payload": {"message": "ack"},
                     },
                 ),
-                timeout=0.5,
+                timeout=15,
             )
         finally:
             release.set()

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.platform.chat.models import ChatMessage, ChatSession
+from tests.support.waiting import wait_until
 
 pytestmark = pytest.mark.skipif(not os.environ.get('OMNIX_TEST_DATABASE_URL'), reason='requires disposable PostgreSQL')
 
@@ -245,9 +246,9 @@ def _create_worker_acceptance_jobs(database, count, *, run_id):
 
 
 def _wait_for_worker_jobs(database, tenant_values, job_ids, expected, *, timeout_seconds=60):
-    deadline = time.monotonic() + timeout_seconds
     _, workspace_id, _, _ = tenant_values
-    while time.monotonic() < deadline:
+
+    def completed_jobs() -> int:
         with database.connection() as connection:
             rows = connection.execute(
                 """
@@ -258,10 +259,11 @@ def _wait_for_worker_jobs(database, tenant_values, job_ids, expected, *, timeout
                 """,
                 (workspace_id, job_ids),
             ).fetchall()
-        completed = sum(int(count) for status, count in rows if status == "completed")
-        if completed == expected:
-            return
-        time.sleep(0.05)
+        return sum(int(count) for status, count in rows if status == "completed")
+
+    completed = wait_until(completed_jobs, lambda count: count == expected, timeout=timeout_seconds, interval=0.05)
+    if completed == expected:
+        return
     raise TimeoutError(f"only {completed} of {expected} durable worker jobs completed")
 
 

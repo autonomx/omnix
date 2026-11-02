@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from tests.support.waiting import wait_until
 
 ROOT = Path(__file__).resolve().parents[3]
 PYTHON = os.environ.get("OMNIX_PORTRAIT_E2E_PYTHON", "")
@@ -78,16 +79,14 @@ def portrait_service():
 
     url = f"http://127.0.0.1:{port}"
     try:
-        deadline = time.monotonic() + 300
-        status = ""
-        while time.monotonic() < deadline and process.poll() is None:
+        def health() -> str:
             try:
-                status = httpx.get(f"{url}/health", timeout=2).json()["status"]
+                return httpx.get(f"{url}/health", timeout=2).json()["status"]
             except httpx.HTTPError:
-                status = ""
-            if status in {"ready", "missing", "short", "failed"}:
-                break
-            time.sleep(1)
+                return ""
+
+        status = wait_until(health, lambda seen: seen in {"ready", "missing", "short", "failed"} or process.poll() is not None,
+                            timeout=300, interval=1)
         assert status == "ready", f"the portrait service did not load ({status or 'no answer'})"
         yield SimpleNamespace(url=url, token=token)
     finally:
@@ -158,10 +157,8 @@ def test_a_call_streams_its_portrait_end_to_end(monkeypatch, portrait_service) -
                 tts.send_json({"type": "output_end", "output_id": f"conversation-g{epoch}-p1", "generation_epoch": epoch})
                 # Frames cover the audio the browser got (16 kHz, 640 samples a frame, the last one partial).
                 outputs[output_id]["expected"] = -(-(sent * 16_000 // RATE) // 640)
-                deadline = time.monotonic() + 30
-                while (sum(1 for h, _j, _a in frames if h["output_id"] == output_id) < outputs[output_id]["expected"]
-                       and time.monotonic() < deadline):
-                    time.sleep(0.05)
+                wait_until(lambda: sum(1 for h, _j, _a in frames if h["output_id"] == output_id),
+                           lambda got: got >= outputs[output_id]["expected"], timeout=30, interval=0.05)
                 time.sleep(1.0)  # a pause between replies, as in a call
             stop.set()
 

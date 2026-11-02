@@ -53,7 +53,8 @@ STATES = [
 @pytest.fixture
 def workspace():
     """A workspace of its own, so other tests' campaigns stay out of the list."""
-    database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=2))
+    # Setting up accounts is the migrator's: the restricted runtime role is held to its own workspace's rows.
+    database = PostgresDatabase(DatabaseSettings(url=admin_database_url(), pool_min=1, pool_max=2))
     try:
         ensure_local_identity(database)
         with database.transaction() as connection:

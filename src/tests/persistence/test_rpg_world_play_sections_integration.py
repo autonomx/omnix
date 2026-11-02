@@ -71,7 +71,8 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
     first = read_play_sections(world_id)
     assert not first["saved"] and first["published_revision"] is not None
     lore = {"economy": "authored", "routines": "authored", "knowledge": "authored", "pressures": "authored",
-            "bestiary": "authored", "quests": "authored"}
+            "bestiary": "authored", "quests": "authored", "fact_effects": "authored", "group_members": "authored",
+            "budgets": "derived"}
     # Aurelia's author wrote every section: its shops, its people's days and what they know, its pressures, its
     # creatures' numbers and its quests' steps.
     assert first["readiness"]["published"] == lore
@@ -82,7 +83,8 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
     provider["sells"][0]["price"] = {"gold": 7, "silver": 0, "copper": 0}
     saved = save_play_sections(world_id, expected_content_hash=first["content_hash"], document=drafted)
     assert saved["saved"] and saved["unpublished"] and saved["findings"] == []
-    assert set(saved["readiness"]["draft"].values()) == {"authored"}  # the written sections kept as written
+    # The written sections kept as written; a draft from the lore writes no consequences or group rosters.
+    assert saved["readiness"]["draft"] == {**lore, "fact_effects": "derived", "group_members": "derived"}
     assert saved["readiness"]["published"] == lore  # not published yet
 
     with pytest.raises(ValueError, match="world_play_sections_conflict"):  # written over a newer save
@@ -101,7 +103,7 @@ def test_an_author_writes_how_the_world_plays_and_the_next_campaign_plays_it(tmp
 
     published = publish_play_sections(world_id)
     assert published["saved"] and not published["unpublished"]
-    assert set(published["readiness"]["published"].values()) == {"authored"}
+    assert published["readiness"]["published"] == {**lore, "fact_effects": "derived", "group_members": "derived"}
 
     revision, pinned = _pinned_revision(world_id)
     assert revision.revision == published["published_revision"]

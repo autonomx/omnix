@@ -15,6 +15,7 @@ from app.platform.characters.avatar_models import CharacterAvatarPack
 from app.platform.live_voice.portrait.link import PortraitUnavailable
 from app.platform.live_voice.transport import avatar_websocket
 from tests.app.test_gateway_tts_live_call_websocket import FakeTtsProvider, _configure_gateway, _request
+from tests.support.waiting import wait_until
 
 STAMPS = {"created_at": "2026-10-30T00:00:00+00:00", "updated_at": "2026-10-30T00:00:00+00:00"}
 PORTRAIT = CharacterAvatarPack(character_id="maya", renderer="portrait", base_asset_id="image:maya",
@@ -265,10 +266,8 @@ def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monk
             tts.receive_json()
             avatar.send_json({"type": "frame_ack", "segment_id": "seg", "offset": 960})
             link = opened["link"]
-            for _ in range(100):
-                if any(isinstance(item, dict) and item.get("type") == "play_position" for item in link.sent):
-                    break
-                time.sleep(0.01)
+            wait_until(lambda: any(isinstance(item, dict) and item.get("type") == "play_position" for item in link.sent),
+                       bool, timeout=1, interval=0.01)
         assert link.closed  # the avatar socket closed: its link is closed and detached
     copied = [item for item in link.sent if isinstance(item, tuple)]
     assert copied == [("pcm", "seg", 0)]

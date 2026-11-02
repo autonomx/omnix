@@ -15,6 +15,7 @@ def protected_store(monkeypatch, tmp_path):
     # Exercise publication races with deterministic fake OS encryption; the
     # native protection contract is checked separately below.
     monkeypatch.setattr(credentials, "_windows", lambda: True)
+    monkeypatch.setattr(credentials, "_protected", lambda: True)
     monkeypatch.setattr(credentials.provider_secret_store, "_protect", lambda value: b"protected:" + value[::-1])
     monkeypatch.setattr(credentials.provider_secret_store, "_unprotect", lambda value: value[len(b"protected:"):][::-1])
     return tmp_path / "secure" / "service-token.dpapi"

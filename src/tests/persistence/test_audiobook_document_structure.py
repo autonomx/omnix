@@ -229,6 +229,8 @@ def test_render_run_omits_fully_skipped_source_chapters(
         "app.apps.audiobook.service.assert_model_revision",
         lambda _provider, _model, _revision: None,
     )
+    monkeypatch.setattr("app.apps.audiobook.service.current_model_identity",
+                        lambda provider_id=None: {"provider_id": provider_id or "faster-qwen3-tts", "model_id": "Qwen3-TTS"})
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"],
         pool_min=1,

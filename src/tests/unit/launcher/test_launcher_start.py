@@ -7,6 +7,7 @@ import sys
 import httpx
 
 from app.composition.launcher import __main__ as launcher
+from tests.support.waiting import wait_until
 
 
 def _client(gateway_ready_after: int, calls: list[str]) -> httpx.Client:
@@ -71,7 +72,6 @@ def test_a_missing_executable_is_a_failed_start_not_a_launcher_error(tmp_path, m
 
 
 def test_a_service_that_released_an_idle_model_is_started_again(tmp_path, monkeypatch):
-    import time
 
     from app.composition.launcher.service_manager import LauncherServiceManager, ServiceSpec
     from app.runtime.process_control import IDLE_EXIT_CODE
@@ -87,10 +87,9 @@ def test_a_service_that_released_an_idle_model_is_started_again(tmp_path, monkey
     ])
     assert manager.start("model")["ok"]
     try:
-        for _ in range(500):
-            if any(line.endswith("] light") for line in manager._services["model"].logs):  # not the command line
-                break
-            time.sleep(0.02)
+        # Not the command line: its own output.
+        wait_until(lambda: any(line.endswith("] light") for line in manager._services["model"].logs), bool,
+                   timeout=10, interval=0.02)
         lines = list(manager._services["model"].logs)
         assert any(f"exited with code {IDLE_EXIT_CODE}" in line for line in lines)
         assert any("starting it again without one" in line for line in lines)
@@ -101,7 +100,6 @@ def test_a_service_that_released_an_idle_model_is_started_again(tmp_path, monkey
 
 def test_a_service_asked_to_stop_is_not_started_again_by_its_idle_exit(tmp_path, monkeypatch):
     # Review finding (2026-10-31): a stop landing as the service exited for idleness was followed by a restart.
-    import time
 
     from app.composition.launcher.service_manager import LauncherServiceManager, ServiceSpec
     from app.runtime.process_control import IDLE_EXIT_CODE
@@ -114,10 +112,8 @@ def test_a_service_asked_to_stop_is_not_started_again_by_its_idle_exit(tmp_path,
     assert manager.start("model")["ok"]
     service = manager._services["model"]
     service.stop_requested = True  # stop() as the process exits on its own
-    for _ in range(200):
-        if any(f"exited with code {IDLE_EXIT_CODE}" in line for line in service.logs):
-            break
-        time.sleep(0.02)
-    time.sleep(0.3)
+    wait_until(lambda: any(f"exited with code {IDLE_EXIT_CODE}" in line for line in service.logs), bool,
+               timeout=4, interval=0.02)
+    wait_until(lambda: service.status() != "running", bool, timeout=2, interval=0.02)
     assert service.status() != "running"
     assert not any("starting it again" in line for line in service.logs)

@@ -51,7 +51,7 @@ GATES = {
         'src/tests/persistence/test_active_feature_factories_integration.py',
         'src/tests/persistence/test_runtime_retirement_integration.py',
         'src/tests/persistence/test_asset_streaming.py',
-        'src/tests/persistence/test_rpg_campaign_genesis_integration.py',
+        'src/tests/persistence/test_rpg_published_world_play_integration.py',
     ),
     'multiprocess': ('src/tests/persistence/test_runtime_multiprocess.py',),
     'persistence-all': ('src/tests/persistence',),

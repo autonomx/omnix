@@ -9,6 +9,7 @@ import pytest
 
 from app.persistence.migrations import discover_migrations
 from app.persistence.device_permits import DevicePermitError
+from tests.support.waiting import wait_until
 
 
 def _tenant_values():
@@ -92,12 +93,10 @@ def _batch_yield_process(url, tenant_values, device_id, events):
         service.configure_capacity("tts", capacity=1)
         with service.slot("tts", holder_id="batch-holder", priority="batch", timeout_seconds=10):
             events.put(("batch_active", time.monotonic()))
-            deadline = time.monotonic() + 8
-            while not service.has_higher_priority_request("tts", priority="batch"):
-                if time.monotonic() >= deadline:
-                    events.put(("batch_timeout", time.monotonic()))
-                    return
-                time.sleep(0.02)
+            if not wait_until(lambda: service.has_higher_priority_request("tts", priority="batch"), bool,
+                              timeout=8, interval=0.02):
+                events.put(("batch_timeout", time.monotonic()))
+                return
         events.put(("batch_yielded", time.monotonic()))
     except BaseException as exc:
         events.put(("batch_error", type(exc).__name__, str(exc)))
@@ -488,17 +487,15 @@ def test_live_fake_tts_load_scales_with_device_capacity_and_returns_429(monkeypa
                 assert fake_tts.wait_for_active(capacity, timeout=5), (
                     f"FakeTTS did not reach configured capacity {capacity}"
                 )
-                deadline = time.monotonic() + 5
-                while True:
+                def full() -> bool:
                     diagnostic = service.diagnostics()[0]
                     queued = sum(count for _priority, count in diagnostic.waiting)
-                    if len(diagnostic.holders) == capacity and queued >= request_count - capacity:
-                        break
-                    if time.monotonic() >= deadline:
-                        pytest.fail(
-                            f"expected {request_count - capacity} queued calls at capacity {capacity}"
-                        )
-                    time.sleep(0.05)
+                    return len(diagnostic.holders) == capacity and queued >= request_count - capacity
+
+                if not wait_until(full, bool, timeout=5, interval=0.05):
+                    pytest.fail(
+                        f"expected {request_count - capacity} queued calls at capacity {capacity}"
+                    )
                 # Queued calls wait at most 1.0 s (tts_server); leave a wide
                 # margin so a busy CI runner cannot admit a late waiter.
                 time.sleep(2.0)

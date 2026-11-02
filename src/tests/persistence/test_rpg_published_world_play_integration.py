@@ -16,6 +16,7 @@ import pytest
 
 from app.persistence.unit_of_work import unit_of_work
 from app.runtime.tenant_context import current_tenant
+from tests.rpg.playthrough.scripted_model import Role, ScriptedRoleModel, classify
 
 pytestmark = [
     pytest.mark.postgres,
@@ -45,13 +46,17 @@ class _ScriptedModel:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.present: list[list[str]] = []
+        self.reader = ScriptedRoleModel()  # answers the intent call; its session_id is the campaign played
 
     def chat_completion(self, messages, model=None, stream=False, **kwargs):
         from app.providers.base import ChatResponse
 
         text = "\n".join(str(getattr(message, "content", "")) for message in messages)
         kind, answer = "unscripted", "{}"
-        if "decide which one present NPC" in text:
+        call = classify(text)
+        if call.role is Role.INTENT:
+            kind, answer = "intent", json.dumps(self.reader._read_line(call))
+        elif "decide which one present NPC" in text:
             present = json.loads(text.rsplit("CONTEXT: ", 1)[1]).get("present_npcs") or []
             self.present.append([str(npc.get("name")) for npc in present])
             kind = "dialogue"
@@ -65,8 +70,6 @@ class _ScriptedModel:
             kind, answer = "canon_dossier", json.dumps({"entities": [], "documents": [], "facts": [], "relationships": []})
         elif "Reply as the speaker in the PLAN" in text:  # the dialogue plan's one call for the line (RQ-2.2)
             kind, answer = "dialogue_line", "Welcome, traveler."
-        elif "first-call semantic intent router" in text:
-            kind = "semantic_intent"
         elif "CONTEXT:" in text:
             kind, answer = "turn_narration", "The moment passes."
         self.calls.append(kind)
@@ -151,7 +154,7 @@ def test_published_world_campaign_plays_in_its_world(tmp_path, monkeypatch) -> N
         lambda: StructuredNarrativeWriter(_scripted_narrative, provider="scripted", model="scripted"),
     )
     try:
-        session_id = _launch_aurelia(tmp_path, monkeypatch)
+        session_id = model.reader.session_id = _launch_aurelia(tmp_path, monkeypatch)
         app = FastAPI()
         include_router_registrar(app, register_rpg_session_routes)
         client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
@@ -242,7 +245,7 @@ def test_item_actions_and_story_turns_share_one_inventory(tmp_path, monkeypatch)
         lambda: StructuredNarrativeWriter(_scripted_narrative, provider="scripted", model="scripted"),
     )
     try:
-        session_id = _launch_aurelia(tmp_path, monkeypatch)
+        session_id = model.reader.session_id = _launch_aurelia(tmp_path, monkeypatch)
         app = FastAPI()
         include_router_registrar(app, register_rpg_session_routes)
         client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
@@ -319,7 +322,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         lambda: StructuredNarrativeWriter(narrate, provider="scripted", model="scripted"),
     )
     try:
-        session_id = _launch_aurelia(tmp_path, monkeypatch)
+        session_id = model.reader.session_id = _launch_aurelia(tmp_path, monkeypatch)
         app = FastAPI()
         include_router_registrar(app, register_rpg_session_routes)
         client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
@@ -372,10 +375,11 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         hungry = stored()["simulation_state"]["survival"]
         assert hungry["enabled"] is True and hungry["hunger"] > 0 and hungry["thirst"] > 0
 
-        # Asking someone present a question is one short model call for their line, not the full narrative writer.
+        # Asking someone present a question is the reading of the line and one short call for theirs, not the full
+        # narrative writer.
         calls, writes = len(model.calls), len(told)
         turn("I ask Orik Stonewake what he thinks of the newcomers.")
-        assert model.calls[calls:] == ["dialogue_line"] and len(told) == writes, model.calls[calls:]
+        assert model.calls[calls:] == ["intent", "dialogue_line"] and len(told) == writes, model.calls[calls:]
 
         # A meal at the inn costs coin and eases hunger.
         purse = public()["player"]["currency"]
@@ -416,20 +420,24 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         turn("I pick up the Lantern Bread.")
         assert bread() == carried
 
-        # Renting a room is a purchase; sleeping in it is resting, and it eases fatigue.
+        # A newcomer's first night is on Orik (EV-1); sleeping in the room is resting, and it eases fatigue.
         before = copper(public()["player"]["currency"])
         turn("I rent a room for the night from Orik Stonewake.")
-        # Fifty copper as written, a fifth more where the roads choke trade (RQ-5.5, economy.md).
-        assert copper(public()["player"]["currency"]) == before - 60, told[-1]
-        assert "(the roads choke trade)" in told[-1]
+        assert copper(public()["player"]["currency"]) == before and "for nothing" in told[-1], told[-1]
         tired = stored()["simulation_state"]["survival"]["fatigue"]
-        assert tired > 0  # paying for the room rests no one
+        assert tired > 0  # taking the room rests no one
         turn("I go to my room and sleep for the night.")
         assert stored()["simulation_state"]["survival"]["fatigue"] < tired
         assert "rest" in told[-1] and "lodging" in told[-1], told[-1]
 
-        # Every one of these commands is understood by the game itself: none asked the model what it meant.
-        assert "semantic_intent" not in model.calls and "dialogue" not in model.calls, model.calls
+        # After that a room is a purchase: fifty copper as written, a fifth more where the roads choke trade
+        # (RQ-5.5, economy.md).
+        before = copper(public()["player"]["currency"])
+        turn("I rent a room for the night from Orik Stonewake.")
+        assert copper(public()["player"]["currency"]) == before - 60, told[-1]
+        assert "(the roads choke trade)" in told[-1]
+
+        assert "dialogue" not in model.calls, model.calls
 
         # A fight goes blow by blow: the creature takes its turns, the narrator is told every blow, the
         # sheet shows the wounds, and the rest of the turn (time passing) is kept. Creatures are met where no
@@ -458,8 +466,9 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert "You break away from the Echo Wolf" in told[-1] or "cuts you off" in told[-1], told[-1]
         assert public()["turn_count"] == count + 1
         assert not (stored()["runtime_state"].get("combat_state") or {}).get("active")
-        # The combat rules decide a blow at a creature and the narrator alone tells it: no other model call.
-        assert model.calls[calls:] == [], model.calls[calls:]
+        # The combat rules decide a blow at a creature and the narrator alone tells it: past reading the typed line
+        # (EV-9), no other model call.
+        assert set(model.calls[calls:]) <= {"intent"}, model.calls[calls:]
         # The world's clock runs from the first turn: Aurelia's creatures make its roads a growing danger (RQ-4.2).
         clock = stored()["simulation_state"]["causal_world_runtime"]
         # Not every turn ticks it yet: fast dialogue and fallback answers skip the advance until RQ-1.4 makes the

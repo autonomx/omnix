@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-import time
 
 import pytest
 from typing import Any
@@ -17,6 +16,7 @@ from app.runtime.live_voice_config import (
     live_voice_execution_lane_config,
     resolve_live_voice_chat_route,
 )
+from tests.support.waiting import wait_until
 
 
 class _BlockingProvider:
@@ -221,11 +221,7 @@ def test_accepted_tts_preempts_active_speculative_stream_and_reports_wait() -> N
     )
     accepted.start()
 
-    deadline = time.time() + 1
-    while time.time() < deadline:
-        if scheduler.snapshot()["active_cancelled"]:
-            break
-        time.sleep(0.005)
+    wait_until(lambda: scheduler.snapshot()["active_cancelled"], bool, timeout=1, interval=0.005)
     assert scheduler.snapshot()["active_cancelled"] is True
 
     provider.release_speculative.set()

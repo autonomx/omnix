@@ -87,7 +87,8 @@ def test_a_world_without_play_sections_is_played_from_its_lore() -> None:
 
     assert findings == ()
     assert authorship(sections) == {section: "derived" for section in
-                                    ("economy", "routines", "knowledge", "pressures", "bestiary", "quests")}
+                                    ("economy", "routines", "knowledge", "pressures", "bestiary", "quests",
+                                     "fact_effects", "budgets", "group_members")}
     model = session_world_model(_revision(_canon()), SimpleNamespace(starting_location_id="loc:hearth"))
     assert model["authorship"]["economy"] == "derived"
     assert model["routines"] == [] and model["pressures"] == []
@@ -99,7 +100,8 @@ def test_a_world_that_writes_its_economy_is_played_as_written() -> None:
     model = session_world_model(_revision(canon), SimpleNamespace(starting_location_id="loc:hearth"))
 
     assert model["authorship"] == {"economy": "authored", "routines": "authored", "knowledge": "authored",
-                                   "pressures": "authored", "bestiary": "derived", "quests": "derived"}
+                                   "pressures": "authored", "bestiary": "derived", "quests": "derived",
+                                   "fact_effects": "derived", "budgets": "derived", "group_members": "derived"}
     provider = model["providers"]["npc:brindle"]
     assert provider["location_id"] == "loc:market"  # where the world puts her, not where her role guesses
     assert provider["buys"] == {"item_types": ["material"], "price_fraction": 0.4}

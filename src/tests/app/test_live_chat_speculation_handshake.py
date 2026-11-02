@@ -1,6 +1,5 @@
 import json
 import threading
-import time
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -12,6 +11,7 @@ from app.platform.chat import live_chat_speculation_handshake as handshake
 from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import service as provider_service
 from tests.support.routers import include_router_registrar
+from tests.support.waiting import wait_until
 
 
 class _FakeProvider:
@@ -124,12 +124,7 @@ def _event_payloads(body: str) -> list[dict]:
 
 
 def _wait_until(predicate, timeout: float = 1.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.01)
-    return predicate()
+    return bool(wait_until(predicate, bool, timeout=timeout, interval=0.01))
 
 
 def _client(store: _FakeStore) -> TestClient:

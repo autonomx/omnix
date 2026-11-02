@@ -52,6 +52,10 @@ needs a row here, with a turn kind or an exemption.
 | `POST /api/rpg/sessions/{session_id}/rename` | `session/new_game.py` (`rename_rpg_session`) | Campaign document (manifest and state title) by out-of-turn `save_session` | Loaded revision | Exemption, admin (title). Should write the title column without a document revision |
 | `POST /api/rpg/sessions/{session_id}/delete` | `session/persistence/session_records.py` (`archive_session_in_postgres`) | `omnix_rpg_campaigns.status = 'archived'`, `revision + 1`, `manifest.archived` set in the document by SQL | None (unconditional `UPDATE`) | Exemption, admin (archive). Should not bump the document revision |
 | `POST /api/rpg/sessions/import` | `session/persistence/campaign_transfer.py` (`import_campaign`) | A new campaign under the package's id: document, creation artifacts, bible, world binding, local maps, narrative responses, in one transaction | Refused when the campaign is in the library or its world is not installed | Exemption, admin (a campaign brought from a file, RQ-8.6) |
+| `POST /api/rpg/sessions/{session_id}/game-master` | `edge/api/feature_routes/rpg_game_master_routes.py`, `narration/game_master/panel.py` | A question and its answer in the game master's panel log (`work.rpg_game_master_panel`); reads the campaign and never writes it | None: an appended row, recording the revision it answered from | Exemption, read-only: changes nothing in play (EV-0) |
+| `POST /api/rpg/sessions/{session_id}/speech-plan` | `edge/api/feature_routes/rpg_voice_routes.py`, `session/voice_cast.py` | The campaign's voice cast, kept outside the document, when a speaker is first cast | None: the cast is deterministic | Exemption, narration transport (EV-13) |
+| `POST /api/rpg/sessions/{session_id}/speech-audio` | `edge/api/feature_routes/rpg_voice_routes.py` | The campaign's spoken-audio cache, once a sentence is whole | None: keyed by what was rendered | Exemption, narration transport (EV-13) |
+| `PUT /api/rpg/sessions/{session_id}/voices/{speaker_id:path}` | `edge/api/feature_routes/rpg_voice_routes.py`, `session/voice_cast.py` | The player's voice choice in the cast, kept outside the document | None: the last choice stands | Exemption, narration transport (EV-13) |
 
 ## Campaign creation and binding
 
@@ -127,6 +131,9 @@ All of these write world tables or the world library and sharing state, never a 
 | `POST /api/rpg/world-sharing/github/device` | `rpg_world_sharing_routes.py` | A GitHub device sign-in flow | Flow id | Exemption, admin (credentials) |
 | `POST /api/rpg/world-sharing/github/device/{flow_id}/poll` | `rpg_world_sharing_routes.py` | The GitHub token when the flow completes | Flow id | Exemption, admin (credentials) |
 | `DELETE /api/rpg/world-sharing/github` | `rpg_world_sharing_routes.py` | Removes the GitHub token | None | Exemption, admin (credentials) |
+| `POST /api/rpg/worlds/{world_id}/lore-review/{draft_id}/check` | `edge/api/feature_routes/rpg_lore_review_routes.py`, `session/lore_review.py` | The draft's consistency findings in the lore review queue | None | Exemption, world authoring (EV-0) |
+| `POST /api/rpg/worlds/{world_id}/lore-review/{draft_id}/decision` | `edge/api/feature_routes/rpg_lore_review_routes.py`, `session/lore_review.py` | The draft's status, and an approval in the world's metadata for the next publication | The draft's status: a decided draft is a 409 | Exemption, world authoring (EV-0) |
+| `POST /api/rpg/worlds/{world_id}/topics/{topic_id}/entities` | `edge/api/feature_routes/rpg_world_authoring_routes.py` (`add_world_entity`) | A new entity in the topic's draft | `expected_draft_revision`, `expected_content_hash` | Exemption, world authoring (EV-6) |
 
 ## Tools and diagnostics
 
@@ -195,6 +202,7 @@ All of these write world tables or the world library and sharing state, never a 
 | `rpg.world.topic.generate` | `genesis/worlds/generation_worker.py` | World generation topic results | Run and job state | Exemption, world authoring |
 | `rpg.world.profile.generate` | `genesis/worlds/generation_worker.py` | World genre profile | Profile revision | Exemption, world authoring |
 | `rpg.world.map.materialize` | `genesis/worlds/progressive_materialization_worker.py` | New world revision with a materialized location map | Source world revision | Exemption, world authoring |
+| `rpg.game_master` | `session/jobs/game_master_job.py` | Proposals in the proposal record, for the next turn to fold in through each kind's owning rule; never the campaign document | One job a committed revision | Exemption, off the turn: a proposal, not a change (EV-0, EV-11) |
 
 `rpg.new_game.create` is the type of a creation progress envelope (`genesis/creation_progress.py`), not a durable job.
 
@@ -214,8 +222,8 @@ All of these write world tables or the world library and sharing state, never a 
 
 ## Counts
 
-- 117 mutating routes: 19 play actions and campaign tools, 7 creation and binding, 52 world authoring, library and
-  sharing, 5 tools, 20 compatibility, 14 Hermes; and 9 job kinds.
+- 124 mutating routes: 23 play actions and campaign tools, 7 creation and binding, 55 world authoring, library and
+  sharing, 5 tools, 20 compatibility, 14 Hermes; and 10 job kinds.
 - Proposed turn kinds: `player_text` 1 route (+ `rpg.turn`); `structured_action` 9 routes (loadout, map actions,
   tactical move and attack, geometry patches, observe, lore discovery, Hermes approved flow and execute-step) plus the
   item and loadout actions of `/api/rpg/session/get`; `world_tick` 2 (`resume`, `spatial-ticks`; `continue` only loads); `system` none

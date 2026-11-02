@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import subprocess
 import threading
-import time
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +14,7 @@ from app.composition.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
 from app.jobs.handlers import JobExecutionContext
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
+from tests.support.waiting import wait_until
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
 pytestmark = pytest.mark.postgres
@@ -94,13 +94,12 @@ def _wait_for_job_status(
     *,
     timeout: float = 2,
 ) -> JobRecord:
-    deadline = time.monotonic() + timeout
-    last_job = None
-    while time.monotonic() < deadline:
-        last_job = store.get_job(job_id)
-        if last_job is not None and last_job.status in statuses:
-            return last_job
-        time.sleep(0.01)
+    def reached(job) -> bool:
+        return job is not None and job.status in statuses
+
+    last_job = wait_until(lambda: store.get_job(job_id), reached, timeout=timeout, interval=0.01)
+    if reached(last_job):
+        return last_job
     last_status = last_job.status.value if last_job is not None else "missing"
     expected = ", ".join(sorted(status.value for status in statuses))
     raise AssertionError(f"Job {job_id} did not reach {expected}; last status was {last_status}")

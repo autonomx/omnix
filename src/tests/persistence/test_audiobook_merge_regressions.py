@@ -125,6 +125,8 @@ def test_long_span_audition_uses_selected_voice_and_returns_all_segments(pipelin
     database, context, blobs, service = pipeline
     monkeypatch.setattr("app.apps.audiobook.service.assert_model_revision", lambda *args: None)
     monkeypatch.setattr("app.apps.audiobook.render_service.assert_model_revision", lambda *args: None)
+    monkeypatch.setattr("app.apps.audiobook.service.current_model_identity",
+                        lambda provider_id=None: {"provider_id": provider_id or "faster-qwen3-tts", "model_id": "Qwen3-TTS"})
     project_id = service.create_project(context, title="Full span audition")["id"]
     service.submit_source(context, project_id=project_id, source_format="txt",
                           content=("A long sentence for the audition. " * 40).encode(), filename="long.txt")

@@ -24,7 +24,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
 from typing import Any
 from urllib.parse import quote
 
@@ -57,6 +56,7 @@ _SYSTEM_MODE_LABEL_PATTERN = re.compile(
     r"(?P<prefix>mode\s*===\s*['\"]character['\"]\s*\?\s*['\"][^'\"]+['\"]\s*:\s*['\"]+)"
     r"(?P<label>Personality|Profile)(?P<suffix>['\"])",
 )
+from tests.support.waiting import wait_until
 _SYSTEM_MODE_LABEL_OCCURRENCES = 3
 
 
@@ -297,21 +297,23 @@ def _approve_pending_runs(client: httpx.Client, run_id: str) -> None:
 
 
 def _wait_for_run(client: httpx.Client, run_id: str, timeout_seconds: float) -> dict[str, Any]:
-    deadline = time.monotonic() + timeout_seconds
-    latest: dict[str, Any] = {}
-    while time.monotonic() < deadline:
+    def poll() -> dict[str, Any]:
         response = client.get(f"/api/agent-runs/{quote(run_id, safe='')}")
         _require_ok(response, "poll Agent run")
-        latest = response.json()
+        run = response.json()
         # Approval requests can be persisted while the worker remains in
         # ``running`` (PI may have emitted a progress message first).  Poll
         # them on every iteration so the UI's ask-sensitive policy does not
         # strand a validation command behind a race in status propagation.
         _approve_pending_runs(client, run_id)
-        status = str(latest.get("status") or "")
-        if status in _TERMINAL_RUN_STATUSES:
-            return latest
-        time.sleep(1.0)
+        return run
+
+    def finished(run: dict[str, Any]) -> bool:
+        return str(run.get("status") or "") in _TERMINAL_RUN_STATUSES
+
+    latest = wait_until(poll, finished, timeout=timeout_seconds, interval=1.0)
+    if finished(latest):
+        return latest
     pytest.fail(
         f"Agent run {run_id} did not reach a terminal state within "
         f"{timeout_seconds:g}s: {json.dumps(latest, sort_keys=True)[:4000]}"

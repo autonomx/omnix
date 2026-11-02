@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 import pytest
+from tests.support.waiting import wait_until
 
 
 SRC_DIR = Path(__file__).resolve().parents[3]
@@ -42,13 +42,12 @@ def _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_serv
 
 
 def _wait_for_job(client: TestClient, job_id: str, *, timeout: float = 2.0) -> dict:
-    deadline = time.monotonic() + timeout
-    last = None
-    while time.monotonic() < deadline:
-        last = client.get(f"/api/jobs/{job_id}").json()
-        if last.get("status") in {"completed", "failed", "canceled", "stale"}:
-            return last
-        time.sleep(0.01)
+    def finished(job: dict) -> bool:
+        return job.get("status") in {"completed", "failed", "canceled", "stale"}
+
+    last = wait_until(lambda: client.get(f"/api/jobs/{job_id}").json(), finished, timeout=timeout, interval=0.01)
+    if finished(last):
+        return last
     raise AssertionError(f"Job {job_id} did not finish: {last}")
 
 

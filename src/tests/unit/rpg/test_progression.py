@@ -23,7 +23,7 @@ def test_one_curve_levels_the_hero_and_each_level_brings_health_and_a_choice() -
     changes, lines = progression.gain(document["simulation_state"], 320)
     reached = changes[-1]
     assert (reached.level, reached.xp, reached.choices_pending, reached.max_hp_gain) == (3, 110, 2, 14)  # con +2
-    assert lines[-1] == progression.PROMPT
+    assert lines[-1] == progression.GROWTH_CHOICES
     after, _ = reduce(document, changes)
     assert after["simulation_state"]["player_state"]["resources"]["hp"] == {"current": 34, "max": 34}
 

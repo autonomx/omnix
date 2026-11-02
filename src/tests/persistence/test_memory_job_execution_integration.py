@@ -23,6 +23,7 @@ pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
     reason="requires disposable PostgreSQL test database",
 )
+from tests.support.waiting import wait_until
 
 
 @pytest.fixture
@@ -264,17 +265,13 @@ def test_lease_renews_during_provider_work(runtime, monkeypatch):
                 (job.id,),
             )
         # Wait on durable evidence instead of assuming thread scheduling.
-        import time
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
+        def lease_renewed() -> bool:
             with database.connection() as connection:
-                renewed = connection.execute(
+                return connection.execute(
                     "SELECT lease_expires_at > clock_timestamp() + INTERVAL '20 seconds' FROM omnix_jobs WHERE id = %s",
                     (job.id,),
                 ).fetchone()[0]
-            if renewed:
-                break
-            time.sleep(0.02)
-        assert renewed
+
+        assert wait_until(lease_renewed, bool, timeout=5, interval=0.02)
         with execution.write_result():
             execution.complete_job(job.id, CompleteJobRequest())

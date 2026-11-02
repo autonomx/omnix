@@ -540,6 +540,10 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
         },
     )
     monkeypatch.setattr(rpg_session_service, "load_session", lambda _session_id: None)
+    monkeypatch.setattr(
+        "app.apps.rpg.session.persistence.session_records.load_launch_gate_source_from_postgres",
+        lambda _session_id: None,
+    )
 
     from app.platform.characters import feature as character_feature
     from app.platform.characters.models import CharacterListResponse

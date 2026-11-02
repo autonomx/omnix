@@ -83,6 +83,8 @@ def _synthetic_tts_model_revision(monkeypatch) -> None:
                         lambda _provider, _model, _revision: None)
     monkeypatch.setattr("app.apps.audiobook.render_service.assert_model_revision",
                         lambda _provider, _model, _revision: None)
+    monkeypatch.setattr("app.apps.audiobook.service.current_model_identity",
+                        lambda provider_id=None: {"provider_id": provider_id or "faster-qwen3-tts", "model_id": "Qwen3-TTS"})
 
 
 def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch) -> None:
