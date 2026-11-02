@@ -12,8 +12,7 @@ from app.apps.rpg.edge.hermes.suggestions import hermes_rpg_suggestions_payload
 from app.apps.rpg.edge.hermes.turn_readout import hermes_rpg_turn_readout_payload
 from app.apps.rpg.edge.hermes.mode_routing import omnix_mode_policy_payload
 from app.apps.rpg.edge.hermes.mode_routing import omnix_route_decision_payload
-from app.apps.rpg.edge.api.web_contracts import (
-    documented,
+from app.apps.rpg.edge.api.hermes_web_contracts import (
     HermesApprovalResponse,
     HermesCandidatePreviewResponse,
     HermesRecentResponse,
@@ -22,6 +21,7 @@ from app.apps.rpg.edge.api.web_contracts import (
     HermesRpgTurnReadoutResponse,
     HermesTestResponse,
 )
+from app.apps.rpg.edge.api.web_contracts import documented
 from app.apps.rpg.edge.api.route_contracts import (
     HermesAdapterPreviewResponse,
     HermesCapabilitiesResponse,

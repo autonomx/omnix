@@ -12,10 +12,8 @@ Design invariants:
 from __future__ import annotations
 
 from typing import Any, Dict
-import logging
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
-logger = logging.getLogger(__name__)
 
 _MAX_SCENE_ILLUSTRATIONS = 24
 _MAX_IMAGE_REQUESTS = 24

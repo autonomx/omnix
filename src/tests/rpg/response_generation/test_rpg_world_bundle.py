@@ -279,3 +279,41 @@ def test_world_bundle_routes_are_in_openapi_and_registered_once() -> None:
     assert duplicate_router.routes == []
     assert "/api/rpg/worlds/{world_id}/export" in app.openapi()["paths"]
     assert "/api/rpg/worlds/import" in app.openapi()["paths"]
+
+
+def test_a_bundle_cannot_mark_its_own_svg_trusted(tmp_path, monkeypatch) -> None:
+    from app.apps.rpg.genesis.worlds import world_bundle_import
+    from app.assets import SharedAssetStore
+
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    descriptor = WorldBundleAsset(
+        asset_id="image:harbor-map",
+        archive_path="assets/image-harbor-map.svg",
+        module="image-generation",
+        mime_type="image/svg+xml",
+        byte_size=len(svg),
+        checksum_sha256=sha256_hex(svg),
+        metadata={"world_id": "world:source", "trusted_svg": True},
+        compat={"source": "curated-svg"},
+    )
+    parsed = parse_world_bundle_archive(
+        build_world_bundle_archive(_payload(), [(descriptor, svg)], exported_at="2026-07-17T00:00:00+00:00").content
+    )
+    transformed = transform_world_bundle(
+        parsed.payload,
+        target_world_id="world:clone",
+        bundle_sha256=parsed.bundle_sha256,
+        existing_map_ids=set(),
+        existing_scenario_ids=set(),
+        existing_asset_ids=set(),
+    )
+    monkeypatch.setattr(world_bundle_import, "resources_data_root", lambda: tmp_path)
+
+    created, _reused, _asset_map = world_bundle_import._prepare_assets(
+        parsed, transformed, SharedAssetStore(tmp_path / "assets.json")
+    )
+
+    [record] = created
+    assert "trusted_svg" not in record.metadata
+    assert "source" not in record.compat
+    assert record.metadata["world_bundle_import"]["source_asset_id"] == "image:harbor-map"

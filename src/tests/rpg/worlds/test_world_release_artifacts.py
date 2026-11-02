@@ -282,3 +282,20 @@ def test_representation_normalization_records_field_level_provenance() -> None:
     assert normalized.provenance["publication_normalization_action_count"] == len(
         actions
     )
+
+
+def test_an_unchanged_blueprint_keeps_the_readiness_its_map_was_certified_with() -> None:
+    certified = {"map_id": "map:hub", "blueprint_revision": 1, "blueprint_hash": "sha256:blueprint",
+                 "semantic_interface_hash": "sha256:interface", "simulation_readiness": "certified",
+                 "presentation_readiness": "ready"}
+    revision = compile_world_revision(world_id="world:test", revision=2, title="Test World", canon={"entities": {}},
+                                      entity_manifest={}, topology={}, blueprint_requirements=[certified])
+    release = compile_world_release(revision, release=1, certification={"launch_ready": True})
+    as_authored = {**certified, "simulation_readiness": "semantic", "presentation_readiness": "placeholder"}
+
+    kept, _ = merge_authored_blueprints(revision, release, [as_authored])
+    assert [(row["simulation_readiness"], row["presentation_readiness"]) for row in kept.blueprint_requirements] == [
+        ("certified", "ready")]
+
+    changed, _ = merge_authored_blueprints(revision, release, [{**as_authored, "blueprint_hash": "sha256:edited"}])
+    assert [row["simulation_readiness"] for row in changed.blueprint_requirements] == ["semantic"]

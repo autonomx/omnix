@@ -174,6 +174,7 @@ Decisions for queried columns are in `resources/architecture/jsonb-decisions.jso
 | `omnix_rpg_campaign_genesis_runs` | `topic_graph_jsonb` | opaque | keep opaque |
 | `omnix_rpg_campaign_map_events` | `payload_jsonb` | opaque | keep opaque |
 | `omnix_rpg_campaign_map_instances` | `snapshot_jsonb` | opaque | keep opaque |
+| `omnix_rpg_campaign_parts` | `part_jsonb` | opaque | keep opaque |
 | `omnix_rpg_campaign_spatial_clocks` | `aggregate_metrics_jsonb` | opaque | keep opaque |
 | `omnix_rpg_campaign_spatial_clocks` | `policy_jsonb` | opaque | keep opaque |
 | `omnix_rpg_campaign_world_bindings` | `binding_jsonb` | opaque | keep opaque |

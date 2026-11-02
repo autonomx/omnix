@@ -7,9 +7,9 @@ from app.apps.rpg.narration.narrative_engine import (
     PresentationProfile,
     TurnPresentationRequest,
     WriterResult,
-    bran_fixture_evidence,
     write_validate_repair,
 )
+from tests.support.narrative_evidence_fixtures import bran_fixture_evidence
 
 
 def _setup():

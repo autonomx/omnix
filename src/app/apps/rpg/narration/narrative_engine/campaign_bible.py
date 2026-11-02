@@ -1,8 +1,13 @@
 """Campaign Bible aggregate contracts and evidence projection."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence, TypeVar
+
+from app.apps.rpg.rules.contracts import public_canon
+from app.caching.bounded_cache import bounded_lru_cache
 
 from .authority import AuthorityClass, EvidenceLifetime, VisibilityClass
 from .contracts import EvidenceRecord
@@ -272,8 +277,29 @@ def _record(
     )
 
 
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
+def _public_slot(digest: str) -> dict[str, Any]:
+    """A holder for one canon content's filtered copy, by its digest; empty until it is first filtered."""
+    return {}
+
+
+def _public_document(snapshot: CampaignBibleSnapshot) -> Mapping[str, Any]:
+    """The snapshot's canon without its secrets' sentences, filtered once per content (the review: some 45 ms a time
+    on Vesper-9's canon, one to three times a narrated turn). Known by a digest of the whole document, never by its
+    stored hash: a discovery's change or an offline save leaves that hash as it was (the twelfth review). The copy is
+    shared: evidence only reads it."""
+    digest = hashlib.sha256(json.dumps(snapshot.document, default=str, separators=(",", ":")).encode()).hexdigest()
+    slot = _public_slot(digest)
+    if "public" not in slot:
+        slot["public"] = public_canon(snapshot.document)
+    return slot["public"]
+
+
 def campaign_bible_evidence(snapshot: CampaignBibleSnapshot) -> tuple[EvidenceRecord, ...]:
-    """Project all authorized canon, including lore pages and dossiers, into evidence."""
+    """Project all authorized canon, including lore pages and dossiers, into evidence: from the canon without a
+    sentence of any secret outside the secrets' own fields (rules/secrets.py; the review: a lore world's every fact
+    carried its hidden truth as public evidence)."""
+    snapshot = replace(snapshot, document=_public_document(snapshot))
 
     records: list[EvidenceRecord] = []
     index = 0

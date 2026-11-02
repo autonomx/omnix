@@ -96,6 +96,10 @@ def _profile(catalogue: types.ModuleType) -> dict[str, Any]:
     return profile
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
 def _payload(source_dir: Path) -> dict[str, Any]:
     catalogue = _catalogue(source_dir)
     profile = _profile(catalogue)
@@ -141,9 +145,19 @@ def _payload(source_dir: Path) -> dict[str, Any]:
         "created_at": EXPORTED_AT,
         "updated_at": EXPORTED_AT,
     }
+    # The author's own additions (lore-additions.json: people and things the catalogue lacks) and how the world plays
+    # (play-sections.json: the world editor's draft, written into the revision when the world is published).
+    additions = _read_json(source_dir / "lore-additions.json").get("topics", {})
+    sections = _read_json(source_dir / "play-sections.json")
+    if sections:
+        metadata["play_sections"] = {"document": sections}
     topics: list[dict[str, Any]] = []
     for topic_id, spec in catalogue.SPECS.items():
         content = catalogue.build_topic_content(topic_id)
+        added = additions.get(topic_id, {})
+        for key in ("entities", "facts"):
+            known = {row.get("id") for row in content.get(key) or ()}
+            content[key] = [*(content.get(key) or ()), *(row for row in added.get(key, ()) if row.get("id") not in known)]
         dependencies = {dependency: "embedded-canon" for dependency in spec[2]}
         topics.append({
             "topic_id": topic_id,

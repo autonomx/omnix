@@ -1,0 +1,251 @@
+{
+  "measurement": "rpg-play-screens",
+  "date": "2026-10-25",
+  "roadmap": "RQ-7.5 part 2: one stylesheet per component; Playwright screenshots in light and dark at 360, 768 and 1,440 px",
+  "tool": "scripts/rpg_play_screenshots.py (capture, compare)",
+  "images_kept_at": "resources/cache/rpg-play-screens/2026-10-25 (ignored by git; regenerate with capture)",
+  "capture": {
+    "session": "rpg_y7kUA03J1SQnr6iV",
+    "web": "http://127.0.0.1:5180",
+    "shots": [
+      {
+        "file": "play-360-light.png",
+        "width": 360,
+        "viewport_height": 740,
+        "page_height": 6728,
+        "appearance": "light",
+        "sha256": "a191453e07063554d3b480f7af94872cca6c5e674d5daf1b070e7c0085fd9a87"
+      },
+      {
+        "file": "play-360-dark.png",
+        "width": 360,
+        "viewport_height": 740,
+        "page_height": 6728,
+        "appearance": "dark",
+        "sha256": "f5ab5a16e4bb6a5df90b5a1e2b7f26e1062b3f296b8d41d58ff0637d673dea74"
+      },
+      {
+        "file": "play-768-light.png",
+        "width": 768,
+        "viewport_height": 1024,
+        "page_height": 5705,
+        "appearance": "light",
+        "sha256": "3180aac6848422301e0f8e6ef8dbd3cdfb630a3a2adbcd8aef8eabf754d4537d"
+      },
+      {
+        "file": "play-768-dark.png",
+        "width": 768,
+        "viewport_height": 1024,
+        "page_height": 5705,
+        "appearance": "dark",
+        "sha256": "46323d3ebb34eee6401bd66997789d75d216f0f6f7fe8f05780218f407467091"
+      },
+      {
+        "file": "play-1440-light.png",
+        "width": 1440,
+        "viewport_height": 900,
+        "page_height": 2468,
+        "appearance": "light",
+        "sha256": "666ee9d969d8fe601b9bb89422b1e4e745da956af5ebcf7d183c42cb855192e4"
+      },
+      {
+        "file": "play-1440-dark.png",
+        "width": 1440,
+        "viewport_height": 900,
+        "page_height": 2468,
+        "appearance": "dark",
+        "sha256": "523cba767fa82eec5e6e21884b22b853b15167681775fe73c66ae4b7e3847a4a"
+      }
+    ]
+  },
+  "comparisons": {
+    "split_vs_before": {
+      "what": "the play screen before the stylesheet split vs after it (the same session, the same state)",
+      "outcome": "every image 1 px taller: the combat panel's own gap (0.9rem) now applies; accepted as intended",
+      "tolerance": 0.001,
+      "worst": 1.0,
+      "pass": false,
+      "images": [
+        {
+          "file": "play-1440-dark.png",
+          "size_before": [
+            1440,
+            2467
+          ],
+          "size_after": [
+            1440,
+            2468
+          ]
+        },
+        {
+          "file": "play-1440-light.png",
+          "size_before": [
+            1440,
+            2467
+          ],
+          "size_after": [
+            1440,
+            2468
+          ]
+        },
+        {
+          "file": "play-360-dark.png",
+          "size_before": [
+            360,
+            6727
+          ],
+          "size_after": [
+            360,
+            6728
+          ]
+        },
+        {
+          "file": "play-360-light.png",
+          "size_before": [
+            360,
+            6727
+          ],
+          "size_after": [
+            360,
+            6728
+          ]
+        },
+        {
+          "file": "play-768-dark.png",
+          "size_before": [
+            768,
+            5704
+          ],
+          "size_after": [
+            768,
+            5705
+          ]
+        },
+        {
+          "file": "play-768-light.png",
+          "size_before": [
+            768,
+            5704
+          ],
+          "size_after": [
+            768,
+            5705
+          ]
+        }
+      ]
+    },
+    "tidy_vs_split": {
+      "what": "after merging each sheet's repeated selectors vs straight after the split",
+      "tolerance": 0.001,
+      "worst": 0.0,
+      "pass": true,
+      "images": [
+        {
+          "file": "play-1440-dark.png",
+          "size": [
+            1440,
+            2468
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-1440-light.png",
+          "size": [
+            1440,
+            2468
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-360-dark.png",
+          "size": [
+            360,
+            6728
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-360-light.png",
+          "size": [
+            360,
+            6728
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-768-dark.png",
+          "size": [
+            768,
+            5705
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-768-light.png",
+          "size": [
+            768,
+            5705
+          ],
+          "share_differing": 0.0
+        }
+      ]
+    },
+    "repeat": {
+      "what": "two captures in a row (the tool leaves the campaign as it is)",
+      "tolerance": 0.001,
+      "worst": 0.0,
+      "pass": true,
+      "images": [
+        {
+          "file": "play-1440-dark.png",
+          "size": [
+            1440,
+            2468
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-1440-light.png",
+          "size": [
+            1440,
+            2468
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-360-dark.png",
+          "size": [
+            360,
+            6728
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-360-light.png",
+          "size": [
+            360,
+            6728
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-768-dark.png",
+          "size": [
+            768,
+            5705
+          ],
+          "share_differing": 0.0
+        },
+        {
+          "file": "play-768-light.png",
+          "size": [
+            768,
+            5705
+          ],
+          "share_differing": 0.0
+        }
+      ]
+    }
+  },
+  "core_tasks": "scripts/rpg_core_tasks.py after the split: 11/11 at 360 x 740 and 1,440 x 900, axe 0 serious or critical, 0 px horizontal overflow"
+}

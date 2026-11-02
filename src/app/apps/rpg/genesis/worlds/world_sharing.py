@@ -41,6 +41,7 @@ _UPLOADS = "https://uploads.github.com"
 _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 _DEVICE_FLOWS: dict[str, dict[str, Any]] = {}
 _DEVICE_LOCK = threading.Lock()
+_MAX_DEVICE_FLOWS = 32  # sign-ins in progress at once
 
 
 class GitHubError(ValueError):
@@ -164,6 +165,11 @@ def start_device_sign_in(*, transport: Transport = _transport) -> dict[str, Any]
         raise GitHubError(f"github_device_sign_in_failed:{started.get('error') or 'no_code'}")
     flow_id = secrets.token_urlsafe(16)
     with _DEVICE_LOCK:
+        now = time.monotonic()
+        for stale in [key for key, flow in _DEVICE_FLOWS.items() if flow["expires"] < now]:
+            _DEVICE_FLOWS.pop(stale, None)  # an abandoned sign-in is forgotten once it expires
+        while len(_DEVICE_FLOWS) >= _MAX_DEVICE_FLOWS:
+            _DEVICE_FLOWS.pop(min(_DEVICE_FLOWS, key=lambda key: _DEVICE_FLOWS[key]["expires"]))
         # The device code stays on the server; the page only polls by this id.
         _DEVICE_FLOWS[flow_id] = {
             "device_code": str(started["device_code"]),

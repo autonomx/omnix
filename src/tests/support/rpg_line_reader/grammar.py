@@ -1,0 +1,714 @@
+"""The command grammar: what a player's words ask for, read against the scene they stand in (RQ-3.1).
+
+The grammar parses the commands a game can understand without a model: "buy the healing potion",
+"go to Skybridge Pass", "attack the echo wolf with my dagger", "ask Liora where the Archon is". It
+reads the text against a ``SceneView`` (the people present, the creatures, what is for sale, the
+exits, the items, places, quests and skills the world knows) and returns an ``IntentCandidate``:
+the action family, the entity it is aimed at, and how sure it is. When it is not sure it says so, and
+the turn asks the model (RQ-3.2) or the player (a clarification).
+
+Matching is by whole words. Verbs and the longer words of names tolerate one typo ("lok around",
+"sel my dagger", "go too the market"); short words must match exactly, so "rest" is never found in
+"forest" nor "use" in "useful".
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, replace
+from typing import Iterable
+
+from app.apps.rpg.rules.intent.reading import (  # noqa: F401 - the reading's types, re-exported for the grammar's readers
+    STATEFUL_FAMILIES,
+    EntityKind,
+    Family,
+    IntentCandidate,
+    SceneEntity,
+    SceneView,
+)
+
+
+_FILLER = frozenset(
+    "a an the my some your his her their its this that these those of to too for at with from in on into "
+    "up down out over about around and or then please just me i i'm im i'll ill i'd lets let us we our "
+    "want would like wanna gonna going try trying will can could might should go".split()
+)
+_PRONOUNS = frozenset({"him", "her", "them", "it", "he", "she", "they", "that", "this", "there"})
+_LEADING = (
+    "i want to ", "i'd like to ", "id like to ", "i would like to ", "i'll ", "ill ", "i will ", "i try to ",
+    "let me ", "lets ", "let's ", "can i ", "could i ", "may i ", "please ", "i'm going to ", "im going to ",
+    "i am going to ", "i ", "we ",
+)
+_QUESTION_WORDS = frozenset(
+    "what where who whom whose why how when which is are does do did can could would should will was were".split()
+)
+
+
+def _norm(text: str) -> str:
+    text = text.casefold().replace("’", "'")
+    text = re.sub(r"[^a-z0-9'?\s-]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# Typos players make in command words, and the word they meant.
+_TYPOS = {
+    "lok": "look", "loook": "look", "arround": "around", "aroud": "around", "sel": "sell", "aks": "ask",
+    "goto": "go to", "too": "to", "atack": "attack", "attak": "attack", "practise": "practice",
+    "inventroy": "inventory", "invetory": "inventory", "examin": "examine", "pickup": "pick up",
+    "whats": "what is", "what's": "what is", "who's": "who is", "where's": "where is", "im": "i am",
+    "i'm": "i am", "dont": "don't", "wont": "won't", "cant": "can't", "purchse": "purchase", "byu": "buy",
+    "giv": "give", "drp": "drop", "tke": "take", "lookk": "look", "sleeep": "sleep", "wiat": "wait",
+    "pratice": "practice", "pracitce": "practice", "travle": "travel", "exmaine": "examine",
+}
+_BARE_VERBS = (
+    "attack", "buy", "take", "give", "drop", "use", "sell", "equip", "eat", "drink", "fight", "open", "move",
+    "talk", "ask", "again", "hmm", "um", "uh", "what", "huh",
+)
+_ATTRIBUTE_NAMES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma", "agility",
+                    "endurance", "intellect", "perception", "presence")
+# What a check is (checks.md), by the words that ask for one; searching stays a manipulation of the scene.
+_CHECKS = (
+    ("haggle", ("haggle", "bargain with", "bargain for", "talk the price down", "a better price", "a lower price",
+                "beat the price down")),
+    ("persuade", ("persuade", "convince", "coax", "sweet talk", "win over", "talk him into", "talk her into",
+                  "talk them into", "reason with", "talk it down", "talk them down", "talk my way", "parley",
+                  "negotiate with")),
+    ("intimidate", ("intimidate", "threaten", "menace", "frighten", "scare")),
+    ("deceive", ("lie to", "deceive", "bluff", "mislead", "trick", "fool")),
+    ("sneak", ("sneak", "creep", "slip past", "steal past", "tiptoe", "hide from", "move quietly")),
+    ("climb", ("climb", "scale the", "clamber")),
+    ("pick_lock", ("pick the lock", "pick a lock", "pick its lock", "lockpick", "pick the door")),
+    ("recall_lore", ("recall", "what do i know about", "try to remember", "remember what i know")),
+    ("notice", ("listen for", "keep an eye out", "watch for", "look out for", "notice anything", "notice something")),
+)
+_VAGUE = ("same as before", "the thing", "the other one", "that one", "do that", "the usual", "you know what")
+_SOCIAL = (
+    "ask", "tell", "talk", "speak", "chat", "greet", "say", "wave", "hail", "call", "nod", "bow", "thank",
+    "thanks", "hello", "hi", "hey", "shout", "whisper", "reply", "answer", "compliment", "apologize",
+    "apologise", "introduce", "insult", "flatter", "joke", "smile", "laugh with", "salute", "beckon", "warn",
+    "promise", "praise", "congratulate", "comfort", "console", "argue", "plead", "beg",
+)
+
+
+def _words(text: str) -> list[str]:
+    words: list[str] = []
+    raw = [word for word in re.split(r"[\s?-]+", text) if word]
+    for index, word in enumerate(raw):
+        if word == "tak":
+            # "tak to the guide" is talking; "tak the dagger" is taking.
+            word = "talk" if index + 1 < len(raw) and raw[index + 1] in {"to", "too", "with"} else "take"
+        elif word == "by" and index == 0:
+            word = "buy"
+        word = _TYPOS.get(word, word)
+        words.extend(part for part in word.replace("'s", "").split() if part)
+    return words
+
+
+def _edit1(a: str, b: str) -> bool:
+    """Whether ``a`` and ``b`` differ by at most one edit (insert, delete, substitute, swap)."""
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        diff = [i for i in range(len(a)) if a[i] != b[i]]
+        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1
+                                  and a[diff[0]] == b[diff[1]] and a[diff[1]] == b[diff[0]])
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    for index in range(len(long)):
+        if long[:index] + long[index + 1:] == short:
+            return True
+    return False
+
+
+def _word_matches(word: str, wanted: str) -> bool:
+    """Short command words match exactly (their common typos are in ``_TYPOS``); long ones tolerate one typo."""
+    return word == wanted or (len(wanted) >= 6 and len(word) >= 5 and _edit1(word, wanted))
+
+
+def _name_word_matches(word: str, wanted: str) -> bool:
+    return word == wanted or (len(wanted) >= 5 and len(word) >= 4 and _edit1(word, wanted))
+
+
+def _has(words: list[str], *phrases: str) -> bool:
+    """Whether any phrase (one or more words) occurs in ``words`` as whole words."""
+    for phrase in phrases:
+        parts = phrase.split()
+        for start in range(len(words) - len(parts) + 1):
+            if all(_word_matches(words[start + offset], part) for offset, part in enumerate(parts)):
+                return True
+    return False
+
+
+def _starts(words: list[str], *phrases: str) -> bool:
+    for phrase in phrases:
+        parts = phrase.split()
+        if len(words) >= len(parts) and all(_word_matches(words[i], part) for i, part in enumerate(parts)):
+            return True
+    return False
+
+
+@dataclass(frozen=True)
+class _Hit:
+    entity: SceneEntity
+    score: float
+    start: int
+
+
+def _name_tokens(name: str) -> list[str]:
+    return [word for word in _words(_norm(name)) if word not in _FILLER]
+
+
+_WHOLE_NAME = 1.5  # the least a hit naming every word of a name scores (a part of a name scores at most 1.25)
+_OTHERS = frozenset({"your", "his", "her", "their", "its"})
+
+
+def _ends_a_name(hit: _Hit, words: list[str]) -> bool:
+    """Whether a name named in part is named by its last word ("the ruins" of Moonroot Ruins; not "the open road" for
+    Naia of the Open Hand, nor "the rain" for Black Rain Station: the fourteenth review)."""
+    said = words[hit.start] if hit.start < len(words) else ""
+    for name in hit.entity.names:
+        tokens = [token for token in _name_tokens(name) if not token.isdigit()]
+        if tokens and _name_word_matches(said, tokens[-1]):
+            return True
+    return False
+
+
+def _asked_after(words: list[str], position: int) -> bool:
+    """Whether the word at ``position`` is what something is asked about: "of Malrec", "about the old mill"."""
+    before = [word for word in words[max(0, position - 2):position]
+              if word not in {"the", "a", "an", "my", "your", "his", "her", "their", "our"}]
+    return bool(before) and before[-1] in {"of", "about", "on", "regarding"}
+
+
+def _seen(hit: _Hit) -> bool:
+    """Whether the hero can look closely at it: a person or creature here, or any thing or place (the narration
+    gate: "examine Dr. Kade" from the docks, planned as a close look, asked the scene's lore for someone not in it)."""
+    return hit.entity.kind not in {"person", "creature"} or hit.entity.here
+
+
+def _owned_word(words: list[str], position: int) -> bool:
+    """Whether the word at ``position`` can name a thing of the hero's own by its kind ("my knife"): not the command's
+    verb ("drink some water" is no Healing Potion), nor a word after another's ("drop your weapon": the review)."""
+    return position > 0 and words[position - 1] not in _OTHERS
+
+
+def _find(words: list[str], entities: Iterable[SceneEntity]) -> list[_Hit]:
+    """Entities named in ``words``: every distinctive word of one of its names present, best first."""
+    entities = list(entities)
+    # Words of people's own names: a calling just before one is their title ("Master Stonewake" is no "the master":
+    # the intent gate, once Aurelia had a foundry master).
+    named_words = {token for entity in entities if entity.kind == "person" for name in entity.names
+                   if not name.startswith(("the ", "my ")) for token in _name_tokens(name)}
+    hits: list[_Hit] = []
+    for entity in entities:
+        best: _Hit | None = None
+        for name in entity.names:
+            tokens = _name_tokens(name)
+            if not tokens:
+                continue
+            positions = []
+            for token in tokens:
+                found = next((i for i, word in enumerate(words) if _name_word_matches(word, token)), None)
+                positions.append(found)
+            matched = [p for p in positions if p is not None]
+            if name.startswith("my ") and not all(_owned_word(words, p) for p in matched):
+                continue
+            # A bare title before a name ("Master Stonewake"); "the captain, Brindle" and "tell the captain Brindle is
+            # cheating" keep the captain (the eleventh review).
+            if (entity.kind == "person" and name.startswith(("the ", "my ")) and len(tokens) == 1 and matched
+                    and matched[0] + 1 < len(words) and words[matched[0] + 1] in named_words
+                    and (matched[0] == 0 or words[matched[0] - 1] not in {"the", "my", "a", "an", "your", "our"})):
+                continue
+            if entity.kind == "item" and any(p > 0 and words[p - 1] in _OTHERS for p in matched):
+                continue  # "drop your dagger!" is said of someone else's (the tenth review)
+            if (entity.kind == "offer" and not entity.here and len(matched) != len(tokens)
+                    and not (set(words) & {"sell", "sells", "selling", "buy"}
+                             or _has(words, "who has", "where can i get", "where can i find", "where do i get",
+                                     "where do i find"))):
+                continue  # sold elsewhere: named in full or not at all ("any news?" is no question about the ruins')
+            if len(matched) == len(tokens):
+                score = len(tokens) + 0.5 + (0.25 if entity.here else 0.0)
+            elif (len(tokens) >= 2 and matched and any(len(tokens[i]) >= 4 for i, p in enumerate(positions) if p is not None)
+                  and not name.startswith(("the ", "my "))):
+                # A distinctive part of a longer name ("Juno" for "Juno Rask", "the market" for a long market name);
+                # not of a calling ("village" is not the "village guard captain": the playtest).
+                score = len(matched) / len(tokens) + (0.25 if entity.here else 0.0)
+            else:
+                continue
+            hit = _Hit(entity, score, min(matched))
+            if best is None or hit.score > best.score:
+                best = hit
+        if best is not None:
+            hits.append(best)
+    return sorted(hits, key=lambda hit: (-hit.score, hit.start, hit.entity.entity_id))
+
+
+def _first(words: list[str], scene: SceneView, *kinds: str, here: bool | None = None) -> _Hit | None:
+    hits = _find(words, scene.of(*kinds, here=here))
+    return hits[0] if hits else None
+
+
+def _candidate(family: Family, hit: _Hit | None, confidence: float, reason: str, **extra) -> IntentCandidate:
+    return IntentCandidate(
+        family=family,
+        target_id=hit.entity.entity_id if hit else None,
+        target_kind=hit.entity.kind if hit else None,
+        confidence=confidence,
+        reason=reason,
+        **extra,
+    )
+
+
+_COMMAND_WORDS = frozenset(
+    "attack fight strike hit stab slash shoot punch kick kill charge swing smite assault ambush slay shove tackle "
+    "slap go travel walk head return leave enter visit move hurry ride run journey set off out make way".split()
+)
+
+
+def _object_words(words: list[str]) -> list[str]:
+    """What the command is aimed at beyond its verb and filler (empty for "attack" or "go")."""
+    return [word for word in words if word not in _FILLER and word not in _COMMAND_WORDS and word not in _PRONOUNS]
+
+
+def _strip_leading(text: str) -> str:
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _LEADING:
+            if text.startswith(prefix) and len(text) > len(prefix):
+                text = text[len(prefix):]
+                changed = True
+    return text
+
+
+def _clauses(text: str) -> tuple[str, ...]:
+    parts = re.split(r",? (?:and then|then|and afterwards|after that) |; ", text)
+    return tuple(part.strip() for part in parts if part.strip())
+
+
+def _clarify(reason: str) -> IntentCandidate:
+    return IntentCandidate(family="clarify", confidence=0.9, reason=reason)
+
+
+def parse_command(text: str, scene: SceneView) -> IntentCandidate:
+    """What ``text`` asks for in ``scene``; ``confidence`` below 0.6 means the grammar is guessing."""
+    candidate = _parse_text(text, scene)
+    return _spoken_to(text, scene, candidate) or candidate
+
+
+def _parse_text(text: str, scene: SceneView) -> IntentCandidate:
+    normalized = _norm(text)
+    clauses = _clauses(normalized)
+    first = _strip_leading(clauses[0] if clauses else normalized)
+    # The first clause's raw words (commas kept, for a name at the end): in "how much is the stew? then come along, Mira"
+    # the name ends the second clause, not the question (the twelfth review); "what happened then, Orik?" is one
+    # clause put to Orik (the thirteenth: the normalized text, without its commas, splits at that "then").
+    # Not at ";": normalizing makes it a space, so "I'm new here; who are you, Rhea?" is one clause (the fourteenth).
+    raw_first = re.split(r",? (?:and then|then|and afterwards|after that) ", text, flags=re.IGNORECASE)[0]
+    candidate = _parse_clause(first, scene, original=normalized, raw=raw_first)
+    if len(clauses) > 1:
+        candidate = IntentCandidate(**{**candidate.__dict__, "clauses": clauses})
+    return candidate
+
+
+def _spoken_to(text: str, scene: SceneView, whole: IntentCandidate) -> IntentCandidate | None:
+    """A name and a comma first ("Liora, I woke up here and remember nothing", "Orik, I'd like a room"): what the
+    words after the name do, said to that person. An order is read with its listener; a deed in the words after the
+    name is the turn (a purchase from them, an invitation to them); anything else (a look's "where am I", a remark) is speech to them. None when no one's name and a comma open the
+    text (normalizing drops the comma, so this reads the raw text)."""
+    match = re.match(r"\s*([^,.!?]{1,60}),\s*(.+)", text, flags=re.DOTALL)
+    if match is None:
+        return None
+    named = _find(_words(_norm(match.group(1))), scene.of("person"))
+    if not named or named[0].start != 0:
+        return None
+    person = named[0].entity.entity_id
+    if whole.family == "order":  # "Liora, keep watch": an order is read with its listener
+        return None
+    rest = _parse_text(match.group(2), scene)
+    if rest.family not in {"look", "talk", "ask", "clarify"} and rest.reason not in {"remark", "looks_without_subject"}:
+        if rest.family == "buy" and not rest.second_target_id:
+            return replace(rest, second_target_id=person)  # bought from them
+        if rest.family == "party" and not rest.target_id:  # "Liora, join my party"; not "Liora, dismiss Juno"
+            return replace(rest, target_id=person, target_kind="person")
+        if rest.family == "decline" and rest.target_kind != "person":  # "Orik, no, I don't need anything"
+            return replace(rest, target_id=person, target_kind="person")
+        if rest.family == "give" and not rest.second_target_id:
+            return replace(rest, second_target_id=person)  # "Liora, I give you my dagger"
+        return rest
+    if rest.family == "ask":  # asked of them, as the words ask it (a hypothetical stays one), and sure of whom
+        # They answer it, not whoever would answer a question put to no one (the narration gate: "Orik Stonewake, how
+        # do I get to Valecourt?" was answered by the one the hero had been talking with).
+        reason = "asks_someone" if rest.reason == "asks_about_thing" else rest.reason
+        return replace(rest, target_id=person, target_kind="person", second_target_id=None, reason=reason,
+                       confidence=max(rest.confidence, 0.85))
+    asked = _question(_words(_norm(match.group(2))), match.group(2).strip())
+    return _candidate("ask" if asked else "talk", named[0], 0.85, "asks_someone" if asked else "talks")
+
+
+_ORDERS = (
+    "keep watch", "stand guard", "stand watch", "keep guard", "guard me", "guard the", "wait here", "stay here", "stay back",
+    "follow me", "scout ahead", "scout", "hold back", "hold position", "protect me", "cover me", "take point",
+)
+_STATUS_QUESTIONS = (
+    "how hurt", "how am i", "my health", "what am i carrying", "what do i have", "what quests", "my quests",
+    "what level", "my level", "how much money do i have", "how much gold do i have", "how much coin do i have",
+    "in my pack", "in my bag", "my objectives", "my inventory", "my skills", "what skills", "my xp",
+)
+_LOOK_QUESTIONS = (
+    "what is here", "where am i", "who is around", "who is here", "anyone else here", "anybody here",
+    "what is going on", "what do i see", "what can i see", "what is around", "is anyone here",
+)
+_STATUS_WORDS = (
+    "inventory", "status", "stats", "journal", "character sheet", "my quests", "my skills", "my level",
+    "my purse", "my gear", "my bag", "my pack", "my health", "my xp", "my objectives", "check my xp",
+)
+
+
+_HYPOTHETICAL = re.compile(
+    r"\b(?:what if|what would (?:happen|it mean|they do|you do) if|what happens if|what will happen if|imagine if|"
+    r"suppose|supposing|hypothetically|what would [a-z\' ]{1,40} do if)\b")
+
+
+def hypothetical(text: str) -> bool:
+    """A question about what would happen ("what if I attacked her?"): it is asked, never done (RQ-3.2)."""
+    return bool(_HYPOTHETICAL.search(_norm(text)))
+
+
+# A question that asks for the deed itself ("can I buy the bread?", "Liora, could you heal me?") is a request.
+_REQUESTS = ("can i", "could i", "may i", "can we", "could we", "may we", "can you", "could you", "would you",
+             "will you")
+
+
+def asked_not_done(text: str) -> bool:
+    """A question about a deed that is no request for it ("what does the bread cost?", "where can I buy bread?",
+    "should I trust her?"): it is asked, never done, as a hypothetical is. It opens with a question word, after the
+    person it is put to ("Liora, ..."); "attack the wolf?" is a command, and "could we buy some bread?" a request."""
+    head, comma, rest = text.partition(",")
+    named = _words(_norm(head))
+    if comma and 0 < len(named) <= 3 and named[0] not in _QUESTION_WORDS:
+        text = rest  # "Liora, where am I?": the question is what follows the name
+    words = _words(_norm(text))
+    return bool(words) and words[0] in _QUESTION_WORDS and not _starts(words, *_REQUESTS)
+
+
+def _question(words: list[str], original: str) -> bool:
+    if original.endswith("?") or re.match(r"[^.!?]*\?", original):  # "Liora, where am I? I woke up here."
+        return True
+    if words[:2] == ["remind", "me"] and len(words) > 2 and words[2] in _QUESTION_WORDS:
+        return True  # "remind me what First Night in Aurelia is about" asks; "remind Liora to keep watch" orders
+    return bool(words) and words[0] in _QUESTION_WORDS and not _starts(words, "what a", "how nice", "how lovely")
+
+
+def _vocative_at_the_end(original: str, scene: SceneView) -> _Hit | None:
+    """Someone here named after a last comma, the whole of what follows it ("what do you sell, Orik?")."""
+    tail = original.rstrip(" ?!.").rsplit(",", 1)
+    if len(tail) != 2:
+        return None
+    named = _words(_norm(tail[1]))
+    hits = _find(named, scene.of("person", here=True)) if 0 < len(named) <= 3 else []
+    return hits[0] if hits and hits[0].score >= _WHOLE_NAME - 0.5 else None
+
+
+def _ask(words: list[str], scene: SceneView, addressed: _Hit | None, raw: str = "") -> IntentCandidate:
+    # Said to someone by name at the end, the question is theirs, whoever the hero was talking with (the tenth review:
+    # "what do you sell, Orik?" went to Brindle).
+    addressed = addressed or _vocative_at_the_end(raw, scene)  # the raw text: normalizing drops commas
+    if addressed is not None:
+        return _candidate("ask", addressed, 0.85, "asks_someone")
+    subject = _first(words, scene, "person", "creature", "place", "item", "offer", "quest", "skill", "group")
+    if subject is not None and subject.entity.kind == "offer":
+        # Asked about someone or somewhere by name, after a thing on sale ("any news of Malrec?", "any rumors about
+        # Elyra?"): what is asked about is them (the eleventh review); a word of a name elsewhere in a price question is
+        # not ("how much is a potion for the trip to the ruins?": the twelfth).
+        later = next((hit for hit in _find(words, scene.of("person", "place", "creature", "group", "quest"))
+                      if hit.start > subject.start and _asked_after(words, hit.start)
+                      and (hit.score >= _WHOLE_NAME or _ends_a_name(hit, words))), None)
+        subject = later or subject
+    if subject is not None and subject.entity.kind == "quest" and words[:1] == ["where"]:
+        # Where a quest and a place share a name, "where is the Hollow Meridian?" asks after the place.
+        place = next((hit for hit in _find(words, scene.of("place")) if hit.start == subject.start), None)
+        subject = place or subject
+    if subject is not None and subject.entity.kind == "item" and "my" not in words:
+        # A thing asked about where it is on sale is the offer, and so its seller's to answer, even if the hero carries
+        # one ("how much is a potion?" went to whoever was here first: the review); "my potion" is the hero's own.
+        # The same thing on sale: an offer named by the very word that named the item ("is the dagger sharp?" is no
+        # question about an Aether Shard: the tenth review).
+        offer = next((hit for hit in _find(words, scene.of("offer", here=True)) if hit.start == subject.start), None)
+        subject = offer or subject
+    focus = next((entity for entity in scene.of("person", here=True) if entity.entity_id == scene.focus_id), None)
+    if (subject is not None and subject.entity.kind == "person" and subject.entity.here and focus is not None
+            and focus.entity_id != subject.entity.entity_id):
+        # Asked of the one the hero talks with, about someone else here ("what do you think of the captain?" to
+        # Brindle): Brindle's to answer, not the captain's (the review).
+        return replace(_candidate("ask", subject, 0.85, "asks_about_thing"), second_target_id=focus.entity_id)
+    if subject is not None and subject.entity.kind == "person" and subject.entity.here:
+        # Asked aloud about someone here ("should I trust the barkeep?"): theirs to answer, as if asked by name (the
+        # narration gate: it went to the intent call, which made it a free action, "you do so").
+        return _candidate("ask", subject, 0.85, "asks_about")
+    answerer = _answerer(scene, subject)
+    if subject is not None and answerer:
+        # Asked aloud about a thing (a place, an offer, a quest) with someone here to answer: theirs to answer, the
+        # one the hero talks with, else the seller of what is asked about, else whoever is here (the intent gate:
+        # the grammar read these right and the intent call, asked again, read some wrong).
+        return replace(_candidate("ask", subject, 0.85, "asks_about_thing"), second_target_id=answerer)
+    return _candidate("ask", subject, 0.75 if subject else 0.6, "asks")
+
+
+def _answerer(scene: SceneView, subject: _Hit | None) -> str:
+    """Who answers a question said aloud about ``subject``: the one the hero talks with, the offer's seller, or the
+    first person here; "" when no one is."""
+    here = [entity.entity_id for entity in scene.of("person", here=True)]
+    if scene.focus_id in here:
+        return scene.focus_id
+    if subject is not None and subject.entity.kind == "offer":
+        seller = subject.entity.entity_id.rsplit(":", 1)[0]
+        if seller in here:
+            return seller
+    return here[0] if here else ""
+
+
+def _addressed(words: list[str], scene: SceneView) -> _Hit | None:
+    """The person spoken to: named first ("Liora, ..."), or after ask/tell/talk to."""
+    lead = _find(words[:3], scene.of("person"))
+    if lead and lead[0].start <= 1:
+        return lead[0]
+    if _starts(words, *_SOCIAL) or _has(words, "good morning", "good evening", "good afternoon", "good day",
+                                         "hello", "greetings", "and chat", "chat with", "talk with"):
+        named = _first(words, scene, "person", here=True) or _first(words, scene, "person")
+        if named is None and _has(words, "him", "her", "them"):
+            present = scene.of("person", here=True)
+            focus = next((entity for entity in present if entity.entity_id == scene.focus_id), None)
+            if focus is not None or len(present) == 1:
+                return _Hit(focus or present[0], 1.0, 0)
+        return named
+    return None
+
+
+def _parse_clause(  # noqa: C901 - one rule table
+    text: str, scene: SceneView, *, original: str, raw: str = ""
+) -> IntentCandidate:
+    words = _words(text)
+    if not words:
+        return _clarify("empty")
+    question = _question(words, original)
+
+    # No, never mind, not now: the player declines what was offered or proposed.
+    if _starts(words, "no", "nope", "never mind", "nevermind", "forget it", "not now", "cancel", "decline",
+               "refuse", "no thanks", "don't", "do not") or _has(
+            words, "don't want", "do not want", "rather not", "won't", "will not", "decide not", "don't attack",
+            "not going to", "choose not"):
+        return _candidate("decline", _first(words, scene, "person", "offer", "item", "quest", "creature"), 0.85,
+                          "declines")
+    if words in (["yes"], ["yeah"], ["ok"], ["okay"], ["sure"], ["do", "it"], ["go"], ["yes", "please"]):
+        return _clarify("bare_assent")
+    if len(words) == 1 and _starts(words, "attack", "fight", "strike"):
+        return _clarify("attack_without_target")  # in a fight, the foe in front of the hero
+    if len(words) == 1 and _starts(words, *_BARE_VERBS):
+        return _clarify("verb_without_object")
+    if _starts(words, *_VAGUE) or (_has(words, "it", "them", "that") and len(words) <= 2):
+        return _clarify("vague_reference")
+    if _has(words, "not interested", "don't need", "no thanks", "no thank you") or (
+            len(words) > 1 and words[1] in {"no", "nope"}):
+        return _candidate("decline", _first(words, scene, "person", "offer", "item"), 0.8, "declines")
+    if _starts(words, "do nothing", "don't do anything"):
+        return _candidate("wait", None, 0.85, "waits")
+    if _has(words, "take me to", "bring me to", "lead me to", "guide me to") and _first(words, scene, "place"):
+        return _candidate("move", _first(words, scene, "place"), 0.8, "asks_to_be_led")
+    if _has(words, "leave the party", "leave my party", "leave the group", "part ways", "go your own way", "dismiss"):
+        return _candidate("party", _first(words, scene, "person"), 0.85, "party_leave")
+    if _has(words, "join my party", "join the party", "join me", "come with me", "travel with me", "recruit"):
+        return _candidate("party", _first(words, scene, "person"), 0.85, "party")
+    lead = _find(words[:3], scene.of("person"))
+    if not question and lead and lead[0].start <= 1 and _has(words, *_ORDERS):
+        # "Liora, keep watch": an order to someone named first; whether they take it is the party rule's to say.
+        return _candidate("order", lead[0], 0.85, "orders")
+
+    if hypothetical(text):
+        # "What would happen if I attacked Liora?" is a question, never the deed. Its target is what it is about
+        # (the person named first, else the first thing it names); who answers is the dialogue's to say.
+        subject = (lead[0] if lead and lead[0].start <= 1 else None) or _first(
+            words, scene, "person", "creature", "item", "place", "offer", "quest", "skill")
+        return _candidate("ask", subject, 0.85, "asks_hypothetical")
+
+    if question:
+        lead = _find(words[:3], scene.of("person"))
+        if lead and lead[0].start <= 1:
+            return _ask(words, scene, lead[0], raw or original)
+        if _has(words, *_STATUS_QUESTIONS):
+            return _candidate("status", None, 0.9, "asks_status")
+        if _has(words, *_LOOK_QUESTIONS):
+            return _candidate("look", None, 0.85, "asks_surroundings")
+        if _has(words, "look like") or (_starts(words, "what is this", "what is that") and _has(words, "for")):
+            hit = _first(words, scene, "person", "creature", "item", "place")
+            if hit and _seen(hit):
+                return _candidate("inspect", hit, 0.85, "asks_appearance")
+        return _ask(words, scene, _addressed(words, scene), raw or original)
+
+    if _has(words, "run away", "flee", "escape", "retreat", "get away", "fall back", "run for it"):
+        return _candidate("flee", None, 0.9, "flees")
+    if _has(words, "defend", "block", "parry", "brace", "defensive", "raise my guard", "guard myself",
+            "take cover", "shield myself", "on guard"):
+        return _candidate("defend", None, 0.85, "defends")
+    if _has(words, *_STATUS_WORDS) and not _has(words, "look at", "examine", "inspect", "drop", "sell", "give"):
+        return _candidate("status", None, 0.9, "status")
+
+    addressed = _addressed(words, scene)
+    if addressed is None and _starts(words, *_SOCIAL) and _has(words, "him", "her", "them"):
+        # "I talk to him" with several people here: the game asks who, rather than a model guessing.
+        return _clarify("speech_without_listener")
+    if _starts(words, "ask") and addressed is not None:
+        return _ask(words, scene, addressed, raw or original)
+
+    if _starts(words, "take me to", "bring me to", "lead me to", "guide me to"):
+        place = _first(words, scene, "place")
+        if place:
+            return _candidate("move", place, 0.85, "asks_to_be_led")
+    if _starts(words, "take in", "listen", "look around", "look about", "glance around", "survey", "scan",
+               "observe", "take a look", "peer", "describe the place", "describe the room", "describe where") \
+            and not _first(words, scene, "person", "creature", "item"):
+        return _candidate("look", None, 0.9, "looks")
+
+    if _has(words, "rest", "sleep", "nap", "lie down", "take a break", "camp", "doze", "catch my breath"):
+        return _candidate("rest", None, 0.85, "rests")
+
+    offer = _first(words, scene, "offer")
+    if _has(words, "rent", "book", "buy", "purchase", "order") or _starts(
+            words, "get me", "sell me", "pay for", "i will take", "one", "two", "give me") or (
+            offer is not None and _starts(words, "i'd like", "id like", "i would like", "i want", "can i get",
+                                          "could i get", "may i have", "i'll take")) or (
+            offer is not None and _starts(words, "take", "have", "i will have") and not _has(words, "bite")
+            and not _starts(words, "take off")):  # "take off my bread" is no order of it
+        hit = offer or _first(words, scene, "item")
+        seller = _first(words, scene, "person", here=True)
+        return _candidate("buy", hit, 0.85 if hit else 0.55, "buys",
+                          second_target_id=seller.entity.entity_id if seller else None)
+    if offer is not None and offer.entity.here and (words[-1] == "please" or _starts(words, "a", "an", "some")):
+        return _candidate("buy", offer, 0.75, "orders")
+    if _starts(words, "sell", "pawn", "trade away") or _has(words, "want to sell", "sell my", "sell the"):
+        return _candidate("sell", _first(words, scene, "item"), 0.85, "sells")
+
+    if _has(words, "invite", "leave the party", "leave my party", "dismiss", "part ways"):
+        return _candidate("party", _first(words, scene, "person"), 0.85, "party")
+    if _has(words, "accept", "take on", "take the job", "start the quest", "begin the quest", "turn in",
+            "take the quest", "sign up for"):
+        hit = _first(words, scene, "quest")
+        if hit or _has(words, "quest", "job", "task"):
+            return _candidate("quest", hit, 0.85 if hit else 0.6, "quest")
+    if _starts(words, "practice", "train", "drill", "hone", "work on") or _has(words, "practice", "train my",
+                                                                                "practicing", "training"):
+        return _candidate("practice", _first(words, scene, "skill"), 0.85, "practice")
+    if (_starts(words, "raise", "increase", "boost") and _has(words, *_ATTRIBUTE_NAMES)) or (
+            _starts(words, "learn") and not _has(words, "about", "more", "what", "how", "where", "who", "why")) or (
+            _starts(words, "improve") and _has(words, "and")):
+        return _candidate("grow", None, 0.85, "level_choice")  # a level's choice (progression.md)
+    if _starts(words, "hunt", "track", "stalk", "seek out", "go after") or _has(
+            words, "hunt for", "hunt down", "look for", "search for", "track down", "seek out", "go looking for"):
+        # Seeking a creature of the world by name is how its fight begins, where it is met (the playtest: "I hunt for
+        # echo wolves along the pass" came to nothing, while "I attack an echo wolf" found one).
+        prey = _first(words, scene, "creature")
+        if prey is not None:
+            return _candidate("attack", prey, 0.85, "hunts")
+    kind = next((kind for kind, phrases in _CHECKS if _has(words, *phrases)), "")
+    if kind and not _has(words, "notice board"):
+        # A try decided by a roll (checks.md): persuading someone, sneaking past, climbing, picking a lock...
+        target = _first(words, scene, "person", "creature", "item", "place")
+        return _candidate("check", target, 0.85, f"check:{kind}")
+
+    if (_starts(words, "give", "hand", "offer", "pass", "lend") or _has(words, "give", "hand over")) and not _starts(
+            words, "give me"):  # "give me a room" asks for one
+        item = _first(words, scene, "item")
+        person = _first(words, scene, "person")
+        if item is None and _has(words, *_PRONOUNS):
+            return _clarify("give_without_item")
+        return _candidate("give", item, 0.85 if item else 0.5, "gives",
+                          second_target_id=person.entity.entity_id if person else None)
+    if _starts(words, "drop", "discard", "toss", "throw away", "dump", "ditch") or _has(
+            words, "put down", "set down", "leave it", "leave behind", "drop", "down and leave"):
+        return _candidate("drop", _first(words, scene, "item"), 0.85, "drops")
+    if _has(words, "take off", "unequip", "remove my", "remove the", "put away", "sheathe", "stow", "holster"):
+        return _candidate("unequip", _first(words, scene, "item"), 0.85, "unequips")
+    if _starts(words, "equip", "wield", "wear", "put on", "ready", "draw", "don", "brandish") or _has(
+            words, "equip", "wield", "put on"):
+        return _candidate("equip", _first(words, scene, "item"), 0.85, "equips")
+    if _starts(words, "take", "pick up", "grab", "collect", "loot", "snatch", "pocket") or _has(words, "pick up"):
+        return _candidate("take", _first(words, scene, "item"), 0.8, "takes")
+    # One of the hero's abilities, by its whole name after a verb ("use Aimed Shot on the wolf") or first ("Aimed
+    # Shot"): a part of a name is too common a word ("I make my way" is no Make Camp).
+    ability = next((hit for hit in _find(words, scene.of("ability")) if hit.score >= _WHOLE_NAME), None)
+    if ability and (ability.start == 0 or _starts(words, "use", "cast", "activate", "invoke", "unleash", "perform",
+                                                    "trigger", "channel", "fire off", "try")):
+        foe = _first(words, scene, "creature", "person", here=True)
+        return _candidate("ability", ability, 0.85, "uses_ability",
+                          second_target_id=foe.entity.entity_id if foe else None)
+    if _starts(words, "eat", "drink", "consume", "use", "quaff", "apply", "swallow", "sip", "chew", "hold up",
+               "have a bite", "take a bite", "nibble", "taste") or _has(words, "eat", "drink", "consume", "quaff"):
+        item = _first(words, scene, "item")
+        if item or offer is None:
+            return _candidate("use_item", item, 0.85 if item else 0.5, "uses")
+        return _candidate("buy", offer, 0.7, "orders")
+
+    if _starts(words, "attack", "fight", "strike", "hit", "stab", "slash", "shoot", "punch", "kick", "kill",
+               "charge", "swing", "smite", "assault", "ambush", "slay", "shove", "tackle", "slap") or _has(
+            words, "attack", "fight"):
+        target = _first(words, scene, "creature", "person")
+        if target is None:
+            # "attack the bandit": a foe the scene list does not know (a spawned one) is the rules' to find.
+            if _object_words(words):
+                return _candidate("attack", None, 0.6, "attacks_unknown_target")
+            return _clarify("attack_without_target")
+        return _candidate("attack", target, 0.9, "attacks")
+
+    if _has(words, "wait", "do nothing", "pass time", "pass the time", "idle", "bide", "linger", "stay put",
+            "keep watch", "time pass", "while away"):
+        return _candidate("wait", None, 0.85, "waits")
+
+    if _starts(words, "go", "travel", "walk", "head", "return", "leave for", "run to", "enter", "visit",
+               "make my way", "set off", "set out", "journey", "move to", "move", "leave", "hurry", "ride") or _has(
+            words, "head to", "go to", "travel to", "walk to", "return to", "make my way"):
+        place = _first(words, scene, "place")
+        if place:
+            return _candidate("move", place, 0.9, "moves")
+        if _object_words(words):
+            # "go outside", "head north": the travel rules know places the scene list does not name.
+            return _candidate("move", None, 0.6, "moves_somewhere_unnamed")
+        if _starts(words, "leave", "go") and not _first(words, scene, "person", "item"):
+            return _clarify("move_without_place")
+
+    if _starts(words, "look at", "examine", "inspect", "check", "study", "describe", "read", "look over",
+               "look closely", "size up", "watch", "eye", "observe", "peer at", "stare at") or _has(
+            words, "look at", "look over", "examine", "inspect", "size up", "over in my hands"):
+        hit = _first(words, scene, "item", "person", "creature", "place", "offer")
+        if hit and not _seen(hit):  # someone not here is no one to look at closely: the model reads what is meant
+            return _candidate("inspect", hit, 0.6, "inspects_someone_away")
+        if hit:
+            return _candidate("inspect", hit, 0.85, "inspects")
+        return _candidate("look", None, 0.75, "looks_without_subject")
+    if _starts(words, "look", "observe", "survey", "scan") or _has(words, "look around", "where am i"):
+        return _candidate("look", None, 0.9, "looks")
+    if _starts(words, "open", "close", "shut", "push", "pull", "lock", "unlock", "knock", "climb", "search",
+               "light", "lift", "turn", "pry", "kick open"):
+        return _candidate("manipulate", _first(words, scene, "item", "place"), 0.75,
+                          "searches" if _starts(words, "search") else "manipulates")
+
+    if _starts(words, "ask"):
+        return _ask(words, scene, addressed, raw or original)
+    if addressed is not None:
+        return _candidate("talk", addressed, 0.85, "talks")
+    if words[0] in {"him", "her", "them", "it"} or (_has(words, "him", "her", "them", "it") and len(words) <= 4):
+        return _clarify("pronoun_without_antecedent")
+    if len(words) == 1 and not scene.of("person", here=True):
+        return _clarify("one_word")
+    # A remark with nobody named is said to whoever is here.
+    present = scene.of("person", here=True)
+    return IntentCandidate(
+        family="talk",
+        target_id=present[0].entity_id if len(present) == 1 else None,
+        target_kind="person" if len(present) == 1 else None,
+        confidence=0.5,
+        reason="remark",
+    )
+
+
+__all__ = ["STATEFUL_FAMILIES", "IntentCandidate", "SceneEntity", "SceneView", "asked_not_done", "hypothetical",
+           "parse_command"]

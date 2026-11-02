@@ -329,13 +329,3 @@ def attach_genesis_to_created_session(
         "session": saved,
         "game": saved.get("state", result.get("game", {})),
     }
-
-
-def create_new_game_from_genesis_payload(payload: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
-    raw = _safe_dict(payload.get("request") or payload)
-    contract = CampaignGenesisContract.model_validate(raw.get("genesis") or raw)
-    legacy = adapt_genesis_payload_to_new_game_payload(
-        {"request": {"genesis": contract.model_dump(mode="json")}}
-    )
-    result = sessions.create_new_game(sessions.new_game_request(legacy))
-    return attach_genesis_to_created_session(result, contract, sessions=sessions)

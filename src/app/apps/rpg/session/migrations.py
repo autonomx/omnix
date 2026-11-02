@@ -8,8 +8,6 @@ from typing import Any
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
-_CURRENT_SAVE_VERSION = "1.0"
-
 
 def migrate_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Migrate wrapped or direct session payloads to the current schema.

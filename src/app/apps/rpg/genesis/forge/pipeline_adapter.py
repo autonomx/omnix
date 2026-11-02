@@ -1,7 +1,7 @@
 """Genesis compiler/bootstrap and World Forge launch pipeline adapter."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Mapping, cast
 
 from .bootstrap import bootstrap_session_from_compiled_genesis
 from .compiler import compile_campaign_genesis
@@ -10,12 +10,6 @@ from .legacy_adapter import (
     adapt_genesis_payload_to_new_game_payload,
     attach_genesis_to_created_session,
 )
-from .materialization import (
-    materialize_world_forge_into_session,
-    persist_campaign_genesis,
-)
-from .world_forge_commit import certify_world_forge_commit
-from .world_forge_pipeline import CampaignWorldForgeResult, run_campaign_world_forge
 from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict
 
 if TYPE_CHECKING:
@@ -62,17 +56,14 @@ def attach_compiled_genesis_to_session(
     runtime_state = _safe_dict(session.get("runtime_state"))
     setup_payload = _safe_dict(session.get("setup_payload"))
     manifest = _safe_dict(session.get("manifest"))
-    state["compiled_genesis_snapshot"] = dict(compiled)
-    state["bootstrap_snapshot"] = dict(bootstrap)
     state["active_goals"] = list(bootstrap.get("active_goals") or [])
     state["decision_biases"] = dict(bootstrap.get("decision_biases") or {})
     state["world_traits"] = list(bootstrap.get("world_traits") or [])
     metadata["compiler_version"] = compiled.get("compiler_version")
     state["metadata"] = metadata
+    # One copy each, which saving moves out of the document into the campaign's artifacts (RQ-1.1).
     setup_payload["compiled_genesis"] = dict(compiled)
     setup_payload["bootstrap_snapshot"] = dict(bootstrap)
-    runtime_state["compiled_genesis_snapshot"] = dict(compiled)
-    runtime_state["bootstrap_snapshot"] = dict(bootstrap)
     manifest["compiler_version"] = compiled.get("compiler_version")
     session.update(
         {
@@ -105,20 +96,8 @@ def _result_from_unsaved_session(session: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _save_prepared_result(result: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
-    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
-    if session is None:
-        return result
-    saved_result = sessions.save_created(session)
-    return {**result, **saved_result}
-
-
-def _attach_world_forge_progress(
-    result: dict[str, Any],
-    world_forge: CampaignWorldForgeResult | None,
-    *,
-    error: str = "",
-) -> dict[str, Any]:
+def _attach_creation_progress(result: dict[str, Any], *, error: str = "") -> dict[str, Any]:
+    """The creation's job and progress as the play screen reads them, on the result and its session."""
     session_id = str(result.get("session_id") or "")
     from app.apps.rpg.genesis.creation_progress import (
         attach_creation_metadata,
@@ -128,45 +107,11 @@ def _attach_world_forge_progress(
 
     status = "completed" if not error and result.get("ok") is True else "failed"
     job = build_creation_job(session_id=session_id, status=cast(Any, status), error=error)
-    progress = build_creation_progress_snapshot(
-        session_id=session_id,
-        status=cast(Any, status),
-        error=error,
-    )
-    if world_forge is not None:
-        jobs = [row.as_dict() for row in world_forge.generation.jobs]
-        completed = sum(1 for row in jobs if row.get("status") == "completed")
-        progress.update(
-            {
-                "stage": (
-                    "launch_ready"
-                    if world_forge.launch_ready
-                    else "consistency_failed"
-                ),
-                "launch_ready": world_forge.launch_ready,
-                "completed_jobs": completed,
-                "total_jobs": len(jobs),
-                "world_forge_jobs": jobs,
-                "topic_graph": world_forge.graph.as_dict(),
-                "audit": world_forge.audit.as_dict(),
-                "completeness": dict(world_forge.compilation.completeness),
-            }
-        )
-        job.update(
-            {
-                "kind": "campaign_world_forge",
-                "depth": world_forge.graph.depth,
-                "launch_ready": world_forge.launch_ready,
-            }
-        )
+    progress = build_creation_progress_snapshot(session_id=session_id, status=cast(Any, status), error=error)
     session = result.get("session")
     if isinstance(session, dict):
         session = attach_creation_metadata(session, job, progress)
-        result = {
-            **result,
-            "session": session,
-            "game": session.get("state", result.get("game", {})),
-        }
+        result = {**result, "session": session, "game": session.get("state", result.get("game", {}))}
     return {**result, "creation_job": job, "creation_progress": progress}
 
 
@@ -192,6 +137,69 @@ def prepare_new_game_session_from_compiled_genesis(
     )
 
 
+def _launch_in_starter_world(
+    *,
+    sessions: CampaignSessions,
+    bootstrap: dict[str, Any],
+    compiled: dict[str, Any],
+    contract: CampaignGenesisContract,
+    legacy: dict[str, Any],
+) -> dict[str, Any]:
+    """No World Forge: the wizard's hero sets out in the starter world, from its opening for the chosen starting
+    place and hook (roadmap §4.4: every campaign plays from a world), with the genesis the wizard made attached."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import launch_starter
+
+    def with_genesis(session: dict[str, Any]) -> dict[str, Any]:
+        built = {"ok": True, "session_id": str(_safe_dict(session.get("manifest")).get("session_id") or ""),
+                 "session": session}
+        built = attach_genesis_to_created_session(built, contract, persist=False, sessions=sessions)
+        return attach_compiled_genesis_to_session(built, compiled, bootstrap, persist=False, sessions=sessions)["session"]
+
+    request = _preserve_seed_zero(sessions.new_game_request(legacy))
+    result = launch_starter(request, sessions=sessions, opening_hook=str(contract.story_options.opening_hook or ""),
+                            prepare=with_genesis)
+    return _attach_creation_progress(result)
+
+
+def launch_wizard_opening(
+    opening: Mapping[str, Any],
+    *,
+    sessions: CampaignSessions,
+    campaign_id: str,
+    bootstrap: dict[str, Any],
+    compiled: dict[str, Any],
+    contract: CampaignGenesisContract,
+    legacy: dict[str, Any],
+) -> dict[str, Any]:
+    """World Forge on: the wizard's hero sets out from an opening of the world made for the campaign (roadmap §4.4,
+    ``wizard_world.py``), under the campaign id the wizard gave the player, with the genesis it made attached."""
+    from app.apps.rpg.genesis.forge.wizard_world import opening_document
+    from app.apps.rpg.genesis.worlds.published_launch import launch_published_scenario
+
+    def with_genesis(session: dict[str, Any]) -> dict[str, Any]:
+        built = {"ok": True, "session_id": campaign_id, "session": session}
+        built = attach_genesis_to_created_session(built, contract, persist=False, sessions=sessions)
+        return attach_compiled_genesis_to_session(built, compiled, bootstrap, persist=False, sessions=sessions)["session"]
+
+    document = opening_document(opening)
+    made = _preserve_seed_zero(sessions.new_game_request(legacy)).model_dump(mode="json", exclude={"starting_location"})
+    return launch_published_scenario(
+        sessions=sessions,
+        world_id=str(document["world_id"]),
+        world_revision=int(document["world_revision"]),
+        world_release=int(document["compatible_release"]),
+        scenario_id=str(document["scenario_id"]),
+        scenario_revision=int(document["revision"]),
+        player=made.get("player"),
+        gameplay={key: made.get(key) for key in ("difficulty", "world_activity", "economy_pressure",
+                                                 "combat_lethality", "companions_enabled", "permadeath")},
+        features=made.get("features"),
+        new_game=made,
+        prepare=with_genesis,
+        session_id=campaign_id,
+    )
+
+
 def create_new_game_session_from_compiled_genesis(
     *,
     sessions: CampaignSessions,
@@ -201,80 +209,15 @@ def create_new_game_session_from_compiled_genesis(
     legacy: dict[str, Any],
     prepared_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    result = prepared_result or prepare_new_game_session_from_compiled_genesis(
-        bootstrap=bootstrap,
-        compiled=compiled,
-        contract=contract,
-        legacy=legacy,
-        sessions=sessions,
-    )
-    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
-    if session is None or not contract.world_forge.enabled:
-        result["status"] = "ready"
-        return _save_prepared_result(_attach_world_forge_progress(result, None), sessions=sessions)
-    session_id = str(result.get("session_id") or "")
-    try:
-        world_forge = run_campaign_world_forge(
-            contract,
-            campaign_id=session_id,
-            compiled_genesis=compiled,
-        )
-        certification = certify_world_forge_commit(world_forge)
-        result.update(
-            {
-                "world_forge": world_forge.as_dict(),
-                "world_forge_commit_certification": certification.as_dict(),
-            }
-        )
-        if not certification.passed:
-            result.update(
-                {
-                    "ok": False,
-                    "status": "blocked",
-                    "error": "campaign_genesis_launch_gate_failed",
-                    "detail": ",".join(certification.errors),
-                    "campaign_genesis_persistence": {
-                        "persisted": False,
-                        "mode": "rejected_unapproved_canon",
-                        "campaign_id": session_id,
-                        "content_hash": certification.content_hash,
-                        "errors": list(certification.errors),
-                    },
-                }
-            )
-            return _attach_world_forge_progress(
-                result,
-                world_forge,
-                error=result["error"],
-            )
-
-        session = materialize_world_forge_into_session(
-            session,
-            contract,
-            world_forge,
-        )
-        result.update(
-            {
-                "session": session,
-                "game": session.get("state", {}),
-                "status": "ready",
-                "ok": True,
-            }
-        )
-        persistence = persist_campaign_genesis(session, contract, world_forge)
-        result["campaign_genesis_persistence"] = persistence
-        result = _attach_world_forge_progress(result, world_forge)
-        return _save_prepared_result(result, sessions=sessions)
-    except Exception as exc:
-        result.update(
-            {
-                "ok": False,
-                "status": "failed",
-                "error": "campaign_world_forge_failed",
-                "detail": str(exc),
-            }
-        )
-        return _attach_world_forge_progress(result, None, error=result["error"])
+    """A new game the wizard made, set out at once: in the starter world without World Forge. With World Forge, the
+    campaign's world is made in the library by the genesis job (``wizard_world.py``), which needs the durable queue;
+    without it there is no world to make, so the request is refused rather than played without one."""
+    if not contract.world_forge.enabled:
+        return _launch_in_starter_world(sessions=sessions, bootstrap=bootstrap, compiled=compiled, contract=contract,
+                                        legacy=legacy)
+    return {**dict(prepared_result or {}), "ok": False, "status": "failed",
+            "error": "campaign_world_forge_requires_queue",
+            "detail": "World Forge makes the campaign's world in the library, which needs the database's job queue."}
 
 
 def create_new_game_from_genesis_payload(payload: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
@@ -290,14 +233,15 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any], *, sessions: C
     )
     compiled = compile_campaign_genesis(contract)
     bootstrap = bootstrap_session_from_compiled_genesis(compiled)
-    prepared = prepare_new_game_session_from_compiled_genesis(
-        bootstrap=bootstrap,
-        compiled=compiled,
-        contract=contract,
-        legacy=legacy,
-        sessions=sessions,
-    )
+    prepared = None
     if contract.world_forge.enabled:
+        prepared = prepare_new_game_session_from_compiled_genesis(
+            bootstrap=bootstrap,
+            compiled=compiled,
+            contract=contract,
+            legacy=legacy,
+            sessions=sessions,
+        )
         from .async_coordinator import (
             campaign_genesis_async_enabled,
             campaign_genesis_sync_fallback_allowed,

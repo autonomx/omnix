@@ -1,0 +1,247 @@
+{
+  "turns": [
+    {
+      "blocks": [
+        "narration||You look around Starfall Grove. Here: Liora Fen (patrolling the grove's edge for new arrivals). Paths lead to Starfall Village."
+      ],
+      "step": "look around",
+      "told": "You look around Starfall Grove. Here: Liora Fen (patrolling the grove's edge for new arrivals). Paths lead to Starfall Village. Starfall Grove\nRegion: Starfall March\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Starfall Grove (location)\nRegion Id: region:starfall-march\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties",
+      "visible": "You look around Starfall Grove. Here: Liora Fen (patrolling the grove's edge for new arrivals). Paths lead to Starfall Village."
+    },
+    {
+      "blocks": [
+        "dialogue|npc:liora-fen|Welcome, traveler."
+      ],
+      "step": "I greet Liora Fen and ask her where I am",
+      "told": "",
+      "visible": "Liora Fen: \"Welcome, traveler.\""
+    },
+    {
+      "blocks": [
+        "action||Liora Fen joins your party."
+      ],
+      "step": "I ask Liora Fen to join my party as a companion.",
+      "told": "Liora Fen joins your party. Liora Fen joins your party.",
+      "visible": "Liora Fen joins your party."
+    },
+    {
+      "blocks": [
+        "action||You take on the quest Voices in the Phone: Have Brindle Gearwing look at your phone."
+      ],
+      "step": "I accept the quest Voices in the Phone.",
+      "told": "You take on the quest Voices in the Phone: Have Brindle Gearwing look at your phone. You take on the quest Voices in the Phone: Have Brindle Gearwing look at your phone.",
+      "visible": "You take on the quest Voices in the Phone: Have Brindle Gearwing look at your phone."
+    },
+    {
+      "blocks": [
+        "action||Your practice earns 5 experience in swordsmanship."
+      ],
+      "step": "Practice swordsmanship with a careful training drill.",
+      "told": "Your practice earns 5 experience in swordsmanship. Your practice earns 5 experience in swordsmanship.",
+      "visible": "Your practice earns 5 experience in swordsmanship."
+    },
+    {
+      "blocks": [
+        "narration||Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+        "action||You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. You gain 15 experience. First Night in Aurelia: Reach Starfall Village. Next: Register with Miri Kestrel at the Wayfarers' Guild. Captain Rhea Sunward asks for your help: \"Echo beasts on the March roads\". Defeat 3 Echo Wolves."
+      ],
+      "step": "go to Starfall Village",
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. You gain 15 experience. First Night in Aurelia: Reach Starfall Village. Next: Register with Miri Kestrel at the Wayfarers' Guild. Captain Rhea Sunward asks for your help: \"Echo beasts on the March roads\". Defeat 3 Echo Wolves. You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. You gain 15 experience. First Night in Aurelia: Reach Starfall Village. Next: Register with Miri Kestrel at the Wayfarers' Guild. Captain Rhea Sunward asks for your help: \"Echo beasts on the March roads\". Defeat 3 Echo Wolves.",
+      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. You gain 15 experience. First Night in Aurelia: Reach Starfall Village. Next: Register with Miri Kestrel at the Wayfarers' Guild. Captain Rhea Sunward asks for your help: \"Echo beasts on the March roads\". Defeat 3 Echo Wolves."
+    },
+    {
+      "blocks": [
+        "narration||You look around Starfall Village. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. Paths lead to Valecourt, Skybridge Pass, Starfall Grove, Wayfarers' Guild."
+      ],
+      "step": "look around",
+      "told": "You look around Starfall Village. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. Paths lead to Valecourt, Skybridge Pass, Starfall Grove, Wayfarers' Guild. Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Brindle Gearwing\nId: npc:brindle-gearwing\nName: Brindle Gearwing\nRole: relic mechanic and merchant\nGoals:\n• build a working radio to Earth\n• earn a guild rank\n• pay off goblin patent collectors\nSpecies: kobold\nBiography: Brindle turns broken Earth electronics into aether tools. His proudest invention is a kettle that predicts rain and insults nobles.\nPersonality:\n• excitable\n• inventive\n• cowardly in combat\n• loyal under pressure\nSpeech Style: technical babble, delighted squeaks, dramatic product names Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait",
+      "visible": "You look around Starfall Village. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. Paths lead to Valecourt, Skybridge Pass, Starfall Grove, Wayfarers' Guild."
+    },
+    {
+      "blocks": [
+        "dialogue|npc:orik-stonewake|Welcome, traveler."
+      ],
+      "step": "I ask Orik Stonewake what he thinks of the newcomers.",
+      "told": "",
+      "visible": "Orik Stonewake: \"Welcome, traveler.\""
+    },
+    {
+      "blocks": [
+        "dialogue|npc:brindle-gearwing|I have Healing Potion for 3 silver, 6 copper."
+      ],
+      "step": "I ask Brindle Gearwing what a Healing Potion costs.",
+      "told": "",
+      "visible": "Brindle Gearwing: \"I have Healing Potion for 3 silver, 6 copper.\""
+    },
+    {
+      "blocks": [
+        "action||You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete."
+      ],
+      "step": "I buy a Healing Potion from Brindle Gearwing.",
+      "told": "You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete. You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete. You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete.",
+      "visible": "You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete."
+    },
+    {
+      "blocks": [
+        "action||You sell the Iron Dagger to Brindle Gearwing for 5 copper."
+      ],
+      "step": "I sell my Iron Dagger to Brindle Gearwing.",
+      "told": "You sell the Iron Dagger to Brindle Gearwing for 5 copper. You sell the Iron Dagger to Brindle Gearwing for 5 copper. You sell the Iron Dagger to Brindle Gearwing for 5 copper.",
+      "visible": "You sell the Iron Dagger to Brindle Gearwing for 5 copper."
+    },
+    {
+      "blocks": [
+        "action||You put down the Lantern Bread; it lies here now."
+      ],
+      "step": "I drop one Lantern Bread on the ground.",
+      "told": "You put down the Lantern Bread; it lies here now. You put down the Lantern Bread; it lies here now.",
+      "visible": "You put down the Lantern Bread; it lies here now."
+    },
+    {
+      "blocks": [
+        "narration||Wayfarers' Guild. Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+        "action||You travel to Wayfarers' Guild; the road takes 2 minutes. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. You gain 15 experience."
+      ],
+      "step": "go to Wayfarers' Guild",
+      "told": "Wayfarers' Guild. Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Wayfarers' Guild; the road takes 2 minutes. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. You gain 15 experience. You travel to Wayfarers' Guild; the road takes 2 minutes. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. You gain 15 experience.",
+      "visible": "Wayfarers' Guild. Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Wayfarers' Guild; the road takes 2 minutes. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. You gain 15 experience."
+    },
+    {
+      "blocks": [
+        "narration||You look around Wayfarers' Guild. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. Paths lead to Starfall Village. Word comes: Unrest in the Meridian Heartland grows worse."
+      ],
+      "step": "look around",
+      "told": "You look around Wayfarers' Guild. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. Paths lead to Starfall Village. Word comes: Unrest in the Meridian Heartland grows worse. Wayfarers' Guild\nRegion: Starfall March\nDescription: Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Miri Kestrel\nId: npc:miri-kestrel\nName: Miri Kestrel\nRole: Wayfarers' Guild registrar\nGoals:\n• professionalize the guild\n• open a cross-world museum\n• keep Seraphine out of paperwork disasters\nSpecies: halfling\nBiography: Miri maintains the Earthborn Registry and can estimate a newcomer's affinity from the objects that crossed with them.\nPersonality:\n• cheerful\n• mercantile\n• hyper-competent\n• collector of Earth snacks\nSpeech Style: rapid lists, friendly bargaining, calls everyone dear traveler Princess Seraphine Valecourt\nId: npc:seraphine-valecourt\nName: Princess Seraphine Valecourt\nRole: princess-engineer and reformist patron\nGoals:\n• repair the royal Meridian engine\n• prevent civil war\n• learn why Earthborn arrivals are increasing\nSpecies: human\nBiography: Second heir of the Meridian Crown, Seraphine rebuilds ancient gateworks and secretly sponsors the Wayfarers' Guild. She believes Earthborn knowledge can modernize Aurelia without repeating the Cataclysm.\nPersonality:\n• brilliant\n• formal in public\n• recklessly hands-on\n• genuinely compassionate\nSpeech Style: precise technical language softened by earnest warmth\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-seraphine-portrait",
+      "visible": "You look around Wayfarers' Guild. Here: Miri Kestrel (keeping the Earthborn Registry), Princess Seraphine Valecourt (poring over gatework plans in the guild's back room), Liora Fen. Paths lead to Starfall Village. Word comes: Unrest in the Meridian Heartland grows worse."
+    },
+    {
+      "blocks": [
+        "narration||Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+        "action||You travel to Starfall Village; the road takes 2 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen."
+      ],
+      "step": "go to Starfall Village",
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 2 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen. You travel to Starfall Village; the road takes 2 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen.",
+      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 2 minutes. Here: Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (tinkering at his relic stall), Captain Rhea Sunward (drilling the village guard), Liora Fen."
+    },
+    {
+      "blocks": [
+        "action||You pick up the Lantern Bread and stow it in your pack."
+      ],
+      "step": "I pick up the Lantern Bread.",
+      "told": "You pick up the Lantern Bread and stow it in your pack. You pick up the Lantern Bread and stow it in your pack.",
+      "visible": "You pick up the Lantern Bread and stow it in your pack."
+    },
+    {
+      "blocks": [
+        "action||You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger."
+      ],
+      "step": "I buy a meal from Orik Stonewake.",
+      "told": "You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger. You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger. You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger.",
+      "visible": "You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger."
+    },
+    {
+      "blocks": [
+        "action||Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival)."
+      ],
+      "step": "I rent a room for the night from Orik Stonewake.",
+      "told": "Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival). Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival). Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival).",
+      "visible": "Orik Stonewake gives you a night's lodging for nothing (Orik's welcome to a new arrival)."
+    },
+    {
+      "blocks": [
+        "action||You rest through the night in the room you paid for (a night's lodging, 8 hours). Brindle Gearwing leaves for Wayfarers' Guild. Captain Rhea Sunward leaves for Skybridge Pass. Miri Kestrel arrives, sorting Earth curios at a corner table of the inn. Word comes: Unrest in the Meridian Heartland stirs again. Word comes: Restlessness in the Memory Loom grows worse."
+      ],
+      "step": "I go to my room and sleep for the night.",
+      "told": "You rest through the night in the room you paid for (a night's lodging, 8 hours). Brindle Gearwing leaves for Wayfarers' Guild. Captain Rhea Sunward leaves for Skybridge Pass. Miri Kestrel arrives, sorting Earth curios at a corner table of the inn. Word comes: Unrest in the Meridian Heartland stirs again. Word comes: Restlessness in the Memory Loom grows worse. You rest through the night in the room you paid for (a night's lodging, 8 hours). Brindle Gearwing leaves for Wayfarers' Guild. Captain Rhea Sunward leaves for Skybridge Pass. Miri Kestrel arrives, sorting Earth curios at a corner table of the inn. Word comes: Unrest in the Meridian Heartland stirs again. Word comes: Restlessness in the Memory Loom grows worse.",
+      "visible": "You rest through the night in the room you paid for (a night's lodging, 8 hours). Brindle Gearwing leaves for Wayfarers' Guild. Captain Rhea Sunward leaves for Skybridge Pass. Miri Kestrel arrives, sorting Earth curios at a corner table of the inn. Word comes: Unrest in the Meridian Heartland stirs again. Word comes: Restlessness in the Memory Loom grows worse."
+    },
+    {
+      "blocks": [
+        "result||You wait a while in Starfall Village; time passes. Around you: Miri Kestrel (sorting Earth curios at a corner table of the inn), Orik Stonewake (keeping the Lantern Below), Liora Fen."
+      ],
+      "step": "wait",
+      "told": "",
+      "visible": "You wait a while in Starfall Village; time passes. Around you: Miri Kestrel (sorting Earth curios at a corner table of the inn), Orik Stonewake (keeping the Lantern Below), Liora Fen."
+    },
+    {
+      "blocks": [],
+      "step": "go to Skybridge Pass",
+      "told": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check.",
+      "visible": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.\n\nYou travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You gain 15 experience. The Echo Wolf bars your way: fight, break away, slip past, or talk it down. Word comes: Restlessness in the Memory Loom is held in check. Word comes: Unrest in the Meridian Heartland is held in check."
+    },
+    {
+      "blocks": [
+        "action||You miss the Echo Wolf. The Echo Wolf hits you for 1 (99 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left)."
+      ],
+      "step": "I attack the Glass Wight.",
+      "told": "You miss the Echo Wolf. The Echo Wolf hits you for 1 (99 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 1 (99 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 1 (99 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left).",
+      "visible": "You miss the Echo Wolf. The Echo Wolf hits you for 1 (99 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left)."
+    },
+    {
+      "step": "tactical_move [9, 6]"
+    },
+    {
+      "blocks": [
+        "action||You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf hits you for 3 (96 of 100 left). Liora Fen misses the Echo Wolf."
+      ],
+      "step": "I attack the Glass Wight.",
+      "told": "You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf hits you for 3 (96 of 100 left). Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf hits you for 3 (96 of 100 left). Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf hits you for 3 (96 of 100 left). Liora Fen misses the Echo Wolf.",
+      "visible": "You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf hits you for 3 (96 of 100 left). Liora Fen misses the Echo Wolf."
+    },
+    {
+      "blocks": [
+        "action||You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left)."
+      ],
+      "step": "I attack the Glass Wight.",
+      "told": "You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left).",
+      "visible": "You miss the Echo Wolf. The Echo Wolf hits you for 4 (92 of 100 left). Liora Fen hits the Echo Wolf for 2 (6 of 10 left)."
+    },
+    {
+      "blocks": [
+        "action||You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing."
+      ],
+      "step": "I flee from the Glass Wight.",
+      "told": "You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing. You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing. You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
+      "visible": "You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing."
+    },
+    {
+      "blocks": [
+        "action||You drink the Healing Potion. It restores 8 health."
+      ],
+      "step": "I drink the Healing Potion.",
+      "told": "You drink the Healing Potion. It restores 8 health. You drink the Healing Potion. It restores 8 health.",
+      "visible": "You drink the Healing Potion. It restores 8 health."
+    },
+    {
+      "blocks": [
+        "result||Active quests: First Night in Aurelia (Register with Miri Kestrel at the Wayfarers' Guild); Voices in the Phone (Have Brindle Gearwing look at your phone). Quests you could take on: The Hollow Meridian, Echo beasts on the March roads."
+      ],
+      "step": "Check my quests",
+      "told": "",
+      "visible": "Active quests: First Night in Aurelia (Register with Miri Kestrel at the Wayfarers' Guild); Voices in the Phone (Have Brindle Gearwing look at your phone). Quests you could take on: The Hollow Meridian, Echo beasts on the March roads."
+    },
+    {
+      "blocks": [],
+      "step": "go to Starfall Village",
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again. You travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again.",
+      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 240 minutes. Here: Miri Kestrel (asleep in a rented room above the Lantern Below), Orik Stonewake (keeping the Lantern Below), Brindle Gearwing (asleep among half-built gadgets), Captain Rhea Sunward (keeping the night watch at the village gate), Liora Fen. Word comes: Restlessness in the Memory Loom stirs again. Word comes: Unrest in the Meridian Heartland stirs again."
+    },
+    {
+      "blocks": [
+        "narration||Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+        "action||You travel to Starfall Grove; the road takes 20 minutes. Here: Naia of the Open Hand (standing barefoot where the old gate flickers), Liora Fen."
+      ],
+      "step": "go to Starfall Grove",
+      "told": "Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Grove; the road takes 20 minutes. Here: Naia of the Open Hand (standing barefoot where the old gate flickers), Liora Fen. You travel to Starfall Grove; the road takes 20 minutes. Here: Naia of the Open Hand (standing barefoot where the old gate flickers), Liora Fen.",
+      "visible": "Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Grove; the road takes 20 minutes. Here: Naia of the Open Hand (standing barefoot where the old gate flickers), Liora Fen."
+    },
+    {
+      "blocks": [
+        "result||You wait a while in Starfall Grove; time passes. Around you: Naia of the Open Hand (standing barefoot where the old gate flickers), Liora Fen."
+      ],
+      "step": "wait",
+      "told": "",
+      "visible": "You wait a while in Starfall Grove; time passes. Around you: Naia of the Open Hand (standing barefoot where the old gate flickers), Liora Fen."
+    }
+  ]
+}

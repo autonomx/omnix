@@ -2,17 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
 
-
-DIALOGUE_BENCHMARK_VERSION = "rpg_dialogue_quality_benchmark_v1"
-DIRECT_ANSWER_TARGET = 0.95
-CORRECT_SPEAKER_TARGET = 0.99
-GROUNDED_SPECIFICITY_TARGET = 0.95
-CONTINUITY_TARGET = 0.95
-MAX_NEAR_DUPLICATE_RATE = 0.05
-MAX_PRIVATE_LEAK_RATE = 0.0
-MAX_EMPTY_LINE_RATE = 0.0
 
 BRAN_PROFILE = {
     "id": "npc:bran",
@@ -74,9 +64,6 @@ class DialogueBenchmarkObservation:
     empty_line: bool
     visible_text: str
     speakers: tuple[str, ...]
-
-
-ResponseBuilder = Callable[[DialogueBenchmarkCase], dict[str, Any]]
 
 
 def default_dialogue_benchmark_cases() -> tuple[DialogueBenchmarkCase, ...]:
@@ -195,14 +182,3 @@ def default_dialogue_benchmark_cases() -> tuple[DialogueBenchmarkCase, ...]:
             forbidden_fragments=private_terms,
         ),
     )
-
-
-def _rate(values: Iterable[bool]) -> float:
-    rows = list(values)
-    if not rows:
-        return 1.0
-    return round(sum(1 for value in rows if value) / len(rows), 4)
-
-
-def _normalize(value: Any) -> str:
-    return " ".join(str(value or "").casefold().replace("—", " ").replace("–", " ").split())

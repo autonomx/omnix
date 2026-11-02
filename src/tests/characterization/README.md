@@ -51,6 +51,29 @@ and validation, and the kinds of model call the turn made. It replaced the
 earlier `rpg-turn` golden, which exercised an execution pipeline production
 never used (2026-10-04).
 
+## Published-world scenario
+
+`rpg-published-world` (RQ-0.2) imports Aurelia from its bundle, adopts it,
+launches its "Gateborn: First Light" opening and plays 30 turns through the
+turn route, plus one tactical grid move: look, talk, ask a price, buy, sell,
+drop, leave and return, pick up, a meal, a room and a night's sleep, wait,
+a fight with a move on the grid, fleeing, a quest taken and advanced, and
+travel there and back. The scripted model is
+`tests.rpg.playthrough.scripted_model.ScriptedRoleModel`: it classifies each
+call by the registered prompt template it was rendered from and answers by
+semantic role (intent, dialogue, narration, lore, ...), so changing a call's
+wording or answer shape changes the adapter, not the recording.
+
+The golden records, per step: the response's changed domains and source, what
+the turn changed (fact by fact: place, people present, purse, pack, health,
+quests, party, needs, skills, the fight) and the document sections its state
+patch touched, the session summary, the facts after the turn, the roles of
+the model calls made, and a hash of the normalized campaign document (ids,
+times and the world's content hashes as placeholders; the stored stage
+timings and the creator preview id left out, as they are not reproducible).
+Its prose is in `rpg-published-world-prose.json`, which may be re-recorded
+without justification when only wording changed (`OMNIX_UPDATE_PROSE=1`).
+
 ## Trading evaluation scenario
 
 `trading-evaluate` replays a fixed, reviewed market-bar fixture through the

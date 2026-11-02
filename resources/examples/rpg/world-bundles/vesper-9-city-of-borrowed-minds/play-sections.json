@@ -1,0 +1,43 @@
+{
+  "economy": {
+    "providers": [
+      {
+        "provider_id": "ent:actors:pell-sato",
+        "location_id": "ent:places:black-rain-station",
+        "sells": [
+          {"offer_key": "stim-patch", "service": "shop_goods", "name": "Stim Patch", "item_id": "ent:equipment_vehicles:stim-patch",
+           "description": "A dermal patch that restores health.", "price": {"silver": 1}, "stock": 6, "restock_per_day": 4},
+          {"offer_key": "ration-bar", "service": "shop_goods", "name": "Ration Bar", "item_id": "ent:equipment_vehicles:ration-bar",
+           "description": "A dense bar that eases hunger for a shift.", "price": {"copper": 4}, "stock": 10, "restock_per_day": 10}
+        ],
+        "buys": {"item_types": ["potion", "food", "equipment", "consumable", "tool"], "price_fraction": 0.5}
+      },
+      {
+        "provider_id": "ent:actors:dex-marlowe",
+        "location_id": "ent:places:black-rain-station",
+        "sells": [
+          {"offer_key": "night", "service": "lodging", "name": "A capsule bunk for the night",
+           "description": "A capsule bunk off every current map.", "price": {"silver": 2}, "stock": 8, "restock_per_day": 8},
+          {"offer_key": "noodles", "service": "meal", "name": "Hot noodles", "description": "A bowl of hot noodles.",
+           "price": {"copper": 6}}
+        ]
+      },
+      {
+        "provider_id": "ent:actors:brother-static",
+        "location_id": "ent:places:undertone",
+        "sells": [
+          {"offer_key": "repair", "service": "repair", "name": "Gear repair", "description": "Repair work on worn equipment.",
+           "price": {"silver": 4}}
+        ]
+      },
+      {
+        "provider_id": "ent:actors:tamsin-rho",
+        "location_id": "ent:places:null-chapel",
+        "sells": [
+          {"offer_key": "information", "service": "paid_information", "name": "Local news",
+           "description": "What is going on around here.", "price": {"silver": 2}}
+        ]
+      }
+    ]
+  }
+}

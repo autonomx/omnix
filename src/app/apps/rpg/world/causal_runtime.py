@@ -68,7 +68,7 @@ def _projection_plan(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
 
 def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, Any]:
     initial_state = build_mutable_world_state(planning_topics)
-    runtime: dict[str, Any] = {
+    built: dict[str, Any] = {
         # Additive lifecycle and projection fields remain compatible with v1 readers.
         "schema_version": "rpg_causal_world_runtime_v1",
         "revision": 1,
@@ -82,8 +82,8 @@ def bootstrap_causal_runtime(planning_topics: Mapping[str, Any]) -> dict[str, An
         "events": [],
         "last_tick": 0,
     }
-    runtime["runtime_hash"] = _hash(runtime)
-    return runtime
+    built["runtime_hash"] = _hash(built)
+    return built
 
 
 def _event_dict(event: CausalWorldEvent) -> dict[str, Any]:
@@ -199,10 +199,90 @@ def advance_causal_runtime(
     current["state"] = next_state
     current["pressure_statuses"] = next_statuses
     current["events"] = [_event_dict(event) for event in all_events]
+    _keep_recent(current)
     current["last_tick"] = tick
     current["revision"] = int(current.get("revision") or 1) + 1
     current["runtime_hash"] = _hash(current)
     return current, tuple(emitted)
+
+
+# The world's recent history kept in the campaign (F2): each pressure tick is a few kilobytes, and a campaign of a
+# thousand turns kept them all. The state before the kept events is the runtime's ``initial_state``, rolled forward
+# over the events let go, so the initial state and the events still replay to the current state.
+MAX_KEPT_EVENTS = 12
+
+
+def _keep_recent(current: dict[str, Any]) -> None:
+    events = list(current.get("events") or ())
+    if len(events) <= MAX_KEPT_EVENTS:
+        return
+    dropped, kept = events[:-MAX_KEPT_EVENTS], events[-MAX_KEPT_EVENTS:]
+    try:
+        rolled = replay_causal_events(dict(current.get("initial_state") or {}), dropped)
+    except ValueError:
+        return  # a history that does not replay is kept whole rather than cut where it breaks
+    current["initial_state"] = rolled
+    current["events"] = kept
+
+
+def pull_levers(
+    runtime: Mapping[str, Any],
+    pulls: Mapping[str, float],
+    *,
+    cause: str,
+) -> tuple[dict[str, Any], CausalWorldEvent | None]:
+    """What the hero did to the world's pressures (RQ-5.4): each pressure's severity moved by its pull (negative
+    eases it), as one replayable event at the runtime's current tick, after that tick's own events. The next pressure
+    tick judges the statuses (a pressure eased below its resolution threshold resolves)."""
+
+    current = copy.deepcopy(dict(runtime))
+    moves = {str(key): float(value) for key, value in pulls.items() if float(value)}
+    cells = dict(dict(current.get("state") or {}).get("cells") or {})
+    moves = {key: value for key, value in moves.items() if key in cells}
+    if not moves:
+        return current, None
+    existing = _events(current)
+    tick = int(current.get("last_tick") or 0)
+    at_tick = [event for event in existing if event.tick == tick]
+    pulled = sum(1 for event in at_tick if event.event_type == "lever_pulled")
+    event_id = f"world:event:causal:{tick}:lever:{pulled + 1}"
+    sequence = max((event.sequence for event in at_tick), default=-1) + 1
+    deltas = tuple(
+        WorldStateDelta(
+            delta_id=f"delta:lever:{tick}:{pulled + 1}:{pressure_id}",
+            tick=tick,
+            sequence=index,
+            target_id=pressure_id,
+            dimension_id="pressure_severity",
+            operation="decrease" if value < 0 else "increase",
+            value=abs(value),
+            source_event_id=event_id,
+            source_kind="lever_pulled",
+        )
+        for index, (pressure_id, value) in enumerate(sorted(moves.items()))
+    )
+    state = dict(current.get("state") or {})
+    before_hash = str(state.get("state_hash") or causal_state_hash(state))
+    next_state, _ = reduce_world_state(state, deltas)
+    event = CausalWorldEvent(
+        event_id=event_id,
+        tick=tick,
+        sequence=sequence,
+        event_type="lever_pulled",
+        deltas=deltas,
+        before_state_hash=before_hash,
+        after_state_hash=next_state["state_hash"],
+        payload={"cause": cause, "pulls": dict(sorted(moves.items()))},
+    )
+    current["state"] = next_state
+    current["events"] = [
+        _event_dict(row)
+        for row in sorted((*existing, event), key=lambda row: (row.tick, row.sequence, row.event_id))
+    ]
+    _keep_recent(current)
+    current["revision"] = int(current.get("revision") or 1) + 1
+    current["runtime_hash"] = _hash(current)
+    return current, event
 
 
 def replay_causal_events(
@@ -233,42 +313,44 @@ def replay_causal_events(
     return state
 
 
+# Installing and advancing the runtime write the simulation they are handed: on a turn that is the causal tick's working
+# copy (``session/causal_turn_runtime.causal_tick``), whose changes the tick hands the reducer as ``WorldTicked``.
 def initialize_causal_runtime(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     runtime_bootstrap: Mapping[str, Any],
 ) -> dict[str, Any]:
     installed = copy.deepcopy(dict(runtime_bootstrap))
-    simulation_state["causal_world_runtime"] = installed
+    working["causal_world_runtime"] = installed
     return installed
 
 
 def ensure_causal_runtime_installed(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
 ) -> dict[str, Any]:
-    runtime = simulation_state.get("causal_world_runtime")
+    runtime = working.get("causal_world_runtime")
     if isinstance(runtime, Mapping):
         return dict(runtime)
-    campaign_bible = simulation_state.get("campaign_bible")
+    campaign_bible = working.get("campaign_bible")
     if isinstance(campaign_bible, Mapping):
         manifest = campaign_bible.get("manifest")
         if isinstance(manifest, Mapping):
             bootstrap = manifest.get("causal_runtime_bootstrap")
             if isinstance(bootstrap, Mapping):
-                return initialize_causal_runtime(simulation_state, bootstrap)
+                return initialize_causal_runtime(working, bootstrap)
     raise ValueError("causal_world_runtime_not_installed")
 
 
 def advance_installed_causal_runtime(
-    simulation_state: dict[str, Any],
+    working: dict[str, Any],
     *,
     tick: int,
 ) -> tuple[dict[str, Any], tuple[CausalWorldEvent, ...]]:
-    runtime = ensure_causal_runtime_installed(simulation_state)
+    runtime = ensure_causal_runtime_installed(working)
     next_runtime, emitted = advance_causal_runtime(runtime, tick=tick)
-    simulation_state["causal_world_runtime"] = next_runtime
+    working["causal_world_runtime"] = next_runtime
     for event in emitted:
         add_world_event(
-            simulation_state,
+            working,
             {
                 "event_id": event.event_id,
                 "kind": event.event_type,
@@ -296,5 +378,7 @@ __all__ = [
     "bootstrap_causal_runtime",
     "ensure_causal_runtime_installed",
     "initialize_causal_runtime",
+    "pull_levers",
+    "MAX_KEPT_EVENTS",
     "replay_causal_events",
 ]

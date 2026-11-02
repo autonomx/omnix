@@ -4,9 +4,9 @@ from pathlib import Path
 from threading import Thread
 from typing import Any
 
-from app.apps.rpg.session.jobs.turn_job_mirror import _apply_turn_with_job_mirror
+from app.apps.rpg.session.jobs.foreground_submission_store import InMemoryForegroundSubmissionStore
+from app.apps.rpg.session.jobs.foreground_turn import execute_foreground_turn
 from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobStatus, ResourceClass
-from app.apps.rpg.session.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 
@@ -59,69 +59,26 @@ def test_provider_free_job_store_serializes_concurrent_writers(tmp_path: Path) -
 
 
 def test_foreground_turn_submission_is_executed_once(monkeypatch: Any, tmp_path: Path) -> None:
-    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: jobs)
+    submissions = InMemoryForegroundSubmissionStore(tmp_path / "submissions")
     calls: list[str] = []
 
     def apply_turn(session_id: str, command: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
         calls.append(f"{session_id}:{command}")
-        return {"ok": True, "final_narration": "Bran answers.", "turn_id": "turn:1"}
+        return {"ok": True, "final_narration": "Bran answers.", "turn_id": "turn:1", "interaction_id": "interaction:1"}
 
-    first = _apply_turn_with_job_mirror(
-        apply_turn,
-        "session:bran",
-        "How is business?",
-        submission_id="submit:stable",
-    )
-    second = _apply_turn_with_job_mirror(
-        apply_turn,
-        "session:bran",
-        "How is business?",
-        submission_id="submit:stable",
-    )
+    first = execute_foreground_turn(apply_turn, "session:bran", "How is business?", submission_id="submit:stable",
+                                    submissions=submissions)
+    second = execute_foreground_turn(apply_turn, "session:bran", "How is business?", submission_id="submit:stable",
+                                     submissions=submissions)
 
     assert calls == ["session:bran:How is business?"]
     assert first["submission_id"] == "submit:stable"
     assert second["submission_id"] == "submit:stable"
-    assert second["idempotent_replay"] is True
-    records = store.list_jobs()
-    assert len(records) == 1
-    assert records[0].type == RPG_FOREGROUND_RECORD_TYPE
-    assert records[0].status == JobStatus.COMPLETED
-    assert records[0].compat["record_only"] is True
-
-
-def test_foreground_submission_lookup_does_not_scan_all_jobs(monkeypatch: Any, tmp_path: Path) -> None:
-    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
-    calls: list[str] = []
-
-    def apply_turn(session_id: str, command: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        calls.append(command)
-        return {"ok": True, "final_narration": "Bran answers.", "interaction_id": "interaction:1"}
-
-    def fail_full_scan(*args: Any, **kwargs: Any) -> list[Any]:
-        raise AssertionError("foreground idempotency must not scan the complete job table")
-
-    monkeypatch.setattr(store, "list_jobs", fail_full_scan)
-
-    first = _apply_turn_with_job_mirror(
-        apply_turn,
-        "session:bran",
-        "How is business?",
-        submission_id="submit:indexed",
-    )
-    replay = _apply_turn_with_job_mirror(
-        apply_turn,
-        "session:bran",
-        "How is business?",
-        submission_id="submit:indexed",
-    )
-
-    assert calls == ["How is business?"]
-    assert first["interaction_id"] == "interaction:1"
-    assert replay["interaction_id"] == "interaction:1"
-    assert replay["idempotent_replay"] is True
+    assert second["idempotent_replay"] is True and second["interaction_id"] == "interaction:1"
+    assert submissions.get("session:bran", "submit:stable").status == "completed"
+    assert jobs.list_jobs() == []  # the claim is the record of the turn: no job is written for it (F2)
 
 
 def test_terminal_job_state_cannot_be_reopened_or_overwritten(tmp_path: Path) -> None:
@@ -154,13 +111,3 @@ def test_terminal_job_state_cannot_be_reopened_or_overwritten(tmp_path: Path) ->
     assert running is not None and running.status == JobStatus.COMPLETED
     assert failed is not None and failed.status == JobStatus.COMPLETED
     assert overwritten is not None and overwritten.output_refs == [{"value": "first"}]
-
-
-def test_record_only_type_is_not_an_inline_executable() -> None:
-    from app.jobs.handlers import registry_from_features
-    from app.runtime.feature_catalog import load_feature
-
-    registry = registry_from_features((load_feature("rpg"),))
-
-    assert RPG_FOREGROUND_RECORD_TYPE not in registry.types()
-    assert "rpg.turn" in registry.types()

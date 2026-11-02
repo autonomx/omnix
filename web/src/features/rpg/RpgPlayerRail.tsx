@@ -1,14 +1,8 @@
 import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 import type { HermesRpgSuggestion } from './api/hermesClient';
-import type {
-  RpgGearPreview,
-  RpgHeroSummaryPreview,
-  RpgPartyMemberPreview,
-  RpgQuestPreview,
-  RpgStatPreview,
-  RpgSurvivalPreview,
-} from './rpgUiState';
+import type { RpgGearPreview, RpgHeroSummaryPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgStatPreview, RpgSurvivalPreview } from './rpgUiTypes';
 import './RpgVisualAssets.css';
+import './RpgPlayerRail.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
 const RPG_PARTY_CAPACITY = 4;
@@ -103,10 +97,6 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
             <span>Gold</span>
             <strong>{heroSummary.gold}</strong>
           </div>
-          <div>
-            <span>Renown</span>
-            <strong>{heroSummary.renown}</strong>
-          </div>
         </div>
       </section>
 
@@ -149,7 +139,7 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
             </button>
           ))}
         </div>
-        <small>Actions prepare a deterministic turn command.</small>
+        <small>Each fills in your next turn; send it when you are ready.</small>
       </section>
 
       <section className="rpg-card" aria-label="Active quests">

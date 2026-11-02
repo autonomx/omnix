@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from collections import Counter
 import hashlib
 import json
@@ -14,11 +15,12 @@ import sys
 import tempfile
 
 from architecture_analysis import (
-    AnalysisError, SourceAnalysis, Violation, is_production, load_layers, top_package, tracked_sources,
+    AnalysisError, SourceAnalysis, Violation, is_production, load_layers, module_name, top_package,
+    tracked_sources,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-RULES = tuple(f"AL{number:03}" for number in range(1, 18))
+RULES = tuple(f"AL{number:03}" for number in range(1, 22))
 MIGRATIONS = "src/app/persistence/migrations/"
 RETIRED_MIGRATIONS = "src/app/persistence/retired/"
 REGISTRY = "resources/architecture/migration-checksums.json"
@@ -223,6 +225,117 @@ def rpg_context_violations(analysis: SourceAnalysis) -> list[Violation]:
     return sorted(violations, key=lambda item: (item.path, item.fingerprint))
 
 
+# RQ-1.5 (docs/RPG_PRODUCTION_ROADMAP_2026-10-23.md §4.1 "Invariants"): over the modules a turn executes.
+_RPG_SAVE_CALLS = frozenset({"save_session", "save_session_to_postgres", "save_runtime_session"})
+# Where a campaign may be saved: persistence, and the commit step.
+_RPG_SAVE_OWNERS = ("app.apps.rpg.session.persistence", "app.apps.rpg.foundation.persistence",
+                    "app.apps.rpg.world.persistence", "app.apps.rpg.session.interaction_stages",
+                    "app.apps.rpg.session.service", "app.apps.rpg.session.durable_store",
+                    "app.apps.rpg.session.session_runtime_store")
+# The names a campaign's state goes by in turn code, and its sections read by string key.
+_RPG_STATE_NAMES = frozenset({"session", "state", "simulation", "simulation_state", "runtime", "runtime_state",
+                              "player_state", "inventory_state", "combat_state", "party_state", "quest_state"})
+_RPG_SECTION_KEYS = frozenset({"simulation_state", "runtime_state", "player_state", "inventory_state",
+                               "combat_state", "quest_state", "party_state", "survival", "world_model",
+                               "npc_index", "present_npc_state", "travel_state", "economy_state"})
+# Where a campaign's state may be written: the reducer (``foundation.state``), and the document's upgrade, which
+# reshapes an older version's document once, outside any turn, as a system turn with a pinned backup
+# (``session.campaign_state``'s upcasters and what they run, ``session.upgrades``; operator-notes.md "Upgrades").
+# And the save (AL018's owners), which keeps the stored record: the campaign's immutable seed, the revision an edit
+# outside a turn takes, the manifest.
+_RPG_STATE_OWNERS = ("app.apps.rpg.foundation.state", "app.apps.rpg.session.campaign_state",
+                     "app.apps.rpg.session.upgrades", "app.apps.rpg.session.service",
+                     "app.apps.rpg.session.persistence", "app.apps.rpg.session.durable_store")
+
+
+def _root_name(node: ast.AST) -> str:
+    while isinstance(node, (ast.Subscript, ast.Attribute)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else ""
+
+
+def _reads_a_state_section(node: ast.AST) -> bool:
+    """Any key read off a name that holds the simulation or runtime state (``simulation_state["rng_seed"]``,
+    ``runtime_state.get("interaction_seq")``): their fields are named once too (``FIELD_ACCESSORS``)."""
+    receiver = node.value if isinstance(node, ast.Subscript) else getattr(node.func, "value", None)
+    return isinstance(receiver, ast.Name) and receiver.id in {"simulation_state", "runtime_state"}
+
+
+def rpg_turn_path_violations(analysis: SourceAnalysis) -> list[Violation]:
+    """AL018-AL020 (RQ-1.5) over ``[rpg_turn_path]``: a campaign is saved only by the commit step (AL018), its
+    state is changed only by the reducer (AL019), and its sections are read through the typed view, not by string
+    key (AL020). Each counts per module; the baseline holds today's counts and shrinks to 0 by the end of RQ-2.
+    """
+    turn_path = set(analysis.config.get("rpg_turn_path", {}).get("modules", ()))
+    violations: list[Violation] = []
+    for path, tree in analysis.trees.items():
+        module = module_name(path)
+        if module not in turn_path:
+            continue
+        saves_allowed = any(module == owner or module.startswith(owner + ".") for owner in _RPG_SAVE_OWNERS)
+        owns_state = any(module == owner or module.startswith(owner + ".") for owner in _RPG_STATE_OWNERS)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and not saves_allowed:
+                name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+                if name in _RPG_SAVE_CALLS:
+                    violations.append(Violation("AL018", path, name, getattr(node, "lineno", 1)))
+            if owns_state:
+                continue
+            targets: list[ast.AST] = []
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+                targets = [node.target]
+            elif isinstance(node, ast.Delete):
+                targets = list(node.targets)
+            for target in targets:
+                if isinstance(target, ast.Subscript) and _root_name(target) in _RPG_STATE_NAMES:
+                    violations.append(Violation("AL019", path, _root_name(target), getattr(node, "lineno", 1)))
+            key = None
+            if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load):
+                key = node.slice.value if isinstance(node.slice, ast.Constant) else None
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get"
+                  and node.args and isinstance(node.args[0], ast.Constant)):
+                key = node.args[0].value
+            if isinstance(key, str) and (key in _RPG_SECTION_KEYS or _reads_a_state_section(node)):
+                violations.append(Violation("AL020", path, key, getattr(node, "lineno", 1)))
+    return violations
+
+
+def _docstrings(tree: ast.AST) -> set[int]:
+    found: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                found.add(id(first.value))
+    return found
+
+
+def rpg_world_content_violations(analysis: SourceAnalysis) -> list[Violation]:
+    """AL021 (RQ-2.8, A4): engine code holds no world content. A string in the ``[rpg_world_content]`` contexts that
+    names a shipped world's people, places or the ids the engine's old copies used (the watchlist) counts, per module
+    and name; docstrings do not. The worlds live in their bundles (``resources/examples/rpg/world-bundles/``)."""
+    policy = analysis.config.get("rpg_world_content", {})
+    names = [str(name) for name in policy.get("names", ()) if str(name)]
+    contexts = tuple(f"app.apps.rpg.{context}" for context in policy.get("contexts", ()))
+    if not names or not contexts:
+        return []
+    pattern = re.compile(r"(?<![A-Za-z0-9_])(" + "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+                         + r")(?![A-Za-z0-9])")
+    violations: list[Violation] = []
+    for path, tree in analysis.trees.items():
+        module = module_name(path)
+        if not any(module == context or module.startswith(context + ".") for context in contexts):
+            continue
+        docstrings = _docstrings(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+                violations.extend(Violation("AL021", path, name, getattr(node, "lineno", 1))
+                                  for name in pattern.findall(node.value))
+    return violations
+
+
 def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
     # The metric counts reciprocal package pairs. Lint additionally rejects
     # longer module-level package cycles, whose edges may use different modules.
@@ -280,7 +393,8 @@ def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
 def measure(sources: dict[str, str], config: dict, protected: dict[str, str]) -> dict:
     analysis = SourceAnalysis(sources, config)
     violations = (analysis.violations() + cycle_violations(analysis) + reciprocal_violations(analysis)
-                  + rpg_context_violations(analysis)
+                  + rpg_context_violations(analysis) + rpg_turn_path_violations(analysis)
+                  + rpg_world_content_violations(analysis)
                   + analysis.table_ownership_violations()
                   + migration_violations(sources, protected))
     counts = Counter((item.rule, item.path, item.fingerprint) for item in violations)

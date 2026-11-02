@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
+from app.apps.rpg.foundation.safe_values import copy_state
 from app.apps.rpg.narration.narrative_engine import (
     CampaignBibleSnapshot,
     EvidenceRecord,
@@ -23,7 +23,7 @@ _LIST_ID_FIELDS = {
 
 
 def _mapping(value: Any) -> dict[str, Any]:
-    return deepcopy(dict(value)) if isinstance(value, Mapping) else {}
+    return copy_state(dict(value)) if isinstance(value, Mapping) else {}
 
 
 def _row_id(row: Mapping[str, Any], fields: Sequence[str], index: int) -> str:
@@ -43,7 +43,7 @@ def _merge_rows(
         for index, value in enumerate(source, start=1):
             if not isinstance(value, Mapping):
                 continue
-            row = deepcopy(dict(value))
+            row = copy_state(dict(value))
             row_id = _row_id(row, fields, index)
             if row_id not in rows:
                 rows[row_id] = row
@@ -54,16 +54,16 @@ def _merge_entities(first: Any, second: Any) -> dict[str, Any]:
     entities = _mapping(second)
     for entity_id, value in _mapping(first).items():
         if not isinstance(value, Mapping):
-            entities.setdefault(str(entity_id), deepcopy(value))
+            entities.setdefault(str(entity_id), copy_state(value))
             continue
         existing = _mapping(entities.get(entity_id))
         # Established durable canon wins; portable materialization only fills gaps.
-        merged = deepcopy(existing)
+        merged = copy_state(existing)
         for key, item in value.items():
             if item not in (None, "", [], {}):
-                merged[key] = deepcopy(item)
+                merged[key] = copy_state(item)
             else:
-                merged.setdefault(key, deepcopy(item))
+                merged.setdefault(key, copy_state(item))
         entities[str(entity_id)] = merged
     return entities
 
@@ -79,7 +79,7 @@ def _merge_discovery(first: Any, second: Any) -> dict[str, Any]:
         },
         "discoveries": list(
             {
-                json.dumps(value, sort_keys=True, default=str): deepcopy(value)
+                json.dumps(value, sort_keys=True, default=str): copy_state(value)
                 for value in (
                     *list(left.get("discoveries") or ()),
                     *list(right.get("discoveries") or ()),
@@ -93,9 +93,9 @@ def _merged_document(
     durable: Mapping[str, Any],
     portable: Mapping[str, Any],
 ) -> dict[str, Any]:
-    merged = deepcopy(dict(durable))
+    merged = copy_state(dict(durable))
     for key, value in portable.items():
-        merged.setdefault(key, deepcopy(value))
+        merged.setdefault(key, copy_state(value))
     for key, fields in _LIST_ID_FIELDS.items():
         merged[key] = _merge_rows(durable.get(key), portable.get(key), fields)
     merged["entities"] = _merge_entities(
@@ -122,8 +122,7 @@ def _merged_document(
 
 
 def _content_hash(document: Mapping[str, Any]) -> str:
-    payload = deepcopy(dict(document))
-    payload.pop("content_hash", None)
+    payload = {key: value for key, value in document.items() if key != "content_hash"}  # only read: no copy
     encoded = json.dumps(
         payload,
         sort_keys=True,

@@ -12,7 +12,6 @@ _MAX_STREAM_CHUNKS = 40
 _MAX_PENDING_INTERRUPTION = 4
 _MAX_INTERRUPTION_LOG = 12
 _MAX_EMOTION_ACTORS = 16
-_MAX_INTERRUPTS_PER_TICK = 2
 _MAX_SEQUENCE_ACTORS = 8
 
 _VALID_TURN_STATUS = {
@@ -261,33 +260,6 @@ def _sort_key_sequence_actor(item: Dict[str, Any]) -> Tuple[int, int, str]:
         _role_precedence(cast(Any, item.get("role"))),
         _safe_int(item.get("priority"), 0),
         _safe_str(item.get("actor_id")),
-    )
-
-
-def _normalize_interruption_candidate(item: Dict[str, Any]) -> Dict[str, Any]:
-    item = _safe_dict(item)
-    actor_id = _safe_str(item.get("actor_id"))
-    target_id = _safe_str(item.get("target_id"))
-    role = _normalize_role(item.get("role") or "companion")
-    return {
-        "actor_id": actor_id,
-        "target_id": target_id,
-        "turn_id": _safe_str(item.get("turn_id")),
-        "reason": _safe_str(item.get("reason")),
-        "priority": _safe_int(item.get("priority"), 0),
-        "role": role,
-        "target_sequence_index": max(0, _safe_int(item.get("target_sequence_index"), 0)),
-    }
-
-
-def _sort_key_interruption_candidate(item: Dict[str, Any]) -> Tuple[int, int, int, str, str]:
-    item = _normalize_interruption_candidate(item)
-    return (
-        _safe_int(item.get("priority"), 0) * -1,
-        _safe_int(item.get("target_sequence_index"), 0),
-        _role_precedence(cast(Any, item.get("role"))),
-        _safe_str(item.get("actor_id")),
-        _safe_str(item.get("target_id")),
     )
 
 

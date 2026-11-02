@@ -31,6 +31,3 @@ class ConversationHooks:
 
     write_line: ConversationLineWriter | None = None
     after_tick: ConversationTickObserver | None = None
-
-
-NO_CONVERSATION_HOOKS = ConversationHooks()

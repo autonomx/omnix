@@ -30,6 +30,7 @@ from app.apps.rpg.genesis.forge.turn_grounding import (
     narrative_grounding_footer,
 )
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
+from app.apps.rpg.foundation.state import access as _sections
 
 _SCENE_MODES = {"observation", "investigation", "travel"}
 _DIALOGUE_MODES = {"dialogue", "conversation", "social"}
@@ -86,18 +87,28 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
     visible = _mapping(result.get("visible_response"))
     visible_npc = _mapping(visible.get("npc"))
     resolved = _mapping(result.get("resolved_result") or result.get("result"))
+    # The turn's target speaks only when it is a person: a journey's place, an item or an offer is no speaker. A
+    # world's own people are persons whatever their ids look like (Vesper-9's are "ent:actors:...").
+    from app.apps.rpg.foundation.state.people import world_people
+
+    people = world_people(_sections.simulation_state_of(_mapping(result.get("session"))))
+    target = _text(resolved.get("target_id"))
+    target_kind = _text(resolved.get("target_kind")).casefold()
+    typed_as = target.split(":", 1)[0].casefold() if ":" in target else ""
+    if target not in people and ((typed_as and typed_as != "npc") or target_kind not in {"", "npc", "person"}):
+        target = ""
     raw_id = _text(
         npc.get("speaker_id")
         or visible_npc.get("speaker_id")
-        or resolved.get("target_id")
+        or target
     )
     name = _text(
         npc.get("speaker")
         or visible_npc.get("speaker")
-        or resolved.get("target_name")
+        or (resolved.get("target_name") if target else "")
         or "NPC"
     )
-    if raw_id and not raw_id.startswith("npc:"):
+    if raw_id and raw_id not in people and not raw_id.startswith("npc:"):
         raw_id = f"npc:{raw_id.casefold().replace(' ', '_')}"
     if not raw_id:
         raw_id = f"npc:{name.casefold().replace(' ', '_')}"
@@ -122,7 +133,7 @@ def _response_mode(result: Mapping[str, Any]) -> str:
 
 def _profile(result: Mapping[str, Any], default: PresentationProfile) -> PresentationProfile:
     session = _mapping(result.get("session"))
-    runtime = _mapping(session.get("runtime_state") or result.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(session) or _sections.runtime_state_of(result))
     settings = _mapping(runtime.get("runtime_settings") or runtime.get("settings"))
     value = _text(
         result.get("presentation_profile")
@@ -458,7 +469,8 @@ def _adopt_compact_provider_dialogue(
         or resolved.get("target_id")
         or f"npc:{speaker.casefold().replace(' ', '_')}"
     )
-    turn_id = _text(result.get("turn_id")) or "turn:0"
+    # Keyed by the committed interaction when there is one, as presentation keys every canonical response.
+    turn_id = _text(result.get("interaction_id")) or _text(result.get("turn_id")) or "turn:0"
     request_id = f"dialogue:{session_id}:{turn_id}"
     block_id = f"{request_id}:provider-line"
     response = CanonicalNarrativeResponse(
@@ -510,6 +522,11 @@ def _adopt_compact_provider_dialogue(
             "sequence": 0,
         }
     ]
+    # What the exchange led to, the game's own words: said after the line, by the narrator.
+    aftermath = _text(visible.get("aftermath"))
+    if aftermath:
+        messages.append({"kind": "narration", "speaker": "Omnix (Narrator)", "text": aftermath,
+                         "block_id": f"{request_id}:aftermath", "sequence": 1})
     projected_visible.update(
         {
             "messages": messages,
@@ -517,7 +534,8 @@ def _adopt_compact_provider_dialogue(
             "plain_text": (
                 f"{_text(visible.get('narration'))}\n\n" if _text(visible.get("narration")) else ""
             )
-            + f'{speaker}: "{line}"',
+            + f'{speaker}: "{line}"'
+            + (f"\n\n{aftermath}" if aftermath else ""),
         }
     )
     result.update(projection)
@@ -625,6 +643,58 @@ def _resolved_significance(
     if mode in {"combat", "transaction", "failure", "recovery"}:
         return NarrativeSignificance.NOTABLE
     return NarrativeSignificance.ROUTINE
+
+
+def publish_fixed_narration(
+    result: dict[str, Any],
+    *,
+    session_id: str,
+    text: str,
+    kind: BeatKind,
+    purpose: BeatPurpose,
+    source: str,
+) -> dict[str, Any]:
+    """Publish a line the game wrote itself (a clarifying question) as the turn's canonical prose: no model call."""
+    # Keyed by the committed interaction when there is one, as presentation keys every canonical response.
+    turn_id = _text(result.get("interaction_id")) or _text(result.get("turn_id")) or "turn:0"
+    request_id = f"{purpose.value}:{session_id}:{turn_id}"
+    block_id = f"{request_id}:line"
+    response = CanonicalNarrativeResponse(
+        response_id=f"narrative:{session_id}:{turn_id}:1",
+        request_id=request_id,
+        turn_id=turn_id,
+        campaign_id=session_id,
+        revision=1,
+        blocks=(NarrativeBlock(block_id=block_id, beat_id=f"{request_id}:{purpose.value}", sequence=0, kind=kind,
+                               purpose=purpose, text=text, metadata={"source": source}),),
+        evidence_used=(),
+        validation=ValidationReport(passed=True, metadata={"fixed_line": True}),
+        generation=GenerationMetadata(source=source, beat_count=1, metadata={"deterministic_fallback_used": False}),
+        delivery=DeliveryMetadata(mode=DeliveryMode.BLOCKING, delivered_block_ids=(block_id,)),
+        metadata={"llm_prose_required": False},
+    ).with_content_hash()
+    projection = legacy_response_projection(response)
+    result.update(projection)
+    result["canonical_visible_response"] = dict(projection["visible_response"])
+    result["canonical_narrative_response"] = response.as_dict()
+    result["canonical_narrative_source"] = source
+    result["legacy_visible_prose_consumed"] = False
+    for nested_key in ("result", "resolved_result"):
+        nested = _mapping(result.get(nested_key))
+        if nested:
+            nested.update(projection)
+            nested["canonical_narrative_response"] = response.as_dict()
+            result[nested_key] = nested
+    return result
+
+
+def narration_needs_writer(result: Mapping[str, Any]) -> bool:
+    """The turn has no words of its own yet: the narrative writer must write them (a person's line is adopted)."""
+    if not isinstance(result, Mapping) or result.get("ok") is not True:
+        return False
+    if isinstance(result.get("canonical_narrative_response"), Mapping):
+        return False
+    return _response_mode(dict(result)) not in _DIALOGUE_MODES
 
 
 def canonicalize_resolved_turn_result(

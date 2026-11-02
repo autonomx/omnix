@@ -92,14 +92,8 @@ def _event(submission_id: str) -> dict:
     }
 
 
-def _prepare(
-    database: PostgresDatabase,
-    *,
-    campaign_id: str,
-    submission_id: str,
-    lease_job: bool,
-    record_only: bool = False,
-) -> tuple[str, dict]:
+def _prepare(database: PostgresDatabase, *, campaign_id: str, submission_id: str) -> dict:
+    """A campaign, and its submission claimed and started as the turn route claims it (F2: no job behind it)."""
     context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         work.rpg.create_campaign(
@@ -111,38 +105,6 @@ def _prepare(
             schema_version="test-schema",
             seed="seed",
         )
-        job = work.jobs.create_job(
-            context,
-            {
-                "id": f"job:{campaign_id}",
-                "module": "rpg",
-                "job_type": "rpg.turn.foreground_record" if record_only else "rpg.turn",
-                "resource_class": "cpu",
-                "input_payload": {"submission_id": submission_id},
-                "metadata": {
-                    "compat_contract": {
-                        "input_ref": {"session_id": campaign_id},
-                        "compat": {"record_only": record_only},
-                    }
-                },
-            },
-        )
-        credentials = {}
-        if lease_job:
-            leased = work.jobs.claim_next(
-                context,
-                worker_id="worker:test",
-                resource_classes=["cpu"],
-                lease_seconds=300,
-            )
-            assert leased is not None
-            credentials = {"worker_id": leased["lease_owner"], "lease_token": leased["lease_token"]}
-            work.jobs.mark_running(
-                context,
-                job_id=job["id"],
-                worker_id=str(leased["lease_owner"]),
-                lease_token=str(leased["lease_token"]),
-            )
         claim = work.foreground_submissions.claim(
             context,
             session_id=campaign_id,
@@ -150,13 +112,6 @@ def _prepare(
             lease_seconds=300,
         )
         assert claim["owner"] is True
-        assert work.foreground_submissions.attach_job(
-            context,
-            session_id=campaign_id,
-            submission_id=submission_id,
-            claim_token=str(claim["claim_token"]),
-            job_id=job["id"],
-        )
         assert work.foreground_submissions.start_execution(
             context,
             session_id=campaign_id,
@@ -164,7 +119,7 @@ def _prepare(
             claim_token=str(claim["claim_token"]),
         )
         work.commit()
-    return job["id"], {"submission_claim_token": claim["claim_token"], **credentials}
+    return {"submission_claim_token": claim["claim_token"]}
 
 
 def test_foreground_turn_commits_every_authoritative_record_together() -> None:
@@ -173,12 +128,7 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
     submission_id = "submission:atomic"
     try:
         _reset(database)
-        job_id, credentials = _prepare(
-            database,
-            campaign_id=campaign_id,
-            submission_id=submission_id,
-            lease_job=True,
-        )
+        credentials = _prepare(database, campaign_id=campaign_id, submission_id=submission_id)
         persisted = persist_foreground_turn(
             **credentials,
             database=database,
@@ -207,10 +157,7 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
                 "(SELECT COUNT(*) FROM omnix_outbox_events WHERE aggregate_id = %s) ",
                 (campaign_id, campaign_id, campaign_id, campaign_id),
             ).fetchone()
-            job = connection.execute(
-                "SELECT status FROM omnix_jobs WHERE id = %s",
-                (job_id,),
-            ).fetchone()
+            jobs = connection.execute("SELECT COUNT(*) FROM omnix_jobs").fetchone()[0]
             submission = connection.execute(
                 "SELECT status, interaction_id, response FROM omnix_rpg_foreground_submissions "
                 "WHERE session_id = %s AND submission_id = %s",
@@ -220,109 +167,10 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
         # Revision 1 writes no full snapshot: one is due every OMNIX_RPG_SNAPSHOT_EVERY revisions (WP-5.6).
         assert tuple(int(value) for value in counts[:3]) == (1, 1, 0)
         assert int(counts[3]) == 0  # RPG events have no outbox consumer (WP-5.3)
-        assert str(job[0]) == "completed"
+        assert int(jobs) == 0  # a foreground turn writes no job (F2)
         assert str(submission[0]) == "completed"
         assert str(submission[1]) == f"interaction:{campaign_id}:1"
         assert dict(submission[2])["interaction_id"] == "interaction:1"
-    finally:
-        database.close()
-
-
-def test_job_completion_failure_rolls_back_turn_campaign_and_outbox() -> None:
-    database = _database()
-    campaign_id = "campaign:rollback"
-    submission_id = "submission:rollback"
-    try:
-        _reset(database)
-        job_id, credentials = _prepare(
-            database,
-            campaign_id=campaign_id,
-            submission_id=submission_id,
-            lease_job=False,
-        )
-        with pytest.raises(RuntimeError, match="no active lease"):
-            persist_foreground_turn(
-                **credentials,
-                database=database,
-                session_id=campaign_id,
-                player_input="I buy a ration.",
-                session=_next_session(campaign_id),
-                result={"ok": True, "narration": "You buy a ration."},
-                event=_event(submission_id),
-                submission_id=submission_id,
-            )
-
-        with database.connection() as connection:
-            campaign = connection.execute(
-                "SELECT revision FROM omnix_rpg_campaigns WHERE id = %s",
-                (campaign_id,),
-            ).fetchone()
-            turn_count = connection.execute(
-                "SELECT COUNT(*) FROM omnix_rpg_turns WHERE campaign_id = %s",
-                (campaign_id,),
-            ).fetchone()[0]
-            interaction_count = connection.execute(
-                "SELECT COUNT(*) FROM omnix_rpg_interactions WHERE campaign_id = %s",
-                (campaign_id,),
-            ).fetchone()[0]
-            job = connection.execute(
-                "SELECT status FROM omnix_jobs WHERE id = %s",
-                (job_id,),
-            ).fetchone()
-            submission = connection.execute(
-                "SELECT status FROM omnix_rpg_foreground_submissions "
-                "WHERE session_id = %s AND submission_id = %s",
-                (campaign_id, submission_id),
-            ).fetchone()
-        assert int(campaign[0]) == 0
-        assert int(turn_count) == 0
-        assert int(interaction_count) == 0
-        assert str(job[0]) == "queued"
-        assert str(submission[0]) == "claimed"
-    finally:
-        database.close()
-
-
-def test_record_only_foreground_turn_commits_without_worker_lease() -> None:
-    database = _database()
-    campaign_id = "campaign:record-only"
-    submission_id = "submission:record-only"
-    try:
-        _reset(database)
-        job_id, credentials = _prepare(
-            database,
-            campaign_id=campaign_id,
-            submission_id=submission_id,
-            lease_job=False,
-            record_only=True,
-        )
-
-        persisted = persist_foreground_turn(
-            **credentials,
-            database=database,
-            session_id=campaign_id,
-            player_input="I buy a ration.",
-            session=_next_session(campaign_id),
-            result={"ok": True, "narration": "You buy a ration."},
-            event=_event(submission_id),
-            submission_id=submission_id,
-        )
-
-        assert persisted["transaction"] == "postgresql_unit_of_work"
-        assert persisted["turn"]["id"] == f"turn:{campaign_id}:1"
-        assert persisted["interaction_record_id"] == f"interaction:{campaign_id}:1"
-        with database.connection() as connection:
-            job = connection.execute(
-                "SELECT status, lease_token FROM omnix_jobs WHERE id = %s",
-                (job_id,),
-            ).fetchone()
-            revision = connection.execute(
-                "SELECT revision FROM omnix_rpg_campaigns WHERE id = %s",
-                (campaign_id,),
-            ).fetchone()[0]
-        assert str(job[0]) == "completed"
-        assert job[1] is None
-        assert int(revision) == 1
     finally:
         database.close()
 
@@ -333,8 +181,7 @@ def test_foreground_transaction_cannot_borrow_an_existing_claim(supplied_claim) 
     campaign_id, submission_id = "campaign:claim-fence", "submission:claim-fence"
     try:
         _reset(database)
-        job_id, _ = _prepare(database, campaign_id=campaign_id, submission_id=submission_id,
-                             lease_job=False, record_only=True)
+        _prepare(database, campaign_id=campaign_id, submission_id=submission_id)
         with pytest.raises(JobClaimConflict, match="original claim"):
             persist_foreground_turn(
                 database=database, session_id=campaign_id, player_input="I buy a ration.",
@@ -344,85 +191,62 @@ def test_foreground_transaction_cannot_borrow_an_existing_claim(supplied_claim) 
             )
         with database.connection() as connection:
             assert connection.execute("SELECT revision FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,)).fetchone()[0] == 0
-            assert connection.execute("SELECT status FROM omnix_jobs WHERE id = %s", (job_id,)).fetchone()[0] == "queued"
+            assert connection.execute(
+                "SELECT status FROM omnix_rpg_foreground_submissions WHERE submission_id = %s", (submission_id,)
+            ).fetchone()[0] == "claimed"
             assert connection.execute("SELECT COUNT(*) FROM omnix_rpg_turns WHERE campaign_id = %s", (campaign_id,)).fetchone()[0] == 0
     finally:
         database.close()
 
 
-@pytest.mark.parametrize("supplied_lease", [None, "stale-token"])
-def test_foreground_transaction_cannot_borrow_a_workers_current_lease(supplied_lease) -> None:
-    database = _database()
-    campaign_id, submission_id = "campaign:worker-fence", "submission:worker-fence"
-    try:
-        _reset(database)
-        job_id, credentials = _prepare(database, campaign_id=campaign_id,
-                                       submission_id=submission_id, lease_job=True)
-        credentials["lease_token"] = supplied_lease
-        with pytest.raises((JobClaimConflict, RuntimeError)):
-            persist_foreground_turn(
-                **credentials, database=database, session_id=campaign_id,
-                player_input="I buy a ration.", session=_next_session(campaign_id),
-                result={"ok": True}, event=_event(submission_id), submission_id=submission_id,
-            )
-        with database.connection() as connection:
-            assert connection.execute("SELECT revision FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,)).fetchone()[0] == 0
-            assert connection.execute("SELECT status FROM omnix_jobs WHERE id = %s", (job_id,)).fetchone()[0] == "running"
-            assert connection.execute("SELECT COUNT(*) FROM omnix_rpg_turns WHERE campaign_id = %s", (campaign_id,)).fetchone()[0] == 0
-    finally:
-        database.close()
-
-
-def test_foreground_mirror_carries_original_claim_through_atomic_turn_and_replay(monkeypatch) -> None:
-    from app.apps.rpg.session.jobs.turn_job_mirror import _apply_turn_with_job_mirror
-    from app.jobs.foreground_execution import current_foreground_execution
-    from app.jobs import store as stores
-    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
+def test_foreground_turn_carries_its_claim_through_the_atomic_commit_and_replays(monkeypatch) -> None:
+    from app.apps.rpg.foundation.persistence.foreground_submissions import PostgresForegroundSubmissionStoreAdapter
+    from app.apps.rpg.session.jobs.foreground_context import current_foreground_claim
+    from app.apps.rpg.session.jobs.foreground_turn import execute_foreground_turn
 
     database = _database()
-    campaign_id, submission_id = "campaign:mirrored", "submission:mirrored"
+    campaign_id, submission_id = "campaign:foreground", "submission:foreground"
     try:
         _reset(database)
         from app.persistence.startup import bootstrap_postgresql_runtime
 
         bootstrap_postgresql_runtime(database)
-        store = PostgresJobStoreAdapter(database)
-        monkeypatch.setattr(stores, "default_job_store", lambda: store)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.rpg.create_campaign(
-                store.context, campaign_id=campaign_id, title="Scoped foreground",
+                context, campaign_id=campaign_id, title="Scoped foreground",
                 state=_initial_session(campaign_id), engine_version="test-engine",
                 schema_version="test-schema", seed="seed",
             )
             work.commit()
+        submissions = PostgresForegroundSubmissionStoreAdapter(database)
         calls = []
 
         def apply_turn(session_id, command):
-            execution = current_foreground_execution()
-            assert execution is not None
-            calls.append(execution)
+            claim = current_foreground_claim()
+            assert claim is not None and claim.submission_id == submission_id
+            calls.append(claim)
             result = {"ok": True, "narration": "You buy a ration."}
-            transaction = persist_foreground_turn(
+            persist_foreground_turn(
                 database=database, session_id=session_id, player_input=command,
                 session=_next_session(session_id), result=result, event=_event(submission_id),
-                submission_id=submission_id, submission_claim_token=execution.claim_token,
+                submission_id=submission_id, submission_claim_token=claim.claim_token,
             )
-            assert transaction["job"]["status"] == "completed"
+            claim.mark_committed()
             return result
 
-        result = _apply_turn_with_job_mirror(
-            apply_turn, campaign_id, "I buy a ration.", submission_id=submission_id,
-        )
-        replay = _apply_turn_with_job_mirror(
-            apply_turn, campaign_id, "I buy a ration.", submission_id=submission_id,
-        )
+        result = execute_foreground_turn(apply_turn, campaign_id, "I buy a ration.", submission_id=submission_id,
+                                         submissions=submissions)
+        replay = execute_foreground_turn(apply_turn, campaign_id, "I buy a ration.", submission_id=submission_id,
+                                         submissions=submissions)
         assert result["ok"] is True
         assert replay["idempotent_replay"] is True
         assert len(calls) == 1
-        assert current_foreground_execution() is None
-        jobs = store.list_jobs()
-        assert len(jobs) == 1
-        assert jobs[0].status.value == "completed"
-        assert jobs[0].lease is None
+        assert current_foreground_claim() is None
+        with database.connection() as connection:
+            assert connection.execute("SELECT COUNT(*) FROM omnix_jobs").fetchone()[0] == 0
+            assert connection.execute(
+                "SELECT status FROM omnix_rpg_foreground_submissions WHERE submission_id = %s", (submission_id,)
+            ).fetchone()[0] == "completed"
     finally:
         database.close()

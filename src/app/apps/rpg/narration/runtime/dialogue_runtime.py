@@ -17,20 +17,17 @@ from app.apps.rpg.narration.runtime.dialogue_runtime_state import (
     _EMOTION_ORDER,
     _MAX_EMOTION_ACTORS,
     _MAX_INTERRUPTION_LOG,
-    _MAX_INTERRUPTS_PER_TICK,
     _MAX_PENDING_INTERRUPTION,
     _MAX_RUNTIME_TURNS,
     _MAX_SEQUENCE_ACTORS,
     _MAX_STREAM_CHUNKS,
     _MAX_TURN_CHUNKS,
-    _clamp,
     _extract_actor_list,
     _get_default_runtime_companions,
     _get_default_runtime_npcs,
     _normalize_dialogue_state,
     _normalize_emotion_entry,
     _normalize_emotion_name,
-    _normalize_interruption_candidate,
     _normalize_interrupt_log_item,
     _normalize_pending_interruption,
     _normalize_role,
@@ -41,7 +38,6 @@ from app.apps.rpg.narration.runtime.dialogue_runtime_state import (
     _safe_float,
     _safe_int,
     _sort_key_chunk,
-    _sort_key_interruption_candidate,
     _sort_key_interrupt_log,
     _sort_key_pending_interrupt,
     _sort_key_sequence_actor,
@@ -54,10 +50,6 @@ from app.apps.rpg.foundation.safe_values import (
     list_copy as _safe_list,
     safe_str as _safe_str,
 )
-from app.apps.rpg.narration.runtime.dialogue_runtime_state import (
-    _role_precedence as _role_precedence  # noqa: F401,
-)
-
 
 
 def ensure_runtime_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -172,12 +164,6 @@ def _rebuild_turn_text_from_chunks(turn: Dict[str, Any]) -> str:
     return "".join(parts)
 
 
-def trim_runtime_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize and trim runtime dialogue state to bounded caps."""
-    dialogue_state = get_runtime_dialogue_state(simulation_state)
-    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
-
-
 def begin_runtime_turn(
     simulation_state: Dict[str, Any],
     *,
@@ -254,72 +240,6 @@ def begin_runtime_turn(
     dialogue_state["sequence_tick"] = tick
     dialogue_state["turn_cursor"] = sequence_index
     dialogue_state["turns"] = turns
-    dialogue_state["stream"] = stream_state
-
-    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
-
-
-def append_runtime_stream_chunk(
-    simulation_state: Dict[str, Any],
-    *,
-    turn_id: str,
-    actor_id: str,
-    speaker_id: str = "",
-    text: str,
-    chunk_index: int,
-    final: bool = False,
-) -> Dict[str, Any]:
-    """Append a structured runtime stream chunk deterministically.
-
-    Duplicate chunk keys overwrite older copies deterministically.
-    """
-    simulation_state = ensure_runtime_state(simulation_state)
-    dialogue_state = get_runtime_dialogue_state(simulation_state)
-    turns = list(_safe_list(dialogue_state.get("turns")))
-    stream_state = _safe_dict(dialogue_state.get("stream"))
-
-    turn_id = _safe_str(turn_id)
-    actor_id = _safe_str(actor_id)
-    speaker_id = _safe_str(speaker_id) or actor_id
-    text = _safe_str(text)
-    chunk_index = max(0, _safe_int(chunk_index, 0))
-
-    if not turn_id or not actor_id:
-        return simulation_state
-
-    chunk = _normalize_stream_chunk({
-        "turn_id": turn_id,
-        "chunk_index": chunk_index,
-        "actor_id": actor_id,
-        "speaker_id": speaker_id,
-        "text": text,
-        "final": bool(final),
-    })
-
-    turn_idx = _find_turn_index_by_id(turns, turn_id)
-    if turn_idx < 0:
-        return simulation_state
-
-    turn = _normalize_turn(turns[turn_idx])
-    turn_chunks = list(_safe_list(turn.get("chunks")))
-    turn_chunks.append(chunk)
-    turn_chunks = _dedupe_and_sort_turn_chunks(turn_chunks)
-    turn["chunks"] = turn_chunks
-    turn["text"] = _rebuild_turn_text_from_chunks(turn)
-    if turn["status"] not in {"complete", "interrupted"}:
-        turn["status"] = "streaming"
-
-    turns[turn_idx] = _normalize_turn(turn)
-    turns = sorted(turns, key=_sort_key_turn)[-_MAX_RUNTIME_TURNS:]
-
-    global_chunks = list(_safe_list(stream_state.get("chunks")))
-    global_chunks.append(chunk)
-    stream_state["chunks"] = _dedupe_and_sort_global_stream_chunks(global_chunks)
-    stream_state["active"] = True
-    stream_state["active_turn_id"] = turn_id
-
-    dialogue_state["turns"] = turns
-    dialogue_state["active_turn_id"] = turn_id
     dialogue_state["stream"] = stream_state
 
     return _set_runtime_dialogue_state(simulation_state, dialogue_state)
@@ -588,140 +508,6 @@ def start_runtime_sequence(
     return _set_runtime_dialogue_state(simulation_state, dialogue_state)
 
 
-def choose_runtime_interruptions(
-    simulation_state: Dict[str, Any],
-    *,
-    active_turn_id: str,
-    sequence: List[Dict[str, Any]] | None = None,
-    context: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
-    """Choose deterministic bounded interruption candidates.
-
-    This selector is pure with respect to return value. It does not mutate state.
-    """
-    simulation_state = ensure_runtime_state(simulation_state)
-    dialogue_state = get_runtime_dialogue_state(simulation_state)
-    turns = list(_safe_list(dialogue_state.get("turns")))
-    interruption_log = list(_safe_list(dialogue_state.get("interruption_log")))
-    context = _safe_dict(context)
-
-    active_turn_id = _safe_str(active_turn_id)
-    if not active_turn_id:
-        return []
-
-    active_turn_idx = _find_turn_index_by_id(turns, active_turn_id)
-    if active_turn_idx < 0:
-        return []
-
-    active_turn = _normalize_turn(turns[active_turn_idx])
-    active_tick = _safe_int(active_turn.get("tick"), 0)
-    active_actor_id = _safe_str(active_turn.get("actor_id"))
-
-    if sequence is None:
-        sequence = _safe_list(dialogue_state.get("sequence_participants"))
-
-    sequence_items = [
-        _normalize_sequence_actor(v)
-        for v in _safe_list(sequence)
-        if isinstance(v, dict)
-    ]
-
-    by_actor_id = {
-        _safe_str(v.get("actor_id")): v
-        for v in sequence_items
-        if _safe_str(v.get("actor_id"))
-    }
-
-    interruption_count_this_tick = 0
-    interrupted_actor_ids_this_tick = set()
-    interrupted_target_ids_this_tick = set()
-    for item in interruption_log:
-        item = _normalize_interrupt_log_item(item)
-        if _safe_int(item.get("tick"), 0) != active_tick:
-            continue
-        interruption_count_this_tick += 1
-        interrupted_actor_ids_this_tick.add(_safe_str(item.get("actor_id")))
-        interrupted_target_ids_this_tick.add(_safe_str(item.get("target_id")))
-
-    if interruption_count_this_tick >= _MAX_INTERRUPTS_PER_TICK:
-        return []
-
-    target_sequence_index = 0
-    if active_actor_id in by_actor_id:
-        target_sequence_index = _safe_int(by_actor_id[active_actor_id].get("sequence_index"), 0)
-
-    base_priority_bonus = _safe_int(context.get("interruption_priority_bonus"), 0)
-    threat_tag = bool(context.get("threat"))
-    tension_tag = bool(context.get("tension"))
-
-    candidates: List[Dict[str, Any]] = []
-    for item in sequence_items:
-        actor_id = _safe_str(item.get("actor_id"))
-        if not actor_id or actor_id == active_actor_id:
-            continue
-        if actor_id in interrupted_actor_ids_this_tick:
-            continue
-        if active_actor_id in interrupted_target_ids_this_tick:
-            continue
-
-        role = _normalize_role(item.get("role"))
-        if role not in {"companion", "npc"}:
-            continue
-
-        emotion_record = get_runtime_emotion(simulation_state, actor_id)
-        emotion_name = _safe_str(emotion_record.get("emotion"))
-        emotion_intensity = _safe_float(emotion_record.get("intensity"), 0.0)
-
-        priority = 0
-        priority += _safe_int(item.get("interrupt_priority"), 0)
-        priority += _safe_int(item.get("interjection_score"), 0)
-        priority += base_priority_bonus
-        if threat_tag:
-            priority += 2
-        if tension_tag:
-            priority += 1
-        if role == "companion":
-            priority += 1
-        if emotion_name in {"tense", "stern", "wary", "shaken"}:
-            priority += 1
-        if emotion_intensity >= 0.75:
-            priority += 1
-
-        reason = _safe_str(context.get("reason"))
-        if not reason:
-            if threat_tag and role == "companion":
-                reason = "protective_reaction"
-            elif tension_tag:
-                reason = "tense_interjection"
-            else:
-                reason = "runtime_interjection"
-
-        candidates.append(_normalize_interruption_candidate({
-            "actor_id": actor_id,
-            "target_id": active_actor_id,
-            "turn_id": active_turn_id,
-            "reason": reason,
-            "priority": priority,
-            "role": role,
-            "target_sequence_index": target_sequence_index,
-        }))
-
-    deduped: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    for item in candidates:
-        key = (
-            _safe_str(item.get("actor_id")),
-            _safe_str(item.get("target_id")),
-        )
-        current = deduped.get(key)
-        if current is None or _sort_key_interruption_candidate(item) < _sort_key_interruption_candidate(current):
-            deduped[key] = item
-
-    out = sorted(deduped.values(), key=_sort_key_interruption_candidate)
-    out = out[: max(0, _MAX_INTERRUPTS_PER_TICK - interruption_count_this_tick)]
-    out = out[:_MAX_PENDING_INTERRUPTION]
-    return out
-
-
 def apply_runtime_interruptions(
     simulation_state: Dict[str, Any],
     *,
@@ -739,41 +525,6 @@ def apply_runtime_interruptions(
     normalized = sorted(normalized, key=_sort_key_pending_interrupt)[:_MAX_PENDING_INTERRUPTION]
     dialogue_state["pending_interruptions"] = normalized
     return _set_runtime_dialogue_state(simulation_state, dialogue_state)
-
-
-def stream_runtime_text_segments(
-    simulation_state: Dict[str, Any],
-    *,
-    turn_id: str,
-    actor_id: str,
-    speaker_id: str = "",
-    segments: List[str],
-    finalize: bool = True,
-    final_text: str = "",
-) -> Dict[str, Any]:
-    """Append a deterministic ordered list of text segments as structured stream chunks."""
-    simulation_state = ensure_runtime_state(simulation_state)
-
-    normalized_segments = [_safe_str(v) for v in _safe_list(segments)]
-    for idx, segment in enumerate(normalized_segments):
-        simulation_state = append_runtime_stream_chunk(
-            simulation_state,
-            turn_id=turn_id,
-            actor_id=actor_id,
-            speaker_id=speaker_id,
-            text=segment,
-            chunk_index=idx,
-            final=False,
-        )
-
-    if finalize:
-        simulation_state = finalize_runtime_turn(
-            simulation_state,
-            turn_id=turn_id,
-            final_text=final_text,
-        )
-
-    return simulation_state
 
 
 def _sort_key_emotion_actor_entry(item: Tuple[str, Dict[str, Any]]) -> Tuple[int, str, int]:
@@ -811,54 +562,6 @@ def update_runtime_emotion(
     emotions[actor_id] = normalized
 
     items = sorted(emotions.items(), key=_sort_key_emotion_actor_entry)
-    if len(items) > _MAX_EMOTION_ACTORS:
-        items = items[-_MAX_EMOTION_ACTORS:]
-
-    dialogue_state["emotions"] = {
-        _safe_str(k): _normalize_emotion_entry(k, v)
-        for k, v in items
-        if _safe_str(k)
-    }
-    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
-
-
-def decay_runtime_emotions(
-    simulation_state: Dict[str, Any],
-    *,
-    tick: int,
-) -> Dict[str, Any]:
-    """Deterministically decay emotional continuity by tick delta.
-
-    Decay rule:
-        - subtract 0.15 per elapsed tick
-        - if resulting intensity <= 0.10 => neutral / 0.0
-    """
-    simulation_state = ensure_runtime_state(simulation_state)
-    dialogue_state = get_runtime_dialogue_state(simulation_state)
-    emotions = _safe_dict(dialogue_state.get("emotions"))
-    tick = _safe_int(tick, 0)
-
-    out: Dict[str, Dict[str, Any]] = {}
-    for actor_id in sorted(emotions.keys()):
-        current = _normalize_emotion_entry(actor_id, cast(Any, emotions.get(actor_id)))
-        updated_tick = _safe_int(current.get("updated_tick"), 0)
-        delta = max(0, tick - updated_tick)
-        intensity = _safe_float(current.get("intensity"), 0.0)
-        if delta > 0:
-            intensity = _clamp(intensity - (0.15 * delta), 0.0, 1.0)
-
-        emotion_name = _safe_str(current.get("emotion"))
-        if intensity <= 0.10:
-            emotion_name = "neutral"
-            intensity = 0.0
-
-        out[actor_id] = _normalize_emotion_entry(actor_id, {
-            "emotion": emotion_name,
-            "intensity": intensity,
-            "updated_tick": tick if delta > 0 else updated_tick,
-        })
-
-    items = sorted(out.items(), key=_sort_key_emotion_actor_entry)
     if len(items) > _MAX_EMOTION_ACTORS:
         items = items[-_MAX_EMOTION_ACTORS:]
 

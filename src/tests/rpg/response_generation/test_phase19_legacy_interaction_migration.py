@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
-from app.apps.rpg.session.legacy_interaction_migration import (
+from app.apps.rpg.session.upgrades.interaction_timeline import (
     LEGACY_INTERACTION_MIGRATION_VERSION,
 )
+from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
 from app.apps.rpg.session.migrations import migrate_session_payload
 
 
@@ -66,7 +67,7 @@ def test_wrapped_legacy_transcript_migrates_to_interaction_events() -> None:
     runtime = session["runtime_state"]
     events = runtime["interaction_timeline"]["events"]
 
-    assert session["manifest"]["schema_version"] == 5
+    assert session["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION
     assert session["manifest"]["turn_count"] == 10
     assert session["simulation_state"]["tick"] == 10
     assert runtime["transcript"] == original_transcript

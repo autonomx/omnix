@@ -6,8 +6,8 @@ from app.apps.rpg.narration.narrative_engine import (
     EvidenceBroker,
     EvidenceQuery,
     InMemoryEvidenceSource,
-    narrative_fixture_evidence,
 )
+from tests.support.narrative_evidence_fixtures import narrative_fixture_evidence
 
 
 def _broker() -> EvidenceBroker:

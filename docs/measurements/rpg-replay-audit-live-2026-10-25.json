@@ -1,0 +1,38 @@
+{
+  "measurement": "rpg_replay_audit_live_summary",
+  "date": "2026-10-25",
+  "database": "live (omnix, read-only transaction)",
+  "note": "counts only; per-campaign rows kept outside the repository",
+  "summary": {
+    "campaigns": 52,
+    "campaigns_replaying_to_current": 0,
+    "campaigns_with_chain_breaks": 16,
+    "campaigns_with_missing_turn_rows": 49,
+    "campaigns_with_unpatched_turns": 31,
+    "mismatched_turns_total": 0,
+    "npc_related_bytes_max": 23343,
+    "revisions_total": 433,
+    "revisions_without_turn_row_total": 314,
+    "state_bytes_max": 749800,
+    "state_bytes_median": 109216,
+    "verified_turns_total": 0
+  },
+  "totals": {
+    "snapshots": 13,
+    "snapshots_failing_hash": 0,
+    "verified_snapshots": 13,
+    "hash_chain_breaks": 83,
+    "turn_rows": 119,
+    "turns_without_patch": 119,
+    "revisions_without_turn_row": 314,
+    "verified_turns": 0
+  },
+  "document_formats": {
+    "rpg-session-v1": 51,
+    "5": 1
+  },
+  "upcast_check": {
+    "campaigns": 52,
+    "upgrade_to_current_ok": 52
+  }
+}

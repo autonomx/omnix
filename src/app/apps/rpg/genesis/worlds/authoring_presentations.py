@@ -5,12 +5,38 @@ from typing import Any, Mapping, Sequence
 
 from app.apps.rpg.genesis.forge.world_forge_dossiers import project_entity_dossier
 
+# A topic's lists of entries the editor shows, opens and writes (a generated topic's ``entities``; a world written
+# by hand or installed from a bundle keeps its people in ``characters``, its things in ``items``, ...).
+ENTRY_LISTS = (
+    "entities",
+    "regions",
+    "areas",
+    "points_of_interest",
+    "locations",
+    "characters",
+    "npcs",
+    "races",
+    "classes",
+    "factions",
+    "monsters",
+    "items",
+    "spells",
+    "feats",
+    "quests",
+    "encounter_seeds",
+    "one_shots",
+    "opening_scenarios",
+)
+
 SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "overview", "label": "Overview", "group": "workspace", "page_kind": "document"},
     {"id": "generation", "label": "World Generation", "group": "workspace", "page_kind": "document"},
     {"id": "images", "label": "Images", "group": "workspace", "page_kind": "collection"},
     {"id": "map", "label": "Map", "group": "world", "page_kind": "document"},
     {"id": "scenarios", "label": "Scenarios", "group": "game-master", "page_kind": "collection"},
+    {"id": "play", "label": "How It Plays", "group": "game-master", "page_kind": "document"},
+    # What the game master invented in campaigns on this world, for its author to approve (EV-0 part 2, EV-6).
+    {"id": "review", "label": "Inventions to Review", "group": "game-master", "page_kind": "document"},
     {"id": "map_blueprints", "label": "Map Blueprints", "group": "game-master", "page_kind": "collection"},
     {"id": "validation", "label": "Validation", "group": "game-master", "page_kind": "document"},
     {"id": "releases", "label": "Releases", "group": "game-master", "page_kind": "collection"},

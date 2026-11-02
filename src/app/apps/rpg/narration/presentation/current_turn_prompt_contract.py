@@ -22,7 +22,6 @@ vetoes impossible service/economy framing rather than positively classifying the
 whole turn.
 """
 
-import json
 import re
 from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
@@ -461,10 +460,3 @@ def build_runtime_current_turn_prompt_contract(
             "loaded_npc_profiles": _compact_loaded_npc_profiles(narration_context),
         },
     }
-
-
-def format_runtime_prompt_contract_block(contract: Dict[str, Any], max_chars: int = 7000) -> str:
-    text = json.dumps(_safe_dict(contract), ensure_ascii=False, indent=2, default=str)
-    if len(text) > max_chars:
-        return text[:max_chars].rstrip() + "\n...[truncated]"
-    return text

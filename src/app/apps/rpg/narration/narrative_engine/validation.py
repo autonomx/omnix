@@ -58,6 +58,100 @@ def _allowed_claim_refs(request: TurnPresentationRequest) -> set[str]:
     return {str(value) for value in raw if str(value).strip()}
 
 
+# What the rules decide (RQ-3.3): an amount of coin, experience or health, a level, a thing gained or lost by name.
+# The prose may say these only as the turn's evidence (its outcome, the scene) has them.
+_AMOUNT = re.compile(r"\b(\d[\d,]*)\s+(gold|silver|copper|coins?|experience|xp|health|hit points|hp)\b", re.IGNORECASE)
+_LEVEL = re.compile(r"\blevel\s+(\d+)\b", re.IGNORECASE)
+_GAINED = re.compile(r"\b(?:receive|receives|received|gain|gains|gained|earn|earns|earned|obtain|obtained|acquire|"
+                     r"acquired|are given|is given|were given|are handed|loot|looted|lose|loses|lost)\b")
+# A thing named in a sentence that tells of a gain or loss: "a Crown of Kings", "the Wayfarer Sigil".
+_NAMED = re.compile(r"(?:\b(?:a|an|the|your|his|her|their)\s+|,\s*)((?:[A-Z][\w'-]+)(?:\s+(?:of|the|[A-Z][\w'-]+))*)")
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+# A fight's lines give the hero's health as "hits you for 2 (98 of 100 left)": the blow, what is left, and the most
+# there is. Only a line that hits the hero says the hero's health ("you hit the wolf for 4 (6 of 10 left)" is the wolf's).
+_HEALTH_UNITS = frozenset({"health", "hit points", "hp"})
+_HEALTH_FORMS = (r"\byou for {n} \(", r"\byou for \d+ \({n} of \d+ left\)", r"\byou for \d+ \(\d+ of {n} left\)")
+# A foe's health, said in a sentence that does not speak of the hero's own: any blow's numbers (the playtest: "the
+# wolf, down to 4 of its 10 health" sent the writer back, every other round, to write the turn again).
+_ANY_HEALTH_FORMS = (r"(?<!\byou )\bfor {n} \(", r"(?<!\byou )\bfor \d+ \({n} of \d+ left\)",
+                     r"(?<!\byou )\bfor \d+ \(\d+ of {n} left\)")  # a blow that hit someone not the hero
+_HEROS_HEALTH = re.compile(r"\byou\b|\byou're\b|\byour (?:health|wounds?|life|strength|body|veins|chest|blood)\b",
+                           re.IGNORECASE)
+
+
+_CLAUSE = re.compile(r"[,;:]\s+|\s+(?:and|but|while)\s+")
+_FOE_WORDS = re.compile(r"\b(?:it|its|itself|they|them|their|him|his|her|hers)\b", re.IGNORECASE)
+_HEROS = re.compile(r"\byou\b|\byou're\b|\byour\b", re.IGNORECASE)  # the hero, in the sentence: "your arm bleeds"
+
+
+# Who the turn's blows struck, as its fight lines name them ("you hit the echo wolf for 4 (5 of 10 left)").
+_STRUCK = re.compile(r"\bhits? (the )?([a-z0-9][a-z0-9' -]*?) for \d+")
+
+
+def _struck(evidence_text: str) -> set[str]:
+    """What the turn's blows struck, as a clause may name it after "the". A creature (its line says "the"): the whole
+    name or a part ending in its last word ("the echo wolf", "the wolf"; never "the echo", which a scene says of
+    anything: the twelfth review). A person (named bare, "you hit Captain Rhea Sunward"): any word of the name, a
+    title too ("the captain": the thirteenth). The hero aside."""
+    names = set()
+    for article, name in _STRUCK.findall(evidence_text):
+        words = name.split()
+        if not words or name == "you":
+            continue
+        if article:
+            names.update(" ".join(words[start:]) for start in range(len(words)))
+        else:
+            names.update(word for word in words if len(word) > 2)
+    return names
+
+
+def _of_a_foe(clause: str, sentence: str, evidence_text: str = "") -> bool:
+    """Whether a clause speaks of a foe's health: it names no "you", and its sentence names none or the clause points
+    at someone else, by a pronoun or by a foe the turn's blows struck ("you hit the wolf, leaving it at 5 health",
+    "your blade bites, and the wolf staggers at 5 health" where the echo wolf was hit; not "bleeding, down to 5
+    health, you press on", nor "the night closing in at 5 health" because the scene names a night)."""
+    if _HEROS_HEALTH.search(clause):
+        return False
+    if not _HEROS.search(sentence) or _FOE_WORDS.search(clause) is not None:
+        return True
+    lowered = clause.casefold()
+    return any(re.search(r"\bthe " + re.escape(tail) + r"\b", lowered) for tail in _struck(evidence_text))
+
+
+def _unsupported_amounts(clause: str, evidence_text: str, *, foes: bool) -> list[str]:
+    said = []
+    forms = _ANY_HEALTH_FORMS if foes else _HEALTH_FORMS
+    for number, unit in _AMOUNT.findall(clause):
+        amount = number.replace(",", "")
+        if re.search(rf"\b{re.escape(amount)}\s+{re.escape(unit.casefold().rstrip('s'))}", evidence_text):
+            continue
+        if unit.casefold() in _HEALTH_UNITS and any(
+            re.search(form.format(n=re.escape(amount)), evidence_text) for form in forms
+        ):
+            continue
+        said.append(f"{number} {unit}")
+    return said
+
+
+def _unsupported_material(text: str, evidence_text: str) -> list[str]:
+    """The rules' facts the prose states and the evidence does not hold."""
+    said: list[str] = []
+    for sentence in _SENTENCE.split(text):
+        for clause in _CLAUSE.split(sentence):
+            said += _unsupported_amounts(clause, evidence_text, foes=_of_a_foe(clause, sentence, evidence_text))
+    for level in _LEVEL.findall(text):
+        if not re.search(rf"\blevel\s+{level}\b", evidence_text):
+            said.append(f"level {level}")
+    for sentence in _SENTENCE.split(text):
+        if not _GAINED.search(sentence):
+            continue
+        for name in _NAMED.findall(sentence):
+            name = name.strip()
+            if name and name.casefold() not in evidence_text:
+                said.append(name)
+    return said
+
+
 def _word_count(blocks: Sequence[NarrativeBlock]) -> int:
     return sum(len(block.text.split()) for block in blocks)
 
@@ -124,6 +218,14 @@ class NarrativeValidator:
             if block.kind is BeatKind.DIALOGUE and text.count('"') % 2 == 1:
                 issues.append(ValidationIssue("unbalanced_quote", "Dialogue contains an unbalanced quote.", block.block_id))
 
+        evidence_text = " ".join(" ".join(record.content.casefold().split()) for record in evidence)
+        for block in blocks:
+            invented = _unsupported_material(block.text, evidence_text)
+            if invented:
+                issues.append(ValidationIssue(
+                    "unsupported_material_claim",
+                    f"The prose states what the rules did not: {', '.join(invented)}.", block.block_id))
+
         claim_issues, claim_metadata = validate_claims(
             request,
             plan,
@@ -166,6 +268,9 @@ class NarrativeRepairer:
             text = _WHITESPACE.sub(" ", _LABEL_PREFIX.sub("", block.text)).strip()
             normalized = " ".join(text.casefold().split())
             if normalized in seen_text:
+                if not beat.required:  # an optional beat that only repeats another says nothing: it is left out
+                    history.append(f"removed_duplicate:{block.block_id}")
+                    continue
                 purpose = beat.purpose.value.replace("_", " ").capitalize()
                 text = f"{purpose}: {text}"
                 normalized = " ".join(text.casefold().split())
@@ -408,6 +513,9 @@ def write_validate_repair(
             writer.write(request, plan, evidence),
         )
     except Exception as exc:
+        from app.apps.rpg.foundation.model_calls import record_model_failure
+
+        record_model_failure("narrative_writer")  # the storyteller is down or too slow: the turn says so (RQ-8.8)
         if not allow_deterministic_fallback:
             logger.warning("rpg narrative provider failed; publishing validated fallback prose", exc_info=True)
         fallback = _validated_fallback(

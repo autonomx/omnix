@@ -170,3 +170,38 @@ def test_topic_history_restore_uses_dual_concurrency_tokens(monkeypatch) -> None
         "expected_draft_revision": 5,
         "expected_content_hash": "sha256:current",
     }
+
+
+def test_play_sections_save_names_each_error_and_a_newer_save(monkeypatch) -> None:
+    from app.apps.rpg.genesis.worlds.play_section_authoring import PlaySectionsInvalidError
+
+    def fake_save(world_id: str, *, expected_content_hash: str, document):
+        if expected_content_hash == "stale":
+            raise ValueError("world_play_sections_conflict:expected=stale:current=fresh")
+        if document.get("routines"):
+            raise PlaySectionsInvalidError(("play_section_invalid:routines.0.npc_id:String should have at least 1 character",))
+        return {"ok": True, "world_id": world_id, "content_hash": "fresh"}
+
+    monkeypatch.setattr(
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_authoring_routes.save_play_sections",
+        fake_save,
+    )
+    app = FastAPI()
+    include_router_registrar(app, register_rpg_world_authoring_routes)
+    client = TestClient(app)
+    url = "/api/rpg/worlds/world:aurelia/play-sections"
+
+    saved = client.put(url, json={"expected_content_hash": "fresh", "document": {}})
+    stale = client.put(url, json={"expected_content_hash": "stale", "document": {}})
+    invalid = client.put(url, json={"expected_content_hash": "fresh", "document": {"routines": [{"npc_id": ""}]}})
+    missing = client.put(url, json={"document": {}})
+
+    assert saved.status_code == 200 and saved.json()["content_hash"] == "fresh"
+    assert stale.status_code == 409 and stale.json()["detail"]["error"].startswith("world_play_sections_conflict")
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["findings"] == [
+        "play_section_invalid:routines.0.npc_id:String should have at least 1 character"]
+    assert missing.status_code == 422  # a save names the draft it replaces
+    paths = app.openapi()["paths"]
+    assert {"/api/rpg/worlds/{world_id}/play-sections", "/api/rpg/worlds/{world_id}/play-sections/publish",
+            "/api/rpg/worlds/{world_id}/play-sections/draft-from-lore"} <= set(paths)

@@ -15,6 +15,7 @@ from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.state import access as _sections
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -116,8 +117,8 @@ def current_location_identity(session: Mapping[str, Any]) -> dict[str, str] | No
     state = _mapping(session.get("state"))
     player = _mapping(state.get("player"))
     world = _mapping(state.get("world"))
-    simulation = _mapping(session.get("simulation_state"))
-    runtime = _mapping(session.get("runtime_state"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    runtime = _mapping(_sections.runtime_state_of(session))
     map_state = _mapping(state.get("map") or session.get("map_state"))
 
     explicit_id = _text(
@@ -172,15 +173,16 @@ def current_location_identity(session: Mapping[str, Any]) -> dict[str, str] | No
 
 
 def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
-    projection = deepcopy(_mapping(session.get("campaign_bible_projection")))
+    # Each part the bible takes from the session is copied once, as it is taken (the projection itself is only read).
+    projection = _mapping(session.get("campaign_bible_projection"))
     state = _mapping(session.get("state"))
     state_bible = _mapping(state.get("campaign_bible"))
     manifest = _mapping(session.get("manifest"))
 
-    documents = _rows(projection.get("documents"))
+    documents = copy_state(_rows(projection.get("documents")))
     if not documents:
-        documents = _rows(_mapping(state_bible.get("lore_pages")).values())
-    entities = deepcopy(_mapping(projection.get("entities")))
+        documents = copy_state(_rows(_mapping(state_bible.get("lore_pages")).values()))
+    entities = copy_state(_mapping(projection.get("entities")))
     if not entities:
         for key, kind in (
             ("npc_dossiers", "npc"),
@@ -191,7 +193,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
                 if isinstance(row, Mapping):
                     entities[str(entity_id)] = {"kind": kind, **dict(row)}
 
-    discovery = deepcopy(
+    discovery = copy_state(
         _mapping(projection.get("discovery_state"))
         or _mapping(state_bible.get("discovery_state"))
     )
@@ -211,7 +213,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
             or state_bible.get("canon_revision")
             or 0
         ),
-        "manifest": deepcopy(_mapping(projection.get("manifest") or state_bible.get("manifest"))),
+        "manifest": copy_state(_mapping(projection.get("manifest") or state_bible.get("manifest"))),
         "documents": documents,
         "entities": entities,
         "discovery_state": discovery,
@@ -221,7 +223,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
             continue
         value = projection.get(key)
         if value is not None:
-            bible[key] = deepcopy(value)
+            bible[key] = copy_state(value)
         elif key not in bible:
             bible[key] = {} if key in {"indexes", "mechanics_catalog"} else []
     return bible
@@ -462,8 +464,8 @@ def _hydrate_session(
     )
     hydrated["campaign_bible_projection"] = projection
 
-    state = _mapping(hydrated.get("state"))
-    state_bible = _mapping(state.get("campaign_bible"))
+    sheet = _mapping(hydrated.get("state"))
+    state_bible = _mapping(sheet.get("campaign_bible"))
     documents = _rows(bible.get("documents"))
     state_bible.update(
         {
@@ -480,38 +482,38 @@ def _hydrate_session(
             },
         }
     )
-    state["campaign_bible"] = state_bible
+    sheet["campaign_bible"] = state_bible
 
     entities = _mapping(bible.get("entities"))
-    state["npc_dossiers"] = {
+    sheet["npc_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
         if isinstance(row, Mapping) and _text(row.get("kind")) == "npc"
     }
-    state["location_dossiers"] = {
+    sheet["location_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
         if isinstance(row, Mapping) and _text(row.get("kind")) == "location"
     }
-    state["faction_dossiers"] = {
+    sheet["faction_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
         if isinstance(row, Mapping) and _text(row.get("kind")) == "faction"
     }
-    hydrated["state"] = state
+    hydrated["state"] = sheet
 
-    runtime = _mapping(hydrated.get("runtime_state"))
-    runtime["campaign_bible_revision"] = revision
-    runtime["campaign_bible_content_hash"] = content_hash
-    hydrated["runtime_state"] = runtime
+    hydrated_runtime = _mapping(_sections.runtime_state_of(hydrated))
+    hydrated_runtime["campaign_bible_revision"] = revision
+    hydrated_runtime["campaign_bible_content_hash"] = content_hash
+    hydrated["runtime_state"] = hydrated_runtime
     mechanics_catalog = deepcopy(_mapping(bible.get("mechanics_catalog")))
     if mechanics_catalog:
-        state = _mapping(hydrated.get("state"))
-        state["campaign_mechanics"] = mechanics_catalog
-        hydrated["state"] = state
-        simulation = _mapping(hydrated.get("simulation_state"))
-        simulation["campaign_mechanics"] = mechanics_catalog
-        hydrated["simulation_state"] = simulation
+        sheet = _mapping(hydrated.get("state"))
+        sheet["campaign_mechanics"] = mechanics_catalog
+        hydrated["state"] = sheet
+        hydrated_simulation = _mapping(_sections.simulation_state_of(hydrated))
+        hydrated_simulation["campaign_mechanics"] = mechanics_catalog
+        hydrated["simulation_state"] = hydrated_simulation
     manifest = _mapping(hydrated.get("manifest"))
     manifest["campaign_bible_revision"] = revision
     manifest["campaign_bible_content_hash"] = content_hash

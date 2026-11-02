@@ -17,6 +17,8 @@ from scripts.export_gateway_openapi import KERNEL_OWNER, ROUTE_OWNERS_FILE, norm
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
 _INTERNAL_JOB_LIST_PARAMETERS = {"limit", "full"}
 _DOCUMENTED_NON_JSON_RESPONSES = {
+    ("POST", "/api/rpg/sessions/{session_id}/speech-audio"),  # PCM16, streamed as it is synthesized
+    ("GET", "/api/rpg/sessions/{session_id}/export"),  # a campaign package, downloaded as a named JSON file
     ("DELETE", "/api/trading/notifications/email"),
     ("DELETE", "/api/trading/notifications/push/subscriptions/{subscription_id}"),
     ("GET", "/api/trading/snapshots/{snapshot_id}.png"),

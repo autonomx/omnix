@@ -10,6 +10,15 @@
       "invalidation": "default_agent_budget_manager.cache_clear"
     },
     {
+      "path": "src/app/apps/rpg/narration/narrative_engine/campaign_bible.py",
+      "symbol": "_public_slot.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation; keyed by a digest of the canon document; it holds only the filtered copy.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_public_slot.cache_clear"
+    },
+    {
       "path": "src/app/platform/agent_runtime/pi_runtime.py",
       "symbol": "_LAST_PROVIDER_FAILURE",
       "category": "cache",
@@ -1207,15 +1216,6 @@
       "invalidation": "unload_image_provider_cache"
     },
     {
-      "path": "src/app/apps/rpg/world/npc_profile_loader.py",
-      "symbol": "load_all_file_npc_profiles.__cache__",
-      "category": "cache",
-      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-      "max_entries": 1,
-      "ttl_seconds": 3600.0,
-      "invalidation": "load_all_file_npc_profiles.cache_clear"
-    },
-    {
       "path": "src/app/apps/rpg/genesis/worlds/generation_coordinator.py",
       "symbol": "_reconcile_lock",
       "category": "cache",
@@ -1580,6 +1580,141 @@
       "max_entries": 256,
       "ttl_seconds": 3600.0,
       "invalidation": "output_schema_text.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/turn_stream.py",
+      "symbol": "_STREAMS",
+      "category": "coordination",
+      "reason": "A submitted turn's events (accepted, committed, the outcome, narration drafts, the final narration) kept for the stream route's subscribers on this replica, 600 s after the last event and 256 streams at most; the turn's durable record is its commit, and a stream on another replica is open (RQ-6.2 follow-up)."
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/turn_stream.py",
+      "symbol": "_CHANGED",
+      "category": "coordination",
+      "reason": "Condition variable waking this replica's stream subscribers when a turn's event is published; it carries no state of its own."
+    },
+    {
+      "path": "src/app/apps/rpg/narration/narration_drafts.py",
+      "symbol": "_DRAFTS",
+      "category": "coordination",
+      "reason": "The narration writer's partial drafts for a turn being narrated after its commit, relayed to the turn's stream on this replica (600 s, 256 at most); the response itself is inserted durably when the writer is done."
+    },
+    {
+      "path": "src/app/apps/rpg/narration/narration_drafts.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "Process-local mutex around the drafts map; it carries no durable state."
+    },
+    {
+      "path": "src/app/apps/rpg/session/persistence/turn_order.py",
+      "symbol": "_IDLE",
+      "category": "per-connection",
+      "reason": "Open PostgreSQL connections kept for the campaign turn lock (session advisory locks), by database, so a turn does not pay a connect; the lock itself lives in PostgreSQL."
+    },
+    {
+      "path": "src/app/apps/rpg/session/persistence/turn_order.py",
+      "symbol": "_IDLE_LOCK",
+      "category": "per-connection",
+      "reason": "Process-local mutex around the idle lock-connection pool; it carries no durable state."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_PINNED",
+      "category": "cache",
+      "reason": "A published world revision's canon as a campaign pins it, projected once per process (a revision never changes); bounded, expiring, and cleared by clear_lore_memos; a miss only costs the projection.",
+      "max_entries_symbol": "_MAX_PINNED",
+      "ttl_symbol": "_PINNED_TTL_SECONDS",
+      "invalidation": "clear_lore_memos"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_PINNED_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_COVERED",
+      "category": "cache",
+      "reason": "What each campaign's bible already covers, checked against the stored bible's version on every use (F2); bounded, expiring, and cleared by clear_lore_memos; a miss only costs the full lore pass.",
+      "max_entries_symbol": "_COVERED_LIMIT",
+      "ttl_symbol": "_COVERED_TTL_SECONDS",
+      "invalidation": "clear_lore_memos"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_store.py",
+      "symbol": "_COVERED_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/world/map_world_integration.py",
+      "symbol": "_REPOSITORIES",
+      "category": "cache",
+      "reason": "Each campaign's built map repository, keyed by its world graph's inputs (RQ-6.4); bounded, expiring, and cleared by clear_map_repositories; a miss rebuilds it.",
+      "max_entries_symbol": "_MAX_REPOSITORIES",
+      "ttl_symbol": "_REPOSITORY_TTL_SECONDS",
+      "invalidation": "clear_map_repositories"
+    },
+    {
+      "path": "src/app/apps/rpg/world/map_world_integration.py",
+      "symbol": "_REPOSITORY_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/persistence/rpg_repository.py",
+      "symbol": "_KEPT",
+      "category": "cache",
+      "reason": "Each campaign's last stored document in this process, with its revision and hash (F2); a read whose row still has them gets it instead of the document, so it is never stale; bounded, expiring, and cleared by clear_kept_documents; a miss reads the row.",
+      "max_entries_symbol": "_MAX_KEPT",
+      "ttl_symbol": "_KEPT_TTL_SECONDS",
+      "invalidation": "clear_kept_documents"
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/persistence/rpg_repository.py",
+      "symbol": "_KEPT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/world_sharing.py",
+      "symbol": "_DEVICE_FLOWS",
+      "category": "per-connection",
+      "reason": "GitHub device sign-ins in progress, each polled by its page; expired ones are forgotten when another starts and at most 32 are kept; the token a sign-in yields is stored durably, not here."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/world_sharing.py",
+      "symbol": "_DEVICE_LOCK",
+      "category": "per-connection",
+      "reason": "Process-local mutex around the sign-in flows; it carries no durable state."
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/builtin_worlds.py",
+      "symbol": "_source_text.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_source_text.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/builtin_worlds.py",
+      "symbol": "bundle_bytes.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "bundle_bytes.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/genesis/worlds/builtin_worlds.py",
+      "symbol": "_revision.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_revision.cache_clear"
     }
   ]
 }

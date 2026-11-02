@@ -21,7 +21,16 @@ def merge_authored_blueprints(
         if row.get("map_id")
     }
     for requirement in requirements:
-        by_map[str(requirement["map_id"])] = dict(requirement)
+        merged = dict(requirement)
+        current = by_map.get(str(requirement["map_id"])) or {}
+        if (current.get("blueprint_hash") == requirement.get("blueprint_hash")
+                and current.get("semantic_interface_hash") == requirement.get("semantic_interface_hash")):
+            # The blueprint the revision's map was already readied from: its readiness (a certified definition, the
+            # release binds it) stands. A changed blueprint starts again from the blueprint's own readiness.
+            for key in ("simulation_readiness", "presentation_readiness"):
+                if current.get(key):
+                    merged[key] = current[key]
+        by_map[str(requirement["map_id"])] = merged
     authored = [
         {
             "map_id": str(row["map_id"]),

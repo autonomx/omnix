@@ -11,53 +11,13 @@ from app.apps.rpg.world.map_contracts import (
     MapOverlay,
     MapRouteOverlay,
 )
-from app.apps.rpg.world.map_fixtures import FROST_HAVEN_MAP_ID, NORTHERN_PASS_MAP_ID
-from app.apps.rpg.world.map_repository import MapDefinitionRepository, default_map_repository
+from app.apps.rpg.world.map_repository import MapDefinitionRepository
 from app.apps.rpg.world.map_world_integration import (
     canonical_route_id_for_locations,
     map_repository_for_session,
 )
 
 MAP_STATE_SCHEMA_VERSION = 1
-
-_STARTING_MAP_BY_LOCATION = {
-    "rusty_flagon_tavern": FROST_HAVEN_MAP_ID,
-    "market_district": FROST_HAVEN_MAP_ID,
-    "frost_haven": FROST_HAVEN_MAP_ID,
-    "northern_road": NORTHERN_PASS_MAP_ID,
-    "glimmerdeep_pass": NORTHERN_PASS_MAP_ID,
-    "old_quarry": NORTHERN_PASS_MAP_ID,
-    "frostpine_hollow": NORTHERN_PASS_MAP_ID,
-    "northern_watchtower": NORTHERN_PASS_MAP_ID,
-}
-
-
-def initial_map_session_state(
-    starting_location_id: str,
-    repository: MapDefinitionRepository | None = None,
-) -> dict[str, Any]:
-    """Create explicit deterministic map state for a newly created campaign."""
-
-    repository = repository or default_map_repository()
-    map_id = _STARTING_MAP_BY_LOCATION.get(starting_location_id, NORTHERN_PASS_MAP_ID)
-    definition = repository.get(map_id)
-    visible = [item.id for item in definition.objects]
-    route_states = {
-        route.route_id: {"status": "open", "known": True, "safe": True}
-        for route in definition.route_geometry
-    }
-    return {
-        "schema_version": MAP_STATE_SCHEMA_VERSION,
-        "current_map_id": map_id,
-        "current_location_id": starting_location_id,
-        "overlay_revision": 0,
-        "discovered_object_ids": visible,
-        "visible_object_ids": visible,
-        "route_states": route_states,
-        "object_states": {},
-        "map_history": [map_id],
-    }
-
 
 def project_session_map_overlay(
     session: Mapping[str, Any],

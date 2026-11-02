@@ -98,27 +98,6 @@ class PostgresForegroundSubmissionStoreAdapter:
             )
         return cursor.rowcount == 1
 
-    def attach_job(
-        self,
-        session_id: str,
-        submission_id: str,
-        claim_token: str,
-        job_id: str,
-        *,
-        now: Any | None = None,
-    ) -> bool:
-        del now
-        with unit_of_work(self.database) as work:
-            attached = work.foreground_submissions.attach_job(
-                self.context,
-                session_id=session_id,
-                submission_id=submission_id,
-                claim_token=claim_token,
-                job_id=job_id,
-            )
-            work.commit()
-        return attached
-
     def mark_execution_started(
         self,
         session_id: str,
@@ -259,8 +238,3 @@ def default_postgres_foreground_submission_store() -> PostgresForegroundSubmissi
     if _DEFAULT_STORE is None:
         _DEFAULT_STORE = PostgresForegroundSubmissionStoreAdapter()
     return _DEFAULT_STORE
-
-
-def submission_store_for_job_store(job_store: Any) -> PostgresForegroundSubmissionStoreAdapter:
-    del job_store
-    return default_postgres_foreground_submission_store()

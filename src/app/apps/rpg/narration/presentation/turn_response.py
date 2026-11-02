@@ -12,8 +12,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .turn_outcome import TurnOutcome
 from .turn_response_budget import enforce_turn_response_budget
 from .visible_response import build_visible_response
+from app.apps.rpg.foundation.state import access as _sections
 
 TURN_RESPONSE_CONTRACT_VERSION = "rpg_turn_response_v2"
 TURN_RESPONSE_MAX_BYTES = 50_000
@@ -29,6 +31,11 @@ class RpgTurnVisibleResponse(_OpenContract):
     narration: str | None = None
     npc: dict[str, Any] | None = None
     messages: list[dict[str, Any]] = Field(default_factory=list)
+    # The names that open their lore (EV-12): {"narration": [{"entry_id", "start", "end"}], "messages": [[...], ...]},
+    # worked out on the final text.
+    links: dict[str, Any] | None = None
+    # Who speaks inside the narration (EV-13): {"narration": [{"speaker_id", "start", "end"}]}.
+    voices: dict[str, Any] | None = None
 
 
 class RpgTurnState(_OpenContract):
@@ -75,6 +82,28 @@ class RpgTurnResponse(_OpenContract):
     timing: dict[str, float] = Field(default_factory=dict)
     session_summary: dict[str, Any] = Field(default_factory=dict)
     canonical_narrative_response: dict[str, Any] | None = None
+    outcome: TurnOutcome | None = None
+    # What the play screen tells the player beside the turn: the storyteller unavailable (RQ-8.8).
+    notices: list[dict[str, str]] = Field(default_factory=list)
+
+
+def attach_turn_outcome(payload: dict[str, Any], outcome: TurnOutcome) -> dict[str, Any]:
+    """The response with the turn's outcome, its one result (RQ-1.3), and the transitional fields made to agree.
+
+    ``state.changed`` and the changed domains, which the play screen reads to refresh, also name the sections
+    the turn's applied changes touched (they listed only "conversation", so every other turn read as
+    unchanged).
+    """
+    payload = dict(payload)
+    payload["outcome"] = outcome.model_dump(mode="json")
+    domains = list(dict.fromkeys([*((payload.get("state") or {}).get("changed_domains") or ()),
+                                  *outcome.presentation.changed_sections]))
+    state = dict(payload.get("state") or {})
+    state.update(changed=bool(domains), changed_domains=domains)
+    payload["state"] = state
+    if isinstance(payload.get("result"), dict):
+        payload["result"] = {**payload["result"], "changed_domains": domains}
+    return payload
 
 
 def build_turn_response_v2(
@@ -191,10 +220,10 @@ def _compact_timing(sources: tuple[dict[str, Any], ...]) -> dict[str, Any]:
 def _session_summary(session: dict[str, Any]) -> dict[str, Any]:
     manifest = _dict(session.get("manifest"))
     state = _dict(session.get("state"))
-    simulation = _dict(session.get("simulation_state")) or state
-    runtime = _dict(session.get("runtime_state"))
+    simulation = _dict(_sections.simulation_state_of(session)) or state
+    runtime = _dict(_sections.runtime_state_of(session))
     scene = _dict(state.get("scene")) or _dict(simulation.get("scene"))
-    player = _dict(state.get("player")) or _dict(simulation.get("player_state"))
+    player = _dict(state.get("player")) or _dict(_sections.player_state_of(simulation))
     return _drop_none(
         {
             "id": _text(manifest.get("session_id") or manifest.get("id")) or None,
@@ -267,7 +296,7 @@ def _changed_domains(sources: tuple[dict[str, Any], ...], *, stateful: bool | No
 
 
 def _state_revision(session: dict[str, Any] | None, sources: tuple[dict[str, Any], ...]) -> int | None:
-    runtime = _dict((session or {}).get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session or {}))
     value = runtime.get("state_revision")
     if value is None:
         for source in sources:

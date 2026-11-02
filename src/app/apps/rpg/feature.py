@@ -14,6 +14,7 @@ from app.apps.rpg.session.persistence.feature_repositories import RPG_REPOSITORY
 from app.apps.rpg.edge.api.compat_router import create_rpg_compatibility_router
 from app.apps.rpg.edge.api.feature_routes import create_rpg_routes_router
 from app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery
+from app.apps.rpg.edge.api.turn_job import execute_inline_feature_job as execute_rpg_turn_job
 
 from app.apps.rpg.session.jobs.turn_job_guard import rpg_turn_submission_policy
 from app.apps.rpg.session.jobs.handlers import (
@@ -22,10 +23,10 @@ from app.apps.rpg.session.jobs.handlers import (
     RpgTurnJobInput,
     execute_rpg_narration_job,
     execute_rpg_report_job,
-    execute_rpg_turn_job,
 )
 from app.apps.rpg.session.jobs.debug_observer import rpg_debug_job_observer
 from app.apps.rpg.genesis.forge.scene_lore_job import RpgSceneLoreJobInput, execute_scene_lore_job
+from app.apps.rpg.session.jobs.game_master_job import RpgGameMasterJobInput, execute_game_master_job
 
 
 def _turn(context: JobExecutionContext, job):
@@ -42,6 +43,10 @@ def _narration(context: JobExecutionContext, job):
 
 def _scene_lore(context: JobExecutionContext, job):
     return execute_scene_lore_job(context.job_store, job)
+
+
+def _game_master(context: JobExecutionContext, job):
+    return execute_game_master_job(context.job_store, job)
 
 
 def _rpg_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
@@ -98,8 +103,8 @@ FEATURE = FeatureModule(
     tier="app",
     # The Hermes routes in app/apps/rpg/edge/hermes read assist mode through app.platform.chat.contracts.
     depends_on=("chat",),
-    # World images use image providers; RPG runs without the image feature.
-    uses=("image",),
+    # World images use image providers, a campaign's voices the voice platform; RPG runs without either.
+    uses=("image", "voice"),
     routers=(_rpg_routes_router, _compatibility_router),
     repositories=RPG_REPOSITORY_SPECS,
     job_observers=(rpg_debug_job_observer,),
@@ -130,6 +135,15 @@ FEATURE = FeatureModule(
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=300,
             max_attempts=3,
+        ),
+        JobHandlerSpec(
+            # The game master's direction after a turn (EV-0): its proposals go to the proposal record.
+            type="rpg.game_master",
+            handler=_game_master,
+            input_model=RpgGameMasterJobInput,
+            resource_class=ResourceClass.GPU_LLM,
+            timeout_seconds=180,
+            max_attempts=2,
         ),
         JobHandlerSpec(
             type="rpg.report.last10",

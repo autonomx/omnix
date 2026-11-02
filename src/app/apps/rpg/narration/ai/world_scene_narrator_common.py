@@ -32,7 +32,6 @@ from app.apps.rpg.narration.dialogue.npc_response_architecture import (
 )
 from app.apps.rpg.narration.presentation.current_turn_prompt_contract import (
     build_runtime_current_turn_prompt_contract,
-    format_runtime_prompt_contract_block,
 )
 from app.apps.rpg.narration.presentation.grounding_validator import (
     build_runtime_presentation_guardrails_block,
@@ -50,21 +49,8 @@ from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict, list_co
 logger = logging.getLogger(__name__)
 
 # Compatibility export for the retired single-process narration guard.
-_ACTIVE_NARRATIONS: frozenset[str] = frozenset()
 
 NARRATION_JSON_FORMAT_VERSION = "rpg_narration_v2"
-
-NARRATION_JSON_SCHEMA_HINT = {
-    "format_version": NARRATION_JSON_FORMAT_VERSION,
-    "narration": "string",
-    "action": "string",
-    "npc": {
-        "speaker": "string",
-        "line": "string",
-    },
-    "reward": "string",
-    "followup_hooks": [],
-}
 
 
 def _extract_llm_text(response):
@@ -174,58 +160,8 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
 
 
 # ---------------------------------------------------------------------------
-# Phase 6.5 — social context helpers
-# ---------------------------------------------------------------------------
-def _attach_social_context(scene, simulation_state):
-    scene = dict(scene or {})
-    simulation_state = simulation_state or {}
-    social_state = simulation_state.get("social_state") or {}
-
-    scene["active_rumors"] = [
-        dict(item) for item in (simulation_state.get("active_rumors") or [])[:3]
-    ]
-    scene["active_alliances"] = [
-        dict(item)
-        for item in (social_state.get("alliances") or [])
-        if item.get("status") == "active"
-    ][:3]
-    scene["faction_positions"] = {
-        key: dict(value)
-        for key, value in sorted((social_state.get("group_positions") or {}).items())
-    }
-    return scene
-
-
-# ---------------------------------------------------------------------------
 # Phase 6 — NPC mind context helpers
 # ---------------------------------------------------------------------------
-
-
-def _safe_str_p6(value):
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _attach_npc_mind_context(actor, simulation_state):
-    """Attach Phase 6 NPC mind context to an actor dict."""
-    actor = dict(actor or {})
-    simulation_state = simulation_state or {}
-
-    npc_id = _safe_str_p6(actor.get("id"))
-    npc_minds = simulation_state.get("npc_minds") or {}
-    mind = npc_minds.get(npc_id) or {}
-
-    if isinstance(mind, dict):
-        actor["memory_summary"] = ((mind.get("memory") or {}).get("entries") or [])[:5]
-        actor["belief_summary"] = (mind.get("beliefs") or {}).get("beliefs") or {}
-        actor["active_goals"] = ((mind.get("goals") or {}).get("goals") or [])[:5]
-        actor["last_decision"] = mind.get("last_decision") or {}
-
-    return actor
-
-
-_NARRATION_MAX_MARKDOWN = 300
 
 
 def _title_case_token(value: Any) -> str:
@@ -247,41 +183,34 @@ def _force_live_llm_required(narration_context: dict[str, Any]) -> bool:
 
 
 __all__ = (
-    'annotations',
-    'json',
-    'logging',
-    're',
-    'traceback',
-    'dataclass',
-    'field',
-    'Any',
-    'Callable',
-    'Dict',
-    'List',
-    'Optional',
-    'normalize_grounding_settings',
-    'select_grounded_narration_candidate',
-    'memory_reference_is_backed',
-    'build_runtime_npc_response_architecture',
-    'build_runtime_current_turn_prompt_contract',
-    'format_runtime_prompt_contract_block',
-    'build_runtime_presentation_guardrails_block',
-    'sanitize_unsupported_combat_payload',
-    'parse_runtime_provider_payload',
-    'build_encounter_view',
-    'logger',
-    '_ACTIVE_NARRATIONS',
-    'NARRATION_JSON_FORMAT_VERSION',
-    'NARRATION_JSON_SCHEMA_HINT',
-    '_extract_llm_text',
-    '_llm_text',
-    '_attach_social_context',
-    '_safe_str_p6',
-    '_attach_npc_mind_context',
-    '_NARRATION_MAX_MARKDOWN',
-    '_safe_str',
-    '_safe_dict',
-    '_safe_list',
-    '_title_case_token',
-    '_force_live_llm_required',
+    "annotations",
+    "json",
+    "logging",
+    "re",
+    "traceback",
+    "dataclass",
+    "field",
+    "Any",
+    "Callable",
+    "Dict",
+    "List",
+    "Optional",
+    "normalize_grounding_settings",
+    "select_grounded_narration_candidate",
+    "memory_reference_is_backed",
+    "build_runtime_npc_response_architecture",
+    "build_runtime_current_turn_prompt_contract",
+    "build_runtime_presentation_guardrails_block",
+    "sanitize_unsupported_combat_payload",
+    "parse_runtime_provider_payload",
+    "build_encounter_view",
+    "logger",
+    "NARRATION_JSON_FORMAT_VERSION",
+    "_extract_llm_text",
+    "_llm_text",
+    "_safe_str",
+    "_safe_dict",
+    "_safe_list",
+    "_title_case_token",
+    "_force_live_llm_required",
 )

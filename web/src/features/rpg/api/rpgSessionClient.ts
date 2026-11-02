@@ -19,6 +19,8 @@ export type RpgSessionListResponse = components['schemas']['RpgSessionListRespon
 
 export type RpgPresetListResponse = components['schemas']['RpgPresetListResponse'];
 
+export type RpgCampaignImportResponse = components['schemas']['RpgCampaignImportResponse'];
+
 /** How the client reached the launch route; added to the launch response for diagnostics, never sent by the gateway. */
 export interface RpgLaunchRequestTraceEvent {
   endpoint: string;
@@ -40,7 +42,14 @@ export type RpgLaunchResponse = components['schemas']['RpgLaunchResponse'] & { c
 
 export type RpgTurnResponse = components['schemas']['RpgTurnResponse'];
 
+/** The workspace's turns by day (RQ-8.4): failure and degraded rates, latency per turn class, model calls. */
+export type RpgOperationsResponse = components['schemas']['RpgOperationsResponse'];
+
 export type RpgSessionMutationResponse = components['schemas']['RpgSessionMutationResponse'];
+
+export type RpgSavePoint = components['schemas']['RpgSavePoint'];
+
+export type RpgSavePointsResponse = components['schemas']['RpgSavePointsResponse'];
 
 export type RpgLoadoutActionRequest = components['schemas']['RpgLoadoutActionRequest'];
 
@@ -128,6 +137,57 @@ export const rpgSessionClient = {
 
   async listRpgSessionSummaries(): Promise<RpgSessionListResponse> {
     return await unwrap(api.GET('/api/rpg/sessions')) as RpgSessionListResponse;
+  },
+
+  async getRpgOperations(days = 14): Promise<RpgOperationsResponse> {
+    return await unwrap(api.GET('/api/rpg/operations', { params: { query: { days } } })) as RpgOperationsResponse;
+  },
+
+  /** The campaign as a file to keep, or to carry to another Omnix (RQ-8.6). */
+  async exportRpgSession(sessionId: string): Promise<Record<string, unknown>> {
+    return await unwrap(api.GET('/api/rpg/sessions/{session_id}/export', {
+      params: { path: { session_id: sessionId } },
+    })) as Record<string, unknown>;
+  },
+
+  /** A campaign file exported from an Omnix, back in this library under its own id (RQ-8.6). */
+  async importRpgSession(campaignPackage: Record<string, unknown>): Promise<RpgCampaignImportResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/import', { body: campaignPackage })) as RpgCampaignImportResponse;
+  },
+
+  /** Undo the hero's last turn, or return to a save point by name: a turn of its own (rewind.md). */
+  async rewindRpgSession(sessionId: string, savePoint?: string): Promise<RpgTurnResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/rewind', {
+      params: { path: { session_id: sessionId } },
+      body: savePoint ? { save_point: savePoint } : {},
+    })) as RpgTurnResponse;
+  },
+
+  /** The player is back after time away: the world moves on, as a turn with a recap (RQ-2.7). */
+  async resumeRpgSession(sessionId: string, elapsedSeconds: number): Promise<RpgTurnResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/resume', {
+      params: { path: { session_id: sessionId } },
+      body: { elapsed_seconds: Math.max(0, Math.round(elapsedSeconds)) },
+    })) as RpgTurnResponse;
+  },
+
+  async listRpgSavePoints(sessionId: string): Promise<RpgSavePointsResponse> {
+    return await unwrap(api.GET('/api/rpg/sessions/{session_id}/save-points', {
+      params: { path: { session_id: sessionId } },
+    })) as RpgSavePointsResponse;
+  },
+
+  async createRpgSavePoint(sessionId: string, name: string): Promise<RpgSavePointsResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/save-points', {
+      params: { path: { session_id: sessionId } },
+      body: { name },
+    })) as RpgSavePointsResponse;
+  },
+
+  async deleteRpgSavePoint(sessionId: string, name: string): Promise<RpgSavePointsResponse> {
+    return await unwrap(api.DELETE('/api/rpg/sessions/{session_id}/save-points/{name}', {
+      params: { path: { session_id: sessionId, name } },
+    })) as RpgSavePointsResponse;
   },
 
   async getRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
@@ -239,17 +299,10 @@ export const rpgSessionClient = {
   },
 
   async applyRpgLoadoutAction(sessionId: string, request: RpgLoadoutActionRequest): Promise<RpgLoadoutActionResponse> {
-    try {
-      return await unwrap(api.POST('/api/rpg/sessions/{session_id}/loadout-action', {
-        params: { path: { session_id: sessionId } },
-        body: request,
-      })) as RpgLoadoutActionResponse;
-    } catch (error) {
-      if (!isNotFound(error)) {
-        throw error;
-      }
-      return compatibility<RpgLoadoutActionResponse>({ action: 'loadout_action', session_id: sessionId, loadout: request });
-    }
+    return await unwrap(api.POST('/api/rpg/sessions/{session_id}/loadout-action', {
+      params: { path: { session_id: sessionId } },
+      body: request,
+    })) as RpgLoadoutActionResponse;
   },
 
   /**
@@ -271,6 +324,7 @@ async function createForegroundTurnJob(request: CreateJobRequest): Promise<JobRe
   }
   const sessionId = stringValue(asRecord(requestRecord.input_ref).session_id);
   const command = stringValue(asRecord(requestRecord.input_payload).command);
+  const card = asRecord(requestRecord.input_payload).card;
   if (!sessionId || !command) {
     return null;
   }
@@ -278,7 +332,8 @@ async function createForegroundTurnJob(request: CreateJobRequest): Promise<JobRe
   try {
     result = await unwrap(api.POST('/api/rpg/sessions/{session_id}/turn', {
       params: { path: { session_id: sessionId } },
-      body: { command },
+      // A card clicked plays the reading it carries (EV-9); its command is what the log shows.
+      body: card && typeof card === 'object' ? { command, card: card as Record<string, unknown> } : { command },
     })) as RpgTurnResponse;
   } catch (error) {
     if (isNotFound(error)) {

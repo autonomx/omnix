@@ -78,10 +78,11 @@ def project_outcomes_from_state(simulation_state: Dict[str, Any]) -> List[Dict[s
     for rumor in active_rumors[:4]:
         if not isinstance(rumor, dict):
             continue
-        projected.append({
+        projected.append({  # world creation's rumours, or a campaign's (EV-4: ``rules/rumours.py``)
             "type": "rumor_pressure",
-            "target_id": _safe_str(rumor.get("subject_id")) or _safe_str(rumor.get("faction_id")),
-            "location_id": _safe_str(rumor.get("location_id")),
+            "target_id": _safe_str(rumor.get("subject_id")) or _safe_str(rumor.get("faction_id"))
+            or _safe_str(rumor.get("rumour_id")),
+            "location_id": _safe_str(rumor.get("location_id")) or _safe_str(rumor.get("place_id")),
             "summary": _safe_str(rumor.get("text")) or _safe_str(rumor.get("type")),
             "tick": tick,
         })

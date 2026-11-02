@@ -21,10 +21,10 @@ EXPECTED_COUNTS = {
     "places": 7,
     "groups": 6,
     "cultures": 4,
-    "actors": 8,
+    "actors": 11,  # with the three Black Rain Station people of lore-additions.json
     "networks": 4,
     "technology_augmentations": 6,
-    "equipment_vehicles": 8,
+    "equipment_vehicles": 10,  # with the Stim Patch and the Ration Bar
     "roles_archetypes": 5,
     "threats": 6,
     "economy_law": 4,
@@ -73,7 +73,7 @@ def test_vesper_9_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
         topic_id: len(row["content"]["entities"])
         for topic_id, row in topics.items()
     } == EXPECTED_COUNTS
-    assert sum(EXPECTED_COUNTS.values()) == 91
+    assert sum(EXPECTED_COUNTS.values()) == 96  # 91 of the catalogue, 5 of lore-additions.json
 
     for topic_id, row in topics.items():
         content = row["content"]

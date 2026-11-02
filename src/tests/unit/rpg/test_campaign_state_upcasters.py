@@ -9,10 +9,12 @@ from app.apps.rpg.session.campaign_state import (
     CURRENT_SCHEMA_VERSION,
     UPCASTERS,
     CampaignState,
+    NewerCampaignDocumentError,
     schema_version,
     upcast_campaign_document,
     upcast_if_outdated,
 )
+from app.errors import DependencyUnavailable
 
 
 def _historical(version: int | str | None) -> dict:
@@ -67,6 +69,29 @@ def test_an_outdated_document_is_upcast_on_load() -> None:
     loaded = upcast_if_outdated(_historical(2))
     assert schema_version(loaded) == CURRENT_SCHEMA_VERSION
     assert loaded["runtime_state"]["ambient_queue"] == []
+
+
+def test_a_document_from_a_newer_omnix_is_refused_not_read_as_stored() -> None:
+    newer = upcast_campaign_document(_historical(1))
+    newer["manifest"]["schema_version"] = CURRENT_SCHEMA_VERSION + 1
+
+    for load in (upcast_if_outdated, upcast_campaign_document):
+        with pytest.raises(NewerCampaignDocumentError) as refused:
+            load(copy.deepcopy(newer))
+        assert refused.value.code == "rpg_campaign_requires_newer_omnix"
+        assert refused.value.hint == "Update Omnix to open this campaign."
+        assert isinstance(refused.value, DependencyUnavailable)
+
+
+def test_a_save_package_from_a_newer_omnix_is_refused() -> None:
+    from app.apps.rpg.foundation.persistence.migration_manager import migrate_package_to_current
+    from app.apps.rpg.foundation.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION
+
+    with pytest.raises(ValueError, match="newer than this Omnix supports"):
+        migrate_package_to_current({"schema_version": CURRENT_RPG_SCHEMA_VERSION + 1})
+    assert migrate_package_to_current({"schema_version": CURRENT_RPG_SCHEMA_VERSION})["schema_version"] == (
+        CURRENT_RPG_SCHEMA_VERSION
+    )
 
 
 def test_upcasters_are_ordered_and_reach_at_most_the_current_version() -> None:

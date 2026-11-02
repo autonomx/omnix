@@ -12,7 +12,7 @@ from app.apps.rpg.foundation.persistence.rpg_session_save_policy import (
     rpg_session_save_policy,
 )
 from app.apps.rpg.session import durable_store, service
-from app.apps.rpg.session.persistence.session_records import save_session_to_postgres
+from app.apps.rpg.session.persistence.session_records import load_session_from_postgres, save_session_to_postgres
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
@@ -48,6 +48,13 @@ def campaign_id():
         database.close()
 
 
+def _edit_elsewhere(campaign_id: str) -> None:
+    """Another request: it reads the campaign as stored (opening it may have upgraded it, RQ-1.1) and saves."""
+    stored = load_session_from_postgres(campaign_id)
+    stored["state"]["note"] = "edited elsewhere"
+    save_session_to_postgres(stored)
+
+
 def test_a_turn_reads_the_saved_game_once_until_it_commits(campaign_id, monkeypatch) -> None:
     reads: list[str] = []
     original = durable_store.load_session_from_disk
@@ -67,11 +74,7 @@ def test_a_turn_reads_the_saved_game_once_until_it_commits(campaign_id, monkeypa
 
         # Another request saves meanwhile (a thread starts without the turn's
         # context): the turn keeps its load; its commit is revision-checked.
-        edit = threading.Thread(target=save_session_to_postgres, args=({
-            "manifest": {"session_id": campaign_id, "id": campaign_id, "title": "Cache"},
-            "state": {"note": "edited elsewhere"},
-            "runtime_state": {"state_revision": 1},
-        },))
+        edit = threading.Thread(target=_edit_elsewhere, args=(campaign_id,))
         edit.start()
         edit.join()
         assert service.load_session(campaign_id)["state"]["note"] == "stored"

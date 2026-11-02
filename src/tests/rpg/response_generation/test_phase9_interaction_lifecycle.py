@@ -4,7 +4,6 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.interaction_lifecycle import (
-    apply_narration_result_to_interaction,
     initialize_interaction_lifecycle,
 )
 
@@ -49,20 +48,27 @@ def _stateful_result() -> dict[str, Any]:
     }
 
 
-def test_stateful_turn_enters_narration_pending_without_changing_simulation_state() -> None:
+def _pending(session: dict[str, Any]) -> dict[str, Any]:
+    """A save from before WP-5.6: its interaction waits on a deferred narration."""
+    lifecycle = session["runtime_state"]["interaction_lifecycles"]["interaction:1"]
+    lifecycle.update(status="narration_pending", narration_status="queued")
+    return session
+
+
+def test_a_committed_interaction_is_resolved_and_queues_no_narration() -> None:
     session = _session()
     before_simulation = deepcopy(session["simulation_state"])
     result = _stateful_result()
 
     lifecycle = initialize_interaction_lifecycle(session, result)
 
-    assert lifecycle["status"] == "narration_pending"
-    assert lifecycle["narration_status"] == "queued"
-    assert result["narration_request"]["interaction_id"] == "interaction:1"
+    # The turn's narration is the narrative engine's: a narration request on the result queues nothing.
+    assert lifecycle["status"] == "runtime_resolved"
+    assert lifecycle["narration_status"] == "not_requested"
     assert session["runtime_state"]["interaction_id_by_turn"]["turn:4"] == "interaction:1"
     assert session["simulation_state"] == before_simulation
     event = session["runtime_state"]["interaction_timeline"]["events"][0]
-    assert event["lifecycle"]["status"] == "narration_pending"
+    assert event["lifecycle"]["status"] == "runtime_resolved"
 
 
 def test_nonstateful_turn_stops_at_runtime_resolved() -> None:
@@ -84,87 +90,18 @@ def test_nonstateful_turn_stops_at_runtime_resolved() -> None:
     assert result["narration_status"] == "not_requested"
 
 
-def test_completed_narration_enriches_same_interaction_only(monkeypatch: Any) -> None:
+def test_version_10_retires_a_narration_pending_from_before_wp_5_6() -> None:
+    from app.apps.rpg.session.upgrades.legacy_narration import retire_pending_narration
+
+    session = _pending(_session_with_lifecycle())
+    session["runtime_state"]["narration_jobs_by_turn"] = {"turn:4": {"narration_request": {"turn_id": "turn:4"}}}
+    retired = retire_pending_narration(session)
+    lifecycle = retired["runtime_state"]["interaction_lifecycles"]["interaction:1"]
+    assert (lifecycle["status"], lifecycle["narration_status"]) == ("narration_retired", "retired")
+    assert "narration_jobs_by_turn" not in retired["runtime_state"]
+
+
+def _session_with_lifecycle() -> dict[str, Any]:
     session = _session()
-    result = _stateful_result()
-    initialize_interaction_lifecycle(session, result)
-    before_simulation = deepcopy(session["simulation_state"])
-    saved: list[dict[str, Any]] = []
-
-    monkeypatch.setattr(
-        "app.apps.rpg.session.session_runtime_store.load_runtime_session",
-        lambda session_id: session,
-    )
-    monkeypatch.setattr(
-        "app.apps.rpg.session.session_runtime_store.save_runtime_session",
-        lambda value: saved.append(deepcopy(value)) or value,
-    )
-
-    worker_result = apply_narration_result_to_interaction(
-        "session:bran",
-        {
-            "ok": True,
-            "status": "completed",
-            "turn_id": "turn:4",
-            "artifact": {
-                "artifact_type": "rpg_turn_narration",
-                "turn_id": "turn:4",
-                "tick": 4,
-                "narration": "Bran wraps the rations and slides them across the counter.",
-                "used_llm": False,
-            },
-        },
-    )
-
-    assert worker_result["interaction_id"] == "interaction:1"
-    assert worker_result["interaction_lifecycle"]["status"] == "narration_complete"
-    assert session["simulation_state"] == before_simulation
-    assert len(session["runtime_state"]["interaction_timeline"]["events"]) == 1
-    event = session["runtime_state"]["interaction_timeline"]["events"][0]
-    assert event["interaction_id"] == "interaction:1"
-    assert "slides them across" in event["narration_enrichment"]["narration"]
-    assert saved
-
-
-def test_failed_narration_keeps_authoritative_response_and_marks_same_interaction(monkeypatch: Any) -> None:
-    session = _session()
-    result = _stateful_result()
-    lifecycle = initialize_interaction_lifecycle(session, result)
-    authoritative = deepcopy(lifecycle["authoritative_response"])
-
-    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.load_runtime_session", lambda session_id: session)
-    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.save_runtime_session", lambda value: value)
-
-    failed = apply_narration_result_to_interaction(
-        "session:bran",
-        {
-            "ok": False,
-            "status": "failed",
-            "turn_id": "turn:4",
-            "error": "provider_unavailable",
-        },
-    )
-
-    assert failed["interaction_id"] == "interaction:1"
-    updated = failed["interaction_lifecycle"]
-    assert updated["status"] == "narration_failed"
-    assert updated["authoritative_response"] == authoritative
-    assert updated["narration_error"] == "provider_unavailable"
-
-
-def test_late_narration_for_superseded_turn_is_ignored(monkeypatch: Any) -> None:
-    session = _session()
-    result = _stateful_result()
-    initialize_interaction_lifecycle(session, result)
-    session["runtime_state"]["interaction_id_by_turn"]["turn:old"] = "interaction:1"
-
-    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.load_runtime_session", lambda session_id: session)
-    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.save_runtime_session", lambda value: value)
-
-    late = apply_narration_result_to_interaction(
-        "session:bran",
-        {"ok": True, "status": "completed", "turn_id": "turn:old", "artifact": {"narration": "Late."}},
-    )
-
-    assert "interaction_lifecycle" not in late
-    assert session["runtime_state"]["interaction_lifecycles"]["interaction:1"]["status"] == "narration_pending"
+    initialize_interaction_lifecycle(session, _stateful_result())
+    return session

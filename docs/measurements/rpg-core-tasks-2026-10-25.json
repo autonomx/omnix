@@ -1,0 +1,176 @@
+{
+ "measured_on": "2026-10-25",
+ "runs": [
+  {
+   "viewport": "phone",
+   "size": [
+    360,
+    740
+   ],
+   "session_id": "rpg_0_E_CqlRBxi0IgVe",
+   "tasks": [
+    {
+     "name": "start",
+     "ok": true,
+     "seconds": 1.1,
+     "detail": "rpg_0_E_CqlRBxi0IgVe"
+    },
+    {
+     "name": "take_quest",
+     "ok": true,
+     "seconds": 0.7,
+     "detail": "Voices in the Phone active"
+    },
+    {
+     "name": "travel",
+     "ok": true,
+     "seconds": 0.6,
+     "detail": "location:aurelia:starfall-village"
+    },
+    {
+     "name": "buy_and_undo",
+     "ok": true,
+     "seconds": 1.1,
+     "detail": "paid 36 copper, undone"
+    },
+    {
+     "name": "buy_and_sell",
+     "ok": true,
+     "seconds": 1.8,
+     "detail": "sold for 15 copper"
+    },
+    {
+     "name": "equip",
+     "ok": true,
+     "seconds": 2.4,
+     "detail": "Travel Cloak off and on"
+    },
+    {
+     "name": "finish_quest",
+     "ok": true,
+     "seconds": 0.8,
+     "detail": "First Night in Aurelia completed"
+    },
+    {
+     "name": "rest",
+     "ok": true,
+     "seconds": 0.7,
+     "detail": "turn 8"
+    },
+    {
+     "name": "save_point",
+     "ok": true,
+     "seconds": 1.4,
+     "detail": "back at location:aurelia:wayfarer-guild"
+    },
+    {
+     "name": "fight_on_grid",
+     "ok": true,
+     "seconds": 6.8,
+     "detail": "Sky Manta struck from the grid; enemy_side_defeated"
+    },
+    {
+     "name": "resume_after_away",
+     "ok": true,
+     "seconds": 0.9,
+     "detail": "the world went on"
+    }
+   ],
+   "passed": 11,
+   "total": 11,
+   "axe_serious_or_critical": [],
+   "axe_other": [
+    "aria-allowed-role",
+    "heading-order"
+   ],
+   "horizontal_overflow_px": 0,
+   "errors": []
+  },
+  {
+   "viewport": "desktop",
+   "size": [
+    1440,
+    900
+   ],
+   "session_id": "rpg_VayvjHvxz57msQTZ",
+   "tasks": [
+    {
+     "name": "start",
+     "ok": true,
+     "seconds": 1.4,
+     "detail": "rpg_VayvjHvxz57msQTZ"
+    },
+    {
+     "name": "take_quest",
+     "ok": true,
+     "seconds": 0.5,
+     "detail": "Voices in the Phone active"
+    },
+    {
+     "name": "travel",
+     "ok": true,
+     "seconds": 0.5,
+     "detail": "location:aurelia:starfall-village"
+    },
+    {
+     "name": "buy_and_undo",
+     "ok": true,
+     "seconds": 1.2,
+     "detail": "paid 36 copper, undone"
+    },
+    {
+     "name": "buy_and_sell",
+     "ok": true,
+     "seconds": 1.6,
+     "detail": "sold for 15 copper"
+    },
+    {
+     "name": "equip",
+     "ok": true,
+     "seconds": 2.4,
+     "detail": "Travel Cloak off and on"
+    },
+    {
+     "name": "finish_quest",
+     "ok": true,
+     "seconds": 0.5,
+     "detail": "First Night in Aurelia completed"
+    },
+    {
+     "name": "rest",
+     "ok": true,
+     "seconds": 0.8,
+     "detail": "turn 8"
+    },
+    {
+     "name": "save_point",
+     "ok": true,
+     "seconds": 1.5,
+     "detail": "back at location:aurelia:wayfarer-guild"
+    },
+    {
+     "name": "fight_on_grid",
+     "ok": true,
+     "seconds": 6.8,
+     "detail": "Sky Manta struck from the grid; enemy_side_defeated"
+    },
+    {
+     "name": "resume_after_away",
+     "ok": true,
+     "seconds": 0.9,
+     "detail": "the world went on"
+    }
+   ],
+   "passed": 11,
+   "total": 11,
+   "axe_serious_or_critical": [],
+   "axe_other": [
+    "aria-allowed-role",
+    "heading-order"
+   ],
+   "horizontal_overflow_px": 0,
+   "errors": []
+  }
+ ],
+ "all_pass": true
+}

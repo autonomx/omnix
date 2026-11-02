@@ -150,6 +150,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, observability | Controls gateway background role for kernel, observability. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
+| `OMNIX_GITHUB_WORLD_SHARING_CLIENT_ID` | string | — | rpg | Controls github world sharing client id for rpg. |
 | `OMNIX_GOOGLE_ALLOWED_DOMAINS` | list | — | security | Controls google allowed domains for security. |
 | `OMNIX_GOOGLE_CLIENT_ID` | string | — | security | Controls google client id for security. |
 | `OMNIX_GOOGLE_CLIENT_SECRET` | string | — | security | Controls google client secret for security. |
@@ -217,7 +218,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_MIGRATE_ON_START` | boolean | `false` | production.py | Controls migrate on start for production.py. |
 | `OMNIX_MIGRATION_DATABASE_URL` | string | — | kernel | Controls migration database url for kernel. |
 | `OMNIX_MODELS_DIR` | string | — | kernel | Controls models dir for kernel. |
-| `OMNIX_MODEL_LOAD_COMMIT_BYTES` | string | — | image | Controls model load commit bytes for image. |
+| `OMNIX_MODEL_LOAD_COMMIT_MB` | string | — | image | Controls model load commit mb for image. |
 | `OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT` | integer | `13` | providers | Controls nemotron final right context for providers. |
 | `OMNIX_NEMOTRON_MODEL` | string | `nvidia/nemotron-speech-streaming-en-0.6b` | providers | Controls nemotron model for providers. |
 | `OMNIX_NEMOTRON_RIGHT_CONTEXT` | integer | `1` | providers | Controls nemotron right context for providers. |
@@ -236,6 +237,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_PACKS_DIR` | string | — | models | Controls packs dir for models. |
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
+| `OMNIX_PORTRAIT_ENABLED` | boolean | `1` | launcher | Controls portrait enabled for launcher. |
+| `OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS` | integer | `600` | tooling | Controls portrait idle unload seconds for tooling. |
+| `OMNIX_PORTRAIT_MAX_STREAMS` | integer | `1` | tooling | Controls portrait max streams for tooling. |
+| `OMNIX_PORTRAIT_PORT` | integer | `5501` | tooling | Controls portrait port for tooling. |
+| `OMNIX_PORTRAIT_PRELOAD` | boolean | `false` | tooling | Controls portrait preload for tooling. |
+| `OMNIX_PORTRAIT_URL` | string | — | launcher, live-voice, voice | Controls portrait url for launcher, live-voice, voice. |
+| `OMNIX_PORTRAIT_VRAM_CAP_MB` | integer | `4096` | tooling | Controls portrait vram cap mb for tooling. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
 | `OMNIX_PRODUCT_NAME` | string | — | kernel | Controls product name for kernel. |
 | `OMNIX_PROVIDER_SECRETS_PATH` | string | — | security | Controls provider secrets path for security. |
@@ -250,6 +258,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
 | `OMNIX_RPG_SNAPSHOT_EVERY` | integer | `20` | rpg | Controls rpg snapshot every for rpg. |
+| `OMNIX_RPG_TURNS_PER_HOUR` | integer | `600` | rpg | Controls rpg turns per hour for rpg. |
+| `OMNIX_RPG_TURN_WAIT_SECONDS` | integer | `120` | rpg | Controls rpg turn wait seconds for rpg. |
+| `OMNIX_RPG_WORLD_CATALOG_REPO` | string | — | rpg | Controls rpg world catalog repo for rpg. |
 | `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |
 | `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |
 | `OMNIX_S3_BUCKET` | string | — | kernel | Controls s3 bucket for kernel. |
@@ -376,7 +387,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `PYTEST_CURRENT_TEST` | string | — | kernel | Controls pytest current test for kernel. |
 | `PYTHONPATH` | string | — | rpg | Controls pythonpath for rpg. |
 | `RPG_TRACE_PROVIDER_CALLS` | string | — | providers | Controls rpg trace provider calls for providers. |
-| `RPG_TRACE_SESSION_TURN` | string | — | rpg | Controls rpg trace session turn for rpg. |
 | `SYSTEMROOT` | string | — | agent-runtime | Controls systemroot for agent-runtime. |
 | `VITE_ASSISTANT_STT_URL` | string | `/api/stt?language=en&authority=auto&endpoint_threshold=0.5` | launcher | Controls vite assistant stt url for launcher. |
 | `VITE_LIVE_SPECULATION_ENABLED` | string | `true` | launcher | Controls vite live speculation enabled for launcher. |

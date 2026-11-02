@@ -4,11 +4,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id
-from app.apps.rpg.world.map_persistence import ensure_session_map_state
-from app.apps.rpg.session.ambient_builder import (
-    ensure_ambient_runtime_state,
-    normalize_ambient_state,
-)
 from app.apps.rpg.session.durable_store import (
     archive_session_on_disk,
     list_sessions_from_disk,
@@ -16,12 +11,8 @@ from app.apps.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
-from app.apps.rpg.session.environment import ensure_session_environment_seed_state
 from app.apps.rpg.session.list_summaries import list_session_summaries_from_disk
 from app.apps.rpg.session.migrations import migrate_session_payload
-from app.apps.rpg.session.published_opening_progress import (
-    ensure_published_opening_progress,
-)
 from app.apps.rpg.session.survival_persistence import normalize_session_survival_for_persistence
 from app.apps.rpg.rules.validation.integrity import (
     assert_session_integrity,
@@ -35,6 +26,7 @@ from app.apps.rpg.foundation.persistence.rpg_session_save_policy import (
     turn_persisted_rng_seed,
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.state import access as _sections
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -48,8 +40,8 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
     session["manifest"] = manifest
     session.setdefault("installed_packs", [])
     session.setdefault("simulation_state", {})
-    simulation_state = dict(_safe_dict(session.get("simulation_state")))
-    rng_seed = simulation_state.get("rng_seed")
+    simulation_state = dict(_safe_dict(_sections.simulation_state_of(session)))
+    rng_seed = _sections.rng_seed_of(simulation_state)
     if (
         not isinstance(rng_seed, int)
         or isinstance(rng_seed, bool)
@@ -66,15 +58,8 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
         rng_seed = rng_seed_from_session_id(session_id)
         simulation_state["rng_seed"] = rng_seed
     session["simulation_state"] = simulation_state
-    session = ensure_session_environment_seed_state(session)
     session = normalize_session_survival_for_persistence(session, owned=owned)
-    session = ensure_session_map_state(session)
-    # Living-world: ensure ambient runtime state exists and is bounded
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    runtime_state = ensure_ambient_runtime_state(runtime_state)
-    runtime_state = normalize_ambient_state(runtime_state)
-    session["runtime_state"] = runtime_state
-    return ensure_published_opening_progress(session)
+    return session
 
 
 def save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
@@ -93,14 +78,14 @@ def save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str,
         saved = _save_session(session, compact=compact)
         if span is not None:
             saved_manifest = _safe_dict(saved.get("manifest"))
-            runtime_state = _safe_dict(saved.get("runtime_state"))
+            runtime_state = _safe_dict(_sections.runtime_state_of(saved))
             span["session_id"] = str(
                 saved_manifest.get("session_id")
                 or saved_manifest.get("id")
                 or session_id
             )
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         return saved
 
 
@@ -124,8 +109,8 @@ def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str
                 or not 0 <= previous_seed < 2**64
             ):
                 previous_seed = rng_seed_from_session_id(session_id)
-            simulation_state = dict(_safe_dict(session.get("simulation_state")))
-            submitted_seed = simulation_state.get("rng_seed")
+            simulation_state = dict(_safe_dict(_sections.simulation_state_of(session)))
+            submitted_seed = _sections.rng_seed_of(simulation_state)
             if (
                 isinstance(submitted_seed, int)
                 and not isinstance(submitted_seed, bool)
@@ -160,39 +145,16 @@ def load_session(session_id: str) -> dict[str, Any]:
         from .interaction_event_store import load_and_replay_interaction_events
 
         session = load_and_replay_interaction_events(session_id, session)
-        from .interaction_lifecycle import recover_pending_interaction_narration
-
-        try:
-            recovered = recover_pending_interaction_narration(session_id, session)
-        except Exception as exc:
-            from app.apps.rpg.foundation.debug_logging import log_rpg_event
-
-            log_rpg_event(
-                "turn.stage.degraded",
-                category="performance",
-                level="warning",
-                session_id=session_id,
-                fields={
-                    "metric": "rpg_turn_stage_degraded",
-                    "stage": "interaction_narration_recovery",
-                    "degraded_stage_count": 1,
-                    "error_type": type(exc).__name__,
-                },
-                error=exc,
-            )
-        else:
-            if span is not None:
-                span["pending_narration_recovered"] = recovered
         if span is not None:
             manifest = _safe_dict(session.get("manifest"))
-            runtime_state = _safe_dict(session.get("runtime_state"))
+            runtime_state = _safe_dict(_sections.runtime_state_of(session))
             span["session_id"] = str(
                 manifest.get("session_id")
                 or manifest.get("id")
                 or session_id
             )
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         if turn_scoped:
             remember_turn_session(session_id, session)
         return session
@@ -273,9 +235,9 @@ class SessionCampaignSessions:
         return RpgNewGameRequest.model_validate(payload)
 
     def create_new_game(self, request: Any) -> dict[str, Any]:
-        from app.apps.rpg.session.new_game import create_new_game_session
+        from app.apps.rpg.session.new_game import create_new_game_session_with_progress
 
-        return create_new_game_session(request)
+        return create_new_game_session_with_progress(request)
 
     def build_new_game(self, request: Any) -> dict[str, Any]:
         from app.apps.rpg.session.new_game import _build_new_game_session

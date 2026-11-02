@@ -15,6 +15,7 @@ Browser-facing JSON routes have typed request and response contracts in OpenAPI.
 | `src/app/platform/chat/live_chat_speculation_handshake.py` | POST | `/api/live/speculation/sessions/{session_id}/{generation_id}/stream` | Server-Sent Events |
 | `src/app/platform/chat/live_chat_speculation_inline_stream.py` | POST | `/api/live/speculation/sessions/{session_id}/start-stream` | Server-Sent Events |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_narrative_delivery_routes.py` | GET | `/api/rpg/narrative-responses/{response_id}/stream` | Server-Sent Events |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py` | GET | `/api/rpg/sessions/{session_id}/submissions/{submission_id}/stream` | Server-Sent Events |
 
 WebSocket routes are absent from OpenAPI by protocol definition. The gateway and feature routes are:
 
@@ -31,6 +32,8 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 
 | Source | Method | Route path | Transport |
 |---|---|---|---|
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py` | GET | `/api/rpg/sessions/{session_id}/export` | A campaign package, downloaded as a JSON file (its shape documented) |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_voice_routes.py` | POST | `/api/rpg/sessions/{session_id}/speech-audio` | A sentence's PCM16 audio, streamed as it is synthesized |
 | `src/app/apps/audiobook/routes.py` | DELETE | `/api/audiobook/projects/{project_id}` | 204 No Content |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/source/download` | Source file bytes; format-specific media type |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/cover` | JPEG or PNG bytes |
@@ -104,7 +107,6 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/trading/drawings/tools/types.ts` | `DrawingActionRequest` | What a drawing's context action asks of the chart (open the order ticket, say) |
 | `web/src/features/trading/intrabarData.ts` | `IntrabarRequest` | A request to the browser's intrabar loader and cache; the wire request is the query of `GET /api/trading/bars/intrabar` |
 | `web/src/features/rpg/api/rpgGenesis.ts` | `LooseRequest` | The new-game form's fields before `withRpgGenesisContract` folds them into the genesis contract (the wire body is `RpgNewGameRequestBody`) |
-| `web/src/features/rpg/RpgLoadoutTabs.tsx` | `RpgItemPanelRequest` | An item panel action before it becomes a loadout-action or item-command call |
 | `web/src/features/rpg/RpgWorldGenerationDashboard.tsx` | `RetryRequest` | Mutation variables; the wire body is the generation review retry request |
 | `web/src/features/rpg/rpgTurnUiStore.ts` | `CachedResponse` | A turn response the fetch middleware keeps per session to replay into the turn UI |
 

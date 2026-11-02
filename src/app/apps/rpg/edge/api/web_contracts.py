@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from typing_extensions import NotRequired, Required, TypedDict
 
+from app.apps.rpg.genesis.worlds.world_play_sections import PlaySectionsDraft
+
 
 def documented(model: Any) -> dict[int | str, dict[str, Any]]:
     """The ``responses`` entry that publishes ``model`` as a route's 200 response."""
@@ -793,11 +795,75 @@ class RpgMapBlueprintRevision(TypedDict, total=False):
     created_at: Required[str]
 
 
+RpgPlaySectionSource = Literal["authored", "derived"]
+
+
+class RpgPlaySectionsReadiness(TypedDict):
+    """Each section (``world_play_sections.SECTIONS``): written by the world, or inferred from its lore at launch."""
+
+    economy: RpgPlaySectionSource
+    routines: RpgPlaySectionSource
+    knowledge: RpgPlaySectionSource
+    pressures: RpgPlaySectionSource
+    bestiary: RpgPlaySectionSource
+    quests: RpgPlaySectionSource
+    fact_effects: RpgPlaySectionSource
+    group_members: RpgPlaySectionSource
+    budgets: RpgPlaySectionSource
+
+
 class RpgWorldRevision(TypedDict, total=False):
     revision: Required[float]
     document: Required[dict[str, Any]]
     content_hash: Required[str]
     created_at: Required[str]
+    play_sections: NotRequired[RpgPlaySectionsReadiness]  # in the world's detail
+
+
+class RpgPlaySectionsReadinessView(TypedDict):
+    published: RpgPlaySectionsReadiness | None
+    draft: RpgPlaySectionsReadiness
+
+
+class RpgPlaySectionsReference(TypedDict):
+    id: str
+    name: str
+
+
+class RpgPlaySectionsReferences(TypedDict):
+    """What a section may name: the world's people, places, items, creatures, regions and quests."""
+
+    people: list[RpgPlaySectionsReference]
+    places: list[RpgPlaySectionsReference]
+    items: list[RpgPlaySectionsReference]
+    creatures: list[RpgPlaySectionsReference]
+    regions: list[RpgPlaySectionsReference]
+    quests: list[RpgPlaySectionsReference]
+
+
+class RpgPlaySectionsResponse(TypedDict):
+    """How a world plays, in the world editor (RQ-4.1): the author's draft (else what the latest revision carries),
+    the hash a save must name, whether a draft is kept and not yet published, readiness as published and as drafted,
+    the references the next publication would refuse, and what the sections may name."""
+
+    ok: bool
+    world_id: str
+    document: PlaySectionsDraft
+    content_hash: str
+    saved: bool
+    unpublished: bool
+    published_revision: int | None
+    readiness: RpgPlaySectionsReadinessView
+    findings: list[str]
+    references: RpgPlaySectionsReferences
+
+
+class RpgPlaySectionsDraftResponse(TypedDict):
+    """World Forge's first draft from the world's lore; not kept until the author saves it."""
+
+    ok: bool
+    world_id: str
+    document: PlaySectionsDraft
 
 
 class RpgWorldRelease(TypedDict, total=False):
@@ -817,6 +883,14 @@ class RpgScenarioSummary(TypedDict, total=False):
     metadata: Required[dict[str, Any]]
     created_at: Required[str]
     updated_at: Required[str]
+
+
+class RpgCampaignImportResponse(TypedDict):
+    """A campaign imported from a save package (RQ-8.6), as it now loads."""
+
+    ok: bool
+    session_id: str
+    session: dict[str, Any]
 
 
 class RpgWorldDetailResponse(TypedDict, total=False):
@@ -908,169 +982,6 @@ class RpgPresetListResponse(TypedDict, total=False):
     presets: Required[list[RpgPresetSummary]]
 
 
-class HermesRpgSequenceStateResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    source: NotRequired[str]
-    state: NotRequired[dict[str, Any] | None]
-    error: NotRequired[str | None]
-
-
-class HermesRpgSequenceResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    source: NotRequired[str]
-    validation: NotRequired[dict[str, Any]]
-    sequence: NotRequired[dict[str, Any]]
-    gate: NotRequired[dict[str, Any] | None]
-    checkpoint: NotRequired[dict[str, Any] | None]
-    loop_guard: NotRequired[dict[str, Any] | None]
-    assist_mode: NotRequired[dict[str, Any] | None]
-    sequence_state: NotRequired[dict[str, Any] | None]
-    state_changed: NotRequired[bool]
-
-
-class HermesRpgExecutionLedgerItem(TypedDict, total=False):
-    execution_id: NotRequired[str]
-    created_at: NotRequired[str]
-    session_id: NotRequired[str | None]
-    sequence_id: NotRequired[str | None]
-    item_id: NotRequired[str | None]
-    command_text: NotRequired[str | None]
-    approval_source: NotRequired[str | None]
-    checkpoint_reason: NotRequired[str | None]
-    state_changed: NotRequired[bool]
-    result_summary: NotRequired[str | None]
-    error: NotRequired[str | None]
-
-
-class HermesRpgExecutionLedgerResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    source: NotRequired[str]
-    items: NotRequired[list[HermesRpgExecutionLedgerItem]]
-    count: NotRequired[float]
-
-
-class HermesRpgApprovedFlowConfig(TypedDict, total=False):
-    ok: NotRequired[bool]
-    source: NotRequired[str]
-    feature_flag: NotRequired[str]
-    default_enabled: NotRequired[bool]
-    enabled: NotRequired[bool]
-    requires_payload_enabled: NotRequired[bool]
-    simulation_owned: NotRequired[bool]
-
-
-class HermesRpgApprovedFlowResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    source: NotRequired[str]
-    enabled: NotRequired[bool]
-    config: NotRequired[HermesRpgApprovedFlowConfig]
-    flow: NotRequired[dict[str, Any]]
-    readout: NotRequired[dict[str, Any]]
-    ledger_entry: NotRequired[dict[str, Any]]
-    error: NotRequired[str | None]
-    state_changed: NotRequired[bool]
-
-
-class HermesTestResponseResultResult(TypedDict, total=False):
-    response: NotRequired[str]
-
-
-class HermesTestResponseResult(TypedDict, total=False):
-    backend: NotRequired[str]
-    result: NotRequired[HermesTestResponseResultResult]
-
-
-class HermesTestResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    dry_run: NotRequired[bool]
-    result: NotRequired[HermesTestResponseResult]
-    error: NotRequired[str | None]
-
-
-class HermesRpgTurnReadoutResponseTurn(TypedDict, total=False):
-    turn_id: NotRequired[str | float | None]
-    command: NotRequired[str]
-    category: NotRequired[str]
-    narration_present: NotRequired[bool]
-
-
-class HermesRpgTurnReadoutResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    read_only: NotRequired[bool]
-    source: NotRequired[str]
-    session_id: NotRequired[str | None]
-    turn: NotRequired[HermesRpgTurnReadoutResponseTurn]
-    systems: NotRequired[list[str]]
-    effect_count: NotRequired[float]
-    grounding_status: NotRequired[str]
-    notes: NotRequired[list[str]]
-    error: NotRequired[str | None]
-
-
-class HermesRpgSuggestion(TypedDict, total=False):
-    id: NotRequired[str]
-    label: NotRequired[str]
-    command: NotRequired[str]
-    kind: NotRequired[str]
-    risk: NotRequired[str]
-    requires_user_click: NotRequired[bool]
-    direct_state_write: NotRequired[bool]
-    processed_by: NotRequired[str]
-    reason: NotRequired[str]
-
-
-class HermesRpgSuggestionsResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    read_only: NotRequired[bool]
-    source: NotRequired[str]
-    suggestions: NotRequired[list[HermesRpgSuggestion]]
-    count: NotRequired[float]
-    error: NotRequired[str | None]
-
-
-class HermesApprovalResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    approved: NotRequired[bool]
-    error: NotRequired[str | None]
-    mode: NotRequired[str]
-    request: NotRequired[dict[str, Any]]
-
-
-class HermesRouteDecisionResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    source: NotRequired[str]
-    mode: NotRequired[str]
-    role: NotRequired[str]
-    owner: NotRequired[str]
-    review_required: NotRequired[bool]
-    capabilities: NotRequired[list[str]]
-    boundary: NotRequired[str]
-    error: NotRequired[str | None]
-
-
-class HermesCandidatePreview(TypedDict, total=False):
-    name: NotRequired[str]
-    target: NotRequired[str]
-    before: NotRequired[dict[str, Any]]
-    after: NotRequired[dict[str, Any]]
-    risk: NotRequired[str]
-    note: NotRequired[str]
-
-
-class HermesCandidatePreviewResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    candidate: NotRequired[HermesCandidatePreview]
-    preview_only: NotRequired[bool]
-
-
-class HermesRecentResponse(TypedDict, total=False):
-    ok: NotRequired[bool]
-    items: NotRequired[list[dict[str, Any]]]
-    count: NotRequired[float]
-    source: NotRequired[str]
-
-
-
 class RpgWorldCatalogInstalled(TypedDict, total=False):
     world_id: Required[str]
     version: Required[int]
@@ -1157,3 +1068,160 @@ class RpgWorldShareResponse(TypedDict, total=False):
     pull_request_url: Required[str]
     bundle_sha256: Required[str]
     bundle_bytes: Required[int]
+
+
+class RpgSavePoint(TypedDict, total=False):
+    """A named moment of a campaign to return to (rewind.md)."""
+
+    name: Required[str]
+    revision: Required[int]
+    created_at: Required[str]
+
+
+class RpgSavePointsResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    save_points: Required[list[RpgSavePoint]]
+    save_point: NotRequired[RpgSavePoint]
+
+
+class RpgGameMasterWish(TypedDict, total=False):
+    """A wish for the story the game master proposes, for the player to confirm (EV-0): its kind and value."""
+
+    kind: Required[str]
+    value: Required[str]
+
+
+class RpgGameMasterEntry(TypedDict, total=False):
+    """One question to the game master, and the answer shown (EV-0)."""
+
+    id: Required[int]
+    question: Required[str]
+    answer: Required[str]
+    withheld: Required[bool]
+    wish: NotRequired[RpgGameMasterWish | None]
+    asked_at: NotRequired[str]
+
+
+class RpgGameMasterResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    entry: NotRequired[RpgGameMasterEntry]
+    entries: NotRequired[list[RpgGameMasterEntry]]
+
+
+class RpgLoreLink(TypedDict, total=False):
+    """A name in a text that opens its entry's lore (EV-12): the entry, and where the name stands in the text."""
+
+    entry_id: Required[str]
+    start: Required[int]
+    end: Required[int]
+
+
+class RpgLoreLinkable(TypedDict, total=False):
+    """An entry a text may link (EV-12): its family and names. None the hero may not be shown."""
+
+    entry_id: Required[str]
+    family: Required[str]
+    names: Required[list[str]]
+
+
+class RpgLoreLinkablesResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    entries: Required[list[RpgLoreLinkable]]
+
+
+class RpgLoreLearned(TypedDict, total=False):
+    known_as: Required[str]
+    told: Required[list[str]]
+    facts: Required[list[str]]
+
+
+class RpgLoreEntryLinks(TypedDict, total=False):
+    text: Required[str]
+    lore: Required[list[RpgLoreLink]]
+
+
+class RpgLoreEntryView(TypedDict, total=False):
+    """What a link opens (EV-12): the entry's public lore, what the hero has learned of it, and links onward."""
+
+    entry_id: Required[str]
+    family: Required[str]
+    name: Required[str]
+    lore: Required[dict[str, str]]
+    learned: Required[RpgLoreLearned]
+    links: Required[RpgLoreEntryLinks]
+
+
+class RpgLoreDraft(TypedDict, total=False):
+    """One of the game master's inventions filed for its world's review (EV-0, part 2)."""
+
+    id: Required[int]
+    world_id: Required[str]
+    campaign_id: Required[str]
+    entry_id: Required[str]
+    family: Required[str]
+    name: Required[str]
+    group_key: Required[str]
+    entry: Required[dict[str, Any]]
+    provenance: Required[dict[str, Any]]
+    status: Required[str]
+    findings: NotRequired[dict[str, Any] | None]
+    canon_id: Required[str]
+    linked_to: NotRequired[int | None]
+    created_at: Required[str]
+    decided_at: NotRequired[str | None]
+
+
+class RpgLoreDraftGroup(TypedDict, total=False):
+    group_key: Required[str]
+    drafts: Required[list[RpgLoreDraft]]
+
+
+class RpgLoreReviewResponse(TypedDict, total=False):
+    ok: Required[bool]
+    world_id: Required[str]
+    groups: NotRequired[list[RpgLoreDraftGroup]]
+    draft: NotRequired[RpgLoreDraft]
+
+
+class RpgVoiceCastEntry(TypedDict, total=False):
+    """The narrator or a person who speaks, and their voice (EV-13)."""
+
+    speaker_id: Required[str]
+    name: Required[str]
+    voice_id: NotRequired[str]
+    voice_revision: NotRequired[str]
+    chosen_by: NotRequired[str]
+
+
+class RpgCastableVoice(TypedDict, total=False):
+    voice_id: Required[str]
+    name: Required[str]
+    description: Required[str]
+
+
+class RpgVoiceCastResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    cast: Required[list[RpgVoiceCastEntry]]
+    voices: Required[list[RpgCastableVoice]]
+
+
+class RpgSpeechSegment(TypedDict):
+    speaker_id: str
+    voice_id: str
+    sentences: list[str]
+
+
+class RpgSpeechPlanResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    segments: Required[list[RpgSpeechSegment]]
+
+
+class RpgLoreEntryResponse(TypedDict, total=False):
+    ok: Required[bool]
+    session_id: Required[str]
+    entry: Required[RpgLoreEntryView]

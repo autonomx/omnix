@@ -1,0 +1,160 @@
+/* What the play screen's components build on and override: it loads before them (RQ-7.5). */
+@layer features {
+  .rpg-workstation-header p,
+  .rpg-workstation p {
+    margin: 0;
+  }
+
+  .rpg-card {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-neutral-220) 82%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 82%, transparent)),
+    color-mix(in srgb, var(--bg-neutral-160) 84%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 15%, transparent);
+    border-radius: 0.85rem;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 5%, transparent),
+    0 1.4rem 3.5rem color-mix(in srgb, var(--c-neutral-0) 18%, transparent);
+    display: grid;
+    gap: 0.85rem;
+    min-width: 0;
+    padding: 0.95rem;
+    overflow-wrap: anywhere;
+  }
+
+  .rpg-section-heading > span,
+  .rpg-section-heading button {
+    color: var(--fg-violet-830);
+    font-size: 0.8rem;
+  }
+
+  .rpg-section-heading button {
+    background: color-mix(in srgb, var(--accent-violet-540) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 28%, transparent);
+    border-radius: 999px;
+    cursor: pointer;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .rpg-list-row span,
+  .rpg-party-row span,
+  .rpg-quest-row span,
+  .rpg-workstation small,
+  .rpg-journal-detail p,
+  .rpg-report-row small {
+    color: var(--fg-slate-730);
+  }
+
+  .rpg-resource-grid strong,
+  .rpg-list-row strong,
+  .rpg-party-row strong,
+  .rpg-quest-row strong,
+  .rpg-report-row strong {
+    color: var(--fg-slate-970-2);
+  }
+
+  .rpg-resource-grid span {
+    color: var(--fg-violet-830);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .rpg-party-health > span {
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--c-green-720), var(--c-green-870));
+  }
+
+  .rpg-resource-grid div {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
+    border-radius: 0.7rem;
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.65rem;
+  }
+
+  .rpg-party-row small {
+    font-size: 0.72rem;
+    justify-self: end;
+    white-space: nowrap;
+  }
+
+  .rpg-party-row div,
+  .rpg-list-row div,
+  .rpg-quest-row div,
+  .rpg-report-row div {
+    display: grid;
+    gap: 0.08rem;
+    min-width: 0;
+  }
+
+  .rpg-tabs button {
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.7rem;
+    cursor: pointer;
+    background: transparent;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-color: transparent;
+    color: var(--fg-violet-830);
+    padding: 0.6rem 0.95rem;
+  }
+
+  .rpg-chip-row span {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 5.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
+    border-radius: 999px;
+    color: var(--fg-slate-830);
+    font-size: 0.75rem;
+    padding: 0.28rem 0.55rem;
+  }
+
+  .rpg-tabs button:focus-visible,
+  .rpg-section-heading button:focus-visible {
+    border-color: color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    outline: none;
+  }
+
+  .rpg-tabs button:hover {
+    background: color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 42%, transparent);
+  }
+
+  .rpg-journal-list p {
+    color: var(--fg-slate-730);
+    font-size: 0.82rem;
+  }
+
+  .rpg-map-controls span {
+    align-items: center;
+    background: color-mix(in srgb, var(--bg-slate-130) 70%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 14%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-neutral-1000);
+    display: inline-flex;
+    height: 1.85rem;
+    justify-content: center;
+    width: 1.85rem;
+  }
+
+  .rpg-report-row > span {
+    align-items: center;
+    background: color-mix(in srgb, var(--accent-violet-540) 14%, transparent);
+    border-radius: 0.6rem;
+    color: var(--fg-violet-810);
+    display: inline-flex;
+    height: 2.3rem;
+    justify-content: center;
+    width: 2.3rem;
+  }
+
+  .rpg-list-row strong,
+  .rpg-party-row strong,
+  .rpg-quest-row strong,
+  .rpg-report-row strong,
+  .rpg-report-row small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

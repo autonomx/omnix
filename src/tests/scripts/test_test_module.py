@@ -30,7 +30,10 @@ def test_characterization_scenarios_name_catalog_modules() -> None:
                 named.update(ast.literal_eval(node.value))
 
     assert named <= set(FEATURE_CATALOG)
-    assert [path.name for path in module_tests.characterization_scenarios("rpg")] == ["test_rpg_production_turn.py"]
+    assert [path.name for path in module_tests.characterization_scenarios("rpg")] == [
+        "test_rpg_production_turn.py",
+        "test_rpg_published_world_golden.py",
+    ]
 
 
 def test_an_unknown_module_is_refused() -> None:

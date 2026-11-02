@@ -15,9 +15,6 @@ from typing import Any, Dict
 from app.apps.rpg.foundation.safe_values import list_copy as _safe_list
 
 
-_MAX_ITEMS = 12
-
-
 def summarize_tick_changes(before_state: Dict[str, Any], after_state: Dict[str, Any]) -> Dict[str, Any]:
     """Summarize what changed between two simulation states."""
     before_state = before_state or {}

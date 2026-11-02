@@ -1023,6 +1023,13 @@
   },
   {
     "default": null,
+    "description": "Controls github world sharing client id for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_GITHUB_WORLD_SHARING_CLIENT_ID",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls google allowed domains for security.",
     "feature": "security",
     "name": "OMNIX_GOOGLE_ALLOWED_DOMAINS",
@@ -1492,9 +1499,9 @@
   },
   {
     "default": null,
-    "description": "Controls model load commit bytes for image.",
+    "description": "Controls model load commit mb for image.",
     "feature": "image",
-    "name": "OMNIX_MODEL_LOAD_COMMIT_BYTES",
+    "name": "OMNIX_MODEL_LOAD_COMMIT_MB",
     "type": "string"
   },
   {
@@ -1624,6 +1631,55 @@
     "type": "string"
   },
   {
+    "default": "1",
+    "description": "Controls portrait enabled for launcher.",
+    "feature": "launcher",
+    "name": "OMNIX_PORTRAIT_ENABLED",
+    "type": "boolean"
+  },
+  {
+    "default": "600",
+    "description": "Controls portrait idle unload seconds for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS",
+    "type": "integer"
+  },
+  {
+    "default": "1",
+    "description": "Controls portrait max streams for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_MAX_STREAMS",
+    "type": "integer"
+  },
+  {
+    "default": "5501",
+    "description": "Controls portrait port for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_PORT",
+    "type": "integer"
+  },
+  {
+    "default": "false",
+    "description": "Controls portrait preload for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_PRELOAD",
+    "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls portrait url for launcher, live-voice, voice.",
+    "feature": "launcher, live-voice, voice",
+    "name": "OMNIX_PORTRAIT_URL",
+    "type": "string"
+  },
+  {
+    "default": "4096",
+    "description": "Controls portrait vram cap mb for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_PORTRAIT_VRAM_CAP_MB",
+    "type": "integer"
+  },
+  {
     "default": null,
     "description": "Controls private browser for launcher.",
     "feature": "launcher",
@@ -1720,6 +1776,27 @@
     "feature": "rpg",
     "name": "OMNIX_RPG_SNAPSHOT_EVERY",
     "type": "integer"
+  },
+  {
+    "default": "600",
+    "description": "Controls rpg turns per hour for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURNS_PER_HOUR",
+    "type": "integer"
+  },
+  {
+    "default": "120",
+    "description": "Controls rpg turn wait seconds for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURN_WAIT_SECONDS",
+    "type": "integer"
+  },
+  {
+    "default": null,
+    "description": "Controls rpg world catalog repo for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_WORLD_CATALOG_REPO",
+    "type": "string"
   },
   {
     "default": null,
@@ -2601,13 +2678,6 @@
     "description": "Controls rpg trace provider calls for providers.",
     "feature": "providers",
     "name": "RPG_TRACE_PROVIDER_CALLS",
-    "type": "string"
-  },
-  {
-    "default": "",
-    "description": "Controls rpg trace session turn for rpg.",
-    "feature": "rpg",
-    "name": "RPG_TRACE_SESSION_TURN",
     "type": "string"
   },
   {

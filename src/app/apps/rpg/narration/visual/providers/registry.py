@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from app.config.env import environment
 
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .base import BaseImageProvider
 from .disabled_provider import DisabledImageProvider
-
-ProviderFactory = Callable[[Dict[str, Any]], BaseImageProvider]
 
 
 def _disabled_provider_factory(config: Dict[str, Any]) -> BaseImageProvider:
@@ -32,10 +30,6 @@ _REGISTRY: Dict[str, Dict[str, Any]] = {
         "runtime_validator": "flux_klein",
     },
 }
-
-
-def list_visual_provider_keys() -> List[str]:
-    return sorted(_REGISTRY.keys())
 
 
 def list_visual_provider_options() -> List[Dict[str, str]]:
@@ -94,10 +88,3 @@ def build_visual_provider(config: Dict[str, Any] | None = None) -> Tuple[str, Ba
         entry = _REGISTRY[key]
     provider = entry["factory"](cfg)
     return key, provider
-
-
-def get_visual_provider_runtime_validator(provider_key: str) -> str | None:
-    entry = _REGISTRY.get(_normalize_provider_key(provider_key))
-    if not entry:
-        return None
-    return entry.get("runtime_validator")

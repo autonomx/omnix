@@ -14,9 +14,22 @@ This writes:
 
 `resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
-Bundle SHA-256: `7b4b4d2868af5b96070f3f40a6f27983576dfda50bb5c9d2972424db64e45eb6`
+Bundle SHA-256: `108e745b7ba8efa1b2ab52e105e0cf3ce5286bdda9b319510d541984ea2985d1`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:aurelia-echoes-beyond-the-gate`, or enter another ID to create a clone.
+
+## How it plays
+
+Aurelia's author wrote its people's days (`play-sections.json`): where each of the ten is, hour by hour, and their goals. By day everyone keeps their place (Liora in the grove, Miri and Seraphine at the guild, Orik, Brindle and Rhea in the village); evenings and nights differ (Liora by the inn's hearth, Brindle pitching at the guild, Rhea checking the pass's barricades, Naia at the grove at dawn).
+
+The author also wrote its pressures, how its creatures fight (the deeper the place, the stronger what lives there: the pass's Sky Mantas at level 4, the ashen Glass Wights at 5, the Loom's Rootbound Knights at 6, the Hollow Archon at 10), and every quest's steps: the first night ends with a companion chosen, the phone is mended and its voice followed and named, Orik's daughter's memory is won back past the Loom's knights (and pays the Moonroot Key), and the finale needs that key, the descent, Malrec, the Archon, and a choice of the gate's fate. Its economy and knowledge are still played from its lore. Its four roads leave Valecourt, Cinderhold and the Hollow Meridian unreached; a launch joins each to them (`lore_sections.joined_routes`).
+
+The sections are written in the way a world author writes them, by the world library's own lifecycle: `author_play_sections.py` imports the bundle into a disposable database, saves and publishes the sections (a new world revision, each opening pinned to it), exports the world, and writes its `world.json` into the source parts, the checksum above and this README.
+
+```bash
+OMNIX_DATABASE_URL=postgresql://...@127.0.0.1:16432/<disposable db> \
+    python resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/author_play_sections.py --allow-database <disposable db>
+```
 
 ## Production artwork
 
@@ -43,7 +56,8 @@ The central campaign asks whether the way home should be closed, opened, or tran
 - 10 named characters with biographies, goals, secrets, relationships, and speaking styles;
 - 6 political factions;
 - 5 regions and a connected travel topology;
-- 5 certified square-grid maps with portals, spawn points, zones, objects, and hazards;
+- 7 certified square-grid maps with portals, spawn points, zones, objects, and hazards (Valecourt and Cinderhold
+  added by the evolution roadmap's EV-8, as grids without artwork yet);
 - 3 published launch scenarios;
 - 6 main quest arcs plus supporting adventure seeds;
 - a Resonance magic system with five schools and Earthborn Echo abilities;
@@ -57,6 +71,8 @@ The central campaign asks whether the way home should be closed, opened, or tran
 3. **Wayfarers' Guild** — registration, contracts, party formation, and training.
 4. **Skybridge Pass** — a tactical mountain crossing above the cloud sea.
 5. **Moonroot Ruins** — a memory-haunted dungeon containing the ancient Memory Loom.
+6. **Valecourt** — the royal city of engines: the city gate, Foundry Row, the palace workshops and the canal.
+7. **Cinderhold** — a walled refuge of black stone in the ash fields, its shrine court lit day and night.
 
 ## Launch scenarios
 

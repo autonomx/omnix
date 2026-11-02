@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from app.apps.rpg.session import durable_store
-from app.apps.rpg.session.environment import build_initial_environment_seed_state
+from app.apps.rpg.world.environment import build_initial_environment_seed_state
 from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session, start_rpg_preset
+
+# PostgreSQL tests skip without a test database, as their neighbours do (RQ-0.7).
+requires_postgres = pytest.mark.skipif(
+    not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+    reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
+)
 
 
 RECENT_CONDITION_DEFAULTS = {
@@ -95,13 +103,14 @@ def test_environment_seed_state_varies_initial_weather_event_by_seed_within_prof
 
 
 @pytest.mark.postgres
+@requires_postgres
 def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monkeypatch, tmp_path) -> None:
     state = _environment_from_created_game(42, "rusty_flagon_tavern", tmp_path, monkeypatch)
     environment = state["world"]["environment"]
     scene_context = state["scene"]["environment_context"]
 
     assert environment["environment_version"] == 1
-    assert environment["region_id"] == "market_road"
+    assert environment["region_id"] == "region:market-road:town"
     assert environment["climate_profile_id"] == "temperate_hills"
     assert isinstance(environment["environment_seed"], int)
     assert environment["absolute_minutes"] == 480
@@ -114,7 +123,7 @@ def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monk
             "type": "weather",
             "condition": "rain",
             "started_at_minute": 480,
-            "region_id": "market_road",
+            "region_id": "region:market-road:town",
         }
     ]
     assert DERIVED_ENVIRONMENT_FIELDS.isdisjoint(environment)
@@ -128,18 +137,19 @@ def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monk
 
 
 @pytest.mark.postgres
+@requires_postgres
 def test_mountain_pass_new_game_persists_outdoor_scene_context(monkeypatch, tmp_path) -> None:
     state = _environment_from_created_game(140914, "glimmerdeep_pass", tmp_path, monkeypatch)
     environment = state["world"]["environment"]
     scene_context = state["scene"]["environment_context"]
 
     assert environment["environment_version"] == 1
-    assert environment["region_id"] == "mountain_pass"
+    assert environment["region_id"] == "region:market-road:pass"
     assert environment["climate_profile_id"] == "northern_mountains"
     assert environment["absolute_minutes"] == 582
     assert environment["active_events"][0]["type"] == "weather"
     assert environment["active_events"][0]["condition"] == "windy"
-    assert environment["active_events"][0]["region_id"] == "mountain_pass"
+    assert environment["active_events"][0]["region_id"] == "region:market-road:pass"
     assert DERIVED_ENVIRONMENT_FIELDS.isdisjoint(environment)
 
     assert state["world"]["time"] == "Day 1 • 09:42"
@@ -150,6 +160,7 @@ def test_mountain_pass_new_game_persists_outdoor_scene_context(monkeypatch, tmp_
 
 
 @pytest.mark.postgres
+@requires_postgres
 def test_demo_preset_normalization_gets_environment_state(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -159,6 +170,6 @@ def test_demo_preset_normalization_gets_environment_state(monkeypatch, tmp_path)
     assert result["ok"] is True
     state = result["game"]
     environment = state["world"]["environment"]
-    assert environment["region_id"] == "mountain_pass"
+    assert environment["region_id"] == "region:market-road:pass"  # the demo is an opening of the starter world
     assert environment["climate_profile_id"] == "northern_mountains"
     assert state["scene"]["environment_context"]["exposure"] == "outdoor"

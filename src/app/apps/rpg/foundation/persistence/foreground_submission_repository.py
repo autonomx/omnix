@@ -44,12 +44,15 @@ class PostgresForegroundSubmissionRepository:
             reclaimed = self.connection.execute(
                 """
                 UPDATE omnix_rpg_foreground_submissions
-                   SET claim_token = %s,
+                   SET claim_token = %s, status = 'claimed', execution_started_at = NULL,
                        lease_expires_at = CURRENT_TIMESTAMP + (%s * INTERVAL '1 second'),
                        updated_at = CURRENT_TIMESTAMP, error = NULL
                  WHERE workspace_id = %s AND session_id = %s AND submission_id = %s
-                   AND status = 'claimed' AND execution_started_at IS NULL
-                   AND lease_expires_at <= CURRENT_TIMESTAMP
+                   AND ((status = 'claimed' AND execution_started_at IS NULL
+                         AND lease_expires_at <= CURRENT_TIMESTAMP)
+                        -- A failed turn committed nothing (a committed one completes its submission in the
+                        -- same transaction): the player's retry runs it again (RQ-8.5).
+                        OR status = 'failed')
                 RETURNING workspace_id, session_id, submission_id, status, claim_token,
                           job_id, interaction_id, response, error, lease_expires_at,
                           execution_started_at, created_at, updated_at
@@ -88,6 +91,8 @@ class PostgresForegroundSubmissionRepository:
         claim_token: str,
         job_id: str,
     ) -> bool:
+        """Bind a record-only job to the claim, for the kernel's record-only guard (``declarations.py``); the turn
+        route itself writes no job (F2)."""
         cursor = self.connection.execute(
             """
             UPDATE omnix_rpg_foreground_submissions

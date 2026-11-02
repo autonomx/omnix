@@ -27,7 +27,6 @@ def _safe_str(value: Any, default: str = "") -> str:
 
 _ALLOWED_FREQUENCIES = ("sparse", "normal", "lively")
 _FREQUENCY_MULTIPLIERS = {"sparse": 0.5, "normal": 1.0, "lively": 1.5}
-_ALLOWED_AMBIENT_DELAYS = (5, 10, 15, 30, 60, 300, 600)
 
 
 def get_default_conversation_settings() -> Dict[str, Any]:

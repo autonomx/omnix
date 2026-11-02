@@ -12,12 +12,6 @@ from app.apps.rpg.genesis.worlds.published_world_setup import (
     session_world_model,
 )
 from app.apps.rpg.rules import location_registry
-from app.apps.rpg.rules.economy.service_registry import find_provider_by_text, get_provider_offers
-from app.apps.rpg.world.travel_graph import (
-    apply_travel_result_to_state,
-    list_available_routes,
-    resolve_travel_destination,
-)
 
 REVISION = SimpleNamespace(
     world_id="world:glass",
@@ -76,7 +70,8 @@ def test_world_model_places_people_routes_and_services() -> None:
     assert [npc["name"] for npc in lamp["present_npcs"]] == ["Bo Kett"]
     assert model["npcs"]["npc:cy"]["location_id"] == ""
     assert lamp["services"] == ["lodging", "meal", "drink"]
-    assert strand["exits"] == {"salt lamp": "location:salt-lamp"}
+    # The lighthouse no road reaches is joined to the roads (lore_sections.joined_routes), from the strand.
+    assert strand["exits"] == {"salt lamp": "location:salt-lamp", "lighthouse": "location:lighthouse"}
     assert model["locations"]["location:lighthouse"]["name"] == "Lighthouse"
     assert location_label(REVISION, "location:lighthouse") == "Lighthouse"
 
@@ -112,21 +107,7 @@ def test_opening_kit_and_quests() -> None:
     assert quests[0]["visited_locations"] == ["location:strand"] and quests[1]["visited_locations"] == []
 
 
-def test_world_people_sell_their_services_where_they_are() -> None:
-    model = _model()
-    at_lamp = {"world_model": model, "player_state": {"location_id": "location:salt-lamp"}}
-    # By name, or by the service's kind word where the provider is.
-    assert find_provider_by_text("I ask Bo Kett for a room", at_lamp)["provider_id"] == "npc:bo"
-    assert find_provider_by_text("I ask the innkeeper for a room", at_lamp)["provider_id"] == "npc:bo"
-    assert [offer["label"] for offer in get_provider_offers("npc:bo", "meal", at_lamp)] == ["A hot meal"]
-    assert get_provider_offers("npc:bo", "meal", at_lamp)[0]["availability_rules"]["requires_location"] == "location:salt-lamp"
-    # Nobody in a published world is the starter town's innkeeper: a room is asked of the innkeeper here.
-    assert find_provider_by_text("I ask Bran for a room", at_lamp)["provider_id"] == "npc:bo"
-    at_strand = {"world_model": model, "player_state": {"location_id": "location:strand"}}
-    assert not find_provider_by_text("I ask Bran for a room", at_strand)
-
-
-def test_registry_and_travel_use_the_session_world() -> None:
+def test_the_registry_uses_the_session_world() -> None:
     simulation = {"world_model": _model(), "player_state": {"location_id": "location:strand"}}
     assert location_registry.current_location_id(simulation) == "location:strand"
     assert [npc["name"] for npc in location_registry.present_npcs_for_current_location(simulation)] == ["Ada Vell"]
@@ -135,22 +116,11 @@ def test_registry_and_travel_use_the_session_world() -> None:
     assert location_registry.find_location_by_name("market", simulation) == {}
     assert location_registry.default_location_id({"world_model": _model()}) == "location:strand"
 
-    state = {**simulation, "current_location_id": "location:strand"}
-    assert [route["to_name"] for route in list_available_routes(state=state)] == ["Salt Lamp"]
-    travel = resolve_travel_destination(player_input="walk to the Salt Lamp", state=state)
-    assert travel["ok"] and travel["to_location"] == "location:salt-lamp"
-    assert travel["travel_time_ticks"] == 2
-    moved = apply_travel_result_to_state(state=state, travel_result=travel)
-    assert moved["player_state"]["location_id"] == "location:salt-lamp"
-    assert location_registry.current_location_id(moved) == "location:salt-lamp"
-    assert location_registry.location_allows_service(moved, "meal")
 
-
-def test_sessions_without_a_world_keep_the_starter_town() -> None:
-    assert location_registry.current_location_id({}) == "loc_tavern"
-    assert location_registry.find_location_by_name("market")["location_id"] == "loc_market"
-    routes = list_available_routes(state={"current_location": "location:rusty_flagon_tavern"})
-    assert routes and routes[0]["from_location"] == "location:rusty_flagon_tavern"
+def test_the_engine_has_no_places_of_its_own() -> None:
+    # Every campaign plays from a world (roadmap §4.4): a state without one names no place.
+    assert location_registry.current_location_id({}) == ""
+    assert location_registry.find_location_by_name("market") == {}
 
 
 def test_the_worlds_creatures_fight_as_themselves() -> None:
@@ -171,3 +141,20 @@ def test_the_worlds_creatures_fight_as_themselves() -> None:
     archon = instantiate_campaign_creature({"campaign_mechanics": mechanics}, "creature:hollow-archon")
     assert archon["level"] == 8 and archon["vulnerabilities"] == []
     assert bestiary_mechanics(SimpleNamespace(revision=1, canon={})) == {}
+
+
+def test_the_openings_derived_places_are_named_after_their_place_and_its_region_is_no_place() -> None:
+    """Found in the browser (RQ-7.7): Vesper-9's opening offered a road to "Starter", the starter bubble's region."""
+    from app.apps.rpg.genesis.worlds.published_world_setup import published_locations
+
+    canon = {"entities": {"ent:places:station": {"id": "ent:places:station", "kind": "location",
+                                                 "name": "Black Rain Station"}}}
+    places = published_locations(canon, {"locations": ["ent:places:station"]}, (
+        "region:ent-places-station:starter", "ent:places:station:interior", "ent:places:station:outskirts",
+        "ent:places:station:outskirts:frontier"))
+    assert {place["id"]: place["name"] for place in places} == {
+        "ent:places:station": "Black Rain Station",
+        "ent:places:station:interior": "Black Rain Station Interior",
+        "ent:places:station:outskirts": "Black Rain Station Outskirts",
+        "ent:places:station:outskirts:frontier": "Black Rain Station Outskirts Frontier",
+    }

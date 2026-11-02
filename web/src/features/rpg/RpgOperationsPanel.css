@@ -1,0 +1,28 @@
+.rpg-operations {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--fg-slate-830);
+}
+
+.rpg-operations h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.rpg-operations table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rpg-operations th,
+.rpg-operations td {
+  padding: 0.25rem 0.5rem;
+  text-align: start;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
+}
+
+.rpg-operations__classes {
+  margin: 0;
+  color: var(--fg-slate-730);
+}

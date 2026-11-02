@@ -39,6 +39,8 @@ describe('the tactical grid model', () => {
   it('names actors and finds who is adjacent', () => {
     expect(actorLabel('npc:liora-fen', PLAYER, 'Alyndra')).toBe('Liora Fen');
     expect(actorLabel(PLAYER, PLAYER, 'Alyndra')).toBe('Alyndra');
+    // A fight's foe by its name, not its id's last part.
+    expect(actorLabel('enemy:creature-echo-wolf:1', PLAYER, 'Alyndra', { 'enemy:creature-echo-wolf:1': 'Echo Wolf' })).toBe('Echo Wolf');
     expect(adjacentActors(observed, PLAYER).map((actor) => actor.actor_id)).toEqual(['npc:liora-fen']);
   });
 

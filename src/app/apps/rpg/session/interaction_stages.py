@@ -27,7 +27,7 @@ def commit_interaction(ctx: Any) -> Any:
     if not isinstance(session, dict):
         return ctx
 
-    from .interaction_timeline import commit_turn_interaction, mark_interaction_persisted
+    from .interaction_timeline import commit_turn_interaction
 
     submission_id = str(DIRECT_RPG_SUBMISSION_ID.get("") or "").strip()
     with rpg_pipeline_span("turn.interaction_append") as interaction_span:
@@ -43,6 +43,24 @@ def commit_interaction(ctx: Any) -> Any:
         interaction_span["stateful"] = event.get("stateful")
     result["session"] = session
 
+    from .narrative_engine_bridge import narration_needs_writer
+    from .turn.narration_timing import narrates_after_commit
+
+    if narrates_after_commit() and narration_needs_writer(result):
+        # Narrated after the commit (RQ-6.2): the turn commits with no response; its narration is inserted beside
+        # the campaign when the writer is done, with no campaign save.
+        from .interaction_lifecycle import initialize_interaction_lifecycle
+
+        initialize_interaction_lifecycle(session, result)
+        result["narration_after_commit"] = True
+    else:
+        result = _canonical_with_the_turn(ctx, session, result)
+
+    return _persist(ctx, session, result, event, submission_id)
+
+
+def _canonical_with_the_turn(ctx: Any, session: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """The turn's narration, written now and committed with it, its projection in the committed state."""
     from .narrative_engine_bridge import canonicalize_resolved_turn_result
 
     with rpg_pipeline_span("turn.canonical_after_interaction") as narrative_span:
@@ -70,7 +88,14 @@ def commit_interaction(ctx: Any) -> Any:
 
         initialize_interaction_lifecycle(session, result)
         narrative_span["session_projection_patched"] = patch_session_canonical_projection(result)
+    return result
 
+
+def _persist(ctx: Any, session: dict[str, Any], result: dict[str, Any], event: dict[str, Any],
+             submission_id: str) -> Any:
+    from .interaction_timeline import mark_interaction_persisted
+
+    session_override = ctx.session_override
     if isinstance(session_override, dict):
         session_override.clear()
         session_override.update(session)
@@ -86,10 +111,12 @@ def commit_interaction(ctx: Any) -> Any:
     from app.persistence.runtime import uses_postgresql_runtime
 
     if uses_postgresql_runtime():
-        from app.jobs.foreground_execution import current_foreground_execution
+        from app.apps.rpg.session.jobs.foreground_context import current_foreground_claim
         from app.apps.rpg.session.persistence.rpg_turn_service import persist_foreground_turn
 
-        execution = current_foreground_execution()
+        claim = current_foreground_claim()
+        if claim is not None and (claim.session_id != ctx.session_id or claim.submission_id != submission_id):
+            claim = None
         result["session"] = session
         with rpg_pipeline_span("turn.postgresql_commit") as transaction_span:
             transaction = persist_foreground_turn(
@@ -99,14 +126,10 @@ def commit_interaction(ctx: Any) -> Any:
                 result=result,
                 event=event,
                 submission_id=submission_id,
-                submission_claim_token=(
-                    execution.claim_token
-                    if execution is not None
-                    and execution.session_id == ctx.session_id
-                    and execution.submission_id == submission_id
-                    else None
-                ),
+                submission_claim_token=claim.claim_token if claim is not None else None,
             )
+            if claim is not None:
+                claim.mark_committed()  # the commit completed the submission's claim with the turn
             transaction_span["interaction_id"] = event.get("interaction_id")
             transaction_span["sequence"] = event.get("sequence")
             transaction_span["submission_id"] = submission_id
@@ -181,11 +204,8 @@ def commit_interaction(ctx: Any) -> Any:
 
 
 def initialize_lifecycle(ctx: Any) -> Any:
-    """Enqueue deferred narration for the committed interaction.
-
-    The commit already recorded the interaction's lifecycle; it is recorded
-    here only for a result that did not pass through ``commit_interaction``.
-    """
+    """Record the lifecycle of a result that did not pass through ``commit_interaction`` (the commit records its
+    own); a turn's narration is the narrative engine's, so nothing is queued here."""
 
     result = ctx.result
     if not isinstance(result, dict) or result.get("ok") is not True:
@@ -200,25 +220,16 @@ def initialize_lifecycle(ctx: Any) -> Any:
     if not isinstance(session, dict):
         return ctx
 
-    from .interaction_lifecycle import (
-        initialize_interaction_lifecycle as initialize,
-        queue_deferred_narration_for_interaction,
-    )
+    from .interaction_lifecycle import initialize_interaction_lifecycle as initialize
 
     lifecycle = result.get("interaction_lifecycle")
     if not isinstance(lifecycle, dict) or lifecycle.get("interaction_id") != result.get("interaction_id"):
-        lifecycle = initialize(session, result)
+        initialize(session, result)
     result["session"] = session
     if isinstance(ctx.session_override, dict):
         ctx.session_override.clear()
         ctx.session_override.update(session)
     ctx.result = result
-    if lifecycle.get("status") == "narration_pending":
-        try:
-            queue_deferred_narration_for_interaction(ctx.session_id, result)
-        except Exception as exc:
-            result["narration_status"] = "failed_to_queue"
-            raise exc
     return ctx
 
 

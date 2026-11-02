@@ -190,7 +190,8 @@ def retry_world_profile_creation(
 
     context = current_tenant()
     with unit_of_work(database) as work:
-        world = work.world_scenarios.get_world(context, world_id)
+        # Held until the binding is written: the world's metadata is rewritten whole (play sections ride in it too).
+        world = work.world_scenarios.get_world(context, world_id, for_update=True)
         if world is None:
             raise KeyError(f"world_not_found:{world_id}")
         existing = dict(
@@ -417,7 +418,7 @@ def execute_claimed_world_profile_job(
             )
 
         with unit_of_work(database) as work:
-            world = work.world_scenarios.get_world(context, world_id)
+            world = work.world_scenarios.get_world(context, world_id, for_update=True)  # its metadata is rewritten whole
             if world is None:
                 raise KeyError(f"world_not_found:{world_id}")
             if canonical_hash(_current_profile_input(world)) != str(

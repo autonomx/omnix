@@ -20,6 +20,7 @@ from app.apps.rpg.session.session_store import _normalize_session
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.runtime.paths import repo_root, rpg_sessions_root
 from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span_if_active
+from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 _SESSION_DIR = rpg_sessions_root()
@@ -225,14 +226,14 @@ def save_session_to_disk(
         saved = _save_session_to_disk(session, compact=compact, session_dir=session_dir)
         if span is not None:
             saved_manifest = _safe_dict(saved.get("manifest"))
-            runtime_state = _safe_dict(saved.get("runtime_state"))
+            runtime_state = _safe_dict(_sections.runtime_state_of(saved))
             span["session_id"] = str(
                 saved_manifest.get("session_id")
                 or saved_manifest.get("id")
                 or session_id
             )
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         return saved
 
 
@@ -275,7 +276,7 @@ def load_persisted_rng_seed(session_id: str, *, session_dir: Path | None = None)
     previous = load_session_from_disk(session_id, session_dir=session_dir)
     if previous is None:
         return (False, None)
-    return (True, _safe_dict(previous.get("simulation_state")).get("rng_seed"))
+    return (True, _safe_dict(_sections.simulation_state_of(previous)).get("rng_seed"))
 
 
 def load_session_from_disk(
@@ -289,10 +290,10 @@ def load_session_from_disk(
     ) as span:
         session = _load_session_from_disk(session_id, session_dir=session_dir)
         if span is not None:
-            runtime_state = _safe_dict(_safe_dict(session).get("runtime_state"))
+            runtime_state = _safe_dict(_sections.runtime_state_of(_safe_dict(session)))
             span["result_present"] = session is not None
-            span["interaction_seq"] = runtime_state.get("interaction_seq")
-            span["state_revision"] = runtime_state.get("state_revision")
+            span["interaction_seq"] = _sections.interaction_seq_of(runtime_state)
+            span["state_revision"] = _sections.state_revision_of(runtime_state)
         return session
 
 

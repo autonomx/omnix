@@ -1,0 +1,138 @@
+"""Step 3: what the turn will do, decided from the reading and the campaign's state (roadmap §4.1).
+
+A ``PlannedAction`` names the mechanic that owns it and what it acts on. Only the mechanics already on the
+pipeline are planned here; for anything else ``plan_action`` returns ``None`` and the turn takes the older path.
+"""
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict
+
+from app.apps.rpg.rules.intent.reading import NO_SLOTS, IntentCandidate, ReadingSlots
+
+# clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
+PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "give", "take", "rest",
+                           "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
+                           "ability", "hotbar", "check", "grow", "rewind", "act", "note_preference", "explore"]
+
+
+# What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
+_NOT_IN_A_FIGHT = frozenset({"move", "rest", "wait", "buy", "sell", "take", "drop", "give", "quest", "practice",
+                             "explore",
+                             "party", "talk", "ask", "look", "inspect"})
+
+
+class PlannedAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mechanic: PipelineMechanic
+    target_id: str = ""
+    # How long it takes, in turns of the campaign clock.
+    ticks: int = 1
+    reason: str = ""
+    question: str = ""
+    second_target_id: str = ""  # an ability's target (the foe it is aimed at); a gift's receiver; a seller, a buyer
+    options: tuple[str, ...] = ()  # a question's answers, as the commands they send (RQ-7.3)
+    option_actions: tuple[dict[str, Any], ...] = ()  # and as the cards they are (EV-9), one for each
+    slots: ReadingSlots = NO_SLOTS  # what the rules need of the line besides its target (EV-9)
+
+
+def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
+    """The plan for a reading (``_plan``), carrying the reading's slots to the rule that resolves it (EV-9)."""
+    planned = _plan(reading, fighting=fighting)
+    if planned is None or reading.slots == NO_SLOTS:
+        return planned
+    return planned.model_copy(update={"slots": reading.slots})
+
+
+def _plan(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
+    """The plan for a single-step reading of a mechanic the pipeline runs (one the intent call decided, or a card's);
+    else ``None``. In a fight an attack at no one means the foe in front of the hero, so it is not asked about."""
+    if len(reading.clauses) > 1:
+        return None
+    if fighting and reading.family == "attack" and not reading.target_id:
+        return PlannedAction(mechanic="fight", ticks=0, reason="attack")  # "attack": the foe in front of the hero
+    if reading.family == "attack" and (fighting or (reading.target_kind in {"creature", "person"} and reading.target_id)):
+        # A creature the world knows or a person present, or in a fight the foe in front of the hero (combat.md).
+        return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="attack")
+    if reading.family == "ability" and reading.target_id:
+        # In a fight, aimed at a foe present (to open one), or with no fight on: the ability rule's (combat.md).
+        return PlannedAction(mechanic="ability", target_id=reading.target_id, ticks=0,
+                             second_target_id=reading.second_target_id or "",
+                             reason="in_fight" if fighting else "opening" if reading.second_target_id else "out_of_fight")
+    if not fighting and reading.family == "grow":
+        return PlannedAction(mechanic="grow", ticks=0, reason="level_choice")  # a level's choice (progression.md)
+    if not fighting and reading.family == "check" and reading.reason.startswith("check:"):
+        # A try decided by a roll (checks.md); in a fight it is no time for it.
+        return PlannedAction(mechanic="check", target_id=reading.target_id or "", ticks=1,
+                             reason=reading.reason.removeprefix("check:"))
+    if not fighting and reading.family == "manipulate" and reading.reason == "searches":
+        return PlannedAction(mechanic="check", target_id=reading.target_id or "", ticks=1, reason="search")
+    if fighting and reading.family == "check" and reading.reason in {"check:sneak", "check:persuade", "check:intimidate"}:
+        # Before blows are traded, slipping past or talking the foe down (encounters.md): the fight rule's to judge.
+        return PlannedAction(mechanic="fight", ticks=0, reason=reading.reason.removeprefix("check:"))
+    if reading.family == "defend" and fighting:  # aimed at one of the party: guarding them (EV-2)
+        return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="defend")
+    if fighting and reading.family == "order" and reading.target_kind == "person" and reading.target_id:
+        # A companion's order in a fight ("Liora, flank it"): the companion rule's, and the fight reads it (EV-2).
+        return PlannedAction(mechanic="order", target_id=reading.target_id, ticks=0, reason=reading.reason)
+    if reading.family == "flee" and fighting:
+        return PlannedAction(mechanic="fight", ticks=0, reason="flee")
+    if fighting and reading.family == "use_item" and reading.target_kind == "item" and reading.target_id:
+        # Something carried, used in the fight: the hero's turn, and then everyone else's (combat.md).
+        return PlannedAction(mechanic="use_item", target_id=reading.target_id, ticks=0, reason="in_fight")
+    if fighting and reading.family == "use_item":  # nothing carried by that name (the playtest: the last potion gone)
+        return PlannedAction(mechanic="fight", ticks=0, reason="nothing_to_use")
+    if fighting and reading.family in _NOT_IN_A_FIGHT:
+        return PlannedAction(mechanic="fight", ticks=0, reason="busy")  # the game says no: the fight goes on
+    if fighting and reading.family != "status":
+        return None  # a move the grammar does not name; abilities and orders in a fight are RQ-2.6 part 2's
+    if reading.family in {"buy", "sell"}:  # the offer or thing, and the seller or buyer, the reading named
+        return PlannedAction(mechanic="trade", target_id=reading.target_id or "",
+                             second_target_id=reading.second_target_id or "", reason=reading.family)
+    if reading.family == "look":
+        return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)
+    if reading.family == "inspect" and reading.target_id:  # a close look at something here, told by what it is
+        return PlannedAction(mechanic="look", target_id=reading.target_id, reason=reading.reason)
+    if reading.family == "decline":  # "no thanks": said to the one who offered, or to whoever the hero talks with
+        return PlannedAction(mechanic="talk", target_id=reading.target_id if reading.target_kind == "person" else "",
+                             ticks=0, reason=reading.reason)
+    if reading.family == "ask" and reading.reason == "asks_about_thing" and reading.second_target_id:
+        # Asked aloud about a thing: whoever answers it (the grammar's), about it.
+        return PlannedAction(mechanic="talk", target_id=reading.second_target_id, ticks=0, reason=reading.reason)
+    if reading.family == "move" and reading.target_kind == "place" and reading.target_id:
+        return PlannedAction(mechanic="travel", target_id=reading.target_id, reason=reading.reason)
+    if (reading.family in {"use_item", "drop", "take", "equip", "unequip"} and reading.target_kind == "item"
+            and reading.target_id):
+        return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reading.reason)
+    if reading.family == "give" and reading.target_kind == "item" and reading.target_id:
+        return PlannedAction(mechanic="give", target_id=reading.target_id, second_target_id=reading.second_target_id or "",
+                             ticks=0, reason=reading.reason)
+    if reading.family == "quest" and reading.target_kind == "quest":
+        return PlannedAction(mechanic="quest", target_id=reading.target_id or "", ticks=0, reason=reading.reason)
+    if reading.family == "practice" and reading.target_kind == "skill":
+        return PlannedAction(mechanic="practice", target_id=reading.target_id or "", ticks=0, reason=reading.reason)
+    if reading.family == "status":
+        return PlannedAction(mechanic="status", ticks=0, reason=reading.reason)
+    if reading.family in {"party", "order"} and reading.target_kind == "person" and reading.target_id:
+        reason = "party_leave" if reading.family == "party" and reading.slots.parting else reading.reason
+        return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reason)
+    if reading.family == "ask" and reading.reason == "asks_hypothetical":
+        # A question about what would happen is speech, whatever it is about (RQ-3.2): asked of the person it
+        # names, else of whoever the hero is talking with.
+        return PlannedAction(mechanic="talk", target_id=reading.target_id if reading.target_kind == "person" else "",
+                             ticks=0, reason=reading.reason)
+    if reading.family in {"talk", "ask"} and (reading.target_kind == "person" or not reading.target_id):
+        # Someone named, or the one the hero is talking to; whether anyone present is, is the dialogue's to say.
+        return PlannedAction(mechanic="talk", target_id=reading.target_id or "", ticks=0, reason=reading.reason)
+    if reading.family == "rest":
+        return PlannedAction(mechanic="rest", ticks=0, reason=reading.reason)
+    if reading.family == "wait":
+        return PlannedAction(mechanic="wait", ticks=3, reason=reading.reason)  # a while: half an hour
+    if reading.family == "explore":  # a search of the area for what is hidden (EV-10)
+        return PlannedAction(mechanic="explore", ticks=0, reason=reading.reason)
+    return None
+
+
+__all__ = ["PipelineMechanic", "PlannedAction", "plan_action"]

@@ -1,0 +1,115 @@
+{
+  "topics": {
+    "actors": {
+      "entities": [
+        {
+          "id": "ent:actors:ines-okoro",
+          "kind": "actor",
+          "name": "Ines Okoro",
+          "short_summary": "A freelance guide and bodyguard walks newcomers through the drowned districts for a day rate.",
+          "description": "A freelance guide and bodyguard walks newcomers through the drowned districts for a day rate. She knows which stairwells flood at high tide, which checkpoints take bribes, and which ones log them.\n\nInes keeps her rates posted on a cracked placard and her knife where clients can see it. She sells her clients' routes to a Kestrel handler to keep her own record clean.",
+          "public_truth": "She takes any client who pays the day rate and gets them where they are going alive.",
+          "lived_detail": "Ines counts exits out loud when she enters a room, a habit she says is for the client's benefit.",
+          "hidden_truth": "She sells her clients' routes to a Kestrel handler to keep her own record clean.",
+          "consequence": "A client she trusts could cost her the handler's protection.",
+          "location_id": "ent:places:black-rain-station",
+          "group_ids": [],
+          "culture_id": "ent:cultures:patch-families",
+          "goal": "Earn enough to buy her sister's debt back from Helix",
+          "dependency": "Steady clients and the handler's silence",
+          "current_pressure": "Kestrel wants more routes than she has clients",
+          "next_action": "Find a client worth walking to the docks",
+          "reaction_conditions": [
+            "Protects paying clients",
+            "Respects people who ask before they act",
+            "Leaves anyone who bargains after the job"
+          ],
+          "knowledge_limits": [
+            "Knows streets and checkpoints, not corporate plans"
+          ],
+          "speech_style": "Brisk, practical, counts things",
+          "image_role": "portrait",
+          "image_prompt": "Cyberpunk RPG concept art for Ines Okoro. A wiry freelance guide in a patched, rain-dark shell stands beneath flickering station floodlights, a cracked rate placard slung at her hip and a knife worn openly, counting exits with a glance while commuters stream past a flooded stairwell."
+        },
+        {
+          "id": "ent:actors:pell-sato",
+          "kind": "actor",
+          "name": "Pell Sato",
+          "short_summary": "A platform vendor sells stim patches, ration bars, and dry socks from a converted ticket kiosk.",
+          "description": "A platform vendor sells stim patches, ration bars, and dry socks from a converted ticket kiosk. Pell buys back anything sealed and unopened, and anything else for a coin.\n\nThe kiosk's old fare screen now lists prices in three currencies and one grudge.",
+          "public_truth": "Pell's prices are fair until a train is late.",
+          "lived_detail": "Pell wraps every sale in transit-map paper from routes that no longer run.",
+          "location_id": "ent:places:black-rain-station",
+          "group_ids": [],
+          "culture_id": "ent:cultures:patch-families",
+          "goal": "Keep the kiosk open through the next corporate sweep",
+          "dependency": "Commuters and the station's dead corridors",
+          "current_pressure": "Helix wants the kiosk's spot for a clinic kiosk",
+          "next_action": "Restock stim patches before the night rush",
+          "reaction_conditions": [
+            "Trusts regular customers",
+            "Dislikes haggling over sealed goods"
+          ],
+          "knowledge_limits": [
+            "Knows the station and its trains, not the city above"
+          ],
+          "speech_style": "Quick, warm, always selling",
+          "image_role": "portrait",
+          "image_prompt": "Cyberpunk RPG concept art for Pell Sato. A cheerful platform vendor leans out of a converted ticket kiosk at Black Rain Station, its old fare screen glowing with prices in three currencies, strips of stim patches and stacked ration bars wrapped in faded transit-map paper."
+        },
+        {
+          "id": "ent:actors:dex-marlowe",
+          "kind": "actor",
+          "name": "Dex Marlowe",
+          "short_summary": "A bunkhouse keeper rents capsule bunks and hot noodles in the station's dead corridors.",
+          "description": "A bunkhouse keeper rents capsule bunks and hot noodles in the station's dead corridors. Dex's bunkhouse is off every current map, which is why people pay for it.\n\nA bowl of noodles comes with every night, and questions cost extra.",
+          "public_truth": "Dex never asks a sleeper's name and never forgets a face.",
+          "lived_detail": "Dex keeps the noodle pot on a battery that once powered a signal box.",
+          "location_id": "ent:places:black-rain-station",
+          "group_ids": [],
+          "culture_id": "ent:cultures:patch-families",
+          "goal": "Keep the bunkhouse off every map",
+          "dependency": "Paying sleepers and quiet corridors",
+          "current_pressure": "Maintenance crews are mapping the dead corridors",
+          "next_action": "Find a new corridor before the crews reach this one",
+          "reaction_conditions": [
+            "Shelters anyone who pays",
+            "Throws out anyone who brings trouble inside"
+          ],
+          "knowledge_limits": [
+            "Knows who sleeps where, not why they hide"
+          ],
+          "speech_style": "Low, slow, few words",
+          "image_role": "portrait",
+          "image_prompt": "Cyberpunk RPG concept art for Dex Marlowe. A heavyset bunkhouse keeper stirs a battered noodle pot powered by a salvaged signal-box battery, rows of capsule bunks receding down a dead station corridor that appears on no current map, steam curling in cold blue light."
+        }
+      ]
+    },
+    "equipment_vehicles": {
+      "entities": [
+        {
+          "id": "ent:equipment_vehicles:stim-patch",
+          "kind": "consumable",
+          "item_type": "potion",
+          "name": "Stim Patch",
+          "short_summary": "A dermal patch of clotting agents and painkillers that restores health.",
+          "description": "A dermal patch of clotting agents and painkillers that restores health.\n\nStation vendors sell them by the strip; the cheap ones itch for an hour, and the expensive ones are counterfeits of the cheap ones.",
+          "rarity": "common",
+          "image_prompt": "Cyberpunk RPG item art of a Stim Patch: a translucent dermal patch on a strip of five, threaded with copper-colored clotting gel and a printed dosage band, resting on a wet kiosk counter at Black Rain Station under a buzzing neon fare screen.",
+          "image_role": "item"
+        },
+        {
+          "id": "ent:equipment_vehicles:ration-bar",
+          "kind": "consumable",
+          "item_type": "food",
+          "name": "Ration Bar",
+          "short_summary": "A dense algae-and-soy bar that eases hunger for a shift.",
+          "description": "A dense algae-and-soy bar that eases hunger for a shift.\n\nIt tastes of nothing, on purpose: the corporations that print them learned that flavour starts arguments.",
+          "rarity": "common",
+          "image_prompt": "Cyberpunk RPG item art of a Ration Bar: a dense green-grey algae-and-soy bar in a crinkled foil sleeve stamped with a corporate shift number, half unwrapped on a stack of faded transit-map wrapping paper beside a dripping station pillar under cold blue platform light.",
+          "image_role": "item"
+        }
+      ]
+    }
+  }
+}

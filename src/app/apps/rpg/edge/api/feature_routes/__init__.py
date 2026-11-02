@@ -9,8 +9,12 @@ from .rpg_debug_routes import (
     add_rpg_debug_middleware,
     register_rpg_debug_routes,
 )
+from .rpg_game_master_routes import register_rpg_game_master_routes
 from .rpg_geometry_patch_routes import register_rpg_geometry_patch_routes
 from .rpg_grid_performance_routes import register_rpg_grid_performance_routes
+from .rpg_lore_link_routes import register_rpg_lore_link_routes
+from .rpg_lore_review_routes import register_rpg_lore_review_routes
+from .rpg_voice_routes import register_rpg_voice_routes
 from .rpg_map_editor_routes import register_rpg_map_editor_routes
 from .rpg_map_routes import register_rpg_map_routes
 from .rpg_npc_spatial_routes import register_rpg_npc_spatial_routes
@@ -36,6 +40,10 @@ def create_rpg_routes_router(context: FeatureContext) -> APIRouter:
     state = context.runtime_state
     for register_routes in (
         register_rpg_debug_routes,
+        register_rpg_game_master_routes,
+        register_rpg_lore_link_routes,
+        register_rpg_lore_review_routes,
+        register_rpg_voice_routes,
         register_rpg_geometry_patch_routes,
         register_rpg_grid_performance_routes,
         register_rpg_map_editor_routes,

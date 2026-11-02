@@ -17,14 +17,12 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from app.runtime.clock import current_turn_context
 
 # Bump this only when intentionally changing deterministic event identity rules.
-IDENTITY_VERSION = 1
 
 
 def rng_seed_from_session_id(session_id: str) -> int:
@@ -62,51 +60,6 @@ def rng_for(
     return random.Random(seed)
 
 
-def rng_for_current_turn(purpose: str, sub_index: int = 0) -> random.Random:
-    """Build a named decision stream from the active turn's immutable input."""
-
-    context = current_turn_context()
-    if (
-        context is None
-        or context.session_seed is None
-        or context.turn_index is None
-    ):
-        raise RuntimeError("text RNG requires a seeded RPG turn context")
-    return rng_for(context.session_seed, context.turn_index, purpose, sub_index)
-
-
-def turn_rng_identity(session: Any, fallback_turn_index: int) -> tuple[int, int]:
-    """Resolve the durable seed and turn number for a pipeline invocation."""
-
-    context = current_turn_context()
-    session_data = session if isinstance(session, dict) else {}
-    state = session_data.get("simulation_state")
-    state = state if isinstance(state, dict) else session_data
-    if context is not None and context.session_seed is not None:
-        session_seed: Any = context.session_seed
-    else:
-        session_seed = state.get("rng_seed")
-        if (
-            not isinstance(session_seed, int)
-            or isinstance(session_seed, bool)
-            or not 0 <= session_seed < 2**64
-        ):
-            session_id = (
-                session_data.get("session_id")
-                or session_data.get("id")
-                or state.get("session_id")
-                or state.get("id")
-            )
-            session_seed = rng_seed_from_session_id(str(session_id)) if session_id else 0
-    if context is not None and context.turn_index is not None:
-        turn_index: Any = context.turn_index
-    else:
-        turn_index = state.get("turn_index")
-        if not isinstance(turn_index, int) or isinstance(turn_index, bool):
-            turn_index = fallback_turn_index
-    return session_seed, turn_index
-
-
 def stable_sub_index(value: Any) -> int:
     """Derive a stable stream index from a JSON-safe decision subject."""
 
@@ -114,27 +67,17 @@ def stable_sub_index(value: Any) -> int:
     return int.from_bytes(digest[:4], "big")
 
 
-def deterministic_turn_uuid(
-    session_id: str,
-    turn_index: int,
-    purpose: str,
-    counter: int = 0,
-) -> str:
-    """Return a stable UUID for an event created by a turn decision."""
+def deterministic_rng(purpose: str, subject: Any = None) -> random.Random:
+    """A named decision stream: the active turn's, or outside a turn one fixed by purpose and subject (RQ-4.6).
 
-    if (
-        not isinstance(turn_index, int)
-        or isinstance(turn_index, bool)
-        or not isinstance(counter, int)
-        or isinstance(counter, bool)
-        or turn_index < 0
-        or counter < 0
-    ):
-        raise ValueError("turn_index and counter must be non-negative")
-    if not str(session_id).strip():
-        raise ValueError("session_id is required for deterministic RPG event IDs")
-    session_namespace = uuid.uuid5(uuid.NAMESPACE_URL, session_id)
-    return str(uuid.uuid5(session_namespace, f"{turn_index}:{purpose}:{counter}"))
+    Use it wherever game or narration code would otherwise reach for module-level ``random``.
+    """
+    sub_index = stable_sub_index(subject) if subject is not None else 0
+    context = current_turn_context()
+    if context is not None and context.session_seed is not None and context.turn_index is not None:
+        return rng_for(context.session_seed, context.turn_index, purpose, sub_index)
+    material = f"outside-turn:{purpose}:{sub_index}".encode("utf-8")
+    return random.Random(int.from_bytes(hashlib.sha256(material).digest()[:8], "big"))
 
 
 @dataclass
@@ -163,46 +106,6 @@ class DeterminismConfig:
     use_recorded_host: bool = False
 
 
-class SeededRNG:
-    """Per-engine seeded RNG. Never use module-level random directly."""
-
-    def __init__(self, seed: int = 0):
-        self._seed = seed
-        self._rng = random.Random(seed)
-
-    @property
-    def seed(self) -> int:
-        return self._seed
-
-    def randint(self, a: int, b: int) -> int:
-        return self._rng.randint(a, b)
-
-    def random(self) -> float:
-        return self._rng.random()
-
-    def choice(self, seq):
-        if not seq:
-            raise IndexError("Cannot choose from empty sequence")
-        return seq[self._rng.randrange(len(seq))]
-
-    def shuffle(self, x) -> None:
-        self._rng.shuffle(x)
-
-    def getstate(self):
-        """Expose underlying RNG state for snapshots."""
-        return self._rng.getstate()
-
-    def setstate(self, state) -> None:
-        """Restore underlying RNG state from snapshots."""
-        self._rng.setstate(state)
-
-    def serialize_state(self) -> dict[str, Any]:
-        return {"state": self._rng.getstate(), "seed": self._seed}
-
-    def deserialize_state(self, state: dict[str, Any]) -> None:
-        self._rng.setstate(state["state"])
-
-
 def stable_json(obj: Any) -> str:
     """Deterministic JSON serialization."""
     def normalize(v: Any) -> Any:
@@ -219,35 +122,3 @@ def stable_json(obj: Any) -> str:
         return v
 
     return json.dumps(normalize(obj), sort_keys=True, separators=(",", ":"))
-
-
-def compute_deterministic_event_id(
-    *,
-    seed: int,
-    event_type: str,
-    payload: dict[str, Any],
-    source: Optional[str],
-    parent_id: Optional[str],
-    tick: Optional[int],
-    seq: int,
-) -> str:
-    """
-    Deterministic event identity derived from causal input, not process-global state.
-
-    Identity is execution-path based, not semantic-equivalence based.
-    That means:
-    same seed + same canonical payload + same parent + same tick + same seq
-    => same event_id
-    """
-    data = {
-        "v": IDENTITY_VERSION,
-        "seed": seed,
-        "type": event_type,
-        "payload": payload,
-        "source": source,
-        "parent_id": parent_id,
-        "tick": tick,
-        "seq": seq,
-    }
-    digest = hashlib.sha256(stable_json(data).encode()).hexdigest()
-    return f"evt_{digest[:20]}"

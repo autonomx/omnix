@@ -6,7 +6,6 @@ import json
 import sys
 from collections import Counter
 from copy import deepcopy
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -29,13 +28,6 @@ class AuthorshipClass(StrEnum):
     LEGACY_UNKNOWN = "legacy_unknown"
     DETERMINISTIC_FIXTURE = "deterministic_fixture"
     DETERMINISTIC_FALLBACK = "deterministic_fallback"
-
-
-class AuthorshipPolicy(StrEnum):
-    LLM_REQUIRED = "llm_required"
-    AUTHORED_REQUIRED = "authored_required"
-    MACHINE_ALLOWED = "machine_allowed"
-    STRUCTURAL_ONLY = "structural_only"
 
 
 _ALLOWED_LORE_CLASSES = {
@@ -260,71 +252,6 @@ def _artifact_without_hash(value: Mapping[str, Any]) -> dict[str, Any]:
     return artifact
 
 
-def build_generation_artifact(
-    candidate: Mapping[str, Any],
-    *,
-    run_id: str,
-    job_id: str,
-    topic_id: str,
-    provider: Mapping[str, Any],
-    settings: Mapping[str, Any] | None = None,
-    attempt: int = 1,
-) -> dict[str, Any]:
-    """Build the server-owned artifact persisted in a topic-result provider record."""
-
-    provider_row = dict(provider)
-    settings_row = dict(settings or {})
-    parsed_hash = content_hash(_payload_without_authorship(candidate))
-    recovery = provider_row.get("structured_recovery")
-    recovery = dict(recovery) if isinstance(recovery, Mapping) else {}
-    raw_hash = str(
-        provider_row.get("raw_response_hash")
-        or provider_row.get("provider_response_hash")
-        or recovery.get("original_candidate_hash")
-        or ""
-    )
-    raw_hash_kind = "provider_response"
-    if not raw_hash:
-        # Older providers expose only the parsed typed response. Keep the artifact
-        # server-owned and explicit about this weaker evidence so migration can find it.
-        raw_hash = parsed_hash
-        raw_hash_kind = "parsed_payload_fallback"
-    transformations: list[str] = []
-    method = str(recovery.get("method") or "")
-    if method:
-        transformations.append(method)
-    transformations.extend(str(value) for value in recovery.get("repair_codes") or ())
-    identity_seed = {
-        "run_id": run_id,
-        "job_id": job_id,
-        "topic_id": topic_id,
-        "parsed_payload_hash": parsed_hash,
-        "provider": str(provider_row.get("provider") or ""),
-        "model": str(provider_row.get("model") or ""),
-    }
-    artifact = {
-        "schema_version": "rpg_world_generation_artifact_v1",
-        "generation_artifact_id": "genart:" + content_hash(identity_seed)[:32],
-        "generation_run_id": run_id,
-        "job_id": job_id,
-        "topic_id": topic_id,
-        "provider": str(provider_row.get("provider") or ""),
-        "model": str(provider_row.get("model") or ""),
-        "generator": str(provider_row.get("generator") or ""),
-        "generator_version": str(settings_row.get("generator_version") or ""),
-        "prompt_version": str(settings_row.get("prompt_version") or ""),
-        "raw_response_hash": raw_hash,
-        "raw_response_hash_kind": raw_hash_kind,
-        "parsed_payload_hash": parsed_hash,
-        "attempt": max(1, int(attempt or 1)),
-        "authorship_class": AuthorshipClass.LLM_AUTHORED.value,
-        "transformations": list(dict.fromkeys(transformations)),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    artifact["artifact_hash"] = content_hash(_artifact_without_hash(artifact))
-    return artifact
-
-
 def _origin_entry(
     row: Mapping[str, str],
     *,
@@ -509,17 +436,6 @@ def validate_publishable_authorship(
     }
 
 
-def require_publishable_authorship(
-    candidate: Mapping[str, Any],
-    *,
-    server_artifact: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    report = validate_publishable_authorship(candidate, server_artifact=server_artifact)
-    if not report["publishable"]:
-        raise AuthorshipValidationError(report)
-    return report
-
-
 def prove_structural_repair_non_authoring(
     before: Mapping[str, Any],
     after: Mapping[str, Any],
@@ -552,15 +468,12 @@ def prove_structural_repair_non_authoring(
 
 __all__ = [
     "AuthorshipClass",
-    "AuthorshipPolicy",
     "AuthorshipValidationError",
     "attach_human_authorship",
     "attach_llm_authorship",
-    "build_generation_artifact",
     "content_hash",
     "lore_string_leaves",
     "prove_structural_repair_non_authoring",
-    "require_publishable_authorship",
     "string_hash",
     "validate_publishable_authorship",
 ]

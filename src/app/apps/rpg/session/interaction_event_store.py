@@ -11,7 +11,7 @@ from typing import Any
 from app.apps.rpg.foundation.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
 
 from . import durable_store
-from .interaction_timeline import MAX_RECENT_INTERACTIONS
+from app.apps.rpg.foundation.state import access as _sections
 
 INTERACTION_EVENT_LOG_VERSION = "rpg_interaction_event_log_v1"
 INTERACTION_COMPACTION_EVENT_COUNT = 25
@@ -74,43 +74,19 @@ def replay_interaction_events(
     session: dict[str, Any],
     events: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """The loaded session with the event log's interactions merged into its timeline (the loader's own copy: in
+    place, by the reducer)."""
     if not isinstance(session, dict) or not events:
         return session
-    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
-    timeline = raw_interaction_timeline if isinstance(raw_interaction_timeline := runtime.get("interaction_timeline"), dict) else {}
-    existing = [item for item in timeline.get("events", []) if isinstance(item, dict)]
-    by_id = {
-        str(item.get("interaction_id") or f"sequence:{item.get('sequence')}"): dict(item)
-        for item in existing
-    }
-    for event in events:
-        key = str(event.get("interaction_id") or f"sequence:{event.get('sequence')}")
-        by_id[key] = dict(event)
-    merged = sorted(by_id.values(), key=lambda item: int(item.get("sequence") or 0))
-    merged = merged[-MAX_RECENT_INTERACTIONS:]
-    last = merged[-1] if merged else {}
-    last_sequence = int(last.get("sequence") or timeline.get("last_sequence") or 0)
-    state_revision = int(last.get("state_revision") or timeline.get("state_revision") or 0)
-    timeline.update(
-        {
-            "format_version": "rpg_interaction_timeline_v1",
-            "last_sequence": last_sequence,
-            "state_revision": state_revision,
-            "events": merged,
-        }
-    )
-    runtime["interaction_seq"] = max(int(runtime.get("interaction_seq") or 0), last_sequence)
-    runtime["state_revision"] = max(int(runtime.get("state_revision") or 0), state_revision)
-    runtime["interaction_timeline"] = timeline
-    runtime["recent_interactions"] = [dict(item) for item in merged[-12:]]
-    if last:
-        runtime["last_interaction"] = dict(last)
-    session["runtime_state"] = runtime
+    from app.apps.rpg.foundation.state.changes import InteractionsReplayed
+    from app.apps.rpg.foundation.state.reducer import reduce
+
+    session, _ = reduce(session, [InteractionsReplayed(events=[dict(event) for event in events])], owned=True)
     return session
 
 
 def load_and_replay_interaction_events(session_id: str, session: dict[str, Any]) -> dict[str, Any]:
-    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := _sections.runtime_state_of(session), dict) else {}
     timeline = raw_interaction_timeline if isinstance(raw_interaction_timeline := runtime.get("interaction_timeline"), dict) else {}
     snapshot_sequence = int(timeline.get("last_sequence") or runtime.get("interaction_seq") or 0)
     events = load_interaction_events(session_id, after_sequence=snapshot_sequence)

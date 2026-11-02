@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 from tests.support.routers import include_router_registrar
 
@@ -10,6 +12,12 @@ import app.apps.rpg.edge.api.feature_routes.rpg_session_routes as routes
 from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from app.apps.rpg.session import durable_store
 from app.apps.rpg.session.service import load_session
+
+# PostgreSQL tests skip without a test database, as their neighbours do (RQ-0.7).
+requires_postgres = pytest.mark.skipif(
+    not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+    reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
+)
 
 
 def _client(monkeypatch, tmp_path) -> TestClient:
@@ -53,6 +61,7 @@ def _region_environment(region_id: str, climate: str, condition: str) -> dict[st
 
 
 @pytest.mark.postgres
+@requires_postgres
 def test_new_game_response_includes_non_persisted_environment_snapshot(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path)
 
@@ -67,17 +76,18 @@ def test_new_game_response_includes_non_persisted_environment_snapshot(monkeypat
     assert contract == result["game"]["environment_narration_contract"]
     assert contract["authority"] == "read_only_environment_snapshot"
     assert "create_new_weather" in contract["forbidden"]
-    assert snapshot["region_id"] == "market_road"
+    assert snapshot["region_id"] == "region:market-road:town"
     assert snapshot["weather"]["condition"] == "rain"
     assert snapshot["context"]["exposure"] == "indoor"
 
     persisted = load_session(result["session_id"])
     assert "environment_snapshot" not in persisted["state"]
     assert "environment_narration_contract" not in persisted["state"]
-    assert persisted["state"]["world"]["environment"]["region_id"] == "market_road"
+    assert persisted["state"]["world"]["environment"]["region_id"] == "region:market-road:town"
 
 
 @pytest.mark.postgres
+@requires_postgres
 def test_read_session_response_includes_environment_snapshot_for_existing_session(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path)
     created = client.post("/api/rpg/new-game", json=_new_game_payload()).json()
@@ -140,6 +150,7 @@ def test_read_session_response_uses_active_region_environment_snapshot(monkeypat
 
 
 @pytest.mark.postgres
+@requires_postgres
 def test_list_sessions_decorates_session_state_with_environment_snapshot(monkeypatch, tmp_path) -> None:
     client = _client(monkeypatch, tmp_path)
     client.post("/api/rpg/new-game", json=_new_game_payload())

@@ -247,17 +247,9 @@
     "sha256": "4400f1e3c54de98032999698657af5a55c6ae862bc9356216f3a3ff7cf6e273f",
     "version": "1"
   },
-  "rpg.ai_action_intelligence.instructions": {
-    "sha256": "850b324bb5b1c3fb2ea68862784538f2c136ec4a6b2e12ac8918f185df0f8ab4",
-    "version": "1"
-  },
-  "rpg.ai_compact_dialogue.choose_speaker": {
-    "sha256": "ea0c3aa21f92ef2e201ebb6d73b14fecb5e86b9d04e2315a3e5f0b0a273ebe0a",
-    "version": "1"
-  },
-  "rpg.ai_compact_dialogue.prompt": {
-    "sha256": "75a9f9b0d5bd2a489941ff24cdc8e535a435228880baf043ced3711b00d00ebc",
-    "version": "1"
+  "rpg.ai_compact_dialogue.plan": {
+    "sha256": "221abbffd285184a8c701d051142bfd44964f7595c43a627772e384c43cfbfc8",
+    "version": "10"
   },
   "rpg.ai_conversation_prompt_builder.build_npc_conversation_line_prompt": {
     "sha256": "b4d541d7a929afa4e4d44c7207df694029656e8e23001c32d76aa5b0afd74a51",
@@ -265,10 +257,6 @@
   },
   "rpg.ai_grounding_soft_audit.build_soft_audit_prompt": {
     "sha256": "a46b418908ef137fa44f3dfc04c0ce24573c9b8bc1a7d934bd41966ac650d7be",
-    "version": "1"
-  },
-  "rpg.ai_llm_mind_npc_prompt_builder.build_decision_prompt": {
-    "sha256": "c54d8904fd286fc3fa54ad1f35f324458cbbf0b3e789122236dc3448c01ba5a7",
     "version": "1"
   },
   "rpg.ai_memory_narration_grounding.memory_narration_prompt_block": {
@@ -281,14 +269,6 @@
   },
   "rpg.ai_memory_narration_grounding.memory_narration_prompt_block_3": {
     "sha256": "23d2b182ea36e150d92b48533197184af0b2a9c9112fdf92cbee3d62073b4dd1",
-    "version": "1"
-  },
-  "rpg.ai_semantic_action_intelligence.build_semantic_action_prompt": {
-    "sha256": "8df8439e5b7c9cb7ccf135d2e42786c271d830b08b18be2e5058040b1f82ff2c",
-    "version": "1"
-  },
-  "rpg.ai_semantic_action_intelligence.instructions": {
-    "sha256": "de10ff7a18062a565b441860d3d83afe59faf3e0bd58da234d0ad67908fa7004",
     "version": "1"
   },
   "rpg.ai_survival_narration_grounding.survival_narration_prompt_block": {
@@ -312,8 +292,8 @@
     "version": "1"
   },
   "rpg.ai_world_scene_narrator_prompts.prompt": {
-    "sha256": "aba674b7991700cf8c0eb89772323ed046fbcb074d8e895e0324be6960611793",
-    "version": "1"
+    "sha256": "a5b7da03a49d6ad487d2ec6ae95a95f52c9b0c4fe8909b648dd5835191d4b11c",
+    "version": "3"
   },
   "rpg.ai_world_scene_narrator_prompts.prompt_2": {
     "sha256": "778ebd95de52144391e0dddc029e56e029de44903cd1f9edb7d9bfe87c53fc7d",
@@ -321,18 +301,6 @@
   },
   "rpg.ai_world_scene_narrator_prompts.prompt_3": {
     "sha256": "4bf1cd080426b00b9260ebb796e011d3fb36e21c8f076fc025a5ee764826ebb4",
-    "version": "1"
-  },
-  "rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules": {
-    "sha256": "e1ffe9ce720b5262c1e1f5e3366cbd008721af8e16beb96b180b10eb29d45d80",
-    "version": "1"
-  },
-  "rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules_2": {
-    "sha256": "62aca157b0aa177a0b56130c89c57ed094f4c58e81fcf681d61f999a7660cb63",
-    "version": "1"
-  },
-  "rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules_3": {
-    "sha256": "7ac48d8c4e096845672672c00a023baf3fe49ffd9423d083ab57ddf505bb328f",
     "version": "1"
   },
   "rpg.ai_world_scene_narrator_prompts.schema": {
@@ -347,45 +315,29 @@
     "sha256": "77c445a42e96d5a7fa53654b1eb727c2a1bcbf9efead050c6947b44b9c0dad40",
     "version": "1"
   },
-  "rpg.cognitive_intent_enrichment.prompt": {
-    "sha256": "599a271d999e0ef720f25ca91c992b86f4118275980a4424c2b7f1149340c68d",
+  "rpg.game_master.area": {
+    "sha256": "ff2b38745d84f752e96650b90fdf1916d870fac81f043b7afbb4260e8eb38415",
     "version": "1"
   },
-  "rpg.cognitive_resolution_engine.prompt": {
-    "sha256": "16a793534ccac8c39743e6c8967357994a2140bf7e97e84c605e9044ff555471",
+  "rpg.game_master.direction": {
+    "sha256": "afa95bbc7b9077a0ae0a3e94ae7c342d77e43d6a8fa5f72015ffc25a01dd25be",
+    "version": "3"
+  },
+  "rpg.game_master.panel": {
+    "sha256": "c396fe5493d496a0ae7d42b656aa871a2aa04bfa61c2e412821f0806177142f4",
     "version": "1"
   },
-  "rpg.jobs_turn_executor.prompt": {
-    "sha256": "c7cc62e51e8887b056797e2e60aad80ad78534adac2fd487a8c9bf62c8bd6d6e",
-    "version": "1"
-  },
-  "rpg.narration_combat_prompt.build_combat_narration_prompt": {
-    "sha256": "c69d902d1dff804f3fe7751184ef45b7b13ec51330f1de5df6e481984659fd4d",
-    "version": "1"
-  },
-  "rpg.narration_combat_prompt.party_defeat_instruction": {
-    "sha256": "8e5ca3c48fdda3bbbd8fe6556fdafaf9ae40ad900988ed1904c25e116a628aab",
-    "version": "1"
-  },
-  "rpg.narration_narrator.prompt": {
-    "sha256": "d3e0bb391c945c4834b768eb7d8c6be6d205a4a8e92a06e2f456198139203164",
+  "rpg.lore_review.consistency": {
+    "sha256": "c8a85667e16a7f454687221333195e027870f90709f9f25723b3a9c6270ea8c1",
     "version": "1"
   },
   "rpg.narration_runtime_narration_legacy.prompt": {
     "sha256": "cbb935b7024b585cb4bd4f935ae3120f42ea351eb2af0bf8a2964022db6c9145",
     "version": "1"
   },
-  "rpg.narrative_narrative_generator.prompt": {
-    "sha256": "3e8dfb0ca89260c4a434e071df5a1f957c2d1d242139e4c4b597ded7203dcaa5",
-    "version": "1"
-  },
-  "rpg.narrative_narrative_generator.prompt_2": {
-    "sha256": "73ffb70930ab4dbf6d75b518b79c9d59ee93a91aa8a8f269a1c5d589d876d271",
-    "version": "1"
-  },
   "rpg.narrative_provider.system_prompt": {
-    "sha256": "72738b24980cf193c45ff61e513782b57ba1a25b203c08ca69cf44ba23ca21d1",
-    "version": "2"
+    "sha256": "fbbd6181159e8c7bb41a7cbd8d804219e69f970c5ec595b9a88458357afa0417",
+    "version": "5"
   },
   "rpg.npc_dialogue_intelligence.system": {
     "sha256": "43159871a9f6453a0ed96f6e94ddf1b6b2f4ac88ddd0d30fc18f5e814c2aea48",
@@ -437,18 +389,6 @@
   },
   "rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_9": {
     "sha256": "6cb9728f4f1464a4da30ed9806c7352ce7777faf4a487cb2a9f8a32a50033df7",
-    "version": "1"
-  },
-  "rpg.presentation_personality.build_personality_prompt_hints": {
-    "sha256": "21c962fe89a90bd3060ab7da4dc48c794a636cbab87bc40fa55e985cd141a395",
-    "version": "1"
-  },
-  "rpg.profiles_llm_profile_drafter.build_profile_draft_prompt": {
-    "sha256": "240fa416f22f13ba76b216854ab691cc5046450970c95114399807c3dc4e65f9",
-    "version": "1"
-  },
-  "rpg.profiles_profile_portraits.prompt": {
-    "sha256": "025b321100c34a2fea1a40b418f68538c76e6bae03a61185ecd8d9bd72bf369d",
     "version": "1"
   },
   "rpg.session_ability_detail.prompt": {
@@ -511,33 +451,13 @@
     "sha256": "bed7276d64b7354c2ef38e3aca8b45075860f546a979d2be5bdb9a42c74203b7",
     "version": "1"
   },
-  "rpg.session_item_detail.prompt": {
-    "sha256": "9243fed112427e8e33f669a84293e4e5495b3883eb1db0ce363474f0bf858140",
-    "version": "1"
-  },
   "rpg.session_memory_prompt.build_relevant_memory_prompt_block": {
     "sha256": "46772309d6d3c5beb486093cfea4f6fa967cb4c44fbfba4d0037d9953c6b7197",
     "version": "1"
   },
-  "rpg.session_player_agency_contract.prompt": {
-    "sha256": "0f494e6e418d2a00e0e1676a46ae306a016efff7610b33dfcc8d6b585b242a93",
-    "version": "1"
-  },
-  "rpg.session_semantic_state_changes.build_semantic_state_change_prompt_contract": {
-    "sha256": "3e01b4debf98996d2785edbbc5abc55b819d9c2e83852e42bbda7d6e6289a259",
-    "version": "1"
-  },
-  "rpg.session_semantic_state_changes.build_semantic_state_change_prompt_contract_2": {
-    "sha256": "e4cc329bd157b7d427cfb8b12ad5f0819d56c2d3d1aa01407420d9f7a790a458",
-    "version": "1"
-  },
-  "rpg.session_semantic_state_changes.interaction_context_instruction": {
-    "sha256": "92c5119682ab92c03823a6ab32f8a25ad4d7f57376d58c35ca3cc2a15c934cc3",
-    "version": "1"
-  },
-  "rpg.session_semantic_state_changes.player_context_instruction": {
-    "sha256": "83639f2e63eb9b73e3e575ffadc9bf51575263c703da085c07c938b1088e7fcb",
-    "version": "1"
+  "rpg.turn_intent.readings": {
+    "sha256": "205064495b5932f430d00b9a0432d27162d6b1db01e050375fbf0c4e39bcc72e",
+    "version": "4"
   },
   "rpg.worlds_generation_first_pass_provider.authored_registry_system_prompt": {
     "sha256": "f5665ee7a037b9dfbe15cbe15b93f5d70842f50947d76f9d0e33cc4429a4cfce",

@@ -167,13 +167,6 @@ def validate_publishable_response(response: RenderedResponse) -> tuple[str, ...]
     return tuple(dict.fromkeys(issues))
 
 
-def approved_delivery_units(
-    response: RenderedResponse,
-    profile: ResponseGenerationProfile,
-) -> tuple[ApprovedDeliveryUnit, ...]:
-    return ValidatedDeliverySession.prepare(response, profile).units
-
-
 def _unit_texts(
     response: RenderedResponse,
     delivery_mode: DeliveryMode,

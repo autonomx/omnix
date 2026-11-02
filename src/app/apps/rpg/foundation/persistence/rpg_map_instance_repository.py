@@ -31,14 +31,16 @@ class PostgresRpgMapInstanceRepository:
         document: Mapping[str, Any],
         definition_hash: str,
         semantic_interface_hash: str,
+        campaign_id: str | None = None,
     ) -> dict[str, Any]:
+        """A map definition, kept once; ``campaign_id``: one of a campaign's own (a site's room, EV-10)."""
         row = self.connection.execute(
             """
             INSERT INTO omnix_rpg_map_definitions (
                 workspace_id, map_id, definition_revision, world_id,
                 world_revision, document_jsonb, definition_hash,
-                semantic_interface_hash
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                semantic_interface_hash, campaign_id
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
             ON CONFLICT (workspace_id, map_id, definition_revision) DO NOTHING
             RETURNING map_id, definition_revision, world_id, world_revision,
                       document_jsonb, definition_hash, semantic_interface_hash,
@@ -53,6 +55,7 @@ class PostgresRpgMapInstanceRepository:
                 canonical_json(dict(document)),
                 definition_hash,
                 semantic_interface_hash,
+                campaign_id,
             ),
         ).fetchone()
         if row is None:
@@ -63,6 +66,14 @@ class PostgresRpgMapInstanceRepository:
                 )
             return current
         return _definition_row(row)
+
+    def next_definition_revision(self, context: TenantContext, map_id: str) -> int:
+        row = self.connection.execute(
+            "SELECT COALESCE(MAX(definition_revision), 0) + 1 FROM omnix_rpg_map_definitions "
+            "WHERE workspace_id = %s AND map_id = %s",
+            (context.workspace_id, map_id),
+        ).fetchone()
+        return int(row[0])
 
     def get_definition(
         self,
@@ -76,6 +87,17 @@ class PostgresRpgMapInstanceRepository:
             "FROM omnix_rpg_map_definitions WHERE workspace_id = %s "
             "AND map_id = %s AND definition_revision = %s",
             (context.workspace_id, map_id, int(definition_revision)),
+        ).fetchone()
+        return _definition_row(row) if row is not None else None
+
+    def latest_definition(self, context: TenantContext, map_id: str) -> dict[str, Any] | None:
+        """A map's newest definition: the one a campaign's first visit to its place stands on."""
+        row = self.connection.execute(
+            "SELECT map_id, definition_revision, world_id, world_revision, "
+            "document_jsonb, definition_hash, semantic_interface_hash, created_at "
+            "FROM omnix_rpg_map_definitions WHERE workspace_id = %s AND map_id = %s "
+            "ORDER BY definition_revision DESC LIMIT 1",
+            (context.workspace_id, map_id),
         ).fetchone()
         return _definition_row(row) if row is not None else None
 
@@ -148,6 +170,18 @@ class PostgresRpgMapInstanceRepository:
             (context.workspace_id, map_instance_id),
         ).fetchone()
         return _instance_row(row) if row is not None else None
+
+    def list_instances(self, context: TenantContext, campaign_id: str) -> list[dict[str, Any]]:
+        """A campaign's local maps as they stand, in id order (a campaign exported with them, RQ-8.6)."""
+        rows = self.connection.execute(
+            "SELECT map_instance_id, campaign_id, location_id, map_id, "
+            "map_definition_revision, definition_hash, map_state_revision, "
+            "applied_event_sequence, snapshot_jsonb, created_at, updated_at "
+            "FROM omnix_rpg_campaign_map_instances WHERE workspace_id = %s "
+            "AND campaign_id = %s ORDER BY map_instance_id",
+            (context.workspace_id, campaign_id),
+        ).fetchall()
+        return [_instance_row(row) for row in rows]
 
     def append_event(
         self,

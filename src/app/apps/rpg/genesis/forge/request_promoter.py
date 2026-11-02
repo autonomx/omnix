@@ -124,6 +124,8 @@ def promote_new_game_request_to_genesis(request: dict[str, Any]) -> CampaignGene
                 "combat_lethality": request.get("combat_lethality") or "normal",
                 "seed": request.get("seed"),
             },
+            # A classic new game never asked for World Forge (it sets out in the starter world).
+            "world_forge": {"enabled": False},
             "system_options": {
                 "autosave": bool(
                     system_options.get("autosave", features.get("autosave", True))

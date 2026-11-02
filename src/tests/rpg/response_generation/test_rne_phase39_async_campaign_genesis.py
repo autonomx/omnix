@@ -13,7 +13,7 @@ from app.apps.rpg.genesis.forge.async_coordinator import (
     campaign_genesis_job_id,
     campaign_genesis_sync_fallback_allowed,
     enqueue_campaign_genesis,
-    _preserve_live_progress_during_expansion,
+    run_campaign_genesis_worker_once,
 )
 from app.apps.rpg.genesis.forge.contract import CampaignGenesisContract
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
@@ -139,59 +139,26 @@ def test_async_mode_is_production_default_but_deterministic_ci_is_explicit() -> 
     ) is False
 
 
-def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeypatch) -> None:
+def test_world_forge_without_the_queue_is_refused_not_played_without_a_world(monkeypatch) -> None:
+    """The campaign's world is made in the library by the genesis job; with no durable queue there is no world to
+    make, so the request is refused (roadmap §4.4: every campaign plays from a world)."""
     pipeline = importlib.import_module("app.apps.rpg.genesis.forge.pipeline_adapter")
     contract = _contract()
-    prepared_calls: list[dict] = []
-
     monkeypatch.setattr(pipeline, "compile_campaign_genesis", lambda value: {"compiled": True})
     monkeypatch.setattr(pipeline, "bootstrap_session_from_compiled_genesis", lambda value: {"bootstrap": True})
     monkeypatch.setattr(pipeline, "adapt_genesis_payload_to_new_game_payload", lambda value: {"legacy": True})
+    monkeypatch.setattr(pipeline, "prepare_new_game_session_from_compiled_genesis", lambda **kwargs: _prepared_result())
+    monkeypatch.setattr("app.apps.rpg.genesis.forge.async_coordinator.campaign_genesis_async_enabled", lambda: True)
+    monkeypatch.setattr("app.apps.rpg.genesis.forge.async_coordinator.campaign_genesis_sync_fallback_allowed",
+                        lambda: True)
+    monkeypatch.setattr("app.apps.rpg.genesis.forge.async_coordinator.enqueue_campaign_genesis",
+                        lambda *args, **kwargs: {"ok": False, "error": "campaign_genesis_enqueue_failed",
+                                                 "detail": "PostgreSQL unavailable"})
 
-    def prepare(**kwargs):
-        result = _prepared_result()
-        prepared_calls.append(result)
-        return result
+    result = pipeline.create_new_game_from_genesis_payload({"genesis": contract.model_dump(mode="json")},
+                                                           sessions=SESSION_CAMPAIGN_SESSIONS)
 
-    monkeypatch.setattr(pipeline, "prepare_new_game_session_from_compiled_genesis", prepare)
-    monkeypatch.setattr(
-        "app.apps.rpg.genesis.forge.async_coordinator.campaign_genesis_async_enabled",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "app.apps.rpg.genesis.forge.async_coordinator.campaign_genesis_sync_fallback_allowed",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "app.apps.rpg.genesis.forge.async_coordinator.enqueue_campaign_genesis",
-        lambda *args, **kwargs: {
-            "ok": False,
-            "error": "campaign_genesis_enqueue_failed",
-            "detail": "PostgreSQL unavailable",
-        },
-    )
-    monkeypatch.setattr(
-        pipeline,
-        "create_new_game_session_from_compiled_genesis",
-        lambda **kwargs: {
-            "ok": True,
-            "status": "ready",
-            "fallback": kwargs["prepared_result"]["campaign_genesis_async_fallback"],
-        },
-    )
-
-    result = pipeline.create_new_game_from_genesis_payload(
-        {"genesis": contract.model_dump(mode="json")},
-        sessions=SESSION_CAMPAIGN_SESSIONS,
-    )
-
-    assert len(prepared_calls) == 2
-    assert result["ok"] is True
-    assert result["status"] == "ready"
-    assert result["fallback"] == {
-        "used": True,
-        "reason": "PostgreSQL unavailable",
-    }
+    assert result["ok"] is False and result["error"] == "campaign_world_forge_requires_queue"
 
 
 def test_campaign_genesis_resource_class_is_part_of_the_shared_job_contract() -> None:
@@ -296,47 +263,68 @@ def test_enqueue_normalizes_database_bootstrap_failure(monkeypatch) -> None:
     assert result["session"]["runtime_state"]["campaign_generation"]["stage"] == "enqueue_failed"
 
 
-def test_background_expansion_preserves_live_discovery_and_thread_progress() -> None:
-    before = {
-        "campaign_bible_projection": {
-            "discovery_state": {
-                "pages": {"lore:rumor": "learned"},
-                "entities": {"npc:bran": "learned"},
-                "discoveries": [{"id": "discovery:bran"}],
-            }
-        },
-        "state": {
-            "opening_story_threads": [
-                {"id": "thread:rumor", "status": "resolved", "progress": 3}
-            ]
-        },
-    }
-    expanded = {
-        "campaign_bible_projection": {
-            "discovery_state": {
-                "pages": {"lore:realm": "public_at_campaign_start"},
-                "entities": {},
-                "discoveries": [],
-            }
-        },
-        "state": {
-            "campaign_bible": {"discovery_state": {}},
-            "opening_story_threads": [
-                {"id": "thread:rumor", "status": "opening", "progress": 0},
-                {"id": "thread:new", "status": "opening"},
-            ],
-        },
-    }
+class _WorkerJobs:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
 
-    _preserve_live_progress_during_expansion(before, expanded)
+    def claim_next(self, context, **kwargs):
+        return {"id": "rpg-genesis:campaign:phase39", "job_type": CAMPAIGN_GENESIS_JOB_TYPE, "lease_token": "t",
+                "input_payload": {"campaign_id": "campaign:phase39", "contract": _contract().model_dump(mode="json")}}
 
-    discovery = expanded["campaign_bible_projection"]["discovery_state"]
-    assert discovery["pages"]["lore:rumor"] == "learned"
-    assert discovery["entities"]["npc:bran"] == "learned"
-    assert discovery["discoveries"] == [{"id": "discovery:bran"}]
-    threads = {
-        row["id"]: row for row in expanded["state"]["opening_story_threads"]
-    }
-    assert threads["thread:rumor"]["status"] == "resolved"
-    assert threads["thread:rumor"]["progress"] == 3
-    assert threads["thread:new"]["status"] == "opening"
+    def mark_running(self, context, **kwargs):
+        return self.claim_next(context)
+
+    def defer(self, context, **kwargs):
+        self.calls.append(("defer", kwargs))
+        return {"status": "queued"}
+
+    def complete(self, context, **kwargs):
+        self.calls.append(("complete", kwargs))
+        return {"status": "completed"}
+
+
+class _WorkerGenesis:
+    def __init__(self) -> None:
+        self.progress: list[dict] = []
+
+    def update(self, context, **kwargs):
+        self.progress.append(dict(kwargs))
+
+
+def _worker(monkeypatch, step) -> tuple[dict, _WorkerJobs, _WorkerGenesis]:
+    unit_of_work_module = importlib.import_module("app.persistence.unit_of_work")
+
+    work = _Work()
+    work.jobs = _WorkerJobs()
+    work.campaign_genesis = _WorkerGenesis()
+    work.rollback = lambda: None
+    monkeypatch.setattr(unit_of_work_module, "unit_of_work", lambda database=None: work)
+    monkeypatch.setattr("app.apps.rpg.genesis.forge.async_coordinator._write_session_progress",
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.apps.rpg.genesis.forge.wizard_world.advance_wizard_world",
+                        lambda contract, **kwargs: step)
+    sessions = SimpleNamespace(load=lambda campaign_id: {"manifest": {"session_id": campaign_id}})
+    return run_campaign_genesis_worker_once(sessions=sessions, database=object()), work.jobs, work.campaign_genesis
+
+
+def test_the_genesis_job_takes_a_step_of_the_world_and_waits_on_the_librarys_workers(monkeypatch) -> None:
+    from app.apps.rpg.genesis.forge.async_coordinator import WIZARD_WORLD_POLL_SECONDS
+    from app.apps.rpg.genesis.forge.wizard_world import WizardWorldStep
+
+    result, jobs, genesis = _worker(monkeypatch, WizardWorldStep("generating", waiting=True, world_id="world:x"))
+    assert result["status"] == "generating" and result["stage"] == "generating"
+    [(kind, deferred)] = jobs.calls
+    assert kind == "defer" and deferred["delay_seconds"] == WIZARD_WORLD_POLL_SECONDS  # without spending an attempt
+    assert genesis.progress[-1]["progress"]["stage"] == "world_generating"
+    _, jobs, _ = _worker(monkeypatch, WizardWorldStep("publishing", world_id="world:x"))
+    assert jobs.calls[0][1]["delay_seconds"] == 1  # a step done, not waiting: straight on to the next
+
+
+def test_the_genesis_job_is_complete_when_the_campaign_has_set_out_from_its_world(monkeypatch) -> None:
+    from app.apps.rpg.genesis.forge.wizard_world import WizardWorldStep
+
+    launched = WizardWorldStep("launched", world_id="world:x", detail={"launch": {"session": {"state": {}}}})
+    result, jobs, genesis = _worker(monkeypatch, launched)
+    assert result["status"] == "ready" and result["world_id"] == "world:x"
+    assert [kind for kind, _ in jobs.calls] == ["complete"]
+    assert genesis.progress[-1]["status"] == "ready"

@@ -5,14 +5,6 @@ from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
 def build_memory_ui_summary(simulation_state: dict) -> dict:
     """Build compact memory UI summary for the player panel."""
     sim = _safe_dict(simulation_state)

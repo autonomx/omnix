@@ -41,6 +41,10 @@ NARRATION = {
 }
 # (marker in the prompt, call kind, scripted answer)
 SCRIPT = (
+    # The intent call (RQ-3.2): the grammar knows no one called "the bartender"; the model reads the bar's keeper.
+    ("Read what the player means", "turn_intent",
+     json.dumps({"readings": [{"family": "talk", "target_id": "npc:bran", "confidence": 0.9}]})),
+    ("Reply as the speaker in the PLAN", "dialogue_line", "The moment passes quietly in the room."),
     ("rpg_narration_candidates_v1", "narration_candidates", json.dumps(NARRATION)),
     ("materializes durable, player-safe RPG canon", "canon_dossier",
      json.dumps({"entities": [], "documents": [], "facts": [], "relationships": []})),
@@ -55,6 +59,17 @@ class _ScriptedModel:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.session_id = ""  # every typed line goes to the intent call (EV-9), read against this campaign
+
+    def _read_line(self, text: str) -> str:
+        """The intent call read as the grammar reads the line; "" where it reads nothing the game acted on."""
+        from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
+        from tests.support.rpg_line_reader.reader import read_line
+
+        said = re.search(r"\nPLAYER: (.*)\n", text)
+        document = load_session_from_postgres(self.session_id) if self.session_id and said else None
+        read = read_line(document, said.group(1).strip()) if document else {}
+        return json.dumps(read) if read.get("readings") or read.get("question") else ""
 
     def chat_completion(self, messages, model=None, stream=False, **kwargs):
         from app.providers.base import ChatResponse
@@ -65,12 +80,8 @@ class _ScriptedModel:
                 break
         else:
             kind, answer = "unscripted", "{}"
-        if "decide which one present NPC" in text:
-            # The dialogue call names its addressee among the present NPCs: the bar's keeper.
-            present = json.loads(text.rsplit("CONTEXT: ", 1)[1]).get("present_npcs") or []
-            keeper = next(npc for npc in present if "innkeeper" in f"{npc.get('name')} {npc.get('role')}".lower())
-            kind = "turn_narration"
-            answer = json.dumps({"speaker_id": keeper["id"], "line": "The moment passes quietly in the room."})
+        if kind == "turn_intent":
+            answer = self._read_line(text) or answer
         self.calls.append(kind)
         response = ChatResponse(content=answer, model="scripted")
         return iter([response]) if stream else response
@@ -149,6 +160,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.jobs import store as job_store
     from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.persistence.repository_registry import register_feature_repositories
     from app.providers import service as provider_service
     from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
     from app.apps.rpg.narration.narrative_engine import service as narrative_service
@@ -159,6 +171,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from tests.support.routers import include_router_registrar
 
     bootstrap_postgresql_runtime()
+    register_feature_repositories("rpg")  # as composition does: the classic new game installs the starter world
     jobs = PostgresJobStoreAdapter()
     job_store.install_default_job_store_factory(lambda: jobs)
     model = _ScriptedModel()
@@ -172,6 +185,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
         def play() -> dict:
             created = create_new_game_session(RpgNewGameRequest(seed=SEED))
             session_id = str(created["session_id"])
+            model.session_id = session_id
             app = FastAPI()
             include_router_registrar(app, register_rpg_session_routes)
             client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})

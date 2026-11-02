@@ -17,6 +17,7 @@ import {
   turnFailureMessage,
 } from './rpgTurnUiStore';
 import { pipelineFetch } from '../../api/fetchPipeline';
+import { latestRpgTurnOffers } from './rpgTurnOffers';
 
 afterEach(() => {
   resetRpgTurnUiStoreForTests();
@@ -123,6 +124,13 @@ describe('rpgTurnUiStore', () => {
         state: { changed: true, changed_domains: ['conversation'] },
         timing: { pipeline_before_encode_ms: 12.5 },
         performance: { attribution_percent: 98.5 },
+        outcome: {
+          format_version: 'rpg_turn_outcome_v1',
+          kind: 'player_text',
+          applied_changes: [{ type: 'turn_counted', turn_count: 2 }],
+          presentation: { changed_sections: ['time', 'npcs'] },
+          model_calls: { total: 1, by_kind: { provider: 1 } },
+        },
       }), {
         status: 200,
         headers: {
@@ -154,6 +162,8 @@ describe('rpgTurnUiStore', () => {
     expect(diagnostic.responseBytes).toBe(777);
     expect(diagnostic.serverAttributionPercent).toBe(98.5);
     expect(diagnostic.serverPayloadTiming).toEqual({ pipeline_before_encode_ms: 12.5 });
+    expect(diagnostic.changedDomains).toEqual(['conversation', 'time', 'npcs']);  // the outcome's sections too
+    expect(diagnostic.serverModelCalls).toBe(1);
     expect(diagnostic.client.requestToHeadersMs).toBeGreaterThanOrEqual(0);
     expect(diagnostic.client.headersToBodyMs).toBeGreaterThanOrEqual(0);
     expect(diagnostic.client.bodyToParseMs).toBeGreaterThanOrEqual(0);
@@ -164,6 +174,33 @@ describe('rpgTurnUiStore', () => {
     expect(completedDiagnostic.client.storeToCommitMs).toBeGreaterThanOrEqual(0);
     expect(completedDiagnostic.client.commitToVisibleMs).toBeGreaterThanOrEqual(0);
     expect(completedDiagnostic.client.requestToVisibleMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reads a campaign afresh after any change to it, and logs an undo as a turn', async () => {
+    let reads = 0;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET') {
+        reads += 1;
+        return new Response(JSON.stringify({ ok: true, session: { read: reads } }), { status: 200 });
+      }
+      if (String(input).endsWith('/rewind')) {
+        return new Response(JSON.stringify({ contract_version: 'rpg_turn_response_v2', ok: true, interaction_id: 'interaction:9',
+          visible_response: { messages: [{ speaker: 'Omnix', text: 'You undo your last turn.' }] } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+    const read = async () => (await (await pipelineFetch('/api/rpg/sessions/session%3Abran')).json()).session.read;
+
+    expect(await read()).toBe(1);
+    expect(await read()).toBe(1); // cached
+    await pipelineFetch('/api/rpg/sessions/session%3Abran/loadout', { method: 'POST', body: '{}' });
+    expect(await read()).toBe(2); // a pack action changed it
+    await pipelineFetch('/api/rpg/map-instances/map%3A1/tactical/move', { method: 'POST', body: '{}' });
+    expect(await read()).toBe(3); // so did a grid move
+    await pipelineFetch('/api/rpg/sessions/session%3Abran/rewind', { method: 'POST', body: '{}' });
+    expect(getRpgTurnUiEntries('session:bran')[0]).toMatchObject({ tone: 'player', text: 'Undo my last turn' });
+    expect(await read()).toBe(4);
   });
 
   it('discards optimistic entries when the client falls back from a missing foreground route', async () => {
@@ -231,12 +268,140 @@ describe('rpgTurnUiStore', () => {
     expect(draftUrls.length).toBe(polls); // polling stops with the turn's answer
   });
 
+  it('follows a turn on its stream: the outcome at the commit, then the narration as it is written', async () => {
+    class FakeEventSource {
+      static last: FakeEventSource | null = null;
+      listeners: Record<string, ((event: MessageEvent<string>) => void)[]> = {};
+      closed = false;
+      constructor(public url: string) {
+        FakeEventSource.last = this;
+      }
+      addEventListener(name: string, listener: (event: MessageEvent<string>) => void) {
+        (this.listeners[name] ||= []).push(listener);
+      }
+      emit(name: string, data: unknown) {
+        for (const listener of this.listeners[name] || []) listener({ data: JSON.stringify(data) } as MessageEvent<string>);
+      }
+      close() {
+        this.closed = true;
+      }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const sent: Headers[] = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(new Headers(init?.headers));
+      return new Response(JSON.stringify({
+        ok: true, contract_version: 'rpg_turn_response_v2', session_id: 'session:bran', interaction_id: 'interaction:9',
+        visible_response: { plain_text: '', status: 'pending' },
+        narration: { status: 'pending', stream_path: '/api/rpg/sessions/session:bran/submissions/s/stream' },
+        outcome: { presentation: { facts: [{ kind: 'coin', text: 'You pay 5 copper.', tone: 'loss' }] } },
+      }), { status: 200 });
+    });
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+    try {
+      await pipelineFetch('/api/rpg/sessions/session%3Abran/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'Buy a meal' }),
+      });
+      expect(sent[0].get('X-Omnix-Rpg-Turn-Stream')).toBe('1');
+      const told = () => getRpgTurnUiEntries('session:bran').filter((entry) => entry.tone !== 'player');
+      expect(told().map((entry) => [entry.messageKind, entry.status])).toEqual([['narration', 'pending'], ['outcome', 'complete']]);
+      const source = FakeEventSource.last as FakeEventSource;
+      expect(source.url).toBe('/api/rpg/sessions/session:bran/submissions/s/stream');
+
+      source.emit('narration.delta', { text: 'Orik sets a bowl down.' });
+      expect(told()[0].text).toBe('Orik sets a bowl down.');
+      source.emit('narration.final', { visible_response: { narration: 'Orik sets a steaming bowl before you.' } });
+      expect(told().map((entry) => [entry.text, entry.status])).toEqual([
+        ['Orik sets a steaming bowl before you.', 'complete'], ['You pay 5 copper.', 'complete']]);
+      expect(source.closed).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("turns a refused turn's error code into words", async () => {
     const json = (detail: unknown, status = 400) => new Response(JSON.stringify({ detail }), { status });
     expect(await turnFailureMessage(json({ error: 'target_not_found' }))).toBe('There is no one or nothing by that name here.');
     expect(await turnFailureMessage(json({ error: 'odd_case' }))).toBe('The turn could not be resolved: odd case.');
     expect(await turnFailureMessage(json({ message: 'The road is closed.' }))).toBe('The road is closed.');
     expect(await turnFailureMessage(new Response('oops', { status: 500 }))).toBe('Turn failed (500).');
+  });
+
+  it('tells the player when the storyteller is unavailable', () => {
+    beginRpgTurnUiSubmission({ sessionId: 'session:outage', submissionId: 'submit:outage', command: 'look around' });
+    completeRpgTurnUiSubmission({
+      sessionId: 'session:outage',
+      submissionId: 'submit:outage',
+      payload: {
+        ok: true,
+        contract_version: 'rpg_turn_response_v2',
+        interaction_id: 'interaction:9',
+        visible_response: { narration: 'You look around the grove.' },
+        notices: [{ kind: 'storyteller_unavailable', message: 'The storyteller is unavailable right now.' }],
+      },
+    });
+    const entries = getRpgTurnUiEntries('session:outage');
+    expect(entries.map((entry) => entry.text)).toEqual([
+      'look around',
+      'You look around the grove.',
+      'The storyteller is unavailable right now.',
+    ]);
+    expect(entries[2].messageKind).toBe('storyteller_unavailable');
+  });
+
+  it("shows what the turn changed as the outcome card's facts", () => {
+    beginRpgTurnUiSubmission({ sessionId: 'session:card', submissionId: 'submit:card', command: 'buy a potion' });
+    completeRpgTurnUiSubmission({
+      sessionId: 'session:card',
+      submissionId: 'submit:card',
+      payload: {
+        ok: true,
+        contract_version: 'rpg_turn_response_v2',
+        interaction_id: 'interaction:10',
+        visible_response: { narration: 'Brindle hands you a potion.' },
+        outcome: {
+          presentation: {
+            facts: [
+              { kind: 'coin', text: '-3 silver', tone: 'loss' },
+              { kind: 'item', text: '+Healing Potion', tone: 'gain' },
+            ],
+          },
+        } as never,
+      },
+    });
+    const [, , card] = getRpgTurnUiEntries('session:card');
+    expect(card.messageKind).toBe('outcome');
+    expect(card.facts).toEqual([
+      { kind: 'coin', text: '-3 silver', tone: 'loss' },
+      { kind: 'item', text: '+Healing Potion', tone: 'gain' },
+    ]);
+    expect(card.text).toBe('-3 silver · +Healing Potion');
+  });
+
+  it("keeps the turn's suggestions and the answers to its question for the composer", () => {
+    beginRpgTurnUiSubmission({ sessionId: 'session:offers', submissionId: 'submit:offers', command: 'go' });
+    completeRpgTurnUiSubmission({
+      sessionId: 'session:offers',
+      submissionId: 'submit:offers',
+      payload: {
+        ok: true,
+        contract_version: 'rpg_turn_response_v2',
+        interaction_id: 'interaction:11',
+        visible_response: { narration: 'Where do you want to go?' },
+        outcome: {
+          presentation: {
+            suggestions: [{ label: 'Look around', command: 'look around' }],
+            choices: [{ label: 'The Road', command: 'go to The Road' }],
+          },
+        } as never,
+      },
+    });
+    expect(latestRpgTurnOffers('session:offers')).toEqual({
+      suggestions: [{ label: 'Look around', command: 'look around' }],
+      choices: [{ label: 'The Road', command: 'go to The Road' }],
+    });
   });
 
   it('does not request heavy query refreshes for explicit conversation-only turns', () => {

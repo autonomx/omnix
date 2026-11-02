@@ -90,7 +90,7 @@ def test_retention_deletes_oldest_events_in_bounded_batches():
 
 
 def test_migration_installs_durable_feed_and_lifecycle_retention():
-    migration = Path("src/app/persistence/migrations/0104_rpg_narration_events.sql").read_text(
+    migration = (Path(__file__).resolve().parents[2] / "app/persistence/migrations/0104_rpg_narration_events.sql").read_text(
         encoding="utf-8"
     )
 

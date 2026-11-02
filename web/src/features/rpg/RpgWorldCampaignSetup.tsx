@@ -5,6 +5,7 @@ import {
   rpgWorldLibraryClient,
   type RpgScenarioRevision,
   type RpgWorldRelease,
+  type RpgWorldRevision,
 } from './api/rpgWorldLibraryClient';
 import './RpgWorldCampaignSetup.css';
 
@@ -158,9 +159,7 @@ export function RpgWorldCampaignSetup({
   }, [scenarioId, scenarios]);
 
   const selectedScenario = scenarios.find((scenario) => scenario.id === scenarioId);
-  const selectedRevision = latestScenarioRevision(
-    detailQuery.data?.scenario_revisions[scenarioId] ?? [],
-  );
+  const selectedRevision = latestScenarioRevision(detailQuery.data?.scenario_revisions[scenarioId] ?? []);
   const selectedRelease = matchingRelease(detailQuery.data?.releases ?? [], selectedRevision);
   const certification = record(record(selectedRelease?.document).certification);
   const launchReady = Boolean(selectedScenario && selectedRevision && selectedRelease && certification.launch_ready);
@@ -355,6 +354,7 @@ export function RpgWorldCampaignSetup({
                   <div><dt>Release</dt><dd>{selectedRelease ? `r${selectedRevision?.world_revision} / ${selectedRelease.release}` : 'Unavailable'}</dd></div>
                   <div><dt>Protagonist</dt><dd>{playerName} · {humanize(build)}</dd></div>
                   <div><dt>Gameplay</dt><dd>{humanize(difficulty)} · {humanize(worldActivity)}</dd></div>
+                  <div><dt>How it plays</dt><dd>{howItPlays(detailQuery.data?.revisions ?? [], selectedRevision?.world_revision)}</dd></div>
                   <div><dt>Certification</dt><dd>{launchReady ? 'Launch ready' : text((certification.missing_requirements as unknown[] | undefined)?.join(', '), 'Not ready')}</dd></div>
                 </dl>
               </section>
@@ -368,6 +368,16 @@ export function RpgWorldCampaignSetup({
 }
 
 /** The launch button, with why a launch was refused beside it (the setup's feedback line may be out of view). */
+/** Launch readiness of how the world plays (RQ-4.1): the sections its author wrote, and those taken from its lore. */
+function howItPlays(revisions: RpgWorldRevision[], worldRevision: number | undefined): string {
+  const readiness = revisions.find((row) => row.revision === worldRevision)?.play_sections;
+  if (!readiness) return 'Unknown';
+  const written = Object.entries(readiness).filter(([, source]) => source === 'authored').map(([section]) => section);
+  if (!written.length) return 'From the world’s lore';
+  const derived = Object.keys(readiness).filter((section) => !written.includes(section));
+  return `Written: ${written.join(', ')}${derived.length ? ` · from lore: ${derived.join(', ')}` : ''}`;
+}
+
 function LaunchButton({ error, pending, ready }: { error: unknown; pending: boolean; ready: boolean }) {
   return (
     <>

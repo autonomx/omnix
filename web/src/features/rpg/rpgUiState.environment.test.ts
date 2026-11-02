@@ -36,7 +36,7 @@ describe('RPG environment UI state', () => {
     expect(rows.Region).toBe('market_road');
     expect(rows.Weather).toBe('Rain');
     expect(rows.Temperature).toBe('7C');
-    expect(rows.Hazards).toBe('Not tracked yet');
+    expect(rows.Hazards).toBeUndefined(); // what the campaign does not know is left out
     expect(rows.Reputation).toBeUndefined();
     expect(state.selectedSessionSummary.location).toBe('Rusty Flagon Tavern');
   });

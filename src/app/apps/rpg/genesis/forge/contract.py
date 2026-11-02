@@ -14,7 +14,6 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, Field
 
 CAMPAIGN_GENESIS_CONTRACT_VERSION: Final = "rpg_genesis_v2"
-DEFAULT_GENESIS_CREATED_BY = "wizard_v2"
 
 
 class GenesisIdentity(BaseModel):

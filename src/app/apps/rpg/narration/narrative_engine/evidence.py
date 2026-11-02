@@ -181,14 +181,15 @@ class EvidenceBroker:
                 excluded.append((record.evidence_id, reason))
 
         # The turn's own confirmed result is always relevant to narrating it, whatever words it shares.
+        scores = {record.evidence_id: _score(record, query) for record in eligible}  # once each (RQ-6.4)
         ranked = sorted(
             eligible,
             key=lambda record: (
                 record.authority is not AuthorityClass.CONFIRMED_TURN,
-                -_score(record, query)[0],
-                -_score(record, query)[1],
-                -_score(record, query)[2],
-                _score(record, query)[3],
+                -scores[record.evidence_id][0],
+                -scores[record.evidence_id][1],
+                -scores[record.evidence_id][2],
+                scores[record.evidence_id][3],
             ),
         )
         selected = tuple(ranked[: max(1, min(int(query.limit), 50))])

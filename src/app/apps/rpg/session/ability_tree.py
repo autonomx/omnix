@@ -175,9 +175,17 @@ def build_ability_tree(identity: dict[str, Any], *, seed: int | None = None) -> 
     return tree
 
 
+STARTING_ABILITIES = 2  # a calling starts with two; the rest of its tree is learned at its levels' choices (EV-2)
+
+
 def build_initial_ability_state(tree: dict[str, Any], *, level: int = 1) -> dict[str, Any]:
+    """A new hero's abilities (evolution roadmap EV-2): their calling's first two, then one more for each level past
+    the first they start at (a demo's level 14 hero); the rest are learned as a level's choice."""
     abilities = _safe_list(tree.get("abilities"))
-    unlocked = [ability["ability_id"] for ability in abilities if ability.get("kind") == "active" and int(ability.get("level_required") or 1) <= level]
+    ready = [ability["ability_id"] for ability in abilities if ability.get("kind") == "active" and int(ability.get("level_required") or 1) <= level]
+    first = [ability_id for ability_id in _safe_list(tree.get("recommended_hotbar")) if ability_id in ready]
+    ordered = [*first, *[ability_id for ability_id in ready if ability_id not in first]]
+    unlocked = ordered[:STARTING_ABILITIES + max(0, int(level) - 1)]
     ranks = {ability_id: 1 for ability_id in unlocked}
     recommended = [ability_id for ability_id in _safe_list(tree.get("recommended_hotbar")) if ability_id in unlocked]
     hotbar_ids = [*recommended, *[ability_id for ability_id in unlocked if ability_id not in recommended]][:6]

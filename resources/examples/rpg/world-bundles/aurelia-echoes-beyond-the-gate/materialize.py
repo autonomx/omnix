@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 BUNDLE_FILENAME = "aurelia-echoes-beyond-the-gate.omnix-world.zip"
-SOURCE_BUNDLE_SHA256 = "9582c2ee7aecfb1d0890210bcd198baedfe4d1ef4ddfbadd6b5086a35f6eb944"
+SOURCE_BUNDLE_SHA256 = "0155020dbe1381d80943e4bb87b4149c89530b020f2a4dc17d6cc6bdfd6da7e0"
 WORLD_ID = "world:aurelia-echoes-beyond-the-gate"
 FIXED_ZIP_TIME = (2026, 7, 17, 9, 30, 0)
 ARTWORK: dict[str, tuple[str, dict[str, str]]] = {

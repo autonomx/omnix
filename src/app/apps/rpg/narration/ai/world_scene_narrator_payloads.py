@@ -1,6 +1,5 @@
 """Split helpers for RPG world scene narration."""
 
-from __future__ import annotations
 
 from app.apps.rpg.narration.ai.memory_narration_grounding import sanitize_memory_narration_payload
 from app.apps.rpg.narration.ai.world_scene_survival_grounding_bridge import (
@@ -8,64 +7,64 @@ from app.apps.rpg.narration.ai.world_scene_survival_grounding_bridge import (
 )
 
 from app.apps.rpg.narration.ai.world_scene_narrator_service_grounding import (
-    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
-    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
-    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
-    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
-    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
-    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
-    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
-    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
-    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
-    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
-    _build_ambient_conversation_line as _build_ambient_conversation_line, _bound_text as _bound_text, _clean_npc_dialogue_line as _clean_npc_dialogue_line,
-    _is_accommodation_request as _is_accommodation_request, _has_authoritative_accommodation_offer as _has_authoritative_accommodation_offer,
-    _ground_accommodation_npc_line as _ground_accommodation_npc_line, _service_result_from_context as _service_result_from_context,
-    _recalled_service_memories_from_context as _recalled_service_memories_from_context,
-    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt, _recalled_npc_memories_from_context as _recalled_npc_memories_from_context,
-    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt, _conversation_result_from_context as _conversation_result_from_context,
-    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt, _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
-    _line_has_prior_memory_reference as _line_has_prior_memory_reference, _memory_reference_is_backed as _memory_reference_is_backed,
-    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line, _strip_service_meta_language as _strip_service_meta_language,
-    _service_offer_label_with_price as _service_offer_label_with_price, _join_natural as _join_natural,
-    _travel_result_from_context as _travel_result_from_context, _grounded_travel_narration as _grounded_travel_narration, _grounded_travel_action as _grounded_travel_action,
-    _final_grounded_service_action_text as _final_grounded_service_action_text, _service_grounded_action_result as _service_grounded_action_result,
-    _service_grounded_npc_line as _service_grounded_npc_line, _normalized_text_for_compare as _normalized_text_for_compare,
-    _fallback_non_service_narration as _fallback_non_service_narration, _sanitize_repeated_player_input_narration as _sanitize_repeated_player_input_narration,
-    _naturalize_service_debug_language as _naturalize_service_debug_language, _service_grounded_narration_text as _service_grounded_narration_text,
-    _service_narration_needs_grounding as _service_narration_needs_grounding, _service_claim_needs_grounding as _service_claim_needs_grounding,
-    _service_purchase_is_applied as _service_purchase_is_applied, _selected_service_offer as _selected_service_offer,
-    _service_extract_price_tokens as _service_extract_price_tokens, _successful_service_purchase_text_needs_grounding as _successful_service_purchase_text_needs_grounding,
-    _ground_action_result_text as _ground_action_result_text, _player_input_action_text as _player_input_action_text,
-    _build_authoritative_action_line as _build_authoritative_action_line, _build_action_result_line as _build_action_result_line, _build_rewards_block as _build_rewards_block,
-    _titleize_action as _titleize_action, _first_nonempty as _first_nonempty,
+    json as json,
+    re as re,
+    traceback as traceback,
+    dataclass as dataclass,
+    field as field,
+    Any as Any,
+    Callable as Callable,
+    Dict as Dict,
+    List as List,
+    Optional as Optional,
+    normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture,
+    build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload,
+    parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view,
+    logger as logger,
+    NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    _extract_llm_text as _extract_llm_text,
+    _llm_text as _llm_text,
+    _safe_str as _safe_str,
+    _safe_dict as _safe_dict,
+    _safe_list as _safe_list,
+    _force_live_llm_required as _force_live_llm_required,
+    _build_ambient_conversation_line as _build_ambient_conversation_line,
+    _bound_text as _bound_text,
+    _clean_npc_dialogue_line as _clean_npc_dialogue_line,
+    _ground_accommodation_npc_line as _ground_accommodation_npc_line,
+    _service_result_from_context as _service_result_from_context,
+    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt,
+    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt,
+    _conversation_result_from_context as _conversation_result_from_context,
+    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt,
+    _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
+    _line_has_prior_memory_reference as _line_has_prior_memory_reference,
+    _memory_reference_is_backed as _memory_reference_is_backed,
+    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line,
+    _strip_service_meta_language as _strip_service_meta_language,
+    _grounded_travel_narration as _grounded_travel_narration,
+    _grounded_travel_action as _grounded_travel_action,
+    _final_grounded_service_action_text as _final_grounded_service_action_text,
+    _service_grounded_action_result as _service_grounded_action_result,
+    _service_grounded_npc_line as _service_grounded_npc_line,
+    _sanitize_repeated_player_input_narration as _sanitize_repeated_player_input_narration,
+    _naturalize_service_debug_language as _naturalize_service_debug_language,
+    _service_grounded_narration_text as _service_grounded_narration_text,
+    _service_narration_needs_grounding as _service_narration_needs_grounding,
+    _service_claim_needs_grounding as _service_claim_needs_grounding,
+    _service_purchase_is_applied as _service_purchase_is_applied,
+    _successful_service_purchase_text_needs_grounding as _successful_service_purchase_text_needs_grounding,
+    _ground_action_result_text as _ground_action_result_text,
+    _build_authoritative_action_line as _build_authoritative_action_line,
+    _build_action_result_line as _build_action_result_line,
+    _build_rewards_block as _build_rewards_block,
+    _first_nonempty as _first_nonempty,
 )
-
-def _extract_text_lines(text: str) -> List[str]:
-    lines = []
-    for part in _safe_str(text).splitlines():
-        part = part.strip()
-        if part:
-            lines.append(part)
-    return lines
-
-
-def _normalize_speaker_block(npc_value: Any) -> Dict[str, Any]:
-    npc_value = (
-        _safe_dict(npc_value)
-        if isinstance(npc_value, dict)
-        else {"text": _safe_str(npc_value).strip()}
-    )
-    return {
-        "speaker_id": _safe_str(
-            npc_value.get("speaker_id") or npc_value.get("npc_id")
-        ).strip(),
-        "name": _safe_str(npc_value.get("name")).strip(),
-        "text": _bound_text(npc_value.get("text"), 180),
-        "emotion": _safe_str(npc_value.get("emotion")).strip(),
-        "portrait": _safe_str(npc_value.get("portrait")).strip(),
-        "role": _safe_str(npc_value.get("role")).strip(),
-    }
 
 
 def _build_safe_prompt_context(
@@ -112,33 +111,6 @@ def _build_safe_prompt_context(
             scene.get("location_name"), scene.get("location_id"), scene.get("scene_id")
         ),
     }
-
-
-def _build_speaker_turns(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
-    parsed = _safe_dict(parsed)
-    npc = _normalize_speaker_block(parsed.get("npc"))
-    turns: List[Dict[str, Any]] = []
-
-    narrator_text = " ".join(
-        filter(
-            None,
-            [
-                _safe_str(parsed.get("narrator")).strip(),
-                _safe_str(parsed.get("action")).strip(),
-            ],
-        )
-    ).strip()
-    if narrator_text:
-        turns.append(
-            {
-                "speaker_id": "narrator",
-                "name": "Narrator",
-                "text": _bound_text(narrator_text, 180),
-            }
-        )
-    if npc.get("text"):
-        turns.append(npc)
-    return turns
 
 
 def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
@@ -363,7 +335,6 @@ def _sanitize_narration_text(
         "the room",
         "the inn",
         "the bar",
-        "the rusty flagon tavern",
     }
 
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
@@ -531,9 +502,6 @@ def _desystemify_text(text: str) -> str:
             text = text.replace("The target ", "", 1)
 
     # normalize various internal id patterns
-    text = text.replace("npc_bran", "Bran")
-    text = text.replace("npc:0", "Bran")
-    text = text.replace("np:bran", "Bran")
     text = text.replace("np:", "")
     text = text.replace("npc_", "")
 
@@ -568,31 +536,6 @@ def _strip_meta_narration(text: str) -> str:
             return ""
 
     return text
-
-
-def _fallback_in_world_narration(narration_context: Dict[str, Any]) -> str:
-    turn_contract = _safe_dict(narration_context.get("turn_contract"))
-    interpreted = _safe_dict(turn_contract.get("interpreted_action"))
-    npc_behavior = _safe_dict(
-        narration_context.get("npc_behavior_context")
-        or turn_contract.get("npc_behavior_context")
-    )
-
-    intent = _safe_str(interpreted.get("intent")).lower()
-    target_name = _safe_str(
-        npc_behavior.get("target_name") or interpreted.get("target_name") or "Bran"
-    )
-
-    if intent == "service":
-        return f"{target_name} looks you over from behind the bar, weighing your request before answering."
-    if intent == "attack":
-        return f"You move suddenly, turning the exchange violent. {target_name} recoils as the tavern around you goes tense."
-    if intent == "apologize":
-        return f"{target_name} watches you carefully, the apology landing against the memory of what just happened."
-    if intent == "ask":
-        return f"{target_name} studies you for a moment before answering, still shaped by the recent tension."
-
-    return "The room shifts around your action, attention turning toward you as the moment changes."
 
 
 def _enforce_npc_behavior(
@@ -978,30 +921,6 @@ def _sanitize_narration_payload(
     )
 
 
-def _render_narration_text_from_json(payload: Dict[str, Any]) -> str:
-    payload = _normalize_narration_json(payload)
-    parts: List[str] = []
-
-    if payload["narration"]:
-        parts.append(payload["narration"])
-
-    if payload["action"]:
-        parts.append(payload["action"])
-
-    npc = _safe_dict(payload.get("npc"))
-    speaker = _safe_str(npc.get("speaker")).strip()
-    line = _safe_str(npc.get("line")).strip()
-    if speaker and line:
-        parts.append(f'{speaker}: "{line}"')
-    elif line:
-        parts.append(line)
-
-    if payload["reward"]:
-        parts.append(f"Rewards: {payload['reward']}")
-
-    return "\n\n".join([p for p in parts if p]).strip()
-
-
 def _recover_narration_from_raw_text(text: str) -> Dict[str, Any]:
     text = _safe_str(text).strip()
     if not text:
@@ -1087,113 +1006,84 @@ def _structured_fallback_response(
 
 
 __all__ = (
-    'annotations',
-    'sanitize_memory_narration_payload',
-    '_merge_bs1_sanitized_payload',
-    'json',
-    'logging',
-    're',
-    'traceback',
-    'dataclass',
-    'field',
-    'Any',
-    'Callable',
-    'Dict',
-    'List',
-    'Optional',
-    'normalize_grounding_settings',
-    'select_grounded_narration_candidate',
-    'memory_reference_is_backed',
-    'build_runtime_npc_response_architecture',
-    'build_runtime_current_turn_prompt_contract',
-    'format_runtime_prompt_contract_block',
-    'build_runtime_presentation_guardrails_block',
-    'sanitize_unsupported_combat_payload',
-    'parse_runtime_provider_payload',
-    'build_encounter_view',
-    'logger',
-    '_ACTIVE_NARRATIONS',
-    'NARRATION_JSON_FORMAT_VERSION',
-    'NARRATION_JSON_SCHEMA_HINT',
-    '_extract_llm_text',
-    '_llm_text',
-    '_attach_social_context',
-    '_safe_str_p6',
-    '_attach_npc_mind_context',
-    '_NARRATION_MAX_MARKDOWN',
-    '_safe_str',
-    '_safe_dict',
-    '_safe_list',
-    '_title_case_token',
-    '_force_live_llm_required',
-    '_build_ambient_conversation_line',
-    '_bound_text',
-    '_clean_npc_dialogue_line',
-    '_is_accommodation_request',
-    '_has_authoritative_accommodation_offer',
-    '_ground_accommodation_npc_line',
-    '_service_result_from_context',
-    '_recalled_service_memories_from_context',
-    '_format_recalled_service_memories_for_prompt',
-    '_recalled_npc_memories_from_context',
-    '_format_recalled_npc_memories_for_prompt',
-    '_conversation_result_from_context',
-    '_format_conversation_beat_for_prompt',
-    '_apply_grounded_conversation_beat',
-    '_line_has_prior_memory_reference',
-    '_memory_reference_is_backed',
-    '_strip_unbacked_memory_reference_from_npc_line',
-    '_strip_service_meta_language',
-    '_service_offer_label_with_price',
-    '_join_natural',
-    '_strip_basic_markdown',
-    '_travel_result_from_context',
-    '_grounded_travel_narration',
-    '_grounded_travel_action',
-    '_final_grounded_service_action_text',
-    '_service_grounded_action_result',
-    '_service_grounded_npc_line',
-    '_normalized_text_for_compare',
-    '_fallback_non_service_narration',
-    '_sanitize_repeated_player_input_narration',
-    '_naturalize_service_debug_language',
-    '_service_grounded_narration_text',
-    '_service_narration_needs_grounding',
-    '_service_claim_needs_grounding',
-    '_service_purchase_is_applied',
-    '_selected_service_offer',
-    '_service_extract_price_tokens',
-    '_successful_service_purchase_text_needs_grounding',
-    '_ground_action_result_text',
-    '_player_input_action_text',
-    '_build_authoritative_action_line',
-    '_build_action_result_line',
-    '_build_rewards_block',
-    '_titleize_action',
-    '_first_nonempty',
-    '_extract_text_lines',
-    '_normalize_speaker_block',
-    '_build_safe_prompt_context',
-    '_build_speaker_turns',
-    '_extract_json_object_from_text',
-    '_normalize_narration_json',
-    '_parse_llm_narration_payload',
-    '_strict_narration_payload',
-    '_recent_authoritative_facts',
-    '_extract_continuity_price_facts',
-    '_extract_present_actor_names',
-    '_extract_price_tokens',
-    '_sanitize_narration_text',
-    '_authoritative_action_text',
-    '_authoritative_reward_text',
-    '_allowed_npc_speakers',
-    '_sanitize_npc_block',
-    '_desystemify_text',
-    '_strip_meta_narration',
-    '_fallback_in_world_narration',
-    '_enforce_npc_behavior',
-    '_sanitize_narration_payload',
-    '_render_narration_text_from_json',
-    '_recover_narration_from_raw_text',
-    '_structured_fallback_response',
+    "sanitize_memory_narration_payload",
+    "_merge_bs1_sanitized_payload",
+    "json",
+    "re",
+    "traceback",
+    "dataclass",
+    "field",
+    "Any",
+    "Callable",
+    "Dict",
+    "List",
+    "Optional",
+    "normalize_grounding_settings",
+    "select_grounded_narration_candidate",
+    "build_runtime_npc_response_architecture",
+    "build_runtime_current_turn_prompt_contract",
+    "build_runtime_presentation_guardrails_block",
+    "sanitize_unsupported_combat_payload",
+    "parse_runtime_provider_payload",
+    "build_encounter_view",
+    "logger",
+    "NARRATION_JSON_FORMAT_VERSION",
+    "_extract_llm_text",
+    "_llm_text",
+    "_safe_str",
+    "_safe_dict",
+    "_safe_list",
+    "_force_live_llm_required",
+    "_build_ambient_conversation_line",
+    "_bound_text",
+    "_clean_npc_dialogue_line",
+    "_ground_accommodation_npc_line",
+    "_service_result_from_context",
+    "_format_recalled_service_memories_for_prompt",
+    "_format_recalled_npc_memories_for_prompt",
+    "_conversation_result_from_context",
+    "_format_conversation_beat_for_prompt",
+    "_apply_grounded_conversation_beat",
+    "_line_has_prior_memory_reference",
+    "_memory_reference_is_backed",
+    "_strip_unbacked_memory_reference_from_npc_line",
+    "_strip_service_meta_language",
+    "_strip_basic_markdown",
+    "_grounded_travel_narration",
+    "_grounded_travel_action",
+    "_final_grounded_service_action_text",
+    "_service_grounded_action_result",
+    "_service_grounded_npc_line",
+    "_sanitize_repeated_player_input_narration",
+    "_naturalize_service_debug_language",
+    "_service_grounded_narration_text",
+    "_service_narration_needs_grounding",
+    "_service_claim_needs_grounding",
+    "_service_purchase_is_applied",
+    "_successful_service_purchase_text_needs_grounding",
+    "_ground_action_result_text",
+    "_build_authoritative_action_line",
+    "_build_action_result_line",
+    "_build_rewards_block",
+    "_first_nonempty",
+    "_build_safe_prompt_context",
+    "_extract_json_object_from_text",
+    "_normalize_narration_json",
+    "_parse_llm_narration_payload",
+    "_strict_narration_payload",
+    "_recent_authoritative_facts",
+    "_extract_continuity_price_facts",
+    "_extract_present_actor_names",
+    "_extract_price_tokens",
+    "_sanitize_narration_text",
+    "_authoritative_action_text",
+    "_authoritative_reward_text",
+    "_allowed_npc_speakers",
+    "_sanitize_npc_block",
+    "_desystemify_text",
+    "_strip_meta_narration",
+    "_enforce_npc_behavior",
+    "_sanitize_narration_payload",
+    "_recover_narration_from_raw_text",
+    "_structured_fallback_response",
 )

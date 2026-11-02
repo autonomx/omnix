@@ -38,19 +38,21 @@ def _delete_snapshots(connection: Any, retention_days: int, batch_size: int) -> 
     """Snapshots outside each campaign's newest 20 and not at a 100th revision (WP-5.2).
 
     ``retention_days`` is a grace period: a snapshot is kept at least that long.
-    Blob-backed snapshots are left to their asset's lifecycle.
+    Blob-backed snapshots are left to their asset's lifecycle, and pinned ones
+    (a pre-upgrade backup, an upcast boundary: RQ-1.7) are never deleted.
     """
     return int(connection.execute(
         """
         DELETE FROM omnix_rpg_snapshots
          WHERE id IN (
              SELECT id
-               FROM (SELECT id, revision, created_at, blob_asset_id,
+               FROM (SELECT id, revision, created_at, blob_asset_id, pinned,
                             row_number() OVER (PARTITION BY campaign_id ORDER BY revision DESC) AS newest
                        FROM omnix_rpg_snapshots) AS ranked
               WHERE newest > %s
                 AND revision %% %s <> 0
                 AND blob_asset_id IS NULL
+                AND NOT pinned
                 AND created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
               ORDER BY created_at, id
               LIMIT %s
@@ -60,6 +62,84 @@ def _delete_snapshots(connection: Any, retention_days: int, batch_size: int) -> 
     ).rowcount)
 
 
+COMPACT_CAMPAIGNS_ABOVE_REVISIONS = 5_000
+COMPACTION_KEEPS_REVISIONS = 1_000
+
+
+def _delete_archived_campaigns(connection: Any, retention_days: int, batch_size: int) -> int:
+    """Campaigns deleted (archived) longer ago than the grace period go, with everything of theirs (RQ-8.10).
+
+    Every RPG table holding a campaign's rows cascades from the campaign row: its turns,
+    interactions, snapshots, narration, maps and NPC runtime, so the player's text goes too.
+    """
+    return int(connection.execute(
+        """
+        DELETE FROM omnix_rpg_campaigns
+         WHERE id IN (
+             SELECT id
+               FROM omnix_rpg_campaigns
+              WHERE status = 'archived'
+                AND updated_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+              ORDER BY updated_at, id
+              LIMIT %s
+         )
+        """,
+        (max(1, int(retention_days)), max(1, int(batch_size))),
+    ).rowcount)
+
+
+def _compact_long_campaigns(connection: Any, retention_days: int, batch_size: int) -> int:
+    """Fold a long campaign's old turns into a pinned snapshot, then delete them (RQ-8.10, owner decision Q-9).
+
+    Only campaigns past 5,000 revisions are compacted. The base is the newest full snapshot at least
+    1,000 revisions old; it is pinned, so replay starts there, and the turns, interactions,
+    narration and unpinned snapshots before it are deleted. Smaller campaigns keep every turn.
+    ``retention_days`` is unused: the threshold is a revision count, not an age.
+    """
+    del retention_days
+    campaigns = connection.execute(
+        """
+        SELECT campaign.id, snapshot.revision
+          FROM omnix_rpg_campaigns AS campaign
+          JOIN LATERAL (
+                SELECT revision
+                  FROM omnix_rpg_snapshots
+                 WHERE campaign_id = campaign.id
+                   AND snapshot_jsonb IS NOT NULL
+                   AND revision <= campaign.revision - %s
+                 ORDER BY revision DESC
+                 LIMIT 1
+          ) AS snapshot ON TRUE
+         WHERE campaign.revision > %s
+           AND EXISTS (SELECT 1 FROM omnix_rpg_turns
+                        WHERE campaign_id = campaign.id AND resulting_revision <= snapshot.revision)
+         ORDER BY campaign.id
+         LIMIT %s
+        """,
+        (COMPACTION_KEEPS_REVISIONS, COMPACT_CAMPAIGNS_ABOVE_REVISIONS, max(1, int(batch_size))),
+    ).fetchall()
+    deleted = 0
+    for campaign_id, base in campaigns:
+        connection.execute(
+            "UPDATE omnix_rpg_snapshots SET pinned = true WHERE campaign_id = %s AND revision = %s",
+            (campaign_id, base),
+        )
+        deleted += int(connection.execute(
+            "DELETE FROM omnix_rpg_narrative_responses WHERE campaign_id = %s AND revision <= %s",
+            (campaign_id, base),
+        ).rowcount)
+        # Interactions cascade from their turn.
+        deleted += int(connection.execute(
+            "DELETE FROM omnix_rpg_turns WHERE campaign_id = %s AND resulting_revision <= %s",
+            (campaign_id, base),
+        ).rowcount)
+        deleted += int(connection.execute(
+            "DELETE FROM omnix_rpg_snapshots WHERE campaign_id = %s AND revision < %s AND NOT pinned",
+            (campaign_id, base),
+        ).rowcount)
+    return deleted
+
+
 def _count(table: str) -> Any:
     def count(connection: Any) -> int:
         return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -67,9 +147,27 @@ def _count(table: str) -> Any:
     return count
 
 
+def _delete_turn_metrics(connection: Any, retention_days: int, batch_size: int) -> int:
+    """The operations view's turn rows (RQ-8.4, migration 0184) past their retention."""
+    return int(connection.execute(
+        """
+        DELETE FROM omnix_rpg_turn_metrics
+         WHERE (workspace_id, metric_id) IN (
+               SELECT workspace_id, metric_id FROM omnix_rpg_turn_metrics
+                WHERE recorded_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                ORDER BY recorded_at
+                LIMIT %s)
+        """,
+        (max(1, int(retention_days)), max(1, int(batch_size))),
+    ).rowcount or 0)
+
+
 RETENTION = (
     RetentionDeclaration("rpg_narration_events", delete=_delete_narration_events, capacity_cleanup=True),
+    RetentionDeclaration("rpg_turn_metrics", delete=_delete_turn_metrics),
     RetentionDeclaration("rpg_snapshots", delete=_delete_snapshots),
+    RetentionDeclaration("rpg_archived_campaigns", delete=_delete_archived_campaigns),
+    RetentionDeclaration("rpg_turn_compaction", delete=_compact_long_campaigns),
 )
 CAPACITY = (
     CapacityCount("rpg_turns", count=_count("omnix_rpg_turns")),

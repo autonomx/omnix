@@ -1,0 +1,2278 @@
+{
+  "economy": {
+    "providers": [
+      {
+        "provider_id": "npc:orik-stonewake",
+        "location_id": "location:aurelia:starfall-village",
+        "sells": [
+          {
+            "offer_key": "night",
+            "service": "lodging",
+            "name": "A night's lodging",
+            "description": "A bed at the Lantern Below.",
+            "price": {
+              "silver": 5,
+              "copper": 0
+            },
+            "stock": 6,
+            "restock_per_day": 6
+          },
+          {
+            "offer_key": "meal",
+            "service": "meal",
+            "name": "A hot meal",
+            "description": "A hot meal of the house.",
+            "price": {
+              "silver": 0,
+              "copper": 8
+            }
+          },
+          {
+            "offer_key": "drink",
+            "service": "drink",
+            "name": "A drink",
+            "description": "A drink of the house.",
+            "price": {
+              "silver": 0,
+              "copper": 8
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:brindle-gearwing",
+        "location_id": "location:aurelia:starfall-village",
+        "sells": [
+          {
+            "offer_key": "lantern-bread",
+            "service": "shop_goods",
+            "name": "Lantern Bread",
+            "item_id": "item:lantern-bread",
+            "price": {
+              "silver": 0,
+              "copper": 8
+            },
+            "stock": 5,
+            "restock_per_day": 5
+          },
+          {
+            "offer_key": "healing-potion",
+            "service": "shop_goods",
+            "name": "Healing Potion",
+            "item_id": "item:healing-potion",
+            "price": {
+              "silver": 3,
+              "copper": 0
+            },
+            "stock": 3,
+            "restock_per_day": 2
+          },
+          {
+            "offer_key": "aether-shard",
+            "service": "shop_goods",
+            "name": "Aether Shard",
+            "item_id": "item:aether-shard",
+            "price": {
+              "silver": 4,
+              "copper": 0
+            },
+            "stock": 4,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "arc-baton",
+            "service": "shop_goods",
+            "name": "Brindle's Arc Baton",
+            "item_id": "item:arc-baton",
+            "price": {
+              "silver": 25,
+              "copper": 0
+            },
+            "stock": 1,
+            "restock_per_day": 0
+          },
+          {
+            "offer_key": "repair",
+            "service": "repair",
+            "name": "Gear repair",
+            "description": "Repair work on worn equipment.",
+            "price": {
+              "silver": 4,
+              "copper": 0
+            }
+          },
+          {
+            "offer_key": "tune",
+            "service": "upgrade",
+            "name": "Tune a weapon",
+            "description": "Brindle tunes the coils of a weapon, the Arc Baton above all, with an Aether Shard.",
+            "price": {
+              "gold": 0,
+              "silver": 4,
+              "copper": 0
+            },
+            "recipe": {
+              "slots": [
+                "main_hand"
+              ],
+              "materials": [
+                {
+                  "item_id": "item:aether-shard",
+                  "quantity": 1
+                }
+              ],
+              "per_tier": {
+                "damage_max": 1
+              },
+              "max_tier": 2
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:captain-rhea-sunward",
+        "location_id": "location:aurelia:starfall-village",
+        "sells": [
+          {
+            "offer_key": "shortsword",
+            "service": "shop_goods",
+            "name": "Gatewarden Shortsword",
+            "item_id": "item:gatewarden-shortsword",
+            "price": {
+              "silver": 12,
+              "copper": 0
+            },
+            "description": "The watch's spare blades, for a Wayfarer going past the grove.",
+            "stock": 2,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "leathers",
+            "service": "shop_goods",
+            "name": "Watch Leathers",
+            "item_id": "item:watch-leathers",
+            "price": {
+              "silver": 10,
+              "copper": 0
+            },
+            "stock": 2,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "buckler",
+            "service": "shop_goods",
+            "name": "Ward-glass Buckler",
+            "item_id": "item:ward-glass-buckler",
+            "price": {
+              "silver": 8,
+              "copper": 0
+            },
+            "stock": 2,
+            "restock_per_day": 1
+          }
+        ],
+        "buys": {
+          "item_types": [
+            "weapon",
+            "armor",
+            "shield"
+          ],
+          "price_fraction": 0.5
+        }
+      },
+      {
+        "provider_id": "npc:miri-kestrel",
+        "location_id": "location:aurelia:wayfarer-guild",
+        "sells": [
+          {
+            "offer_key": "information",
+            "service": "paid_information",
+            "name": "Local news",
+            "description": "What is going on around here.",
+            "price": {
+              "silver": 1,
+              "copper": 0
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:elyra-moonroot",
+        "location_id": "location:aurelia:moonroot-ruins",
+        "sells": [
+          {
+            "offer_key": "information",
+            "service": "paid_information",
+            "name": "Local news",
+            "description": "What is going on around here.",
+            "price": {
+              "silver": 1,
+              "copper": 0
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "npc:hollis-brask",
+        "location_id": "location:aurelia:valecourt",
+        "sells": [
+          {
+            "offer_key": "longsword",
+            "service": "shop_goods",
+            "name": "Aether-forged Longsword",
+            "item_id": "item:aether-forged-longsword",
+            "price": {
+              "silver": 45,
+              "copper": 0
+            },
+            "stock": 1,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "half-plate",
+            "service": "shop_goods",
+            "name": "Foundry Half-plate",
+            "item_id": "item:foundry-half-plate",
+            "price": {
+              "silver": 50,
+              "copper": 0
+            },
+            "stock": 1,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "shortsword",
+            "service": "shop_goods",
+            "name": "Gatewarden Shortsword",
+            "item_id": "item:gatewarden-shortsword",
+            "price": {
+              "silver": 12,
+              "copper": 0
+            },
+            "stock": 3,
+            "restock_per_day": 1
+          },
+          {
+            "offer_key": "aether-shard",
+            "service": "shop_goods",
+            "name": "Aether Shard",
+            "item_id": "item:aether-shard",
+            "price": {
+              "silver": 4,
+              "copper": 0
+            },
+            "stock": 6,
+            "restock_per_day": 2
+          },
+          {
+            "offer_key": "healing-potion",
+            "service": "shop_goods",
+            "name": "Healing Potion",
+            "item_id": "item:healing-potion",
+            "price": {
+              "silver": 3,
+              "copper": 0
+            },
+            "stock": 4,
+            "restock_per_day": 2
+          },
+          {
+            "offer_key": "repair",
+            "service": "repair",
+            "name": "Forge repair",
+            "description": "Hollis's forge sets worn gear right.",
+            "price": {
+              "silver": 3,
+              "copper": 0
+            }
+          },
+          {
+            "offer_key": "improve",
+            "service": "upgrade",
+            "name": "Improve a blade or armour",
+            "description": "Hollis reworks a blade's edge or an armour's plates, a tier at a time, with Aether Shards.",
+            "price": {
+              "gold": 0,
+              "silver": 6,
+              "copper": 0
+            },
+            "recipe": {
+              "slots": [
+                "main_hand",
+                "body",
+                "off_hand",
+                "head"
+              ],
+              "materials": [
+                {
+                  "item_id": "item:aether-shard",
+                  "quantity": 2
+                }
+              ],
+              "per_tier": {
+                "damage_max": 1,
+                "armor": 1
+              },
+              "max_tier": 3
+            }
+          }
+        ],
+        "buys": {
+          "item_types": [
+            "weapon",
+            "armor",
+            "shield",
+            "material"
+          ],
+          "price_fraction": 0.5
+        }
+      }
+    ]
+  },
+  "routines": [
+    {
+      "npc_id": "npc:liora-fen",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 6,
+          "location_id": "location:aurelia:arrival-grove",
+          "activity": "asleep in a hollow beneath the starfall oaks"
+        },
+        {
+          "from_hour": 6,
+          "to_hour": 19,
+          "location_id": "location:aurelia:arrival-grove",
+          "activity": "patrolling the grove's edge for new arrivals"
+        },
+        {
+          "from_hour": 19,
+          "to_hour": 23,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "warming herself by the Lantern Below's hearth"
+        },
+        {
+          "from_hour": 23,
+          "to_hour": 24,
+          "location_id": "location:aurelia:arrival-grove",
+          "activity": "walking the last patrol of the night"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "liora-fen-goal-1",
+          "summary": "find her missing foster mother",
+          "priority": 3
+        },
+        {
+          "goal_id": "liora-fen-goal-2",
+          "summary": "keep new arrivals alive",
+          "priority": 2,
+          "beats": [
+            {
+              "id": "lantern-path",
+              "chance": 0.7,
+              "after_day": 1,
+              "told_at": [
+                "location:aurelia:arrival-grove",
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "Liora Fen has marked a safe path through the grove with blue lanterns for new arrivals.",
+              "sets": [
+                {
+                  "fact": "grove_lantern_path",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "goal_id": "liora-fen-goal-3",
+          "summary": "prove foxkin can lead mixed parties",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:seraphine-valecourt",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 7,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "asleep in the palace at Valecourt"
+        },
+        {
+          "from_hour": 7,
+          "to_hour": 19,
+          "location_id": "location:aurelia:wayfarer-guild",
+          "activity": "poring over gatework plans in the guild's back room"
+        },
+        {
+          "from_hour": 19,
+          "to_hour": 24,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "holding court in Valecourt"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "seraphine-valecourt-goal-1",
+          "summary": "repair the royal Meridian engine",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "calls-the-engine-wrights",
+              "chance": 0.6,
+              "after_day": 2,
+              "told_at": [
+                "location:aurelia:valecourt",
+                "location:aurelia:wayfarer-guild",
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "Seraphine Valecourt has called every engine-wright in Valecourt to the palace workshops."
+            }
+          ]
+        },
+        {
+          "goal_id": "seraphine-valecourt-goal-2",
+          "summary": "prevent civil war",
+          "priority": 2
+        },
+        {
+          "goal_id": "seraphine-valecourt-goal-3",
+          "summary": "learn why Earthborn arrivals are increasing",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:vael-ardyn",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 7,
+          "location_id": "location:aurelia:hollow-meridian",
+          "activity": "stalking the Glass Synod's sentries"
+        },
+        {
+          "from_hour": 7,
+          "to_hour": 15,
+          "location_id": "location:aurelia:moonroot-ruins",
+          "activity": "hunting cult agents among the ruins"
+        },
+        {
+          "from_hour": 15,
+          "to_hour": 24,
+          "location_id": "location:aurelia:hollow-meridian",
+          "activity": "watching the Hollow Meridian from the dark"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "vael-ardyn-goal-1",
+          "summary": "destroy the Hollow Meridian",
+          "priority": 3
+        },
+        {
+          "goal_id": "vael-ardyn-goal-2",
+          "summary": "atone for burned villages",
+          "priority": 2
+        },
+        {
+          "goal_id": "vael-ardyn-goal-3",
+          "summary": "train someone capable of defeating him if he falls",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:miri-kestrel",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 7,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "asleep in a rented room above the Lantern Below"
+        },
+        {
+          "from_hour": 7,
+          "to_hour": 19,
+          "location_id": "location:aurelia:wayfarer-guild",
+          "activity": "keeping the Earthborn Registry"
+        },
+        {
+          "from_hour": 19,
+          "to_hour": 24,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "sorting Earth curios at a corner table of the inn"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "miri-kestrel-goal-1",
+          "summary": "professionalize the guild",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "posts-new-rules",
+              "chance": 0.6,
+              "after_day": 1,
+              "told_at": [
+                "location:aurelia:wayfarer-guild",
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "The Wayfarers' Guild has posted new rules: every contract now needs a signed report.",
+              "sets": [
+                {
+                  "fact": "guild_reports_required",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "goal_id": "miri-kestrel-goal-2",
+          "summary": "open a cross-world museum",
+          "priority": 2
+        },
+        {
+          "goal_id": "miri-kestrel-goal-3",
+          "summary": "keep Seraphine out of paperwork disasters",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:archon-malrec",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 8,
+          "location_id": "location:aurelia:hollow-meridian",
+          "activity": "communing with the broken Meridian"
+        },
+        {
+          "from_hour": 8,
+          "to_hour": 20,
+          "location_id": "location:aurelia:hollow-meridian",
+          "activity": "presiding over the Glass Synod"
+        },
+        {
+          "from_hour": 20,
+          "to_hour": 24,
+          "location_id": "location:aurelia:hollow-meridian",
+          "activity": "harvesting memories in the deep chambers"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "archon-malrec-goal-1",
+          "summary": "open a permanent gate to Earth",
+          "priority": 3
+        },
+        {
+          "goal_id": "archon-malrec-goal-2",
+          "summary": "replace Aurelia's gods with human imagination",
+          "priority": 2
+        },
+        {
+          "goal_id": "archon-malrec-goal-3",
+          "summary": "recruit the protagonist",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:elyra-moonroot",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 6,
+          "location_id": "location:aurelia:moonroot-ruins",
+          "activity": "dreaming within the archive tree"
+        },
+        {
+          "from_hour": 6,
+          "to_hour": 18,
+          "location_id": "location:aurelia:moonroot-ruins",
+          "activity": "tending the memory archive"
+        },
+        {
+          "from_hour": 18,
+          "to_hour": 24,
+          "location_id": "location:aurelia:moonroot-ruins",
+          "activity": "listening to the ruins' echoes"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "elyra-moonroot-goal-1",
+          "summary": "stop the Memory Loom from awakening",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "lights-in-the-ruins",
+              "chance": 0.5,
+              "after_day": 3,
+              "told_at": [
+                "location:aurelia:moonroot-ruins",
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "Lights were seen moving in the Moonroot Ruins at night, and Elyra Moonroot has not come out of them for days."
+            }
+          ]
+        },
+        {
+          "goal_id": "elyra-moonroot-goal-2",
+          "summary": "free trapped souls",
+          "priority": 2
+        },
+        {
+          "goal_id": "elyra-moonroot-goal-3",
+          "summary": "experience one memory that belongs only to her",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:orik-stonewake",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 5,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "asleep behind the bar"
+        },
+        {
+          "from_hour": 5,
+          "to_hour": 23,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "keeping the Lantern Below"
+        },
+        {
+          "from_hour": 23,
+          "to_hour": 24,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "banking the hearth fire"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "orik-stonewake-goal-1",
+          "summary": "protect Starfall Village",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "drills-the-youths",
+              "chance": 0.7,
+              "after_day": 1,
+              "told_at": [
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "Orik Stonewake has started teaching the village youths to hold a spear in the forge yard.",
+              "sets": [
+                {
+                  "fact": "starfall_drills",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "goal_id": "orik-stonewake-goal-2",
+          "summary": "recover his daughter's memory from Moonroot",
+          "priority": 2
+        },
+        {
+          "goal_id": "orik-stonewake-goal-3",
+          "summary": "teach honest craft",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:brindle-gearwing",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 8,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "asleep among half-built gadgets"
+        },
+        {
+          "from_hour": 8,
+          "to_hour": 18,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "tinkering at his relic stall"
+        },
+        {
+          "from_hour": 18,
+          "to_hour": 22,
+          "location_id": "location:aurelia:wayfarer-guild",
+          "activity": "pitching inventions to the guild"
+        },
+        {
+          "from_hour": 22,
+          "to_hour": 24,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "testing a rain-predicting kettle by lamplight"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "brindle-gearwing-goal-1",
+          "summary": "build a working radio to Earth",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "radio-hisses",
+              "chance": 0.7,
+              "after_day": 1,
+              "told_at": [
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "Brindle Gearwing swears the radio hissed with a voice from Earth last night."
+            }
+          ]
+        },
+        {
+          "goal_id": "brindle-gearwing-goal-2",
+          "summary": "earn a guild rank",
+          "priority": 2
+        },
+        {
+          "goal_id": "brindle-gearwing-goal-3",
+          "summary": "pay off goblin patent collectors",
+          "priority": 1,
+          "beats": [
+            {
+              "id": "collectors-call",
+              "chance": 0.5,
+              "after_day": 2,
+              "told_at": [
+                "location:aurelia:starfall-village",
+                "location:aurelia:wayfarer-guild"
+              ],
+              "rumour": "Patent collectors were seen leaving Brindle Gearwing's workbench with a crate of parts."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:captain-rhea-sunward",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 6,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "keeping the night watch at the village gate"
+        },
+        {
+          "from_hour": 6,
+          "to_hour": 19,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "drilling the village guard"
+        },
+        {
+          "from_hour": 19,
+          "to_hour": 22,
+          "location_id": "location:aurelia:skybridge-pass",
+          "activity": "checking the pass's new barricades"
+        },
+        {
+          "from_hour": 22,
+          "to_hour": 24,
+          "location_id": "location:aurelia:starfall-village",
+          "activity": "keeping the night watch at the village gate"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "captain-rhea-sunward-goal-1",
+          "summary": "fortify Skybridge Pass",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "masons-to-the-pass",
+              "chance": 0.6,
+              "after_day": 2,
+              "told_at": [
+                "location:aurelia:starfall-village",
+                "location:aurelia:skybridge-pass"
+              ],
+              "rumour": "Masons have gone up to Skybridge Pass to raise the old wall again.",
+              "sets": [
+                {
+                  "fact": "skybridge_wall_rising",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "goal_id": "captain-rhea-sunward-goal-2",
+          "summary": "expose a traitor in the guard",
+          "priority": 2,
+          "beats": [
+            {
+              "id": "asks-about-the-watch",
+              "chance": 0.7,
+              "after_day": 1,
+              "told_at": [
+                "location:aurelia:starfall-village",
+                "location:aurelia:wayfarer-guild"
+              ],
+              "rumour": "Captain Sunward has been asking quiet questions about who stood watch the night the pass gate was left open.",
+              "sets": [
+                {
+                  "fact": "rhea_doubts_the_watch",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "names-the-guardsman",
+              "chance": 0.6,
+              "after_day": 2,
+              "when": {
+                "rhea_doubts_the_watch": true
+              },
+              "told_at": [
+                "location:aurelia:starfall-village",
+                "location:aurelia:wayfarer-guild",
+                "location:aurelia:skybridge-pass"
+              ],
+              "rumour": "The captain has named the guardsman who left the pass gate open; he slipped away before dawn.",
+              "sets": [
+                {
+                  "fact": "pass_gate_guardsman_named",
+                  "value": true,
+                  "told": "Captain Sunward named the guardsman who left the pass gate open."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "goal_id": "captain-rhea-sunward-goal-3",
+          "summary": "write a terrible adventure novel",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:naia-of-the-open-hand",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 5,
+          "location_id": "location:aurelia:cinderhold",
+          "activity": "walking the ash roads of the east"
+        },
+        {
+          "from_hour": 5,
+          "to_hour": 7,
+          "location_id": "location:aurelia:arrival-grove",
+          "activity": "standing barefoot where the old gate flickers"
+        },
+        {
+          "from_hour": 7,
+          "to_hour": 24,
+          "location_id": "location:aurelia:cinderhold",
+          "activity": "walking the ash roads of the east"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "naia-of-the-open-hand-goal-1",
+          "summary": "keep worlds from consuming each other",
+          "priority": 3
+        },
+        {
+          "goal_id": "naia-of-the-open-hand-goal-2",
+          "summary": "prepare the next Gatebearer",
+          "priority": 2
+        },
+        {
+          "goal_id": "naia-of-the-open-hand-goal-3",
+          "summary": "remember her original family",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:hollis-brask",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 6,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "asleep in the loft above his forge"
+        },
+        {
+          "from_hour": 6,
+          "to_hour": 20,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "pouring aether at his forge on the foundry row"
+        },
+        {
+          "from_hour": 20,
+          "to_hour": 24,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "drinking with the foundry crews"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "hollis-brask-goal-1",
+          "summary": "keep the foundry fires lit through the shard shortage",
+          "priority": 3,
+          "beats": [
+            {
+              "id": "banks-the-fires",
+              "chance": 0.5,
+              "after_day": 2,
+              "told_at": [
+                "location:aurelia:valecourt",
+                "location:aurelia:starfall-village"
+              ],
+              "rumour": "The Valecourt foundry has banked half its fires; shard coal is running short.",
+              "sets": [
+                {
+                  "fact": "foundry_fires_banked",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "goal_id": "hollis-brask-goal-2",
+          "summary": "forge a blade worthy of the Ashen Oathblade",
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:cassia-venn",
+      "schedule": [
+        {
+          "from_hour": 0,
+          "to_hour": 8,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "asleep in the warden's cell beside the engine hall"
+        },
+        {
+          "from_hour": 8,
+          "to_hour": 22,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "tending the royal gate engine in its hall"
+        },
+        {
+          "from_hour": 22,
+          "to_hour": 24,
+          "location_id": "location:aurelia:valecourt",
+          "activity": "walking the engine hall's last round"
+        }
+      ],
+      "goals": [
+        {
+          "goal_id": "cassia-venn-goal-1",
+          "summary": "keep the engine from stalling again",
+          "priority": 3
+        },
+        {
+          "goal_id": "cassia-venn-goal-2",
+          "summary": "learn what powers the sealed core",
+          "priority": 2
+        }
+      ]
+    }
+  ],
+  "knowledge": [
+    {
+      "npc_id": "npc:elyra-moonroot",
+      "facts": [
+        {
+          "fact_id": "unfinished-call",
+          "text": "The voice in the phone is the hero's own: the last call they made as the blackout took them, torn loose at the crossing and caught in the Memory Loom beneath Moonroot, which plays it back toward Earth. Elyra calls it the Unfinished Call; while it rings, someone on Earth is still listening for the hero.",
+          "topics": [
+            "voice",
+            "phone",
+            "call",
+            "earth",
+            "loom"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:brindle-gearwing",
+      "facts": [
+        {
+          "fact_id": "radio-storms",
+          "text": "Brindle's Impossible Radio catches the same voice as the phone, only in storms and only when it points toward the Moonroot Ruins.",
+          "topics": [
+            "radio",
+            "voice",
+            "phone",
+            "storm",
+            "moonroot"
+          ]
+        },
+        {
+          "fact_id": "shards",
+          "text": "Brindle buys aether shards; unstable Echoes shed them when they fall.",
+          "topics": [
+            "shard",
+            "aether",
+            "echo",
+            "sell"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:captain-rhea-sunward",
+      "facts": [
+        {
+          "fact_id": "watch-gear",
+          "text": "Captain Rhea sells the watch's spare blades, leathers and bucklers to any Wayfarer going past the grove.",
+          "topics": [
+            "gear",
+            "weapon",
+            "sword",
+            "armor",
+            "armour",
+            "shield"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:hollis-brask",
+      "facts": [
+        {
+          "fact_id": "foundry-gear",
+          "text": "Hollis forges the best blades and plate in the Heartland on Valecourt's foundry row, and pays for every aether shard a Wayfarer brings back from the ruins.",
+          "topics": [
+            "forge",
+            "foundry",
+            "sword",
+            "armor",
+            "armour",
+            "plate",
+            "shard"
+          ]
+        },
+        {
+          "fact_id": "oathblade",
+          "text": "The Ashen Oathblade was forged to be carried across Skybridge Pass by someone keeping a vow; the gale spirit there gives it to whoever does.",
+          "topics": [
+            "oathblade",
+            "blade",
+            "skybridge",
+            "vow"
+          ]
+        }
+      ]
+    },
+    {
+      "npc_id": "npc:cassia-venn",
+      "facts": [
+        {
+          "fact_id": "engine-stalls",
+          "text": "The royal gate engine has stalled three times this season, and each time a new Earthborn came through at Starfall the same night.",
+          "topics": [
+            "engine",
+            "gate",
+            "stall",
+            "earthborn"
+          ]
+        },
+        {
+          "fact_id": "sealed-core",
+          "text": "The engine's core is sealed by royal order. At night Cassia hears voices inside it, like a crowd remembering.",
+          "shares": "when_trusted",
+          "trust_needed": 30,
+          "topics": [
+            "core",
+            "engine",
+            "voices"
+          ]
+        }
+      ]
+    }
+  ],
+  "pressures": [
+    {
+      "pressure_id": "pressure:echo-beasts",
+      "name": "Echo beasts on the March roads",
+      "region_id": "region:starfall-march",
+      "description": "Echo Wolves mimic lost voices along the roads out of Starfall Grove and drag off travellers who answer them.",
+      "dimension": "trade_access",
+      "severity": 62.0,
+      "trend": "volatile",
+      "escalation_threshold": 78.0,
+      "resolution_threshold": 10.0,
+      "levers": [
+        {
+          "action": "defeat:creature:echo-wolf",
+          "effect": "lower",
+          "amount": 8.0
+        },
+        {
+          "action": "quest:quest:first-night-in-aurelia",
+          "effect": "lower",
+          "amount": 10.0
+        }
+      ]
+    },
+    {
+      "pressure_id": "pressure:crown-unrest",
+      "name": "Unrest in the Meridian Heartland",
+      "region_id": "region:meridian-heartland",
+      "description": "The court of Valecourt is splitting over the broken Meridian Gate as the story opens, and the heirs' factions gather arms.",
+      "dimension": "political_stability",
+      "severity": 70.0,
+      "trend": "escalating",
+      "escalation_threshold": 78.0,
+      "resolution_threshold": 15.0,
+      "levers": [
+        {
+          "action": "quest:quest:the-princess-and-the-engine",
+          "effect": "lower",
+          "amount": 25.0
+        }
+      ]
+    },
+    {
+      "pressure_id": "pressure:ashen-remnants",
+      "name": "Remnants of the Ashen Host",
+      "region_id": "region:ashen-east",
+      "description": "Deserters of the Nine-Banner War raid the ash roads, and Glass Wights walk among them wearing stolen faces.",
+      "dimension": "political_stability",
+      "severity": 52.0,
+      "trend": "volatile",
+      "escalation_threshold": 80.0,
+      "resolution_threshold": 15.0,
+      "levers": [
+        {
+          "action": "defeat:creature:glass-wight",
+          "effect": "lower",
+          "amount": 6.0
+        },
+        {
+          "action": "quest:quest:bridge-of-one-thousand-promises",
+          "effect": "lower",
+          "amount": 20.0
+        }
+      ]
+    },
+    {
+      "pressure_id": "pressure:memory-loom",
+      "name": "Restlessness in the Memory Loom",
+      "region_id": "region:moonroot-deep",
+      "description": "Beneath Moonroot the Memory Loom pulls at the minds of the living; the Rootbound Knights wake to guard it.",
+      "dimension": "population_index",
+      "severity": 40.0,
+      "trend": "escalating",
+      "escalation_threshold": 72.0,
+      "resolution_threshold": 12.0,
+      "levers": [
+        {
+          "action": "defeat:creature:rootbound-knight",
+          "effect": "lower",
+          "amount": 8.0
+        },
+        {
+          "action": "quest:quest:the-memory-that-burned",
+          "effect": "lower",
+          "amount": 25.0
+        },
+        {
+          "action": "quest:quest:hollow-meridian",
+          "effect": "lower",
+          "amount": 30.0
+        }
+      ]
+    },
+    {
+      "pressure_id": "pressure:skybridge-storms",
+      "name": "Aether storms over Skybridge",
+      "region_id": "region:cloudspine",
+      "description": "Sky Mantas nest on the aether currents of the pass, and Echo Wolves hunt the travellers the storms strand.",
+      "dimension": "trade_access",
+      "severity": 70.0,
+      "trend": "volatile",
+      "escalation_threshold": 86.0,
+      "resolution_threshold": 10.0,
+      "levers": [
+        {
+          "action": "defeat:creature:echo-wolf",
+          "effect": "lower",
+          "amount": 6.0
+        },
+        {
+          "action": "defeat:creature:sky-manta",
+          "effect": "lower",
+          "amount": 6.0
+        }
+      ]
+    }
+  ],
+  "bestiary": [
+    {
+      "id": "creature:sky-manta",
+      "stats": {
+        "level": 4,
+        "hp": 26,
+        "defense": 13,
+        "damage_min": 3,
+        "damage_max": 7,
+        "accuracy_bonus": 2,
+        "xp_value": 90
+      },
+      "behaviour": "flees_when_hurt",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.5
+        }
+      ],
+      "weakness_effect": "morale"
+    },
+    {
+      "id": "creature:glass-wight",
+      "stats": {
+        "level": 5,
+        "hp": 32,
+        "defense": 14,
+        "damage_min": 3,
+        "damage_max": 9,
+        "accuracy_bonus": 3,
+        "xp_value": 130
+      },
+      "behaviour": "ambushes",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.7,
+          "quantity": 2
+        }
+      ],
+      "weakness_effect": "damage"
+    },
+    {
+      "id": "creature:rootbound-knight",
+      "stats": {
+        "level": 6,
+        "hp": 40,
+        "defense": 15,
+        "damage_min": 4,
+        "damage_max": 10,
+        "accuracy_bonus": 4,
+        "xp_value": 170
+      },
+      "behaviour": "guards",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.8,
+          "quantity": 2
+        },
+        {
+          "item_id": "item:healing-potion",
+          "chance": 0.3
+        }
+      ],
+      "weakness_effect": "morale",
+      "resists": [
+        "plain steel"
+      ]
+    },
+    {
+      "id": "creature:hollow-archon",
+      "stats": {
+        "level": 10,
+        "hp": 120,
+        "defense": 16,
+        "damage_min": 6,
+        "damage_max": 14,
+        "accuracy_bonus": 6,
+        "xp_value": 900
+      },
+      "behaviour": "fights",
+      "weakness_effect": "stun",
+      "no_escape": true,
+      "recovers": 0.5,
+      "phases": [
+        {
+          "at": 0.75,
+          "defense_bonus": 1,
+          "damage_bonus": 2,
+          "told": "it splits into conflicting versions of itself, each remembering the fight differently."
+        },
+        {
+          "at": 0.5,
+          "calls_ally": true,
+          "told": "it calls an echo of itself out of the Hollow Meridian's remembered terrain."
+        },
+        {
+          "at": 0.25,
+          "exposes_weakness": true,
+          "damage_bonus": 1,
+          "told": "its versions contradict each other: a shared witnessed truth would bind it now."
+        }
+      ]
+    },
+    {
+      "id": "creature:echo-wolf",
+      "loot": [
+        {
+          "item_id": "item:aether-shard",
+          "chance": 0.4
+        }
+      ],
+      "resists": [
+        "plain steel"
+      ],
+      "weakness_effect": "morale"
+    }
+  ],
+  "quests": [
+    {
+      "id": "quest:first-night-in-aurelia",
+      "giver_id": "npc:liora-fen",
+      "steps": [
+        {
+          "id": "village",
+          "summary": "Reach Starfall Village",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:starfall-village"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "register",
+          "summary": "Register with Miri Kestrel at the Wayfarers' Guild",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:miri-kestrel",
+                  "about": [
+                    "register",
+                    "registry",
+                    "sign",
+                    "join",
+                    "enrol",
+                    "enroll",
+                    "guild",
+                    "wayfarer"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "companion",
+          "summary": "Choose a first companion",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "companion",
+                  "subject": "anyone"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:voices-in-the-phone",
+      "steps": [
+        {
+          "id": "mend",
+          "summary": "Have Brindle Gearwing look at your phone",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:brindle-gearwing",
+                  "about": [
+                    "phone",
+                    "radio",
+                    "repair",
+                    "fix",
+                    "mend",
+                    "signal",
+                    "voice",
+                    "call",
+                    "ring"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "follow",
+          "summary": "Follow the voice to the Moonroot Ruins, where it is strongest",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:moonroot-ruins"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "identify",
+          "summary": "Ask Elyra Moonroot whose voice it is",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:elyra-moonroot",
+                  "about": [
+                    "voice",
+                    "phone",
+                    "call",
+                    "earth",
+                    "radio",
+                    "who"
+                  ]
+                }
+              ],
+              "told": "Elyra listens to the phone and goes still. \"It is your own voice,\" she says: the call you were making when the blackout took you, caught in the Memory Loom and played back toward Earth. She calls it the Unfinished Call."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:bridge-of-one-thousand-promises",
+      "giver_id": "npc:vael-ardyn",
+      "steps": [
+        {
+          "id": "vow",
+          "summary": "Hear the vow Vael Ardyn would have you witness",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "vow",
+                    "oath",
+                    "promise",
+                    "witness",
+                    "crown",
+                    "bridge"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cross",
+          "summary": "Cross Skybridge Pass with the vow spoken",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:skybridge-pass"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "gale",
+          "summary": "Keep faith before the gale spirit of the pass",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:skybridge-pass"
+                },
+                {
+                  "kind": "check",
+                  "subject": "persuade"
+                }
+              ],
+              "told": "The gale hears the vow for what it is and falls quiet; the bridge stills underfoot.",
+              "sets": [
+                {
+                  "fact": "vael_vow",
+                  "value": "kept",
+                  "told": "Vael Ardyn's vow was kept on the Skybridge, with you as its witness."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:skybridge-pass"
+                },
+                {
+                  "kind": "check",
+                  "subject": "climb"
+                }
+              ],
+              "told": "Hand over hand through the gale, the vow is kept to the far side, and the spirit lets the crossing stand.",
+              "sets": [
+                {
+                  "fact": "vael_vow",
+                  "value": "kept",
+                  "told": "Vael Ardyn's vow was kept on the Skybridge, with you as its witness."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "defeat",
+                  "subject": "creature:sky-manta",
+                  "count": 2
+                }
+              ],
+              "told": "With its mantas driven off, the gale spirit has nothing more to throw; the bridge is crossed.",
+              "sets": [
+                {
+                  "fact": "vael_vow",
+                  "value": "kept",
+                  "told": "Vael Ardyn's vow was kept on the Skybridge, with you as its witness."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:the-memory-that-burned",
+      "giver_id": "npc:orik-stonewake",
+      "steps": [
+        {
+          "id": "daughter",
+          "summary": "Hear from Orik Stonewake what the Loom took from his daughter",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:orik-stonewake",
+                  "about": [
+                    "daughter",
+                    "memory",
+                    "loom",
+                    "moonroot",
+                    "stolen",
+                    "burned"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "loom",
+          "summary": "Go down to the Memory Loom in the Moonroot Ruins",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:moonroot-ruins"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "guardians",
+          "summary": "Get past the Rootbound Knights that keep the Loom",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "defeat",
+                  "subject": "creature:rootbound-knight",
+                  "count": 2
+                }
+              ],
+              "told": "The Rootbound Knights lie broken among the roots, and the way to the Loom is open.",
+              "sets": [
+                {
+                  "fact": "rootbound_knights",
+                  "value": "broken",
+                  "told": "The Rootbound Knights who kept the Loom lie broken."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:moonroot-ruins"
+                },
+                {
+                  "kind": "check",
+                  "subject": "recall_lore"
+                }
+              ],
+              "told": "Named aloud, the oath they broke stills the Rootbound Knights; they kneel among the roots and let you pass.",
+              "sets": [
+                {
+                  "fact": "rootbound_knights",
+                  "value": "released",
+                  "told": "The Rootbound Knights were named and released from the oath they broke."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "restore",
+          "summary": "Ask Elyra Moonroot to restore the memory",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:elyra-moonroot",
+                  "about": [
+                    "restore",
+                    "memory",
+                    "daughter",
+                    "orik",
+                    "loom"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "return",
+          "summary": "Bring the memory home to Orik",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:orik-stonewake"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "fact": "memory_restored",
+          "value": true,
+          "told": "The memory the Loom took from Orik's daughter is hers again."
+        }
+      ]
+    },
+    {
+      "id": "quest:the-princess-and-the-engine",
+      "giver_id": "npc:seraphine-valecourt",
+      "steps": [
+        {
+          "id": "summons",
+          "summary": "Hear what Princess Seraphine needs of an Earthborn",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "engine",
+                    "gate",
+                    "help",
+                    "technician",
+                    "earth",
+                    "summons",
+                    "work"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "engine",
+          "summary": "See the royal gate engine in Valecourt with its warden, Cassia Venn",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:cassia-venn",
+                  "about": [
+                    "engine",
+                    "gate",
+                    "core",
+                    "hall",
+                    "machine",
+                    "stall",
+                    "seraphine"
+                  ]
+                }
+              ],
+              "told": "Cassia walks you through the engine hall: a cathedral of aether coils, stalled and humming, its core sealed by royal order."
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "summary": "Tell Seraphine what should become of the engine",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "repair",
+                    "fix",
+                    "mend"
+                  ]
+                }
+              ],
+              "told": "Seraphine sets her engineers to mend the royal engine as it was; the crown keeps its power, and the court breathes easier.",
+              "sets": [
+                {
+                  "fact": "engine_fate",
+                  "value": "repaired",
+                  "told": "The royal engine in Valecourt runs again, the crown's own."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "dismantle",
+                    "destroy",
+                    "tear it down",
+                    "shut it down",
+                    "break it"
+                  ]
+                }
+              ],
+              "told": "Seraphine orders the royal engine taken apart, stone by stone, and the memories it held set free; the crown loses its greatest tool.",
+              "sets": [
+                {
+                  "fact": "engine_fate",
+                  "value": "dismantled",
+                  "told": "The royal engine was taken apart, and the memories it held set free."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:seraphine-valecourt",
+                  "about": [
+                    "democratize",
+                    "democratise",
+                    "share",
+                    "the people",
+                    "everyone",
+                    "council"
+                  ]
+                }
+              ],
+              "told": "Seraphine gives the engine's keeping to a council of the guilds and the people; no crown or faction will hold it alone.",
+              "sets": [
+                {
+                  "fact": "engine_fate",
+                  "value": "council",
+                  "told": "The royal engine is kept by a council of the guilds and the people."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quest:hollow-meridian",
+      "giver_id": "npc:liora-fen",
+      "steps": [
+        {
+          "id": "key",
+          "summary": "Find what opens the memory-sealed way beneath Moonroot",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "hold",
+                  "subject": "item:moonroot-key"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "descend",
+          "summary": "Descend to the Hollow Meridian",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "reach",
+                  "subject": "location:aurelia:hollow-meridian"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "confront",
+          "summary": "Confront Archon Malrec",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:archon-malrec"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "archon",
+          "summary": "Defeat the Hollow Archon",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "defeat",
+                  "subject": "creature:hollow-archon"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choose",
+          "summary": "Choose what becomes of the gate between Earth and Aurelia",
+          "ways": [
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:liora-fen",
+                  "about": [
+                    "close",
+                    "seal",
+                    "shut"
+                  ]
+                }
+              ],
+              "told": "The Meridian Gate closes behind its last light. No more Earthborn will wake in Starfall Grove, and none will go home: Aurelia keeps its own, and its own keep it.",
+              "sets": [
+                {
+                  "fact": "gate_fate",
+                  "value": "closed",
+                  "told": "The Meridian Gate is closed for good; no Earthborn will wake in Starfall Grove again."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:liora-fen",
+                  "about": [
+                    "open it",
+                    "keep it open",
+                    "permanent",
+                    "throw it open"
+                  ]
+                }
+              ],
+              "told": "The gate is thrown open and kept so. Earth's lights spill into Aurelia's sky, and travellers come and go unguarded, as Malrec once wanted, with no one left to ask what they carry.",
+              "sets": [
+                {
+                  "fact": "gate_fate",
+                  "value": "open",
+                  "told": "The Meridian Gate stands open; Earth's lights spill into Aurelia's sky."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:liora-fen",
+                  "about": [
+                    "reciprocal",
+                    "bridge",
+                    "guarded",
+                    "both ways",
+                    "both worlds"
+                  ]
+                }
+              ],
+              "told": "The gate becomes a guarded bridge between the worlds: wardens at both ends, a crossing for those who give their names, and no memory taken as its toll.",
+              "sets": [
+                {
+                  "fact": "gate_fate",
+                  "value": "bridge",
+                  "told": "The Meridian Gate is a guarded bridge between the worlds, kept by wardens at both ends."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "close",
+                    "seal",
+                    "shut"
+                  ]
+                }
+              ],
+              "told": "The Meridian Gate closes behind its last light. No more Earthborn will wake in Starfall Grove, and none will go home: Aurelia keeps its own, and its own keep it.",
+              "sets": [
+                {
+                  "fact": "gate_fate",
+                  "value": "closed",
+                  "told": "The Meridian Gate is closed for good; no Earthborn will wake in Starfall Grove again."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "open it",
+                    "keep it open",
+                    "permanent",
+                    "throw it open"
+                  ]
+                }
+              ],
+              "told": "The gate is thrown open and kept so. Earth's lights spill into Aurelia's sky, and travellers come and go unguarded, as Malrec once wanted, with no one left to ask what they carry.",
+              "sets": [
+                {
+                  "fact": "gate_fate",
+                  "value": "open",
+                  "told": "The Meridian Gate stands open; Earth's lights spill into Aurelia's sky."
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "kind": "talk",
+                  "subject": "npc:vael-ardyn",
+                  "about": [
+                    "reciprocal",
+                    "bridge",
+                    "guarded",
+                    "both ways",
+                    "both worlds"
+                  ]
+                }
+              ],
+              "told": "The gate becomes a guarded bridge between the worlds: wardens at both ends, a crossing for those who give their names, and no memory taken as its toll.",
+              "sets": [
+                {
+                  "fact": "gate_fate",
+                  "value": "bridge",
+                  "told": "The Meridian Gate is a guarded bridge between the worlds, kept by wardens at both ends."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "fact_effects": [
+    {
+      "waive": {
+        "provider": "npc:orik-stonewake",
+        "offer": "night",
+        "why": "Orik's welcome to a new arrival"
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "repaired"
+      },
+      "standing": {
+        "group": "faction:meridian-crown",
+        "delta": 30
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "repaired"
+      },
+      "standing": {
+        "group": "faction:free-marches",
+        "delta": -20
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "repaired"
+      },
+      "price": {
+        "provider": "npc:hollis-brask",
+        "percent": -10,
+        "why": "the foundry has the engine's power"
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "repaired"
+      },
+      "place": {
+        "location": "location:aurelia:valecourt",
+        "line": "The engine hall hums again, and the crown's banners hang fresh over its doors."
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "dismantled"
+      },
+      "standing": {
+        "group": "faction:meridian-crown",
+        "delta": -30
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "dismantled"
+      },
+      "standing": {
+        "group": "faction:rootbound-covenant",
+        "delta": 20
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "dismantled"
+      },
+      "price": {
+        "region": "region:meridian-heartland",
+        "percent": 15,
+        "why": "the foundries run short of power"
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "dismantled"
+      },
+      "place": {
+        "location": "location:aurelia:valecourt",
+        "line": "Where the engine hall stood, workmen cart away dead coils; the towers sway a little lower."
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "council"
+      },
+      "standing": {
+        "group": "faction:wayfarers-guild",
+        "delta": 20
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "council"
+      },
+      "standing": {
+        "group": "faction:free-marches",
+        "delta": 20
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "council"
+      },
+      "standing": {
+        "group": "faction:meridian-crown",
+        "delta": -10
+      }
+    },
+    {
+      "when": {
+        "engine_fate": "council"
+      },
+      "place": {
+        "location": "location:aurelia:valecourt",
+        "line": "A council of guild masters and commoners meets on the engine hall's steps."
+      }
+    },
+    {
+      "when": {
+        "rootbound_knights": "broken"
+      },
+      "standing": {
+        "group": "faction:rootbound-covenant",
+        "delta": -30
+      }
+    },
+    {
+      "when": {
+        "rootbound_knights": "released"
+      },
+      "standing": {
+        "group": "faction:rootbound-covenant",
+        "delta": 30
+      }
+    },
+    {
+      "when": {
+        "memory_restored": true
+      },
+      "place": {
+        "location": "location:aurelia:starfall-village",
+        "line": "Orik's daughter sits by the Lantern Below's hearth, remembering aloud."
+      }
+    },
+    {
+      "when": {
+        "memory_restored": true
+      },
+      "price": {
+        "provider": "npc:orik-stonewake",
+        "percent": -20,
+        "why": "Orik remembers what you did"
+      }
+    },
+    {
+      "when": {
+        "vael_vow": "kept"
+      },
+      "standing": {
+        "group": "faction:ashen-remnant",
+        "delta": 25
+      }
+    },
+    {
+      "when": {
+        "gate_fate": "closed"
+      },
+      "place": {
+        "location": "location:aurelia:arrival-grove",
+        "line": "The grove's arrival stones are dark and cold."
+      }
+    },
+    {
+      "when": {
+        "gate_fate": "open"
+      },
+      "place": {
+        "location": "location:aurelia:arrival-grove",
+        "line": "Earth's lights spill through the grove, and strangers wander in, blinking."
+      }
+    },
+    {
+      "when": {
+        "gate_fate": "bridge"
+      },
+      "place": {
+        "location": "location:aurelia:arrival-grove",
+        "line": "Wardens keep the grove's arrival stones, and ask each newcomer their name."
+      }
+    },
+    {
+      "when": {
+        "gate_fate": "open"
+      },
+      "standing": {
+        "group": "faction:glass-synod",
+        "delta": 40
+      }
+    },
+    {
+      "when": {
+        "gate_fate": "closed"
+      },
+      "standing": {
+        "group": "faction:glass-synod",
+        "delta": -40
+      }
+    }
+  ],
+  "group_members": [
+    {
+      "group_id": "faction:meridian-crown",
+      "members": [
+        "npc:seraphine-valecourt",
+        "npc:cassia-venn"
+      ]
+    },
+    {
+      "group_id": "faction:wayfarers-guild",
+      "members": [
+        "npc:miri-kestrel"
+      ]
+    },
+    {
+      "group_id": "faction:glass-synod",
+      "members": [
+        "npc:archon-malrec"
+      ]
+    },
+    {
+      "group_id": "faction:rootbound-covenant",
+      "members": [
+        "npc:elyra-moonroot"
+      ]
+    },
+    {
+      "group_id": "faction:ashen-remnant",
+      "members": [
+        "npc:vael-ardyn"
+      ]
+    }
+  ]
+}
