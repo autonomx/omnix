@@ -1417,6 +1417,7 @@ blocking defect (no database-backed test ran in it). Fixed from them:
   for every live caller, which nobody decided;
 - the first-audio harness counts the player's start and runaways, and rebuffers as the worklet does.
 
-Left for the owner: migration 0171 hard-deletes archived campaigns 30 days after their last update, at the first
-retention sweep after a live start, which cannot be undone; count them before that start.
+The live database was already at migration 0193 before the merge (applied 24-30 October), so merging left none
+pending; the merge commit's message says otherwise and is wrong. Owner (2026-11-02): the 16 archived campaigns past
+migration 0171's 30 days go at the next retention sweep. A backup taken first holds them, outside the repository.
 

@@ -51,8 +51,6 @@ The four strict xfails in the playthrough suite:
   ([rpg-intent-label-review-2026-10-26.md](../measurements/rpg-intent-label-review-2026-10-26.md): 22 items).
 - Permission to run the web typecheck.
 - A spot check of the model-written sample sets (`resources/benchmarks/rpg/idiom_set`, `slot_set`, `step_set`).
-- Migration 0171 hard-deletes archived campaigns 30 days after their last update, at the first retention sweep after
-  a live start: count them before that start.
 - The LM Studio World Forge run, at the very end.
 
 ## Open engineering work
