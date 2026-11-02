@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out exact workflow head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 
