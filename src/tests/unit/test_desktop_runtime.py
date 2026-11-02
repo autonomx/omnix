@@ -303,8 +303,6 @@ def test_a_stop_asks_the_service_to_shut_down_before_killing_it(monkeypatch) -> 
             if self.exits:
                 self.code = 0
 
-        terminate = lambda self: self.send_signal("SIGTERM")  # noqa: E731
-
         def wait(self, timeout=None):
             if self.code is None:
                 raise subprocess.TimeoutExpired("svc", timeout)
@@ -315,7 +313,7 @@ def test_a_stop_asks_the_service_to_shut_down_before_killing_it(monkeypatch) -> 
 
     graceful = _Stubborn(exits=True)
     services_module.stop_gracefully(graceful, timeout=0.01)
-    expected = signal.CTRL_BREAK_EVENT if sys.platform == "win32" else "SIGTERM"
+    expected = signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGTERM
     assert graceful.signals == [expected] and not graceful.killed
     hung = _Stubborn(exits=False)
     services_module.stop_gracefully(hung, timeout=0.01)
