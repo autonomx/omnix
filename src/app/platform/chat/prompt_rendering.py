@@ -15,6 +15,8 @@ class RenderedPromptMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: str
     message_id: str | None = None
+    # A system message that can differ on the next turn of the same conversation.
+    per_turn: bool = False
 
 
 class RenderedPrompt(BaseModel):
@@ -127,6 +129,8 @@ def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
 
     for instruction in assembly.system_instructions:
         messages.append(RenderedPromptMessage(role="system", content=instruction))
+    for instruction in assembly.turn_instructions:
+        messages.append(RenderedPromptMessage(role="system", content=instruction, per_turn=True))
     if assembly.assistant_identity:
         identity = "\n".join(assembly.assistant_identity)
         messages.append(RenderedPromptMessage(role="system", content=identity))
@@ -137,7 +141,7 @@ def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
         trimmed = trim_to_token_budget(memory, assembly.budget.memory_tokens)
         if trimmed != memory:
             truncated_sections.append("approved_memory")
-        messages.append(RenderedPromptMessage(role="system", content=trimmed))
+        messages.append(RenderedPromptMessage(role="system", content=trimmed, per_turn=True))
         section_tokens["approved_memory"] = estimate_tokens(trimmed)
 
     if assembly.session_summary:
@@ -147,7 +151,7 @@ def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
         )
         if not summary.endswith(assembly.session_summary):
             truncated_sections.append("session_summary")
-        messages.append(RenderedPromptMessage(role="system", content=summary))
+        messages.append(RenderedPromptMessage(role="system", content=summary, per_turn=True))
         section_tokens["session_summary"] = estimate_tokens(summary)
 
     recent = [_turn_message(turn) for turn in assembly.recent_messages]
@@ -202,7 +206,7 @@ def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
 
     messages.extend(kept_recent)
     if trimmed_history:
-        messages.append(RenderedPromptMessage(role="system", content=trimmed_history))
+        messages.append(RenderedPromptMessage(role="system", content=trimmed_history, per_turn=True))
     messages.append(
         RenderedPromptMessage(
             role="user",

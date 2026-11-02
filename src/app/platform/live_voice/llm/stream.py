@@ -18,7 +18,7 @@ from app.platform.chat.contracts import (
     remaining_turn_seconds,
 )
 from app.providers.service import provider_lease
-from app.providers.catalog import CONVERSATION_SESSIONS, THINKING_TOGGLE, provider_supports
+from app.providers.catalog import CONVERSATION_SESSIONS, LIVE_TURNS, THINKING_TOGGLE, provider_supports
 
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -196,12 +196,13 @@ def stream_low_latency_reply(
             context_items or [],
         )
         prompt_build_ms = (time.perf_counter() - prompt_started) * 1000.0
+        live_turn = provider_supports(provider_name, LIVE_TURNS) and _is_live_voice_turn(user_message)
         messages = [
-            ProviderMessage(role=message.role, content=message.content)
+            ProviderMessage(role=message.role, content=message.content, per_turn=live_turn and message.per_turn)
             for message in rendered.messages
         ]
         model_name = model_key(model_id)
-        completion_kwargs: dict[str, Any] = {}
+        completion_kwargs: dict[str, Any] = {"live_turn": True} if live_turn else {}
         if provider_supports(provider_name, CONVERSATION_SESSIONS):
             conversation_id = str(getattr(session, "id", "") or "").strip()
             if conversation_id:

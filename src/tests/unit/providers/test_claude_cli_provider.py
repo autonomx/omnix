@@ -29,7 +29,8 @@ class _FakePopen:
 
     def __init__(self, command, **kwargs):
         system_file = Path(command[command.index("--system-prompt-file") + 1])
-        self.record = {"command": command, "cwd": kwargs["cwd"], "system": system_file.read_text(encoding="utf-8")}
+        self.record = {"command": command, "cwd": kwargs["cwd"], "env": kwargs["env"],
+                       "system": system_file.read_text(encoding="utf-8")}
         _FakePopen.calls.append(self.record)
         self.stdin = _Stdin(self.record)
         self.stdout = io.StringIO(_FakePopen.stdout_text)
@@ -232,6 +233,102 @@ def test_the_pool_keeps_few_processes_and_retires_idle_ones(pooled) -> None:
     assert pool._warm == {}  # idle ones are retired
     assert len(_WaitingPopen.killed) == 3
     assert all(not Path(record["cwd"]).exists() for record in _FakePopen.calls)
+
+
+def test_a_spoken_turn_answers_without_thinking_and_no_other_call_does(provider) -> None:
+    _FakePopen.stdout_text = _events("ok")
+    provider.chat_completion([ChatMessage("user", "typed")])
+    _FakePopen.stdout_text = _events("ok")
+    provider.chat_completion([ChatMessage("user", "spoken")], live_turn=True)
+
+    typed = next(call for call in _FakePopen.calls if call.get("prompt") == "typed")
+    spoken = next(call for call in _FakePopen.calls if call.get("prompt") == "spoken")
+    assert "MAX_THINKING_TOKENS" not in typed["env"]
+    assert spoken["env"]["MAX_THINKING_TOKENS"] == "0"
+    # The configured effort stays: thinking off does not depend on it.
+    assert spoken["command"][spoken["command"].index("--effort") + 1] == "high"
+
+
+def test_every_turn_of_a_call_takes_a_waiting_process_though_its_context_changes(pooled) -> None:
+    provider, pool = pooled
+    def turn(memory: str, text: str) -> list[ChatMessage]:
+        return [ChatMessage("system", "You are Aria."), ChatMessage("system", memory, per_turn=True),
+                ChatMessage("user", text)]
+
+    provider.warm_live_turn(turn("Memory for the warm-up.", "warm-up"), model="claude-haiku-4-5-20251001")
+    assert len(_FakePopen.calls) == 1  # started on the first ask, with no request and no earlier uses
+    waiting = _FakePopen.calls[0]
+    assert "prompt" not in waiting and waiting["env"]["MAX_THINKING_TOKENS"] == "0"
+    assert waiting["system"] == "You are Aria."
+
+    provider.chat_completion(turn("Likes tea.", "hello"), model="claude-haiku-4-5-20251001", live_turn=True)
+    assert len(_FakePopen.calls) == 2  # the turn took it, and the next one is already started
+    assert waiting["prompt"] == "Context for this turn, not said by anyone:\n\nLikes tea.\n\nUSER: hello"
+    next_waiting = _FakePopen.calls[1]
+
+    provider.chat_completion(turn("Likes coffee now.", "again"), model="claude-haiku-4-5-20251001", live_turn=True)
+    assert len(_FakePopen.calls) == 3
+    assert next_waiting["prompt"].endswith("Likes coffee now.\n\nUSER: again")
+    pool.close()
+
+
+def test_a_spoken_turn_does_not_take_a_process_started_for_another_kind_of_call(pooled) -> None:
+    provider, pool = pooled
+    messages = [ChatMessage("system", "Same system."), ChatMessage("user", "hi")]
+    provider.warm_live_turn(messages)
+    provider.chat_completion(messages)  # thinking stays on for this one, so it starts its own process
+
+    assert len(_FakePopen.calls) == 2
+    assert _FakePopen.calls[0].get("prompt") is None
+    assert "MAX_THINKING_TOKENS" not in _FakePopen.calls[1]["env"]
+    pool.close()
+
+
+def test_a_live_process_waits_through_a_call_and_is_retired_after_it(pooled, monkeypatch) -> None:
+    provider, pool = pooled
+    limits: list[tuple[float, tuple]] = []
+
+    class _Timer:
+        def __init__(self, seconds, _function, args=()):
+            limits.append((seconds, args))
+            self.daemon = True
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(module.threading, "Timer", _Timer)
+    provider.warm_live_turn([ChatMessage("system", "You are Aria."), ChatMessage("user", "warm-up")])
+
+    (seconds, (kind, process)), = limits
+    assert seconds == pool.LIVE_IDLE_SECONDS > pool.IDLE_SECONDS
+    assert len(pool._warm) == 1
+    pool._expire(kind, process)
+    assert pool._warm == {}
+    assert len(_WaitingPopen.killed) == 1
+
+
+class _StreamingPopen(_WaitingPopen):
+    """A process still writing its reply when the caller stops reading."""
+
+    def poll(self):
+        return None if self.alive else 0
+
+
+def test_stopping_reading_a_reply_ends_the_cli_call(monkeypatch) -> None:
+    _FakePopen.calls = []
+    _WaitingPopen.killed = []
+    monkeypatch.setattr(module, "resolve_claude_executable", lambda _path: "claude")
+    monkeypatch.setattr(module.subprocess, "Popen", _StreamingPopen)
+    monkeypatch.setattr(module, "_WARM_POOL", module._WarmPool())
+    _FakePopen.stdout_text = _events("one ", "two")
+    provider = module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli"))
+
+    stream = provider.chat_completion([ChatMessage("user", "go")], stream=True)
+    assert next(stream).content == "one "
+    stream.close()
+
+    assert len(_WaitingPopen.killed) == 1
+    assert not Path(_FakePopen.calls[0]["cwd"]).exists()
 
 
 def test_a_schema_call_streams_its_structured_answer_as_it_is_written(provider) -> None:

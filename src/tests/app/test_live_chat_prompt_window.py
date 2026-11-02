@@ -300,3 +300,25 @@ def test_character_prompt_suppresses_competing_assistant_prompts(monkeypatch) ->
     assert assembly.diagnostics["global_system_prompt_suppressed"] is True
     assert assembly.diagnostics["session_system_prompt_count_suppressed"] == 1
     assert assembly.diagnostics["caller_identity_override_suppressed"] is True
+
+
+def test_what_changes_between_turns_is_marked_and_the_order_is_unchanged() -> None:
+    from app.conversation.contracts import PromptMemoryItem
+
+    assembly = prompt_assembly_module.PromptAssembly(
+        system_instructions=["Stable instructions."],
+        turn_instructions=["Sound gentler this turn."],
+        assistant_identity=["You are Aria."],
+        approved_memory=[PromptMemoryItem(
+            memory_id="m1", content="Likes tea.", scope="user", category="preference", revision=1, source="character",
+        )],
+        session_summary="They talked about tea.",
+        current_user_message=prompt_assembly_module.PromptTurn(role="user", content="Hello"),
+    )
+
+    rendered = render_prompt_assembly(assembly)
+
+    system = [message for message in rendered.messages if message.role == "system"]
+    assert [message.content for message in system[:3]] == ["Stable instructions.", "Sound gentler this turn.", "You are Aria."]
+    assert [message.per_turn for message in system] == [False, True, False, True, True]
+    assert "Likes tea." in system[3].content and system[4].content == "Session summary:\nThey talked about tea."

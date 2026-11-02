@@ -38,7 +38,7 @@ from .generative_ui.prompting import RichReplyDecision, ui_enabled_for_turn
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .routing_context import ChatRoutingContext, build_chat_routing_context
-from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
+from app.providers.catalog import CONVERSATION_SESSIONS, LIVE_TURNS, provider_supports
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from .prompt_window import build_prompt_assembly_with_window
 from .store import (
@@ -759,6 +759,8 @@ class ChatSessionStore(JsonChatSessionStore):
             if provider_supports(provider_id, CONVERSATION_SESSIONS)
             else {}
         )
+        if provider_supports(provider_id, LIVE_TURNS) and live_voice.is_live_voice_message(user_message):
+            completion_kwargs["live_turn"] = True
         from app.providers.structured.errors import ProviderTimeout
 
         remaining = remaining_turn_seconds(

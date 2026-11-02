@@ -20,7 +20,7 @@ from app.platform.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
 from app.providers.service import get_tts_provider
-from app.providers.catalog import LOADED_MODEL, provider_supports
+from app.providers.catalog import LIVE_TURNS, LOADED_MODEL, provider_supports
 
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.conversation.tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
@@ -388,7 +388,16 @@ def _warm_llm(
     response: Iterator[Any] | None = None
     prompt_messages: list[ProviderMessage] = []
     try:
-        prompt_messages = _live_voice_warm_messages(store, session)
+        live_turn = provider_supports(provider, LIVE_TURNS)
+        prompt_messages = _live_voice_warm_messages(store, session, live_turn=live_turn)
+        if live_turn:
+            provider.warm_live_turn(prompt_messages, model=_model_key(selected_model_id))
+            return _WarmResult(
+                status="warmed",
+                elapsed_ms=(time.perf_counter() - started) * 1000.0,
+                prompt_message_count=len(prompt_messages),
+                prompt_chars=sum(len(message.content) for message in prompt_messages),
+            )
         # LM Studio should warm whichever model is actually resident. Cloud and
         # other explicit providers use the current model from Settings/live lane.
         model = (
@@ -430,7 +439,7 @@ def _warm_llm(
                 close()
 
 
-def _live_voice_warm_messages(store: Any, session: Any) -> list[ProviderMessage]:
+def _live_voice_warm_messages(store: Any, session: Any, *, live_turn: bool = False) -> list[ProviderMessage]:
     warm_message = ChatMessage(
         id=f"live-call-prewarm:{getattr(session, 'id', 'session')}",
         role="user",
@@ -450,7 +459,7 @@ def _live_voice_warm_messages(store: Any, session: Any) -> list[ProviderMessage]
         return [ProviderMessage(role="user", content=_WARM_USER_CONTENT)]
     _, rendered = builder(session, warm_message, [])
     return [
-        ProviderMessage(role=message.role, content=message.content)
+        ProviderMessage(role=message.role, content=message.content, per_turn=live_turn and message.per_turn)
         for message in rendered.messages
     ]
 

@@ -80,6 +80,46 @@ def test_typed_chat_emits_its_first_provider_fragment_and_retains_usage(monkeypa
     json.dumps(events[-1])
 
 
+def test_only_a_spoken_turn_on_claude_asks_for_a_live_turn(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeProvider:
+        def __init__(self, provider_name: str) -> None:
+            self.provider_name = provider_name
+
+        def chat_completion(self, **kwargs: Any):
+            calls.append(kwargs)
+            return iter([ChatResponse(content="Hi.", model="m", finish_reason="stop")])
+
+    rendered = SimpleNamespace(messages=[
+        SimpleNamespace(role="system", content="You are Aria.", per_turn=False),
+        SimpleNamespace(role="system", content="Likes tea.", per_turn=True),
+        SimpleNamespace(role="user", content="Hello", per_turn=False),
+    ])
+    store = SimpleNamespace(
+        build_provider_prompt=lambda session, user_message, context_items: (SimpleNamespace(diagnostics={}), rendered),
+        _active_memory_metadata=lambda assembly, current_rendered: {},
+        _active_history_metadata=lambda assembly: {},
+    )
+
+    def reply(provider_id: str, metadata: dict[str, str]) -> None:
+        name = provider_id.removeprefix("llm:")
+        list(stream_low_latency_reply(
+            store, SimpleNamespace(id="chat:test"), SimpleNamespace(id="msg:user", content="Hello", metadata=metadata),
+            provider_id=provider_id, model_id=None, context_items=[], provider=FakeProvider(name),
+        ))
+
+    reply("llm:claude_cli", {"speech_segment_id": "segment-1"})
+    reply("llm:claude_cli", {})
+    reply("llm:cerebras", {"speech_segment_id": "segment-1"})
+
+    spoken, typed, other = calls
+    assert spoken["live_turn"] is True
+    assert [message.per_turn for message in spoken["messages"]] == [False, True, False]
+    assert "live_turn" not in typed and not any(message.per_turn for message in typed["messages"])
+    assert "live_turn" not in other and not any(message.per_turn for message in other["messages"])
+
+
 def test_codex_low_latency_path_reuses_exact_omnix_session(monkeypatch) -> None:
     calls: list[dict[str, Any]] = []
 

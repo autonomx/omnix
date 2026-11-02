@@ -49,6 +49,8 @@ class PromptAssembly(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     system_instructions: list[str] = Field(default_factory=list)
+    # Instructions decided for this turn alone; they render right after the system instructions.
+    turn_instructions: list[str] = Field(default_factory=list)
     assistant_identity: list[str] = Field(default_factory=list)
     approved_memory: list[PromptMemoryItem] = Field(default_factory=list)
     session_summary: str | None = None

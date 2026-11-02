@@ -10,6 +10,11 @@ started ahead of it (``_WarmPool``), still one fresh process per call. The promp
 goes in, and the output arrives, as ``stream-json`` events, which serve both
 streaming and single responses. A JSON Schema response format is passed to the
 CLI's own ``--json-schema`` validation as well as to the prompt.
+
+A spoken turn (``live_turn=True``) answers without thinking first, whatever the
+model and effort, and its call keeps a process ready: ``warm_live_turn`` starts
+the first one, and a system message that changes between turns (``per_turn``)
+goes with the turn, so every turn of a call can take the waiting process.
 """
 from __future__ import annotations
 
@@ -67,15 +72,20 @@ _ALIAS_NAMES = {alias: f"Latest {alias.capitalize()} ({alias})" for alias in MOD
 _ROLE_LABELS = {"user": "USER", "assistant": "ASSISTANT", "tool": "TOOL"}
 # Windows limits a command line to 32,767 characters; a larger schema stays in the prompt only.
 _MAX_SCHEMA_ARGUMENT = 16_000
+# Not in ``claude --help``; measured on CLI 2.1.314. Haiku 4.5 thinks at any effort: 2.2 s to its first word, 0.55 s without.
+_LIVE_TURN_ENVIRONMENT = {"MAX_THINKING_TOKENS": "0"}
+_PER_TURN_HEADING = "Context for this turn, not said by anyone:"
 
 
 class ClaudeCliTimeout(ProviderError):
     """The Claude CLI did not finish within the request's deadline."""
 
 
-def _call_kind(executable: str, model: str, effort: str, system: str, schema: dict[str, Any] | None) -> str:
-    """Calls of one kind start the same process: the same CLI, model, effort, system prompt and schema."""
-    material = json.dumps([executable, model, effort, system, schema], sort_keys=True, ensure_ascii=False)
+def _call_kind(
+    executable: str, model: str, effort: str, system: str, schema: dict[str, Any] | None, live_turn: bool = False,
+) -> str:
+    """Calls of one kind start the same process: the same CLI, model, effort, system prompt, schema and thinking."""
+    material = json.dumps([executable, model, effort, system, schema, live_turn], sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -96,10 +106,14 @@ class _WarmPool:
     answers at once. Each call still gets a fresh process and conversation. An
     idle process holds ~200 MB, so the pool is small: only kinds made at least
     twice, at most ``MAX_WARM`` processes, each retired after ``IDLE_SECONDS``.
+    A live call's process is started on its first ask and waits through the pauses
+    of a call, ``LIVE_IDLE_SECONDS``; the call's warm-up, which repeats on speech
+    after five quiet minutes, starts another when that one has gone.
     """
 
     MAX_WARM = 2
     IDLE_SECONDS = 120.0
+    LIVE_IDLE_SECONDS = 360.0
     MIN_USES = 2
     _MAX_KINDS = 64
 
@@ -119,12 +133,12 @@ class _WarmPool:
             return None
         return process, workdir
 
-    def refill(self, kind: str, spawn: Callable[[], tuple[subprocess.Popen[str], str]]) -> None:
+    def refill(self, kind: str, spawn: Callable[[], tuple[subprocess.Popen[str], str]], *, live: bool = False) -> None:
         with self._lock:
             if kind not in self._uses and len(self._uses) >= self._MAX_KINDS:
                 self._uses.clear()
             self._uses[kind] = self._uses.get(kind, 0) + 1
-            if self._uses[kind] < self.MIN_USES or kind in self._warm:
+            if (self._uses[kind] < self.MIN_USES and not live) or kind in self._warm:
                 return
             evicted = []
             while len(self._warm) >= self.MAX_WARM:
@@ -142,7 +156,7 @@ class _WarmPool:
             self._warm[kind] = (process, workdir, time.monotonic())
         if stale is not None:
             _discard(stale[0], stale[1])
-        timer = threading.Timer(self.IDLE_SECONDS, self._expire, args=(kind, process))
+        timer = threading.Timer(self.LIVE_IDLE_SECONDS if live else self.IDLE_SECONDS, self._expire, args=(kind, process))
         timer.daemon = True
         timer.start()
 
@@ -232,14 +246,22 @@ def _structured_instruction(response_format: Any) -> str:
 
 
 def split_messages(messages: list[ChatMessage]) -> tuple[str, str]:
-    """The system prompt and the user turn: one message as itself, a conversation as a labelled transcript."""
-    system = "\n\n".join(str(message.content or "") for message in messages if message.role == "system").strip()
+    """The system prompt and the user turn: one message as itself, a conversation as a labelled transcript.
+
+    A ``per_turn`` system message goes ahead of the turn instead, so the system prompt stays the same across turns.
+    """
+    system = "\n\n".join(
+        str(message.content or "") for message in messages if message.role == "system" and not message.per_turn
+    ).strip()
+    per_turn = [str(message.content or "") for message in messages if message.role == "system" and message.per_turn]
     turns = [message for message in messages if message.role != "system"]
-    if len(turns) == 1 and turns[0].role == "user":
+    if len(turns) == 1 and turns[0].role == "user" and not per_turn:
         return system, str(turns[0].content or "")
     rendered = [
         f"{_ROLE_LABELS.get(message.role, message.role.upper())}: {message.content or ''}" for message in turns
     ]
+    if per_turn:
+        rendered.insert(0, "\n\n".join([_PER_TURN_HEADING, *per_turn]))
     return system, "\n\n".join(rendered)
 
 
@@ -356,7 +378,10 @@ class ClaudeCliProvider(BaseProvider):
             messages=list(messages), extra={"stream": bool(stream)},
         )
         schema = _response_schema(kwargs.get("response_format"))
-        events = self._run(selected_model, system, prompt, timeout=timeout, owner=current_turn_owner(), schema=schema)
+        events = self._run(
+            selected_model, system, prompt, timeout=timeout, owner=current_turn_owner(), schema=schema,
+            live_turn=bool(kwargs.get("live_turn")),
+        )
         if stream:
             def traced() -> Iterator[ChatResponse]:
                 try:
@@ -387,6 +412,16 @@ class ClaudeCliProvider(BaseProvider):
         provider_call_exit(trace_row, ok=True)
         return response
 
+    def warm_live_turn(self, messages: list[ChatMessage], model: Optional[str] = None) -> None:
+        """Have the process the call's next spoken turn takes started and waiting; this sends no request."""
+        executable = resolve_claude_executable(self.claude_path)
+        if not executable:
+            raise ConnectionError(f"Claude CLI executable not found: {self.claude_path}")
+        selected_model = str(model or self.config.model or DEFAULT_CLAUDE_MODEL).strip()
+        system, _ = split_messages(list(messages))
+        kind = _call_kind(executable, selected_model, self.effort, system, None, True)
+        _WARM_POOL.refill(kind, lambda: self._spawn(executable, selected_model, system, None, live_turn=True), live=True)
+
     def _command(self, executable: str, model: str, system_file: Path, schema: dict[str, Any] | None = None) -> list[str]:
         command = [
             executable, "-p",
@@ -410,15 +445,16 @@ class ClaudeCliProvider(BaseProvider):
         return command
 
     def _spawn(
-        self, executable: str, model: str, system: str, schema: dict[str, Any] | None,
+        self, executable: str, model: str, system: str, schema: dict[str, Any] | None, *, live_turn: bool = False,
     ) -> tuple[subprocess.Popen[str], str]:
         """Start one ``claude -p`` in its own empty working directory; it waits for its prompt on stdin."""
         workdir = tempfile.mkdtemp(prefix="omnix-claude-")
         system_file = Path(workdir) / "system.txt"
         system_file.write_text(system or "You are a helpful assistant.", encoding="utf-8")
+        environment = {**self._environment(), **_LIVE_TURN_ENVIRONMENT} if live_turn else self._environment()
         kwargs: dict[str, Any] = {
             "stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
-            "cwd": workdir, "env": self._environment(), "text": True, "encoding": "utf-8", "errors": "replace",
+            "cwd": workdir, "env": environment, "text": True, "encoding": "utf-8", "errors": "replace",
         }
         if os.name == "nt":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -430,7 +466,7 @@ class ClaudeCliProvider(BaseProvider):
 
     def _run(
         self, model: str, system: str, prompt: str, *, timeout: float, owner: str | None,
-        schema: dict[str, Any] | None = None,
+        schema: dict[str, Any] | None = None, live_turn: bool = False,
     ) -> Iterator[ChatResponse]:
         """Run one ``claude -p`` call; yield text deltas, then one final chunk with the result.
 
@@ -441,11 +477,10 @@ class ClaudeCliProvider(BaseProvider):
         if not executable:
             raise ConnectionError(f"Claude CLI executable not found: {self.claude_path}")
         key = owner or f"call:{id(threading.current_thread())}:{time.monotonic_ns()}"
-        kind = _call_kind(executable, model, self.effort, system, schema)
+        kind = _call_kind(executable, model, self.effort, system, schema, live_turn)
+        spawn = lambda: self._spawn(executable, model, system, schema, live_turn=live_turn)  # noqa: E731
         warm = _WARM_POOL.take(kind)
-        process, workdir = warm if warm is not None else self._spawn(executable, model, system, schema)
-        # The next call of this kind finds a process already started and waiting.
-        _WARM_POOL.refill(kind, lambda: self._spawn(executable, model, system, schema))
+        process, workdir = warm if warm is not None else spawn()
         try:
             with self._processes_lock:
                 self._processes[key] = process
@@ -462,6 +497,8 @@ class ClaudeCliProvider(BaseProvider):
                 assert process.stdin is not None and process.stdout is not None
                 process.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": prompt}}) + "\n")
                 process.stdin.close()
+                # The next call of this kind finds a process already started and waiting.
+                _WARM_POOL.refill(kind, spawn, live=live_turn)
                 result: dict[str, Any] | None = None
                 resolved = model
                 streamed = False
@@ -521,4 +558,5 @@ class ClaudeCliProvider(BaseProvider):
         finally:
             with self._processes_lock:
                 self._processes.pop(key, None)
-            shutil.rmtree(workdir, ignore_errors=True)
+            # A caller that stops reading (an interrupted reply) ends the request with it.
+            _discard(process, workdir)

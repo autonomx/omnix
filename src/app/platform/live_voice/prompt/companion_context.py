@@ -234,7 +234,7 @@ def build_companion_prompt(
                 temporal_result,
             )
             if initiative_directive:
-                assembly.system_instructions.append(initiative_directive)
+                assembly.turn_instructions.append(initiative_directive)
         except Exception:
             initiative_decision = None
     paralinguistic_state = None
@@ -250,7 +250,7 @@ def build_companion_prompt(
             emotional_attunement=profile.emotional_attunement,
         )
         if style_directive:
-            assembly.system_instructions.append(style_directive)
+            assembly.turn_instructions.append(style_directive)
     assembly.diagnostics["memory"] = memory_diagnostics
     assembly.diagnostics["companion_context"] = packet.content_free_diagnostics()
     assembly.diagnostics["temporal_retrieval"] = (

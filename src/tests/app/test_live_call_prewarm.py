@@ -42,9 +42,10 @@ class _FakeStore:
             SimpleNamespace(
                 role="system",
                 content="You are Jinx. Stay chaotic, theatrical, and in character.",
+                per_turn=False,
             ),
-            SimpleNamespace(role="assistant", content="Make it interesting."),
-            SimpleNamespace(role="user", content=user_message.content),
+            SimpleNamespace(role="assistant", content="Make it interesting.", per_turn=False),
+            SimpleNamespace(role="user", content=user_message.content, per_turn=False),
         ])
         return SimpleNamespace(), rendered
 
@@ -140,6 +141,35 @@ def test_live_call_prewarm_inflight_registry_is_bounded_expiring_and_clearable(
     prewarm.clear_live_call_prewarm_state()
     assert second_event.is_set()
     assert not prewarm._PREWARM_INFLIGHT
+
+
+def test_a_provider_with_live_turns_warms_a_process_and_sends_no_request(monkeypatch) -> None:
+    prewarm.clear_live_call_prewarm_state()
+    store = _FakeStore()
+    warmed: list[tuple[list, str | None]] = []
+
+    class _LiveTurnProvider:
+        provider_name = "claude_cli"
+
+        def chat_completion(self, **_kwargs):
+            raise AssertionError("the warm-up must not call the model")
+
+        def warm_live_turn(self, messages, model=None):
+            warmed.append((messages, model))
+
+    monkeypatch.setattr(prewarm, "load_settings", _fake_provider_settings)
+    monkeypatch.setattr(prewarm.provider_service, "get_provider", lambda _provider_id: _LiveTurnProvider())
+    monkeypatch.setattr(prewarm, "get_tts_provider", lambda: _FakeTtsProvider())
+
+    response = _client(store).post(
+        "/api/live-call/sessions/session-prewarm/prewarm",
+        json={"speaker": "Jinx", "language": "English"},
+    )
+
+    assert response.json()["llm"]["status"] == "warmed"
+    (messages, model), = warmed
+    assert model == "fake-model"
+    assert "You are Jinx" in messages[0].content
 
 
 def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) -> None:

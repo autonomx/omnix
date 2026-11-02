@@ -139,6 +139,41 @@ def test_transcript_compatibility_is_strict_about_words() -> None:
     )
 
 
+def test_a_speculative_turn_on_claude_is_a_live_turn(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    calls: list[dict] = []
+
+    class _LiveTurnProvider(_FakeProvider):
+        provider_name = "claude_cli"
+
+        def chat_completion(self, **kwargs):
+            calls.append(kwargs)
+            return super().chat_completion(**kwargs)
+
+    class _Store(_FakeStore):
+        def build_provider_prompt(self, _session, user_message, _context_items):
+            rendered = SimpleNamespace(messages=[
+                SimpleNamespace(role="system", content="Likes tea.", per_turn=True),
+                SimpleNamespace(role="user", content=user_message.content, per_turn=False),
+            ])
+            return SimpleNamespace(sources=[]), rendered
+
+    store = _Store()
+    monkeypatch.setattr(provider_service, "get_provider", lambda _provider_id: _LiveTurnProvider())
+    app = FastAPI()
+    include_router_registrar(app, speculation.register_live_chat_speculation_routes, chat_store_factory=lambda: store)
+
+    response = TestClient(app).post(
+        "/api/live/speculation/sessions/session-1/stream",
+        json={"content": "Tell me a story", "segment_id": "segment-1", "source_sequence": 0},
+    )
+
+    assert response.status_code == 200
+    (call,) = calls
+    assert call["live_turn"] is True
+    assert [message.per_turn for message in call["messages"]] == [True, False]
+
+
 def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     store = _FakeStore()

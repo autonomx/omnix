@@ -53,7 +53,8 @@ class ChatMessage:
     tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_call_id: Optional[str] = None
     vision_images: Optional[List[Dict[str, Any]]] = None  # For vision models
-    
+    per_turn: bool = False  # A system message that changes between turns; a provider may send it with the turn
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
         result = {"role": self.role, "content": self.content}
@@ -333,6 +334,9 @@ class BaseProvider(ABC):
     def cancel_active_request(self, owner: Optional[str] = None) -> bool:
         """Best-effort interruption of an in-flight request; ``owner`` names the job's turn."""
         return False
+
+    def warm_live_turn(self, messages: list[ChatMessage], model: str | None = None) -> None:
+        """Prepare for a live call's next spoken turn, for a provider declaring ``LIVE_TURNS``; this sends no request."""
 
     def requires_api_key(self) -> bool:
         """Check if provider requires an API key."""

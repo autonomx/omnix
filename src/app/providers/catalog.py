@@ -31,6 +31,9 @@ LOCAL_DEVICE = "local_device"
 RUNTIME_STATS = "runtime_stats"
 # Accepts ``chat_template_kwargs={"enable_thinking": False}``.
 THINKING_TOGGLE = "thinking_toggle"
+# Accepts ``live_turn=True`` for a spoken turn: no thinking before the answer, from a
+# process kept ready for the call (``warm_live_turn`` starts it, without a request).
+LIVE_TURNS = "live_turns"
 # Answers with the model the local server has loaded; a route need not name one.
 LOADED_MODEL = "loaded_model"
 # Enforces a JSON Schema ``response_format`` natively (strict, inline refs).
@@ -60,7 +63,7 @@ VOICE_BLEND = "voice_blend"
 
 CAPABILITIES = frozenset({
     CHAT, STREAMING, MODELS, TOOLS, CANCELLATION, CONVERSATION_SESSIONS, LOCAL_DEVICE,
-    RUNTIME_STATS, THINKING_TOGGLE, LOADED_MODEL, NATIVE_JSON_SCHEMA, CLOSED_OBJECT_SCHEMA,
+    RUNTIME_STATS, THINKING_TOGGLE, LIVE_TURNS, LOADED_MODEL, NATIVE_JSON_SCHEMA, CLOSED_OBJECT_SCHEMA,
     API_KEY, DESKTOP_VISION, SYNTHESIS, VOICE_CLONE, LOCAL_ARTIFACTS, TRANSCRIPTION,
     DELIVERY_INSTRUCTION, WORD_TIMESTAMPS, DIARIZATION, VOICE_DESIGN, VOICE_BLEND,
 })
@@ -95,7 +98,7 @@ CATALOG: tuple[ProviderSpec, ...] = (
         "chatgpt_codex", "chatgpt_codex_provider", "ChatGPTCodexProvider",
         STREAMING, TOOLS, CONVERSATION_SESSIONS, CLOSED_OBJECT_SCHEMA, DESKTOP_VISION,
     ),
-    _llm("claude_cli", "claude_cli_provider", "ClaudeCliProvider", STREAMING, MODELS, NATIVE_JSON_SCHEMA),
+    _llm("claude_cli", "claude_cli_provider", "ClaudeCliProvider", STREAMING, MODELS, NATIVE_JSON_SCHEMA, LIVE_TURNS),
     _llm("llamacpp", "llamacpp_provider", "LlamaCppProvider", STREAMING, MODELS, LOCAL_DEVICE),
     _llm(
         "lmstudio", "lmstudio_provider", "LMStudioProvider",
@@ -185,6 +188,7 @@ __all__ = [
     "CLOSED_OBJECT_SCHEMA",
     "CONVERSATION_SESSIONS",
     "DESKTOP_VISION",
+    "LIVE_TURNS",
     "LOADED_MODEL",
     "LOCAL_ARTIFACTS",
     "LOCAL_DEVICE",

@@ -27,7 +27,7 @@ from app.platform.chat import (
 )
 from app.platform.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
-from app.providers.catalog import CANCELLATION, RUNTIME_STATS, THINKING_TOGGLE, provider_supports
+from app.providers.catalog import CANCELLATION, LIVE_TURNS, RUNTIME_STATS, THINKING_TOGGLE, provider_supports
 
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log
@@ -423,11 +423,12 @@ def _generate_side_effect_free(
             },
         )
         assembly, rendered = store.build_provider_prompt(session, user_message, [])
+        live_turn = provider_supports(provider, LIVE_TURNS)
         messages = [
-            ProviderMessage(role=item.role, content=item.content)
+            ProviderMessage(role=item.role, content=item.content, per_turn=live_turn and item.per_turn)
             for item in rendered.messages
         ]
-        provider_kwargs: dict[str, Any] = {}
+        provider_kwargs: dict[str, Any] = {"live_turn": True} if live_turn else {}
         if cancel_event is not None and provider_supports(provider, CANCELLATION):
             provider_kwargs["cancel"] = cancel_event
         if provider_supports(provider, THINKING_TOGGLE):
