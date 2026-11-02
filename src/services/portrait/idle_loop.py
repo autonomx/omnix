@@ -24,13 +24,22 @@ IDLE_OUTPUT_ID = "idle"
 IDLE_SEGMENT_ID = "idle"
 # FLOAT's own motion never blinks (none in 12 s of rendered silence or in 140 s of a recorded call, 2026-10-31), so
 # the idle face blinks along the motion decoder's eyelid direction: the 15th of its 20 orthonormal directions (a
-# model property, the same for every face). Its coordinate at -4 nearly shuts the eyes, at -6.5 closes them on the
-# faces tried, and past -8 distorts the face.
+# model property, the same for every face). Its coordinate at -4 nearly shuts the eyes, at -6.5 closes them hard on
+# the faces tried, and past -8 distorts the face. -5 is a mild blink (rated too forced at -6.5, 2026-11-01).
 EYELID_DIRECTION = 14
-EYELID_CLOSED = -6.5
+EYELID_CLOSED = -5.0
 # Each idle frame with its eyes shut, sent after the loop: the browser blinks wherever the loop is by fading a frame
-# into its shut twin and back (the same pose, so only the eyelids differ).
+# into its shut twin and back.
 BLINK_OUTPUT_ID = "blink"
+# The direction also presses the lips and moves the jaw and hairline about as much as the eyelids (measured
+# 2026-11-01), so a twin takes only the area around the eyes from the shut render. The area is found from where the
+# render changes, inside these fractions of the frame (they hold the eyes and brows of FLOAT's face crop, not its
+# hairline or mouth), and its edge fades out from EYE_REGION_SOLID of its radius.
+EYE_SEARCH_ROWS = (0.25, 0.55)
+EYE_SEARCH_COLUMNS = (0.25, 0.75)
+EYE_REGION_HALF_WIDTH = 0.26
+EYE_REGION_HALF_HEIGHT = 0.10
+EYE_REGION_SOLID = 0.7
 
 
 def eyes_shut(latents: Any, eyelid: Any) -> Any:
@@ -38,6 +47,25 @@ def eyes_shut(latents: Any, eyelid: Any) -> Any:
     its motion is kept."""
     coordinates = latents @ eyelid
     return latents + (EYELID_CLOSED - coordinates)[:, None] * eyelid[None, :]
+
+
+def eye_region_mask(change: np.ndarray) -> np.ndarray:
+    """How much of the shut render each pixel takes (height x width, 0 to 1), from how much each pixel changed."""
+    height, width = change.shape
+    top, bottom = int(height * EYE_SEARCH_ROWS[0]), int(height * EYE_SEARCH_ROWS[1])
+    left, right = int(width * EYE_SEARCH_COLUMNS[0]), int(width * EYE_SEARCH_COLUMNS[1])
+    weights = change[top:bottom, left:right].astype(np.float64) ** 2
+    total = float(weights.sum())
+    if total > 0.0:
+        centre_y = top + float((weights.sum(axis=1) * np.arange(bottom - top)).sum()) / total
+        centre_x = left + float((weights.sum(axis=0) * np.arange(right - left)).sum()) / total
+    else:
+        centre_y, centre_x = (top + bottom) / 2, (left + right) / 2
+    rows, columns = np.mgrid[:height, :width]
+    radius = np.hypot((columns - centre_x) / (width * EYE_REGION_HALF_WIDTH),
+                      (rows - centre_y) / (height * EYE_REGION_HALF_HEIGHT))
+    fade = np.clip((1.0 - radius) / (1.0 - EYE_REGION_SOLID), 0.0, 1.0)
+    return (fade * fade * (3.0 - 2.0 * fade)).astype(np.float32)
 
 
 def idle_frame_step(level: int) -> int:
@@ -72,4 +100,5 @@ def choose_loop(latents: np.ndarray, *, span: int = IDLE_SPAN_FRAMES,
 
 
 __all__ = ["BLINK_OUTPUT_ID", "EYELID_CLOSED", "EYELID_DIRECTION", "IDLE_MIN_LOOP_FRAMES", "IDLE_OUTPUT_ID",
-           "IDLE_RENDER_FRAMES", "IDLE_SEGMENT_ID", "IDLE_SPAN_FRAMES", "choose_loop", "eyes_shut", "idle_frame_step"]
+           "IDLE_RENDER_FRAMES", "IDLE_SEGMENT_ID", "IDLE_SPAN_FRAMES", "choose_loop", "eye_region_mask", "eyes_shut",
+           "idle_frame_step"]

@@ -412,10 +412,14 @@ class FloatRuntime:
         Encoded on the CPU (libjpeg-turbo, about 2 ms a frame): torchvision's GPU encoder returned noise for
         some frames of a batch in the Phase 1 runtime check (2026-10-29), which SyncNet scored as lost sync.
         """
+        return self.encode_pixels(self.render_pixels(portrait, latents), level)
+
+    @torch.no_grad()
+    def encode_pixels(self, pixels: torch.Tensor, level: int = 0) -> list[bytes]:
+        """JPEG frames for RGB pixels (frames x 3 x 512 x 512, uint8), at a quality level's size and JPEG quality."""
         from torchvision.io import encode_jpeg
 
         size, _, quality = QUALITY_LEVELS[level]
-        pixels = self.render_pixels(portrait, latents)
         if size != FRAME_SIZE:
             pixels = F.interpolate(pixels.float(), size=(size, size), mode="bilinear", antialias=True,
                                    align_corners=False).round().clamp(0, 255).to(torch.uint8)
@@ -454,14 +458,20 @@ class FloatRuntime:
             portrait.idle_jpegs[level] = self.render(portrait, self.idle_latents(portrait)[::step], level)
         return portrait.idle_jpegs[level]
 
+    @torch.no_grad()
     def blink_frames(self, portrait: Portrait, level: int = 0) -> list[bytes]:
         """Each idle loop frame with its eyes shut, in the same order: the browser blinks by fading a loop frame into
-        its twin and back."""
-        from services.portrait.idle_loop import eyes_shut, idle_frame_step
+        its twin and back. Only the area around the eyes differs from the loop's frame (``eye_region_mask``): the
+        mouth and the rest of the face stay as they are."""
+        from services.portrait.idle_loop import eye_region_mask, eyes_shut, idle_frame_step
 
         if level not in portrait.blink_jpegs:
             loop = self.idle_latents(portrait)[::idle_frame_step(level)]
-            portrait.blink_jpegs[level] = self.render(portrait, eyes_shut(loop, self.eyelid), level)
+            opened = self.render_pixels(portrait, loop).cpu().float()
+            shut = self.render_pixels(portrait, eyes_shut(loop, self.eyelid)).cpu().float()
+            mask = torch.from_numpy(eye_region_mask((shut - opened).abs().mean(dim=(0, 1)).numpy()))
+            twins = (opened + (shut - opened) * mask).round().clamp(0, 255).to(torch.uint8)
+            portrait.blink_jpegs[level] = self.encode_pixels(twins, level)
         return portrait.blink_jpegs[level]
 
     @torch.no_grad()

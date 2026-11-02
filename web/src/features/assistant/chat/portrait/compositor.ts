@@ -6,8 +6,8 @@
  * frame, so once the user stops speaking the loop is steered there (the shorter way, at its own pace) and then sways
  * slowly over its first few frames, which stay close to it in motion (rated 2026-10-31: a face held dead still
  * while the reply was thought of looked frozen). The reply then cuts in with no blend, from whichever of those
- * frames is on screen. Wherever the idle loop is, free or swaying, the face blinks every 2.5-6 s: the frame on
- * screen fades into its eyes-shut twin (the same pose, rendered by the service) and back. A pause inside a reply
+ * frames is on screen. Wherever the idle loop is, free or swaying, the face blinks every 3.5-8 s: the frame on
+ * screen fades into its eyes-shut twin (the same frame with only the eyes changed, from the service) and back. A pause inside a reply
  * (a clause silence, a late phrase, an underrun) holds the last frame. When the reply's audio has drained, the
  * service's transition frames take the face back to the loop's first frame, and the loop resumes from there. A
  * pixel crossfade, which shows two poses at once, is left only as the fallback: a reply that comes before the loop
@@ -26,12 +26,12 @@ export const SETTLE_HOLD_MS = 10_000;
 // eased, every 2 s (more of it, as rated 2026-10-31, than the 240 ms first tried).
 export const SWAY_LOOP_MS = 400;
 export const SWAY_PERIOD_MS = 2_000;
-// A blink every 2.5-6 s while the idle loop shows: shut over 80 ms, held 40 ms, open over 120 ms.
-export const BLINK_GAP_MIN_MS = 2_500;
-export const BLINK_GAP_MAX_MS = 6_000;
-export const BLINK_MS = 240;
-const BLINK_SHUT_MS = 80;
-const BLINK_HELD_MS = 40;
+// A blink every 3.5-8 s while the idle loop shows: eased shut over 110 ms and open over 190 ms, with no hold (the 240 ms
+// linear blink every 2.5-6 s first tried was rated too forced, 2026-11-01).
+export const BLINK_GAP_MIN_MS = 3_500;
+export const BLINK_GAP_MAX_MS = 8_000;
+export const BLINK_MS = 300;
+const BLINK_SHUT_MS = 110;
 
 /** Draw `under`, then `over` (when set) at `alpha` on top of it. */
 export type PortraitPicture<T> = { under: T | null; over: T | null; alpha: number };
@@ -267,7 +267,8 @@ export class PortraitCompositor<T> {
 
 /** How shut the eyes are `elapsed` ms into a blink (0 open, 1 shut). */
 function blinkClosure(elapsed: number): number {
-  if (elapsed < BLINK_SHUT_MS) return elapsed / BLINK_SHUT_MS;
-  if (elapsed < BLINK_SHUT_MS + BLINK_HELD_MS) return 1;
-  return Math.max(0, 1 - (elapsed - BLINK_SHUT_MS - BLINK_HELD_MS) / (BLINK_MS - BLINK_SHUT_MS - BLINK_HELD_MS));
+  const progress = elapsed < BLINK_SHUT_MS
+    ? elapsed / BLINK_SHUT_MS
+    : 1 - Math.min(1, (elapsed - BLINK_SHUT_MS) / (BLINK_MS - BLINK_SHUT_MS));
+  return Math.sin((progress * Math.PI) / 2) ** 2;
 }

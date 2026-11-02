@@ -195,45 +195,63 @@ describe('the portrait compositor', () => {
   });
 
   it('blinks every few seconds wherever the loop is, fading the frame on screen into its eyes-shut twin and back', () => {
-    const compositor = new PortraitCompositor<string>(() => 0); // the shortest gap: 2.5 s
+    const compositor = new PortraitCompositor<string>(() => 0); // the shortest gap: 3.5 s
     compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
     compositor.setBlink(['s0', 's1', 's2', 's3', 's4']);
-    expect(compositor.picture(0, null, false).under).toBe('i0'); // a blink is due from 2.5 s
-    expect(compositor.picture(2_000, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
-    expect(compositor.picture(2_500, null, false)).toEqual({ under: 'i2', over: 's2', alpha: 0 }); // mid-loop
-    expect(compositor.picture(2_540, null, false)).toEqual({ under: 'i3', over: 's3', alpha: 0.5 }); // shutting
-    // On the wrap's blend, the nearer frame blinks; shut from 80 to 120 ms, then opening.
-    expect(compositor.picture(2_590, null, false)).toEqual({ under: 'i0', over: 's0', alpha: 1 });
-    const opening = compositor.picture(2_700, null, false);
+    expect(compositor.picture(0, null, false).under).toBe('i0'); // a blink is due from 3.5 s
+    expect(compositor.picture(3_000, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    expect(compositor.picture(3_500, null, false)).toEqual({ under: 'i2', over: 's2', alpha: 0 }); // mid-loop
+    const shutting = compositor.picture(3_555, null, false); // halfway through the 110 ms, eased
+    expect(shutting).toMatchObject({ under: 'i3', over: 's3' });
+    expect(shutting.alpha).toBeCloseTo(0.5);
+    // On the wrap's blend, the nearer frame blinks; shut at 110 ms with no hold, then opening over 190 ms.
+    const shut = compositor.picture(3_610, null, false);
+    expect(shut).toMatchObject({ under: 'i0', over: 's0' });
+    expect(shut.alpha).toBeCloseTo(1);
+    const opening = compositor.picture(3_705, null, false); // halfway back
     expect(opening).toMatchObject({ under: 'i2', over: 's2' });
-    expect(opening.alpha).toBeCloseTo(1 / 3);
-    // Over after 240 ms; the next one 2.5 s later.
-    expect(compositor.picture(2_740, null, false)).toEqual({ under: 'i3', over: null, alpha: 0 });
-    expect(compositor.picture(5_200, null, false).over).toBeNull();
-    expect(compositor.picture(5_240, null, false).over).toBe('s1');
+    expect(opening.alpha).toBeCloseTo(0.5);
+    // Over after 300 ms; the next one 3.5 s later.
+    expect(compositor.picture(3_800, null, false)).toEqual({ under: 'i0', over: null, alpha: 0 });
+    expect(compositor.picture(7_290, null, false).over ?? '').not.toMatch(/^s/);
+    expect(compositor.picture(7_300, null, false).over).toBe('s2');
     // A reply cuts in, even mid-blink, and the shut twins are never shown with speech.
-    expect(compositor.picture(5_260, 's', false).over).not.toBe('s1');
+    expect(compositor.picture(7_320, 's', false).over).not.toBe('s2');
 
     const incomplete = new PortraitCompositor<string>(() => 0);
     incomplete.setIdleLoop(['i0', 'i1'], 0, 40);
     incomplete.setBlink(['s0']); // not one twin a frame: no blinks
     incomplete.picture(0, null, false);
-    expect(incomplete.picture(2_500, null, false).over).toBeNull();
+    expect(incomplete.picture(3_500, null, false).over ?? '').not.toMatch(/^s/);
+  });
+
+  it('eases a blink, never snapping shut or open', () => {
+    const compositor = new PortraitCompositor<string>(() => 0);
+    compositor.setIdleLoop(['i0', 'i1', 'i2', 'i3', 'i4'], 0, 40);
+    compositor.setBlink(['s0', 's1', 's2', 's3', 's4']);
+    compositor.picture(0, null, false);
+    const alphas: number[] = [];
+    for (let elapsed = 0; elapsed < 300; elapsed += 10) alphas.push(compositor.picture(3_500 + elapsed, null, false).alpha);
+    const steps = alphas.slice(1).map((alpha, index) => Math.abs(alpha - alphas[index]));
+    expect(Math.max(...steps)).toBeLessThan(0.16);
+    expect(alphas[0]).toBe(0);
+    expect(Math.max(...alphas)).toBeGreaterThan(0.98);
+    expect(alphas.at(-1)).toBeLessThan(0.02);
   });
 
   it('blinks a gap after a reply ends, not the moment the idle loop returns', () => {
     // Review finding (2026-10-31): the next blink came due during the reply, so the face blinked on its return.
-    const compositor = new PortraitCompositor<string>(() => 0); // 2.5 s gaps
+    const compositor = new PortraitCompositor<string>(() => 0); // 3.5 s gaps
     compositor.setIdleLoop(['i0', 'i1'], 0, 40);
     compositor.setBlink(['s0', 's1']);
-    compositor.picture(0, null, false); // due at 2.5 s
+    compositor.picture(0, null, false); // due at 3.5 s
     compositor.picture(100, 's1', false);
     compositor.picture(5_000, 's2', false); // a long reply
     compositor.picture(5_100, null, false, true);
     compositor.picture(5_400, null, false, true); // drained: fading back to the loop
     expect(compositor.picture(5_500, null, false, true).over).toBeNull(); // the loop again: no blink yet
-    expect(compositor.picture(7_990, null, false, true).over).toBeNull();
-    expect(compositor.picture(8_000, null, false, true).over).toMatch(/^s/); // 2.5 s after it returned
+    expect(compositor.picture(8_990, null, false, true).over ?? '').not.toMatch(/^s/);
+    expect(compositor.picture(9_000, null, false, true).over).toMatch(/^s/); // 3.5 s after it returned
   });
 
   it('plays a transition only as its own reply ends, though it arrived before that reply played', () => {
