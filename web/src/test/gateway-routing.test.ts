@@ -48,6 +48,15 @@ describe('gateway routing policy', () => {
       url: '/api/tts/live-call/websocket', method: 'GET', headers: {},
     }, true)).toBe(false);
   });
+  it('keeps what a live call holds per process with the call, and on the worker without one', () => {
+    for (const url of ['/api/tts/live-call/avatar-websocket?token=t&session_id=a', '/api/live/speculation/tts-prefetch',
+      '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel']) {
+      const inCall = { url, method: 'POST', headers: { cookie: 'omnix_call_affinity=session-a' } };
+      expect(canUseApi(inCall, true)).toBe(true);
+      expect(canUseApi(inCall)).toBe(false);
+      expect(canUseApi({ url, method: 'POST', headers: {} }, true)).toBe(false);
+    }
+  });
   it('balances only read operations for jobs and market data', () => {
     for (const url of ['/api/jobs', '/api/jobs/a', '/events?after_id=10', '/api/trading/bars']) {
       expect(canUseApi({ url, method: 'GET', headers: {} })).toBe(true);
@@ -212,6 +221,34 @@ describe('real Vite HTTP, SSE, and WebSocket proxy', () => {
     const selected = hits.slice(before);
     expect(new Set(selected.map((hit) => hit.label)).size).toBe(2);
     expect(selected.every((hit) => hit.path === '/api/tts/stream/websocket?test=1')).toBe(true);
+  });
+  it('sends a call\'s avatar websocket and speculative TTS to its TTS websocket\'s replica', async () => {
+    const upgradeRoute = async (path: string, cookie: string): Promise<string> => {
+      const req = request(base + path, { headers: {
+        Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13',
+        'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', Cookie: cookie,
+      } });
+      const upgraded = once(req, 'upgrade');
+      req.end();
+      const [response, socket] = await upgraded;
+      socket.destroy();
+      return response.headers['x-omnix-gateway-route'] as string;
+    };
+    for (const key of ['session-a', 'session-b', 'session-c', 'session-d']) {
+      const cookie = `omnix_call_affinity=${key}`;
+      const call = await upgradeRoute('/api/tts/live-call/websocket?portrait=1', cookie);
+      expect(call).toMatch(/^api-[12]$/u);
+      expect(await upgradeRoute('/api/tts/live-call/avatar-websocket?token=t&session_id=a', cookie)).toBe(call);
+      const prefetch = await fetch(base + '/api/live/speculation/tts-prefetch', {
+        method: 'POST', body: '{}', headers: { Cookie: cookie },
+      });
+      expect(prefetch.headers.get('x-omnix-gateway-route')).toBe(call);
+      // A call's first reply speculates before the cookie exists: the request names the call itself.
+      const named = await fetch(base + '/api/live/speculation/tts-prefetch', {
+        method: 'POST', body: '{}', headers: { 'X-Omnix-Call-Id': key },
+      });
+      expect(named.headers.get('x-omnix-gateway-route')).toBe(call);
+    }
   });
   it('rejects a private prefix during WebSocket upgrade', async () => {
     const before = hits.length;

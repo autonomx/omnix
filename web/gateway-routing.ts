@@ -11,6 +11,8 @@ const CHAT = new RegExp(routingPolicy.chat_pattern, 'u');
 const LIVE_CHAT = new RegExp(routingPolicy.live_chat_pattern, 'u');
 const SPEECH = new Set(routingPolicy.speech_paths);
 const LIVE_CALL_WEBSOCKET = routingPolicy.live_call_websocket_path;
+// Held per gateway process by the call's TTS websocket, so these must reach the same replica.
+const LIVE_CALL_BOUND = new RegExp(routingPolicy.live_call_bound_pattern, 'u');
 const READS = new RegExp(routingPolicy.read_pattern, 'u');
 const CALL_ID_HEADER = routingPolicy.call_id_header;
 const CALL_AFFINITY_COOKIE = routingPolicy.call_affinity_cookie;
@@ -60,7 +62,7 @@ export function canUseApi(
   const path = (req.url ?? '').split('?')[0];
   const callAffinity = callAffinityKey(req.headers);
   if ((req.method ?? 'GET') === 'POST' && LIVE_CHAT.test(path)) return speechOnApi && Boolean(callAffinity);
-  if (path === LIVE_CALL_WEBSOCKET) return speechOnApi && Boolean(callAffinity);
+  if (path === LIVE_CALL_WEBSOCKET || LIVE_CALL_BOUND.test(path)) return speechOnApi && Boolean(callAffinity);
   return CHAT.test(path) || (speechOnApi && SPEECH.has(path))
     || (routingPolicy.read_methods.includes(req.method ?? 'GET') && READS.test(path));
 }

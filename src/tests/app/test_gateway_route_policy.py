@@ -89,3 +89,17 @@ def test_live_call_ingress_uses_consistent_replica_affinity():
     assert '~^1:.+:POST:/api/chat/sessions/[^/]+/messages/stream$ omnix_live_api;' in rendered
     assert '~^1::POST:/api/chat/sessions/[^/]+/messages/stream$ omnix_worker;' in rendered
     assert '$omnix_call_affinity_key:$request_method:$uri' in rendered
+
+
+def test_what_a_live_call_holds_per_process_follows_its_replica():
+    # The avatar token and a portrait call's speculative TTS live in the process holding the call's TTS websocket.
+    from app.platform.live_voice.transport.avatar_websocket import AVATAR_WEBSOCKET_PATH
+
+    bound = re.compile(POLICY['live_call_bound_pattern'])
+    for path in (AVATAR_WEBSOCKET_PATH, '/api/live/speculation/tts-prefetch',
+                 '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel'):
+        assert bound.fullmatch(path)
+    for path in ('/api/live/speculation/sessions/s/stream', '/api/tts/live-call/other', '/api/settings'):
+        assert not bound.fullmatch(path)
+    rendered = _renderer().render(POLICY, speech_on_api=True)
+    assert f"~^1:.+:{POLICY['live_call_bound_pattern'][1:-1]}$ omnix_live_api;" in rendered

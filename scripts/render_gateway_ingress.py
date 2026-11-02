@@ -87,6 +87,7 @@ def render(
         if path != policy['live_call_websocket_path']
     )
     live_websocket = re.escape(policy['live_call_websocket_path'])
+    live_bound = policy['live_call_bound_pattern'].removeprefix('^').removesuffix('$')
     live_chat_pattern = policy['live_chat_pattern']
     live_chat = live_chat_pattern.removeprefix('^').removesuffix('$')
     call_id_header = policy['call_id_header']
@@ -172,6 +173,7 @@ map "$omnix_speech_on_api:$omnix_call_affinity_key:$request_method:$uri" $omnix_
 map "$omnix_speech_on_api:$omnix_call_affinity_key:$uri" $omnix_speech_target {{
     default $omnix_live_chat_target;
     ~^1:.+:{live_websocket}$ omnix_live_api;
+    ~^1:.+:{live_bound}$ omnix_live_api;
     ~^1:.*:(?:{speech})$ omnix_api;
 }}
 {target_map}
