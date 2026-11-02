@@ -72,7 +72,7 @@ jobs:
             echo "::warning::Alpaca credentials are unavailable. Fully cached replays can still run, but any missing historical session will fail closed."
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
