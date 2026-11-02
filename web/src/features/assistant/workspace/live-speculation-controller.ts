@@ -196,6 +196,14 @@ export function speculativeTtsPrefetchWindowOpen(
   return isNewestHypothesis;
 }
 
+/**
+ * Speculative TTS lives in one gateway process, which must be the one running the call's speech. A call's first reply
+ * can speculate before its audio session sets the affinity cookie, so each request names the call itself.
+ */
+export function speculativeTtsHeaders(sessionId: string, headers: Record<string, string>): Record<string, string> {
+  return { ...headers, 'X-Omnix-Call-Id': encodeURIComponent(sessionId) };
+}
+
 export function speculativeTtsPrefetchEnabled(value: string | undefined): boolean {
   return value?.trim().toLowerCase() !== 'false';
 }
@@ -690,7 +698,7 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
     .then(async () => {
       const response = await fetchImpl('/api/live/speculation/tts-prefetch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: speculativeTtsHeaders(active.sessionId, { 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           generation_id: active.generationId,
           // A portrait call's speculation is copied to its portrait, and only this call can claim it.
@@ -765,7 +773,7 @@ function acceptSpeculativeTts(active: ActiveSpeculation): void {
   active.prefetchAcceptPromise = afterPrefetchOperation(active, async () => {
     const response = await fetchImpl(
       `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId as string)}/accept`,
-      { method: 'POST', headers: { Accept: 'application/json' } },
+      { method: 'POST', headers: speculativeTtsHeaders(active.sessionId, { Accept: 'application/json' }) },
     );
     if (!response.ok) throw new Error(`Speculative TTS accept failed with status ${response.status}.`);
     const payload = await response.json() as { buffered_chunk_count?: number; completed?: boolean };
@@ -798,7 +806,7 @@ function cancelSpeculativeTts(active: ActiveSpeculation, reason: string): void {
     .then(async () => {
       await fetchImpl(
         `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId as string)}/cancel`,
-        { method: 'POST', headers: { Accept: 'application/json' } },
+        { method: 'POST', headers: speculativeTtsHeaders(active.sessionId, { Accept: 'application/json' }) },
       ).catch(() => undefined);
       dispatchPerformance('tts_speculative_prefetch_cancelled', {
         sessionId: active.sessionId,

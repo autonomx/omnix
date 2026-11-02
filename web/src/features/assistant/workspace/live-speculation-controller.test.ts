@@ -5,6 +5,7 @@ import {
   normalizeSpeculationWords,
   shouldStartExtendedHypothesis,
   speculationCandidateCanStart,
+  speculativeTtsHeaders,
   speculativeTtsPrefetchEnabled,
   speculativeTtsPrefetchWindowOpen,
   transcriptCorrectionNeedsStability,
@@ -82,6 +83,13 @@ describe('live speculation hypothesis policy', () => {
     expect(speculativeTtsPrefetchWindowOpen(null, true)).toBe(true);
     expect(speculativeTtsPrefetchWindowOpen(null, false)).toBe(false);
     expect(speculativeTtsPrefetchWindowOpen('final transcript', true)).toBe(true);
+  });
+
+  it('names the call on speculative TTS requests, in the form the audio session\'s affinity cookie uses', () => {
+    expect(speculativeTtsHeaders('chat:one', { Accept: 'application/json' })).toEqual({
+      Accept: 'application/json',
+      'X-Omnix-Call-Id': 'chat%3Aone',
+    });
   });
 
   it('keeps speculative TTS enabled by default but allows an explicit TTS-only opt out', () => {

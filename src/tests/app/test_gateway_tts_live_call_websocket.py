@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ from app.composition.gateway.main import create_gateway_app
 from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens
 from app.conversation.performance_contract import SpeechPerformancePlan
 from app.platform.live_voice.capacity import LiveCallCapacity
+from app.platform.live_voice.transport import websocket as websocket_module
 from app.providers.qwen_http_gateway import TtsServiceSaturated
 
 
@@ -317,7 +319,54 @@ def test_live_call_websocket_denies_connections_above_configured_capacity(monkey
     }
 
 
+def test_a_phrase_waits_out_a_busy_service_instead_of_being_dropped(monkeypatch) -> None:
+    # Seen on a live call: a speculation in another gateway process held the service's one permit, each phrase was
+    # refused after a second, and the whole of the call's first reply went unheard.
+    monkeypatch.setattr(websocket_module, "PHRASE_CAPACITY_RETRY_SECONDS", 0.001)
+
+    class BusyThenFree(FakeTtsProvider):
+        def generate_audio_stream(self, **kwargs: Any):
+            self.calls.append(kwargs)
+            if len(self.calls) <= 3:
+                raise TtsServiceSaturated("1")
+            yield [0.25, -0.25] * 100, 24_000, {"chunk_index": 0}
+
+    provider = BusyThenFree()
+    client, _ = _configure_gateway(monkeypatch, provider)
+    with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
+        websocket.send_json(_request("First phrase.", 0))
+        started = websocket.receive_json()
+        audio = websocket.receive_bytes()
+        completed = websocket.receive_json()
+        websocket.send_json({"type": "close", "reason": "finished"})
+    assert (started["type"], completed["type"]) == ("start", "done")
+    assert len(audio) > 0 and len(provider.calls) == 4
+
+
+def test_a_refusal_after_audio_began_is_not_retried(monkeypatch) -> None:
+    monkeypatch.setattr(websocket_module, "PHRASE_CAPACITY_RETRY_SECONDS", 0.001)
+
+    class FailsPartWay(FakeTtsProvider):
+        def generate_audio_stream(self, **kwargs: Any):
+            self.calls.append(kwargs)
+            yield [0.25, -0.25] * 2_400, 24_000, {"chunk_index": 0}
+            raise TtsServiceSaturated("1")
+
+    provider = FailsPartWay()
+    client, _ = _configure_gateway(monkeypatch, provider)
+    with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
+        websocket.send_json(_request("First phrase.", 0))
+        while True:
+            message = websocket.receive()
+            if message.get("text") and json.loads(message["text"])["type"] == "error":
+                break
+        websocket.send_json({"type": "close", "reason": "finished"})
+    assert len(provider.calls) == 1  # it would repeat the words already heard
+
+
 def test_live_call_capacity_rejection_keeps_websocket_usable_for_later_phrases(monkeypatch) -> None:
+    monkeypatch.setattr(websocket_module, "PHRASE_CAPACITY_WAIT_SECONDS", 0.0)
+
     class SaturatingProvider(FakeTtsProvider):
         def generate_audio_stream(self, **kwargs: Any):
             self.calls.append(kwargs)

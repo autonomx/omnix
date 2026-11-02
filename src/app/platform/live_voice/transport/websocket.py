@@ -49,6 +49,9 @@ TTS_LIVE_CALL_WEBSOCKET_PATH = "/api/tts/live-call/websocket"
 TTS_PCM_FRAME_SAMPLES = TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES
 FRAME_HANDOFF_TIMEOUT_SECONDS = 0.250
 SPECULATIVE_STARTUP_BURST_FRAMES = 2
+# How long a phrase waits for a busy TTS service (each refusal itself takes the service's one second).
+PHRASE_CAPACITY_WAIT_SECONDS = 15.0
+PHRASE_CAPACITY_RETRY_SECONDS = 0.05
 _measured_audio_converter = measured_pcm_converter(_audio_chunk_to_pcm16_bytes)
 _measured_pcm_block_streamer = measured_pcm_block_streamer(_stream_pcm16_blocks)
 
@@ -505,15 +508,31 @@ async def _stream_phrase(
                     # Speculation made for this call only (its portrait has a copy of it).
                     stream_kwargs["portrait_call_key"] = portrait.call_key
 
+                def provider_audio():
+                    # A busy service is waited out: a dropped phrase silences the rest of its reply.
+                    deadline = time.monotonic() + PHRASE_CAPACITY_WAIT_SECONDS
+                    while True:
+                        try:
+                            yield from provider.generate_audio_stream(
+                                text=text,
+                                speaker=request.speaker,
+                                language=request.language or "en",
+                                **stream_kwargs,
+                            )
+                            return
+                        except Exception as exc:
+                            if (getattr(exc, "retry_after", None) is None or raw_chunk_count
+                                    or time.monotonic() >= deadline):
+                                raise
+                        stream_log(stream_id, "provider", "phrase_capacity_wait", phrase_index=phrase_index,
+                                   output_id=output_id, generation_epoch=generation_epoch)
+                        time.sleep(PHRASE_CAPACITY_RETRY_SECONDS)
+                        if stopped():
+                            return
+
                 def raw_chunks():
                     nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count, portrait_replay
-                    provider_stream = provider.generate_audio_stream(
-                        text=text,
-                        speaker=request.speaker,
-                        language=request.language or "en",
-                        **stream_kwargs,
-                    )
-                    for audio_chunk, sample_rate, timing in provider_stream:
+                    for audio_chunk, sample_rate, timing in provider_audio():
                         if stopped():
                             return
                         raw_chunk_ready_at = time.perf_counter()
