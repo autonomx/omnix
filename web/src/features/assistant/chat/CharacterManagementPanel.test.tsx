@@ -132,17 +132,64 @@ describe('CharacterManagementPanel dashboard', () => {
     renderPanel();
 
     expect(await screen.findByRole('heading', { name: 'Character profile' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Voice governance' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Live avatar' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Cloned-voice backfill' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Character data / relationship data' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Danger zone / cleanup' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Select character' })).toHaveValue('character:maya');
+    const sections: [string, string][] = [
+      ['Voice', 'Voice governance'],
+      ['Cloned voices', 'Cloned-voice backfill'],
+      ['Data', 'Character data / relationship data'],
+      ['Danger zone', 'Danger zone / cleanup'],
+      ['Live avatar', 'Live avatar'],
+    ];
+    for (const [tab, heading] of sections) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }));
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(1);
+    }
     expect(await screen.findByAltText('Maya avatar preview')).toBeInTheDocument();
     expect(screen.getByText('Use your own image')).toBeInTheDocument();
     expect(screen.getByLabelText('Upload source image')).toBeInTheDocument();
     expect(screen.getByText('Viseme support (9 mouth shapes)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloned voices' }));
     expect(screen.getByRole('button', { name: 'Create characters from cloned voices' })).toBeInTheDocument();
+  });
+
+  it('keeps unsaved work across tab switches and gives the System Assistant its own tab', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/characters') return Response.json({ characters: [legacyCharacter] });
+      if (path === '/api/characters/maya/data') return Response.json(legacyData);
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel();
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Character name' }), { target: { value: 'Maya two' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Live avatar' }));
+    expect(screen.getByRole('tab', { name: 'Live avatar' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('textbox', { name: 'Character name' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Upload source image'), {
+      target: { files: [new File(['avatar'], 'my-face.png', { type: 'image/png' })] },
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'System Assistant' }));
+    expect(screen.getByRole('heading', { name: 'System Assistant avatar' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Select character' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Live avatar' }));
+    expect(screen.getByText(/my-face\.png/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }));
+    expect(screen.getByRole('textbox', { name: 'Character name' })).toHaveValue('Maya two');
+  });
+
+  it('keeps the System Assistant reachable with no characters', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (
+      requestPath(input) === '/api/characters' ? Response.json({ characters: [] }) : new Response('not found', { status: 404 })
+    )));
+
+    renderPanel();
+    expect(await screen.findByText('No characters have been created.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'System Assistant' }));
+    expect(screen.getByRole('heading', { name: 'System Assistant avatar' })).toBeInTheDocument();
+    expect(screen.queryByText('No characters have been created.')).not.toBeVisible();
   });
 
   it('activates the selected character for the current chat and Live Voice runtime', async () => {
@@ -183,6 +230,7 @@ describe('CharacterManagementPanel dashboard', () => {
     }));
 
     renderPanel({ sessionId: 'chat:voice' });
+    fireEvent.click(await screen.findByRole('tab', { name: 'Voice' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Use Maya' }));
 
     await waitFor(() => expect(interactionBodies).toEqual([{
@@ -240,6 +288,7 @@ describe('CharacterManagementPanel dashboard', () => {
 
     renderPanel();
     await screen.findByRole('heading', { name: 'Character profile' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Live avatar' }));
     const submit = screen.getByRole('button', { name: 'Upload image and generate avatar pack' });
     expect(submit).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Upload source image'), {
@@ -298,7 +347,9 @@ describe('CharacterManagementPanel dashboard', () => {
     }));
 
     renderPanel();
-    await screen.findByRole('heading', { name: 'Danger zone / cleanup' });
+    await screen.findByRole('heading', { name: 'Character profile' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Danger zone' }));
+    expect(screen.getByRole('heading', { name: 'Danger zone / cleanup' })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Delete character memories and pending suggestions'));
     const apply = screen.getByRole('button', { name: 'Apply selected actions' });
     expect(apply).toBeDisabled();

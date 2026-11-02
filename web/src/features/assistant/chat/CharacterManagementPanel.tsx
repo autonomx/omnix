@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { omnixApiClient } from '../../../api/client';
+import { AssistantAvatarPanel } from './AssistantAvatarPanel';
 import { CharacterAvatarPanel } from './CharacterAvatarPanel';
 import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvatarClient';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
@@ -13,6 +14,12 @@ import { downloadJson } from '../../../shared/download';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'omnix.chatbot.selectedCharacterId';
 
+type CharacterSection = 'profile' | 'voice' | 'avatar' | 'backfill' | 'data' | 'danger' | 'assistant';
+const CHARACTER_SECTIONS: [CharacterSection, string][] = [
+  ['profile', 'Profile'], ['voice', 'Voice'], ['avatar', 'Live avatar'], ['backfill', 'Cloned voices'],
+  ['data', 'Data'], ['danger', 'Danger zone'], ['assistant', 'System Assistant'],
+];
+
 export function CharacterManagementPanel({
   sessionId = null,
   onSessionResolved,
@@ -22,12 +29,14 @@ export function CharacterManagementPanel({
 }) {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(() => window.localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY) ?? '');
+  const [activeSection, setActiveSection] = useState<CharacterSection>('profile');
   const [draft, setDraft] = useState({ display_name: '', description: '', personality_prompt: '', default_greeting: '', gender: '' });
   const [confirmation, setConfirmation] = useState('');
   const [actions, setActions] = useState({ delete_memories: false, delete_transcripts: false, unlink_voice: false, archive_profile: false });
   const [status, setStatus] = useState<string | null>(null);
   const [profileSaveStatus, setProfileSaveStatus] = useState<{ kind: 'saving' | 'saved' | 'error'; message: string } | null>(null);
   const lastSessionIdentitySyncRef = useRef('');
+  const cardRef = useRef<HTMLElement | null>(null);
 
   const charactersQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'characters', 'management'],
@@ -105,6 +114,7 @@ export function CharacterManagementPanel({
     }),
     onSuccess: async (created) => {
       setSelectedId(created.id);
+      setActiveSection('profile');
       setStatus('Character created.');
       await refresh();
     },
@@ -185,6 +195,16 @@ export function CharacterManagementPanel({
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Character data action failed.'),
   });
 
+  function openSection(section: CharacterSection): void {
+    setActiveSection(section);
+    // A section opens at its top, not partway down because the last one was scrolled.
+    const card = cardRef.current;
+    const scroller = card?.closest('.assistant-view-panel');
+    if (!card || !scroller) return;
+    const scrolledPast = scroller.getBoundingClientRect().top - card.getBoundingClientRect().top;
+    if (scrolledPast > 0) scroller.scrollTop -= scrolledPast;
+  }
+
   function exportData(data: CharacterDataExport): void {
     downloadJson(data, `${data.character.id}-character-export.json`);
     setStatus('Character export prepared from current backend state.');
@@ -195,10 +215,23 @@ export function CharacterManagementPanel({
     && interactionQuery.data.character_id === selected?.id;
 
   return (
-    <article className="character-management-card" aria-label="Character management">
+    <article className="character-management-card" aria-label="Character management" ref={cardRef}>
       <h3 className="character-management-sr-title">Profiles and relationship data</h3>
+      <div className="character-section-tabs" role="tablist" aria-label="Character sections">
+        {CHARACTER_SECTIONS.map(([section, label]) => <button
+          key={section}
+          type="button"
+          role="tab"
+          id={`character-tab-${section}`}
+          aria-controls={selected || section === 'assistant' ? `character-section-${section}` : undefined}
+          aria-selected={activeSection === section}
+          className={activeSection === section ? 'is-active' : undefined}
+          onClick={() => openSection(section)}
+        >{label}</button>)}
+      </div>
+      {status ? <p className="character-management-status" role="status">{status}</p> : null}
       <div className="character-management-layout">
-        <section className="character-selector-bar" aria-label="Character profiles">
+        {activeSection === 'assistant' ? null : <section className="character-selector-bar" aria-label="Character profiles">
           <label>
             <span>Character</span>
             <select aria-label="Select character" value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.currentTarget.value)}>
@@ -216,9 +249,9 @@ export function CharacterManagementPanel({
               New character
             </button>
           </div>
-        </section>
+        </section>}
 
-        <div className="character-management-editor">
+        <div className="character-management-editor" hidden={activeSection === 'assistant'}>
           {charactersQuery.isPending ? <div className="character-dashboard-empty">Loading characters…</div> : selected ? (
             <div className="character-dashboard-grid">
               <header className="character-editor-summary">
@@ -233,103 +266,115 @@ export function CharacterManagementPanel({
                   <div><dt>Version</dt><dd>v{selected.active_version}</dd></div>
                 </dl>
               </header>
-              <section className="character-dashboard-section character-profile-section">
-                <header className="character-section-heading">
-                  <div><span>1</span><h4>Character profile</h4></div>
-                  <aside className="character-profile-save-actions">
-                    {profileSaveStatus ? <p className={`character-profile-save-confirmation ${profileSaveStatus.kind}`} role={profileSaveStatus.kind === 'error' ? 'alert' : 'status'}>{profileSaveStatus.message}</p> : null}
-                    <button
-                      type="button"
-                      disabled={updateMutation.isPending || selected.status === 'archived'}
-                      onClick={() => updateMutation.mutate()}
-                    >
-                      {updateMutation.isPending ? 'Saving…' : 'Save profile version'}
-                    </button>
-                  </aside>
-                </header>
-                <div className="character-form-grid">
-                  <label>
-                    <span>Display name <small>{draft.display_name.length} / 160</small></span>
-                    <input aria-label="Character name" value={draft.display_name} onChange={(event) => setDraft({ ...draft, display_name: event.currentTarget.value })} />
-                  </label>
-                  <label>
-                    <span>Gender</span>
-                    <select aria-label="Character gender" value={draft.gender} onChange={(event) => setDraft({ ...draft, gender: event.currentTarget.value })}>
-                      <option value="">Not specified</option>
-                      <option value="female">Female</option>
-                      <option value="male">Male</option>
-                      <option value="nonbinary">Nonbinary</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Short description <small>{draft.description.length} / 1000</small></span>
-                    <textarea aria-label="Character description" rows={2} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} />
-                  </label>
-                  <label>
-                    <span>Default greeting <small>{draft.default_greeting.length} / 2000</small></span>
-                    <textarea aria-label="Character greeting" rows={2} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
-                  </label>
-                  <label className="wide">
-                    <span>Personality prompt <small>{draft.personality_prompt.length} characters</small></span>
-                    <textarea aria-label="Character personality" rows={4} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
-                  </label>
-                </div>
-                <p className="character-section-note">Profile instructions apply to this Character Mode identity and its Omnix Chat conversations.</p>
-              </section>
-
-              <VoiceGovernancePanel
-                assetId={selected.default_voice_asset_id}
-                character={selected}
-                characterIsActive={selectedCharacterIsActive}
-                activationPending={activateCharacterMutation.isPending}
-                onActivateCharacter={() => activateCharacterMutation.mutate()}
-              />
-              <CharacterAvatarPanel character={selected} />
-
-              <section className="character-dashboard-section character-backfill-section">
-                <header className="character-section-heading">
-                  <div><span>4</span><h4>Cloned-voice backfill</h4></div>
-                </header>
-                <div className="character-backfill-content">
-                  <span className="character-backfill-icon" aria-hidden="true">♙</span>
-                  <div>
-                    <strong>Create characters from cloned voices</strong>
-                    <p>Discover governed voice profiles, create missing character identities, and queue their avatar and viseme packs.</p>
+              <CharacterSectionPanel section="profile" activeSection={activeSection}>
+                <section className="character-dashboard-section character-profile-section">
+                  <header className="character-section-heading">
+                    <div><span>1</span><h4>Character profile</h4></div>
+                    <aside className="character-profile-save-actions">
+                      {profileSaveStatus ? <p className={`character-profile-save-confirmation ${profileSaveStatus.kind}`} role={profileSaveStatus.kind === 'error' ? 'alert' : 'status'}>{profileSaveStatus.message}</p> : null}
+                      <button
+                        type="button"
+                        disabled={updateMutation.isPending || selected.status === 'archived'}
+                        onClick={() => updateMutation.mutate()}
+                      >
+                        {updateMutation.isPending ? 'Saving…' : 'Save profile version'}
+                      </button>
+                    </aside>
+                  </header>
+                  <div className="character-form-grid">
+                    <label>
+                      <span>Display name <small>{draft.display_name.length} / 160</small></span>
+                      <input aria-label="Character name" value={draft.display_name} onChange={(event) => setDraft({ ...draft, display_name: event.currentTarget.value })} />
+                    </label>
+                    <label>
+                      <span>Gender</span>
+                      <select aria-label="Character gender" value={draft.gender} onChange={(event) => setDraft({ ...draft, gender: event.currentTarget.value })}>
+                        <option value="">Not specified</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                        <option value="nonbinary">Nonbinary</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Short description <small>{draft.description.length} / 1000</small></span>
+                      <textarea aria-label="Character description" rows={2} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })} />
+                    </label>
+                    <label>
+                      <span>Default greeting <small>{draft.default_greeting.length} / 2000</small></span>
+                      <textarea aria-label="Character greeting" rows={2} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
+                    </label>
+                    <label className="wide">
+                      <span>Personality prompt <small>{draft.personality_prompt.length} characters</small></span>
+                      <textarea aria-label="Character personality" rows={4} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
+                    </label>
                   </div>
-                  <CharacterVoiceBackfillButton />
-                </div>
-              </section>
+                  <p className="character-section-note">Profile instructions apply to this Character Mode identity and its Omnix Chat conversations.</p>
+                </section>
+              </CharacterSectionPanel>
 
-              <CharacterDataSummary
-                characterId={selected.id}
-                data={dataQuery.data}
-                loading={dataQuery.isPending}
-                onExport={() => dataQuery.data && exportData(dataQuery.data)}
-              />
+              <CharacterSectionPanel section="voice" activeSection={activeSection}>
+                <VoiceGovernancePanel
+                  assetId={selected.default_voice_asset_id}
+                  character={selected}
+                  characterIsActive={selectedCharacterIsActive}
+                  activationPending={activateCharacterMutation.isPending}
+                  onActivateCharacter={() => activateCharacterMutation.mutate()}
+                />
+              </CharacterSectionPanel>
+              <CharacterSectionPanel section="avatar" activeSection={activeSection}>
+                <CharacterAvatarPanel character={selected} />
+              </CharacterSectionPanel>
 
-              <section className="character-dashboard-section character-danger-zone">
-                <header className="character-section-heading">
-                  <div><span>6</span><h4>Danger zone / cleanup</h4></div>
-                </header>
-                <p>Choose only the independent resources to remove. Voice, profile, avatar, memories, and transcripts remain separately governed.</p>
-                <div className="character-action-options">
-                  <label><input aria-label="Delete character memories and pending suggestions" type="checkbox" checked={actions.delete_memories} onChange={(event) => setActions({ ...actions, delete_memories: event.currentTarget.checked })} /><span><strong>Delete memories</strong><small>Remove this character’s memories and pending suggestions.</small></span></label>
-                  <label><input aria-label="Delete character transcript messages" type="checkbox" checked={actions.delete_transcripts} onChange={(event) => setActions({ ...actions, delete_transcripts: event.currentTarget.checked })} /><span><strong>Delete transcripts</strong><small>Remove this character’s transcript messages.</small></span></label>
-                  <label><input aria-label="Unlink the default voice without deleting it" type="checkbox" checked={actions.unlink_voice} onChange={(event) => setActions({ ...actions, unlink_voice: event.currentTarget.checked })} /><span><strong>Unlink voice</strong><small>Keep the voice asset but remove it from this profile.</small></span></label>
-                  <label><input aria-label="Archive the character profile" type="checkbox" checked={actions.archive_profile} onChange={(event) => setActions({ ...actions, archive_profile: event.currentTarget.checked })} /><span><strong>Archive profile</strong><small>Hide this character from active Character Mode selection.</small></span></label>
-                </div>
-                <div className="character-danger-confirmation">
-                  <label>
-                    Type <code>{selected.id}</code> to confirm
-                    <input aria-label="Confirm character id" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} />
-                  </label>
-                  <button type="button" className="danger" disabled={!hasAction || confirmation !== selected.id || actionMutation.isPending} onClick={() => actionMutation.mutate()}>
-                    Apply selected actions
-                  </button>
-                </div>
-                <small>Changes apply to Omnix Chat Character Mode and live-avatar experiences. RPG data is not modified.</small>
-              </section>
+              <CharacterSectionPanel section="backfill" activeSection={activeSection}>
+                <section className="character-dashboard-section character-backfill-section">
+                  <header className="character-section-heading">
+                    <div><span>4</span><h4>Cloned-voice backfill</h4></div>
+                  </header>
+                  <div className="character-backfill-content">
+                    <span className="character-backfill-icon" aria-hidden="true">♙</span>
+                    <div>
+                      <strong>Create characters from cloned voices</strong>
+                      <p>Discover governed voice profiles, create missing character identities, and queue their avatar and viseme packs.</p>
+                    </div>
+                    <CharacterVoiceBackfillButton />
+                  </div>
+                </section>
+              </CharacterSectionPanel>
+
+              <CharacterSectionPanel section="data" activeSection={activeSection}>
+                <CharacterDataSummary
+                  characterId={selected.id}
+                  data={dataQuery.data}
+                  loading={dataQuery.isPending}
+                  onExport={() => dataQuery.data && exportData(dataQuery.data)}
+                />
+              </CharacterSectionPanel>
+
+              <CharacterSectionPanel section="danger" activeSection={activeSection}>
+                <section className="character-dashboard-section character-danger-zone">
+                  <header className="character-section-heading">
+                    <div><span>6</span><h4>Danger zone / cleanup</h4></div>
+                  </header>
+                  <p>Choose only the independent resources to remove. Voice, profile, avatar, memories, and transcripts remain separately governed.</p>
+                  <div className="character-action-options">
+                    <label><input aria-label="Delete character memories and pending suggestions" type="checkbox" checked={actions.delete_memories} onChange={(event) => setActions({ ...actions, delete_memories: event.currentTarget.checked })} /><span><strong>Delete memories</strong><small>Remove this character’s memories and pending suggestions.</small></span></label>
+                    <label><input aria-label="Delete character transcript messages" type="checkbox" checked={actions.delete_transcripts} onChange={(event) => setActions({ ...actions, delete_transcripts: event.currentTarget.checked })} /><span><strong>Delete transcripts</strong><small>Remove this character’s transcript messages.</small></span></label>
+                    <label><input aria-label="Unlink the default voice without deleting it" type="checkbox" checked={actions.unlink_voice} onChange={(event) => setActions({ ...actions, unlink_voice: event.currentTarget.checked })} /><span><strong>Unlink voice</strong><small>Keep the voice asset but remove it from this profile.</small></span></label>
+                    <label><input aria-label="Archive the character profile" type="checkbox" checked={actions.archive_profile} onChange={(event) => setActions({ ...actions, archive_profile: event.currentTarget.checked })} /><span><strong>Archive profile</strong><small>Hide this character from active Character Mode selection.</small></span></label>
+                  </div>
+                  <div className="character-danger-confirmation">
+                    <label>
+                      Type <code>{selected.id}</code> to confirm
+                      <input aria-label="Confirm character id" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} />
+                    </label>
+                    <button type="button" className="danger" disabled={!hasAction || confirmation !== selected.id || actionMutation.isPending} onClick={() => actionMutation.mutate()}>
+                      Apply selected actions
+                    </button>
+                  </div>
+                  <small>Changes apply to Omnix Chat Character Mode and live-avatar experiences. RPG data is not modified.</small>
+                </section>
+              </CharacterSectionPanel>
             </div>
           ) : (
             <div className="character-dashboard-empty">
@@ -339,10 +384,28 @@ export function CharacterManagementPanel({
             </div>
           )}
         </div>
+
+        <CharacterSectionPanel section="assistant" activeSection={activeSection}>
+          <div className="character-dashboard-grid"><AssistantAvatarPanel /></div>
+        </CharacterSectionPanel>
       </div>
-      {status ? <p className="character-management-status" role="status">{status}</p> : null}
     </article>
   );
+}
+
+/** One tab's content. It stays mounted while hidden: a chosen file, a running generation and unsaved text outlive a tab switch. */
+function CharacterSectionPanel({ section, activeSection, children }: {
+  section: CharacterSection;
+  activeSection: CharacterSection;
+  children: ReactNode;
+}) {
+  return <div
+    role="tabpanel"
+    className="character-section-panel"
+    id={`character-section-${section}`}
+    aria-labelledby={`character-tab-${section}`}
+    hidden={activeSection !== section}
+  >{children}</div>;
 }
 
 function CharacterRosterAvatar({ character }: { character: CharacterProfile }) {

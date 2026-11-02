@@ -269,6 +269,11 @@
     width: fit-content;
   }
 
+  /* Holds the hidden input in the panel's scroll: otherwise focusing it scrolls the overflow-hidden chat shell. */
+  .character-avatar-upload-picker {
+    position: relative;
+  }
+
   .character-avatar-upload-picker span {
     background: color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
     border: 1px solid color-mix(in srgb, var(--accent-violet-660) 34%, transparent);
@@ -282,6 +287,7 @@
     height: 1px;
     opacity: 0;
     overflow: hidden;
+    pointer-events: none;
     position: absolute;
     width: 1px;
   }

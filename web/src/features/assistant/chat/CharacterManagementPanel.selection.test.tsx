@@ -160,6 +160,7 @@ describe('CharacterManagementPanel selection', () => {
     await waitFor(() => expect(characterListRevision).toBeGreaterThan(1));
     expect(selector).toHaveValue('jinx');
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Voice' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Use Jinx' }));
 
     await waitFor(() => expect(interactionBodies).toHaveLength(1));
