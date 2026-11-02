@@ -317,7 +317,10 @@ def test_a_stop_asks_the_service_to_shut_down_before_killing_it(monkeypatch) -> 
     assert graceful.signals == [expected] and not graceful.killed
     hung = _Stubborn(exits=False)
     services_module.stop_gracefully(hung, timeout=0.01)
-    assert hung.killed
+    if sys.platform == "win32":
+        assert hung.killed
+    else:  # the whole group, so nothing the service started outlives it
+        assert hung.signals[-1] == signal.SIGKILL
 
 
 def test_removing_the_bundle_stops_its_service(services) -> None:
