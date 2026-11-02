@@ -36,7 +36,8 @@ export function RpgEntityPlayFields({ entity, title, onChange }: { entity: Entit
     const equipment = record(entity.equipment);
     const stats = record(equipment.stats);
     const setEquipment = (next: Entity) => {
-      const { equipment: _dropped, ...rest } = entity;
+      const rest = { ...entity };
+      delete rest.equipment;
       onChange(next.slot ? { ...rest, equipment: next } : rest);
     };
     return (

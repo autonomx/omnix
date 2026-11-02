@@ -15,7 +15,7 @@ import type { TtsEnginesResponse } from './api/voiceClient';
 export type OutputSettingName = keyof typeof DEFAULT_OUTPUT_SETTINGS;
 type Engine = TtsEnginesResponse['engines'][number];
 
-export interface ExportRequest {
+export interface ExportChoice {
   format: ExportFormatId;
   sampleRate: number | null;
   loudness: LoudnessPresetId;
@@ -64,7 +64,7 @@ export function VoiceInspector({
   exportPending: boolean;
   exportError: string;
   exports: ExportedFile[];
-  onExport: (request: ExportRequest) => void;
+  onExport: (request: ExportChoice) => void;
 }) {
   const [noticeHidden, setNoticeHidden] = useState(effectsNoticeDismissed);
   const [format, setFormat] = useState<ExportFormatId>('wav16');

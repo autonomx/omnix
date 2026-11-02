@@ -7,6 +7,7 @@ import {
 import type { LiveVoicePcmSession, LiveVoicePortraitHooks } from '../../workspace/live-voice-pcm-session';
 import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
+import { startTicker } from '../../../../shared/timers';
 import { PortraitFrameBuffer } from './frameBuffer';
 import {
   BLINK_OUTPUT_ID,
@@ -96,7 +97,7 @@ export class LivePortrait {
   private lastMeasured: ImageBitmap | null = null;
   private acks = 0;
   private helloTimer: ReturnType<typeof setTimeout> | null = null;
-  private ackTimer: ReturnType<typeof setInterval> | null = null;
+  private stopAcks: (() => void) | null = null;
   private generation = 0;
 
   constructor(
@@ -200,8 +201,8 @@ export class LivePortrait {
     this.lastMeasured = null;
     setLiveVoiceReleasePortrait(false);
     this.clearHelloTimer();
-    if (this.ackTimer) clearInterval(this.ackTimer);
-    this.ackTimer = null;
+    this.stopAcks?.();
+    this.stopAcks = null;
     this.socket?.close(1000, 'call-ended');
     this.socket = null;
     this.session?.setPortraitClock(false);
@@ -280,7 +281,7 @@ export class LivePortrait {
       // A late hello may have come after the portrait was given up on: the worklet's clock is needed again.
       this.session?.setPortraitClock(true);
       this.publish({ status: 'ready', fallbackRenderer: message.fallback_renderer ?? this.snapshot.fallbackRenderer, reason: null });
-      this.ackTimer = setInterval(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
+      this.stopAcks = startTicker(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
     } else if (message.type === 'loading') {
       this.session?.setPortraitClock(false); // no frames for a minute: the replies' audio never waits for them
       this.publish({ status: 'loading', fallbackRenderer: this.snapshot.fallbackRenderer, reason: message.code ?? null });

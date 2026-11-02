@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ GET: vi.fn() }));
 vi.mock('./api/gateway', () => ({ api }));
@@ -51,6 +51,13 @@ function show(onShowInstrument = vi.fn(), initialWatchlistId: string | null = nu
 }
 
 describe('advanced view (TVP-5.4)', () => {
+  // Which earnings are "next" depends on today; the fixture's dates are around this one.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('shows the first symbol’s overview, earnings with reported EPS, dividends and news', async () => {
     show();
     expect(await screen.findByText('Apple Inc. · Technology · Computer Hardware')).toBeInTheDocument();

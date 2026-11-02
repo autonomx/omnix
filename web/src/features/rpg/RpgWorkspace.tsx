@@ -31,6 +31,20 @@ import './RpgWorkspace.css';
 import { ACTIVE_JOB_STATUSES, RPG_TURN_QUEUE_TIMEOUT_MS, RPG_TURN_RECOVERY_WINDOW_MS, buildSubmittedTurnStoryMessages, isRpgTurnJobType, readStoredDeveloperTools, readStoredRpgSessionId, timestampMs, writeStoredDeveloperTools, writeStoredRpgSessionId } from './rpgWorkspaceSupport';
 import type { PendingRpgTurnSubmission, RpgFormValues } from './rpgWorkspaceSupport';
 
+const RPG_WORKSPACE_QUERY_KEYS = [
+  ['feature', 'rpg', 'replay-inventory'],
+  // The loadout's skills, abilities and effects change with story turns too.
+  ['feature', 'rpg', 'ability-tree-session'],
+  ['feature', 'rpg', 'hermes-suggestions'],
+  ['feature', 'rpg', 'hermes-route-decision'],
+  ['feature', 'rpg', 'hermes-turn-readout'],
+  ['feature', 'rpg', 'hermes-execution-ledger'],
+  ['feature', 'rpg', 'hermes-sequence-state'],
+  ['platform', 'jobs'],
+  ['platform', 'assets'],
+  ['platform', 'reports'],
+];
+
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
@@ -200,19 +214,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     .filter(Boolean)
     .join(' ');
   const invalidateRpgWorkspaceQueries = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
-      // The loadout's skills, abilities and effects change with story turns too.
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'ability-tree-session'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-execution-ledger'] }),
-      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-sequence-state'] }),
-      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
-      queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
-      queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
-    ]);
+    await Promise.all(RPG_WORKSPACE_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
   };
   const {
     activeHermesSequenceJob,

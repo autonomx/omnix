@@ -49,6 +49,18 @@ function operationLabel(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+/** The play fields for the structured JSON draft, while that draft parses to an object. */
+function RpgEntityDraftPlayFields({ rawEntity, title, onChange }: { rawEntity: string; title: string; onChange: (next: Record<string, unknown>) => void }) {
+  let draft: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(rawEntity) as unknown;
+    draft = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    draft = null;
+  }
+  return draft ? <RpgEntityPlayFields entity={draft} title={title} onChange={onChange} /> : null;
+}
+
 export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityEditorProps) {
   const queryClient = useQueryClient();
   const initialEntity = JSON.stringify(entity.metadata, null, 2);
@@ -113,6 +125,13 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
     ]);
   };
 
+  const takeStoredDossier = (stored: { dossier?: unknown; short_summary?: unknown }) => {
+    setDossierPreview(null);
+    setDossierDraftDirty(false);
+    replaceDossierDraft(JSON.stringify(stored.dossier && typeof stored.dossier === 'object' ? stored.dossier : {}, null, 2));
+    setShortSummary(String(stored.short_summary || shortSummary));
+  };
+
   const saveDossier = useMutation({
     mutationFn: () => rpgWorldAuthoringClient.updateEntityDossier(
       worldId,
@@ -126,13 +145,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       },
     ),
     onSuccess: async (result) => {
-      setDossierPreview(null);
-      setDossierDraftDirty(false);
-      const storedDossier = result.entity.dossier && typeof result.entity.dossier === 'object'
-        ? result.entity.dossier
-        : {};
-      replaceDossierDraft(JSON.stringify(storedDossier, null, 2));
-      setShortSummary(String(result.entity.short_summary || shortSummary));
+      takeStoredDossier(result.entity);
       setFeedback(`Saved the editorial dossier for ${entity.title}. Canonical IDs, mechanics, and relationships were preserved.`);
       await refresh();
     },
@@ -176,13 +189,7 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
       );
     },
     onSuccess: async (result) => {
-      setDossierPreview(null);
-      setDossierDraftDirty(false);
-      const storedDossier = result.entity.dossier && typeof result.entity.dossier === 'object'
-        ? result.entity.dossier
-        : {};
-      replaceDossierDraft(JSON.stringify(storedDossier, null, 2));
-      setShortSummary(String(result.entity.short_summary || shortSummary));
+      takeStoredDossier(result.entity);
       setFeedback(`Applied the reviewed prose preview for ${entity.title}; no canonical structured fields changed.`);
       await refresh();
     },
@@ -320,21 +327,10 @@ export function RpgWorldEntityEditor({ entity, topic, worldId }: RpgWorldEntityE
           </div>
         </section>
 
-        {(() => {
-          let draft: Record<string, unknown> | null = null;
-          try {
-            const parsed = JSON.parse(rawEntity) as unknown;
-            draft = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-          } catch {
-            draft = null;
-          }
-          return draft ? (
-            <RpgEntityPlayFields entity={draft} title={entity.title} onChange={(next) => {
-              setEntityDraftDirty(true);
-              replaceEntityDraft(JSON.stringify(next, null, 2));
-            }} />
-          ) : null;
-        })()}
+        <RpgEntityDraftPlayFields rawEntity={rawEntity} title={entity.title} onChange={(next) => {
+          setEntityDraftDirty(true);
+          replaceEntityDraft(JSON.stringify(next, null, 2));
+        }} />
 
         <details className="rpg-authoring-canonical-entity-editor">
           <summary>Canonical structured entity</summary>

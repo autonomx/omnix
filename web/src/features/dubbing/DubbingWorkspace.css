@@ -25,7 +25,7 @@
   .dub-step.done { border-color: color-mix(in srgb, var(--c-green-720) 45%, transparent); }
   .dub-step.running, .dub-step.queued, .dub-step.waiting { border-color: color-mix(in srgb, var(--accent-indigo-600) 55%, transparent); }
   .dub-step.failed { border-color: color-mix(in srgb, var(--c-amber-770) 60%, transparent); }
-  .dub-step-error { color: var(--fg-amber-770) !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dub-step small.dub-step-error, .dub-step-error { color: var(--fg-amber-770); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dub-step-actions { display: flex; flex-wrap: wrap; gap: 0.2rem; }
   .dub-casting { display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
   .dub-casting h3 { grid-column: 1 / -1; }

@@ -1,5 +1,6 @@
 // View types of the audiobook routes, which return untyped objects in the
 // gateway contract (WP-9.3); audiobookApi.ts casts responses to them.
+import type { components } from './api/generated';
 
 export interface ProjectSummary {
   id: string;
@@ -129,11 +130,7 @@ export interface AudiobookJobView {
 }
 
 /** Stability and Style Exaggeration (0–1) for the book, and characters' own levels. */
-export interface BookPerformance {
-  stability: number;
-  style: number;
-  speakers: Record<string, { stability?: number; style?: number }>;
-}
+export type BookPerformance = components['schemas']['BookPerformance'];
 
 export interface ProjectDetail extends ProjectSummary {
   performance?: BookPerformance;

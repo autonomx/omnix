@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { bars, installTradingMocks, instrument } from './support/tradingMocks';
+import { installTradingMocks } from './support/tradingMocks';
 
 test('Trading terminal smoke covers flexible layout, saved workspaces, drawings, and chart alerts', async ({ page }) => {
   const state = await installTradingMocks(page);

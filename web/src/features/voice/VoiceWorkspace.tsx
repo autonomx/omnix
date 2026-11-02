@@ -31,7 +31,7 @@ import {
   voiceReference,
   type VoiceAsset,
 } from './voiceAssets';
-import { VoiceInspector, type ExportRequest, type OutputSettingName } from './VoiceInspector';
+import { VoiceInspector, type ExportChoice, type OutputSettingName } from './VoiceInspector';
 import { VoiceLibraryGrid } from './VoiceLibraryGrid';
 import { extractPlayableOutputs, mergeVoiceJobs, voiceJobErrorMessage, type PlayableVoiceOutput } from './voiceOutputs';
 import { VoiceScriptEditor } from './VoiceScriptEditor';
@@ -232,7 +232,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
 
   const exportMutation = useMutation({
-    mutationFn: ({ assetId, request }: { assetId: string; request: ExportRequest }) => omnixApiClient.createJob({
+    mutationFn: ({ assetId, request }: { assetId: string; request: ExportChoice }) => omnixApiClient.createJob({
       module: 'voice',
       type: 'voice.export',
       resource_class: 'cpu',

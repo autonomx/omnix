@@ -1,13 +1,8 @@
+import type { components } from '../../api/generated';
 import type { ChoicesBlock, FormBlock, FormField } from './schema';
 
 /** What the user did with a widget; it rides on the message they send (GUI-5.4). */
-export type ChatUiAction = {
-  source_message_id: string;
-  block_id: string;
-  action: 'choose' | 'submit';
-  option_index?: number | null;
-  values?: Record<string, string | number | boolean> | null;
-};
+export type ChatUiAction = components['schemas']['ChatUiAction'];
 
 /** A widget's submitted state, rebuilt from the user message that answered it (GUI-5.3). */
 export type ChatUiSubmission = { action: ChatUiAction; content: string };

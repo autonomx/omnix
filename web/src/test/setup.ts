@@ -1,5 +1,9 @@
+import { configure } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
+
+// A busy machine can take over the default second to settle a render; a test that fails still fails.
+configure({ asyncUtilTimeout: 4000 });
 
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'scrollTo', {

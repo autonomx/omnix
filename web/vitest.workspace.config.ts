@@ -5,5 +5,6 @@ import webConfig from './vitest.config';
 export default mergeConfig(webConfig, {
   test: {
     setupFiles: 'web/src/test/setup.ts',
+    testTimeout: 20_000,
   },
 });

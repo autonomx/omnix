@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { startTicker } from '../../shared/timers';
 import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import { rpgWorldSharingClient, type RpgGitHubDeviceSignIn } from './api/rpgWorldSharingClient';
 
@@ -25,12 +26,11 @@ function GitHubSignIn({ deviceSignIn, repo }: { deviceSignIn: boolean; repo: str
 
   useEffect(() => {
     if (!device) return undefined;
-    const timer = window.setInterval(() => {
+    return startTicker(() => {
       rpgWorldSharingClient.pollDeviceSignIn(device.flow_id)
         .then((result) => (result.connected ? connected() : undefined))
         .catch((cause: unknown) => { setPollError(errorText(cause, 'GitHub sign-in did not finish.')); setDevice(null); });
     }, Math.max(5, device.interval) * 1000);
-    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- polls once per sign-in attempt
   }, [device]);
 
