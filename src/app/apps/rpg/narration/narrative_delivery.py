@@ -4,7 +4,6 @@ from __future__ import annotations
 from app.config.env import environment
 
 from app.caching.bounded_cache import bounded_lru_cache
-from threading import RLock
 from typing import Any, Callable, Mapping
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -35,14 +34,10 @@ class PostgresNarrativeDeliveryRepositoryAdapter:
         self.database = database or default_database()
         self._context_provider = context_provider
         self._unit_of_work_factory = unit_of_work_factory
-        self._context_lock = RLock()
-        self._tenant_context: TenantContext | None = None
 
     def _context(self) -> TenantContext:
-        with self._context_lock:
-            if self._tenant_context is None:
-                self._tenant_context = self._context_provider(self.database)
-            return self._tenant_context
+        # Asked each time: this adapter is shared by the process, and each request has its own tenant.
+        return self._context_provider(self.database)
 
     def open(
         self,
@@ -157,7 +152,7 @@ def prepare_canonical_result_delivery(
         return result
     response = canonical_response_from_dict(raw).with_content_hash()
     delivery_repo = delivery_repository or build_production_narrative_delivery_repository()
-    persistence = result.get("interaction_persistence") if isinstance(result.get("interaction_persistence"), Mapping) else {}
+    persistence = raw_interaction_persistence if isinstance(raw_interaction_persistence := result.get("interaction_persistence"), Mapping) else {}
     if (persistence.get("narrative_response_id") == response.response_id
             and persistence.get("narrative_content_hash") == response.content_hash):
         persisted = response  # inserted with the turn, in its unit of work: not saved again (RQ-6.4)

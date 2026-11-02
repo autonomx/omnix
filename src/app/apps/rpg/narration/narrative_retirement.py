@@ -104,14 +104,10 @@ class PostgresNarrativeRetirementRepositoryAdapter:
         self.database = database or default_database()
         self._context_provider = context_provider
         self._unit_of_work_factory = unit_of_work_factory
-        self._context_lock = RLock()
-        self._tenant_context: TenantContext | None = None
 
     def _context(self) -> TenantContext:
-        with self._context_lock:
-            if self._tenant_context is None:
-                self._tenant_context = self._context_provider(self.database)
-            return self._tenant_context
+        # Asked each time: this adapter is shared by the process, and each request has its own tenant.
+        return self._context_provider(self.database)
 
     def put(self, **payload: Any) -> dict[str, Any]:
         with self._unit_of_work_factory(self.database) as work:
