@@ -28,6 +28,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `LIVE_SPEECH_VAD_PROVIDER` | string | `energy` | live-speech | Controls live speech vad provider for live-speech. |
 | `LM_API_TOKEN` | string | — | live-speech | Controls lm api token for live-speech. |
 | `LOCALAPPDATA` | string | — | launcher, security | Controls localappdata for launcher, security. |
+| `OMNIXDESKTOP_DB_APP_PASSWORD` | string | — | desktop | Controls omnixdesktop db app password for desktop. |
+| `OMNIXDESKTOP_DB_OWNER_PASSWORD` | string | — | desktop | Controls omnixdesktop db owner password for desktop. |
 | `OMNIX_AGENT_ALLOW_UNSANDBOXED` | boolean | `false` | agent-runtime | Controls agent allow unsandboxed for agent-runtime. |
 | `OMNIX_AGENT_AUTO_INSTALL_DEPENDENCIES` | string | `true` | agent-runtime | Controls agent auto install dependencies for agent-runtime. |
 | `OMNIX_AGENT_BROKER_URL` | string | `http://127.0.0.1:8000/api/agent-runs` | agent-runtime | Controls agent broker url for agent-runtime. |
@@ -137,6 +139,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
 | `OMNIX_DEPLOYMENT_PROCESS_COUNTS` | string | — | kernel | Controls deployment process counts for kernel. |
 | `OMNIX_DESKTOP_COMPANION_EVALUATION_PATH` | string | — | desktop-companion | Controls desktop companion evaluation path for desktop-companion. |
+| `OMNIX_DESKTOP_PARENT_PID` | string | — | desktop | Controls desktop parent pid for desktop. |
+| `OMNIX_DESKTOP_WEB_DIST` | string | — | desktop | Controls desktop web dist for desktop. |
 | `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
 | `OMNIX_DOCUMENT_SCHEMAS_STRICT` | boolean | `false` | kernel | Controls document schemas strict for kernel. |
 | `OMNIX_DRAIN_MIN_SECONDS` | integer | `0` | kernel | Controls drain min seconds for kernel. |

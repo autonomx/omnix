@@ -48805,6 +48805,14 @@
         "title": "RpgCampaignGenesisResponse",
         "type": "object"
       },
+      "RpgCampaignImportBody": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "description": "A campaign's save package, as ``/export`` wrote it; ``import_campaign`` checks what it holds.",
+        "title": "RpgCampaignImportBody",
+        "type": "object"
+      },
       "RpgCampaignImportResponse": {
         "description": "A campaign imported from a save package (RQ-8.6), as it now loads.",
         "properties": {
@@ -93306,9 +93314,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Package",
-                "type": "object"
+                "$ref": "#/components/schemas/RpgCampaignImportBody"
               }
             }
           },

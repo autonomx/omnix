@@ -6880,6 +6880,13 @@ export interface components {
             storage: components["schemas"]["RpgLoreStorage"];
         };
         /**
+         * RpgCampaignImportBody
+         * @description A campaign's save package, as ``/export`` wrote it; ``import_campaign`` checks what it holds.
+         */
+        RpgCampaignImportBody: {
+            [key: string]: components["schemas"]["JsonValue"];
+        };
+        /**
          * RpgCampaignImportResponse
          * @description A campaign imported from a save package (RQ-8.6), as it now loads.
          */
@@ -14014,9 +14021,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["RpgCampaignImportBody"];
             };
         };
         responses: {
