@@ -19,6 +19,14 @@ paths = ['''(?:^|/)src/app/platform/assistant_memory/v2/embeddings\.py$''']
 regexTarget = "secret"
 regexes = ['''^[0-9a-f]{64}$''']
 
+[[allowlists]]
+description = "SHA-256 cache keys of portrait latents in a measurement report, not credentials"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)docs/measurements/portrait-runtime-2026-10-29\.json$''']
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{64}$''']
+
 # Exact non-secret examples only. New credentials in these files still fail.
 [[allowlists]]
 description = "Documented local-only placeholder bearer token"
@@ -119,3 +127,11 @@ id = "omnix-google-oauth"
 description = "Google OAuth client secret"
 regex = '''\bGOCSPX-[A-Za-z0-9_-]{28,}\b'''
 keywords = ["GOCSPX-"]
+
+[[allowlists]]
+description = "Made-up IBKR access tokens in two tests' fixtures"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/tests/trading/test_ibkr_web_api\.py$''', '''(?:^|/)web/src/features/settings/TradingMarketDataSettings\.test\.tsx$''']
+regexTarget = "secret"
+regexes = ['''^(?:a1b2c3d4e5f6|a1b2c3d4ef56)$''']

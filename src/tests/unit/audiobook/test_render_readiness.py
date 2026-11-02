@@ -85,6 +85,8 @@ def test_manual_book_can_render_without_classification_state(monkeypatch, blocke
 
     monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", unit_of_work)
     monkeypatch.setattr("app.apps.audiobook.service.assert_model_revision", lambda *_args: None)
+    monkeypatch.setattr("app.apps.audiobook.service.current_model_identity",
+                        lambda provider_id=None: {"provider_id": provider_id or "faster-qwen3-tts", "model_id": "Qwen3-TTS"})
     monkeypatch.setattr("app.apps.audiobook.service.check_book_render_readiness", lambda *_args, **_kwargs: BookRenderReadiness(
         blockers=["Assign a voice"] if blocked else [],
         chapters=[{"id": "chapter", "title": "Opening"}], skipped_chapter_ids=["skipped"],

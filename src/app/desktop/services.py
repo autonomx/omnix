@@ -114,7 +114,7 @@ def _signal_group(process: subprocess.Popen[bytes], signum: int) -> None:
         return
     try:
         os.killpg(process.pid, signum)
-    except OSError:
+    except (OSError, AttributeError):
         process.send_signal(signum)
 
 
