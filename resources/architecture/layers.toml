@@ -19,7 +19,8 @@ may_import = ["kernel", "shared_services"]
 
 [layers.composition]
 # PA-5.3: the gateway, workers, launcher and runtime composition sit in app/composition/.
-packages = ["app.composition", "services"]
+# The desktop app's supervisor and service boot compose the same parts in their own processes.
+packages = ["app.composition", "app.desktop", "services"]
 may_import = ["*"]
 
 [modules]

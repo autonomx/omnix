@@ -64,7 +64,7 @@ def _provider(http: FakeHttp) -> fish.FishS2ProTTSProvider:
 @pytest.fixture(autouse=True)
 def _host_memory_unknown(monkeypatch):
     """These tests are about the server's lifecycle, not this machine's free memory."""
-    monkeypatch.setattr("app.providers.host_memory.available_commit_bytes", lambda: None)
+    monkeypatch.setattr("app.models.host_memory.available_commit_bytes", lambda: None)
 
 def test_synthesis_sends_the_voice_sample_with_its_transcript(voice):
     http = FakeHttp(_wav(samples=22_050))

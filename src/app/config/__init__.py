@@ -1,6 +1,5 @@
-"""Typed Omnix process configuration."""
+"""Typed Omnix process configuration.
 
-from .load import load_config
-from .models import OmnixConfig
-
-__all__ = ["OmnixConfig", "load_config"]
+Importing this package loads nothing else: a desktop model service reads its environment
+(``app.config.env``, standard library only) before its packages are on the path.
+"""

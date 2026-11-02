@@ -36,7 +36,7 @@ from app.desktop.env import LaunchConfig, service_environment  # noqa: E402
 from app.desktop.services import plans, stop_gracefully  # noqa: E402
 from app.models import catalog as model_catalog  # noqa: E402
 from app.models.packs import ModelStore, RuntimeStore  # noqa: E402
-from app.providers.host_memory import available_commit_bytes  # noqa: E402
+from app.models.host_memory import available_commit_bytes  # noqa: E402
 
 PORTS = {"stt": 47931, "tts": 47932, "image": 47933}
 SENTENCE = "Hello from the Omnix desktop app. The shared Torch layer works for every service."

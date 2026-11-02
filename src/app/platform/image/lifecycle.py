@@ -146,7 +146,7 @@ def _validate_commit_budget(provider_name: str) -> None:
     """The desktop app passes the memory FLUX was measured to need; a load with less free would exhaust Windows'
     commit (or macOS memory and swap) and freeze the computer (roadmap R-9)."""
     from app.config.env import environment
-    from app.providers.host_memory import available_commit_bytes
+    from app.models.host_memory import available_commit_bytes
 
     from app.platform.image.config import get_provider_config
     from app.platform.image.downloads import catalog_model_for

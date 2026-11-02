@@ -411,16 +411,16 @@ def parse_catalog(raw: Mapping[str, Any]) -> Catalog:
     for bundle in bundles.values():
         for variant in bundle.variants:
             for model_id in variant.all_models():
-                entry = models.get(names.get(model_id, ""))
-                if entry is None:
+                model = models.get(names.get(model_id, ""))
+                if model is None:
                     raise CatalogError(f"bundle {bundle.id}: unknown model {model_id!r}")
-                if not entry.pinned:
+                if not model.pinned:
                     raise CatalogError(f"bundle {bundle.id}: {model_id} has no pinned files")
             for runtime_id in (*variant.runtimes, *(runtime for item in variant.options for runtime in item.runtimes)):
-                pack = runtimes.get(runtime_id)
-                if pack is None:
+                needed = runtimes.get(runtime_id)
+                if needed is None:
                     raise CatalogError(f"bundle {bundle.id}: unknown runtime {runtime_id!r}")
-                if pack.platform != variant.platform:
+                if needed.platform != variant.platform:
                     raise CatalogError(f"bundle {bundle.id}: runtime {runtime_id} is not for {variant.platform}")
     return Catalog(models=models, runtimes=runtimes, bundles=bundles, version=int(raw.get("catalog_version") or 1))
 

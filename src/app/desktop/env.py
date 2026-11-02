@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 
+from app.config.env import environment, environment_copy
+
 SYSTEM_ALLOWLIST = (
     "SystemRoot", "SYSTEMROOT", "windir", "WINDIR", "SystemDrive", "SYSTEMDRIVE",
     "TEMP", "TMP", "USERPROFILE", "USERNAME", "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "ProgramData",
@@ -172,7 +174,7 @@ def child_environment(config: LaunchConfig, inherited: Mapping[str, str] | None 
 
     ``owner`` adds the owner role's URL (OMNIX_MIGRATION_DATABASE_URL) for migrations, backup, restore and grants.
     The running gateway gets ``owner=False``: it reaches PostgreSQL only as omnix_app under row-level security."""
-    source = dict(os.environ if inherited is None else inherited)
+    source = environment_copy() if inherited is None else dict(inherited)
     required = ("OMNIXDESKTOP_DB_OWNER_PASSWORD",) if owner else ()
     missing = [name for name in (*required, "OMNIXDESKTOP_DB_APP_PASSWORD", "OMNIXDESKTOP_NOTIFY_SECRET")
                if not source.get(name)]
@@ -235,7 +237,7 @@ def child_environment(config: LaunchConfig, inherited: Mapping[str, str] | None 
 def service_environment(config: LaunchConfig, service: str, *, service_token: str, site_dirs: list[Path],
                         model_dir: Path | None = None, inherited: Mapping[str, str] | None = None) -> dict[str, str]:
     """A model service's environment: only what it needs to start, authenticate and reach its permits."""
-    source = dict(os.environ if inherited is None else inherited)
+    source = environment_copy() if inherited is None else dict(inherited)
     if not source.get("OMNIXDESKTOP_DB_APP_PASSWORD"):
         raise ValueError("the supervisor must pass OMNIXDESKTOP_DB_APP_PASSWORD")
     if not service_token:
@@ -279,14 +281,15 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
 
 def apply_environment(env: Mapping[str, str]) -> None:
     """Replace this process's environment with ``env`` (children inherit it)."""
-    for name in list(os.environ):
+    current = environment()
+    for name in list(current):
         if name not in env:
-            del os.environ[name]
-    os.environ.update(env)
+            del current[name]
+    current.update(env)
 
 
 def owner_database_url(config: LaunchConfig, inherited: Mapping[str, str] | None = None) -> str:
-    source = os.environ if inherited is None else inherited
+    source = environment() if inherited is None else inherited
     return _database_url(DB_OWNER, source["OMNIXDESKTOP_DB_OWNER_PASSWORD"], config.pg_port)
 
 

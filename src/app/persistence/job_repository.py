@@ -220,6 +220,25 @@ class PostgresJobRepository(_BaseJobRepository):
                  _json(item.get("error")) if item.get("error") is not None else None),
             )
 
+    def ended_job_ids(self, job_ids: list[str]) -> list[str]:
+        """Those of these jobs that have ended, in any workspace."""
+        rows = self.connection.execute(
+            """SELECT id FROM omnix_jobs
+                WHERE id = ANY(%s) AND status IN ('completed', 'failed', 'canceled', 'stale') LIMIT %s""",
+            (job_ids, len(job_ids)),
+        ).fetchall()
+        return [row[0] for row in rows]
+
+    def tts_job_running(self) -> bool:
+        """Whether a TTS job of any workspace is running under a live lease."""
+        return self.connection.execute(
+            """SELECT 1 FROM omnix_jobs
+                WHERE status IN ('leased', 'running', 'cancel_requested')
+                  AND (resource_class = 'gpu:tts' OR resource_class LIKE 'gpu:tts:%')
+                  AND lease_expires_at > clock_timestamp()
+                LIMIT 1"""
+        ).fetchone() is not None
+
     def job_exists(self, job_id: str) -> bool:
         return self.connection.execute(
             "SELECT EXISTS (SELECT 1 FROM omnix_jobs WHERE id = %s)", (job_id,)

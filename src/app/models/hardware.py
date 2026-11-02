@@ -4,7 +4,7 @@ The setup screen runs before any GPU runtime is installed, so this probe asks
 the operating system: ``nvidia-smi`` for NVIDIA GPUs, VRAM and the driver, WMI
 for other display adapters (so an AMD or Intel GPU shows as "no CUDA"), and
 ``sysctl`` on macOS. Memory includes the commit headroom Windows has left, the
-limit a model load runs into (``app.providers.host_memory``). It reports facts;
+limit a model load runs into (``app.models.host_memory``). It reports facts;
 ``app.models.verdicts`` turns them into what the setup screen offers.
 """
 from __future__ import annotations
@@ -19,6 +19,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from app.config.env import environment
 from app.models.catalog import current_platform
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def _nvidia_smi() -> str | None:
     if found:
         return found
     if sys.platform == "win32":
-        candidate = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvidia-smi.exe"
+        candidate = Path(environment().get("SystemRoot", r"C:\Windows")) / "System32" / "nvidia-smi.exe"
         if candidate.is_file():
             return str(candidate)
     return None
@@ -105,7 +106,7 @@ def macos_facts(run: Run = _run) -> dict[str, Any]:
 
 
 def memory_facts() -> dict[str, Any]:
-    from app.providers.host_memory import available_commit_bytes
+    from app.models.host_memory import available_commit_bytes
 
     facts: dict[str, Any] = {"total_bytes": None, "available_bytes": None,
                              "commit_available_bytes": available_commit_bytes(), "commit_limit_bytes": None}

@@ -493,7 +493,7 @@ def test_an_image_load_with_too_little_memory_is_refused_for_the_model_it_loads(
     """Each image model has its own need: FLUX.2 klein's measured 22 GB, Z-Image Turbo's more."""
     from app.platform.image import config as image_config
     from app.platform.image import lifecycle
-    from app.providers import host_memory
+    from app.models import host_memory
 
     monkeypatch.setenv("OMNIX_MODEL_LOAD_COMMIT_MB", json.dumps({"flux2-klein-4b": 22528, "flux2-klein-base-4b": 22528,
                                                                  "z-image-turbo": 36864}))

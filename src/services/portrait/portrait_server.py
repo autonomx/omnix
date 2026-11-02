@@ -139,7 +139,7 @@ def _cuda_initialized() -> bool:
 
 def _default_resources() -> tuple[bool, str]:
     """Whether a load fits now (free VRAM and host commit), and why not."""
-    from app.providers.host_memory import available_commit_bytes
+    from app.models.host_memory import available_commit_bytes
 
     free = free_vram_gb()
     if free is not None and free < LOAD_VRAM_GB:
@@ -490,7 +490,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        from app.providers.host_memory import available_commit_bytes
+        from app.models.host_memory import available_commit_bytes
 
         free, commit = free_vram_gb(), available_commit_bytes()
         return {"ok": True, "status": host.status, "message": host.message,

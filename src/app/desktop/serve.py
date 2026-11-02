@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import runpy
 import sys
 from pathlib import Path
 
+from app.config.env import environment_copy
 from app.desktop.env import DB_APP, LaunchConfig, apply_environment, child_environment
 
 SRC = Path(__file__).resolve().parents[2]
@@ -54,12 +54,12 @@ def gateway_command(config: LaunchConfig, python: str) -> list[str]:
 
 
 def _serve(config: LaunchConfig) -> int:
-    sys.argv = gateway_command(config, sys.executable)[1:]
+    import run_omnix_gateway  # in scripts/, on the path since _prepare
+
     try:
-        runpy.run_path(str(SCRIPTS / "run_omnix_gateway.py"), run_name="__main__")
+        return run_omnix_gateway.main(gateway_command(config, sys.executable)[2:])
     except SystemExit as exit_:
         return int(exit_.code or 0)
-    return 0
 
 
 def _persistence(argv: list[str]) -> int:
@@ -112,10 +112,9 @@ def _service_token() -> int:
 
 
 def _show_env() -> int:
-    import os
-
+    
     shown = {name: ("***" if any(marker in name for marker in _REDACT) else value)
-             for name, value in sorted(os.environ.items())}
+             for name, value in sorted(environment_copy().items())}
     print(json.dumps(shown, indent=1))
     return 0
 

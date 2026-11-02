@@ -20,6 +20,7 @@ library starting a subprocess, and the service hung while loading.)
 """
 from __future__ import annotations
 
+import importlib
 import os
 import runpy
 import signal
@@ -28,7 +29,10 @@ import sys
 import sysconfig
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
+
+from app.config.env import environment
 
 # After the supervisor is gone: this long for the graceful shutdown, then the process exits regardless.
 ORPHAN_GRACE_SECONDS = 20.0
@@ -48,8 +52,8 @@ class ServiceBootError(RuntimeError):
     pass
 
 
-def pack_site_dirs(environ: dict[str, str] | os._Environ[str] | None = None) -> list[Path]:
-    source = os.environ if environ is None else environ
+def pack_site_dirs(environ: Mapping[str, str] | None = None) -> list[Path]:
+    source = environment() if environ is None else environ
     packs = (source.get("OMNIX_PACKS_DIR") or "").strip()
     raw = (source.get("OMNIX_DESKTOP_SITE_DIRS") or "").strip()
     if not packs or not raw:
@@ -123,7 +127,7 @@ def _stop_when_orphaned(parent: int, getppid=os.getppid, poll: float = PARENT_PO
 def run(service: str, arguments: list[str] | None = None) -> None:
     folders = pack_site_dirs()
     prepare(folders)
-    parent = os.environ.get("OMNIX_DESKTOP_PARENT_PID", "")
+    parent = environment().get("OMNIX_DESKTOP_PARENT_PID", "")
     if parent.isdigit() and sys.platform != "win32":
         _stop_when_orphaned(int(parent))
     if service == "image":
@@ -138,7 +142,9 @@ def run(service: str, arguments: list[str] | None = None) -> None:
     module = ENTRY_MODULES.get(service)
     if module is None:
         raise ServiceBootError(f"unknown model service {service!r}")
-    sys.argv = [module, *(arguments or [])]
+    if arguments:  # OmniVoice's model and port; the other services take none
+        importlib.import_module(module).main(arguments)
+        return
     runpy.run_module(module, run_name="__main__", alter_sys=True)
 
 

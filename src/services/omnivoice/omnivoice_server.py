@@ -162,11 +162,11 @@ def generate(request: GenerateRequest) -> Response:
                              "X-Omnix-Duration": f"{len(samples) / SAMPLE_RATE:.3f}"})
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="OmniVoice child server for Omnix")
     parser.add_argument("--model-dir", required=True)
     parser.add_argument("--port", type=int, default=5103)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
     try:
         load(args.model_dir)

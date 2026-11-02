@@ -12,10 +12,11 @@ The desktop app has no nginx: this raw ASGI wrapper does both in front of ``app.
 from __future__ import annotations
 
 import mimetypes
-import os
 from collections.abc import Awaitable, Callable, MutableMapping
 from pathlib import Path
 from typing import Any
+
+from app.config.env import environment
 
 Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
@@ -113,7 +114,7 @@ class DesktopApplication:
 def _create() -> DesktopApplication:
     from app.composition.production import ProductionApplication
 
-    dist = os.environ.get("OMNIX_DESKTOP_WEB_DIST", "").strip()
+    dist = environment().get("OMNIX_DESKTOP_WEB_DIST", "").strip()
     return DesktopApplication(ProductionApplication(), Path(dist) if dist else None)
 
 

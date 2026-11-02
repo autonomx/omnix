@@ -246,7 +246,7 @@ class FishS2ProTTSProvider(BaseTTSProvider):
 
     def _host_memory_shortfall(self) -> str:
         """Why the host cannot hold Fish now, or "" (starting anyway pages for minutes and starves the machine)."""
-        from .host_memory import available_commit_bytes
+        from app.models.host_memory import available_commit_bytes
 
         needed = float(self.config.get("host_memory_gb") or 0)
         available = available_commit_bytes()

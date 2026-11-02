@@ -51,6 +51,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.config.env import environment
 from app.desktop.env import DB_APP, DB_NAME, DB_OWNER, SECRET_VARIABLES, SYSTEM_ALLOWLIST, LaunchConfig, child_environment
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -225,7 +226,8 @@ class Supervisor:
         """app.desktop.serve rebuilds the child environment itself, so it gets the secrets the supervisor holds.
 
         The gateway (``owner=False``) gets neither the owner password nor the owner URL."""
-        env = {**self.env, **{name: os.environ[name] for name in SECRET_VARIABLES if os.environ.get(name)}}
+        current = environment()
+        env = {**self.env, **{name: current[name] for name in SECRET_VARIABLES if current.get(name)}}
         if not owner:
             env.pop("OMNIXDESKTOP_DB_OWNER_PASSWORD", None)
             env.pop("OMNIX_MIGRATION_DATABASE_URL", None)
@@ -272,7 +274,7 @@ class Supervisor:
         self._step("initdb", "Creating the database")
         self.pgdata.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", delete=False, dir=self.data, suffix=".pw", encoding="utf-8") as pwfile:
-            pwfile.write(os.environ["OMNIXDESKTOP_DB_OWNER_PASSWORD"])
+            pwfile.write(environment()["OMNIXDESKTOP_DB_OWNER_PASSWORD"])
         try:
             self._run("initdb", [self._bin("initdb"), "-D", str(self.pgdata), "-U", DB_OWNER, "--auth=scram-sha-256",
                                  f"--pwfile={pwfile.name}", "-E", "UTF8", "--locale=C"], env=self.pg_env, log="initdb.log")
@@ -320,7 +322,7 @@ class Supervisor:
         import psycopg
 
         return psycopg.connect(host="127.0.0.1", port=self.config.pg_port, user=DB_OWNER, dbname=database,
-                               password=os.environ["OMNIXDESKTOP_DB_OWNER_PASSWORD"], autocommit=True,
+                               password=environment()["OMNIXDESKTOP_DB_OWNER_PASSWORD"], autocommit=True,
                                connect_timeout=10)
 
     def ensure_database(self) -> None:
@@ -332,7 +334,7 @@ class Supervisor:
                 self._step("database", "Creating the Omnix database")
                 connection.execute(f'CREATE DATABASE "{DB_NAME}"')
             role = connection.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (DB_APP,)).fetchone()
-            password = os.environ["OMNIXDESKTOP_DB_APP_PASSWORD"]
+            password = environment()["OMNIXDESKTOP_DB_APP_PASSWORD"]
             if not role:
                 connection.execute(sql.SQL(
                     "CREATE ROLE {} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD {}"
@@ -344,7 +346,7 @@ class Supervisor:
 
     def _test_hook(self, name: str) -> bool:
         """A test-only failure switch. Release builds ship no src/tests, so it is never active there."""
-        return bool(os.environ.get(name)) and (SRC / "tests").is_dir()
+        return bool(environment().get(name)) and (SRC / "tests").is_dir()
 
     def pending_migrations(self) -> list[str]:
         if self._test_hook("OMNIXDESKTOP_TEST_FAIL_MIGRATION"):

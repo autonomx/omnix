@@ -167,7 +167,7 @@ def pending_swap_requests() -> list[dict[str, Any]]:
     with unit_of_work() as work:
         rows = work.connection.execute(
             """SELECT id, engine, job_id, requested_at FROM omnix_tts_swap_requests
-                WHERE status = 'pending' ORDER BY requested_at, id"""
+                WHERE status = 'pending' ORDER BY requested_at, id LIMIT 1000"""
         ).fetchall()
     return [{"id": row[0], "engine": row[1], "job_id": row[2], "requested_at": row[3]} for row in rows]
 
@@ -183,13 +183,13 @@ def resolve_swap_requests(engine: str, status: str, detail: str = "") -> int:
     if status not in {"served", "failed"}:
         raise ValueError("status must be served or failed")
     with unit_of_work() as work:
-        rows = work.connection.execute(
+        count = work.connection.execute(
             """UPDATE omnix_tts_swap_requests SET status = %s, detail = %s, updated_at = clock_timestamp()
-                WHERE status = 'pending' AND engine = %s RETURNING id""",
+                WHERE status = 'pending' AND engine = %s""",
             (status, detail[:1000], engine),
-        ).fetchall()
+        ).rowcount
         work.commit()
-    return len(rows)
+    return count
 
 
 def finish_swap_request(job_id: str) -> None:
@@ -213,15 +213,17 @@ def close_finished_requests() -> int:
     from .tenant_scope import system_scope
 
     with system_scope("voice.swap"), unit_of_work() as work:
-        rows = work.connection.execute(
-            """UPDATE omnix_tts_swap_requests AS request SET status = 'done', updated_at = clock_timestamp()
-                 FROM omnix_jobs AS job
-                WHERE job.id = request.job_id AND request.status IN ('pending', 'served')
-                  AND job.status IN ('completed', 'failed', 'canceled', 'stale')
-               RETURNING request.id"""
+        open_requests = work.connection.execute(
+            """SELECT DISTINCT job_id FROM omnix_tts_swap_requests WHERE status IN ('pending', 'served') LIMIT 1000"""
         ).fetchall()
+        ended = work.jobs.ended_job_ids([row[0] for row in open_requests]) if open_requests else []
+        count = work.connection.execute(
+            """UPDATE omnix_tts_swap_requests SET status = 'done', updated_at = clock_timestamp()
+                WHERE job_id = ANY(%s) AND status IN ('pending', 'served')""",
+            (ended,),
+        ).rowcount if ended else 0
         work.commit()
-    return len(rows)
+    return count
 
 
 def tts_jobs_running() -> bool:
@@ -233,14 +235,7 @@ def tts_jobs_running() -> bool:
     from .tenant_scope import system_scope
 
     with system_scope("voice.swap"), unit_of_work() as work:
-        row = work.connection.execute(
-            """SELECT 1 FROM omnix_jobs
-                WHERE status IN ('leased', 'running', 'cancel_requested')
-                  AND (resource_class = 'gpu:tts' OR resource_class LIKE 'gpu:tts:%')
-                  AND lease_expires_at > clock_timestamp()
-                LIMIT 1"""
-        ).fetchone()
-    return row is not None
+        return work.jobs.tts_job_running()
 
 
 def engine_in_use(engine: str, *, stale_after_seconds: float = 900.0, linger_seconds: float = 0.0) -> bool:

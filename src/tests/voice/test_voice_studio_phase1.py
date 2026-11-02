@@ -10,6 +10,7 @@ import pytest
 
 from app.platform.voice import model_install
 from app.platform.voice.model_catalog import SPEECH_MODELS, speech_model
+from tests.support.waiting import wait_until
 
 
 @pytest.fixture
@@ -327,12 +328,7 @@ def engine_switching(monkeypatch):
 
 
 def _wait_until(condition: Any, seconds: float = 5.0) -> None:
-    import time
-
-    deadline = time.monotonic() + seconds
-    while not condition():
-        assert time.monotonic() < deadline, "timed out"
-        time.sleep(0.01)
+    assert wait_until(condition, bool, timeout=seconds, interval=0.01), "timed out"
 
 
 def test_a_switch_lets_a_running_generation_finish_before_unloading_its_engine(engine_switching) -> None:
@@ -476,7 +472,8 @@ def test_a_swap_to_an_engine_the_host_cannot_hold_fails_fast_with_a_reason() -> 
 
 
 def test_fish_refuses_to_start_without_the_host_memory_it_needs(monkeypatch, tmp_path) -> None:
-    from app.providers import fish_s2_pro_provider, host_memory
+    from app.models import host_memory
+    from app.providers import fish_s2_pro_provider
 
     monkeypatch.setattr(host_memory, "available_commit_bytes", lambda: 3 * 1024 ** 3)
     launched: list[object] = []

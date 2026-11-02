@@ -109,9 +109,12 @@ def _process_group() -> dict[str, Any]:
 
 
 def _signal_group(process: subprocess.Popen[bytes], signum: int) -> None:
+    if sys.platform == "win32":  # no process groups to signal
+        process.send_signal(signum)
+        return
     try:
         os.killpg(process.pid, signum)
-    except (OSError, AttributeError):
+    except OSError:
         process.send_signal(signum)
 
 
@@ -183,7 +186,7 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
 
 
 def _available_commit() -> int | None:
-    from app.providers.host_memory import available_commit_bytes
+    from app.models.host_memory import available_commit_bytes
 
     return available_commit_bytes()
 

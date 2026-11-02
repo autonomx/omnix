@@ -168,6 +168,20 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls omnixdesktop db app password for desktop.",
+    "feature": "desktop",
+    "name": "OMNIXDESKTOP_DB_APP_PASSWORD",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls omnixdesktop db owner password for desktop.",
+    "feature": "desktop",
+    "name": "OMNIXDESKTOP_DB_OWNER_PASSWORD",
+    "type": "string"
+  },
+  {
     "default": "false",
     "description": "Controls agent allow unsandboxed for agent-runtime.",
     "feature": "agent-runtime",
@@ -928,6 +942,20 @@
     "description": "Controls desktop companion evaluation path for desktop-companion.",
     "feature": "desktop-companion",
     "name": "OMNIX_DESKTOP_COMPANION_EVALUATION_PATH",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls desktop parent pid for desktop.",
+    "feature": "desktop",
+    "name": "OMNIX_DESKTOP_PARENT_PID",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls desktop web dist for desktop.",
+    "feature": "desktop",
+    "name": "OMNIX_DESKTOP_WEB_DIST",
     "type": "string"
   },
   {
