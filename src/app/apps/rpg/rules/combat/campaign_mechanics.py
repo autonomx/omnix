@@ -94,7 +94,7 @@ def instantiate_campaign_creature(
         "resists": [_text(tag).casefold() for tag in definition.get("resists") or () if _text(tag)],
         "phases": deepcopy(list(definition.get("phases") or ())),
         "no_escape": definition.get("no_escape") is True,
-        "recovers": float(definition.get("recovers") if definition.get("recovers") is not None else 1.0),
+        "recovers": float(raw_recovers if (raw_recovers := definition.get("recovers")) is not None else 1.0),
         "behaviour": _text(definition.get("behaviour")) or "fights",
         "speaks": definition.get("speaks") is True,
         "status": "active",

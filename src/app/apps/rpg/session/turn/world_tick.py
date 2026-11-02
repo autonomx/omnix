@@ -85,7 +85,7 @@ def _word(event_ids: list[str], runtime: Mapping[str, Any], region: str) -> list
     """What reaches the hero of the world's pressures turning (escalated, contained, resolved, stirring again): word of
     it, the hero's region first, at most ``SURFACED_PER_TURN``. A pressure that turned more than once in the turn's
     hours is told where it ended (the playtest: "grows worse" and "is held in check" in one night's word)."""
-    plan = {_d(row).get("pressure_id"): _d(row) for row in _d(runtime.get("pressure_plan")).get("pressures") or ()}
+    plan: dict[Any, dict[str, Any]] = {_d(row).get("pressure_id"): _d(row) for row in _d(runtime.get("pressure_plan")).get("pressures") or ()}
     last: dict[str, str] = {}
     for event_id in event_ids:
         kind = event_id.rsplit(":", 1)[-1]

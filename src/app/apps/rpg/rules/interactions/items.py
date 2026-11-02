@@ -102,7 +102,7 @@ def use_item(simulation: Mapping[str, Any], item_id: str) -> ItemOutcome:
     if kind in RELIEF:
         need, delta = RELIEF[kind]
         verb = "eat" if kind == "food" else "drink"
-        return ItemOutcome([*used, NeedsChanged(**{need: delta})], [f"You {verb} the {name}. It eases your {need}."],
+        return ItemOutcome([*used, NeedsChanged.model_validate({need: delta})], [f"You {verb} the {name}. It eases your {need}."],
                            minutes=10)
     return ItemOutcome(lines=[f"The {name} is not something you can use like that."], refused=True)
 

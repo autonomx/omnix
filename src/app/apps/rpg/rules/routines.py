@@ -191,7 +191,7 @@ def beat_moves(simulation: Mapping[str, Any]) -> dict[str, tuple[str, str]]:
     for npc_id, row in _d(_sections.goal_state_of(simulation)).items():
         for held in map(_d, _d(row).values()):
             if _s(held.get("location_id")) or held.get("gone") is True:
-                at = int(held.get("at") if held.get("at") is not None else int(held.get("day") or 0) * MINUTES_PER_DAY)
+                at = int(raw_at if (raw_at := held.get("at")) is not None else int(held.get("day") or 0) * MINUTES_PER_DAY)
                 if str(npc_id) not in found or at >= found[str(npc_id)][0]:
                     found[str(npc_id)] = (at, _s(held.get("location_id")), _s(held.get("activity")))
     return {npc_id: (place, activity) for npc_id, (_, place, activity) in found.items()}
@@ -235,10 +235,10 @@ def advance(simulation: Mapping[str, Any], npc_id: str, goal: Mapping[str, Any],
     goal_id, beat_id = _s(goal.get("goal_id")), _s(beat.get("id"))
     move = _d(beat.get("move")) if isinstance(beat.get("move"), Mapping) else None
     places = [_s(place) for place in _l(beat.get("told_at"))] or [_home(simulation, npc_id), _s(goal.get("location_id"))]
+    moved: dict[str, Any] = {"location_id": _s(move.get("location")), "activity": _s(move.get("activity")),
+                             "gone": not _s(move.get("location"))} if move is not None else {}
     changes: list[StateChange] = [BeatAdvanced(
-        person_id=npc_id, goal_id=goal_id, beat=beat_id, source=source, at_minute=at_minute,
-        **({"location_id": _s(move.get("location")), "activity": _s(move.get("activity")),
-            "gone": not _s(move.get("location"))} if move is not None else {}))]
+        person_id=npc_id, goal_id=goal_id, beat=beat_id, source=source, at_minute=at_minute, **moved)]
     from app.apps.rpg.rules.consequences import world_facts
 
     held = world_facts(simulation)

@@ -507,7 +507,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
 
     @router.get("/google/callback", response_class=RedirectResponse, status_code=303,
                 dependencies=[Depends(login_rate_limit)])
-    def google_callback(request: Request, code: str = "", state: str = "") -> RedirectResponse:
+    def google_callback(request: Request, code: str = "", state: str = "") -> Response:
         service = service_for(AuthMode.LOCAL)
         bindings = [request.cookies.get(GOOGLE_TX_COOKIE) or "", request.cookies.get(GOOGLE_DESKTOP_TX_COOKIE) or ""]
         issued, target = service.complete_google_login(code=code, state=state, browser_binding=bindings,

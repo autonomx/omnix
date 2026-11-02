@@ -29,7 +29,7 @@ DISCOVERY_XP = 15  # the first visit to a named place
 QUEST_STEP_XP = 50  # a quest that names no experience pays this for each of its places (tuned, RQ-5.3)
 CHECK_XP = ((22, 35), (16, 20), (13, 10), (0, 5))  # a check passed: by difficulty, heroic to easy
 ATTRIBUTES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
-PROMPT = ('Choose how you grow: raise an attribute by 2 ("raise strength"), learn a new ability ("learn ...") or '
+GROWTH_CHOICES = ('Choose how you grow: raise an attribute by 2 ("raise strength"), learn a new ability ("learn ...") or '
           'improve two skills ("improve stealth and archery").')
 
 
@@ -77,7 +77,7 @@ def gain(simulation: Mapping[str, Any], amount: int) -> tuple[list[StateChange],
             unspent_skill_points=int(player.get("unspent_skill_points") or 0),
             choices_pending=int(player.get("level_choices_pending") or 0) + risen,
             max_hp_gain=risen * max(1, HP_PER_LEVEL + constitution)))
-        lines += [f"You reach level {level}.", PROMPT]
+        lines += [f"You reach level {level}.", GROWTH_CHOICES]
     return changes, lines
 
 
@@ -120,9 +120,9 @@ def choose(document: Mapping[str, Any], choice: str) -> Growth:
     attribute = value if kind == "attribute" and value in ATTRIBUTES else ""
     if attribute:
         stats = _d(player.get("stats"))
-        value = int(stats.get(attribute) or 10) + ATTRIBUTE_RAISE
-        return Growth([LevelChoiceMade(choice="attribute", attribute=attribute, value=value)],
-                      [f"Your {attribute} rises to {value}."], detail={"choice": "attribute", "attribute": attribute})
+        raised = int(stats.get(attribute) or 10) + ATTRIBUTE_RAISE
+        return Growth([LevelChoiceMade(choice="attribute", attribute=attribute, value=raised)],
+                      [f"Your {attribute} rises to {raised}."], detail={"choice": "attribute", "attribute": attribute})
     learnable = _learnable(document)
     named = [row for row in learnable if kind == "ability" and _s(row.get("ability_id")) == value]
     if named:
@@ -139,8 +139,8 @@ def choose(document: Mapping[str, Any], choice: str) -> Growth:
                       [f"Your {chosen[0]} and {chosen[1]} each rise a rank."], detail={"choice": "skills",
                                                                                      "skills": chosen})
     names = ", ".join(_s(row.get("name")) for row in learnable[:4])
-    return Growth([], [PROMPT + (f" Abilities you could learn: {names}." if names else "")], refused=True)
+    return Growth([], [GROWTH_CHOICES + (f" Abilities you could learn: {names}." if names else "")], refused=True)
 
 
-__all__ = ["ATTRIBUTES", "DISCOVERY_XP", "PROMPT", "QUEST_STEP_XP", "SKILL_RANK_MAX", "Growth", "check_xp", "choose",
+__all__ = ["ATTRIBUTES", "DISCOVERY_XP", "GROWTH_CHOICES", "QUEST_STEP_XP", "SKILL_RANK_MAX", "Growth", "check_xp", "choose",
            "gain", "skill_gain", "skill_xp_to_next", "xp_to_next"]

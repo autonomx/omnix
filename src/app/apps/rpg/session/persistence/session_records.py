@@ -92,7 +92,7 @@ def save_session_to_postgres(
     schema_version = str(session.get("save_version") or "rpg-session-v1")
     seed = str(manifest.get("seed") or session.get("seed") or campaign_id)
     title = str(manifest.get("title") or campaign_id)
-    written = dict(campaign_id=campaign_id, session=session, artifacts=artifacts, narrations=narrations,
+    written: dict[str, Any] = dict(campaign_id=campaign_id, session=session, artifacts=artifacts, narrations=narrations,
                    revision=revision, manifest=manifest, engine_version=engine_version,
                    schema_version=schema_version, seed=seed, title=title)
     if work is not None:

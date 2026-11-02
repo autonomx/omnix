@@ -153,7 +153,7 @@ def _creature(simulation: Mapping[str, Any], entry_id: str, name: str, text: str
     from app.apps.rpg.rules.budgets import creature_findings
 
     level = max(1, min(_level(simulation) + 2, int(play.get("level") or _level(simulation))))
-    combat = {"definition_id": entry_id, "name": name, "level": level, "hp": int(play.get("hp") or 0),
+    combat: dict[str, Any] = {"definition_id": entry_id, "name": name, "level": level, "hp": int(play.get("hp") or 0),
               "damage_min": max(1, int(play.get("damage_min") or 1)), "damage_max": int(play.get("damage_max") or 0),
               "defense": int(play.get("defense") or 0), "armor": 0, "accuracy_bonus": 0, "initiative_bonus": 0,
               "behaviour": _s(play.get("behaviour")) or "fights", "morale_threshold": 35, "loot": [],
@@ -262,8 +262,8 @@ def _invent(document: Mapping[str, Any], payload: Mapping[str, Any], *, limited:
             reward_item_id=_reward(simulation, entry_id))}}
     provenance = {"campaign_id": _campaign(document), "source": "game_master",
                   "turn": int(_d(document.get("state")).get("turn_count") or 0), "reason": _s(payload.get("reason"))[:500]}
-    changes: list[StateChange] = [InventionAdded(entry_id=entry_id, family=family, name=name, row=row, play=played,
-                                                 provenance=provenance)]  # type: ignore[arg-type]
+    changes: list[StateChange] = [InventionAdded(entry_id=entry_id, family=family, name=name, row=row, play=played,  # type: ignore[arg-type]
+                                                 provenance=provenance)]
     changes += [FactSet(fact_id=_s(row.get("fact")), value=row.get("value", True), source=entry_id, known=False)
                 for row in sets]
     return Folded([*changes, counted(simulation, "invention")] if limited else changes)

@@ -182,19 +182,19 @@ class OvernightMarketData:
         )
         candidates = []
         for symbol, raw in intraday.items():
-            rows = history.get(symbol)
-            if not rows:
+            prior_days = history.get(symbol)
+            if not prior_days:
                 continue
             candidate = build_candidate(
                 symbol=symbol,
                 instrument_id=f"equity:{assets[symbol]}:{symbol}",
-                prior_close=rows[-1].close,
+                prior_close=prior_days[-1].close,
                 bars=_bars(raw),
-                adv_volumes=[b.volume for b in rows[-config.adv_sessions:]],
+                adv_volumes=[b.volume for b in prior_days[-config.adv_sessions:]],
                 session_date=session_date,
                 config=config,
                 bar_minutes=SCAN_BAR_MINUTES,
-                prior_closes=[b.close for b in rows[-21:]],
+                prior_closes=[b.close for b in prior_days[-21:]],
                 adv_dollars=adv_dollars.get(symbol),
             )
             if candidate is not None:

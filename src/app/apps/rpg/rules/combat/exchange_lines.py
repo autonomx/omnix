@@ -86,20 +86,20 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
                 if safe_str(safe_dict(row).get("side")) == "enemy"]
         lines.append(f"The fight begins: you against {' and '.join(foes) or 'your foe'}.")
     reason = safe_str(combat_result.get("reason"))
-    foes = " and ".join(_name(combat_state, safe_str(foe), subject=False) for foe in safe_list(combat_result.get("foe_ids")))
+    foe_names = " and ".join(_name(combat_state, safe_str(foe), subject=False) for foe in safe_list(combat_result.get("foe_ids")))
     fell_fleeing = reason == "combat_fled" and safe_str(combat_state.get("ended_reason")) == "party_side_defeated"
     # In the order it happened: the blows before the hero's turn, the hero's turn, then everyone else's.
     lines.extend(_act(combat_state, safe_dict(attack)) for attack in safe_list(combat_result.get("earlier_turns")))
     if reason == "combat_fled":
         blows = safe_list(combat_result.get("parting_blows"))
-        lines.append(f"You break away from {foes or 'the fight'}; "
+        lines.append(f"You break away from {foe_names or 'the fight'}; "
                      f"{'a parting blow follows' if len(blows) == 1 else 'parting blows follow'} you."
-                     if blows else f"You break away from {foes or 'the fight'} and escape; the fight is over.")
+                     if blows else f"You break away from {foe_names or 'the fight'} and escape; the fight is over.")
         lines.extend(_blow(combat_state, safe_dict(blow)) for blow in safe_list(combat_result.get("parting_blows")))
         if not fell_fleeing and combat_result.get("parting_blows"):
             lines.append("You escape; the fight is over, and it yields you nothing.")
     elif reason == "combat_flee_failed":
-        lines.append(f"You try to break away, but {foes or 'your foe'} cuts you off.")
+        lines.append(f"You try to break away, but {foe_names or 'your foe'} cuts you off.")
     elif reason == "combat_defended":
         lines.append("You raise your guard.")
     elif reason == "combat_ability":
@@ -129,7 +129,7 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     elif combat_state.get("active") is not True and ended in {"evaded", "talked_down"}:
         lines.append("You go on your way; no blow was struck.")
     elif combat_state.get("active") is not True and ended == "party_side_defeated":
-        lines.extend(_defeat_lines(safe_dict(combat_state.get("defeat")), foes))
+        lines.extend(_defeat_lines(safe_dict(combat_state.get("defeat")), foe_names))
     return lines
 
 

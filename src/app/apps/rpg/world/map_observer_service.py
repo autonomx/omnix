@@ -74,7 +74,7 @@ def _campaign_turn(work: Any, context: Any, campaign_id: str, observer_actor_id:
     if campaign is None:
         return {"campaign_revision": None, "tactical": {"combat_active": False}}, {}
     simulation = dict(dict(campaign.get("state") or {}).get("simulation_state") or {})
-    combat = simulation.get("combat_state") if isinstance(simulation.get("combat_state"), dict) else {}
+    combat = raw_combat_state if isinstance(raw_combat_state := simulation.get("combat_state"), dict) else {}
     return {
         "campaign_revision": int(campaign["revision"]),
         "tactical": grid_turn_summary(simulation, campaign_id, observer_actor_id),

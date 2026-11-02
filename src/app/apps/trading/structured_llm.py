@@ -168,7 +168,7 @@ def trading_model_call(
         schema_name=schema_name,
         regenerate_on_semantic_failure=False,
     )
-    budget = StructuredRetryBudget(
+    retry_budget = StructuredRetryBudget(
         max_provider_calls=1,
         max_transport_retries=0,
         max_format_downgrades=0,
@@ -178,7 +178,7 @@ def trading_model_call(
     )
     try:
         value = StructuredOutputGateway[T](analyzer_request).generate(
-            messages, contract=contract, model=model, retry_budget=budget,
+            messages, contract=contract, model=model, retry_budget=retry_budget,
         )
     except (StructuredOutputExhausted, StructuredOutputError) as exc:
         cause = exc.last_error if isinstance(exc, StructuredOutputExhausted) else exc

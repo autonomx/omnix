@@ -316,7 +316,7 @@ class QuestsSection(Section):
     @classmethod
     def from_document(cls, document: Mapping[str, Any]) -> QuestsSection:
         quest_state = _mapping(read_path(document, ("simulation_state", "quest_state")))
-        rows = quest_state.get("quests") if isinstance(quest_state.get("quests"), list) else (
+        rows = raw_quests if isinstance(raw_quests := quest_state.get("quests"), list) else (
             read_path(document, ("state", "quests")) or ())
         quests = [
             Quest(quest_id=str(raw.get("quest_id") or raw.get("id") or ""), title=str(raw.get("title") or ""),

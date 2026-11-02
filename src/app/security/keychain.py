@@ -12,7 +12,7 @@ import ctypes
 import ctypes.util
 import secrets
 import sys
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.config.env import env_str
 
@@ -33,6 +33,8 @@ class KeychainBackend(Protocol):
 
 class SecurityFrameworkKeychain:
     """The login Keychain through Security.framework's generic-password calls."""
+
+    _security: Any
 
     def __init__(self) -> None:
         if sys.platform != "darwin":

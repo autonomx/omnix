@@ -157,10 +157,10 @@ def persist_foreground_turn(
 
         from app.apps.rpg.session.turn.proposals import settle_folded
 
-        pipeline = result.get("turn_pipeline") if isinstance(result.get("turn_pipeline"), dict) else {}
+        pipeline = raw_turn_pipeline if isinstance(raw_turn_pipeline := result.get("turn_pipeline"), dict) else {}
         # What the turn folded in at its load (EV-11): settled only while still pending, else the commit fails.
         folded = settle_folded(work, context, campaign_id=session_id, turn_id=turn_id, revision=state_revision,
-                               reported=pipeline.get("proposals") if isinstance(pipeline.get("proposals"), dict) else {})
+                               reported=raw_proposals if isinstance(raw_proposals := pipeline.get("proposals"), dict) else {})
         undone = next((int(row.get("source_revision") or 0) for row in pipeline.get("changes") or ()
                        if isinstance(row, dict) and row.get("type") == "revision_restored"), None)
         if undone is not None:  # a rewind: what was proposed in the timeline undone never folds in (EV-11)
@@ -257,8 +257,8 @@ def persist_foreground_turn(
 def _command_marks(result: dict[str, Any]) -> dict[str, Any]:
     """What the turn row records of the turn's kind beside the player's words: a world tick, a rewind and the
     revision it restored (an undo walks these back, rewind.md)."""
-    pipeline = result.get("turn_pipeline") if isinstance(result.get("turn_pipeline"), dict) else {}
-    answer = pipeline.get("action_result") if isinstance(pipeline.get("action_result"), dict) else {}
+    pipeline = raw_turn_pipeline if isinstance(raw_turn_pipeline := result.get("turn_pipeline"), dict) else {}
+    answer = raw_action_result if isinstance(raw_action_result := pipeline.get("action_result"), dict) else {}
     if answer.get("kind") == "rewind":
         return {"turn_kind": "rewind", "restored_revision": int(answer.get("restored_revision") or 0)}
     if answer.get("kind") == "hotbar":

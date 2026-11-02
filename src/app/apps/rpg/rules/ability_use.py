@@ -131,7 +131,7 @@ def out_of_fight(document: Mapping[str, Any], ability: Mapping[str, Any]) -> Out
     player = _d(_sections.player_state_of(_d(_sections.simulation_state_of(document))))
     pool = _d(_d(player.get("resources")).get("hp"))  # as the fight rule reads it
     maximum = int(pool.get("max") or player.get("max_hp") or 20)
-    current = int(pool.get("current") if pool.get("current") is not None else player.get("hp") or maximum)
+    current = int(raw_current if (raw_current := pool.get("current")) is not None else player.get("hp") or maximum)
     healed = min(in_fight(ability).heal, max(0, maximum - current))
     restored = {resource: 0 for resource in ("stamina", "mana")}
     for op in map(_d, _l(ability.get("effect_ops"))):

@@ -5,6 +5,8 @@ only cross-feature wiring and kernel stores composed with feature adapters
 remain here, and only composition imports this module.
 """
 
+from typing import Any
+
 from app.caching.bounded_cache import bounded_lru_cache
 from app.persistence.repository_registry import register_feature_repositories
 
@@ -53,9 +55,11 @@ def production_chat_store(*, job_service=None, live_agent_planner=None):
     from app.runtime.feature_catalog import enabled_feature_ids
 
     # The desktop companion records accepted chats only when it is enabled; otherwise it is not imported (Phase 12).
-    record_accepted_chat_activity = None
+    record_accepted_chat_activity: Any = None
     if "desktop-companion" in enabled_feature_ids(get_runtime_config()):
-        from app.apps.desktop_companion.chat_activity import record_accepted_chat_activity
+        from app.apps.desktop_companion import chat_activity
+
+        record_accepted_chat_activity = chat_activity.record_accepted_chat_activity
 
     if job_service is None:
         job_service = production_job_store()

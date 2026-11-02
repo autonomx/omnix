@@ -170,8 +170,8 @@ def register_rpg_map_routes(router: APIRouter, state) -> None:
         else:
             # Looking (inspect) or a suggestion changes nothing; a fixture map's moves keep their older record.
             result_session = result.get("session")
-            changed = isinstance(result_session, dict) and action_result.get("changed") is True
-            saved = save_session(result_session, compact=False) if changed else session
+            saved = (save_session(result_session, compact=False)
+                     if isinstance(result_session, dict) and action_result.get("changed") is True else session)
         active_map_id = str(result.get("map_id") or map_id)
         definition, overlay = _definition_and_overlay(saved, active_map_id)
         overlay_payload = _project_overlay_payload(saved, definition, overlay)

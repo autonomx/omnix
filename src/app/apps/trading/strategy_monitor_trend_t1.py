@@ -32,7 +32,7 @@ def _execution_payload(execution: Any) -> dict[str, Any]:
         "provider", "binding_id", "bid", "ask", "bid_size", "ask_size", "last", "spread_bps",
         "source_time", "received_at", "freshness_mode", "execution_eligible", "rejection_reasons",
     )
-    payload = {}
+    payload: dict[str, Any] = {}
     for name in fields:
         value = getattr(execution, name, None)
         payload[name] = str(value) if isinstance(value, Decimal) else value

@@ -217,7 +217,7 @@ def buy(simulation: Mapping[str, Any], target_id: str = "", seller_id: str = "",
                                          **({"equipment": _d(item.get("equipment"))} if _d(item.get("equipment")) else {})}))
     if kind in RELIEF:
         need, delta = RELIEF[kind]
-        changes.append(NeedsChanged(**{need: delta}))
+        changes.append(NeedsChanged.model_validate({need: delta}))
         lines.append(f"It eases your {need}.")
     if told[1]:
         changes += told[0]

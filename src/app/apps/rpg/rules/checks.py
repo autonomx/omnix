@@ -161,12 +161,12 @@ def _consequence(simulation: Mapping[str, Any], kind: str, band: str, target_kin
     if not won:
         return [], ["You find nothing of note."], 0
     ground = [_s(_d(item).get("name")) for item in _l(_d(simulation.get("world_items")).get(here)) if _s(_d(item).get("name"))]
-    seen = routines.described(simulation, routines.present_now(simulation)[1], routines.clock(simulation))
+    people_seen = routines.described(simulation, routines.present_now(simulation)[1], routines.clock(simulation))
     lines = []
     if ground:
         lines.append(f"Lying here: {', '.join(ground)}.")
-    if kind == "notice" and seen:
-        lines.append(f"You notice: {', '.join(seen)}.")
+    if kind == "notice" and people_seen:
+        lines.append(f"You notice: {', '.join(people_seen)}.")
     return [], lines or ["You look carefully, and there is nothing hidden here."], 0
 
 
@@ -194,7 +194,7 @@ def check(simulation: Mapping[str, Any], kind: str, target_id: str = "", *, turn
             difficulty, difficulty / 13))))
         earned, hero_lines = progression.gain(simulation, progression.check_xp(difficulty))
         changes, lines = [*changes, *gained, *earned], [*lines, *xp_lines, *hero_lines]
-    result = {"kind": kind, "target_id": target_id, "location_id": here, "natural": natural, "bonus": bonus,
+    result: dict[str, Any] = {"kind": kind, "target_id": target_id, "location_id": here, "natural": natural, "bonus": bonus,
               "total": total, "difficulty": difficulty, "margin": margin, "band": band, "skill": skill,
               "minute": routines.clock(simulation)}
     return CheckOutcome([CheckResolved(**result), *changes], [roll_line, *lines], minutes=MINUTES + extra, band=band,

@@ -751,7 +751,7 @@ class IbkrWebApiTransport:
             raise ValueError("ibkr historical end must be timezone-aware")
         end_utc = end.astimezone(timezone.utc)
         start = end_utc - timedelta(seconds=max(1, int(duration_seconds)))
-        request = {
+        request: dict[str, Any] = {
             "use_rth": use_rth,
             "timeout_seconds": timeout_seconds,
             "rate_wait_seconds": timeout_seconds if rate_wait_seconds is None else rate_wait_seconds,
@@ -827,7 +827,8 @@ class IbkrWebApiTransport:
             self._release_contract(subscription.contract.con_id)
 
     def _contract_in_use(self, con_id: int) -> bool:
-        return any(item.contract.con_id == con_id for item in (*self._quotes.values(), *self._bars.values()))
+        subscriptions: list[_QuoteSubscription | _BarSubscription] = [*self._quotes.values(), *self._bars.values()]
+        return any(item.contract.con_id == con_id for item in subscriptions)
 
     def request_health(self, token: int) -> dict[str, Any]:
         with self._lock:
@@ -1015,9 +1016,9 @@ class IbkrWebApiTransport:
             if last is not None:
                 update = self._fold_trade(state, last, day_volume, source_time)
                 if update is not None:
-                    for item in self._bars.values():
-                        if item.contract.con_id == con_id and item.history_sent:
-                            bar_events.append((item.listener, IbkrBarStreamEvent("update", (update,))))
+                    for subscribed in self._bars.values():
+                        if subscribed.contract.con_id == con_id and subscribed.history_sent:
+                            bar_events.append((subscribed.listener, IbkrBarStreamEvent("update", (update,))))
         for quote_listener, snapshot in quote_events:
             self._deliver(quote_listener, snapshot)
         for bar_listener, event in bar_events:

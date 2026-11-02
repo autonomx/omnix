@@ -94,7 +94,7 @@ def _coins(currency: Mapping[str, Any]) -> str:
 def status(simulation: Mapping[str, Any], topics: tuple[str, ...] = ()) -> RequestOutcome:
     """Where the hero stands, from the campaign, on what they ask (the reading's topics: health, progress, inventory,
     quests, skills; unnamed, what they carry and their health): nothing changes and no time passes."""
-    topics = list(topics) or ["inventory", "health"]
+    topics = tuple(topics) or ("inventory", "health")
     player = _d(_sections.player_state_of(simulation))
     lines = []
     if "health" in topics:

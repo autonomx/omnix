@@ -272,7 +272,7 @@ def _move_hero(writer: _Writer, change: LocationChanged) -> None:
             for companion in party["companions"]]})
     place = _world_place(writer, location_id)
     if place:
-        exits = place.get("exits") if isinstance(place.get("exits"), dict) else {}
+        exits = raw_exits if isinstance(raw_exits := place.get("exits"), dict) else {}
         writer.set(("simulation_state", "location_state"), {"current_location_id": location_id,
                                                              "current_location": copy_state(place),
                                                              "available_exits": dict(exits)})
@@ -472,9 +472,9 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
     elif isinstance(change, TimeAdvanced):
         writer.set(("simulation_state", "tick"), int(writer.get(("simulation_state", "tick")) or 0) + change.ticks)
     elif isinstance(change, TurnCounted):
-        for path in (("manifest", "turn_count"), ("manifest", "current_turn"), ("state", "turn_count"),
-                     ("state", "current_turn")):
-            writer.set(path, change.turn_count)
+        for counter in (("manifest", "turn_count"), ("manifest", "current_turn"), ("state", "turn_count"),
+                        ("state", "current_turn")):
+            writer.set(counter, change.turn_count)
         if writer.get(("state", "ability_state", "ready_at")):
             _show_cooldowns(writer)  # each counted turn brings the hero's abilities nearer to ready
     elif isinstance(change, WorldTicked):
@@ -613,8 +613,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
                                                       "tick": int(writer.get(("simulation_state", "tick")) or 0)})
     elif isinstance(change, FactSet):
         held = writer.get(_FACTS + (change.fact_id,))
-        known = change.known or (isinstance(held, dict) and held.get("known") is True)
-        writer.set(_FACTS + (change.fact_id,), {"value": change.value, "source": change.source, "known": known,
+        fact_known = change.known or (isinstance(held, dict) and held.get("known") is True)
+        writer.set(_FACTS + (change.fact_id,), {"value": change.value, "source": change.source, "known": fact_known,
                                                 "told": change.told,
                                                 "tick": int(writer.get(("simulation_state", "tick")) or 0)})
         _show_what_has_changed(writer)
@@ -700,9 +700,9 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         _show_standing(writer)
     elif isinstance(change, QuestOffered):
         quests = writer.get(("simulation_state", "quest_state", "quests"))
-        known = isinstance(quests, list) and any(
+        offered_before = isinstance(quests, list) and any(
             isinstance(row, dict) and change.quest_id in (row.get("quest_id"), row.get("id")) for row in quests)
-        if not known and change.quest:  # a new quest: its row joins the log
+        if not offered_before and change.quest:  # a new quest: its row joins the log
             _write_quests(writer, [*(dict(row) for row in quests or ()), {**change.quest, "quest_id": change.quest_id}])
         rows, index = _quest_rows(writer, change.quest_id)
         rows[index] = {**rows[index], "offered_by": change.npc_id}
@@ -723,8 +723,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         if not isinstance(participant, dict):
             raise ChangeRejected(f"{change.actor_id} is not in the fight")
         maximum = int(participant.get("max_hp") or participant.get("hp") or 0)
-        hp = max(0, min(maximum, int(participant.get("hp") or 0) + change.delta))
-        writer.set(("simulation_state", "combat_state", "participants", change.actor_id), {**participant, "hp": hp})
+        left = max(0, min(maximum, int(participant.get("hp") or 0) + change.delta))
+        writer.set(("simulation_state", "combat_state", "participants", change.actor_id), {**participant, "hp": left})
     elif isinstance(change, CombatEnded):
         combat = writer.get(("simulation_state", "combat_state"))
         if not isinstance(combat, dict) or not combat.get("active"):
@@ -789,13 +789,13 @@ def _restore(writer: _Writer, change: RevisionRestored) -> None:
     game_runtime = {path[1] for name, paths in SECTION_PATHS.items() if name != "interactions"
                     for path in paths if path[0] == "runtime_state"}
     runtime = dict(writer.get(("runtime_state",)) or {})
-    before = earlier.get("runtime_state") if isinstance(earlier.get("runtime_state"), dict) else {}
+    before = raw_runtime_state if isinstance(raw_runtime_state := earlier.get("runtime_state"), dict) else {}
     for key in game_runtime:
         runtime.pop(key, None)
         if key in before:
             runtime[key] = copy_state(before[key])
     writer.set(("runtime_state",), runtime)
-    manifest = earlier.get("manifest") if isinstance(earlier.get("manifest"), dict) else {}
+    manifest = raw_manifest if isinstance(raw_manifest := earlier.get("manifest"), dict) else {}
     for key in ("turn_count", "current_turn"):
         if key in manifest:
             writer.set(("manifest", key), manifest[key])
@@ -972,7 +972,7 @@ def _show_progression(writer: _Writer, *, xp: int, xp_to_next: int | None = None
     sheet = writer.get(("state", "player"))
     if not isinstance(sheet, dict):
         return
-    meter = sheet.get("xp") if isinstance(sheet.get("xp"), dict) else {}
+    meter = raw_xp if isinstance(raw_xp := sheet.get("xp"), dict) else {}
     writer.set(("state", "player", "xp"), {**meter, "current": xp,
                                            "max": xp_to_next or int(meter.get("max") or 0) or 100})
     if level is not None:
@@ -1033,7 +1033,7 @@ def _record_lifecycle(writer: _Writer, change: LifecycleRecorded) -> None:
         writer.set(_RUNTIME + ("interaction_id_by_turn",), _kept_last(by_turn, LIFECYCLES_KEPT))
     timeline = dict(writer.get(_RUNTIME + ("interaction_timeline",)) or {})
     events = []
-    for value in timeline.get("events") if isinstance(timeline.get("events"), list) else ():
+    for value in raw_events if isinstance(raw_events := timeline.get("events"), list) else ():
         event = dict(value) if isinstance(value, dict) else {}
         if str(event.get("interaction_id") or "") == change.interaction_id:
             event["lifecycle"] = copy_state(change.lifecycle)

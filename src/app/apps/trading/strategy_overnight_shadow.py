@@ -14,7 +14,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -435,7 +435,7 @@ def label_outcome(
         and bar.start + timedelta(minutes=1) <= datetime.combine(next_session_date, time(8, 0), tzinfo=_ET)
     ]
     bar_0945 = _first_at_or_after(next_bars, datetime.combine(next_session_date, time(9, 45), tzinfo=_ET), flat_at)
-    common = dict(
+    common: dict[str, Any] = dict(
         arm_id=arm_id, symbol=candidate.symbol, instrument_id=candidate.instrument_id,
         session_date=session_date, next_session_date=next_session_date,
         premarket_0800=premarket[-1].close if premarket else None,

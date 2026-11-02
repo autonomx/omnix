@@ -69,8 +69,8 @@ def _grid_turn(map_instance_id: str, *, actor_id: str, submission_id: str, comma
 
         detail = stale_refusal(campaign_id, {key: value for key, value in payload.items() if key != "status_code"})
         raise HTTPException(status_code=int(payload.get("status_code") or 409), detail=detail)
-    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
-    answer = outcome.get("action_result") if isinstance(outcome.get("action_result"), dict) else {}
+    outcome = raw_outcome if isinstance(raw_outcome := payload.get("outcome"), dict) else {}
+    answer = raw_action_result if isinstance(raw_action_result := outcome.get("action_result"), dict) else {}
     return {
         "ok": True,
         "kind": action["type"],

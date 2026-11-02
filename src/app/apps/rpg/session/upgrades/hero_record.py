@@ -20,7 +20,7 @@ def hydrate_hero(document: dict[str, Any]) -> dict[str, Any]:
     simulation = _sections.simulation_state_of(document)
     if isinstance(simulation, dict):
         hero = _sections.player_state_of(simulation) or {}
-        setup = document.get("setup_payload") if isinstance(document.get("setup_payload"), dict) else {}
+        setup = raw_setup_payload if isinstance(raw_setup_payload := document.get("setup_payload"), dict) else {}
         if not hero.get("skills"):  # a new hero's skills are those of their world's kind
             skills = skills_for_genre(str(setup.get("genre") or ""))
             if skills:

@@ -141,7 +141,7 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
         pressure_id = _s(pressure["pressure_id"])
         if (_s(statuses.get(pressure_id)) or "active") == "resolved" or _severity(runtime, pressure_id) < PRESSURE_QUEST_SEVERITY:
             continue
-        hunts = [(lever, campaign_creature_definition(simulation, _s(lever.get("action")).partition(":")[2]))
+        hunts: list[tuple[dict[str, Any], Any]] = [(lever, campaign_creature_definition(simulation, _s(lever.get("action")).partition(":")[2]))
                  for lever in map(_d, _l(pressure.get("levers")))
                  if _s(lever.get("action")).startswith("defeat:") and _amount(lever) < 0]
         # The hunt fits the hero: the strongest of its creatures below their level, else one of it (none: no offer

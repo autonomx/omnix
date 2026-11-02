@@ -249,12 +249,12 @@ def adopt_shared_world(
             history = work.world_library.list_scenario_revisions(context, str(scenario["id"]))
             if not history:
                 continue
-            latest = ScenarioRevisionDocument.model_validate(history[0]["document"])
-            runtime_seed_hash = str(dict(release.runtime_seed).get("content_hash") or "") if latest.runtime_seed_hash else ""
+            latest_scenario = ScenarioRevisionDocument.model_validate(history[0]["document"])
+            runtime_seed_hash = str(dict(release.runtime_seed).get("content_hash") or "") if latest_scenario.runtime_seed_hash else ""
             document = _ensure_hash(
-                latest.model_copy(
+                latest_scenario.model_copy(
                     update={
-                        "revision": latest.revision + 1,
+                        "revision": latest_scenario.revision + 1,
                         "world_revision": target,
                         "world_revision_hash": revision.content_hash,
                         "compatible_release": release.release,

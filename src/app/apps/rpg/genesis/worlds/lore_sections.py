@@ -238,12 +238,12 @@ def joined_routes(routes: Iterable[Mapping[str, Any]], locations: Iterable[Mappi
                                                                 reached.index(known)))]
             time = DERIVED_JOURNEY_TIME
         candidates = [known for known in reached if region_of[known] == region]
-        origin = capitals.get(region) if capitals.get(region) in candidates else candidates[0]
+        origin = capital if (capital := capitals.get(region)) in candidates and capital is not None else candidates[0]
         routes.append({"id": f"route:joined:{origin}:{place}", "from": origin, "to": place, "travel_time": time})
         neighbours[origin].add(place)
         neighbours[place].add(origin)
         reached += [found for found in reach(place) if found not in reached]
-    return routes
+    return [dict(route) for route in routes]
 
 
 __all__ = ["DERIVED_JOURNEY_TIME", "DERIVED_TRAVEL_TIME", "joined_routes", "lore_location_rows", "lore_routes",

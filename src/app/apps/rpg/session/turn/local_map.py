@@ -148,9 +148,9 @@ def on_the_local_map(
         kind, read = ready if ready is not None else ("existing", _existing(session_id, target))
         loaded = read if kind == "existing" else None
         made = read if kind == "new" else None
-        if loaded is None and (made or (made := _new_instance(session_id, here, map_id))) is not None:
-            loaded = made
-            snapshot = made[1]
+        if loaded is None and (fresh := made or _new_instance(session_id, here, map_id)) is not None:
+            loaded = fresh
+            snapshot = fresh[1]
             created.append({"map_instance_id": snapshot.map_instance_id, "campaign_id": snapshot.campaign_id,
                             "location_id": snapshot.location_id, "map_id": snapshot.map_id,
                             "definition_revision": snapshot.definition_revision,

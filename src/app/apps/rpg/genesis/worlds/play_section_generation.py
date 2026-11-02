@@ -29,6 +29,7 @@ from .published_pressures import derived_pressures
 from .published_world_setup import derived_behaviour, session_world_model, threat_stats
 from .world_play_sections import (
     CreaturePlay,
+    CreatureStats,
     GoalBeat,
     Price,
     QuestCondition,
@@ -214,7 +215,7 @@ def _pressures(canon: Mapping[str, Any], places: Mapping[str, Mapping[str, Any]]
             pressures.append(WorldPressure(
                 pressure_id=pressure_id, name=_short(_text(entity.get("name")) or pressure_id, 120),
                 description=_short(_text(entity.get("short_summary") or entity.get("description")), 600),
-                region_id=region_id, dimension=_dimension(words), severity=50.0, levers=levers,
+                region_id=region_id, dimension=_dimension(words), severity=50.0, levers=levers,  # type: ignore[arg-type]
             ))
         except ValidationError:
             continue
@@ -227,8 +228,8 @@ def _bestiary(canon: Mapping[str, Any]) -> list[CreaturePlay]:
         creature_id = _text(row.get("id"))
         if not creature_id:
             continue
-        creatures.append(CreaturePlay(id=creature_id, stats=threat_stats(_text(row.get("threat"))),
-                                      behaviour=derived_behaviour(row)))
+        creatures.append(CreaturePlay(id=creature_id, stats=CreatureStats.model_validate(threat_stats(_text(row.get("threat")))),
+                                      behaviour=derived_behaviour(row)))  # type: ignore[arg-type]
     return creatures
 
 

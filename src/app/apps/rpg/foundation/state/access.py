@@ -197,5 +197,12 @@ FIELD_ACCESSORS = {
     "performance": performance_of,
 }
 
-__all__ = [*sorted(accessor.__name__ for table in (ACCESSORS, FIELD_ACCESSORS) for accessor in table.values()),
-           "ACCESSORS", "FIELD_ACCESSORS"]
+__all__ = [
+    "ACCESSORS", "FIELD_ACCESSORS", "active_rumors_of", "area_detail_of", "campaign_calendar_of", "campaign_end_of",
+    "campaign_mechanics_of", "campaign_rules_of", "causal_applied_turn_keys_of", "climate_survival_of",
+    "combat_state_of", "direction_of", "economy_state_of", "exploration_of", "goal_state_of", "group_standing_of",
+    "hero_knowledge_of", "interaction_seq_of", "inventory_state_of", "lore_layer_of", "memory_state_of", "needs_of",
+    "npc_index_of", "party_state_of", "performance_of", "player_journal_of", "player_state_of",
+    "present_npc_state_of", "presentation_state_of", "quest_state_of", "rng_seed_of", "runtime_state_of",
+    "simulation_state_of", "state_revision_of", "survival_of", "travel_state_of", "world_facts_of", "world_model_of",
+]

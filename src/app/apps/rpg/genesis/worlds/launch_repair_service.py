@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import replace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -38,7 +38,7 @@ from .world_bundle import safe_bundle_segment
 
 def _compile_imported_topics_publication(
     world: Mapping[str, Any],
-    topic_rows: list[Mapping[str, Any]],
+    topic_rows: Sequence[Mapping[str, Any]],
     *,
     revision: int,
     starting_location_id: str,
@@ -176,7 +176,7 @@ def _draft_topics(work: Any, context: Any, world: Mapping[str, Any]) -> list[dic
 
 
 def _republished_latest(
-    work: Any, context: Any, world_id: str, *, revision: int, topic_rows: list[Mapping[str, Any]],
+    work: Any, context: Any, world_id: str, *, revision: int, topic_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[WorldGenerationPublication, list[GridMapDefinition]]:
     """A world with nothing to recompile from (written by hand or installed from a bundle: no generation run, no
     imported topics) republished as its latest revision stands, from before that revision's starter-bubble
@@ -256,7 +256,7 @@ def _existing_ready_promotion(
     starting_location_id: str,
     play_sections: str,
     database: Any | None,
-    topic_rows: list[Mapping[str, Any]] | None = None,
+    topic_rows: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """A launch-ready promotion at ``starting_location_id`` that already carries the world's play-sections draft
     (``play_sections``, its hash, "" for none), and, for a republished world, the entries its editor holds

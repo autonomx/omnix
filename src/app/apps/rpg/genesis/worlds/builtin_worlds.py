@@ -125,12 +125,12 @@ def bind_to_starter_world(document: dict[str, Any]) -> dict[str, Any]:
     people named by the world's ids, the world model for where the hero stands, who is present there, and its
     binding naming the world. A campaign that already plays from a world is returned as it is; one World Forge made
     (``setup_payload.genesis``), which the version 6 upgrade also marked "starter", is marked as its own."""
-    state = document.get("state") if isinstance(document.get("state"), dict) else {}
-    binding = state.get("world_binding") if isinstance(state.get("world_binding"), dict) else {}
-    simulation = document.get("simulation_state") if isinstance(document.get("simulation_state"), dict) else {}
+    state = raw_state if isinstance(raw_state := document.get("state"), dict) else {}
+    binding = raw_world_binding if isinstance(raw_world_binding := state.get("world_binding"), dict) else {}
+    simulation = raw_simulation_state if isinstance(raw_simulation_state := document.get("simulation_state"), dict) else {}
     if binding.get("kind") != "starter" or binding.get("world_id") or simulation.get("world_model"):
         return document
-    setup = document.get("setup_payload") if isinstance(document.get("setup_payload"), dict) else {}
+    setup = raw_setup_payload if isinstance(raw_setup_payload := document.get("setup_payload"), dict) else {}
     if setup.get("genesis") or setup.get("compiled_genesis"):
         return {**document, "state": {**state, "world_binding": {"kind": "genesis"}}}
     bound = _with_ids(document, legacy_ids(STARTER))

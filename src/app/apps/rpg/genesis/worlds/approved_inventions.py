@@ -43,7 +43,7 @@ def with_approved_inventions(canon: Mapping[str, Any], topology: Mapping[str, An
             continue
         family = _s(approved_row.get("family"))
         row, play = _d(_rewritten(approved_row.get("row"), ids)), _d(_rewritten(approved_row.get("play"), ids))
-        entity = {**{name: value for name, value in row.items() if isinstance(value, (str, int, float, bool))},
+        entity: dict[str, Any] = {**{name: value for name, value in row.items() if isinstance(value, (str, int, float, bool))},
                   "id": key, "kind": kinds.get(family, family), "name": _s(approved_row.get("name"))}
         entities.append(entity)
         if family == "person":

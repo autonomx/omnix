@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timezone
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -116,7 +116,7 @@ def _walk_ids(value: Any, output: set[str]) -> None:
             _walk_ids(item, output)
 
 
-def _known_ids(topic_rows: list[Mapping[str, Any]], world_id: str) -> set[str]:
+def _known_ids(topic_rows: Sequence[Mapping[str, Any]], world_id: str) -> set[str]:
     result = {world_id}
     for row in topic_rows:
         _walk_ids(_record(row.get("content")), result)

@@ -93,7 +93,7 @@ def _struck(evidence_text: str) -> set[str]:
     name or a part ending in its last word ("the echo wolf", "the wolf"; never "the echo", which a scene says of
     anything: the twelfth review). A person (named bare, "you hit Captain Rhea Sunward"): any word of the name, a
     title too ("the captain": the thirteenth). The hero aside."""
-    names = set()
+    names: set[str] = set()
     for article, name in _STRUCK.findall(evidence_text):
         words = name.split()
         if not words or name == "you":

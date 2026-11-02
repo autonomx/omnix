@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -32,7 +32,7 @@ from .models import MarketBar
 from .us_equity_calendar import EASTERN as _ET
 from .us_equity_calendar import regular_close_time
 
-TREND_T1_VERSION = "trend-continuation-t1-v1"
+TREND_T1_VERSION: Final = "trend-continuation-t1-v1"
 MIN_GAIN = Decimal("0.10")
 MIN_DOLLARS = Decimal("1000000")
 SIGNAL_START_ET = time(10, 0)
@@ -144,7 +144,7 @@ def evaluate_trend_t1(
     regular = [bar for bar in regular if bar.start_time.astimezone(_ET).time() < close_at]
     buckets = _buckets(regular)
     session_open = regular[0].open
-    base = {
+    base: dict[str, Any] = {
         "session_date": session.isoformat(),
         "as_of": regular[-1].end_time,
         "five_minute_bar_count": len(buckets),
@@ -179,7 +179,7 @@ def evaluate_trend_t1(
             dollar_volume=bucket.dollars,
             open_gap_pct=_pct(session_open, prior_close),
         )
-        entry = {"signal": signal, "entry_time": entry_bucket.start, "entry_price": entry_bucket.open}
+        entry: dict[str, Any] = {"signal": signal, "entry_time": entry_bucket.start, "entry_price": entry_bucket.open}
         for later in range(index + 1, len(buckets)):
             current = buckets[later]
             if current.start.time() >= flat_at or current.end > regular[-1].end_time:

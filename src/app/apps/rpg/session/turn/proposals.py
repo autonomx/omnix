@@ -107,7 +107,8 @@ def _capped(proposals: list[Proposal]) -> list[Proposal]:
 
     area = sorted((proposal for proposal in proposals if proposal.kind == "gm_area"),
                   key=lambda proposal: _AREA_ORDER.get(str(_d(proposal.payload.get("entry")).get("kind") or ""), 3))
-    taken, size = [], 0
+    taken: list[Any] = []
+    size = 0
     for proposal in area[:AREA_ENTRIES_PER_TURN]:
         size += len(json.dumps(dict(proposal.payload), ensure_ascii=False))
         if taken and size > AREA_BYTES_PER_TURN:

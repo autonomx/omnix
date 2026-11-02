@@ -83,10 +83,10 @@ def _item_changes(before: CampaignStateView, after: CampaignStateView) -> list[S
         elif delta < 0:
             changes.append(ItemRemoved(item_id=key, quantity=-delta))
     for slot in sorted(set(before.inventory.equipment) | set(after.inventory.equipment)):
-        now = after.inventory.equipment.get(slot)
-        if now == before.inventory.equipment.get(slot):
+        worn = after.inventory.equipment.get(slot)
+        if worn == before.inventory.equipment.get(slot):
             continue
-        changes.append(ItemEquipped(slot=slot, item_id=str(now)) if now else ItemUnequipped(slot=slot))
+        changes.append(ItemEquipped(slot=slot, item_id=str(worn)) if worn else ItemUnequipped(slot=slot))
     return changes
 
 
@@ -151,13 +151,13 @@ def changes_between(before_document: Mapping[str, Any], after_document: Mapping[
         changes.append(NeedsChanged(**needs))
     quests_before = {quest.quest_id: quest for quest in before.quests.quests}
     for quest in after.quests.quests:
-        previous = quests_before.get(quest.quest_id)
-        if previous is None:
+        earlier = quests_before.get(quest.quest_id)
+        if earlier is None:
             continue
-        if quest.status != previous.status and quest.status in _QUEST_STATUSES:
+        if quest.status != earlier.status and quest.status in _QUEST_STATUSES:
             changes.append(QuestStatusChanged(quest_id=quest.quest_id, status=quest.status))  # type: ignore[arg-type]
         for place in quest.visited_locations:
-            if place not in previous.visited_locations:
+            if place not in earlier.visited_locations:
                 changes.append(QuestPlaceReached(quest_id=quest.quest_id, location_id=place))
     party_before = {companion.npc_id for companion in before.party.companions}
     party_after = {companion.npc_id: companion for companion in after.party.companions}

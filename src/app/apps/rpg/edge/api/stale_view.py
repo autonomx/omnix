@@ -26,7 +26,7 @@ def stale_refusal(session_id: str, detail: Mapping[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.session.service import load_session
 
     session = load_session(session_id) or {}
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
     return {**dict(detail), "stale_view": True, "message": STALE_MESSAGES[error],
             "current_revision": int(runtime.get("state_revision") or 0), "session": player_session_view(session)}
 

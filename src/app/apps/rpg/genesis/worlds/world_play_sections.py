@@ -429,7 +429,8 @@ def _rows(value: Any) -> list[Any]:
 
 
 def _error_code(error: ValidationError) -> str:
-    first = error.errors()[0] if error.errors() else {}
+    errors = error.errors()
+    first: Mapping[str, Any] = errors[0] if errors else {}
     location = ".".join(str(part) for part in first.get("loc") or ())
     message = str(first.get("msg") or "invalid").removeprefix("Value error, ")
     return f"{location}:{message}" if location else message
@@ -452,7 +453,7 @@ def _condition_play(condition: Mapping[str, Any]) -> dict[str, Any]:
 
 def _step_play(step: Mapping[str, Any]) -> dict[str, Any]:
     if _rows(step.get("any_of")):
-        ways = [way if isinstance(way, (list, tuple)) or (isinstance(way, Mapping) and "all_of" in way) else [way]
+        ways: list[Any] = [way if isinstance(way, (list, tuple)) or (isinstance(way, Mapping) and "all_of" in way) else [way]
                 for way in _rows(step["any_of"])]
     else:
         ways = [_rows(step.get("all_of") or step.get("conditions"))]
@@ -460,7 +461,8 @@ def _step_play(step: Mapping[str, Any]) -> dict[str, Any]:
     for way in ways:
         told, sets = "", []
         if isinstance(way, Mapping) and "all_of" in way:  # a way with its own telling, and the facts it leaves
-            way, told, sets = _rows(way.get("all_of")), str(way.get("told") or ""), _rows(way.get("sets"))
+            told, sets = str(way.get("told") or ""), _rows(way.get("sets"))
+            way = _rows(way.get("all_of"))
         elif len(ways) == 1:
             told, sets = str(step.get("told") or ""), _rows(step.get("sets"))
         plays.append({"conditions": [_condition_play(_mapping(row)) for row in way], **({"told": told} if told else {}),
@@ -492,11 +494,12 @@ def quest_canon_fields(play: QuestPlay) -> dict[str, Any]:
                           **({"told": step.ways[0].told} if step.ways[0].told else {}),
                           **({"sets": _facts(step.ways[0].sets)} if step.ways[0].sets else {})})
             continue
-        steps.append({"id": step.id, "summary": step.summary, "any_of": [
+        any_of: list[Any] = [
             {"all_of": way, **({"told": play_way.told} if play_way.told else {}),
              **({"sets": _facts(play_way.sets)} if play_way.sets else {})}
             if play_way.told or play_way.sets else way[0] if len(way) == 1 else way
-            for way, play_way in zip(ways, step.ways)]})
+            for way, play_way in zip(ways, step.ways)]
+        steps.append({"id": step.id, "summary": step.summary, "any_of": any_of})
     return {**({"steps": steps} if steps else {}), **({"giver_id": play.giver_id} if play.giver_id else {}),
             **({"deadline_hours": play.deadline_hours} if play.deadline_hours is not None else {}),
             **({"sets": _facts(play.sets)} if play.sets else {}),
@@ -559,10 +562,10 @@ def parse_play_sections(canon: Mapping[str, Any]) -> tuple[WorldPlaySections, tu
     if quests:
         parsed["quests"] = parse("quests", QuestPlay, quests)
         authored.append("quests")
-    for section, model in (("fact_effects", FactEffect), ("group_members", GroupMembers), ("budgets", LevelBudget)):
+    for section, section_model in (("fact_effects", FactEffect), ("group_members", GroupMembers), ("budgets", LevelBudget)):
         rows = _rows(canon.get(section))
         if rows:
-            parsed[section] = parse(section, model, rows)
+            parsed[section] = parse(section, section_model, rows)
             authored.append(section)
     return WorldPlaySections(**parsed, authored=tuple(authored)), tuple(findings)
 
@@ -629,10 +632,10 @@ def play_section_findings(
              "check": (set(CHECK_KINDS), "check")}
     group_ids = _ids(canon, "groups") | {str(_mapping(row).get("id") or "") for row in _rows(canon.get("factions"))}
     for effect in sections.fact_effects:
-        provider = next((getattr(effect, kind).provider for kind in ("price", "waive", "closes")
-                         if getattr(effect, kind) is not None and getattr(effect, kind).provider), "")
-        if provider and provider not in npc_ids:
-            unknown.append(f"play_section_unknown_person:fact_effects:{provider}")
+        seller = next((getattr(effect, kind).provider for kind in ("price", "waive", "closes")
+                       if getattr(effect, kind) is not None and getattr(effect, kind).provider), "")
+        if seller and seller not in npc_ids:
+            unknown.append(f"play_section_unknown_person:fact_effects:{seller}")
         if effect.price is not None and effect.price.region and effect.price.region not in region_ids:
             unknown.append(f"play_section_unknown_place:fact_effects:{effect.price.region}")
         if effect.place is not None:
@@ -654,8 +657,8 @@ def play_section_findings(
             unknown.append(f"play_section_unknown_quest:quests:{quest.id}")
         if quest.giver_id and quest.giver_id not in npc_ids:
             unknown.append(f"play_section_unknown_person:quests:{quest.giver_id}")
-        for step in quest.steps:
-            for condition in (condition for way in step.ways for condition in way.conditions):
+        for quest_step in quest.steps:
+            for condition in (condition for way in quest_step.ways for condition in way.conditions):
                 ids, what = known.get(condition.kind, (None, ""))
                 if ids is not None and condition.subject not in ids:
                     unknown.append(f"play_section_unknown_{what}:quests:{condition.subject}")
@@ -774,12 +777,12 @@ def with_play_sections(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> di
     if draft.quests is not None and (quests or any(_quest_plays(row) for row in lore_rows(canon, "quests"))):
         rows = []
         for row in lore_rows(canon, "quests"):
-            play = quests.pop(str(row.get("id") or ""), None)
-            if play is None and _quest_plays(row) and not _edits_as_a_section(row):
+            quest_play = quests.pop(str(row.get("id") or ""), None)
+            if quest_play is None and _quest_plays(row) and not _edits_as_a_section(row):
                 rows.append(row)  # steps the editor cannot show (findings name them) are kept, never dropped
                 continue
             lore = {key: value for key, value in row.items() if key not in _QUEST_PLAY}
-            rows.append({**lore, **(quest_canon_fields(play) if play is not None else {})})
+            rows.append({**lore, **(quest_canon_fields(quest_play) if quest_play is not None else {})})
         canon["quests"] = rows  # a quest the world lacks is left out (unknown_creatures names it)
     return canon
 

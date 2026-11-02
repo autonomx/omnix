@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 # The release index of each canon list's ids, where the release keeps one.
 _INDEXES = {"characters": "character_ids", "factions": "faction_ids", "quests": "quest_ids"}
@@ -28,7 +28,7 @@ def _rows(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in value or () if isinstance(row, Mapping)] if isinstance(value, list) else []
 
 
-def _entries(topic_rows: list[Mapping[str, Any]], canon: Mapping[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
+def _entries(topic_rows: Sequence[Mapping[str, Any]], canon: Mapping[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
     """The draft topics' entries by the canon list they belong to, in topic order (every list of entries, with no
     ``canon``)."""
     entries: dict[str, list[dict[str, Any]]] = {}
@@ -44,7 +44,7 @@ def _entries(topic_rows: list[Mapping[str, Any]], canon: Mapping[str, Any] | Non
 
 
 def with_topic_entries(canon: Mapping[str, Any], manifest: Mapping[str, Any], indexes: Mapping[str, Any],
-                       topic_rows: list[Mapping[str, Any]]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+                       topic_rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """``canon``, its entity ``manifest`` and the release's ``indexes`` with the draft topics' entries written in."""
     canon, manifest, indexes = dict(canon), dict(manifest), dict(indexes)
     for key, rows in _entries(topic_rows, canon).items():
@@ -68,18 +68,18 @@ def with_topic_entries(canon: Mapping[str, Any], manifest: Mapping[str, Any], in
     return canon, manifest, indexes
 
 
-def holds_topic_entries(canon: Mapping[str, Any], topic_rows: list[Mapping[str, Any]]) -> bool:
+def holds_topic_entries(canon: Mapping[str, Any], topic_rows: Sequence[Mapping[str, Any]]) -> bool:
     """Whether ``canon`` already holds every entry of the draft topics as the editor has it."""
     return with_topic_entries(canon, {}, {}, topic_rows)[0] == dict(canon)
 
 
-def entries_hash(topic_rows: list[Mapping[str, Any]]) -> str:
+def entries_hash(topic_rows: Sequence[Mapping[str, Any]]) -> str:
     """Every entry the editor holds, as one hash (whatever lists a canon keeps, before or after its play sections)."""
     text = json.dumps(_entries(topic_rows, None), sort_keys=True, separators=(",", ":"), default=str)
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def unresolved(canon: Mapping[str, Any], manifest: Mapping[str, Any], topic_rows: list[Mapping[str, Any]]) -> list[str]:
+def unresolved(canon: Mapping[str, Any], manifest: Mapping[str, Any], topic_rows: Sequence[Mapping[str, Any]]) -> list[str]:
     """Each reference an added or changed entry makes to what neither the canon nor the entries hold."""
     from .entity_authoring import validate_entity_references
 
@@ -101,7 +101,7 @@ def unresolved(canon: Mapping[str, Any], manifest: Mapping[str, Any], topic_rows
     return found
 
 
-def carries_entries(revision_document: Mapping[str, Any], topic_rows: list[Mapping[str, Any]]) -> bool:
+def carries_entries(revision_document: Mapping[str, Any], topic_rows: Sequence[Mapping[str, Any]]) -> bool:
     """Whether a published revision holds the entries the editor holds now: by the entries it recorded, or (one made
     before it recorded them, as a bundle installs) by its canon."""
     canon = dict(revision_document.get("canon") or {})

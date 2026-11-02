@@ -154,7 +154,7 @@ def note_preference(simulation: Mapping[str, Any], kind: str, value: str) -> Not
         return Noted(lines=[f"Say {' or '.join(allowed)} for {kind}."], refused=True)
     said = {"pace": f"The story will move {value}.", "danger": f"The road will hold {value} danger.",
             "tone": f"The story will turn {value}.", "focus": "The game master will keep that in sight."}[kind]
-    return Noted([PreferenceNoted(kind=kind, value=value)], [f"Noted: {said}"])
+    return Noted([PreferenceNoted(kind=kind, value=value)], [f"Noted: {said}"])  # type: ignore[arg-type]
 
 
 def wishes(simulation: Mapping[str, Any]) -> dict[str, str]:

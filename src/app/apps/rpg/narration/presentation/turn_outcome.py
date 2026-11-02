@@ -14,7 +14,7 @@ the ``planned_action``; ``dialogue_plan`` is empty.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,7 +25,7 @@ from app.apps.rpg.foundation.state.extract import CHANGE_SECTIONS, changes_betwe
 from app.apps.rpg.narration.presentation.outcome_facts import OutcomeFact, Suggestion, outcome_facts
 from app.apps.rpg.foundation.state import access as _sections
 
-TURN_OUTCOME_FORMAT = "rpg_turn_outcome_v1"
+TURN_OUTCOME_FORMAT: Final = "rpg_turn_outcome_v1"
 TurnKind = Literal["player_text", "structured_action", "world_tick", "system"]
 
 

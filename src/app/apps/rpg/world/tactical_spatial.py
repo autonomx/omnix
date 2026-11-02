@@ -65,7 +65,7 @@ def grid_turn_summary(simulation_state: Mapping[str, Any], campaign_id: str, obs
     hero = hero_on_map(campaign_id)
     current = str(combat.get("current_actor_id") or "")
     _, left = movement_left(combat)
-    participants = combat.get("participants") if isinstance(combat.get("participants"), Mapping) else {}
+    participants = raw_participants if isinstance(raw_participants := combat.get("participants"), Mapping) else {}
     return {
         "combat_active": True,
         "round": int(combat.get("round") or 1),
@@ -190,7 +190,7 @@ def foes_take_the_field(
 
     def taken(exclude: str) -> set[GridPoint]:
         cells = {cell for actor in snapshot.actors for cell in actor_footprint_cells(actor)}
-        return cells | {tuple(row["cell"]) for key, row in participants.items()  # type: ignore[misc]
+        return cells | {tuple(row["cell"]) for key, row in participants.items()
                         if key in foes and key != exclude and isinstance(row.get("cell"), list)}
 
     def beside_the_hero(exclude: str) -> list[GridPoint]:

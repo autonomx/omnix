@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from threading import RLock
 from time import monotonic
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -286,7 +287,7 @@ def first_causal_execution(
     is far wider than the market. The source is fixed by policy, never chosen by
     price, and each source still contributes only its first post-decision quote.
     """
-    timing = dict(
+    timing: dict[str, Any] = dict(
         decision_completed_at=decision_completed_at,
         actionable_at=actionable_at,
         market_snapshot_as_of=market_snapshot_as_of,

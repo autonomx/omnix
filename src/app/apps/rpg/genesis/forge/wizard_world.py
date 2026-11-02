@@ -75,7 +75,8 @@ def _opening(prepared: Mapping[str, Any], wanted: str) -> Mapping[str, Any] | No
     named = [row for row in rows if words and words <= set(re.findall(
         r"[a-z0-9]+", f"{row.get('title') or ''} {opening_document(row).get('starting_location_id') or ''}"
         .casefold().replace("-", " ")))]
-    return (named or rows or [None])[0]
+    found = named or rows
+    return found[0] if found else None
 
 
 def advance_wizard_world(

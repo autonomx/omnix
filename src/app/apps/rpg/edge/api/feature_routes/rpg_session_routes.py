@@ -1,6 +1,8 @@
 """Clean RPG session launch and save-management gateway routes."""
 from __future__ import annotations
 from fastapi import APIRouter
+from pydantic import JsonValue, RootModel
+
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -218,8 +220,8 @@ def _loadout_as_turn(session_id: str, *, command: str, action: dict[str, Any], p
     if payload.get("ok") is False:
         detail = {key: value for key, value in payload.items() if key != "status_code"}
         raise HTTPException(status_code=int(payload.get("status_code") or 400), detail=detail)
-    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
-    answer = outcome.get("action_result") if isinstance(outcome.get("action_result"), dict) else {}
+    outcome = raw_outcome if isinstance(raw_outcome := payload.get("outcome"), dict) else {}
+    answer = raw_action_result if isinstance(raw_action_result := outcome.get("action_result"), dict) else {}
     saved = load_session(session_id)
     return {
         "ok": True,
@@ -400,6 +402,10 @@ def _require_local_dialogue_fixture_request(request: Request) -> None:
             status_code=403,
             detail={"ok": False, "error": "local_dialogue_fixture_opt_in_required"},
         )
+
+
+class RpgCampaignImportBody(RootModel[dict[str, JsonValue]]):
+    """A campaign's save package, as ``/export`` wrote it; ``import_campaign`` checks what it holds."""
 
 
 def register_rpg_session_routes(router: APIRouter, state) -> None:
@@ -733,11 +739,11 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         tags=["rpg-session"],
         responses=documented(RpgCampaignImportResponse),
     )
-    def rpg_import_session(package: dict[str, Any]) -> dict[str, Any]:
+    def rpg_import_session(package: RpgCampaignImportBody) -> dict[str, Any]:
         from app.apps.rpg.session.persistence.campaign_transfer import CampaignTransferRefused, import_campaign
 
         try:
-            return import_campaign(package)
+            return import_campaign(package.root)
         except CampaignTransferRefused as exc:
             code, _, subject = str(exc).partition(":")
             message = {

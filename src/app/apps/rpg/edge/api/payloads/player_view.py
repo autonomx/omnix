@@ -29,8 +29,8 @@ def player_session_view(session: Any) -> Any:
     """``session`` as its player may see it; anything that is not a campaign document is returned as it is."""
     if not isinstance(session, Mapping) or "simulation_state" not in session and "runtime_state" not in session:
         return session
-    simulation = session.get("simulation_state") if isinstance(session.get("simulation_state"), Mapping) else {}
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), Mapping) else {}
+    simulation = raw_simulation_state if isinstance(raw_simulation_state := session.get("simulation_state"), Mapping) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), Mapping) else {}
     view = {key: value for key, value in session.items() if key not in _PRIVATE_TOP}
     if isinstance(view.get("state"), Mapping):
         view["state"] = {key: value for key, value in view["state"].items() if key not in _PRIVATE_STATE}

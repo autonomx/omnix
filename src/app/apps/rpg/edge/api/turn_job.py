@@ -71,7 +71,7 @@ def _run_turn(job_store: Any, job: JobRecord) -> tuple[str, str]:
     if answer.get("ok") is not True:
         code = str(answer.get("error") or "rpg_turn_refused")
         raise TurnJobRefused(code, str(answer.get("message") or code), retryable=code in _RETRYABLE)
-    visible = answer.get("visible_response") if isinstance(answer.get("visible_response"), dict) else {}
+    visible = raw_visible_response if isinstance(raw_visible_response := answer.get("visible_response"), dict) else {}
     text = str(visible.get("plain_text") or visible.get("narration") or "").strip()
     if not text:
         raise TurnJobRefused("rpg_turn_without_visible_response", "The turn produced no visible response",

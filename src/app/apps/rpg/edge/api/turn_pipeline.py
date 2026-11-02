@@ -224,7 +224,7 @@ def run_rpg_turn(
                                 narrate_after_commit=narrate_after_commit)
     except HTTPException as exc:
         if exc.status_code >= 500:
-            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
             record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=kind, ok=False,
                                error=str(detail.get("error") or exc.status_code), complete_ms=trace.elapsed_ms,
                                model_failures=current_model_failures())
@@ -236,8 +236,8 @@ def run_rpg_turn(
                            error=type(exc).__name__, complete_ms=trace.elapsed_ms,
                            model_failures=current_model_failures())
         raise
-    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), Mapping) else {}
-    calls = outcome.get("model_calls") if isinstance(outcome.get("model_calls"), Mapping) else {}
+    outcome = raw_outcome if isinstance(raw_outcome := payload.get("outcome"), Mapping) else {}
+    calls = raw_model_calls if isinstance(raw_model_calls := outcome.get("model_calls"), Mapping) else {}
     record_turn_metric(campaign_id=session_id, submission_id=submission_id,
                        turn_class=str(outcome.get("planned_action") or outcome.get("kind") or kind), ok=True,
                        degraded_stages=int(payload.get("degraded_stage_count") or 0), complete_ms=trace.elapsed_ms,

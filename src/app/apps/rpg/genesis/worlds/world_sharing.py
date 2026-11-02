@@ -278,7 +278,7 @@ def share_world(
     )
     upload_url = f"{_UPLOADS}/repos/{fork}/releases/{int(release['id'])}/assets?name={urllib.parse.quote(filename)}"
     asset = dict(github.upload(upload_url, bundle.content, step="upload"))
-    submission = {
+    submission: dict[str, Any] = {
         "schema_version": SUBMISSION_SCHEMA,
         "id": slug,
         "title": str(world.get("title") or slug),

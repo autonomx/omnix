@@ -187,7 +187,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
                 if planned.reason == "nothing_to_use" else "You are in a fight: strike, break away, or use something you carry.")
         return Resolution([_counted(session)], [said], refused=True, told=False)
     if mechanic == "fight":
-        turn = fight(simulation, action={"flee": "flee", "defend": "defend", "sneak": "sneak", "persuade": "parley",
+        turn = fight(simulation, action={"flee": "flee", "defend": "defend", "sneak": "sneak", "persuade": "parley",  # type: ignore[arg-type]
                                          "intimidate": "parley"}.get(planned.reason, "attack"),
                      target_ref=planned.target_id, turn_key=str(_counted(session).turn_count),
                      parley="intimidate" if planned.reason == "intimidate" else "persuade", weakness=slots.weakness)
@@ -223,7 +223,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution(_timed(session, given.changes, given.minutes), given.lines, minutes=given.minutes,
                           refused=given.refused, told=not given.refused)
     if mechanic in {"use_item", "drop", "take", "equip", "unequip"}:
-        counted = {"quantity": slots.quantity, "everything": slots.everything}
+        counted: dict[str, Any] = {"quantity": slots.quantity, "everything": slots.everything}
         outcome = (use_item(simulation, planned.target_id) if mechanic == "use_item"
                    else drop_item(simulation, planned.target_id, **counted) if mechanic == "drop"
                    else pick_up(simulation, planned.target_id, **counted) if mechanic == "take"
@@ -273,10 +273,10 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution(_timed(session, searched.changes, searched.minutes), searched.lines,
                           minutes=searched.minutes, needs="standard_turn", told=bool(searched.changes))
     if mechanic == "rest":
-        outcome = rest(simulation, slots.rest)
-        return Resolution(_timed(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,
-                          refused=outcome.refused, needs="rest" if outcome.kind == "while" else "sleep",
-                          told=not outcome.refused)
+        rested = rest(simulation, slots.rest)
+        return Resolution(_timed(session, rested.changes, rested.minutes), rested.lines, minutes=rested.minutes,
+                          refused=rested.refused, needs="rest" if rested.kind == "while" else "sleep",
+                          told=not rested.refused)
     return None
 
 

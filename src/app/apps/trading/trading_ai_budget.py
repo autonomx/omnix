@@ -89,7 +89,7 @@ def contract_tier(contract_id: str) -> Tier:
 def tier_limits(daily: int) -> dict[str, int]:
     """Each tier's cap, and the day's total only live calls may go past."""
 
-    limits = {tier: math.floor(daily * share) for tier, share in TIER_SHARE.items()}
+    limits: dict[str, int] = {tier: math.floor(daily * share) for tier, share in TIER_SHARE.items()}
     limits["non_live_total"] = daily - math.floor(daily * LIVE_RESERVE_SHARE)
     return limits
 

@@ -13,7 +13,7 @@ from typing import Any, Mapping
 from app.apps.rpg.world.causal_runtime import bootstrap_causal_runtime
 
 from .lore_sections import lore_rows
-from .world_play_sections import WorldPressure, parse_play_sections
+from .world_play_sections import PressureLever, WorldPressure, parse_play_sections
 
 # The bestiary rates threat; the most dangerous creature sets how dangerous a region's roads start.
 _THREAT_SEVERITY = {"low": 25.0, "minor": 25.0, "medium": 40.0, "moderate": 40.0, "high": 55.0, "severe": 55.0,
@@ -48,7 +48,7 @@ def derived_pressures(canon: Mapping[str, Any]) -> tuple[WorldPressure, ...]:
                 severity=severity,
                 trend="volatile",
                 levers=tuple(
-                    {"action": f"defeat:{_text(row.get('id'))}", "effect": "lower", "amount": 8.0}
+                    PressureLever(action=f"defeat:{_text(row.get('id'))}", effect="lower", amount=8.0)
                     for row in creatures
                 ),
             )

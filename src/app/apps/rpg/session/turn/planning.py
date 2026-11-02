@@ -96,7 +96,7 @@ def _plan(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction 
     if reading.family == "inspect" and reading.target_id:  # a close look at something here, told by what it is
         return PlannedAction(mechanic="look", target_id=reading.target_id, reason=reading.reason)
     if reading.family == "decline":  # "no thanks": said to the one who offered, or to whoever the hero talks with
-        return PlannedAction(mechanic="talk", target_id=reading.target_id if reading.target_kind == "person" else "",
+        return PlannedAction(mechanic="talk", target_id=(reading.target_id or "") if reading.target_kind == "person" else "",
                              ticks=0, reason=reading.reason)
     if reading.family == "ask" and reading.reason == "asks_about_thing" and reading.second_target_id:
         # Asked aloud about a thing: whoever answers it (the grammar's), about it.
@@ -121,7 +121,7 @@ def _plan(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction 
     if reading.family == "ask" and reading.reason == "asks_hypothetical":
         # A question about what would happen is speech, whatever it is about (RQ-3.2): asked of the person it
         # names, else of whoever the hero is talking with.
-        return PlannedAction(mechanic="talk", target_id=reading.target_id if reading.target_kind == "person" else "",
+        return PlannedAction(mechanic="talk", target_id=(reading.target_id or "") if reading.target_kind == "person" else "",
                              ticks=0, reason=reading.reason)
     if reading.family in {"talk", "ask"} and (reading.target_kind == "person" or not reading.target_id):
         # Someone named, or the one the hero is talking to; whether anyone present is, is the dialogue's to say.

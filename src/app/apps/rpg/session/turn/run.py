@@ -85,16 +85,17 @@ def _offered(document: dict[str, Any], planned: PlannedAction | None) -> dict[st
     from app.apps.rpg.narration.presentation.outcome_facts import Suggestion
     from app.apps.rpg.session.turn.suggestions import choices, suggestions
 
-    asked = planned is not None and planned.mechanic == "clarify"
     offered_at = int(_d(document.get("state")).get("turn_count") or 0)  # a card from an older turn is refused
 
     def dealt(rows: list[Suggestion]) -> list[dict[str, Any]]:
         return [{**row.model_dump(), "action": {**row.action, "offered_turn": offered_at}} if row.action
                 else row.model_dump() for row in rows]
 
-    answers = (dealt([Suggestion(label=command, command=command, action=dict(action))
-                      for command, action in zip(planned.options, planned.option_actions or ({},) * len(planned.options))])
-               if asked and planned.options else dealt(choices(document, planned.reason)) if asked else [])
+    answers: list[dict[str, Any]] = []
+    if planned is not None and planned.mechanic == "clarify":
+        answers = (dealt([Suggestion(label=command, command=command, action=dict(action))
+                          for command, action in zip(planned.options, planned.option_actions or ({},) * len(planned.options))])
+                   if planned.options else dealt(choices(document, planned.reason)))
     return {"suggestions": dealt(suggestions(document)), "choices": answers}
 
 
@@ -400,7 +401,7 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
         outcome.lines, minutes=outcome.minutes, needs="standard_turn" if outcome.minutes else None, told=False,
         action_result={"kind": "loadout", "action": _s(action.get("action")), "item_name": _s(action.get("item_name")),
                        "detail": " ".join(outcome.lines)})
-    planned = PlannedAction(mechanic=mechanic, ticks=0, reason="loadout")
+    planned = PlannedAction(mechanic=mechanic, ticks=0, reason="loadout")  # type: ignore[arg-type]
     reading = IntentCandidate(family=mechanic, confidence=1.0, reason="loadout")  # type: ignore[arg-type]
     request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
     return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
@@ -573,7 +574,7 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
         definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
         if action.get("type") == "tactical_move":
             grid = grid_move(ctx.session_id, simulation, definition, snapshot,
-                             destination=tuple(action.get("destination") or ()),  # type: ignore[arg-type]
+                             destination=tuple(action.get("destination") or ()),
                              command_id=_s(action.get("command_id")) or f"grid:{count}")
             planned = PlannedAction(mechanic="fight", ticks=0, reason="grid_move")
         else:

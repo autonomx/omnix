@@ -124,7 +124,7 @@ def _hero_hp(simulation: Mapping[str, Any]) -> tuple[int, int]:
     player = _player(simulation)
     pool = _d(_d(player.get("resources")).get("hp"))
     maximum = int(pool.get("max") or player.get("max_hp") or 20)
-    return int(pool.get("current") if pool.get("current") is not None else player.get("hp") or maximum), maximum
+    return int(raw_current if (raw_current := pool.get("current")) is not None else player.get("hp") or maximum), maximum
 
 
 def _companions(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -260,7 +260,7 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
         calling = _calling_numbers(_d(_d(_d(_sections.world_model_of(simulation)).get("npcs")).get(npc_id)))
         participants[npc_id] = {
             "actor_id": npc_id, "side": "party", "name": _s(companion.get("name")) or npc_id,
-            "hp": int(companion.get("hp") if companion.get("hp") is not None else maximum), "max_hp": maximum,
+            "hp": int(raw_hp if (raw_hp := companion.get("hp")) is not None else maximum), "max_hp": maximum,
             "armor": calling["armor"], "defense": calling["defense"], "initiative_bonus": calling["initiative_bonus"],
             "status": "active", "status_effects": []}
         if participants[npc_id]["hp"] <= 0:
@@ -768,19 +768,19 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     elif not ended and action == "attack":
         target_id = _named(combat, target_ref) or default_target_for_actor(combat, "player")
         used = _weakness(combat, target_id, weakness)
-        effect = _s(used.get("effect")) or "stun" if used else ""
+        weak_effect = _s(used.get("effect")) or "stun" if used else ""
         blow = _strike(simulation, combat, conditions, "player", target_id, cover=cover,
-                       harder=WEAKNESS_DAMAGE if effect == "damage" else 0)
+                       harder=WEAKNESS_DAMAGE if weak_effect == "damage" else 0)
         if used and blow["hit"] and int(participant(combat, target_id).get("hp") or 0) > 0:
-            foe = participant(combat, target_id)
-            if effect == "morale" and not foe.get("boss"):
-                foe["status"] = "fled"  # its nerve breaks: it flees the field
+            struck = participant(combat, target_id)
+            if weak_effect == "morale" and not struck.get("boss"):
+                struck["status"] = "fled"  # its nerve breaks: it flees the field
             else:
                 combat["pending_skip_turn_actor_id"] = target_id  # it reels, and loses its next turn
             combat.setdefault("combat_log", []).append({"kind": "weakness", "round": int(combat.get("round") or 1),
                                                         "actor_id": "player", "target_id": target_id,
-                                                        "weakness": _s(used.get("trigger_tag")), "effect": effect})
-            report["weakness"] = {"name": _s(foe.get("name")), "effect": effect,
+                                                        "weakness": _s(used.get("trigger_tag")), "effect": weak_effect})
+            report["weakness"] = {"name": _s(struck.get("name")), "effect": weak_effect,
                                   "weakness": weakness or _s(used.get("trigger_tag"))}
         report.update(blow, reason=report.get("reason") or ("combat_defeat_resolved" if blow["defeated"]
                                                             else "combat_attack_resolved"))
@@ -789,8 +789,8 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
             _advance(combat)
     elif not ended and any(participant(combat, foe).get("no_escape") for foe in living_enemy_ids(combat)):
         # A fight with no escape (EV-2: a finale): breaking away is refused, and no time passes.
-        foe = next(participant(combat, foe) for foe in living_enemy_ids(combat) if participant(combat, foe).get("no_escape"))
-        return FightTurn([], [f"There is no breaking away from the {_s(foe.get('name')) or 'foe'}: this fight ends with "
+        barring = next(participant(combat, foe) for foe in living_enemy_ids(combat) if participant(combat, foe).get("no_escape"))
+        return FightTurn([], [f"There is no breaking away from the {_s(barring.get('name')) or 'foe'}: this fight ends with "
                               "one of you. Strike, guard, or use something you carry."], refused=True, minutes=0)
     elif not ended:  # breaking away (combat.md)
         hero = participant(combat, "player")
@@ -851,11 +851,11 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     for companion in _companions(simulation):
         npc_id = _s(companion.get("npc_id"))
         row = participant(combat, npc_id)
-        if row and int(row.get("hp") or 0) != int(companion.get("hp") if companion.get("hp") is not None else row.get("max_hp") or 0):
+        if row and int(row.get("hp") or 0) != int(raw_hp if (raw_hp := companion.get("hp")) is not None else row.get("max_hp") or 0):
             changes.append(CompanionHpChanged(npc_id=npc_id, hp=max(0, int(row.get("hp") or 0))))
-    before = _conditions(simulation)
+    conditions_before = _conditions(simulation)
     changes.extend(ConditionsChanged(actor_id=actor_id, conditions=tuple(rows))
-                   for actor_id, rows in conditions.items() if rows != before.get(actor_id, []))
+                   for actor_id, rows in conditions.items() if rows != conditions_before.get(actor_id, []))
     changes.extend(after)
     changes.extend(regard)
     changes.extend(tried)
@@ -894,7 +894,7 @@ def _left(combat: dict[str, Any], foe_ids: list[str]) -> None:
     left = _d(combat.get("left"))
     for foe_id in foe_ids:
         foe = participant(combat, foe_id)
-        share = float(foe.get("recovers") if foe.get("recovers") is not None else 1.0)
+        share = float(raw_recovers if (raw_recovers := foe.get("recovers")) is not None else 1.0)
         if share >= 1.0:
             continue
         hp, most = int(foe.get("hp") or 0), int(foe.get("max_hp") or 0)
