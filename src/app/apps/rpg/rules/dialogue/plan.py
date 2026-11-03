@@ -357,12 +357,12 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str, *, top
                step: str = "", hero: Mapping[str, str] | None = None) -> DialoguePlan | None:
     """The plan for ``speaker_id``'s answer to the line ``text`` (the writer answers it; no word of it is read here),
     to the ``hero`` (their name and pronouns): what it asks about is its reading's ``topics``, and ``step`` the quest
-    step it answers (EV-3); ``None`` when the world does not know them."""
+    step it answers (EV-3); ``None`` when the world does not know them: a person has a name, and an id is not one."""
     world = _d(_sections.world_model_of(simulation))
     npc = {**_d(_d(_sections.npc_index_of(simulation)).get(speaker_id)), **_d(_d(world.get("npcs")).get(speaker_id))}
-    if not npc:
+    name = _s(npc.get("name"))
+    if not name:
         return None
-    name = _s(npc.get("name")) or speaker_id
     asked = frozenset(topics)
     trust = _trust(simulation, speaker_id)
     stance = "friendly" if trust >= FRIENDLY_TRUST else "wary" if trust < 0 else "neutral"
