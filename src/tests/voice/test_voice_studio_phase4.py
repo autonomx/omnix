@@ -10,6 +10,7 @@ import base64
 import io
 import wave
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -317,6 +318,45 @@ def test_resampling_keeps_length_and_rate_ratio() -> None:
     samples = np.random.default_rng(1).standard_normal(48_000).astype(np.float32)
     assert len(audio_server.resample(samples, 48_000, 16_000)) == 16_000
     assert audio_server.resample(samples, 16_000, 16_000) is samples
+
+
+@pytest.mark.parametrize("subtype", ["OPUS", "VORBIS"])
+def test_isolating_ogg_hands_the_separator_a_format_its_wav_stems_can_keep(monkeypatch, subtype: str) -> None:
+    """The separator writes WAV stems with the input's subtype, which WAV cannot hold for Ogg's codecs."""
+    import soundfile as sf
+
+    from services.audio import audio_server
+
+    seen: list[tuple[str, str]] = []
+
+    class _Separator:
+        output_dir = ""
+
+        def separate(self, path: str) -> list[str]:
+            seen.append((Path(path).suffix, sf.info(path).subtype))
+            stems = ["source_(Vocals)_model.wav", "source_(other)_model.wav"]
+            for stem in stems:
+                sf.write(Path(path).parent / stem, np.zeros(480, dtype=np.float32), 48_000)
+            return stems
+
+    monkeypatch.setitem(audio_server.SEPARATORS, "roformer", SimpleNamespace(get=_Separator))
+    upload = io.BytesIO()
+    sf.write(upload, np.zeros(4_800, dtype=np.float32), 48_000, format="OGG", subtype=subtype)
+
+    result = audio_server.isolate(upload.getvalue(), "voice-note.ogg", "roformer")
+
+    assert seen == [(".wav", "PCM_16")]
+    assert result["sample_rate"] == 48_000
+    assert result["vocals"] and result["background"]
+
+
+def test_uploads_the_separator_can_keep_reach_it_untouched() -> None:
+    from services.audio import audio_server
+
+    wav = _wav()
+    assert audio_server.separation_source(wav, ".wav") == (wav, ".wav")
+    # What soundfile cannot read (M4A, WebM) the separator loads itself, and writes as 16-bit.
+    assert audio_server.separation_source(b"not soundfile audio", ".m4a") == (b"not soundfile audio", ".m4a")
 
 
 def test_the_service_routes_validate_and_report_missing_models(monkeypatch) -> None:

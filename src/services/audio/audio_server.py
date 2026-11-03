@@ -209,9 +209,26 @@ HELPERS = [*SEPARATORS.values(), DENOISER, WATERMARKER]
 # --- Tools -----------------------------------------------------------------------------------------
 
 
+def separation_source(payload: bytes, suffix: str) -> tuple[bytes, str]:
+    """The upload as the separator should read it, and its file suffix.
+
+    The separator writes its WAV stems with the input's subtype, and WAV cannot hold Ogg's Opus
+    or Vorbis: those go in as PCM. What soundfile cannot read (M4A, WebM) the separator loads
+    itself and writes as 16-bit.
+    """
+    try:
+        subtype = sf.info(io.BytesIO(payload)).subtype
+    except sf.LibsndfileError:
+        return payload, suffix
+    if sf.check_format("WAV", subtype):
+        return payload, suffix
+    samples, rate = decode(payload)
+    return wav_bytes(samples, rate), ".wav"
+
+
 def isolate(payload: bytes, filename: str, model: str) -> dict[str, Any]:
     separator = SEPARATORS[model].get()
-    suffix = Path(filename or "audio.wav").suffix or ".wav"
+    payload, suffix = separation_source(payload, Path(filename or "audio.wav").suffix or ".wav")
     with tempfile.TemporaryDirectory(prefix="omnix-isolate-") as work:
         source = Path(work) / f"source{suffix}"
         source.write_bytes(payload)
