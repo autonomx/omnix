@@ -89,11 +89,6 @@ function clearMessageComposer(): void {
   textarea.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function requestSessionListRefresh(): void {
-  document.dispatchEvent(new Event('visibilitychange'));
-  window.dispatchEvent(new Event('focus'));
-}
-
 export async function startBlankChat(): Promise<ChatSession> {
   let request: CreateChatSessionRequest = {
     title: 'New chat',
@@ -140,7 +135,6 @@ export async function startBlankChat(): Promise<ChatSession> {
   clearMessageComposer();
   emitOmnixEvent(CHAT_SESSION_CREATED_EVENT, { session });
   emitOmnixEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, { sessionId });
-  requestSessionListRefresh();
   return session;
 }
 
