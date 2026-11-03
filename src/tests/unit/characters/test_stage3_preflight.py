@@ -204,6 +204,22 @@ def test_prepare_requires_restart_then_final_verification_passes_and_cleans_up(
     assert len(gateway.deleted_sessions) == 3
     assert gateway.candidates == {}
     assert all(record["status"] == "forgotten" for record in gateway.memories.values())
+    assert {key: value["status"] for key, value in gateway.characters.items()} == {
+        "stage3-maya": "archived",
+        "stage3-alex": "archived",
+    }
+
+
+def test_a_later_run_uses_new_characters(tmp_path: Path) -> None:
+    gateway = FakeStage3Gateway()
+    gateway.create_character({"id": "stage3-alex", "display_name": "Alex Stage 3"})
+    gateway.archive_character("stage3-alex")
+
+    report = prepare_stage3(gateway, _config(), checkpoint_path=tmp_path / "checkpoint.json")
+
+    assert report.decision == "needs_review"
+    assert gateway.characters["stage3-alex-2"]["status"] == "active"
+    assert gateway.characters["stage3-maya"]["status"] == "active"
 
 
 def test_prepare_blocks_when_suggestion_worker_does_not_materialize_candidate(

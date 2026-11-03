@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .stage2_contracts import Stage2PrepareConfig, marker_memory
+from .fixture_characters import archive_fixture_characters
+from .stage2_contracts import Stage2Checkpoint, Stage2PrepareConfig, marker_memory
 from .stage2_http import Stage2Gateway
 
 
@@ -126,6 +127,23 @@ def ensure_synthetic_memory(
     )
 
 
+def retire_fixture_characters(
+    gateway: Stage2Gateway,
+    checkpoint: Stage2Checkpoint,
+) -> tuple[list[str], str, dict[str, Any]]:
+    # A chat cannot resolve an archived character, so the Maya pilot goes first.
+    gateway.delete_session(checkpoint.maya_pilot_session_id)
+    archived = archive_fixture_characters(
+        gateway,
+        [checkpoint.maya_character_id, checkpoint.alex_character_id],
+    )
+    return (
+        archived,
+        "The Maya pilot session was deleted and the fixture characters archived.",
+        {"fixture_sessions_deleted": 1, "characters_archived": archived},
+    )
+
+
 def memory_record_ids(payload: dict[str, Any]) -> list[str]:
     records = payload.get("records")
     if not isinstance(records, list):
@@ -172,5 +190,6 @@ __all__ = [
     "ensure_synthetic_memory",
     "memory_candidate_ids",
     "memory_record_ids",
+    "retire_fixture_characters",
     "snapshot_item_ids",
 ]

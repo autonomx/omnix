@@ -9,7 +9,7 @@ from .stage2_contracts import (
     Stage2PrepareConfig,
     Stage2Report,
 )
-from .stage2_fixtures import memory_record_ids, snapshot_item_ids
+from .stage2_fixtures import memory_record_ids, retire_fixture_characters, snapshot_item_ids
 from .stage2_http import Stage2Gateway
 from .stage2_runner import (
     _check,
@@ -238,11 +238,12 @@ def verify_stage2_restart(
             session_id=checkpoint.maya_pilot_session_id,
         )
 
-    _check(
+    if _check(
         checks,
         "cleanup.forget_isolation",
         lambda: cleanup_and_verify_forget(gateway, checkpoint, token_budget),
-    )
+    ) is not None:
+        _check(checks, "cleanup.fixture_characters", lambda: retire_fixture_characters(gateway, checkpoint))
     return _report(
         config,
         checks,
@@ -323,11 +324,12 @@ def resume_stage2_cleanup(
             mode="verify-restart",
             session_id=checkpoint.maya_pilot_session_id,
         )
-    _check(
+    if _check(
         checks,
         "cleanup.forget_isolation",
         lambda: cleanup_and_verify_forget(gateway, checkpoint, token_budget),
-    )
+    ) is not None:
+        _check(checks, "cleanup.fixture_characters", lambda: retire_fixture_characters(gateway, checkpoint))
     report = _report(
         config,
         checks,

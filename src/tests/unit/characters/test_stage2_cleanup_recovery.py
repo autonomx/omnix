@@ -53,6 +53,14 @@ class PurgingCleanupGateway:
         )
         self.interaction_updates: list[str] = []
         self.deleted_sessions: list[str] = []
+        self.archived_characters: list[str] = []
+
+    def list_characters(self) -> list[dict[str, Any]]:
+        return []
+
+    def archive_character(self, character_id: str) -> dict[str, Any]:
+        self.archived_characters.append(character_id)
+        return {"character": {"id": character_id, "status": "archived"}}
 
     def list_memory(self, session_id: str) -> dict[str, Any]:
         records = list(self.records[session_id].values())
@@ -232,7 +240,8 @@ def test_resume_cleanup_finishes_known_partial_failure() -> None:
     assert next(
         item for item in report.checks if item.id == "recovery.prior_evidence"
     ).status == "pass"
-    assert len(gateway.deleted_sessions) == 4
+    assert len(gateway.deleted_sessions) == 5
+    assert gateway.archived_characters == ["stage2-maya", "stage2-alex"]
 
 
 def test_resume_cleanup_rejects_unrelated_failure() -> None:

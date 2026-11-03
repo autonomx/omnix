@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .fixture_characters import free_fixture_ids
 from .stage2_contracts import (
     Stage2Check,
     Stage2Checkpoint,
@@ -25,6 +26,7 @@ from .stage2_fixtures import (
     ensure_synthetic_memory,
     memory_candidate_ids,
     memory_record_ids,
+    retire_fixture_characters,
     snapshot_item_ids,
 )
 from .stage2_http import Stage2Gateway
@@ -446,6 +448,17 @@ def prepare_stage2(
     metrics = Stage2Metrics()
     if _check(checks, "gateway.health", lambda: _health(gateway)) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
+    free_ids = _check(
+        checks,
+        "fixtures.character_ids",
+        lambda: free_fixture_ids(
+            gateway,
+            {"maya_character_id": config.maya_character_id, "alex_character_id": config.alex_character_id},
+        ),
+    )
+    if free_ids is None:
+        return _report(config, checks, metrics, mode="prepare", session_id=None)
+    config = config.model_copy(update=free_ids)
     if _check(checks, "fixtures.characters", lambda: _ensure_profiles(gateway, config)) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
     fixtures = _check(checks, "fixtures.memory", lambda: _create_fixtures(gateway, config))
@@ -792,11 +805,12 @@ def verify_stage2_restart(
             session_id=checkpoint.maya_pilot_session_id,
         )
 
-    _check(
+    if _check(
         checks,
         "cleanup.forget_isolation",
         lambda: _cleanup_and_verify_forget(gateway, checkpoint, token_budget),
-    )
+    ) is not None:
+        _check(checks, "cleanup.fixture_characters", lambda: retire_fixture_characters(gateway, checkpoint))
     return _report(
         config,
         checks,

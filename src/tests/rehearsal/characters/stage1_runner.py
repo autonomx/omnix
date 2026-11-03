@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from .fixture_characters import archive_fixture_characters, free_fixture_ids
 from .stage1_contracts import (
     Stage1Check,
     Stage1Checkpoint,
@@ -483,6 +484,15 @@ def prepare_stage1(
     if _check(checks, "gateway.health", lambda: _health(gateway)) is None:
         return _prepare_report(config, checks, metrics, checkpoint_path, None)
 
+    free_ids = _check(
+        checks,
+        "character.fixture_id",
+        lambda: free_fixture_ids(gateway, {"character_id": config.character_id}),
+    )
+    if free_ids is None:
+        return _prepare_report(config, checks, metrics, checkpoint_path, None)
+    config = config.model_copy(update=free_ids)
+
     if config.voice_asset_id:
         governance = _check(
             checks,
@@ -641,6 +651,17 @@ def prepare_stage1(
     return _prepare_report(config, checks, metrics, path, session_id)
 
 
+def _cleanup(gateway: Stage1Gateway, checkpoint: Stage1Checkpoint):
+    # A chat cannot resolve an archived character, so its session goes first.
+    gateway.delete_session(checkpoint.character_session_id)
+    archived = archive_fixture_characters(gateway, [checkpoint.character_id])
+    return (
+        archived,
+        "The Stage 1 character session was deleted and its fixture character archived.",
+        {"fixture_sessions_deleted": 1, "characters_archived": archived},
+    )
+
+
 def verify_stage1_restart(
     gateway: Stage1Gateway,
     checkpoint: Stage1Checkpoint,
@@ -694,6 +715,8 @@ def verify_stage1_restart(
                 duration_ms=duration_ms(started),
             )
         )
+    if checks[-1].status == "pass":
+        _check(checks, "cleanup.stage1_fixtures", lambda: _cleanup(gateway, checkpoint))
     return Stage1Report(
         generated_at=utcnow(),
         mode="verify-restart",

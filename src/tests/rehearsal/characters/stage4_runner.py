@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Literal
 
+from .fixture_characters import archive_fixture_characters, free_fixture_ids
 from .stage4_contracts import (
     Stage4Check,
     Stage4Checkpoint,
@@ -234,6 +235,10 @@ def prepare_stage4(gateway: Stage4Gateway, config: Stage4PrepareConfig, *, check
     metrics = Stage4Metrics()
     if _check(checks, "gateway.health", lambda: _health(gateway)) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
+    free_ids = _check(checks, "fixtures.character_id", lambda: free_fixture_ids(gateway, {"character_id": config.character_id}))
+    if free_ids is None:
+        return _report(config, checks, metrics, mode="prepare", session_id=None)
+    config = config.model_copy(update=free_ids)
     if _check(checks, "fixtures.character_policy", lambda: _ensure_character(gateway, config)) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
     sessions = _check(checks, "sessions.shared_policy", lambda: _create_sessions(gateway, config))
@@ -313,8 +318,9 @@ def _cleanup(gateway: Stage4Gateway, checkpoint: Stage4Checkpoint):
     })
     for session_id in (checkpoint.shared_session_id, checkpoint.control_session_id, checkpoint.system_setup_session_id):
         gateway.delete_session(session_id)
+    archived = archive_fixture_characters(gateway, [checkpoint.character_id])
     return True, "Stage 4 synthetic records and temporary sessions were cleaned up.", {
-        "fixture_records_deleted": deleted, "fixture_sessions_deleted": 3,
+        "fixture_records_deleted": deleted, "fixture_sessions_deleted": 3, "characters_archived": archived,
     }
 
 

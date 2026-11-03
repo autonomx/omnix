@@ -68,6 +68,14 @@ class FakeStage1Gateway:
     def get_character(self, character_id: str) -> dict[str, Any]:
         return self.characters[character_id]
 
+    def archive_character(self, character_id: str) -> dict[str, Any]:
+        self.characters[character_id]["status"] = "archived"
+        return {"character": self.characters[character_id]}
+
+    def delete_session(self, session_id: str) -> dict[str, Any]:
+        del self.sessions[session_id]
+        return {"ok": True, "session_id": session_id}
+
     def voice_governance(self, asset_id: str) -> dict[str, Any]:
         assert asset_id == self.voice["asset_id"]
         return dict(self.voice)
@@ -225,6 +233,49 @@ def test_prepare_generates_needs_review_checkpoint_then_restart_passes(tmp_path:
 
     assert verified.decision == "pass"
     assert next(check for check in verified.checks if check.id == "restart.persistence").status == "pass"
+    assert next(check for check in verified.checks if check.id == "cleanup.stage1_fixtures").status == "pass"
+    assert gateway.characters["stage1-maya"]["status"] == "archived"
+    assert checkpoint.character_session_id not in gateway.sessions
+
+
+def test_a_failed_restart_check_keeps_the_character(tmp_path: Path) -> None:
+    gateway = FakeStage1Gateway()
+    checkpoint_path = tmp_path / "checkpoint.json"
+    prepare_stage1(gateway, _config(), checkpoint_path=checkpoint_path)
+    checkpoint = Stage1Checkpoint.model_validate_json(checkpoint_path.read_text(encoding="utf-8"))
+    gateway.characters["stage1-maya"]["active_version"] = 2
+
+    verified = verify_stage1_restart(gateway, checkpoint)
+
+    assert verified.decision == "blocked"
+    assert gateway.characters["stage1-maya"]["status"] == "active"
+
+
+def test_a_later_run_uses_a_new_character_and_archives_it_too(tmp_path: Path) -> None:
+    gateway = FakeStage1Gateway()
+    for run in (1, 2):
+        checkpoint_path = tmp_path / f"run-{run}.json"
+        assert prepare_stage1(gateway, _config(), checkpoint_path=checkpoint_path).decision == "needs_review"
+        checkpoint = Stage1Checkpoint.model_validate_json(checkpoint_path.read_text(encoding="utf-8"))
+        assert verify_stage1_restart(gateway, checkpoint).decision == "pass"
+
+    assert {key: value["status"] for key, value in gateway.characters.items()} == {
+        "stage1-maya": "archived",
+        "stage1-maya-2": "archived",
+    }
+
+
+def test_a_run_on_a_character_it_was_given_leaves_that_character(tmp_path: Path) -> None:
+    gateway = FakeStage1Gateway()
+    checkpoint_path = tmp_path / "checkpoint.json"
+    config = _config().model_copy(update={"character_id": "maya"})
+    prepare_stage1(gateway, config, checkpoint_path=checkpoint_path)
+    checkpoint = Stage1Checkpoint.model_validate_json(checkpoint_path.read_text(encoding="utf-8"))
+
+    verified = verify_stage1_restart(gateway, checkpoint)
+
+    assert verified.decision == "pass"
+    assert gateway.characters["maya"]["status"] == "active"
 
 
 def test_voice_governance_must_be_explicit_before_character_link(tmp_path: Path) -> None:

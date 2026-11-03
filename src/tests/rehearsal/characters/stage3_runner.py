@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .fixture_characters import archive_fixture_characters, free_fixture_ids
 from .stage2_fixtures import ensure_character, memory_record_ids, snapshot_item_ids
 from .stage3_contracts import (
     Stage3Check,
@@ -453,6 +454,17 @@ def prepare_stage3(
     metrics = Stage3Metrics()
     if _check(checks, "gateway.health", lambda: _health(gateway)) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
+    free_ids = _check(
+        checks,
+        "fixtures.character_ids",
+        lambda: free_fixture_ids(
+            gateway,
+            {"maya_character_id": config.maya_character_id, "alex_character_id": config.alex_character_id},
+        ),
+    )
+    if free_ids is None:
+        return _report(config, checks, metrics, mode="prepare", session_id=None)
+    config = config.model_copy(update=free_ids)
     if _check(checks, "fixtures.characters", lambda: _ensure_profiles(gateway, config)) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
     sessions = _check(checks, "sessions.write_policies", lambda: _create_sessions(gateway, config))
@@ -650,6 +662,10 @@ def _cleanup(gateway: Stage3Gateway, checkpoint: Stage3Checkpoint, token_budget:
             },
         )
         gateway.delete_session(session_id)
+    archived = archive_fixture_characters(
+        gateway,
+        [checkpoint.maya_character_id, checkpoint.alex_character_id],
+    )
     return (
         refreshed,
         "Stage 3 synthetic records and temporary sessions were cleaned up.",
@@ -658,6 +674,7 @@ def _cleanup(gateway: Stage3Gateway, checkpoint: Stage3Checkpoint, token_budget:
             "fixture_candidates_deleted": candidates_deleted,
             "fixture_sessions_deleted": 3,
             "refreshed_snapshot_revision": refreshed.get("snapshot_revision"),
+            "characters_archived": archived,
         },
     )
 

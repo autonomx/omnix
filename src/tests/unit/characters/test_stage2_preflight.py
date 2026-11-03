@@ -5,6 +5,7 @@ from typing import Any
 
 from tests.rehearsal.characters.stage2_contracts import Stage2Checkpoint, Stage2PrepareConfig
 from tests.rehearsal.characters.stage2_runner import prepare_stage2, verify_stage2_restart
+from tests.rehearsal.characters.stage2_verification import verify_stage2_restart as verify_command_line_restart
 
 
 class FakeStage2Gateway:
@@ -37,6 +38,10 @@ class FakeStage2Gateway:
         }
         self.characters[str(payload["id"])] = value
         return dict(value)
+
+    def archive_character(self, character_id: str) -> dict[str, Any]:
+        self.characters[character_id]["status"] = "archived"
+        return {"character": dict(self.characters[character_id])}
 
     def _segment(self) -> str:
         self.segment_counter += 1
@@ -348,7 +353,39 @@ def test_prepare_requires_restart_then_final_verification_passes_and_cleans_up(
     assert gateway.memories[checkpoint.maya_memory_id]["status"] == "forgotten"
     assert gateway.memories[checkpoint.alex_memory_id]["status"] == "forgotten"
     assert gateway.memories[checkpoint.system_memory_id]["status"] == "forgotten"
-    assert len(gateway.deleted_sessions) == 4
+    assert len(gateway.deleted_sessions) == 5
+    assert checkpoint.maya_pilot_session_id in gateway.deleted_sessions
+    assert {key: value["status"] for key, value in gateway.characters.items()} == {
+        "stage2-maya": "archived",
+        "stage2-alex": "archived",
+    }
+
+
+def test_final_verification_of_the_command_line_archives_too(tmp_path: Path) -> None:
+    gateway = FakeStage2Gateway()
+    checkpoint_path = tmp_path / "checkpoint.json"
+    prepare_stage2(gateway, _config(), checkpoint_path=checkpoint_path)
+    checkpoint = Stage2Checkpoint.model_validate_json(checkpoint_path.read_text(encoding="utf-8"))
+
+    verified = verify_command_line_restart(gateway, checkpoint, settle_seconds=0)
+
+    assert verified.decision == "pass"
+    assert checkpoint.maya_pilot_session_id in gateway.deleted_sessions
+    assert gateway.characters["stage2-maya"]["status"] == "archived"
+    assert gateway.characters["stage2-alex"]["status"] == "archived"
+
+
+def test_a_later_run_uses_new_characters(tmp_path: Path) -> None:
+    gateway = FakeStage2Gateway()
+    gateway.create_character({"id": "stage2-maya", "display_name": "Maya Stage 2"})
+    gateway.archive_character("stage2-maya")
+
+    report = prepare_stage2(gateway, _config(), checkpoint_path=tmp_path / "checkpoint.json")
+
+    assert report.decision == "needs_review"
+    assert report.maya_character_id == "stage2-maya-2"
+    assert gateway.characters["stage2-maya-2"]["status"] == "active"
+    assert gateway.characters["stage2-alex"]["status"] == "active"
 
 
 def test_cross_owner_prompt_selection_blocks_prepare(tmp_path: Path) -> None:
