@@ -47,14 +47,26 @@ export function initializeLiveVoiceController(): () => void {
   if (controller.initialized || typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   controller.initialized = true;
   window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleExternalStop);
+  const unsubscribeFromChatSelection = liveConversationStore.subscribe(endCallIfChatChanged);
   liveCallPresentationStore.update({ captureOwned: true });
   return () => {
     // Leaving Chat ends a running call, as the stop button would.
     handleExternalStop();
+    unsubscribeFromChatSelection();
     window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleExternalStop);
     liveCallPresentationStore.update({ captureOwned: false, captureStatus: 'idle', captureActive: false, hearing: false });
     controller.initialized = false;
   };
+}
+
+/** A call belongs to the chat it started in. With another chat selected every sentence would be refused, so it ends, as New chat ends it. */
+function endCallIfChatChanged(): void {
+  const session = controller.activeSession;
+  if (!session) return;
+  const selectedSessionId = liveConversationStore.getState().sessionId;
+  if (selectedSessionId === session.chatSessionId) return;
+  session.reporter.record('live_call_chat_changed', { call_session_id: session.chatSessionId, selected_session_id: selectedSessionId }, 'live_voice_controller');
+  emitOmnixEvent(ASSISTANT_LIVE_VOICE_STOP_EVENT);
 }
 
 /** Starts capture for the call card (Chat's call controls); a running call is left alone. */
@@ -143,7 +155,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       },
       onError: (message) => showLiveVoiceError(card, message),
     });
-    const shell = createLiveVoiceSessionShell({ card, stream, audioContext, source, client, reporter, sttAuthority });
+    const shell = createLiveVoiceSessionShell({ card, chatSessionId: sessionId, stream, audioContext, source, client, reporter, sttAuthority });
     audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => {
       const session = controller.activeSession;
       if (session?.card === card) processAudioFrame(session, audio);
@@ -153,6 +165,8 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     const session: LiveVoiceSession = { ...shell, audioPipeline };
     controller.activeSession = session;
     controller.pendingStart = null;
+    endCallIfChatChanged();
+    if (controller.activeSession !== session) return;
     await client.connect();
     if (controller.activeSession !== session || token !== controller.startToken) {
       cleanupSession(session);

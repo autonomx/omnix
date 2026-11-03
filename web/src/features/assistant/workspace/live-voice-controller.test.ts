@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   dispatchAssistantTurnSummary,
@@ -11,12 +11,14 @@ import {
   resetLiveSttCapabilityState,
 } from './live-stt-capability-state';
 import {
+  initializeLiveVoiceController,
   LiveSttSegmentTelemetryGate,
   liveVoiceAssistantOwnsFloor,
   liveVoiceSpeechThreshold,
   semanticFinalizationRemainingMs,
   waitForLiveConversationSessionId,
 } from './live-voice-controller';
+import { controller, type LiveVoiceSession } from './live-voice-controller-state';
 
 const SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 
@@ -167,6 +169,55 @@ describe('live voice session selection', () => {
     liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:just-created' });
 
     await expect(selected).resolves.toBe('chat:just-created');
+  });
+});
+
+describe('a call and the selected chat', () => {
+  function runningCall(chatSessionId: string) {
+    const session = {
+      card: document.createElement('section'),
+      chatSessionId,
+      finalizationBuffer: { clear: vi.fn() },
+      preSpeechBuffer: { clear: vi.fn() },
+      audioPipeline: { cleanup: vi.fn() },
+      source: { disconnect: vi.fn() },
+      stream: { getTracks: () => [] },
+      client: { disconnect: vi.fn(), cancelPreview: vi.fn() },
+      audioContext: { close: vi.fn(async () => undefined) },
+      reporter: { record: vi.fn(), close: vi.fn(async () => undefined) },
+      floorState: 'listening',
+    };
+    controller.activeSession = session as unknown as LiveVoiceSession;
+    return session;
+  }
+
+  it('ends the call when another chat is selected, so it cannot refuse every sentence', () => {
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:call' });
+    const dispose = initializeLiveVoiceController();
+    const session = runningCall('chat:call');
+    const stopped = vi.fn();
+    window.addEventListener('omnix:assistant-live-voice-stop', stopped);
+
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:other' });
+
+    expect(stopped).toHaveBeenCalledOnce();
+    expect(controller.activeSession).toBeNull();
+    expect(session.client.disconnect).toHaveBeenCalled();
+    expect(session.reporter.record).toHaveBeenCalledWith('live_call_chat_changed', { call_session_id: 'chat:call', selected_session_id: 'chat:other' }, 'live_voice_controller');
+    window.removeEventListener('omnix:assistant-live-voice-stop', stopped);
+    dispose();
+  });
+
+  it('keeps the call through anything else that changes in the store', () => {
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:call' });
+    const dispose = initializeLiveVoiceController();
+    const session = runningCall('chat:call');
+
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'speaking' } });
+
+    expect(controller.activeSession).toBe(session);
+    controller.activeSession = null;
+    dispose();
   });
 });
 

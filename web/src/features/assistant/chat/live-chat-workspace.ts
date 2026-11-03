@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { registerFetchMiddleware } from '../../../api/fetchPipeline';
-import { emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT } from '../../../events/bus';
+import { CHAT_SESSION_SELECTED_EVENT, emitOmnixEvent, latestOmnixEventDetail, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT } from '../../../events/bus';
 
 type LiveCallDiagnosticDetail = {
   event?: unknown;
@@ -43,7 +43,9 @@ export function initializeLiveChatWorkspace(queryClient: QueryClient): () => voi
   const removeMiddleware = registerFetchMiddleware('live-chat-workspace', async (input, init, next) => {
     const sessionId = sessionIdFromChatRequest(input);
     const response = await next(input, init);
-    if (response.ok && sessionId && sessionId !== selectedSessionId) {
+    // A late answer for a chat already left must not select it again, under a call on the chat now open.
+    const openSessionId = latestOmnixEventDetail(CHAT_SESSION_SELECTED_EVENT)?.sessionId;
+    if (response.ok && sessionId && sessionId !== selectedSessionId && (!openSessionId || openSessionId === sessionId)) {
       selectedSessionId = sessionId;
       emitOmnixEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, { sessionId });
     }

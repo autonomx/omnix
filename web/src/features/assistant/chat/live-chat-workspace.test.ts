@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { initializeLiveChatWorkspace, sessionIdFromChatRequest } from './live-chat-workspace';
 import { pipelineFetch } from '../../../api/fetchPipeline';
+import { emitOmnixEvent } from '../../../events/bus';
 import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 let disposeWorkspace: (() => void) | null = null;
@@ -32,6 +33,21 @@ describe('live chat workspace controller', () => {
 
     expect(changed).toHaveBeenCalledOnce();
     expect((changed.mock.calls[0][0] as CustomEvent<{ sessionId: string }>).detail.sessionId).toBe('chat:one');
+    window.removeEventListener('omnix:live-chat-session-changed', changed);
+  });
+
+  it('does not select a chat because a late answer for it arrived', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ok: true })));
+    const changed = vi.fn();
+    window.addEventListener('omnix:live-chat-session-changed', changed);
+    disposeWorkspace = initializeLiveChatWorkspace(createTestQueryClient());
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: 'chat:selected', session: undefined });
+
+    await pipelineFetch('/api/chat/sessions/chat%3Aselected/interaction');
+    await pipelineFetch('/api/chat/sessions/chat%3Aleft-behind/live-call/runtime');
+    emitOmnixEvent('omnix:chat-session-selected', { sessionId: null, session: undefined });
+
+    expect(changed.mock.calls.map(([event]) => (event as CustomEvent<{ sessionId: string }>).detail.sessionId)).toEqual(['chat:selected']);
     window.removeEventListener('omnix:live-chat-session-changed', changed);
   });
 

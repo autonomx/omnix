@@ -35,6 +35,8 @@ export type LiveVoiceAudioPipeline = { node: AudioNode; cleanup: () => void };
 
 export type LiveVoiceSession = {
   card: HTMLElement;
+  /** The chat the call started in; its finals are only accepted while that chat stays selected. */
+  chatSessionId: string;
   stream: MediaStream;
   audioContext: AudioContext;
   source: MediaStreamAudioSourceNode;
@@ -128,12 +130,13 @@ export function isCardStartingOrActive(card: HTMLElement): boolean {
   return controller.activeSession?.card === card || controller.pendingStart?.card === card;
 }
 
-export type LiveVoiceSessionResources = Pick<LiveVoiceSession, 'card' | 'stream' | 'audioContext' | 'source' | 'client' | 'reporter' | 'sttAuthority'>;
+export type LiveVoiceSessionResources = Pick<LiveVoiceSession, 'card' | 'chatSessionId' | 'stream' | 'audioContext' | 'source' | 'client' | 'reporter' | 'sttAuthority'>;
 
 /** A new call's session before its audio pipeline exists: buffers sized to the context's rate, turn state at rest. */
-export function createLiveVoiceSessionShell({ card, stream, audioContext, source, client, reporter, sttAuthority }: LiveVoiceSessionResources) {
+export function createLiveVoiceSessionShell({ card, chatSessionId, stream, audioContext, source, client, reporter, sttAuthority }: LiveVoiceSessionResources) {
   return {
     card,
+    chatSessionId,
     stream,
     audioContext,
     source,

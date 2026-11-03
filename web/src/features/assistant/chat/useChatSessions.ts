@@ -60,8 +60,10 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
     // A newly created session can be selected before the invalidated list has
     // finished refetching. Keep it while the list is temporarily empty.
     if (selectedSessionId && (sessions.length === 0 || sessions.some((session) => session.id === selectedSessionId))) return;
+    // A list being replaced can be older than the selected chat: only the current one says a chat is gone.
+    if (selectedSessionId && sessionsQuery.isFetching) return;
     setSelectedSessionId(sessions[0]?.id ?? null);
-  }, [selectedSessionId, sessionsQuery.data]);
+  }, [selectedSessionId, sessionsQuery.data, sessionsQuery.isFetching]);
 
 
   useEffect(() => {
@@ -92,6 +94,7 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
       queryClient.setQueryData(['feature', 'chatbot', 'session', sessionId], session);
       setSelectedSessionId(sessionId);
       setActiveView('chats');
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'], exact: true });
     };
     window.addEventListener('omnix:live-chat-session-changed', syncLiveChatSession);
     window.addEventListener('omnix:chat-session-created', syncCreatedChatSession);
