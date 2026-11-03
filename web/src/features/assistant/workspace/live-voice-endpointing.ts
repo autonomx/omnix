@@ -147,6 +147,7 @@ export function handlePartialTranscript(card: HTMLElement, text: string): void {
     if (transcriptChanged) {
       session.partialTranscript = normalized;
       session.partialTranscriptUpdatedAt = performance.now();
+      session.reporter.record('stt_partial_received', { transcript_chars: normalized.length }, 'live_voice_controller');
       if (
         session.silenceTimer
         && session.pauseStartedAt !== null

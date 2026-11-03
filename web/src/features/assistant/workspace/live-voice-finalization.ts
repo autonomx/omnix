@@ -1,11 +1,15 @@
 /** Per-frame speech detection and turn finalization: when a pause ends the user's turn, the final transcript is requested. */
+import { liveConversationStore } from './live-conversation-store';
 import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
 import { type ConversationPace, assessSemanticTurn, reduceUserFloor, semanticFinalizeDelay } from './live-voice-floor-manager';
 import { calculateRms } from './live-voice-websocket';
 import { FINAL_RESPONSE_TIMEOUT_MS, INTERRUPT_CONFIRMATION_FRAMES, LiveVoiceSession, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, controller, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, liveVoiceAssistantOwnsFloor, liveVoiceSpeechThreshold, readConversationPace, renderTranscript, setPanelStatus, updateVoiceVisualizer } from './live-voice-controller-state';
+import { createMicLevelWindow } from './live-voice-mic-level';
 import { assessOverlapCandidate, clearAuthoritativePreview, overlapAwaitsInterruption, scheduleAuthoritativePreview } from './live-voice-preview';
 import { resetTurnState, stopLiveVoice } from './live-voice-session-lifecycle';
 import { ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, emitOmnixEvent } from '../../../events/bus';
+
+const micLevelWindows = new WeakMap<LiveVoiceSession, ReturnType<typeof createMicLevelWindow>>();
 
 export function semanticFinalizationRemainingMs(
   text: string,
@@ -43,7 +47,10 @@ export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array
     return;
   }
   const speechWasDetected = session.speechDetected;
-  if (!speechWasDetected) session.preSpeechBuffer.push(audio);
+  if (!speechWasDetected) {
+    session.preSpeechBuffer.push(audio);
+    reportMicLevel(session, rms, assistantSpeaking);
+  }
   const speechStarted = rms >= liveVoiceSpeechThreshold();
   session.speechFrameCount = speechStarted ? session.speechFrameCount + 1 : 0;
   const confirmedSpeech = session.speechFrameCount >= INTERRUPT_CONFIRMATION_FRAMES;
@@ -93,6 +100,14 @@ export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array
   if (!speechWasDetected) {
     const preSpeechFrames = session.preSpeechBuffer.drain();
     const preSpeechSamples = preSpeechFrames.reduce((total, frame) => total + frame.length, 0);
+    session.reporter.record('stt_turn_opened', {
+      rms,
+      threshold: liveVoiceSpeechThreshold(),
+      pre_speech_samples: preSpeechSamples,
+      assistant_speaking: assistantSpeaking,
+      assistant_owns_floor: assistantOwnsFloor,
+      overlap_intent: session.overlapIntent,
+    }, 'live_voice_controller');
     dispatchLiveVoicePerfEvent({
       stage: 'stt_pre_speech_buffer_flushed',
       timestamp: new Date().toISOString(),
@@ -105,6 +120,27 @@ export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array
     return;
   }
   session.client.sendAudio(audio, session.audioContext.sampleRate);
+}
+
+function reportMicLevel(session: LiveVoiceSession, rms: number, assistantSpeaking: boolean): void {
+  const now = performance.now();
+  let window = micLevelWindows.get(session);
+  if (!window) {
+    window = createMicLevelWindow(now);
+    micLevelWindows.set(session, window);
+  }
+  const report = window.observe(rms, liveVoiceSpeechThreshold(), now);
+  if (!report) return;
+  const track = session.stream.getAudioTracks()[0];
+  session.reporter.record('mic_level_window', {
+    ...report,
+    assistant_speaking: assistantSpeaking,
+    duplex_mode: liveConversationStore.getState().duplex.resolvedMode,
+    track_enabled: track?.enabled,
+    track_muted: track?.muted,
+    track_state: track?.readyState,
+    audio_context_state: session.audioContext.state,
+  }, 'live_voice_controller');
 }
 
 export function handleFinalizationBufferOverflow(session: LiveVoiceSession, bufferedSamples: number, maxSamples: number): void {
@@ -250,6 +286,12 @@ export function requestFinalTranscript(
   session.client.sendFinal();
   session.finalResponseTimer = setTimeout(() => {
     if (controller.activeSession !== session) return;
+    // The turn is given up on here: without this record it would leave no trace at all.
+    session.reporter.record('stt_final_timed_out', {
+      timeout_ms: FINAL_RESPONSE_TIMEOUT_MS,
+      trigger,
+      transcript_chars: session.partialTranscript.length,
+    }, 'live_voice_controller');
     const continuation = session.finalizationBuffer.drain();
     resetTurnState(session);
     setPanelStatus(session.card, 'connected');

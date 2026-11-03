@@ -15,6 +15,7 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from app.observability.stt_stream_diagnostics import stt_stream_log
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_EOU,
     CAP_AUTHORITATIVE_FINAL,
@@ -78,6 +79,7 @@ def _mark_live_audio() -> None:
 
 
 def _metric(event: str, **fields: Any) -> None:
+    stt_stream_log(event, **fields)
     logger.info("[STT_METRIC] "
         + json.dumps(
             {
@@ -401,6 +403,8 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
         connection_id = uuid.uuid4().hex
         active_session_id = f"connection-{connection_id}"
         owned_segments: dict[str, HybridSessionState] = {}
+        close_code: int | None = None
+        _metric("stt_connection_opened", connection_id=connection_id)
         await _safe_send(
             websocket,
             send_lock,
@@ -417,6 +421,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                 if message_type == "hello":
                     active_session_id = str(_field(data, "sessionId", "session_id", active_session_id))[:120]
                     state = _session_state(active_session_id)
+                    _metric("stt_session_ready", connection_id=connection_id, session_id=state.session_id)
                     await _safe_send(
                         websocket,
                         send_lock,
@@ -464,6 +469,15 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         )
                         state.segments[segment_id] = segment
                         owned_segments[segment_id] = state
+                        _metric(
+                            "stt_segment_opened",
+                            connection_id=connection_id,
+                            session_id=state.session_id,
+                            segment_id=segment_id,
+                            segment_sequence=sequence,
+                            capture_start_sample=capture_start,
+                            primary_start_sample=primary_start,
+                        )
                     try:
                         _mark_live_audio()
                         payload = audio_message_pcm(data, validate=True)
@@ -680,7 +694,11 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         await _safe_send(websocket, send_lock, result)
                         _metric(
                             "stt_hybrid_final_completed",
+                            session_id=state.session_id,
+                            segment_id=segment.segment_id,
                             segment_sequence=segment.sequence,
+                            primary_start_sample=segment.primary_start_sample,
+                            accepted_through_sample=segment.accepted_through_sample,
                             transcript_chars=len(text),
                             finalize_ms=round(finalize_ms, 3),
                             stream_flush_ms=round(stream_flush_ms, 3),
@@ -724,7 +742,8 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         state.segments.pop(segment_id, None)
                         owned_segments.pop(segment_id, None)
                     continue
-        except WebSocketDisconnect:
+        except WebSocketDisconnect as exc:
+            close_code = exc.code
             return
         except Exception as exc:  # noqa: BLE001 - top-level websocket fault containment
             _metric("stt_hybrid_websocket_failed", error_type=type(exc).__name__, error=str(exc))
@@ -746,3 +765,10 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                     connection_id=connection_id,
                     released_segments=released,
                 )
+            _metric(
+                "stt_connection_closed",
+                connection_id=connection_id,
+                session_id=active_session_id,
+                close_code=close_code,
+                segments_released=released,
+            )

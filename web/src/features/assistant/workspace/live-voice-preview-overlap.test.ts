@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ASSISTANT_VOICE_INTERRUPT_EVENT } from '../../../events/bus';
-import { interruptOnFinalOverlap, overlapAwaitsInterruption } from './live-voice-preview';
+import { acceptedFinalSuppressionReason } from './live-accepted-final-routing';
+import { assessFinalOverlap, interruptOnFinalOverlap, overlapAwaitsInterruption } from './live-voice-preview';
 
 const hardStop = { intent: 'hard_stop', confidence: 0.99, reason: 'explicit_stop' } as const;
 
@@ -46,5 +47,29 @@ describe('a spoken stop over the assistant', () => {
 
     expect(watch.events).toEqual([]);
     watch.stop();
+  });
+});
+
+describe('the final transcript of a turn that began over the assistant', () => {
+  it('is judged on all its words, not on what its first partial said', () => {
+    // "Yeah" alone is a backchannel; the sentence it started is not, and must reach the conversation.
+    const sentence = assessFinalOverlap('backchannel', 'Yeah, how is the release going?');
+    expect(sentence?.intent).toBe('interrupt');
+    expect(acceptedFinalSuppressionReason('Yeah, how is the release going?', sentence?.intent ?? null)).toBeNull();
+    expect(assessFinalOverlap('hard_stop', 'No, I meant the other farm')?.intent).toBe('interrupt');
+    expect(assessFinalOverlap('noise', 'tell me about the mango harvest this year')?.intent).toBe('interrupt');
+    expect(assessFinalOverlap('uncertain', 'what about the corn')?.intent).toBe('interrupt');
+  });
+
+  it('stays suppressed when all its words are still only an acknowledgement, a stop or noise', () => {
+    expect(assessFinalOverlap('backchannel', 'Yeah.')?.intent).toBe('backchannel');
+    expect(assessFinalOverlap('backchannel', 'Yeah, okay.')?.intent).toBe('backchannel');
+    expect(assessFinalOverlap('hard_stop', 'Stop.')?.intent).toBe('hard_stop');
+    expect(assessFinalOverlap('noise', '[noise]')?.intent).toBe('noise');
+  });
+
+  it('keeps an interruption already acted on, and has nothing to judge without an overlap', () => {
+    expect(assessFinalOverlap('interrupt', 'okay')).toBeNull();
+    expect(assessFinalOverlap(null, 'okay')).toBeNull();
   });
 });

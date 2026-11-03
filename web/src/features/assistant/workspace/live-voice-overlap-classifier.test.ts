@@ -23,6 +23,9 @@ describe('live voice overlap classifier', () => {
   it('keeps acknowledgements and noise non-authoritative', () => {
     expect(classifyOverlap('mhm').intent).toBe('backchannel');
     expect(classifyOverlap('yeah').intent).toBe('backchannel');
+    expect(classifyOverlap('Yeah, okay.').intent).toBe('backchannel');
+    expect(classifyOverlap('right right').intent).toBe('backchannel');
+    expect(classifyOverlap('yeah how is the farm').intent).toBe('interrupt');
     expect(classifyOverlap('[cough]').intent).toBe('noise');
     expect(shouldConfirmInterruption(classifyOverlap('right'), 'easy')).toBe(false);
   });

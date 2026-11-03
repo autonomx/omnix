@@ -66,6 +66,19 @@ export function recordSttAuthoritySelection(
 export function createSttTelemetryHandlers(reporter: LiveCallDiagnosticsReporter) {
   const segmentTelemetryGate = new LiveSttSegmentTelemetryGate();
   return {
+    onConnectionClosed: (event) => {
+      reporter.record('stt_connection_closed', {
+        code: event.code,
+        reason: event.reason,
+        was_clean: event.wasClean,
+      }, 'live_voice_controller');
+    },
+    onAudioHeld: (event) => {
+      reporter.record('stt_audio_held', {
+        reason: event.reason,
+        pending_chunks: event.pendingChunks,
+      }, 'live_voice_controller');
+    },
     onNegotiated: (negotiation) => {
       reporter.record('stt_negotiated', {
         provider: negotiation.provider,

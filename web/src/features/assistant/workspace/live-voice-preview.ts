@@ -101,6 +101,12 @@ export function clearAuthoritativePreview(session: LiveVoiceSession, resumedSpee
 export function assessOverlapCandidate(session: LiveVoiceSession): void {
   const assessment = classifyOverlap(session.partialTranscript, currentAssistantSpeechText());
   session.overlapIntent = assessment.intent;
+  session.reporter.record('overlap_classified', {
+    intent: assessment.intent,
+    confidence: assessment.confidence,
+    reason: assessment.reason,
+    transcript_chars: session.partialTranscript.length,
+  }, 'live_voice_controller');
   dispatchLiveVoicePerfEvent({
     stage: 'overlap_classified',
     timestamp: new Date().toISOString(),
@@ -123,6 +129,19 @@ export function overlapAwaitsInterruption(
   session: Pick<LiveVoiceSession, 'overlapIntent' | 'interruptionDispatched'>,
 ): boolean {
   return session.overlapIntent !== null && !session.interruptionDispatched;
+}
+
+/**
+ * A partial's intent describes only the words so far: "Yeah" is a backchannel, the sentence it starts is not. The
+ * final has all the words, so it decides, except for an interruption already acted on.
+ */
+export function assessFinalOverlap(
+  partialIntent: OverlapIntent | null,
+  transcript: string,
+  assistantText = '',
+): OverlapAssessment | null {
+  if (partialIntent === null || partialIntent === 'interrupt') return null;
+  return classifyOverlap(transcript, assistantText);
 }
 
 /** A final transcript that confirms an interruption the partials did not: the assistant still speaking stops. */

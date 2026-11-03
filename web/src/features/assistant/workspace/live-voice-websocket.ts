@@ -125,12 +125,14 @@ export type StreamingSttNegotiation = {
   language?: string;
 };
 
+export type StreamingSttSocketCloseEvent = { code?: number; reason?: string; wasClean?: boolean };
+
 export type StreamingSttSocketLike = {
   readyState: number;
   onopen: (() => void) | null;
   onmessage: ((event: { data: string }) => void) | null;
   onerror: ((event: unknown) => void) | null;
-  onclose: (() => void) | null;
+  onclose: ((event?: StreamingSttSocketCloseEvent) => void) | null;
   send(data: string | ArrayBuffer): void;
   close(): void;
 };
@@ -156,6 +158,9 @@ export type StreamingSttWebSocketClientOptions = {
   onFinalRejected?: (reason: string, identity: Partial<AcceptedVoiceFinal>) => void;
   onStatusChange?: (status: StreamingSttConnectionStatus) => void;
   onError?: (message: string) => void;
+  onConnectionClosed?: (event: { code: number | null; reason: string; wasClean: boolean | null }) => void;
+  /** Mic audio that could not go to the recognizer now: held for the connection, losing its oldest, or thrown away. */
+  onAudioHeld?: (event: { reason: StreamingSttAudioHeldReason; pendingChunks: number }) => void;
   onSegmentStateChange?: (state: StreamingSttSegmentState) => void;
   onNegotiated?: (negotiation: StreamingSttNegotiation) => void;
   onEndpointScore?: (event: StreamingSttEndpointScore) => void;
@@ -165,6 +170,8 @@ export type StreamingSttWebSocketClientOptions = {
 };
 
 export type StreamingSttConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
+
+export type StreamingSttAudioHeldReason = 'buffered' | 'overflow' | 'discarded';
 
 export type StreamingSttSegmentState = {
   protocol: LiveSttProtocol;
@@ -415,6 +422,7 @@ export class StreamingSttWebSocketClient {
   private protocol: LiveSttProtocol = 'legacy';
   private negotiation: StreamingSttNegotiation | null = null;
   private pendingAudio: PendingAudioFrame[] = [];
+  private heldAudioReason: StreamingSttAudioHeldReason | null = null;
   private pendingFinal = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly sessionId = createRuntimeId('stt-session');
@@ -504,8 +512,9 @@ export class StreamingSttWebSocketClient {
           this.setStatus('error');
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         clearTimeout(timeout);
+        this.options.onConnectionClosed?.({ code: event?.code ?? null, reason: event?.reason ?? '', wasClean: event?.wasClean ?? null });
         this.connecting = false;
         this.serverReady = false;
         this.awaitingSessionReady = false;
@@ -527,6 +536,7 @@ export class StreamingSttWebSocketClient {
       this.bufferAudio(frame);
       return;
     }
+    this.heldAudioReason = null;
     this.sendPreparedAudio(frame);
   }
 
@@ -1162,14 +1172,27 @@ export class StreamingSttWebSocketClient {
   }
 
   private bufferAudio(frame: PendingAudioFrame): void {
-    if (!this.connecting && !this.autoReconnect && !this.socket) return;
+    if (!this.connecting && !this.autoReconnect && !this.socket) {
+      this.reportHeldAudio('discarded');
+      return;
+    }
     this.pendingAudio.push(frame);
     const maxPendingChunks = this.options.maxPendingChunks ?? DEFAULT_MAX_PENDING_CHUNKS;
+    const overflowed = this.pendingAudio.length > maxPendingChunks;
     while (this.pendingAudio.length > maxPendingChunks) this.pendingAudio.shift();
+    this.reportHeldAudio(overflowed ? 'overflow' : 'buffered');
+  }
+
+  /** Once per change: this runs for every frame while the connection is away. */
+  private reportHeldAudio(reason: StreamingSttAudioHeldReason): void {
+    if (this.heldAudioReason === reason) return;
+    this.heldAudioReason = reason;
+    this.options.onAudioHeld?.({ reason, pendingChunks: this.pendingAudio.length });
   }
 
   private flushPendingAudio(): void {
     if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady || !this.negotiation || this.awaitingSessionReady) return;
+    this.heldAudioReason = null;
     const pending = this.pendingAudio;
     this.pendingAudio = [];
     for (const frame of pending) this.sendPreparedAudio(frame);

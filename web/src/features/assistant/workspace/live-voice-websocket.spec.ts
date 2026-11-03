@@ -9,6 +9,7 @@ import {
   encodePcm16Base64,
   getDefaultStreamingSttWebSocketUrl,
   resampleFloat32,
+  type StreamingSttSocketCloseEvent,
   type StreamingSttSocketLike,
 } from './live-voice-websocket';
 
@@ -551,12 +552,63 @@ function resultFor(
   };
 }
 
+describe('what the live recognizer client reports about its connection', () => {
+  function reportingClient() {
+    const sockets: TestStreamingSocket[] = [];
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const closed: unknown[] = [];
+    const held: unknown[] = [];
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5202/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      reconnectDelayMs: 60_000,
+      overlapMs: 0,
+      maxPendingChunks: 2,
+      onConnectionClosed: (event) => closed.push(event),
+      onAudioHeld: (event) => held.push(event),
+    });
+    return { client, sockets, closed, held };
+  }
+
+  it('says how the socket closed', async () => {
+    const { client, sockets, closed } = reportingClient();
+    await openSegmentedClient(client, sockets, segmentedReady());
+
+    sockets[0].readyState = 3;
+    sockets[0].onclose?.({ code: 1011, reason: 'model_service_error', wasClean: false });
+
+    expect(closed).toEqual([{ code: 1011, reason: 'model_service_error', wasClean: false }]);
+    client.disconnect();
+  });
+
+  it('says once when mic audio is being held back, and again when it starts losing some', async () => {
+    const { client, sockets, held } = reportingClient();
+    await openSegmentedClient(client, sockets, segmentedReady());
+    sockets[0].readyState = 3;
+    sockets[0].onclose?.();
+
+    for (let frame = 0; frame < 5; frame += 1) client.sendAudio(new Float32Array([0.1]), 16_000);
+
+    expect(held).toEqual([
+      { reason: 'buffered', pendingChunks: 1 },
+      { reason: 'overflow', pendingChunks: 2 },
+    ]);
+    client.disconnect();
+  });
+});
+
 class TestStreamingSocket implements StreamingSttSocketLike {
   readyState = 0;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: ((event: unknown) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event?: StreamingSttSocketCloseEvent) => void) | null = null;
   send = vi.fn();
   close = vi.fn(() => {
     this.readyState = 3;

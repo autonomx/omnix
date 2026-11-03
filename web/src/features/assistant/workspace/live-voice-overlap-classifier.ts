@@ -18,7 +18,8 @@ export type OverlapAssessment = {
 const HARD_STOP_PATTERN = /^(?:stop|wait|hold on|cancel|pause|quiet|be quiet|no|nope|that's wrong|that is wrong)[.!?\s-]*$/i;
 const CORRECTION_PATTERN = /\b(?:no|not|wrong|actually|correction|I meant|you said|that's not|that is not)\b/i;
 const QUESTION_PATTERN = /(?:[?？]|^(?:what|why|when|where|who|how|can|could|would|should|did|do|does|is|are)\b)/i;
-const BACKCHANNEL_PATTERN = /^(?:m+h+m+|mhm+|uh[ -]?huh|yeah|yep|right|okay|ok|got it|sure|I see|mm+)[.!\s-]*$/i;
+const ACKNOWLEDGEMENT = '(?:m+h+m+|mhm+|uh[ -]?huh|yeah|yep|right|okay|ok|got it|sure|I see|mm+)';
+const BACKCHANNEL_PATTERN = new RegExp(`^${ACKNOWLEDGEMENT}(?:[,.!\\s-]+${ACKNOWLEDGEMENT})*[.!\\s-]*$`, 'i');
 const NON_SPEECH_PATTERN = /^(?:\[?(?:noise|cough|breath|music|silence|background)\]?|[.!,…\s-]*)$/i;
 
 export function classifyOverlap(

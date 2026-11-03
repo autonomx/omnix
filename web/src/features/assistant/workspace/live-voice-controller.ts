@@ -125,6 +125,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       onEndpointCandidate: (event) => handleProviderEndpointCandidate(card, event),
       onPreviewTranscript: (event) => handleAuthoritativePreview(card, event),
       onStatusChange: (status) => {
+        reporter.record('stt_connection_status', { status }, 'live_voice_controller');
         if (controller.activeSession?.card === card || controller.pendingStart?.card === card) setPanelStatus(card, status);
       },
       onPartialTranscript: (text) => handlePartialTranscript(card, text),
