@@ -1,7 +1,11 @@
 """The live-call TTS websocket's portrait copy (roadmap: docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 2)."""
 from __future__ import annotations
 
+import json
 from typing import Any
+
+import numpy as np
+import pytest
 
 from tests.app.test_gateway_tts_live_call_websocket import FakeTtsProvider, _configure_gateway, _request
 
@@ -102,6 +106,73 @@ def test_a_portrait_call_gets_a_hello_and_its_audio_is_copied_with_offsets(monke
                               {"type": "cancel", "output_id": "turn-2", "epoch": 2}]
     # The call is over: it leaves the registry and its portrait link is closed.
     assert len(calls) == 0 and link.closed
+
+
+class SilentOnceAfterTheOpening(FakeTtsProvider):
+    def __init__(self, opening_seconds: float) -> None:
+        super().__init__()
+        self.opening_seconds = opening_seconds
+
+    def generate_audio_stream(self, **kwargs: Any):
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            level, seconds = 0.2, self.opening_seconds
+        elif len(self.calls) == 2:
+            level, seconds = 0.001, 2.9  # the words came out as near-silence
+        else:
+            level, seconds = 0.2, 1.4
+        yield np.full(int(24_000 * seconds), level, dtype=np.float32), 24_000, {"chunk_index": 0}
+
+
+def _portrait_call(websocket, client: Any, link: FakeLink) -> None:
+    hello = websocket.receive_json()
+    client.app.state.live_portrait_calls.claim(hello["avatar_token"], "local").attach(link)
+
+
+def _until_done(websocket) -> None:
+    while True:
+        message = websocket.receive()
+        if message.get("text") and json.loads(message["text"])["type"] == "done":
+            return
+
+
+def test_a_portrait_never_sees_a_silent_take_and_is_not_paused_while_it_is_replaced(monkeypatch) -> None:
+    provider = SilentOnceAfterTheOpening(opening_seconds=10.0)
+    client, logged = _configure_gateway(monkeypatch, provider)
+    link = FakeLink()
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
+        _portrait_call(websocket, client, link)
+        websocket.send_json(_owned_request("Yeah man, I really like building things.", 0))
+        _until_done(websocket)
+        link.sent.clear()
+        websocket.send_json(_owned_request("Like when you write quality code.", 1))
+        _until_done(websocket)
+        websocket.send_json({"type": "close", "reason": "finished"})
+
+    assert len(provider.calls) == 3
+    copied = sum(entry[3] for entry in link.sent if isinstance(entry, tuple) and entry[1] == "seg-1") // 2
+    assert copied == pytest.approx(24_000 * 1.4, rel=0.2)
+    # The pause is for a first chunk the browser waits on: released before the held generation, not after it.
+    first_pcm = next(index for index, entry in enumerate(link.sent) if isinstance(entry, tuple))
+    assert {"type": "tts_priority", "on": False} in link.sent[:first_pcm]
+    takes = [details for _stream, _source, event, details in logged if event == "phrase_speech_check"]
+    assert [take["missing"] for take in takes] == ["too_little_speech", None]
+
+
+def test_a_portrait_needs_more_queued_audio_before_a_phrase_is_held(monkeypatch) -> None:
+    # This much covers the generation alone (about 1.7 s expected), not also the second the portrait renders ahead.
+    provider = SilentOnceAfterTheOpening(opening_seconds=2.2)
+    client, _logged = _configure_gateway(monkeypatch, provider)
+    link = FakeLink()
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
+        _portrait_call(websocket, client, link)
+        websocket.send_json(_owned_request("Yeah man, I really like it.", 0))
+        _until_done(websocket)
+        websocket.send_json(_owned_request("Like when you write quality code.", 1))
+        _until_done(websocket)
+        websocket.send_json({"type": "close", "reason": "finished"})
+
+    assert len(provider.calls) == 2
 
 
 def test_pcm_offsets_count_each_phrases_own_samples() -> None:

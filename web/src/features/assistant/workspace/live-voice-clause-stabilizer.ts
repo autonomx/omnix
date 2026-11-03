@@ -26,8 +26,10 @@ type ClausePolicy = {
 // Later clauses retain enough text for stable prosody while staying short enough
 // for reliable local TTS lexical coverage. The first clause uses a smaller
 // bounded window because the user has already experienced STT + LLM latency
-// before any audio can begin.
-const DEFAULT_MINIMUM = 12;
+// before any audio can begin. Below about 26 characters the engine far more often
+// produces a phrase's length in near-silence instead of its words, and by the time
+// a later clause commits, audio is already queued ahead of it.
+const DEFAULT_MINIMUM = 26;
 const DEFAULT_LOOKAHEAD = 12;
 const DEFAULT_MAXIMUM = 64;
 const DEFAULT_DEADLINE_MS = 140;
@@ -46,6 +48,9 @@ const PLAIN_PARENTHETICAL = /\(([^)\n]{1,180})\)/gu;
 const MARKDOWN_SPAN = /(\*{1,3}|_{1,3})([^*_\n]{1,160})\1/gu;
 const EMOJI_SEQUENCE = /\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic})*/gu;
 const STACKED_LEADING_HESITATIONS = /^(?:(?:h+m+|u+m+|uh+|erm+|er+)\b(?:\s|[.…,!—–-])*){2,}/iu;
+// Written laughter opening a phrase sends the speech engine into another voice: a quarter to a third of real takes
+// scored as someone else, against 4% without it. Later in a phrase it did no harm (0%), so it stays there.
+const LEADING_WRITTEN_LAUGHTER = /^(?:(?:a?ha(?:[ -]?ha)+h?|he(?:he)+h?)\b[.!,…—–-]*\s*)+/iu;
 const STAGE_DIRECTION_START = /^(?:(?:a|an|the)\s+)?(?:(?:soft|small|little|nervous|playful|gentle|quiet)\s+)*(?:pause|pauses|sigh|sighs|laugh|laughs|laughter|chuckle|chuckles|giggle|giggles|breath|breathes|inhale|inhales|exhale|exhales|nod|nods|smile|smiles|grin|grins|shrug|shrugs|tilt|tilts|whisper|whispers|murmur|murmurs|typing sounds?)(?:\b|$)/iu;
 const STAGE_DIRECTION_META = /\b(?:tone|sounds?\s+implied|stage\s+direction|gesture|facial\s+expression)\b/iu;
 const WRITTEN_SOUND_EFFECT = /^["“”'‘’]?(?:he+he+|ha+ha+|hm+|mm+|ugh+|ah+)[.!…]*["“”'‘’]?$/iu;
@@ -195,7 +200,7 @@ export function sanitizeLiveVoiceSpokenText(text: string): string {
     ))
     .replace(EMOJI_SEQUENCE, ' ');
 
-  cleaned = cleaned.replace(STACKED_LEADING_HESITATIONS, '');
+  cleaned = cleaned.replace(STACKED_LEADING_HESITATIONS, '').trimStart().replace(LEADING_WRITTEN_LAUGHTER, '');
 
   const spokenText = cleaned
     .replace(/\s+/gu, ' ')

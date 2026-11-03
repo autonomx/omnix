@@ -22,6 +22,12 @@ from app.platform.live_voice.speech.pcm_diagnostics import (
     measured_pcm_block_streamer,
     measured_pcm_converter,
 )
+from app.platform.live_voice.speech.phrase_speech_check import (
+    PORTRAIT_RENDER_LEAD_SECONDS,
+    PlaybackRunway,
+    speech_checked_audio,
+)
+from app.platform.live_voice.speech.voice_likeness import VoiceLikeness
 from app.platform.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
     stream_live_call_pcm16_blocks,
@@ -84,6 +90,11 @@ class ConnectionState:
     cancelled_outputs: set[tuple[str, int]] = field(default_factory=set)
     # The call's portrait, when the client asked for one (``?portrait=1``); a no-op until a link attaches.
     portrait: PortraitCall | None = None
+    playback_runway: PlaybackRunway = field(default_factory=PlaybackRunway)
+    likeness_by_voice: dict[str, VoiceLikeness] = field(default_factory=dict)
+
+    def voice_likeness(self, speaker: str | None) -> VoiceLikeness:
+        return self.likeness_by_voice.setdefault(speaker or "", VoiceLikeness(speaker or ""))
 
 
 def _connection_details(websocket: WebSocket) -> dict[str, Any]:
@@ -530,9 +541,32 @@ async def _stream_phrase(
                         if stopped():
                             return
 
+                def phrase_audio():
+                    if request.max_new_tokens is None:
+                        return provider_audio()
+                    lead = PORTRAIT_RENDER_LEAD_SECONDS if portrait is not None else 0.0
+                    return speech_checked_audio(
+                        provider_audio,
+                        text_chars=len(text),
+                        max_new_tokens=request.max_new_tokens,
+                        to_pcm=_audio_chunk_to_pcm16_bytes,
+                        runway_seconds=lambda: (
+                            state.playback_runway.seconds(generation_epoch, time.perf_counter()) - lead
+                        ),
+                        stopped=stopped,
+                        is_cached=_is_speculative_cache_frame,
+                        on_take=lambda **take: stream_log(
+                            stream_id, "provider", "phrase_speech_check", phrase_index=phrase_index,
+                            output_id=output_id, generation_epoch=generation_epoch, text_chars=len(text), **take,
+                        ),
+                        # No first chunk is awaited while a phrase is held, so the portrait has nothing to give way to.
+                        on_hold=(lambda: portrait.tts_priority(False)) if portrait is not None else (lambda: None),
+                        likeness=state.voice_likeness(request.speaker).score,
+                    )
+
                 def raw_chunks():
                     nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count, portrait_replay
-                    for audio_chunk, sample_rate, timing in provider_audio():
+                    for audio_chunk, sample_rate, timing in phrase_audio():
                         if stopped():
                             return
                         raw_chunk_ready_at = time.perf_counter()
@@ -848,6 +882,7 @@ async def _stream_phrase(
                 sent_frames += 1
                 active_output.sent_frames = sent_frames
                 sent_samples += frame_samples
+                state.playback_runway.record(generation_epoch, frame_samples, sample_rate, time.perf_counter())
                 continue
             if message_type == "done":
                 if portrait is not None:

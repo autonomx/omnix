@@ -53,6 +53,26 @@ describe('stable live voice clauses', () => {
     expect(accumulator.pendingText()).toBe('split');
   });
 
+  it('does not hand the engine fragments too short to be spoken reliably after the first clause', () => {
+    const accumulator = new StableClauseAccumulator();
+    expect(accumulator.append('Hey Ehsan!', 0)).toEqual([{ text: 'Hey Ehsan!', reason: 'strong-boundary' }]);
+
+    // Both came out nearly silent as "can't complain." and "after all the" + "work stress,".
+    expect(accumulator.append("Doing good yaar, can't complain.", 10)).toEqual([
+      { text: "Doing good yaar, can't complain.", reason: 'strong-boundary' },
+    ]);
+    expect(accumulator.append('after all the', 20)).toEqual([]);
+    expect(accumulator.takeReady(1_000)).toEqual([]);
+    expect(accumulator.append('work stress, just need to chill', 1_010)).toEqual([
+      { text: 'after all the work stress,', reason: 'stable-boundary' },
+    ]);
+  });
+
+  it('keeps the first clause fast: it alone may be short', () => {
+    const accumulator = new StableClauseAccumulator();
+    expect(accumulator.append('Hey Ehsan!', 0)).toEqual([{ text: 'Hey Ehsan!', reason: 'strong-boundary' }]);
+  });
+
   it('uses lookahead before committing weaker punctuation', () => {
     const accumulator = new StableClauseAccumulator({
       minimumClauseCharacters: 12,
@@ -154,6 +174,42 @@ describe('stable live voice clauses', () => {
       'okay—trying this out feels weirdly fun? Like... honestly? '
       + 'I love that you asked. It feels surprisingly natural.',
     );
+  });
+
+  it.each([
+    ['Haha. So what kind of stuff are you into then?', 'So what kind of stuff are you into then?'],
+    ['Haha! My brother is handling the fish pond.', 'My brother is handling the fish pond.'],
+    ['Hahaha, my brother is handling the fish pond.', 'my brother is handling the fish pond.'],
+    ['Haha yeah man, that is crazy.', 'yeah man, that is crazy.'],
+    ['Hehe, my brother is handling the fish pond.', 'my brother is handling the fish pond.'],
+    ['Ha ha. That is crazy.', 'That is crazy.'],
+    ['Haha. Hehe. That is crazy.', 'That is crazy.'],
+  ])('does not open a phrase with written laughter, which brings on a wrong voice: %s', (written, spoken) => {
+    expect(sanitizeLiveVoiceSpokenText(written)).toBe(spoken);
+  });
+
+  it.each(['Haha.', 'Hahaha!', 'Hehe', 'haha...'])('drops a phrase that is only written laughter: %s', (written) => {
+    expect(sanitizeLiveVoiceSpokenText(written)).toBe('');
+  });
+
+  it.each([
+    'It is not for everyone, you know? Haha.',
+    'It is not for everyone, you know? Haha. My brother is handling it.',
+    'Been too long since I went there last time haha.',
+    'Lol, my brother is handling the fish pond.',
+    'Ha. That is what I thought.',
+    'Hahn is a common surname.',
+    'He said he would come.',
+  ])('keeps laughter later in a phrase, and words that only look like it: %s', (written) => {
+    expect(sanitizeLiveVoiceSpokenText(written)).toBe(written);
+  });
+
+  it('commits what follows dropped laughter as the clause', () => {
+    const accumulator = new StableClauseAccumulator();
+
+    expect(accumulator.append('Haha. So what kind of stuff are you into then?', 0)).toEqual([
+      { text: 'So what kind of stuff are you into then?', reason: 'strong-boundary' },
+    ]);
   });
 
   it('preserves ordinary parenthetical language while removing stage directions', () => {

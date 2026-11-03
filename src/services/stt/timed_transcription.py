@@ -579,6 +579,23 @@ def install_timed_transcription_routes(app: Any, *, decode: Callable[[bytes, str
             return {"ok": False, "code": "live_call_active", "message": LIVE_CALL_WARM_MESSAGE}
         return {"ok": True, "loaded": True}
 
+    @app.post("/speaker/embedding")
+    async def speaker_embedding_route(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+        """A recording's speaker embedding: how live calls tell a take in the wrong voice (not on the batch queue)."""
+        payload = await file.read()
+        if not payload:
+            raise HTTPException(status_code=400, detail="empty_audio")
+
+        def run() -> np.ndarray:
+            pcm16, _duration = decode(payload, file.filename or "audio.wav")
+            return _embedding(SPEAKERS.get(), pcm16_to_float(pcm16))
+
+        try:
+            embedding = await asyncio.to_thread(run)
+        except TimedTranscriptionUnavailable as exc:
+            return {"ok": False, "code": "model_unavailable", "message": str(exc)}
+        return {"ok": True, "embedding": [round(float(value), 6) for value in embedding]}
+
     @app.post("/transcribe/timed")
     async def transcribe_timed_route(
         file: UploadFile = File(...),  # noqa: B008 - FastAPI dependency default

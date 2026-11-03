@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketDenialResponse
@@ -341,6 +342,46 @@ def test_a_phrase_waits_out_a_busy_service_instead_of_being_dropped(monkeypatch)
         websocket.send_json({"type": "close", "reason": "finished"})
     assert (started["type"], completed["type"]) == ("start", "done")
     assert len(audio) > 0 and len(provider.calls) == 4
+
+
+def test_a_phrase_rendered_silent_is_generated_again_and_never_sent(monkeypatch) -> None:
+    class SilentOnceAfterTheFirstPhrase(FakeTtsProvider):
+        def generate_audio_stream(self, **kwargs: Any):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                level, seconds = 0.2, 8.0  # the reply's opening: plenty of queued audio to cover a check
+            elif len(self.calls) == 2:
+                level, seconds = 0.001, 2.9  # "can't complain.", silent to its budget, as on real takes
+            else:
+                level, seconds = 0.2, 1.4
+            yield np.full(int(24_000 * seconds), level, dtype=np.float32), 24_000, {"chunk_index": 0}
+
+    def phrase_audio(websocket) -> bytes:
+        audio = b""
+        while True:
+            message = websocket.receive()
+            if message.get("bytes"):
+                audio += message["bytes"]
+            elif json.loads(message["text"])["type"] == "done":
+                return audio
+
+    provider = SilentOnceAfterTheFirstPhrase()
+    client, logged = _configure_gateway(monkeypatch, provider)
+    with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
+        websocket.send_json(_request("Hey Ehsan, doing good yaar.", 0))
+        phrase_audio(websocket)
+        assert len(provider.calls) == 1  # with nothing queued, the first phrase streams unchecked
+        websocket.send_json(_request("can't complain.", 1))
+        second = phrase_audio(websocket)
+        websocket.send_json({"type": "close", "reason": "finished"})
+
+    assert len(provider.calls) == 3
+    samples = np.frombuffer(second, dtype="<i2")
+    assert len(samples) == pytest.approx(24_000 * 1.4, rel=0.2)
+    assert np.abs(samples).max() > 3_000
+    takes = [details for _stream, _source, event, details in logged if event == "phrase_speech_check"]
+    assert [take["missing"] for take in takes] == ["too_little_speech", None]
+    assert all("text" not in take for take in takes)
 
 
 def test_a_refusal_after_audio_began_is_not_retried(monkeypatch) -> None:
