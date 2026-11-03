@@ -1,0 +1,97 @@
+/* RpgSurvivalCard's own styles. */
+@layer features {
+  .rpg-survival-card {
+    gap: 0.75rem;
+  }
+
+  .rpg-survival-status {
+    border: 1px solid color-mix(in srgb, var(--c-green-870) 30%, transparent);
+    border-radius: 999px;
+    color: var(--fg-green-870);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.45rem;
+    text-transform: uppercase;
+  }
+
+  .rpg-survival-status.is-warning {
+    border-color: color-mix(in srgb, var(--c-yellow-880) 35%, transparent);
+    color: var(--fg-yellow-910);
+  }
+
+  .rpg-survival-status.is-critical {
+    border-color: color-mix(in srgb, var(--c-red-720) 40%, transparent);
+    color: var(--fg-red-720);
+  }
+
+  .rpg-survival-detail,
+  .rpg-survival-card > small {
+    color: var(--fg-slate-730);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .rpg-survival-needs {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .rpg-survival-need {
+    display: grid;
+    gap: 0.28rem 0.6rem;
+    grid-template-columns: auto auto;
+  }
+
+  .rpg-survival-need > span:first-child {
+    color: var(--fg-violet-830);
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .rpg-survival-need > strong {
+    color: var(--fg-slate-970-2);
+    font-size: 0.76rem;
+    justify-self: end;
+  }
+
+  .rpg-survival-meter {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent);
+    border-radius: 999px;
+    display: block;
+    grid-column: 1 / -1;
+    height: 0.38rem;
+    overflow: hidden;
+  }
+
+  .rpg-survival-meter > span {
+    background: linear-gradient(90deg, var(--c-green-720), var(--c-green-870));
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+  }
+
+  .rpg-survival-meter.is-warning > span {
+    background: linear-gradient(90deg, var(--c-amber-770), var(--c-yellow-910));
+  }
+
+  .rpg-survival-meter.is-critical > span {
+    background: linear-gradient(90deg, var(--c-orange-580), var(--c-red-720));
+  }
+
+  .rpg-survival-warnings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .rpg-survival-warnings span {
+    background: color-mix(in srgb, var(--c-amber-770) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-amber-770) 22%, transparent);
+    border-radius: 999px;
+    color: var(--fg-yellow-920-2);
+    font-size: 0.68rem;
+    padding: 0.2rem 0.4rem;
+  }
+}

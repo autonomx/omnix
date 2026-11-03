@@ -1,31 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VirtualList } from '../../design/VirtualList';
-import { RpgGameMasterPanel } from './RpgGameMasterPanel';
-import { RpgLorePanel } from './RpgLorePanel';
 import { RpgLinkedText } from './rpgLoreLinks';
-import { RpgVoicesPanel } from './RpgVoicesPanel';
-import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiTypes';
+import type { RpgJournalDetailPreview, RpgJournalEntryPreview, RpgQuestPreview } from './rpgUiTypes';
 import { emptyWorldChanges, type RpgWorldChangesPreview } from './rpgWorldChanges';
 
-type RpgNarrativeTab = 'journal' | 'changes' | 'lore' | 'dialogue' | 'turns' | 'game-master' | 'voices';
+export type RpgNarrativeTab = 'journal' | 'quests' | 'changes' | 'history';
+type RpgHistoryFilter = 'all' | 'said' | 'did';
 
 interface RpgNarrativeTabsProps {
+  initialTab?: RpgNarrativeTab;
   journalEntries: RpgJournalEntryPreview[];
   logEntries: RpgJournalEntryPreview[];
   journalDetail: RpgJournalDetailPreview;
+  quests?: RpgQuestPreview[];
   recentEvents: string[];
   worldChanges?: RpgWorldChangesPreview;
 }
 
 const tabs: Array<{ id: RpgNarrativeTab; label: string }> = [
   { id: 'journal', label: 'Journal' },
+  { id: 'quests', label: 'Quests' },
   { id: 'changes', label: 'What has changed' },
-  { id: 'lore', label: 'Lore' },
-  { id: 'dialogue', label: 'Dialogue log' },
-  { id: 'turns', label: 'What you did' },
-  { id: 'game-master', label: 'Game master' },
-  { id: 'voices', label: 'Voices' },
+  { id: 'history', label: 'History' },
 ];
+
+const historyFilters: Array<{ id: RpgHistoryFilter; label: string }> = [
+  { id: 'all', label: 'Everything' },
+  { id: 'said', label: 'What was said' },
+  { id: 'did', label: 'What you did' },
+];
+
+const emptyHistoryRow: RpgJournalEntryPreview = {
+  time: 'History',
+  title: 'Nothing yet',
+  detail: 'What happens is kept here.',
+};
 
 const emptyDialogueRow: RpgJournalEntryPreview = {
   time: 'Dialogue',
@@ -40,12 +49,10 @@ const emptyTurnRow: RpgJournalEntryPreview = {
 };
 
 export function RpgNarrativeTabs({
-  journalEntries, logEntries, journalDetail, recentEvents, worldChanges = emptyWorldChanges,
+  initialTab = 'journal', journalEntries, logEntries, journalDetail, quests = [], recentEvents, worldChanges = emptyWorldChanges,
 }: RpgNarrativeTabsProps) {
-  const [activeTab, setActiveTab] = useState<RpgNarrativeTab>('journal');
+  const [activeTab, setActiveTab] = useState<RpgNarrativeTab>(initialTab);
   const [selectedJournalIndex, setSelectedJournalIndex] = useState(0);
-  const dialogueRows = useMemo(() => buildDialogueRows(logEntries, recentEvents), [logEntries, recentEvents]);
-  const turnRows = useMemo(() => buildTurnRows(logEntries), [logEntries]);
 
   useEffect(() => {
     setSelectedJournalIndex(0);
@@ -53,7 +60,7 @@ export function RpgNarrativeTabs({
 
   return (
     <section className="rpg-card rpg-journal-card">
-      <div className="rpg-tabs" role="tablist" aria-label="RPG logs and lore">
+      <div className="rpg-tabs" role="tablist" aria-label="Journal">
         {tabs.map((tab) => (
           <button
             aria-controls={`rpg-${tab.id}-panel`}
@@ -77,16 +84,9 @@ export function RpgNarrativeTabs({
           selectedIndex={selectedJournalIndex}
         />
       ) : null}
+      {activeTab === 'quests' ? <QuestsPanel quests={quests} /> : null}
       {activeTab === 'changes' ? <WorldChangesPanel worldChanges={worldChanges} /> : null}
-      {activeTab === 'lore' ? <RpgLorePanel /> : null}
-      {activeTab === 'dialogue' ? <DialoguePanel dialogueRows={dialogueRows} /> : null}
-      {activeTab === 'turns' ? <TurnHistoryPanel turnRows={turnRows} /> : null}
-      {activeTab === 'game-master' ? (
-        <div aria-labelledby="rpg-game-master-tab" id="rpg-game-master-panel" role="tabpanel"><RpgGameMasterPanel /></div>
-      ) : null}
-      {activeTab === 'voices' ? (
-        <div aria-labelledby="rpg-voices-tab" id="rpg-voices-panel" role="tabpanel"><RpgVoicesPanel /></div>
-      ) : null}
+      {activeTab === 'history' ? <HistoryPanel logEntries={logEntries} recentEvents={recentEvents} /> : null}
     </section>
   );
 }
@@ -182,44 +182,56 @@ function WorldChangesPanel({ worldChanges }: { worldChanges: RpgWorldChangesPrev
   );
 }
 
-function DialoguePanel({ dialogueRows }: { dialogueRows: RpgJournalEntryPreview[] }) {
+function QuestsPanel({ quests }: { quests: RpgQuestPreview[] }) {
   return (
-    <div aria-labelledby="rpg-dialogue-tab" className="rpg-journal-grid" id="rpg-dialogue-panel" role="tabpanel">
-      <div className="rpg-journal-list">
-        {dialogueRows.map((row, index) => (
-          <article className={index === 0 ? 'active' : undefined} key={`${row.time}:${row.title}`}>
-            <span aria-hidden="true" />
-            <div><strong>{row.time}</strong><p>{row.title}</p></div>
-          </article>
-        ))}
-      </div>
-      <article className="rpg-journal-detail">
-        <h3>Dialogue log</h3>
-        <p>What people have said to you.</p>
-        <ul>{dialogueRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
-      </article>
+    <div aria-labelledby="rpg-quests-tab" className="rpg-list-stack" id="rpg-quests-panel" role="tabpanel">
+      {quests.length ? quests.map((quest) => (
+        <article className="rpg-journal-detail rpg-quest-entry" key={quest.title}>
+          <div className="rpg-section-heading">
+            <h3>{quest.title}</h3>
+            {quest.status ? <span className="rpg-pill">{quest.status}</span> : null}
+          </div>
+          {quest.detail ? <p>{quest.detail}</p> : null}
+        </article>
+      )) : <p>No quests yet.</p>}
     </div>
   );
 }
 
-function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) {
+/** One history in place of three logs: all of it, what people said, or what the hero did. */
+function HistoryPanel({ logEntries, recentEvents }: { logEntries: RpgJournalEntryPreview[]; recentEvents: string[] }) {
+  const [filter, setFilter] = useState<RpgHistoryFilter>('all');
+  const rows = useMemo(() => {
+    if (filter === 'said') return buildDialogueRows(logEntries, recentEvents);
+    if (filter === 'did') return buildTurnRows(logEntries);
+    return buildAllRows(logEntries, recentEvents);
+  }, [filter, logEntries, recentEvents]);
   return (
-    <div aria-labelledby="rpg-turns-tab" className="rpg-journal-grid" id="rpg-turns-panel" role="tabpanel">
-      <div className="rpg-journal-list">
-        {turnRows.map((row, index) => (
-          <article className={index === 0 ? 'active' : undefined} key={`${row.time}:${row.title}`}>
-            <span aria-hidden="true" />
-            <div><strong>{row.time}</strong><p>{row.title}</p></div>
-          </article>
+    <div aria-labelledby="rpg-history-tab" className="rpg-history" id="rpg-history-panel" role="tabpanel">
+      <div role="group" aria-label="Show" className="rpg-history-filters">
+        {historyFilters.map((row) => (
+          <button aria-pressed={filter === row.id} key={row.id} onClick={() => setFilter(row.id)} type="button">{row.label}</button>
         ))}
       </div>
-      <article className="rpg-journal-detail">
-        <h3>What you did</h3>
-        <p>Your latest turns, newest first.</p>
-        <ul>{turnRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
-      </article>
+      <ul className="rpg-history-list">
+        {rows.map((row, index) => (
+          <li key={`${index}:${row.time}:${row.detail}`}>
+            <small>{row.time}</small>
+            <strong>{row.title}</strong>
+            {row.detail !== row.title ? <span>{row.detail}</span> : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
+}
+
+function buildAllRows(logEntries: RpgJournalEntryPreview[], recentEvents: string[]): RpgJournalEntryPreview[] {
+  const told = new Set(logEntries.map((entry) => entry.detail));
+  const events = recentEvents.filter((event) => !told.has(event))
+    .map((event, index) => ({ time: `Event ${index + 1}`, title: speakerFromEvent(event) ?? 'Narration', detail: event }));
+  const rows = [...logEntries, ...events];
+  return rows.length ? rows : [emptyHistoryRow];
 }
 
 function buildDialogueRows(journalEntries: RpgJournalEntryPreview[], recentEvents: string[]): RpgJournalEntryPreview[] {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { rpgSessionClient, type RpgLoadoutActionRequest } from './api/rpgSessionClient';
 import { buildSelectedItemActions, type RpgItemUiAction } from './rpgItemUiState';
@@ -7,10 +7,10 @@ import './RpgLoadoutTabs.css';
 import { AbilitiesPanel, CoveragePanel, EffectsPanel, HotbarPanel, InventoryPanel, SkillsPanel, TraitsPanel } from './RpgLoadoutPanels';
 import { buildAbilityOverview } from './rpgAbilityOverview';
 
-type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar' | 'skills' | 'traits' | 'effects' | 'coverage';
+type RpgCharacterTab = 'status' | 'abilities' | 'hotbar' | 'skills' | 'traits' | 'effects' | 'coverage';
 
 /** The tabs about the character's ability tree, which show its summary above them. */
-const ABILITY_TABS: ReadonlySet<RpgLoadoutTab> = new Set(['abilities', 'skills', 'traits', 'coverage']);
+const ABILITY_TABS: ReadonlySet<RpgCharacterTab> = new Set(['abilities', 'skills', 'traits', 'coverage']);
 
 export interface RpgLoadoutTabsProps {
   inventoryItems: RpgInventoryItemPreview[];
@@ -21,10 +21,14 @@ export interface RpgLoadoutTabsProps {
   /** Sends a typed turn, as the composer would (selling from the pack). */
   onSubmitCommand?: (command: string) => void;
   selectedSessionId?: string | null;
+  /** The bar's two panels: what is carried, or who the hero is. */
+  section: 'pack' | 'character';
+  /** The Character panel's first tab: how the hero stands. */
+  statusPanel?: ReactNode;
 }
 
-const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
-  { id: 'inventory', label: 'Inventory' },
+const tabs: Array<{ id: RpgCharacterTab; label: string }> = [
+  { id: 'status', label: 'Status' },
   { id: 'abilities', label: 'Abilities' },
   { id: 'hotbar', label: 'Hotbar' },
   { id: 'skills', label: 'Skills' },
@@ -33,8 +37,8 @@ const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
   { id: 'coverage', label: 'Coverage' },
 ];
 
-export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, onSubmitCommand, selectedSessionId }: RpgLoadoutTabsProps) {
-  const [activeTab, setActiveTab] = useState<RpgLoadoutTab>('inventory');
+export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, onSubmitCommand, section, selectedSessionId, statusPanel }: RpgLoadoutTabsProps) {
+  const [activeTab, setActiveTab] = useState<RpgCharacterTab>(statusPanel ? 'status' : 'abilities');
   const [activeInventoryIndex, setActiveInventoryIndex] = useState(0);
   const [activeAbilityIndex, setActiveAbilityIndex] = useState(0);
   const [activeHotbarSlot, setActiveHotbarSlot] = useState('1');
@@ -73,10 +77,29 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     wasApplyingAction.current = isApplyingLoadoutAction;
   }, [isApplyingLoadoutAction, selectedSessionId, sessionQuery]);
 
+  if (section === 'pack') {
+    return (
+      <section className="rpg-card rpg-inventory-card" aria-label="Inventory">
+        <InventoryPanel
+          activeItemIndex={activeInventoryIndex}
+          hotbarAbilities={displayedHotbarAbilities}
+          inventoryItems={inventoryItems}
+          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          itemActions={buildSelectedItemActions({ item: activeItem, selectedSessionId })}
+          onApplyItemAction={applyItemAction}
+          onApplyLoadoutAction={onApplyLoadoutAction}
+          onSelectCommand={onSelectCommand}
+          onSelectItem={setActiveInventoryIndex}
+          selectedSessionId={selectedSessionId}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="rpg-card rpg-inventory-card">
-      <div className="rpg-tabs" role="tablist" aria-label="Inventory and ability tabs">
-        {tabs.map((tab) => (
+      <div className="rpg-tabs" role="tablist" aria-label="Character tabs">
+        {tabs.filter((tab) => tab.id !== 'status' || statusPanel).map((tab) => (
           <button
             aria-controls={`rpg-${tab.id}-loadout-panel`}
             aria-selected={activeTab === tab.id}
@@ -103,19 +126,8 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
         </div>
       ) : null}
 
-      {activeTab === 'inventory' ? (
-        <InventoryPanel
-          activeItemIndex={activeInventoryIndex}
-          hotbarAbilities={displayedHotbarAbilities}
-          inventoryItems={inventoryItems}
-          isApplyingLoadoutAction={isApplyingLoadoutAction}
-          itemActions={buildSelectedItemActions({ item: activeItem, selectedSessionId })}
-          onApplyItemAction={applyItemAction}
-          onApplyLoadoutAction={onApplyLoadoutAction}
-          onSelectCommand={onSelectCommand}
-          onSelectItem={setActiveInventoryIndex}
-          selectedSessionId={selectedSessionId}
-        />
+      {activeTab === 'status' ? (
+        <div aria-labelledby="rpg-status-loadout-tab" id="rpg-status-loadout-panel" role="tabpanel">{statusPanel}</div>
       ) : null}
       {activeTab === 'abilities' ? (
         <AbilitiesPanel

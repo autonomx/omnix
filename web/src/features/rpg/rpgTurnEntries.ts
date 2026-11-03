@@ -1,5 +1,6 @@
 /** A turn's response as the play screen reads it, and the story entries it becomes. */
 import type { components } from './api/generated';
+import { speakerLabel } from './rpgUiRecords';
 import type { RpgStoryMessagePreview } from './rpgUiTypes';
 
 type RpgLoreSpan = { entry_id: string; start: number; end: number };
@@ -108,7 +109,7 @@ export function rpgTurnEntriesFromPayload(
   for (const [index, message] of (visible.messages || []).entries()) {
     const text = message.text?.trim();
     if (!text) continue;
-    const speaker = message.speaker?.trim() || 'NPC';
+    const speaker = speakerLabel(message.speaker?.trim() || 'NPC');
     entries.push({
       id: `${interactionId}:message:${index}`,
       sessionId,

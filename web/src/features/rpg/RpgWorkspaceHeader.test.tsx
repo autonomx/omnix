@@ -44,6 +44,7 @@ describe('RpgWorkspaceHeader', () => {
     expect(screen.queryByLabelText('RPG runtime status')).not.toBeInTheDocument();
     expect(screen.queryByText('Replay-preserving')).not.toBeInTheDocument();
     expect(screen.queryByText('/rpg')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByRole('button', { name: 'World Lore' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide world rail' })).toBeInTheDocument();

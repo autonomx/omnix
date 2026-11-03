@@ -8,6 +8,11 @@ import { RpgWorkspace } from './RpgWorkspace';
 import { buildSubmittedTurnStoryMessages } from './rpgWorkspaceSupport';
 import { createTestQueryClient } from '../../test/renderWithProviders';
 
+/** The campaign being played, as the turn form holds it. */
+function sessionField() {
+  return document.querySelector('input[name="sessionId"]');
+}
+
 function renderRpg() {
   const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'rpg');
@@ -159,7 +164,7 @@ describe('RpgWorkspace', () => {
 
     renderRpg();
 
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('ongoing-session'));
+    await waitFor(() => expect(sessionField()).toHaveValue('ongoing-session'));
     expect(window.localStorage.getItem('omnix:rpg:selected-session-id')).toBe('ongoing-session');
 
     await waitFor(() => {
@@ -214,7 +219,7 @@ describe('RpgWorkspace', () => {
 
     renderRpg();
 
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('indexed-session'));
+    await waitFor(() => expect(sessionField()).toHaveValue('indexed-session'));
     await waitFor(() => expect(window.localStorage.getItem('omnix:rpg:selected-session-id')).toBe('indexed-session'));
   });
 
@@ -263,9 +268,8 @@ describe('RpgWorkspace', () => {
     renderRpg();
 
     expect(await screen.findByRole('heading', { name: 'Your turn' })).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: 'rpg-session-1' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'rpg_checkpoint / rpg' })).not.toBeInTheDocument(); // a developer panel
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    await waitFor(() => expect(sessionField()).toHaveValue('rpg-session-1'));
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
@@ -273,6 +277,7 @@ describe('RpgWorkspace', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeEnabled());
     // Players never see job ids; Developer tools shows them.
     expect(screen.queryByText(/job:rpg/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     fireEvent.click(screen.getByRole('button', { name: 'Developer tools' }));
     expect(await screen.findByText('Turn job: job:rpg')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Developer tools' })).toBeInTheDocument();
@@ -396,7 +401,7 @@ describe('RpgWorkspace', () => {
     renderRpg();
 
     expect(await screen.findByRole('heading', { name: 'Your turn' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    await waitFor(() => expect(sessionField()).toHaveValue('rpg-session-1'));
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
@@ -456,7 +461,7 @@ describe('RpgWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderRpg();
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    await waitFor(() => expect(sessionField()).toHaveValue('rpg-session-1'));
 
     const conversation = screen.getByLabelText('Conversation');
     const previousResponse = await within(conversation).findByText('Bran nods at the ledger.');
@@ -506,7 +511,7 @@ describe('RpgWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderRpg();
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    await waitFor(() => expect(sessionField()).toHaveValue('rpg-session-1'));
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
@@ -552,7 +557,7 @@ describe('RpgWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderRpg();
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    await waitFor(() => expect(sessionField()).toHaveValue('rpg-session-1'));
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Listen to the hearth-side conversation' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
@@ -597,7 +602,7 @@ describe('RpgWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderRpg();
-    await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
+    await waitFor(() => expect(sessionField()).toHaveValue('rpg-session-1'));
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran about business.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
@@ -664,6 +669,7 @@ describe('RpgWorkspace', () => {
     // Saving is the campaign's own save points (the Campaign Menu), not a platform checkpoint.
     expect(screen.queryByRole('button', { name: 'Create checkpoint' })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     fireEvent.click(screen.getByRole('button', { name: 'Developer tools' })); // autoplay is a developer's tool
     fireEvent.click(await screen.findByRole('button', { name: 'Start autoplay' }));
 
@@ -678,11 +684,77 @@ describe('RpgWorkspace', () => {
     });
   });
 
+  it('keeps everything but the story behind the play bar, one panel at a time', async () => {
+    stubEmptyWorkspaceFetch();
+
+    renderRpg();
+
+    expect(await screen.findByRole('heading', { name: 'Your turn' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Inventory item slots' })).not.toBeInTheDocument();
+
+    const bar = within(screen.getByRole('navigation', { name: 'Play panels' }));
+    fireEvent.click(bar.getByRole('button', { name: 'Pack' }));
+    expect(within(screen.getByRole('region', { name: 'Pack' })).getByRole('group', { name: 'Inventory item slots' })).toBeInTheDocument();
+
+    fireEvent.click(bar.getByRole('button', { name: 'Character' }));
+    expect(screen.queryByRole('region', { name: 'Pack' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Character' })).getByRole('region', { name: 'Survival status' })).toBeInTheDocument();
+
+    fireEvent.click(bar.getByRole('button', { name: 'World' }));
+    const world = within(screen.getByRole('region', { name: 'World' }));
+    expect(world.queryByRole('tab', { name: 'Here' })).not.toBeInTheDocument(); // beside the story on a wide screen
+    fireEvent.click(world.getByRole('tab', { name: 'People' }));
+    expect(world.getByRole('button', { name: '+ Add companion' })).toBeInTheDocument();
+  });
+
+  it('puts a command chosen from a panel in the composer and closes the panel', async () => {
+    stubEmptyWorkspaceFetch();
+
+    renderRpg();
+
+    const bar = within(await screen.findByRole('navigation', { name: 'Play panels' }));
+    fireEvent.click(bar.getByRole('button', { name: 'Character' }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Survival status' })).getByRole('button', { name: 'Rest' }));
+
+    expect(screen.queryByRole('region', { name: 'Character' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Command' })).toHaveValue('I rest');
+  });
+
+  it('opens the quests from the goal, and the journal itself from the bar', async () => {
+    stubEmptyWorkspaceFetch();
+
+    renderRpg();
+
+    fireEvent.click(await screen.findByRole('button', { name: /The Frostbound Relic/ }));
+    expect(screen.getByRole('tab', { name: 'Quests' })).toHaveAttribute('aria-selected', 'true');
+
+    const bar = within(screen.getByRole('navigation', { name: 'Play panels' }));
+    fireEvent.click(bar.getByRole('button', { name: 'Journal' })); // closes it
+    fireEvent.click(bar.getByRole('button', { name: 'Journal' }));
+    expect(screen.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens the game master from the composer and the voices from More', async () => {
+    stubEmptyWorkspaceFetch();
+
+    renderRpg();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask the game master' }));
+    expect(screen.getByRole('region', { name: 'Game master' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Voices' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide header' })).not.toBeInTheDocument(); // the menu closed behind it
+  });
+
   it('keeps both rails expanded while preserving accessible hide controls', async () => {
     stubEmptyWorkspaceFetch();
 
     renderRpg();
 
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByRole('button', { name: 'Hide header' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(await screen.findByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
@@ -720,6 +792,8 @@ describe('RpgWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'New Campaign' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Campaign Menu' })).toBeInTheDocument();
     expect(within(screen.getByRole('banner', { name: 'Campaign menu header' })).getByRole('button', { name: 'Campaign Menu' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide player rail' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Expand header' })).not.toBeInTheDocument();
@@ -763,6 +837,7 @@ describe('RpgWorkspace', () => {
 
     renderRpg();
 
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByRole('button', { name: 'Expand live data' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('region', { name: 'RPG live data status' })).not.toBeInTheDocument();
 

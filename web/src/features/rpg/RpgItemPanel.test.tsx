@@ -19,7 +19,6 @@ describe('RpgItemPanel', () => {
   it('asks the player to select something when nothing is', () => {
     render(<RpgItemPanel actions={[]} />);
 
-    expect(screen.getByText('Item details and actions')).toBeInTheDocument();
     expect(screen.getByText('Select something you carry.')).toBeInTheDocument();
   });
 

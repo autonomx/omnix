@@ -1,69 +1,47 @@
-import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
-import type { HermesRpgSuggestion } from './api/hermesClient';
-import type { RpgGearPreview, RpgHeroSummaryPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgStatPreview, RpgSurvivalPreview } from './rpgUiTypes';
+import { RpgSurvivalCard, survivalIsPressing } from './RpgSurvivalCard';
+import type { RpgHeroSummaryPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgStatPreview, RpgSurvivalPreview } from './rpgUiTypes';
 import './RpgVisualAssets.css';
 import './RpgPlayerRail.css';
 
 const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
-const RPG_PARTY_CAPACITY = 4;
-
-type RpgRailPanelState = 'idle' | 'loading' | 'ready' | 'error' | 'empty';
-
-interface RpgTurnReadoutPreview {
-  category?: string;
-  systems?: string[];
-  effectCount?: number;
-  groundingStatus?: string;
-}
-
-interface RpgRouteDecisionPreview {
-  mode: string;
-  hermesRole: string;
-  owner: string;
-  reviewRequired: boolean;
-  boundary: string;
-}
 
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
   className?: string;
-  equippedGear: RpgGearPreview[];
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
-  hermesRouteDecision?: RpgRouteDecisionPreview;
-  hermesRouteDecisionState?: RpgRailPanelState;
-  hermesSuggestionFreshnessLabel?: string;
-  hermesSuggestionState?: RpgRailPanelState;
-  hermesSuggestions?: HermesRpgSuggestion[];
-  hermesTurnReadout?: RpgTurnReadoutPreview;
-  hermesTurnReadoutFreshnessLabel?: string;
-  hermesTurnReadoutState?: RpgRailPanelState;
-  onApprovedFlowAccepted?: (result: HermesRpgApprovedFlowResponse) => void | Promise<void>;
+  onOpenQuests?: () => void;
   onSelectCommand?: (command: string) => void;
   partyMembers: RpgPartyMemberPreview[];
   survival: RpgSurvivalPreview;
 }
 
-export function RpgPlayerRail(props: RpgPlayerRailProps) {
-  const {
-    activeQuests,
-    className,
-    equippedGear,
-    heroStats,
-    heroSummary,
-    onSelectCommand,
-    partyMembers,
-    survival,
-  } = props;
+/** The quest to name beside the story: the first one under way, else the first still open. */
+export function currentGoal(quests: RpgQuestPreview[]): RpgQuestPreview | undefined {
+  const open = quests.filter((quest) => !['completed', 'failed', 'abandoned'].includes(quest.status?.toLowerCase() ?? ''));
+  return open.find((quest) => quest.status?.toLowerCase() === 'active') ?? open[0];
+}
+
+/** The hero at a glance: how they stand, what they are after, and what needs attention now. The rest is on the bar. */
+export function RpgPlayerRail({
+  activeQuests,
+  className,
+  heroStats,
+  heroSummary,
+  onOpenQuests,
+  onSelectCommand,
+  partyMembers,
+  survival,
+}: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
   const heroAvatarClassName = heroSummary.source === 'preview'
     ? 'rpg-avatar rpg-hero-avatar rpg-hero-avatar-art'
     : 'rpg-avatar rpg-hero-avatar';
+  const goal = currentGoal(activeQuests);
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
-      <section className="rpg-card rpg-hero-card">
-        <p className="eyebrow">Your hero</p>
+      <section className="rpg-card rpg-hero-card" aria-label="Your hero">
         <div className="rpg-hero-summary">
           <div className={heroAvatarClassName} aria-hidden="true">
             {heroSummary.source === 'preview' ? <img src={HERO_ART_SRC} alt="" loading="lazy" /> : heroSummary.avatar}
@@ -71,7 +49,6 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
           <div>
             <h3>{heroSummary.name}</h3>
             <p>{heroSummary.subtitle}</p>
-            <p>{heroSummary.origin}</p>
           </div>
         </div>
         <div className="rpg-stat-stack">
@@ -84,7 +61,7 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
               </span>
             </div>
           ))}
-          <div className="rpg-stat-row">
+          <div className="rpg-stat-row rpg-stat-row-xp">
             <span>XP</span>
             <strong>{heroSummary.xpLabel}</strong>
             <span className="rpg-meter rpg-meter-xp" role="img" aria-label={`XP ${heroSummary.xpLabel}`}>
@@ -92,118 +69,34 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
             </span>
           </div>
         </div>
-        <div className="rpg-resource-grid">
-          <div>
-            <span>Gold</span>
-            <strong>{heroSummary.gold}</strong>
-          </div>
-        </div>
+        <p className="rpg-hero-coin"><span>Gold</span> <strong>{heroSummary.gold}</strong></p>
       </section>
 
-      <section className="rpg-card rpg-survival-card" aria-label="Survival status">
-        <div className="rpg-section-heading">
-          <p className="eyebrow">Survival</p>
-          <span className={`rpg-survival-status is-${survival.status.toLowerCase()}`}>{survival.status}</span>
-        </div>
-        <p className="rpg-survival-detail">{survival.detail}</p>
-        <div className="rpg-survival-needs">
-          {survival.needs.map((need) => (
-            <div className="rpg-survival-need" key={need.id}>
-              <span>{need.label}</span>
-              <strong>{need.value}</strong>
-              <span
-                role="img"
-                aria-label={`${need.label} pressure ${need.value}`}
-                className={`rpg-survival-meter is-${need.severity}`}
-              >
-                <span style={{ width: `${need.percent}%` }} />
-              </span>
-            </div>
-          ))}
-        </div>
-        {survival.warnings.length ? (
-          <div role="group" className="rpg-survival-warnings" aria-label="Survival warnings">
-            {survival.warnings.map((warning) => <span key={warning}>{warning}</span>)}
-          </div>
-        ) : null}
-        <div role="group" className="rpg-survival-actions" aria-label="Survival actions">
-          {survival.actions.map((action) => (
-            <button
-              className="rpg-secondary-button"
-              disabled={!onSelectCommand}
-              key={action.command}
-              onClick={() => onSelectCommand?.(action.command)}
-              type="button"
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-        <small>Each fills in your next turn; send it when you are ready.</small>
-      </section>
+      {survivalIsPressing(survival) ? <RpgSurvivalCard onSelectCommand={onSelectCommand} survival={survival} /> : null}
 
-      <section className="rpg-card" aria-label="Active quests">
-        <div className="rpg-section-heading">
-          <p className="eyebrow">Objectives</p>
-          <span>{activeQuests.length}</span>
-        </div>
-        <div className="rpg-list-stack">
-          {activeQuests.map((quest) => (
-            <article className="rpg-list-row" key={quest.title}>
-              <span className="rpg-icon-tile" aria-hidden="true">{quest.icon}</span>
-              <div>
-                <strong>{quest.title}</strong>
-                <span>{quest.detail}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {goal ? (
+        <section className="rpg-card rpg-goal-card" aria-label="Current goal">
+          <p className="eyebrow">Goal</p>
+          <button className="rpg-goal-button" onClick={onOpenQuests} type="button">
+            <strong>{goal.title}</strong>
+            {goal.detail ? <span>{goal.detail}</span> : null}
+          </button>
+        </section>
+      ) : null}
 
-      <section className="rpg-card" aria-label="Party members">
-        <div className="rpg-section-heading">
+      {partyMembers.length ? (
+        <section className="rpg-card rpg-party-card" aria-label="Party members">
           <p className="eyebrow">Party</p>
-          <span>{partyMembers.length} / {RPG_PARTY_CAPACITY}</span>
-        </div>
-        <div className="rpg-list-stack">
-          {partyMembers.map((member) => (
-            <article className="rpg-list-row" key={member.name}>
-              <span className="rpg-icon-tile" aria-hidden="true">{member.avatar}</span>
-              <div>
+          <div className="rpg-list-stack">
+            {partyMembers.map((member) => (
+              <article className="rpg-party-line" key={member.name}>
                 <strong>{member.name}</strong>
-                <span>{member.role}</span>
-              </div>
-              <span className="rpg-pill">{member.hp}</span>
-            </article>
-          ))}
-        </div>
-        <button
-          className="rpg-secondary-button"
-          disabled={!onSelectCommand || partyMembers.length >= RPG_PARTY_CAPACITY}
-          onClick={() => onSelectCommand?.('Ask a trusted companion to join the party.')}
-          type="button"
-        >
-          + Add companion
-        </button>
-      </section>
-
-      <section className="rpg-card" aria-label="Equipped gear">
-        <div className="rpg-section-heading">
-          <p className="eyebrow">Gear</p>
-          <span>{equippedGear.length}</span>
-        </div>
-        <div className="rpg-list-stack">
-          {equippedGear.map((item) => (
-            <article className="rpg-list-row" key={item.name}>
-              <span className="rpg-icon-tile" aria-hidden="true">{item.icon}</span>
-              <div>
-                <strong>{item.name}</strong>
-                <span>{item.slot}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+                <span>{member.hp}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </aside>
   );
 }

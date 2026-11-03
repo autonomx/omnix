@@ -1,12 +1,12 @@
 // What the play screen's components build on loads before them; RpgWorkspace.css (below) after their own styles.
 import { RpgLoreLinksProvider } from './rpgLoreLinks';
 import './RpgWorkspaceBase.css';
+import { useMediaQuery } from '@mantine/hooks';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient } from '../../api/client';
 import { rpgSessionClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from './api/rpgSessionClient';
-import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
@@ -19,22 +19,27 @@ import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 import { RpgDeveloperTools } from './RpgDeveloperTools';
 import { RpgLiveDataStatus } from './RpgLiveDataStatus';
 import { buildRpgLiveDataCards } from './rpgLiveDataCards';
-import { RpgLoadoutTabs } from './RpgLoadoutTabs';
-import { RpgNarrativeTabs } from './RpgNarrativeTabs';
+import { rpgLocalMap } from './rpgLocalMap';
+import type { RpgNarrativeTab } from './RpgNarrativeTabs';
 import { RpgPlayerRail } from './RpgPlayerRail';
+import { RpgPlayPanelContent } from './RpgPlayPanelContent';
+import { RpgPlayPanels, type RpgPlayPanelId } from './RpgPlayPanels';
 import { RpgStoryScene } from './RpgStoryScene';
+import { RpgTacticalGrid } from './RpgTacticalGrid';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { buildRpgFight } from './rpgCombatState';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
-import { ACTIVE_JOB_STATUSES, RPG_TURN_QUEUE_TIMEOUT_MS, RPG_TURN_RECOVERY_WINDOW_MS, buildSubmittedTurnStoryMessages, isRpgTurnJobType, readStoredDeveloperTools, readStoredRpgSessionId, timestampMs, writeStoredDeveloperTools, writeStoredRpgSessionId } from './rpgWorkspaceSupport';
+import { ACTIVE_JOB_STATUSES, RPG_TURN_QUEUE_TIMEOUT_MS, RPG_TURN_RECOVERY_WINDOW_MS, buildSubmittedTurnStoryMessages, isRpgTurnJobType, readStoredDeveloperTools, rpgTurnJobRequest, readStoredRpgSessionId, timestampMs, writeStoredDeveloperTools, writeStoredRpgSessionId } from './rpgWorkspaceSupport';
 import type { PendingRpgTurnSubmission, RpgFormValues } from './rpgWorkspaceSupport';
 
 const RPG_WORKSPACE_QUERY_KEYS = [
   ['feature', 'rpg', 'replay-inventory'],
   // The loadout's skills, abilities and effects change with story turns too.
   ['feature', 'rpg', 'ability-tree-session'],
+  // Who stands where on the local map, and whether a fight is on, change with story turns too.
+  ['feature', 'rpg', 'tactical-grid'],
   ['feature', 'rpg', 'hermes-suggestions'],
   ['feature', 'rpg', 'hermes-route-decision'],
   ['feature', 'rpg', 'hermes-turn-readout'],
@@ -50,8 +55,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
   const [isLiveDataExpanded, setIsLiveDataExpanded] = useState(false);
+  const [openPanel, setOpenPanel] = useState<RpgPlayPanelId | null>(null);
+  const [journalTab, setJournalTab] = useState<RpgNarrativeTab>('journal');
+  // Too narrow to keep the map beside the story: it waits in the World panel.
+  const isNarrow = useMediaQuery('(max-width: 1180px)', false, { getInitialValueInEffect: false });
   const [campaignMenuHost, setCampaignMenuHost] = useState<HTMLElement | null>(null);
-  const [latestHermesExecutionResult, setLatestHermesExecutionResult] = useState<HermesRpgApprovedFlowResponse | null>(null);
   // Hermes sequence tools and job ids are for developers; players see the story (RQ-7.1).
   const [developerTools, setDeveloperTools] = useState(readStoredDeveloperTools);
   const toggleDeveloperTools = () => {
@@ -82,6 +90,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     register,
     handleSubmit,
     reset,
+    setFocus,
     setValue,
     watch,
     formState: { errors },
@@ -133,7 +142,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     heroSummary,
     heroStats,
     survival,
-    equippedGear,
+    here,
     partyMembers,
     activeQuests,
     quickActions,
@@ -218,11 +227,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   };
   const {
     activeHermesSequenceJob,
-    hermesRouteDecision,
     hermesSequenceJobMutation,
-    hermesSuggestionState,
-    hermesSuggestions,
-    hermesTurnReadout,
     responseOptions,
   } = useRpgHermesAssist({
     selectedLiveSessionId, selectedSessionSummary, quickActions, latestCompletedTurnJobId, rpgJobs,
@@ -241,31 +246,10 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) => {
       const sessionId = values.sessionId || selectedLiveSessionId;
-      return rpgSessionClient.submitTurnJob(
-        {
-          module: 'rpg',
-          type: 'rpg.turn',
-          resource_class: 'gpu:llm',
-          priority: 0,
-          input_ref: sessionId ? { session_id: sessionId } : null,
-          input_payload: {
-            command: values.command,
-            ...(values.card ? { card: values.card } : {}),
-            determinism_policy: 'replay_preserving',
-          },
-          stages: [
-            { id: 'load-session', label: 'Load session', resource_class: 'cpu', status: 'queued' },
-            { id: 'apply-turn', label: 'Apply deterministic turn', resource_class: 'cpu', status: 'queued' },
-            { id: 'narrate', label: 'Generate narration', resource_class: 'gpu:llm', status: 'queued' },
-            { id: 'checkpoint', label: 'Write checkpoint', resource_class: 'cpu', status: 'queued' },
-          ],
-        },
-        {
-          timeoutMs: RPG_TURN_QUEUE_TIMEOUT_MS,
-          timeoutMessage:
-            'The RPG turn queue request is taking longer than expected. The workspace will keep checking the RPG job queue for this turn.',
-        },
-      );
+      return rpgSessionClient.submitTurnJob(rpgTurnJobRequest(sessionId, values), {
+        timeoutMs: RPG_TURN_QUEUE_TIMEOUT_MS,
+        timeoutMessage: 'The RPG turn queue request is taking longer than expected. The workspace will keep checking the RPG job queue for this turn.',
+      });
     },
     onMutate: (values) => {
       pendingTurnSubmissionRef.current = {
@@ -280,7 +264,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         writeStoredRpgSessionId(sessionId);
       }
       reset({ sessionId, command: '' });
-      void invalidateRpgWorkspaceQueries();
+      refreshAfterTurn(); // the hero, the place and the pack as the turn left them
     },
   });
   const activeSubmittedTurnJobId = createJobMutation.data?.id ?? null;
@@ -373,8 +357,9 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       })
       .sort((left, right) => timestampMs(right.created_at) - timestampMs(left.created_at))[0];
   })();
-  const submittedTurnJob = createJobMutation.data
-    ? submittedTurnJobFromQuery ?? rpgJobs.find((job) => job.id === createJobMutation.data.id) ?? createJobMutation.data
+  const queuedTurnJob = createJobMutation.data;
+  const submittedTurnJob = queuedTurnJob
+    ? submittedTurnJobFromQuery ?? rpgJobs.find((job) => job.id === queuedTurnJob.id) ?? queuedTurnJob
     : recoveredSubmittedTurnJob;
   const submittedTurnFailed = submittedTurnJob
     ? ['failed', 'canceled', 'stale'].includes(submittedTurnJob.status)
@@ -403,7 +388,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         ? `${activeAutoplayJob.status} • ${activeAutoplayJob.id}`
         : 'Off';
   const isRefreshingRpgQueries = inventoryQuery.isFetching || jobsQuery.isFetching || assetsQuery.isFetching || reportsQuery.isFetching;
-  const selectCommand = (command: string) => setValue('command', command, { shouldDirty: true, shouldValidate: true });
+  // A command chosen from a panel or the rail waits in the composer for the player to send.
+  const selectCommand = (command: string) => {
+    setValue('command', command, { shouldDirty: true, shouldValidate: true });
+    setOpenPanel(null);
+    if (!isNarrow) requestAnimationFrame(() => setFocus('command'));
+  };
   const applyLoadoutAction = (request: RpgLoadoutActionRequest) => {
     if (!selectedLiveSessionId) {
       selectCommand('Select or create a live RPG session before using inventory or abilities.');
@@ -426,6 +416,40 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const visibleStoryMessages = missingSubmittedTurnMessages.length
     ? [...storyMessages, ...missingSubmittedTurnMessages].slice(-40)
     : storyMessages;
+  const localMap = rpgLocalMap(selectedSessionQuery.data?.session, selectedSessionSummary.id);
+  const worldRail = (
+    <RpgWorldRail
+      developerTools={developerTools}
+      autoplayRunning={Boolean(activeAutoplayJob)}
+      autoplayStatusLabel={autoplayStatusLabel}
+      className="rpg-rail-expanded"
+      checkpointSummary={checkpointSummary}
+      here={here}
+      isAutoplayPending={autoplayMutation.isPending}
+      isRefreshingJobs={isRefreshingRpgQueries}
+      jobCards={jobCards}
+      onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
+      onSelectCommand={selectCommand}
+      onToggleAutoplay={() => autoplayMutation.mutate()}
+      rpgAssets={rpgAssets}
+      rpgJobCount={rpgJobs.length}
+      selectedSessionSummary={selectedSessionSummary}
+      worldStateRows={worldStateRows}
+    />
+  );
+  const loadoutProps = {
+    hotbarAbilities,
+    inventoryItems,
+    isApplyingLoadoutAction: loadoutActionMutation.isPending,
+    onApplyLoadoutAction: applyLoadoutAction,
+    onSelectCommand: selectCommand,
+    // A typed turn from the pack (selling): the story is where its outcome shows.
+    onSubmitCommand: (command: string) => {
+      setOpenPanel(null);
+      createJobMutation.mutate({ sessionId: selectedSessionId, command });
+    },
+    selectedSessionId: selectedLiveSessionId,
+  };
 
   return (
     <RpgLoreLinksProvider sessionId={selectedLiveSessionId ?? ''}>
@@ -439,6 +463,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           isWorldRailCollapsed={isWorldRailCollapsed}
           module={module}
           developerTools={developerTools}
+          onOpenVoices={() => setOpenPanel('voices')}
           onToggleDeveloperTools={toggleDeveloperTools}
           onToggleLiveData={() => setIsLiveDataExpanded((value) => !value)}
           onTogglePlayerRail={() => setIsPlayerRailCollapsed((value) => !value)}
@@ -461,16 +486,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           <RpgPlayerRail
             activeQuests={activeQuests}
             className="rpg-rail-expanded"
-            equippedGear={equippedGear}
             heroStats={heroStats}
             heroSummary={heroSummary}
-            hermesRouteDecision={hermesRouteDecision}
-            hermesSuggestionState={hermesSuggestionState}
-            hermesSuggestions={hermesSuggestions}
-            hermesTurnReadout={hermesTurnReadout}
-            onApprovedFlowAccepted={async (result) => {
-              setLatestHermesExecutionResult(result);
-              await invalidateRpgWorkspaceQueries();
+            onOpenQuests={() => {
+              setJournalTab('quests');
+              setOpenPanel('journal');
             }}
             onSelectCommand={selectCommand}
             partyMembers={partyMembers}
@@ -485,7 +505,16 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             heroSummary={heroSummary}
             recentEvents={recentEvents}
             selectedSessionSummary={selectedSessionSummary}
+            stage={fight ? (
+              <>
+                <RpgCombatSurface fight={fight} />
+                {localMap.mapInstanceId ? (
+                  <RpgTacticalGrid heroName={localMap.heroName} mapInstanceId={localMap.mapInstanceId} playerActorId={localMap.playerActorId} />
+                ) : null}
+              </>
+            ) : null}
             storyMessages={visibleStoryMessages}
+            timeLabel={worldStateRows.find((row) => row.label === 'Day / Time')?.value}
           >
             <RpgCampaignMenu
               campaignMenuHost={campaignMenuHost}
@@ -507,6 +536,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               hasCommandError={Boolean(errors.command)}
               isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
               liveSessionId={selectedLiveSessionId ?? ''}
+              onAskGameMaster={() => setOpenPanel('game-master')}
               onQuickAction={(action) => (action.card && selectedLiveSessionId
                 ? createJobMutation.mutate({ sessionId: selectedLiveSessionId, command: action.command, card: action.card })
                 : selectCommand(action.command))}
@@ -515,7 +545,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               quickActions={responseOptions}
               selectedSessionId={selectedSessionId}
               sessionRegistration={register('sessionId')}
-              sessionSummaries={sessionSummaries}
             />
             <FeatureValidationMessage show={Boolean(errors.command)} message="Type what you want to do first." />
             <FeatureValidationMessage show={submittedTurnFailed} message={submittedTurnFailureMessage} />
@@ -533,57 +562,36 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           {developerTools ? (
             <RpgDeveloperTools
               activeJob={activeHermesSequenceJob}
-              executionResult={latestHermesExecutionResult}
+              executionResult={null}
               isPending={hermesSequenceJobMutation.isPending}
               onJobAction={(action) => hermesSequenceJobMutation.mutate(action)}
             />
           ) : null}
-
-          <RpgCombatSurface fight={fight} />
-
-          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} logEntries={narrativeLogEntries} recentEvents={recentEvents} worldChanges={worldChanges} />
-
-          <RpgLoadoutTabs
-            hotbarAbilities={hotbarAbilities}
-            inventoryItems={inventoryItems}
-            isApplyingLoadoutAction={loadoutActionMutation.isPending}
-            onApplyLoadoutAction={applyLoadoutAction}
-            onSelectCommand={selectCommand}
-            onSubmitCommand={(command) => createJobMutation.mutate({ sessionId: selectedSessionId, command })}
-            selectedSessionId={selectedLiveSessionId}
-          />
-          <FeatureSubmitFeedback
-            error={loadoutActionMutation.error}
-            errorPrefix="RPG loadout action"
-            isError={loadoutActionMutation.isError}
-            isPending={loadoutActionMutation.isPending}
-            pendingMessage="Applying deterministic loadout action…"
-            successPrefix="RPG loadout action applied"
-          />
         </section>
 
-        {isWorldRailCollapsed ? null : (
-          <RpgWorldRail
-            developerTools={developerTools}
-            autoplayRunning={Boolean(activeAutoplayJob)}
-            autoplayStatusLabel={autoplayStatusLabel}
-            className="rpg-rail-expanded"
-            checkpointSummary={checkpointSummary}
-            isAutoplayPending={autoplayMutation.isPending}
-            isRefreshingJobs={isRefreshingRpgQueries}
-            jobCards={jobCards}
-            npcRelationships={npcRelationships}
-            onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
-            onToggleAutoplay={() => autoplayMutation.mutate()}
-            reportsHref="/api/reports"
-            rpgAssets={rpgAssets}
-            rpgJobCount={rpgJobs.length}
-            rpgReportCount={rpgReports.length}
-            selectedSessionSummary={selectedSessionSummary}
-            worldStateRows={worldStateRows}
-          />
-        )}
+        {isWorldRailCollapsed || isNarrow ? null : worldRail}
       </div>
+
+      <RpgPlayPanels
+        open={openPanel}
+        onChange={(panel) => {
+          setJournalTab('journal');
+          setOpenPanel(panel);
+        }}
+      >
+        <RpgPlayPanelContent
+          heroSummary={heroSummary}
+          journal={{ journalDetail, journalEntries, logEntries: narrativeLogEntries, quests: activeQuests, recentEvents, worldChanges }}
+          journalTab={journalTab}
+          loadout={loadoutProps}
+          loadoutFeedback={{ error: loadoutActionMutation.error, isError: loadoutActionMutation.isError, isPending: loadoutActionMutation.isPending }}
+          onSelectCommand={selectCommand}
+          panel={openPanel}
+          survival={survival}
+          world={{ npcRelationships, partyMembers, worldStateRows }}
+          worldHere={isNarrow ? worldRail : undefined}
+        />
+      </RpgPlayPanels>
     </WorkspacePanel>
     </RpgLoreLinksProvider>
   );

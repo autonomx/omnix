@@ -56,9 +56,7 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
     lines = [f"You look around {name}.", *place_lines(simulation, location_id)]  # and what the world's facts changed
     if present:
         lines.append(f"Here: {', '.join(present)}.")
-    places = _d(world.get("locations"))
-    exits = [_s(_d(places.get(_s(place_id))).get("name")) for place_id in _d(location.get("exits")).values()]
-    exits = [place for place in dict.fromkeys(exits) if place]
+    exits = routines.paths_from(world, location_id)
     if exits:
         lines.append(f"Paths lead to {', '.join(exits)}.")
     return lines

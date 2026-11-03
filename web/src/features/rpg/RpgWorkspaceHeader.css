@@ -1,29 +1,56 @@
 /* RpgWorkspaceHeader's own styles (RQ-7.5). */
 @layer features {
-  .rpg-workspace-header-content,
-  .rpg-unified-header-controls {
+  .rpg-workspace-header-content {
     align-items: center;
     display: flex;
+    flex: none;
+    gap: 0.45rem;
+    justify-content: flex-end;
+    margin-left: auto;
     min-width: 0;
   }
 
-  .rpg-workspace-header-content {
-    flex-wrap: wrap;
-    gap: 0.5rem 0.65rem;
-    justify-content: flex-end;
-    margin-left: auto;
+  .rpg-header-more {
+    position: relative;
   }
 
+  /* What is not played with: the menu under More. */
   .rpg-unified-header-controls {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: flex-end;
+    background: var(--bg-slate-130);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 28%, transparent);
+    border-radius: 0.75rem;
+    box-shadow: 0 0.9rem 2rem color-mix(in srgb, var(--c-neutral-0) 38%, transparent);
+    display: grid;
+    gap: 0.35rem;
+    min-width: 13rem;
+    padding: 0.5rem;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.35rem);
+    z-index: 40;
+  }
+
+  .rpg-unified-header-controls[hidden] {
+    display: none;
+  }
+
+  .rpg-unified-header .rpg-unified-header-controls .rpg-secondary-button {
+    text-align: left;
+    width: 100%;
   }
 
   .rpg-header-toggle {
-    flex: 0 0 auto;
     min-height: 2.15rem;
     padding: 0.5rem 0.68rem;
     white-space: nowrap;
+  }
+
+  @media (max-width: 480px) {
+    .rpg-unified-header .rpg-workspace-header-content .rpg-secondary-button {
+      font-size: 0.78rem;
+      min-height: 2.25rem;
+      padding: 0.3rem 0.5rem;
+      white-space: normal;
+    }
   }
 }

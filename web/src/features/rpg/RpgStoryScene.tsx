@@ -24,12 +24,15 @@ interface RpgStorySceneProps {
   heroSummary: RpgHeroSummaryPreview;
   recentEvents: string[];
   selectedSessionSummary: RpgSessionSummaryPreview;
+  /** A fight on: the board takes the stage above the story. */
+  stage?: ReactNode;
   storyMessages?: RpgStoryMessagePreview[];
+  /** The world's time here, when it is known. */
+  timeLabel?: string;
 }
 
-export function RpgStoryScene({ children, developerTools = false, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
+export function RpgStoryScene({ children, developerTools = false, heroSummary, recentEvents, selectedSessionSummary, stage, storyMessages = [], timeLabel }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
-  const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
   const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, [...storyMessages]);
   const diagnostics = useLatestRpgTurnDiagnostics(selectedSessionSummary.id);
   const showDiagnostics = developerTools || rpgDiagnosticsEnabled();
@@ -40,6 +43,9 @@ export function RpgStoryScene({ children, developerTools = false, heroSummary, r
     [visibleStoryMessages],
   );
   const interactionKey = interactionIds.join('|');
+  const newest = visibleStoryMessages[visibleStoryMessages.length - 1];
+  // What moves the end of the story: a new message, or the one being written growing as its words arrive.
+  const storyEnd = `${visibleStoryMessages.length}:${newest?.text.length ?? 0}`;
   // Auto-play (EV-13), when switched on: a response is spoken once it is final ("complete"), and only then; what a
   // campaign shows when it is opened or switched to (its history, once loaded) is not played again; a notice beside a
   // response is not its narration.
@@ -68,17 +74,18 @@ export function RpgStoryScene({ children, developerTools = false, heroSummary, r
 
   useEffect(() => () => stopSpeaking(), [selectedSessionSummary.id]);  // a campaign left stops speaking
 
+  // The story follows its newest words, unless the player has scrolled back to read: then it stays where they are.
   useLayoutEffect(() => {
     const element = dialogueRef.current;
-    if (element) {
-      const priorHeight = previousScrollHeight.current;
-      const wasNearBottom = priorHeight === 0 || element.scrollTop + element.clientHeight >= priorHeight - 24;
-      if (!wasNearBottom && priorHeight > 0) {
-        element.scrollTop += Math.max(0, element.scrollHeight - priorHeight);
-      }
-      previousScrollHeight.current = element.scrollHeight;
+    if (!element) return;
+    const priorHeight = previousScrollHeight.current;
+    if (priorHeight === 0 || element.scrollTop + element.clientHeight >= priorHeight - 24) {
+      element.scrollTop = element.scrollHeight;
     }
+    previousScrollHeight.current = element.scrollHeight;
+  }, [selectedSessionSummary.id, storyEnd]);
 
+  useLayoutEffect(() => {
     markRpgTurnReactCommitted(selectedSessionSummary.id, interactionIds);
     if (typeof requestAnimationFrame !== 'function') {
       markRpgTurnVisible(selectedSessionSummary.id, interactionIds);
@@ -91,17 +98,10 @@ export function RpgStoryScene({ children, developerTools = false, heroSummary, r
   }, [selectedSessionSummary.id, interactionKey]);
 
   return (
-    <section className="rpg-card rpg-story-card" aria-labelledby="rpg-story-scene-title">
+    <section className={`rpg-card rpg-story-card${stage ? ' has-stage' : ''}`} aria-labelledby="rpg-story-scene-title">
       <div className="rpg-story-heading">
-        <div>
-          <p className="eyebrow">Story / scene</p>
-          <h1 id="rpg-story-scene-title">📍 {selectedSessionSummary.location}</h1>
-          <div className="rpg-chip-row">
-            <span>{selectedSessionSummary.title}</span>
-            <span>{selectedSessionSummary.turnLabel}</span>
-            <span>{selectedSessionSummary.updatedAt}</span>
-          </div>
-        </div>
+        <h1 id="rpg-story-scene-title">{selectedSessionSummary.location}</h1>
+        {timeLabel ? <p className="rpg-story-time">{timeLabel}</p> : null}
         {/* Live sessions have no scene art yet: no empty placeholder box. */}
         {isPreview ? (
           <div role="img" className="rpg-scene-art rpg-scene-art-has-image" aria-label={`${selectedSessionSummary.location} scene preview`}>
@@ -109,7 +109,8 @@ export function RpgStoryScene({ children, developerTools = false, heroSummary, r
           </div>
         ) : null}
       </div>
-      {selectedSessionSummary.summary ? <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p> : null}
+      {selectedSessionSummary.summary && !stage ? <p className="rpg-scene-copy" title={selectedSessionSummary.summary}>{selectedSessionSummary.summary}</p> : null}
+      {stage ? <div className="rpg-story-stage">{stage}</div> : null}
       {/* Focusable, so the story can be scrolled from the keyboard (RQ-7.6). */}
       <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite" tabIndex={0}>
         {isPreview ? (
@@ -196,24 +197,6 @@ export function RpgStoryScene({ children, developerTools = false, heroSummary, r
         </details>
       ) : null}
       {children}
-      <div className={`rpg-event-strip${recentEventsExpanded ? ' is-expanded' : ' is-collapsed'}`}>
-        <button
-          aria-controls="rpg-recent-events-list"
-          aria-expanded={recentEventsExpanded}
-          className="rpg-event-strip-summary"
-          onClick={() => setRecentEventsExpanded((expanded) => !expanded)}
-          title={recentEventsExpanded ? 'Collapse recent events' : 'Expand recent events'}
-          type="button"
-        >
-          <strong>Recent events</strong>
-          <span aria-hidden="true" className="rpg-event-strip-toggle" />
-        </button>
-        <ul id="rpg-recent-events-list">
-          {recentEvents.map((event, index) => (
-            <li key={`recent-event-list:${index}`}>{event}</li>
-          ))}
-        </ul>
-      </div>
     </section>
   );
 }

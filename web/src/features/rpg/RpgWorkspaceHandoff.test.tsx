@@ -282,10 +282,9 @@ describe('RpgWorkspace campaign handoff', () => {
     firstView.unmount();
 
     renderRpg();
-    expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('input[name="sessionId"]')).toHaveValue('rpg-created-1'));
     expect(await screen.findByRole('heading', { name: 'Elara' })).toBeInTheDocument();
     const playerRail = screen.getByRole('complementary', { name: 'Player, party, and quests' });
-    expect(within(playerRail).getByText('Travel cloak')).toBeInTheDocument();
     expect(within(playerRail).getByText('Echoes Beyond the Gate')).toBeInTheDocument();
     expect(screen.getAllByText('Elara awakens beneath the broken gate.').length).toBeGreaterThan(0);
 
@@ -300,5 +299,43 @@ describe('RpgWorkspace campaign handoff', () => {
     const storyScene = screen.getByRole('region', { name: /Starfall Grove/ });
     expect(within(storyScene).getByText('I survey the broken gate.')).toBeInTheDocument();
     expect(within(storyScene).getByText('Silver motes gather around the fractured arch.')).toBeInTheDocument();
+  });
+
+  it('takes a turn the gateway answers without a job as done: no failure, the composer cleared, the campaign reloaded', async () => {
+    let turnApplied = false;
+    const session = (location: string, turns: number) => ({
+      ok: true,
+      session: {
+        manifest: { session_id: 'rpg-played', title: 'Played', updated_at: '2026-11-03T00:00:00Z', turn_count: turns },
+        state: { location, turn_count: turns, player: { name: 'Elara', inventory: [] } },
+        simulation_state: { player_state: { location_id: `place:${location}` } },
+        runtime_state: {},
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://localhost').pathname;
+      if (path === '/api/rpg/sessions') return Response.json({ sessions: [session('Old Town', 0).session] });
+      if (path === '/api/rpg/sessions/rpg-played/turn' && init?.method === 'POST') {
+        turnApplied = true;
+        return Response.json({ ok: true, contract_version: 'rpg_turn_response_v2', session_id: 'rpg-played', job_id: null, response: 'You walk to the Night Market.' });
+      }
+      if (path === '/api/rpg/sessions/rpg-played') return Response.json(turnApplied ? session('Night Market', 1) : session('Old Town', 0));
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      if (path === '/api/reports') return Response.json({ reports: [] });
+      return new Response('not found', { status: 404 });
+    }));
+    window.localStorage.setItem('omnix:rpg:selected-session-id', 'rpg-played');
+
+    renderRpg();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Old Town' })).toBeInTheDocument();
+    const command = screen.getByRole('textbox', { name: 'Command' });
+    fireEvent.change(command, { target: { value: 'go to the Night Market' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Night Market' })).toBeInTheDocument();
+    expect(command).toHaveValue('');
+    expect(screen.queryByText(/Your turn failed/)).not.toBeInTheDocument();
   });
 });

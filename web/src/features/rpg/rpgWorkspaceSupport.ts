@@ -1,4 +1,4 @@
-import type { JobRecord } from '../../api/client';
+import type { CreateJobRequest, JobRecord } from '../../api/client';
 import type { HermesRpgSuggestion } from './api/hermesClient';
 import { rpgTurnOutputText } from './rpgStoryState';
 import type { RpgQuickActionPreview, RpgStoryMessagePreview } from './rpgUiTypes';
@@ -220,4 +220,26 @@ export function buildSubmittedTurnStoryMessages(
     });
   }
   return messages;
+}
+
+/** The job a turn is submitted as: its rules run first, the storyteller after them, and a checkpoint last. */
+export function rpgTurnJobRequest(sessionId: string | null, values: RpgFormValues): CreateJobRequest {
+  return {
+    module: 'rpg',
+    type: 'rpg.turn',
+    resource_class: 'gpu:llm',
+    priority: 0,
+    input_ref: sessionId ? { session_id: sessionId } : null,
+    input_payload: {
+      command: values.command,
+      ...(values.card ? { card: values.card } : {}),
+      determinism_policy: 'replay_preserving',
+    },
+    stages: [
+      { id: 'load-session', label: 'Load session', resource_class: 'cpu', status: 'queued' },
+      { id: 'apply-turn', label: 'Apply deterministic turn', resource_class: 'cpu', status: 'queued' },
+      { id: 'narrate', label: 'Generate narration', resource_class: 'gpu:llm', status: 'queued' },
+      { id: 'checkpoint', label: 'Write checkpoint', resource_class: 'cpu', status: 'queued' },
+    ],
+  };
 }

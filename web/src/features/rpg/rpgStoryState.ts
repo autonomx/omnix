@@ -1,5 +1,5 @@
 import { previewJournalDetail, previewJournalEntries, previewRecentEvents, previewSessionSummary } from './rpgUiPreview';
-import { compactTimestamp, firstArray, firstNumber, firstRecord, firstString, getSessionRecords, recordValue } from './rpgUiRecords';
+import { compactTimestamp, firstArray, firstNumber, firstRecord, firstString, getSessionRecords, recordValue, speakerLabel } from './rpgUiRecords';
 import type { RpgHeroSummaryPreview, RpgJob, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgSession, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiTypes';
 
 interface TimelineEvent {
@@ -225,7 +225,7 @@ export function buildInteractionStoryMessages(
     visibleMessages.forEach((message, index) => {
       const text = firstString(message.text);
       if (!text) return;
-      const speaker = firstString(message.speaker, event.speaker) ?? 'Omnix';
+      const speaker = speakerLabel(firstString(message.speaker, event.speaker) ?? 'Omnix');
       result.push({
         id: interactionId ? `${interactionId}:message:${index}` : undefined,
         interactionId,

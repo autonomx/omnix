@@ -37,7 +37,7 @@ export function InventoryPanel({
   selectedSessionId,
 }: InventoryPanelProps) {
   return (
-    <div aria-labelledby="rpg-inventory-loadout-tab" className="rpg-loadout-layout rpg-item-loadout-layout" id="rpg-inventory-loadout-panel" role="tabpanel">
+    <div className="rpg-loadout-layout rpg-item-loadout-layout">
       <div className="rpg-inventory-column">
         <div role="group" className="rpg-inventory-grid" aria-label="Inventory item slots">
           {inventoryItems.map((item, index) => (
@@ -51,6 +51,7 @@ export function InventoryPanel({
             >
               <span className="rpg-item-slot-icon" aria-hidden="true">{item.icon}</span>
               <span className="rpg-item-slot-name" aria-hidden="true">{item.label}</span>
+              {item.worn ? <small className="rpg-item-worn" aria-hidden="true">Worn</small> : null}
               <small aria-hidden="true">×{item.count}</small>
             </button>
           ))}

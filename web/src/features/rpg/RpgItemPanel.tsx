@@ -24,13 +24,6 @@ export function RpgItemPanel({ actions, isPending = false, item, onApplyAction }
 
   return (
     <section className="rpg-item-panel" aria-label="Selected item">
-      <header className="rpg-item-panel-header">
-        <div>
-          <p className="eyebrow">Your pack</p>
-          <h3>Item details and actions</h3>
-        </div>
-      </header>
-
       {detail ? <ItemDetailCard detail={detail} /> : null}
 
       {actions.length ? (
@@ -53,6 +46,7 @@ export function RpgItemPanel({ actions, isPending = false, item, onApplyAction }
                   type="button"
                 >
                   <span aria-hidden="true">{actionIcons[action.kind] ?? '•'}</span>
+                  <span aria-hidden="true">{action.label}</span>
                 </button>
               );
             })}
