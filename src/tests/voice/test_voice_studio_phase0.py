@@ -23,7 +23,7 @@ from app.jobs.models import JobRecord
 from app.platform.voice import effects, jobs as voice_jobs
 from app.platform.voice.export import ExportRequestError, render_export
 from app.platform.voice.loudness import integrated_loudness
-from app.platform.voice.sample_cleanup import clean_sample, strictness_for
+from app.platform.voice.sample_cleanup import clean_sample, shorten_pauses, strictness_for
 from app.providers.exceptions import TtsEngineNotLoaded
 
 RATE = 24_000
@@ -358,6 +358,42 @@ def test_a_clone_sample_is_trimmed_leveled_and_checked() -> None:
     assert any("Background noise" in warning for warning in report.warnings)
     decoded, _ = effects.read_mono(cleaned)
     assert len(decoded) / rate < 7.0
+
+
+def test_a_clone_sample_keeps_no_long_pause_the_engine_would_copy_as_silence() -> None:
+    # A voice note: the engine copies its pauses, and 16% of its takes came out silent; 2.5% with them cut to 0.25 s.
+    rate = 24_000
+    speech = _tone(200.0, seconds=3.0, rate=rate)
+    note = np.concatenate([speech, np.zeros(int(rate * 1.8)), speech, np.zeros(int(rate * 0.9)), speech])
+
+    cleaned, _suffix, report = clean_sample(_wav(note, rate), quality="High")
+
+    decoded, _ = effects.read_mono(cleaned)
+    assert report.pauses_shortened == 2
+    assert report.pause_seconds_removed == pytest.approx(2.2, abs=0.1)
+    assert len(decoded) / rate == pytest.approx(9.5, abs=0.2)
+
+
+def test_shortening_pauses_keeps_the_speech_and_the_breaths_between_words() -> None:
+    rate = 24_000
+    speech = _tone(200.0, seconds=1.0, rate=rate)
+    natural = np.concatenate([speech, np.zeros(int(rate * 0.2)), speech])
+    assert shorten_pauses(natural, rate) == (pytest.approx(natural), 0, 0.0)
+
+    long_pause = np.concatenate([speech, np.zeros(rate * 2), speech])
+    shortened, count, removed = shorten_pauses(long_pause, rate)
+    assert (count, removed) == (1, pytest.approx(1.75, abs=0.05))
+    # No click where the cut was made, and all the speech is still there.
+    assert np.abs(np.diff(shortened)).max() <= np.abs(np.diff(speech)).max() + 1e-6
+    assert (np.abs(shortened) > 0.05).sum() == pytest.approx((np.abs(long_pause) > 0.05).sum(), abs=2)
+
+
+def test_a_recording_with_no_clear_speech_is_left_alone() -> None:
+    rate = 24_000
+    assert shorten_pauses(np.zeros(rate * 3), rate)[1] == 0
+    noise = 0.01 * np.random.default_rng(1).standard_normal(rate * 3)
+    assert shorten_pauses(noise, rate)[1] == 0
+    assert shorten_pauses(np.zeros(0), rate)[1] == 0
 
 
 def test_an_unreadable_recording_passes_through_unchecked() -> None:
