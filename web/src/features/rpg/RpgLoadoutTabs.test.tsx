@@ -100,7 +100,7 @@ describe('RpgLoadoutTabs', () => {
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn() });
 
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Inventory' })).toHaveTextContent('12');
+    expect(screen.getByRole('region', { name: 'Carried items' })).toHaveTextContent('12');
     expect(screen.getByRole('button', { name: 'Healing potion' })).toBeInTheDocument();
     expect(screen.getByLabelText('Selected item details: Healing potion')).toHaveTextContent('Nothing more is known of it.');
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();

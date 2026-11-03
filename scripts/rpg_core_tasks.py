@@ -35,7 +35,7 @@ VIEWPORTS = {"phone": (360, 740), "desktop": (1440, 900)}
 WORLD = "Aurelia: Echoes Beyond the Gate"
 WORLD_ID = "world:aurelia-echoes-beyond-the-gate"
 BUNDLE = ROOT / "resources" / "examples" / "rpg" / "world-bundles" / "aurelia-echoes-beyond-the-gate.omnix-world.zip"
-PANELS = ("Pack", "Character", "Journal", "World")
+PANELS = ("Inventory", "Character", "Journal", "World")
 TURN_SECONDS = 120.0
 
 
@@ -154,7 +154,7 @@ class Screen:
 
     def inventory_item(self, name: str) -> list[str]:
         """Selects a carried item; the actions its toolbar offers."""
-        self.open_panel("Pack")
+        self.open_panel("Inventory")
         self.page.get_by_role("group", name="Inventory item slots").get_by_role("button", name=name, exact=True).click()
         self.page.wait_for_timeout(500)
         return [button.get_attribute("aria-label") or "" for button in self.item_actions().get_by_role("button").all()]

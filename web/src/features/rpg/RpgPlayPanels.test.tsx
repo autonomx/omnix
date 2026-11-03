@@ -19,14 +19,14 @@ describe('RpgPlayPanels', () => {
   it('opens one panel at a time from the bar, and closes it from the bar or its own button', () => {
     render(<Harness />);
     expect(screen.queryByRole('region')).not.toBeInTheDocument();
-    expect(bar('Pack')).toHaveAttribute('aria-expanded', 'false');
+    expect(bar('Inventory')).toHaveAttribute('aria-expanded', 'false');
 
-    fireEvent.click(bar('Pack'));
-    expect(screen.getByRole('region', { name: 'Pack' })).toHaveTextContent('Inside pack');
-    expect(bar('Pack')).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(bar('Inventory'));
+    expect(screen.getByRole('region', { name: 'Inventory' })).toHaveTextContent('Inside pack');
+    expect(bar('Inventory')).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.click(bar('Journal'));
-    expect(screen.queryByRole('region', { name: 'Pack' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Inventory' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Journal' })).toBeInTheDocument();
 
     fireEvent.click(bar('Journal'));
@@ -50,7 +50,7 @@ describe('RpgPlayPanels', () => {
 
   it('opens and closes panels by their keys', () => {
     render(<Harness />);
-    for (const [key, name] of [['i', 'Pack'], ['c', 'Character'], ['j', 'Journal'], ['l', 'World']]) {
+    for (const [key, name] of [['i', 'Inventory'], ['c', 'Character'], ['j', 'Journal'], ['l', 'World']]) {
       fireEvent.keyDown(document.body, { key });
       expect(screen.getByRole('region', { name })).toBeInTheDocument();
     }

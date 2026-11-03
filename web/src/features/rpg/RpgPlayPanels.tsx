@@ -4,14 +4,14 @@ import './RpgPlayPanels.css';
 export type RpgPlayPanelId = 'pack' | 'character' | 'journal' | 'world' | 'game-master' | 'voices';
 
 const BAR_PANELS: Array<{ id: RpgPlayPanelId; label: string; shortcut: string }> = [
-  { id: 'pack', label: 'Pack', shortcut: 'I' },
+  { id: 'pack', label: 'Inventory', shortcut: 'I' },
   { id: 'character', label: 'Character', shortcut: 'C' },
   { id: 'journal', label: 'Journal', shortcut: 'J' },
   { id: 'world', label: 'World', shortcut: 'L' },
 ];
 
 const PANEL_TITLES: Record<RpgPlayPanelId, string> = {
-  pack: 'Pack',
+  pack: 'Inventory',
   character: 'Character',
   journal: 'Journal',
   world: 'World',

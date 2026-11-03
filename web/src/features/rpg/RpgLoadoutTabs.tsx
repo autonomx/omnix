@@ -79,7 +79,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
 
   if (section === 'pack') {
     return (
-      <section className="rpg-card rpg-inventory-card" aria-label="Inventory">
+      <section className="rpg-card rpg-inventory-card" aria-label="Carried items">
         <InventoryPanel
           activeItemIndex={activeInventoryIndex}
           hotbarAbilities={displayedHotbarAbilities}

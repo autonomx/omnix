@@ -694,11 +694,11 @@ describe('RpgWorkspace', () => {
     expect(screen.queryByRole('group', { name: 'Inventory item slots' })).not.toBeInTheDocument();
 
     const bar = within(screen.getByRole('navigation', { name: 'Play panels' }));
-    fireEvent.click(bar.getByRole('button', { name: 'Pack' }));
-    expect(within(screen.getByRole('region', { name: 'Pack' })).getByRole('group', { name: 'Inventory item slots' })).toBeInTheDocument();
+    fireEvent.click(bar.getByRole('button', { name: 'Inventory' }));
+    expect(within(screen.getByRole('region', { name: 'Inventory' })).getByRole('group', { name: 'Inventory item slots' })).toBeInTheDocument();
 
     fireEvent.click(bar.getByRole('button', { name: 'Character' }));
-    expect(screen.queryByRole('region', { name: 'Pack' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Inventory' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Character' })).getByRole('region', { name: 'Survival status' })).toBeInTheDocument();
 
     fireEvent.click(bar.getByRole('button', { name: 'World' }));

@@ -45,7 +45,7 @@ export function RpgPlayPanelContent({
       {panel === 'pack' || panel === 'character' ? (
         <FeatureSubmitFeedback
           {...loadoutFeedback}
-          errorPrefix="Your pack"
+          errorPrefix="Your inventory"
           pendingMessage="Working on it…"
           successPrefix="Done"
         />
