@@ -126,6 +126,64 @@ def test_attribution_owner_rejects_a_trade_that_skips_prior_stages() -> None:
     assert attribution.reason == "ATTRIBUTION_PREDECESSOR_MISSING"
 
 
+def test_post_close_learning_leaves_the_event_loop_free(monkeypatch) -> None:
+    # After 16:10 ET this ran on the gateway's event loop: every five minutes IBKR bar fetches and database reads froze
+    # the process for about 25 s, and a live call on it lost its speech recognition.
+    import threading
+    import time as time_module
+
+    from app.apps.trading import (
+        strategy_dynamic_discovery_quality as quality,
+        strategy_dynamic_discovery_runtime as runtime,
+        strategy_interday_learning_monitor as monitor,
+        strategy_interday_postclose as postclose,
+    )
+
+    ran_on: dict[str, int] = {}
+
+    def recorded(name, result=None, seconds=0.0):
+        def call(*_args, **_kwargs):
+            ran_on[name] = threading.get_ident()
+            time_module.sleep(seconds)
+            return result
+
+        return call
+
+    async def core(**_kwargs):
+        return {"bridged": 0, "reported": False, "labeled": 0, "qualified": False}
+
+    evidence = SimpleNamespace(eligible_for_review=False, model_dump=lambda mode: {})
+    monkeypatch.setattr(monitor, "_run_interday_learning_once_core", core)
+    monkeypatch.setattr(postclose, "session_outcomes", recorded("outcomes", ()))
+    monkeypatch.setattr(quality, "_persist_automatic_replay_refined", recorded("replay", seconds=0.3))
+    monkeypatch.setattr(runtime, "_persist_parent_exposure", recorded("exposure"))
+    monkeypatch.setattr(runtime, "_qualification_from_persisted_evidence_complete", recorded("qualification", evidence))
+    monkeypatch.setattr(runtime, "_append_parent_event", recorded("event"))
+
+    async def scenario():
+        beats = []
+
+        async def heartbeat():
+            while True:
+                beats.append(time_module.perf_counter())
+                await asyncio.sleep(0.01)
+
+        beating = asyncio.create_task(heartbeat())
+        result = await run_interday_learning_once(
+            now=datetime(2026, 9, 11, 21, 0, tzinfo=timezone.utc),  # 17:00 ET
+            repository=_ParentOnlyRepository(),
+        )
+        beating.cancel()
+        return result, threading.get_ident(), max(later - earlier for earlier, later in zip(beats, beats[1:]))
+
+    result, loop_thread, longest_gap = asyncio.run(scenario())
+
+    assert result["labeled"] == 0
+    assert set(ran_on) == {"outcomes", "replay", "exposure", "qualification", "event"}
+    assert loop_thread not in set(ran_on.values())
+    assert longest_gap < 0.2  # the 0.3 s of blocking work did not stop the loop
+
+
 def test_interday_learning_owner_delegates_to_core_before_post_close() -> None:
     result = asyncio.run(
         run_interday_learning_once(

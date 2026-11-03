@@ -1994,6 +1994,8 @@ async def _run_interday_learning_once_complete(
     repository: TradingStrategyRepository | None = None,
     market_service=None,
 ):
+    import asyncio
+
     # First run the original monitor for bridging/outcomes/report persistence.
     from .strategy_interday_learning_monitor import (
         _run_interday_learning_once_core,
@@ -2007,11 +2009,16 @@ async def _run_interday_learning_once_complete(
     observed_at = _utc(now or datetime.now(timezone.utc))
     if observed_at.astimezone(_ET).time().replace(tzinfo=None) < time(16, 10):
         return result
-    repo = repository or default_strategy_repository()
+    # Database reads and market data fetches: on the event loop they freeze everything this gateway process serves.
+    await asyncio.to_thread(_persist_post_close_evidence, repository or default_strategy_repository(), observed_at)
+    return result
+
+
+def _persist_post_close_evidence(repo: TradingStrategyRepository, observed_at: datetime) -> None:
     try:
         parent = repo.get_config(dd.INTERDAY_TRADING_STRATEGY_ID)
     except ValueError:
-        return result
+        return
     from .strategy_interday_postclose import session_outcomes
 
     session_date = observed_at.astimezone(_ET).date()
@@ -2057,7 +2064,6 @@ async def _run_interday_learning_once_complete(
         payload=evidence.model_dump(mode="json"),
         identity=(session_date.isoformat(), "v2"),
     )
-    return result
 
 
 def _union_complete(config, repository, frozen, *, session_date, observed_at=None):
