@@ -250,10 +250,16 @@ describe('VoiceWorkspace', () => {
       if (path === '/api/jobs' && init?.method === 'POST') {
         const request = JSON.parse(String(init.body)) as Record<string, unknown>;
         if (request.type === 'voice-cloning.transcribe-sample') {
-          return Response.json({ ...queuedJob, id: 'job:transcribe', module: 'voice-cloning', type: request.type, status: 'completed', output_refs: [{ type: 'transcript', content: 'Sofia speaks these exact words.' }] });
+          return Response.json({ ...queuedJob, id: 'job:transcribe', module: 'voice-cloning', type: request.type });
         }
         cloneRequest = request;
-        return Response.json({ ...queuedJob, id: 'job:clone', module: 'voice-cloning', type: request.type, status: 'completed', output_refs: [{ type: 'voice_profile', asset_id: 'voice-cloning:maya', sample_check: { warnings: ['Background noise is high.'] } }] });
+        return Response.json({ ...queuedJob, id: 'job:clone', module: 'voice-cloning', type: request.type });
+      }
+      if (path === '/api/jobs/job%3Aclone') {
+        return Response.json({ ...queuedJob, id: 'job:clone', module: 'voice-cloning', type: 'voice-cloning.create-profile', status: 'completed', output_refs: [{ type: 'voice_profile', asset_id: 'voice-cloning:maya', sample_check: { warnings: ['Background noise is high.'] } }] });
+      }
+      if (path === '/api/jobs/job%3Atranscribe') {
+        return Response.json({ ...queuedJob, id: 'job:transcribe', module: 'voice-cloning', type: 'voice-cloning.transcribe-sample', status: 'completed', output_refs: [{ type: 'transcript', content: 'Sofia speaks these exact words.' }] });
       }
       if (path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
       return new Response('not found', { status: 404 });
@@ -289,6 +295,180 @@ describe('VoiceWorkspace', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]);
     expect(await screen.findByRole('region', { name: 'Speak' })).toBeInTheDocument();
     expect(screen.getByText(/Cast Dave as dave\./)).toBeInTheDocument();
+  });
+
+  describe('which voice a render speaks with', () => {
+    function stubRender() {
+      const render: { payload?: Record<string, unknown> } = {};
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = requestPath(input);
+        if (path === '/api/assets') return Response.json({ assets: libraryAssets });
+        if (path === '/api/jobs' && init?.method === 'POST') {
+          render.payload = (JSON.parse(String(init.body)) as { input_payload: Record<string, unknown> }).input_payload;
+          return Response.json({ ...queuedJob, id: 'job:tts' });
+        }
+        if (path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
+        return new Response('not found', { status: 404 });
+      }));
+      return render;
+    }
+
+    async function generate(render: { payload?: Record<string, unknown> }) {
+      fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
+      await waitFor(() => expect(render.payload).toBeDefined());
+      return render.payload as Record<string, unknown>;
+    }
+
+    it('keeps the voice chosen under Voices when the script is then replaced', async () => {
+      const render = stubRender();
+      renderVoice();
+      fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
+      expect((await screen.findAllByText('jinx2')).length).toBeGreaterThan(0);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[1]);
+      expect(await screen.findByText(/Cast jinx2 as dave\./)).toBeInTheDocument();
+
+      // The default script's speakers are gone: plain text is one Narrator.
+      fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Just some plain words.' } });
+
+      expect(screen.getByLabelText('Narrator voice')).toHaveValue('voice-cloning:jinx2');
+      const payload = await generate(render);
+      expect(payload.voice_id).toBe('voice-cloning:jinx2');
+      expect(payload.character_voice_assignments).toEqual([{ speaker: 'Narrator', voice_id: 'voice-cloning:jinx2', line_count: 1 }]);
+    });
+
+    it('sends the voice the Cast shows when nothing was chosen', async () => {
+      const render = stubRender();
+      renderVoice();
+      fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Just some plain words.' } });
+      await waitFor(() => expect(screen.getByLabelText('Narrator voice')).toHaveValue('voice-cloning:Dave'));
+
+      const payload = await generate(render);
+      expect(payload.voice_id).toBe('voice-cloning:Dave');
+    });
+  });
+
+  describe('creating a clone', () => {
+    /** Answers the clone job with each status in turn, and counts how often the library is read. */
+    function stubClone(answers: Array<Record<string, unknown>>) {
+      const counts = { polls: 0, libraryReads: 0 };
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = requestPath(input);
+        if (path === '/api/jobs' && init?.method === 'POST') return Response.json({ ...queuedJob, id: 'job:clone' });
+        if (path === '/api/jobs/job%3Aclone') {
+          const answer = answers[Math.min(counts.polls, answers.length - 1)];
+          counts.polls += 1;
+          return Response.json({ ...queuedJob, id: 'job:clone', ...answer });
+        }
+        if (path === '/api/assets') {
+          counts.libraryReads += 1;
+          return Response.json({ assets: libraryAssets });
+        }
+        if (path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
+        return new Response('not found', { status: 404 });
+      }));
+      return counts;
+    }
+
+    async function submitClone() {
+      renderVoice();
+      fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
+      fireEvent.change(await screen.findByLabelText('Voice Name'), { target: { value: 'Abhishek' } });
+      fireEvent.change(screen.getByLabelText(/Audio sample/), { target: { files: [new File(['voice sample'], 'abhishek.ogg', { type: 'audio/ogg' })] } });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Create Clone' })).toBeEnabled());
+      fireEvent.click(screen.getByRole('button', { name: 'Create Clone' }));
+    }
+
+    it('says why a clone failed and keeps the form to try again', async () => {
+      const counts = stubClone([{ status: 'failed', error: { message: 'The audio service refused the request' } }]);
+      await submitClone();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('The audio service refused the request');
+      // The refresh after a settled job reads it once more; then the polling has stopped.
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      expect(counts.polls).toBeLessThanOrEqual(2);
+      expect(screen.getByLabelText('Voice Name')).toHaveValue('Abhishek');
+      expect(screen.getByRole('button', { name: 'Create Clone' })).toBeEnabled();
+      expect(screen.queryByText(/added to the Voice Library/)).not.toBeInTheDocument();
+    });
+
+    it('reads the library again only once the job has finished', async () => {
+      const counts = stubClone([
+        { status: 'running' },
+        { status: 'completed', output_refs: [{ type: 'voice_profile', asset_id: 'voice-cloning:Abhishek' }] },
+      ]);
+      await submitClone();
+      await waitFor(() => expect(counts.polls).toBe(1));
+      const readsWhileRunning = counts.libraryReads;
+      expect(screen.getByLabelText('Voice Name')).toHaveValue('Abhishek');
+
+      expect(await screen.findByText(/added to the Voice Library/, undefined, { timeout: 3000 })).toBeInTheDocument();
+      await waitFor(() => expect(counts.libraryReads).toBeGreaterThan(readsWhileRunning));
+      expect(screen.getByLabelText('Voice Name')).toHaveValue('');
+    });
+  });
+
+  describe('generating a clone sample transcript', () => {
+    /** Answers the transcription job with each status in turn, staying on the last. */
+    function stubTranscription(answers: Array<Record<string, unknown>>) {
+      let polls = 0;
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = requestPath(input);
+        if (path === '/api/jobs' && init?.method === 'POST') return Response.json({ ...queuedJob, id: 'job:transcribe' });
+        if (path === '/api/jobs/job%3Atranscribe') {
+          const answer = answers[Math.min(polls, answers.length - 1)];
+          polls += 1;
+          return Response.json({ ...queuedJob, id: 'job:transcribe', ...answer });
+        }
+        if (path === '/api/assets') return Response.json({ assets: libraryAssets });
+        if (path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
+        return new Response('not found', { status: 404 });
+      }));
+    }
+
+    async function requestTranscript() {
+      renderVoice();
+      fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
+      fireEvent.change(await screen.findByLabelText(/Audio sample/), { target: { files: [new File(['voice sample'], 'abhishek.ogg', { type: 'audio/ogg' })] } });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Transcript' })).toBeEnabled());
+      fireEvent.click(screen.getByRole('button', { name: 'Generate Transcript' }));
+    }
+
+    it('keeps waiting through a retry until the words arrive', async () => {
+      stubTranscription([
+        { status: 'retrying' },
+        { status: 'completed', output_refs: [{ type: 'transcript', content: 'The words of the second attempt.' }] },
+      ]);
+      await requestTranscript();
+
+      await waitFor(() => expect(screen.getByLabelText('Reference transcript (optional)')).toHaveValue('The words of the second attempt.'), { timeout: 3000 });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: /Generate transcript with STT/ })).not.toBeChecked();
+    });
+
+    it('says why when the job fails', async () => {
+      stubTranscription([{ status: 'failed', error: { message: 'STT could not generate a reference transcript: no speech' } }]);
+      await requestTranscript();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('no speech');
+      expect(screen.getByRole('button', { name: 'Generate Transcript' })).toBeEnabled();
+    });
+
+    it('says so when a finished job holds no transcript', async () => {
+      stubTranscription([{ status: 'completed', output_refs: [] }]);
+      await requestTranscript();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('STT completed without returning a transcript.');
+    });
+
+    it('drops the job of a sample that was replaced', async () => {
+      stubTranscription([{ status: 'running' }]);
+      await requestTranscript();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Transcript' })).toBeDisabled());
+
+      fireEvent.change(screen.getByLabelText(/Audio sample/), { target: { files: [new File(['other sample'], 'other.ogg', { type: 'audio/ogg' })] } });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Transcript' })).toBeEnabled());
+    });
   });
 
   it('lists no invented jobs when nothing has run', async () => {
@@ -643,7 +823,32 @@ describe('VoiceWorkspace Audio Tools (Phase 4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
     expect(await screen.findByRole('checkbox', { name: 'Isolate vocals first' })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: 'Clean up noise' })).toBeDisabled();
+    expect(screen.getByText(/The audio service is not configured/)).toBeInTheDocument();
   });
+
+  it('gives the clone switches back by itself after one failed status check', async () => {
+    let checks = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/voice/audio-tools') {
+        checks += 1;
+        // The gateway restarting answers the first check; the service itself is fine.
+        if (checks === 1) return new Response('bad gateway', { status: 502 });
+        return Response.json({ configured: true, available: true, detail: '', tools: {}, watermark: { enabled: false } });
+      }
+      if (path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
+      if (path === '/api/assets') return Response.json({ assets: [interview] });
+      return new Response('not found', { status: 404 });
+    }));
+    renderVoice();
+    fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
+    expect(await screen.findByRole('checkbox', { name: 'Isolate vocals first' })).toBeDisabled();
+    expect(await screen.findByText(/The audio service did not answer/)).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Isolate vocals first' })).toBeEnabled(), { timeout: 5000 });
+    expect(screen.getByRole('checkbox', { name: 'Clean up noise' })).toBeEnabled();
+    expect(screen.queryByText(/The audio service did not answer/)).not.toBeInTheDocument();
+  }, 10000);
 });
 
 describe('VoiceWorkspace Models tool and engine groups (Phase 5)', () => {

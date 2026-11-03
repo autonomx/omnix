@@ -1,13 +1,13 @@
 import { Button, Group, Text } from '@mantine/core';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient } from '../../api/client';
+import { omnixApiClient, type JobRecord } from '../../api/client';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
-import { voiceApiClient } from './api/voiceClient';
-import { AUDIO_TOOLS_QUERY_KEY } from './AudioToolsTool';
+import { useAudioToolsStatus } from './AudioToolsTool';
+import { jobSettled, useJobResult } from './useJobResult';
 import { blobToDataUrl, formatBytes } from './voiceAssets';
-import { sampleCheckWarnings, transcriptFromJob } from './voiceOutputs';
+import { sampleCheckWarnings, transcriptFromJob, voiceJobErrorMessage } from './voiceOutputs';
 import './VoiceStudioWorkspace.css';
 
 interface VoiceCloneFormValues {
@@ -51,12 +51,14 @@ export interface CloneSeed {
 export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: CloneDefaults; onFinished: () => Promise<unknown>; seed?: CloneSeed | null }) {
   const [cloneSource, setCloneSource] = useState<CloneSourceKind>('upload');
   // Isolating and cleaning up a sample needs the audio service.
-  const audioTools = useQuery({ queryKey: AUDIO_TOOLS_QUERY_KEY, queryFn: () => voiceApiClient.audioToolsStatus(), retry: false });
+  const audioTools = useAudioToolsStatus();
   const [sampleFile, setSampleFile] = useState<File | null>(null);
   const [recordedSample, setRecordedSample] = useState<Blob | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState('');
+  const [transcription, setTranscription] = useState<{ jobId: string; sample: Blob } | null>(null);
+  const [cloneRun, setCloneRun] = useState<{ jobId: string; sample: Blob } | null>(null);
   const appliedRevision = useRef('');
   const formDefaults = (): VoiceCloneFormValues => ({
     providerId: defaults.providerId, profileName: '', language: defaults.language,
@@ -121,20 +123,33 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
           { id: 'store-profile', label: 'Store local voice clone', resource_class: 'cpu', status: 'queued' },
         ],
       });
-      if (job.status === 'failed') throw new Error(job.error?.message || 'The voice clone could not be created.');
-      return job;
+      return { jobId: job.id, sample: selectedSample };
     },
-    onSuccess: async (job, values) => {
+    onMutate: () => setCloneRun(null),
+    onSuccess: setCloneRun,
+  });
+
+  const cloneJob = useJobResult(cloneRun?.jobId ?? '');
+  const settledClone = jobSettled(cloneJob.data) ? cloneJob.data : undefined;
+  const cloning = cloneMutation.isPending || (Boolean(cloneRun) && !settledClone);
+  const cloneFailure = settledClone && settledClone.status !== 'completed' ? cloneFailureMessage(settledClone) : '';
+
+  // A voice joins the library when its job finishes, not when it is queued. A failed job keeps the form to try again.
+  useEffect(() => {
+    if (!settledClone || !cloneRun) return;
+    void onFinished();
+    if (settledClone.status !== 'completed') return;
+    const warnings = sampleCheckWarnings(settledClone);
+    setRecordingStatus(`Voice clone created and added to the Voice Library.${warnings.length ? ` ${warnings.join(' ')}` : ''}`);
+    if (cloneRun.sample === selectedSample) {
+      const values = getValues();
       reset({ ...formDefaults(), providerId: values.providerId, language: values.language, quality: values.quality, generateTranscript: values.generateTranscript });
       setSampleFile(null);
       setRecordedSample(null);
-      const warnings = sampleCheckWarnings(job);
-      setRecordingStatus(job.status === 'completed'
-        ? `Voice clone created and added to the Voice Library.${warnings.length ? ` ${warnings.join(' ')}` : ''}`
-        : 'Voice clone queued. It will appear in the Voice Library when complete.');
-      await onFinished();
-    },
-  });
+    }
+    setCloneRun(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, when the job settles
+  }, [settledClone]);
 
   const transcribeMutation = useMutation({
     mutationFn: async () => {
@@ -155,17 +170,27 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
         },
         stages: [{ id: 'transcribe-sample', label: 'Transcribe reference sample', resource_class: 'gpu:stt', status: 'queued' }],
       });
-      if (job.status === 'failed') throw new Error(job.error?.message || 'STT could not transcribe the audio sample.');
-      const transcript = transcriptFromJob(job);
-      if (!transcript) throw new Error('STT completed without returning a transcript.');
-      return transcript;
+      return { jobId: job.id, sample: selectedSample };
     },
-    onSuccess: (transcript) => {
-      setValue('referenceText', transcript, { shouldDirty: true, shouldValidate: true });
-      setValue('generateTranscript', false, { shouldDirty: true });
-      setRecordingStatus('Transcript generated. Review or correct it before creating the clone.');
-    },
+    onMutate: () => setTranscription(null),
+    onSuccess: setTranscription,
   });
+
+  // The job answers for the sample it was queued with; a different sample drops it.
+  const transcribeJob = useJobResult(transcription?.sample === selectedSample ? transcription.jobId : '');
+  const settledJob = jobSettled(transcribeJob.data) ? transcribeJob.data : undefined;
+  const transcript = settledJob?.status === 'completed' ? transcriptFromJob(settledJob) : '';
+  const transcribing = transcribeMutation.isPending || (transcription?.sample === selectedSample && !settledJob);
+  const transcribeFailure = !settledJob || transcript ? '' : transcribeFailureMessage(settledJob);
+
+  // A finished transcript fills the form once, so it never overwrites later corrections.
+  useEffect(() => {
+    if (!transcript) return;
+    setValue('referenceText', transcript, { shouldDirty: true, shouldValidate: true });
+    setValue('generateTranscript', false, { shouldDirty: true });
+    setRecordingStatus('Transcript generated. Review or correct it before creating the clone.');
+    setTranscription(null);
+  }, [transcript, setValue]);
 
   async function toggleRecording() {
     if (mediaRecorder && isRecording) {
@@ -211,7 +236,7 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
 
   return (
     <section className="voice-clone" aria-label="Clone a Voice">
-      <div className="voice-section-head"><div><h3>Clone a Voice</h3><Text size="sm">The sample is trimmed, levelled and checked for noise and clipping before cloning.</Text></div></div>
+      <div className="voice-section-head"><div><h3>Clone a Voice</h3><Text size="sm">The sample is trimmed, its long pauses shortened, then levelled and checked for noise and clipping before cloning.</Text></div></div>
       <form className="voice-clone-form" onSubmit={handleSubmit((values) => cloneMutation.mutate(values))}>
         <div className="clone-source-grid">
           <button className={cloneSource === 'upload' ? 'active' : ''} type="button" onClick={() => setCloneSource('upload')}><strong>Upload Audio</strong><small>WAV, FLAC, MP3, Ogg</small><small>10–30 seconds clones best</small></button>
@@ -223,21 +248,36 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
           <label>Language / Accent<input {...register('language')} /></label>
           <label title="How strictly the sample is checked for background noise and clipping.">Quality<select {...register('quality')}>{QUALITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         </div>
-        <div className="voice-clone-prep" title={audioTools.data?.available ? undefined : 'Needs the audio service (Audio Tools).'}>
+        <div className="voice-clone-prep">
           <label><input type="checkbox" disabled={!audioTools.data?.available} {...register('isolateVocals')} /> Isolate vocals first</label>
           <label><input type="checkbox" disabled={!audioTools.data?.available} {...register('enhanceSample')} /> Clean up noise</label>
+          {audioTools.isPending || audioTools.data?.available ? null : <small>{audioTools.data?.detail || 'The audio service did not answer.'} Checking again…</small>}
         </div>
         <label>Reference transcript (optional)<textarea rows={3} placeholder="Paste the exact spoken words, or transcribe the selected sample with STT." {...register('referenceText')} /></label>
-        <Group className="voice-transcribe-action" justify="space-between" align="center"><Text size="xs">Use STT now so you can verify the exact words before cloning.</Text><Button type="button" size="sm" variant="outline" loading={transcribeMutation.isPending} disabled={!selectedSample || transcribeMutation.isPending} onClick={() => transcribeMutation.mutate()}>Generate Transcript</Button></Group>
+        <Group className="voice-transcribe-action" justify="space-between" align="center"><Text size="xs">Use STT now so you can verify the exact words before cloning.</Text><Button type="button" size="sm" variant="outline" loading={transcribing} disabled={!selectedSample || transcribing} onClick={() => transcribeMutation.mutate()}>Generate Transcript</Button></Group>
         {transcribeMutation.isError ? <div className="platform-empty" role="alert">{transcribeMutation.error instanceof Error ? transcribeMutation.error.message : 'STT could not transcribe the sample.'}</div> : null}
+        {transcribeFailure ? <div className="platform-empty" role="alert">{transcribeFailure}</div> : null}
         <label className="voice-transcript-option"><input type="checkbox" {...register('generateTranscript')} /><span>Generate transcript with STT<small>Uses the configured STT provider when the reference transcript is empty.</small></span></label>
         <label>Notes / Tags (optional)<textarea rows={2} placeholder="Add notes or tags to help identify this voice..." {...register('notes')} /></label>
-        <Group justify="space-between"><Text size="xs">{recordingStatus && cloneSource === 'upload' ? recordingStatus : 'Clones are stored in Omnix resources.'}</Text><Group gap="xs"><Button type="button" variant="subtle" onClick={resetDefaults}>Reset defaults</Button><Button type="submit" loading={cloneMutation.isPending} disabled={!selectedSample || cloneMutation.isPending}>Create Clone</Button></Group></Group>
+        <Group justify="space-between"><Text size="xs">{recordingStatus && cloneSource === 'upload' ? recordingStatus : 'Clones are stored in Omnix resources.'}</Text><Group gap="xs"><Button type="button" variant="subtle" onClick={resetDefaults}>Reset defaults</Button><Button type="submit" loading={cloning} disabled={!selectedSample || cloning}>Create Clone</Button></Group></Group>
       </form>
       <FeatureValidationMessage show={Boolean(errors.profileName)} message="Enter a voice name before creating a clone." />
-      <FeatureSubmitFeedback error={cloneMutation.error} errorPrefix="Voice clone request" isError={cloneMutation.isError} isPending={cloneMutation.isPending} jobId={cloneMutation.data?.status === 'failed' ? undefined : cloneMutation.data?.id} pendingMessage="Queueing voice clone job…" successPrefix="Voice clone job queued" />
+      <FeatureSubmitFeedback error={cloneMutation.error} errorPrefix="Voice clone request" isError={cloneMutation.isError} isPending={cloning} pendingMessage="Cloning the voice…" successPrefix="Voice clone job queued" />
+      {cloneFailure ? <div className="platform-empty" role="alert">{cloneFailure}</div> : null}
     </section>
   );
+}
+
+/** Why a settled clone job made no voice. */
+function cloneFailureMessage(job: JobRecord): string {
+  return voiceJobErrorMessage(job) || 'The voice clone stopped before it finished.';
+}
+
+/** Why a settled transcription job left no transcript. */
+function transcribeFailureMessage(job: JobRecord): string {
+  if (job.status === 'completed') return 'STT completed without returning a transcript.';
+  if (job.status === 'failed') return job.error?.message || 'STT could not transcribe the audio sample.';
+  return 'The transcription stopped before it finished.';
 }
 
 /** Older settings and forms used other labels for the same three strictness levels. */

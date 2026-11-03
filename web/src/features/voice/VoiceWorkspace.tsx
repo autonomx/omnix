@@ -76,6 +76,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   // A clone sample handed over by Transcribe's "Make a voice".
   const [cloneSeed, setCloneSeed] = useState<CloneSeed | null>(null);
   const [speakerVoiceAssignments, setSpeakerVoiceAssignments] = useState<Record<string, string>>({});
+  const [lastCastVoice, setLastCastVoice] = useState('');
   const [speakerDelivery, setSpeakerDelivery] = useState<Record<string, string>>({});
   const [outputSettings, setOutputSettings] = useState<Record<OutputSettingName, number>>(centralOutputSettings);
   const [effects, setEffects] = useState<AudioEffectId[]>(centralEffects);
@@ -108,8 +109,10 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const engineId = selectedEngine?.id || moduleDefaults.providerId || '';
   const deliverySupported = Boolean(selectedEngine?.delivery_instruction);
 
+  // What the Cast shows is what the render sends. The voice last picked under Voices outlives the
+  // script it was cast into: replacing the text renames the speakers, not the choice.
   const voiceFor = (speaker: ScriptSpeakerRow): string =>
-    speakerVoiceAssignments[speaker.name] ?? voiceReference(findMatchingVoice(speaker.name, profileAssets)) ?? voiceReference(profileAssets[0]) ?? '';
+    speakerVoiceAssignments[speaker.name] || voiceReference(findMatchingVoice(speaker.name, profileAssets)) || lastCastVoice || voiceReference(profileAssets[0]);
   const deliveryFor = (speaker: ScriptSpeakerRow): string => speakerDelivery[speaker.name] ?? '';
 
   const casting = () => Object.fromEntries(parsedSpeakers.map((speaker) => [speaker.name, {
@@ -226,6 +229,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     onSuccess: async (_result, asset) => {
       const deleted = voiceAssetId(asset);
       setSpeakerVoiceAssignments((current) => Object.fromEntries(Object.entries(current).filter(([, voiceId]) => voiceId !== deleted)));
+      setLastCastVoice((current) => (current === deleted ? '' : current));
       setMessage(`${voiceAssetName(asset)} was deleted from the Voice Library.`);
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
     },
@@ -348,6 +352,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   function castVoice(asset: VoiceAsset) {
     const speaker = parsedSpeakers[0]?.name ?? 'Narrator';
     setSpeakerVoiceAssignments((current) => ({ ...current, [speaker]: voiceReference(asset) }));
+    setLastCastVoice(voiceReference(asset));
     setMessage(`Cast ${voiceAssetName(asset)} as ${speaker}.`);
     selectTool('speak');
   }

@@ -217,6 +217,7 @@
   .voice-audio-tools-results audio { width: 100%; }
   .voice-audio-tools-switch, .voice-clone-prep label { align-items: center; color: var(--fg-slate-870); display: flex; font-size: 0.8rem; gap: 0.4rem; }
   .voice-clone-prep { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+  .voice-clone-prep small { color: var(--fg-slate-870); flex-basis: 100%; }
   /* Models tool (Phase 5). */
   .voice-hardware { color: var(--fg-slate-870); }
   .voice-model-vram { display: grid; gap: 0.15rem; margin-top: 0.25rem; max-width: 22rem; }

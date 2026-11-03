@@ -9,6 +9,16 @@ type Asset = AssetListResponse['assets'][number];
 
 export const AUDIO_TOOLS_QUERY_KEY = ['voice', 'audio-tools'] as const;
 
+/** The audio service's status, asked again until it answers: one failed check must not stick. */
+export function useAudioToolsStatus() {
+  return useQuery({
+    queryKey: AUDIO_TOOLS_QUERY_KEY,
+    queryFn: () => voiceApiClient.audioToolsStatus(),
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.available ? false : 3000),
+  });
+}
+
 const SOURCE_TYPES = new Set(['audio', 'voice_sample', 'voice_profile', 'voice_take', 'chapter_audio', 'render', 'export']);
 const TOOLS = {
   isolate: { type: 'audio.isolate', label: 'Isolate vocals', stage: 'Separate the voice from the background' },
@@ -40,7 +50,7 @@ export function AudioToolsTool({ assets }: { assets: Asset[] }) {
   const [sourceId, setSourceId] = useState('');
   const [model, setModel] = useState('roformer');
   const [jobId, setJobId] = useState('');
-  const status = useQuery({ queryKey: AUDIO_TOOLS_QUERY_KEY, queryFn: () => voiceApiClient.audioToolsStatus(), retry: false });
+  const status = useAudioToolsStatus();
   const job = useJobResult(jobId);
   const available = Boolean(status.data?.available);
 
