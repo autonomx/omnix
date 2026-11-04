@@ -75,6 +75,72 @@ def test_terminal_jobs_go_with_their_events_and_live_ones_stay(database) -> None
         assert _exists(admin, "omnix_jobs", "id", recent_done)
 
 
+def test_a_job_a_record_still_needs_stays_and_the_rest_go(database) -> None:
+    # Real: an audiobook export's foreign key failed every run for two weeks, and nothing after jobs was cleaned.
+    export_id = f"export:retention:{uuid.uuid4().hex}"
+    holder = f"retention_holder_{uuid.uuid4().hex[:10]}"
+    with _admin() as admin:
+        held_by_export = _job(admin, "completed", days_ago=400)
+        held_by_new_table = _job(admin, "failed", days_ago=400)
+        unheld = _job(admin, "completed", days_ago=400)
+        # A table no code has heard of: what holds a job is read from the catalog.
+        admin.execute(f"CREATE TABLE {holder} (job_ref TEXT NOT NULL REFERENCES omnix_jobs(id))")
+        admin.execute(f"INSERT INTO {holder} (job_ref) VALUES (%s)", (held_by_new_table,))
+        admin.execute(f"GRANT SELECT ON {holder} TO PUBLIC")
+        # The export's own references and its immutability are not this test's subject.
+        admin.execute("SET session_replication_role = replica")
+        admin.execute(
+            """INSERT INTO omnix_audiobook_exports
+                   (id, workspace_id, project_id, source_revision_id, job_id, format, manifest, manifest_hash, output_asset_id)
+               VALUES (%s, %s, 'project', 'revision', %s, 'wav', '{}'::jsonb, %s, %s)""",
+            (export_id, WORKSPACE, held_by_export, "0" * 64, export_id),
+        )
+        admin.execute("SET session_replication_role = DEFAULT")
+
+    try:
+        report = RetentionWorker(database).run_once()
+
+        assert report.failed == []
+        with _admin() as admin:
+            assert _exists(admin, "omnix_jobs", "id", held_by_export)
+            assert _exists(admin, "omnix_job_events", "job_id", held_by_export)  # kept whole
+            assert _exists(admin, "omnix_jobs", "id", held_by_new_table)
+            assert not _exists(admin, "omnix_jobs", "id", unheld)
+    finally:
+        with _admin() as admin:
+            admin.execute(f"DROP TABLE {holder}")
+            admin.execute("SET session_replication_role = replica")
+            admin.execute("DELETE FROM omnix_audiobook_exports WHERE id = %s", (export_id,))
+            admin.execute("SET session_replication_role = DEFAULT")
+
+
+def test_one_policy_failing_does_not_stop_the_others(database, monkeypatch) -> None:
+    from app.persistence import retention
+
+    def broken(_connection, _days, _batch):
+        raise RuntimeError("this policy is broken")
+
+    real_handler_for = retention.handler_for
+    # agent_run_events comes first of all, so everything else runs after the failure.
+    monkeypatch.setattr(
+        retention, "handler_for", lambda record_type: broken if record_type == "agent_run_events" else real_handler_for(record_type),
+    )
+    with _admin() as admin:
+        stale = _job(admin, "completed", days_ago=400)
+
+    with pytest.raises(RuntimeError, match="this policy is broken"):
+        RetentionWorker(database).run_once()
+
+    with _admin() as admin:
+        assert not _exists(admin, "omnix_jobs", "id", stale)
+        status, error = admin.execute(
+            "SELECT status, error FROM omnix_lifecycle_cleanup_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    # It still reads as failed, so a broken policy cannot go unnoticed.
+    assert status == "failed"
+    assert "this policy is broken" in error
+
+
 def test_agent_run_noise_is_dropped_but_milestones_and_evidence_are_kept(database) -> None:
     run_id = f"retention-{uuid.uuid4().hex[:10]}"
     live_run = f"retention-live-{uuid.uuid4().hex[:10]}"

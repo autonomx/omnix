@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+from psycopg import sql
+
 from app.observability.metrics import record_retention_deleted
 
 from .tenant_scope import system_scope
@@ -60,6 +62,52 @@ def _audit(connection: Any, days: int, batch: int) -> int:
     ).rowcount)
 
 
+def _jobs(connection: Any, days: int, batch: int) -> int:
+    """Terminal jobs; events, logs and attempts go with them (ON DELETE CASCADE).
+
+    A job a record still needs stays until that record goes: a foreign key to the jobs table that neither cascades nor
+    clears blocks the delete, and one such row in a batch failed whole runs for two weeks. The catalog names them, so
+    the kernel names no module's table and a new one cannot do this again.
+    """
+    holders = connection.execute(
+        """SELECT holder_namespace.nspname, holder_class.relname,
+                  ARRAY(SELECT attribute.attname FROM unnest(foreign_key.conkey) WITH ORDINALITY AS key(number, position)
+                          JOIN pg_attribute AS attribute
+                            ON attribute.attrelid = foreign_key.conrelid AND attribute.attnum = key.number
+                         ORDER BY key.position),
+                  ARRAY(SELECT attribute.attname FROM unnest(foreign_key.confkey) WITH ORDINALITY AS key(number, position)
+                          JOIN pg_attribute AS attribute
+                            ON attribute.attrelid = foreign_key.confrelid AND attribute.attnum = key.number
+                         ORDER BY key.position)
+             FROM pg_constraint AS foreign_key
+             JOIN pg_class AS holder_class ON holder_class.oid = foreign_key.conrelid
+             JOIN pg_namespace AS holder_namespace ON holder_namespace.oid = holder_class.relnamespace
+            WHERE foreign_key.contype = 'f' AND foreign_key.conparentid = 0
+              AND foreign_key.confrelid = 'omnix_jobs'::regclass
+              AND foreign_key.confdeltype IN ('a', 'r')
+            ORDER BY 1, 2, foreign_key.conname"""
+    ).fetchall()
+    still_needed = [
+        sql.SQL("AND NOT EXISTS (SELECT 1 FROM {holder} AS holder WHERE {match})").format(
+            holder=sql.Identifier(str(row[0]), str(row[1])),
+            match=sql.SQL(" AND ").join(
+                sql.SQL("holder.{} = job.{}").format(sql.Identifier(str(column)), sql.Identifier(str(referenced)))
+                for column, referenced in zip(row[2], row[3], strict=True)
+            ),
+        )
+        for row in holders
+    ]
+    statement = sql.SQL(
+        """DELETE FROM omnix_jobs WHERE ctid IN (
+               SELECT job.ctid FROM omnix_jobs AS job
+                WHERE job.status IN ('completed', 'failed', 'canceled')
+                  AND COALESCE(job.completed_at, job.updated_at) < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                  {still_needed}
+                LIMIT %s)"""
+    ).format(still_needed=sql.SQL(" ").join(still_needed))
+    return int(connection.execute(statement, (days, batch)).rowcount)
+
+
 HANDLERS: MappingProxyType[str, Handler] = MappingProxyType({
     "outbox_events": _outbox("outbox_events"),
     "outbox_consumer_inbox": _outbox("outbox_consumer_inbox"),
@@ -70,14 +118,7 @@ HANDLERS: MappingProxyType[str, Handler] = MappingProxyType({
                 WHERE created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
                 ORDER BY created_at, id LIMIT %s)"""
     ),
-    # Terminal jobs; events, logs and attempts go with them (ON DELETE CASCADE).
-    "jobs": _sql(
-        """DELETE FROM omnix_jobs WHERE ctid IN (
-               SELECT ctid FROM omnix_jobs
-                WHERE status IN ('completed', 'failed', 'canceled')
-                  AND COALESCE(completed_at, updated_at) < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                LIMIT %s)"""
-    ),
+    "jobs": _jobs,
     # Events of long-lived jobs still accumulate: cap their age as well.
     "job_events": _sql(
         """DELETE FROM omnix_job_events WHERE ctid IN (
@@ -126,6 +167,7 @@ class RetentionReport:
     run_id: int
     deleted: dict[str, int] = field(default_factory=dict)
     skipped: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
 
 
 class RetentionWorker:
@@ -150,16 +192,28 @@ class RetentionWorker:
             ).fetchone()[0])
         report = RetentionReport(run_id=run_id)
         try:
-            for policy in self.policies():
-                handler = handler_for(policy.record_type)
-                if handler is None or (policy.maintenance_only and not include_maintenance):
-                    report.skipped.append(policy.record_type)
-                    continue
-                report.deleted[policy.record_type] = self._run_policy(handler, policy)
-                record_retention_deleted(policy.record_type, report.deleted[policy.record_type])
+            policies = self.policies()
         except Exception as exc:
             self._finish(run_id, "failed", report, error=f"{type(exc).__name__}: {exc}"[:2000])
             raise
+        first_failure: Exception | None = None
+        for policy in policies:
+            handler = handler_for(policy.record_type)
+            if handler is None or (policy.maintenance_only and not include_maintenance):
+                report.skipped.append(policy.record_type)
+                continue
+            # One policy failing must not stop the rest: everything after it would quietly stop being cleaned.
+            try:
+                report.deleted[policy.record_type] = self._run_policy(handler, policy)
+            except Exception as exc:
+                logger.warning("retention_policy_failed record_type=%s error=%s", policy.record_type, type(exc).__name__)
+                report.failed.append(policy.record_type)
+                first_failure = first_failure or exc
+                continue
+            record_retention_deleted(policy.record_type, report.deleted[policy.record_type])
+        if first_failure is not None:
+            self._finish(run_id, "failed", report, error=f"{type(first_failure).__name__}: {first_failure}"[:2000])
+            raise first_failure
         self._finish(run_id, "completed", report)
         return report
 
@@ -181,7 +235,9 @@ class RetentionWorker:
                     WHERE id = %s""",
                 (status, json.dumps(report.deleted, sort_keys=True), error, run_id),
             )
-        logger.info("retention_run status=%s deleted=%s skipped=%s", status, report.deleted, report.skipped)
+        logger.info(
+            "retention_run status=%s deleted=%s skipped=%s failed=%s", status, report.deleted, report.skipped, report.failed,
+        )
 
 
 def latest_cleanup_run(connection: Any) -> dict[str, Any] | None:
