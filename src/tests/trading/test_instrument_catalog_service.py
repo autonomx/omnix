@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
+
+import pytest
 
 from app.apps.trading.catalog import (
     all_bindings,
     binding_by_id,
     bindings_for_instrument,
+    clear_dynamic_catalog_cache,
     default_binding,
     instrument_by_id,
 )
 from app.apps.trading.instrument_catalog_service import ProviderBackedInstrumentCatalog
+
+
+@pytest.fixture(autouse=True)
+def _empty_dynamic_catalog() -> Iterator[None]:
+    """The catalog is per process: another test's random symbol can contain the text these tests search for."""
+    clear_dynamic_catalog_cache()
+    yield
+    clear_dynamic_catalog_cache()
 
 
 class FakeResponse:
