@@ -513,9 +513,21 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             return {"ok": False, "code": exc.code, "message": str(exc)}
         key = portrait_key(tenant, image_sha256.lower())
         try:
-            await asyncio.wrap_future(host.submit(runtime.prepare, key, payload))
+            portrait = await asyncio.wrap_future(host.submit(runtime.prepare, key, payload))
         except PortraitImageError as exc:
             return {"ok": False, "code": exc.code, "message": str(exc)}
+        # A prepared portrait is ready for a call. Rendered at the call's start instead, its idle loop would hold the
+        # GPU thread, and with it the first reply's frames, for seconds. Never in the way of a call in progress.
+        if not admission.active:
+            started = time.monotonic()
+            try:
+                await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, 0))
+                await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, 0))
+            except Exception:  # noqa: BLE001 - the portrait is prepared; a call renders its idle loop itself
+                logger.warning("Portrait idle loop could not be rendered ahead of the call", exc_info=True)
+            else:
+                if (seconds := time.monotonic() - started) >= 0.05:
+                    logger.info("Portrait idle loop rendered in %.1f s", seconds)
         return {"ok": True, "latent_key": key}
 
     @app.post("/portrait/preview")

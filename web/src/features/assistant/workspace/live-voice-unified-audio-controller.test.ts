@@ -69,6 +69,8 @@ import {
 } from './live-voice-unified-audio-controller';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 import { liveCallPresentationStore, liveCallVoiceMode } from './live-call-presentation-store';
+import { liveConversationStore } from './live-conversation-store';
+import { livePortrait } from '../chat/portrait/livePortrait';
 
 let cleanup: (() => void) | null = null;
 let streamEvents: Array<Record<string, unknown>> | null = null;
@@ -140,6 +142,7 @@ beforeEach(() => {
   mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);
   mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);
   mocks.session.setStartPolicy.mockReset();
+  mocks.session.sendOutputEnd.mockReset();
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
   mocks.session.isClosed.mockReset().mockReturnValue(false);
@@ -164,6 +167,56 @@ afterEach(async () => {
   document.body.innerHTML = '';
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('a portrait at the start of a call', () => {
+  const connected = () => window.dispatchEvent(new Event('omnix:assistant-live-voice-call-connected'));
+
+  beforeEach(() => {
+    vi.spyOn(livePortrait, 'attachSession').mockImplementation(() => undefined);
+    liveConversationStore.dispatch({ type: 'session', sessionId: 's1' });
+  });
+
+  afterEach(() => {
+    livePortrait.setPack(null);
+    liveConversationStore.dispatch({ type: 'session', sessionId: null });
+  });
+
+  it('opens the audio session when the call connects, and the first reply reuses it', async () => {
+    livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite' });
+
+    connected();
+
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.createSession.mock.calls[0]).toEqual(expect.arrayContaining([expect.objectContaining({ affinityKey: 's1', portrait: expect.anything() })]));
+    await waitFor(() => expect(livePortrait.attachSession).toHaveBeenCalledOnce());
+
+    streamEvents = null;
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST', body: JSON.stringify({ content: 'hi' }) });
+    await response.text();
+
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalled());
+    expect(mocks.createSession).toHaveBeenCalledOnce();
+  });
+
+  it('opens nothing early for a call without a portrait', async () => {
+    livePortrait.setPack({ renderer: 'live2d' });
+
+    connected();
+    await Promise.resolve();
+
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it('waits for a chat to be selected', async () => {
+    livePortrait.setPack({ renderer: 'portrait' });
+    liveConversationStore.dispatch({ type: 'session', sessionId: null });
+
+    connected();
+    await Promise.resolve();
+
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
 });
 
 describe('live voice unified audio controller', () => {

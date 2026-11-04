@@ -102,6 +102,50 @@ def _prepare(client: TestClient, tenant: str = "tenant-a", image: bytes = IMAGE)
                        files={"file": ("portrait.png", io.BytesIO(image))}).json()
 
 
+class CountingRuntime(FakeRuntime):
+    """Counts what is rendered, optionally failing at it."""
+
+    def __init__(self, fail_idle: bool = False) -> None:
+        super().__init__()
+        self.rendered: list[str] = []
+        self.fail_idle = fail_idle
+
+    def idle_frames(self, portrait: object, level: int = 0) -> list[bytes]:
+        if self.fail_idle:
+            raise RuntimeError("no idle loop")
+        self.rendered.append(f"idle-l{level}")
+        return super().idle_frames(portrait, level)
+
+    def blink_frames(self, portrait: object, level: int = 0) -> list[bytes]:
+        self.rendered.append(f"blink-l{level}")
+        return super().blink_frames(portrait, level)
+
+
+def test_preparing_a_portrait_renders_its_idle_loop_so_a_call_finds_it_ready(token: str) -> None:
+    runtime = CountingRuntime()
+    with _client(_ready_app(runtime), token) as client:
+        assert _prepare(client)["ok"] is True
+
+    assert runtime.rendered == ["idle-l0", "blink-l0"]
+
+
+def test_a_portrait_is_still_prepared_when_its_idle_loop_cannot_be_rendered(token: str) -> None:
+    with _client(_ready_app(CountingRuntime(fail_idle=True)), token) as client:
+        assert _prepare(client)["ok"] is True
+
+
+def test_preparing_during_a_call_leaves_the_gpu_to_the_call(token: str) -> None:
+    runtime = CountingRuntime()
+    client = _client(_ready_app(runtime), token)
+    latent_key = _prepare(client)["latent_key"]
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, latent_key)["type"] == "ready"
+        _frames(websocket, 6)  # the call's own idle loop and blink
+        runtime.rendered.clear()
+        assert _prepare(client)["ok"] is True
+        assert runtime.rendered == []
+
+
 def _open(websocket, latent_key: str, call_key: str = "call-1", principal: str = "user-1", session: str = "s-1",
           level: int = 0) -> dict:
     websocket.send_json({"type": "open", "call_key": call_key, "principal": principal, "session": session,

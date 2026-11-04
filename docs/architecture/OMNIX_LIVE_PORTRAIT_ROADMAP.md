@@ -848,6 +848,9 @@ During any of them the renderer holds the last speaking frame. If the gap passes
   benchmark runs and the end-to-end check measure a loaded portrait). With too little VRAM or commit for the load
   (`model_busy`), the gateway keeps asking every 5 s for as long as the call lasts, so the portrait starts once memory is
   freed; the call says why it is not showing the portrait (added 2026-11-01, after a real call fell back silently).
+  Since 2026-11-04 a loaded portrait is shown from the call's start: `prepare` renders the idle loop and its blink at
+  L0 (they used to hold the GPU thread at the call's start), and a portrait call opens its audio session, and so its
+  link, when the call connects rather than with the first reply (8.5 s later on the call that showed it).
 - **D-10 The paired gate's underrun bound: +0.1 per reply (settled 2026-10-31).** Underruns per reply may be at most
   0.1 higher with the portrait on than off (about 4 in 40 replies). Both runs underrun about 1.4 times a reply from TTS
   alone on this machine, and with no allowance one more in 40 replies failed the gate from run to run.

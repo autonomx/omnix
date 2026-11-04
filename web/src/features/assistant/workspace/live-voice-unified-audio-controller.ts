@@ -2,6 +2,7 @@
 import { activeFetchMiddlewares, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 import { livePortrait } from '../chat/portrait/livePortrait';
+import { liveConversationStore } from './live-conversation-store';
 import {
   createLiveCallDiagnosticsReporter,
   createLiveCallTraceId,
@@ -290,7 +291,18 @@ function handleGreetingCallStart(): void {
   };
 }
 
+/**
+ * A portrait call opens its audio session as soon as the call connects, not with the first reply: the session's hello
+ * is what brings the portrait up, and the face should move from the start of the call. The first reply reuses it.
+ */
+function openPortraitForCall(): void {
+  const sessionId = liveConversationStore.getState().sessionId;
+  if (!sessionId || !livePortrait.wanted() || !isAutoSpeakEnabled() || !readLiveVoiceHumanizationFlags().master) return;
+  void ensureSharedAudioSession(sessionId, selectedVoiceId());
+}
+
 function handleGreetingCallConnected(): void {
+  openPortraitForCall();
   if (!greetingStartup) return;
   greetingStartup.connected = true;
   maybeStartGeneratedGreeting();

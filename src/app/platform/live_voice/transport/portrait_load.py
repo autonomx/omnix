@@ -2,7 +2,8 @@
 
 The model loads on demand when a call first asks for it; this asks ahead of the call, so the video is there when it
 starts. ``POST /api/tts/live-call/portrait-load`` with the portrait's image asset has the service prepare it, which
-starts a load when none is under way; the browser asks again while the answer is ``loading``. The service's own checks
+starts a load when none is under way and renders the portrait's idle loop, so ``ready`` means a call has no rendering
+left to wait for; the browser asks again while the answer is ``loading``. The service's own checks
 apply as they do to a call: with too little memory it refuses (``model_busy``). ``GET
 /api/tts/live-call/portrait-load`` says where the model stands, since it unloads after an idle while.
 """
