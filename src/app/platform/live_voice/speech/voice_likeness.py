@@ -11,8 +11,10 @@ import logging
 import wave
 from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,9 @@ def _wav(pcm: Iterable[bytes], sample_rate: int) -> bytes:
 def _unit(vector: list[float] | None) -> np.ndarray | None:
     if vector is None:
         return None
+    # Loaded with the first take: the gateway starts without numpy.
+    import numpy as np
+
     values = np.asarray(vector, dtype=np.float32)
     norm = float(np.linalg.norm(values))
     return values / norm if norm > 0 else None
@@ -95,7 +100,7 @@ class VoiceLikeness:
             if clip is None:
                 return None
             take = _unit(self._embed(_wav(pcm, sample_rate), "take.wav"))
-            return None if take is None else round(float(np.dot(take, clip)), 4)
+            return None if take is None else round(float((take * clip).sum()), 4)
         except Exception:  # noqa: BLE001 - this check must never cost a phrase
             logger.debug("Voice likeness check failed", exc_info=True)
             return None

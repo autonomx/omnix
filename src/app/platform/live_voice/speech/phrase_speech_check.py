@@ -16,8 +16,6 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
-
 CODEC_STEPS_PER_SECOND = 12.5
 # Generating a second of speech took 0.37 s on real takes; live phrases share the service, so assume worse.
 CAUTIOUS_GENERATION_SECONDS_PER_AUDIO_SECOND = 0.6
@@ -91,6 +89,9 @@ class TakeWatch:
         count = len(self._pending) // (self._frame_samples * 2)
         if not count:
             return
+        # Loaded with the first take: the gateway starts without numpy.
+        import numpy as np
+
         used = count * self._frame_samples * 2
         samples = np.frombuffer(self._pending[:used], dtype="<i2").astype(np.float32) / 32768.0
         self._pending = self._pending[used:]
