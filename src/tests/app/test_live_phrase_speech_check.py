@@ -61,6 +61,12 @@ def test_measuring_a_take_counts_only_audible_time() -> None:
     # Words at their usual pace, even a quiet-sounding short phrase, stay.
     (1.36, 0.72, 15, 41, None),
     (2.96, 1.92, 33, 62, None),
+    # Real takes with every word, spoken quickly: these used to be retried for nothing.
+    (1.60, 1.52, 40, 70, None),
+    (1.20, 1.04, 30, 59, None),
+    # Real takes that lost words, the first just over the line: "or you're lost. Which is it?" heard as "or you are lost".
+    (1.60, 0.96, 28, 56, "too_little_speech"),
+    (3.20, 0.80, 62, 96, "too_little_speech"),
     # Audible but it never ended by itself: it ran into the cap.
     (4.48, 1.60, 33, 62, "ran_to_budget"),
 ])
@@ -141,17 +147,68 @@ def test_a_pause_after_enough_speech_is_never_stopped() -> None:
     assert len(produced) == 2
 
 
-def test_a_take_is_not_stopped_when_there_is_no_time_for_another() -> None:
+def _short_of_time(takes: list[Any]) -> tuple[list[Any], list[dict[str, Any]]]:
+    """The phrase is held (enough queued audio at the start), then there is no time for a retry by the book."""
     answers = iter([60.0])
     logged: list[dict[str, Any]] = []
-    takes = iter([SILENT, SPOKEN])
+    source = iter(takes)
     produced = list(speech_checked_audio(
-        lambda: iter(next(takes)), text_chars=15, max_new_tokens=41, to_pcm=_pcm, runway_seconds=lambda: next(answers, 0.0),
+        lambda: iter(next(source)), text_chars=15, max_new_tokens=41, to_pcm=_pcm, runway_seconds=lambda: next(answers, 0.0),
+        stopped=lambda: False, is_cached=lambda _timing: False, on_take=lambda **fields: logged.append(fields),
+    ))
+    return produced, logged
+
+
+def test_a_take_with_some_of_its_words_is_kept_when_there_is_no_time_for_another() -> None:
+    partial = _take((0.4, 0.1), (2.5, 0.001))
+    produced, logged = _short_of_time([partial, SPOKEN])
+
+    assert [entry["stopped_early"] for entry in logged] == [False]
+    assert [len(chunk[0]) for chunk in produced] == [len(part[0]) for part in partial]
+
+
+def test_a_silent_take_is_never_played_for_lack_of_time() -> None:
+    # A real call: 4 s of silence and a lost sentence, because a retry fell 0.12 s short of its margin.
+    produced, logged = _short_of_time([SILENT, SPOKEN])
+
+    assert [len(chunk[0]) for chunk in produced] == [len(SPOKEN[0][0])]
+    assert logged[0]["missing"] == "too_little_speech"
+    assert logged[1] == {"attempt": 1, "streamed": True}
+
+
+def test_the_retry_of_a_silent_take_goes_out_as_it_is_made() -> None:
+    order: list[str] = []
+
+    def speaking():
+        for chunk in SPOKEN + SPOKEN:
+            order.append("generated")
+            yield chunk
+
+    takes = iter([lambda: iter(SILENT), speaking])
+    answers = iter([60.0])
+    for _chunk in speech_checked_audio(
+        lambda: next(takes)(), text_chars=15, max_new_tokens=41, to_pcm=_pcm, runway_seconds=lambda: next(answers, 0.0),
+        stopped=lambda: False, is_cached=lambda _timing: False, on_take=lambda **_fields: None,
+    ):
+        order.append("sent")
+
+    assert order == ["generated", "sent", "generated", "sent"]
+
+
+def test_a_failed_retry_of_a_silent_take_still_sends_what_it_has() -> None:
+    def refused():
+        raise RuntimeError("engine busy")
+
+    attempts = iter([lambda: iter(SILENT), refused])
+    answers = iter([60.0])
+    logged: list[dict[str, Any]] = []
+    produced = list(speech_checked_audio(
+        lambda: next(attempts)(), text_chars=15, max_new_tokens=41, to_pcm=_pcm, runway_seconds=lambda: next(answers, 0.0),
         stopped=lambda: False, is_cached=lambda _timing: False, on_take=lambda **fields: logged.append(fields),
     ))
 
-    assert [entry["stopped_early"] for entry in logged] == [False]
-    assert [len(chunk[0]) for chunk in produced] == [len(SILENT[0][0])]
+    assert len(produced) == 1  # never nothing: the phrase's slot in the reply is kept
+    assert logged[1]["streamed"] is True
 
 
 def test_without_enough_queued_audio_the_phrase_streams_as_it_always_did() -> None:

@@ -11,10 +11,13 @@ that, or when the check would risk an audible gap, the phrase streams as it alwa
 """
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 CODEC_STEPS_PER_SECOND = 12.5
 # Generating a second of speech took 0.37 s on real takes; live phrases share the service, so assume worse.
@@ -30,8 +33,13 @@ PORTRAIT_RENDER_LEAD_SECONDS = 1.0
 _FRAME_SECONDS = 0.08
 # The level the browser's mouth treats as closed. Speech stays above it between words only briefly.
 _QUIET_RMS = 0.015
-# Speech is rarely faster than this, so less voiced time than this means words are missing.
-_FASTEST_VOICED_CHARS_PER_SECOND = 25.0
+# Speech is rarely faster than this, so less voiced time than this means words are missing. Real takes scored by
+# transcribing them, 70 per voice (2026-11-04): whole takes reached 28.85 on the faster voice, and a take that had lost
+# its last three words was 29.17 on the slower one. At 25, 18 of the faster voice's 25 flagged takes had every word.
+_FASTEST_VOICED_CHARS_PER_SECOND = 29.0
+# Under this share of that time a take is worth nothing to the listener: a retry goes ahead however little audio is
+# queued. (A real take: 28 characters, 4.08 s, nothing voiced, retry refused 0.12 s short of its margin, 2026-11-04.)
+_HARDLY_SPOKEN_SHARE = 0.5
 # Audio this close to its budget ran into the cap instead of ending on its own.
 _RAN_TO_BUDGET_FRACTION = 0.88
 # On real takes this stops 35 of 37 silent ones about 1.7 s early, and 17 of 368 good ones, which costs only a retry.
@@ -133,6 +141,28 @@ def missing_speech_reason(take: SpeechTake, text_chars: int, max_new_tokens: int
     return None
 
 
+def _hardly_spoken(take: SpeechTake, text_chars: int) -> bool:
+    return take.voiced_seconds < text_chars / _FASTEST_VOICED_CHARS_PER_SECOND * _HARDLY_SPOKEN_SHARE
+
+
+def _streamed_or(
+    generate: Callable[[], Iterator[tuple[Any, int, Any]]],
+    fallback: list[tuple[Any, int, Any]],
+) -> Iterator[tuple[Any, int, Any]]:
+    """A new take as it is made; ``fallback`` if it fails before its first chunk."""
+    try:
+        stream = generate()
+        first = next(stream, None)
+    except Exception:  # noqa: BLE001 - what the listener would have had anyway still goes out
+        logger.warning("A retry of a phrase with no speech failed", exc_info=True)
+        first, stream = None, iter(())
+    if first is None:
+        yield from fallback
+        return
+    yield first
+    yield from stream
+
+
 def speech_checked_audio(
     generate: Callable[[], Iterator[tuple[Any, int, Any]]],
     *,
@@ -176,8 +206,9 @@ def speech_checked_audio(
                 watch = watch or TakeWatch(chunk[1])
                 pcm.append(to_pcm(chunk[0]))
                 watch.add(pcm[-1])
-                # The last attempt runs to its end, and so does any with no time for another: something real must go out.
-                if attempt < MAX_RETRIES and watch.gone_silent(text_chars) and runway_seconds() >= expected_wait:
+                # The last attempt runs to its end, and so does a take with some of its words and no time for another.
+                if (attempt < MAX_RETRIES and watch.gone_silent(text_chars)
+                        and (runway_seconds() >= expected_wait or _hardly_spoken(watch.take, text_chars))):
                     stopped_early = True
                     break
         except Exception as exc:
@@ -213,6 +244,15 @@ def speech_checked_audio(
         rank = (not stopped_early, judged, 1.0 if score is None else score, take.voiced_seconds)
         if best_rank is None or rank > best_rank:
             best, best_rank = chunks, rank
-        if stopped() or runway_seconds() < expected_wait:
+        if stopped():
             break
+        if runway_seconds() >= expected_wait:
+            continue
+        if attempt < MAX_RETRIES and _hardly_spoken(take, text_chars):
+            # Playing this take is seconds of silence and the words lost; waiting for another costs less at worst.
+            # Nothing is held any longer: it goes out as it is made.
+            on_take(attempt=attempt + 1, streamed=True)
+            yield from _streamed_or(generate, best or [])
+            return
+        break
     yield from best or ()
