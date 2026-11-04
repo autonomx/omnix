@@ -362,6 +362,12 @@ class _SchedulerLockSession:
             context.__exit__(None, None, None)
 
 
+# How long a proof of the lock connection stands for a check on the event loop. Each check is a round trip to PostgreSQL
+# behind a lock the supervisor's thread holds: on the loop they stalled everything the gateway relays, 5 to 20 s a minute
+# (2026-11-04). Writes do not rely on this: they fence by epoch in their own transaction.
+LIVENESS_PROOF_SECONDS = 5.0
+
+
 class _TaskOwner:
     def __init__(
         self,
@@ -373,17 +379,36 @@ class _TaskOwner:
         self.task_id = task_id
         self.lock_key = lock_key
         self.healthy = False
+        self._proven_at: float | None = None
 
     def acquire(self) -> bool:
         self.healthy = self.lock_session.acquire(self.lock_key)
         return self.healthy
+
+    def _proof_stands(self) -> bool:
+        """Whether a recent proof answers for this check: only on the event loop, which must not wait on the database."""
+        if (self._proven_at is None or not self.lock_session.healthy
+                or time.monotonic() - self._proven_at > LIVENESS_PROOF_SECONDS):
+            return False
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        return True
 
     def require_live(self) -> None:
         if not self.healthy:
             raise SchedulerOwnershipUnavailable(
                 f"Scheduler ownership is unavailable for {self.task_id}"
             )
+        if self._proof_stands():
+            return
         self.lock_session.require_live(self.task_id)
+        self._proven_at = time.monotonic()
+
+    async def prove_live(self) -> None:
+        """``require_live`` for the event loop: the round trip runs on a thread and leaves a proof for what follows."""
+        await asyncio.to_thread(self.require_live)
 
     def fence(self, connection: Any) -> None:
         """Fail the caller's transaction unless this task still owns its lock (WP-8.3)."""
@@ -666,7 +691,7 @@ class SchedulerRuntime:
                 if task_id not in self._runner_tasks:
                     continue
                 try:
-                    await asyncio.to_thread(owner.require_live)
+                    await owner.prove_live()
                 except Exception as exc:
                     self._record_failure(task_id, exc)
                     runtime_transition(
@@ -749,7 +774,8 @@ class SchedulerRuntime:
     async def _invoke(
         self, spec: ScheduledTaskSpec, context: TaskContext, owner: _TaskOwner
     ) -> None:
-        runs = self._workspace_runs(spec, context)
+        # It reads PostgreSQL: on a thread, so a task's tick does not stall the event loop.
+        runs = await asyncio.to_thread(self._workspace_runs, spec, context)
         if spec.executor is TaskExecutor.ASYNC:
             async def invoke_async() -> None:
                 errors: list[Exception] = []
@@ -924,7 +950,7 @@ class SchedulerRuntime:
                 else None
             )
             while not self._stopping:
-                owner.require_live()
+                await owner.prove_live()
                 await controls.enabled.wait()
                 if next_interval is not None:
                     assert spec.interval_seconds is not None
@@ -971,6 +997,8 @@ class SchedulerRuntime:
                 metric.last_lag_seconds = lag
                 controls.active_run.clear()
                 try:
+                    # Leaves a proof for the run's execution scope, which checks on the event loop.
+                    await owner.prove_live()
                     await self._invoke(spec, run_context, owner)
                 except TaskExecutionTimeout as exc:
                     if spec.disable_on_timeout:

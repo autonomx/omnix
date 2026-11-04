@@ -155,6 +155,129 @@ def test_scheduler_owns_task_runs_serially_and_records_metrics():
     assert database.keys == set()
 
 
+class _CountingSession:
+    """A lock session that records where each liveness round trip ran."""
+
+    def __init__(self):
+        self.healthy = True
+        self.threads = []
+
+    def require_live(self, _task_id="scheduler"):
+        self.threads.append(threading.current_thread())
+
+
+def test_no_liveness_round_trip_runs_on_the_event_loop():
+    # A real gateway stalled 5-20 s a minute on these: each is a query behind a lock, one per task tick.
+    from app.runtime import scheduler as module
+
+    database = _FakeDatabase()
+    calls = []
+    trips = []
+    loop_threads = []
+    original = module._SchedulerLockSession.require_live
+
+    def recording(self, task_id="scheduler"):
+        trips.append(threading.current_thread())
+        return original(self, task_id)
+
+    module._SchedulerLockSession.require_live = recording
+
+    async def run(context: TaskContext):
+        calls.append(context.task_id)
+        await asyncio.sleep(0)
+
+    scheduler = SchedulerRuntime(
+        database, "workspace-a", capabilities=_capabilities(), execution_scope=_owner_scope,
+        startup_jitter_seconds=0, thread_workers=1, process_workers=1,
+    )
+    scheduler.register_task(ScheduledTaskSpec(task_id="test.loop", run=run, interval_seconds=0.005, timeout_seconds=1))
+
+    async def scenario():
+        loop_threads.append(threading.current_thread())
+        await scheduler.startup()
+        deadline = time.monotonic() + 5
+        while len(calls) < 3 and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
+        started = len(trips)
+        await scheduler.shutdown()
+        return started
+
+    try:
+        started = asyncio.run(scenario())
+    finally:
+        module._SchedulerLockSession.require_live = original
+    assert len(calls) >= 3
+    assert started > 0
+    # Startup's own acquisition aside, every round trip while tasks ran left the loop's thread.
+    assert [thread for thread in trips[1:started] if thread is loop_threads[0]] == []
+
+
+def _owner_scope(owner):
+    """The real scope's check: ``owner.require_live()`` on whichever thread enters it."""
+    from app.persistence.background_authority import background_execution
+
+    return background_execution(owner)
+
+
+def test_a_recent_proof_answers_on_the_event_loop_and_only_there():
+    from app.runtime.scheduler import _TaskOwner
+
+    session = _CountingSession()
+    owner = _TaskOwner(session, "task", 1)
+    owner.healthy = True
+
+    async def on_the_loop():
+        await owner.prove_live()
+        trips = len(session.threads)
+        owner.require_live()  # answered by the proof
+        assert len(session.threads) == trips
+        return trips
+
+    assert asyncio.run(on_the_loop()) == 1
+    owner.require_live()  # off the loop: always a real check
+    assert len(session.threads) == 2
+
+
+def test_a_proof_does_not_outlive_its_window_or_a_lost_connection():
+    from app.runtime import scheduler as module
+
+    session = _CountingSession()
+    owner = module._TaskOwner(session, "task", 1)
+    owner.healthy = True
+
+    async def expired():
+        await owner.prove_live()
+        owner._proven_at -= module.LIVENESS_PROOF_SECONDS + 1
+        owner.require_live()
+
+    asyncio.run(expired())
+    assert len(session.threads) == 2
+
+    async def connection_lost():
+        await owner.prove_live()
+        session.healthy = False
+        owner.require_live()
+
+    asyncio.run(connection_lost())
+    assert len(session.threads) == 4  # the session's own check then decides
+
+
+def test_an_unhealthy_owner_fails_even_with_a_recent_proof():
+    from app.runtime.scheduler import SchedulerOwnershipUnavailable, _TaskOwner
+
+    session = _CountingSession()
+    owner = _TaskOwner(session, "task", 1)
+    owner.healthy = True
+
+    async def scenario():
+        await owner.prove_live()
+        owner.healthy = False
+        with pytest.raises(SchedulerOwnershipUnavailable):
+            owner.require_live()
+
+    asyncio.run(scenario())
+
+
 def test_scheduler_lock_key_encodes_workspace_and_task_boundaries():
     database = _FakeDatabase()
 
