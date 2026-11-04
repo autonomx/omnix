@@ -31,10 +31,12 @@ const PREVIEW_PROBLEMS: Record<string, string> = {
   warming: 'The portrait model is still loading. Try again in a minute.',
 };
 
-export function PortraitAvatarSetup({ characterId, displayName, pack }: {
+export function PortraitAvatarSetup({ characterId, displayName, pack, removable = false }: {
   characterId: string;
   displayName: string;
   pack: CharacterAvatarPack | null | undefined;
+  /** Offer to turn the saved portrait off: for an avatar with nothing else to fall back on (the System Assistant). */
+  removable?: boolean;
 }) {
   const queryClient = useQueryClient();
   const current = pack?.renderer === 'portrait' ? pack : null;
@@ -98,14 +100,26 @@ export function PortraitAvatarSetup({ characterId, displayName, pack }: {
     },
     onSuccess: (saved) => {
       applyCharacterAvatarPackToTrackedRuntimes(characterId, saved);
-      setStatus('The live portrait is saved. Live calls with this character now show it.');
+      setStatus(`The live portrait is saved. Live calls with ${displayName} now show it.`);
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', characterId] });
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] });
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'The portrait could not be saved.'),
   });
 
-  const busy = preview.isPending || save.isPending;
+  const remove = useMutation({
+    mutationFn: () => characterAvatarClient.deletePack(characterId),
+    onSuccess: () => {
+      applyCharacterAvatarPackToTrackedRuntimes(characterId, null);
+      setStatus('The live portrait is off. Live calls show the voice orb until another avatar is selected.');
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', characterId] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', characterId] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] });
+    },
+    onError: (error) => setStatus(error instanceof Error ? error.message : 'The portrait could not be turned off.'),
+  });
+
+  const busy = preview.isPending || save.isPending || remove.isPending;
   const ready = Boolean(file || assetId);
 
   return <div className="character-portrait-setup">
@@ -127,7 +141,7 @@ export function PortraitAvatarSetup({ characterId, displayName, pack }: {
     {file ? <small>{file.name} · {Math.max(1, Math.round(file.size / 1024))} KB</small> : null}
     <label>Emotion
       <select aria-label="Portrait emotion" value={emotion} onChange={(event) => setEmotion(event.currentTarget.value as PortraitEmotion)}>
-        <option value="character">The character&apos;s speaking style</option>
+        <option value="character">{displayName}&apos;s speaking style</option>
         {EMOTIONS.map((label) => <option key={label} value={label}>{label[0].toUpperCase() + label.slice(1)}</option>)}
       </select>
     </label>
@@ -145,6 +159,9 @@ export function PortraitAvatarSetup({ characterId, displayName, pack }: {
       <button type="button" disabled={!ready || busy} onClick={() => save.mutate()}>
         {save.isPending ? 'Saving…' : current ? 'Save the portrait' : 'Use this portrait'}
       </button>
+      {removable && current ? <button type="button" disabled={busy} onClick={() => remove.mutate()}>
+        {remove.isPending ? 'Turning off…' : 'Turn off the portrait'}
+      </button> : null}
     </div>
     {status ? <p className="character-avatar-status" role="status">{status}</p> : null}
   </div>;

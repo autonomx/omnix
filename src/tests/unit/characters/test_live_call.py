@@ -397,3 +397,22 @@ def test_system_live_call_runtime_carries_the_assistants_own_avatar(tmp_path: Pa
     assert runtime.interaction_mode == "system"
     assert runtime.avatar_pack == pack
     assert runtime.preload.avatar_pack_loaded is True
+
+
+def test_system_live_call_runtime_carries_the_assistants_live_portrait(tmp_path: Path, monkeypatch) -> None:
+    """The gateway opens a call's portrait from this pack, so a system chat's call shows it as a character's does."""
+    from app.platform.characters.avatar_models import CharacterAvatarPack
+
+    _configure(tmp_path, monkeypatch)
+    session = default_chat_store().create_session(CreateChatSessionRequest(title="System call"))
+    pack = CharacterAvatarPack(character_id="system-assistant", renderer="portrait", base_asset_id="image:face",
+                               created_at="2026-11-04T00:00:00+00:00", updated_at="2026-11-04T00:00:00+00:00")
+
+    class Avatars:
+        def resolve(self, character_id: str | None) -> CharacterAvatarPack | None:
+            return pack if character_id == "system-assistant" else None
+
+    runtime = resolve_live_call_runtime(session, avatar_service_factory=lambda: Avatars())
+
+    assert runtime.interaction_mode == "system"
+    assert runtime.avatar_pack is not None and runtime.avatar_pack.renderer == "portrait"

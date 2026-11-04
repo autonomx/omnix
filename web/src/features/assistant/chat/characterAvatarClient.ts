@@ -79,6 +79,9 @@ export const characterAvatarClient = {
   savePack(characterId: string, input: UpsertCharacterAvatarPackRequest): Promise<CharacterAvatarPack> {
     return avatar(api.PUT('/api/characters/{character_id}/avatar-pack', { params: { path: characterPath(characterId) }, body: input }));
   },
+  deletePack(characterId: string): Promise<components['schemas']['DeleteCharacterAvatarPackResponse']> {
+    return avatar(api.DELETE('/api/characters/{character_id}/avatar-pack', { params: { path: characterPath(characterId) } }));
+  },
   /** A portrait speaking a sample line (live portrait setup): its audio and frames, or why it cannot. */
   previewPortrait(input: PortraitPreviewRequest): Promise<PortraitPreviewResponse> {
     return avatar(api.POST('/api/tts/live-call/portrait-preview', { body: input }));

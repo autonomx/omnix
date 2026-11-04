@@ -29,13 +29,13 @@ const AVATAR_EDITOR_TABS: [AvatarEditorMode, string][] = [
 type CharacterAvatarPanelProps = {
   character: Pick<CharacterProfile, 'id' | 'display_name'>;
   /** The System Assistant's version (Chat, Characters): no stored character, so no generated pack. */
-  live2dOnly?: boolean;
+  systemAssistant?: boolean;
 };
 
-/** A character's live avatar: a generated image pack or a Live2D model. */
-export function CharacterAvatarPanel({ character, live2dOnly = false }: CharacterAvatarPanelProps) {
+/** A character's live avatar: a generated image pack, a Live2D model or a live portrait. */
+export function CharacterAvatarPanel({ character, systemAssistant = false }: CharacterAvatarPanelProps) {
   const queryClient = useQueryClient();
-  const [editorMode, setEditorMode] = useState<AvatarEditorMode>(live2dOnly ? 'live2d' : 'generated');
+  const [editorMode, setEditorMode] = useState<AvatarEditorMode>(systemAssistant ? 'live2d' : 'generated');
   const [appearancePrompt, setAppearancePrompt] = useState('');
   const [style, setStyle] = useState('illustrated character portrait');
   const [outfitPrompt, setOutfitPrompt] = useState('');
@@ -113,9 +113,9 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
     mutationFn: () => characterAvatarClient.disableLive2d(character.id),
     onSuccess: (result) => {
       applyCharacterAvatarPackToTrackedRuntimes(character.id, result.avatar_pack ?? null);
-      if (!live2dOnly) setEditorMode('generated');
+      if (!systemAssistant) setEditorMode('generated');
       setStatus(result.avatar_pack
-        ? 'The previous generated avatar has been restored.'
+        ? result.avatar_pack.renderer === 'portrait' ? 'The previous live portrait has been restored.' : 'The previous generated avatar has been restored.'
         : 'Live2D has been disabled. Live calls will use the voice orb until another avatar is selected.');
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id] });
@@ -125,7 +125,7 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
   });
 
   useEffect(() => {
-    setEditorMode(live2dOnly ? 'live2d' : 'generated');
+    setEditorMode(systemAssistant ? 'live2d' : 'generated');
     setSourceFile(null);
     setSourceConsentConfirmed(false);
     setGenerationId(null);
@@ -133,12 +133,12 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
     setVisemeRequestedForGenerationId(null);
     setSelectedLive2DModelId(null);
     setStatus(null);
-  }, [character.id, live2dOnly]);
+  }, [character.id, systemAssistant]);
 
   useEffect(() => {
     if (packQuery.data?.renderer === 'live2d') setEditorMode('live2d');
-    if (packQuery.data?.renderer === 'portrait' && !live2dOnly) setEditorMode('portrait');
-  }, [packQuery.data?.renderer, live2dOnly]);
+    if (packQuery.data?.renderer === 'portrait') setEditorMode('portrait');
+  }, [packQuery.data?.renderer]);
 
   useEffect(() => {
     const models = live2dCatalogQuery.data?.models;
@@ -252,11 +252,11 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
 
   return <section className="character-dashboard-section character-avatar-panel" aria-labelledby={`character-avatar-${character.id}`}>
     <header className="character-section-heading">
-      <div>{live2dOnly ? null : <span>03</span>}<h4 id={`character-avatar-${character.id}`}>{live2dOnly ? `${character.display_name} avatar` : 'Live avatar'}</h4></div>
+      <div>{systemAssistant ? null : <span>03</span>}<h4 id={`character-avatar-${character.id}`}>{systemAssistant ? `${character.display_name} avatar` : 'Live avatar'}</h4></div>
     </header>
 
-    {live2dOnly ? null : <div className="character-avatar-type-tabs" role="tablist" aria-label="Avatar type">
-      {AVATAR_EDITOR_TABS.map(([mode, label]) => <button
+    <div className="character-avatar-type-tabs" role="tablist" aria-label="Avatar type">
+      {AVATAR_EDITOR_TABS.filter(([mode]) => !systemAssistant || mode !== 'generated').map(([mode, label]) => <button
         key={mode}
         type="button"
         role="tab"
@@ -264,15 +264,15 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
         className={editorMode === mode ? 'is-active' : undefined}
         onClick={() => setEditorMode(mode)}
       >{label}</button>)}
-    </div>}
+    </div>
 
     <div className="character-avatar-layout">
       <div className="character-avatar-preview">
-        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : isLive2D ? <Live2DPreview model={activeLive2DModel} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar</strong><small>{live2dOnly ? 'Select a Live2D avatar; until then Live Voice shows the voice orb.' : 'Generate one, upload an image, or select Live2D.'}</small></div>}
+        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : isLive2D ? <Live2DPreview model={activeLive2DModel} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar</strong><small>{systemAssistant ? 'Choose a Live2D avatar or a live portrait; until then Live Voice shows the voice orb.' : 'Generate one, upload an image, or select Live2D.'}</small></div>}
         {pack ? <div className="character-avatar-meta"><span><small>Pack version</small><strong>v{pack.version}</strong></span><span><small>Render mode</small><strong>{pack.render_mode.replace('_', ' ')}</strong></span><span><small>Renderer</small><strong>{pack.renderer}</strong></span></div> : null}
       </div>
 
-      {editorMode === 'portrait' ? <PortraitAvatarSetup characterId={character.id} displayName={character.display_name} pack={pack} /> : editorMode === 'generated' ? <div className="character-avatar-form">
+      {editorMode === 'portrait' ? <PortraitAvatarSetup characterId={character.id} displayName={character.display_name} pack={pack} removable={systemAssistant} /> : editorMode === 'generated' ? <div className="character-avatar-form">
         {isLive2D ? <div className="character-avatar-mode-notice"><strong>Live2D is currently active.</strong><span>Generating a new image pack will replace it. You can also restore the previously generated pack from the Live2D tab.</span></div> : null}
         <div className="character-avatar-upload-card">
           <div className="character-avatar-upload-preview">
@@ -333,7 +333,7 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
         {visemeGeneration ? <div className="character-avatar-progress"><strong>{visemeGeneration.status.replaceAll('_', ' ')}</strong><span>{generatedVisemes} precise mouth shapes ready</span>{visemeGeneration.error ? <small>{visemeGeneration.error}</small> : null}</div> : null}
       </div> : <div className="character-live2d-panel">
         <div className="character-live2d-intro">
-          <div><strong>Rigged Live2D avatars</strong><p>Select a model for {live2dOnly ? `${character.display_name}'s` : 'character'} live calls. Omnix downloads the pinned runtime and model only after you accept their separate licenses, then serves everything locally.</p></div>
+          <div><strong>Rigged Live2D avatars</strong><p>Select a model for {systemAssistant ? `${character.display_name}'s` : 'character'} live calls. Omnix downloads the pinned runtime and model only after you accept their separate licenses, then serves everything locally.</p></div>
           <span>{live2dCatalogQuery.data?.runtime_installed ? 'Runtime installed' : 'Download on selection'}</span>
         </div>
 
@@ -372,7 +372,7 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
               {activateLive2DMutation.isPending ? 'Downloading and activating…' : selectedLive2DModel.selected ? 'Live2D avatar active' : selectedLive2DModel.installed ? 'Use this Live2D avatar' : 'Download and use Live2D avatar'}
             </button>
             {isLive2D ? <button type="button" disabled={live2dBusy} onClick={() => disableLive2DMutation.mutate()}>
-              {disableLive2DMutation.isPending ? 'Restoring…' : live2dOnly ? 'Turn off the avatar' : 'Restore previous generated avatar'}
+              {disableLive2DMutation.isPending ? 'Restoring…' : systemAssistant ? 'Turn off Live2D' : 'Restore previous generated avatar'}
             </button> : null}
           </div>
           {activateLive2DMutation.isPending ? <div className="character-live2d-download-progress" role="status" aria-live="polite">
@@ -391,7 +391,7 @@ export function CharacterAvatarPanel({ character, live2dOnly = false }: Characte
       </div>}
     </div>
 
-    {(live2dOnly && !isLive2D) || pack?.renderer === 'portrait' || editorMode === 'portrait' ? null : isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Physics, eye movement, and expressions remain model-driven while the live view stays idle.</p></div> : <div className="character-viseme-panel">
+    {(systemAssistant && !isLive2D) || pack?.renderer === 'portrait' || editorMode === 'portrait' ? null : isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Physics, eye movement, and expressions remain model-driven while the live view stays idle.</p></div> : <div className="character-viseme-panel">
       <header><strong>Viseme support (9 mouth shapes)</strong><span>{pack?.render_mode === 'viseme' ? 'Precise lip sync ready' : 'Audio-envelope fallback active'}</span></header>
       <div className="character-viseme-strip">
         {VISEME_KEYS.map((viseme) => {
