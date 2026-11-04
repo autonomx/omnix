@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { assistantSidebarItems, type AssistantView, type UtilityPanel } from './chatbotWorkspaceModel';
+import { NewChatButton } from './NewChatButton';
 
 type ChatNavigationSidebarProps = {
   minimized: boolean;
@@ -10,8 +11,9 @@ type ChatNavigationSidebarProps = {
   children: ReactNode;
 };
 
-/** Chat's left sidebar: the workspace views, then the sessions. */
+/** Chat's left sidebar: New chat stays in place; the workspace views and the sessions scroll away under it. */
 export function ChatNavigationSidebar({ minimized, onToggleMinimized, activeView, onShowView, children }: ChatNavigationSidebarProps) {
+  const [scrolled, setScrolled] = useState(false);
   return (
     <aside className={`assistant-chat-sidebar${minimized ? ' assistant-chat-sidebar-minimized' : ''}`} aria-label="Omnix assistant navigation">
       <div role="group" className="assistant-chat-sidebar-controls" aria-label="Assistant navigation controls">
@@ -26,15 +28,20 @@ export function ChatNavigationSidebar({ minimized, onToggleMinimized, activeView
           <span aria-hidden="true" data-direction={minimized ? 'right' : 'left'}>{minimized ? '›' : '‹'}</span>
         </button>
       </div>
-      <nav className="assistant-sidebar-nav" aria-label="Assistant workspace">
-        {assistantSidebarItems.map((item) => (
-          <button aria-label={`Open ${item.label} view`} className={activeView === item.id ? 'active' : undefined} key={item.id} onClick={() => onShowView(item.id)} title={item.label} type="button">
-            <span aria-hidden="true">{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
-      {children}
+      <div className={`assistant-sidebar-nav assistant-chat-sidebar-new${scrolled ? ' scrolled' : ''}`}>
+        <NewChatButton />
+      </div>
+      <div className="assistant-chat-sidebar-scroll" onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}>
+        <nav className="assistant-sidebar-nav" aria-label="Assistant workspace">
+          {assistantSidebarItems.map((item) => (
+            <button aria-label={`Open ${item.label} view`} className={activeView === item.id ? 'active' : undefined} key={item.id} onClick={() => onShowView(item.id)} title={item.label} type="button">
+              <span aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        {children}
+      </div>
     </aside>
   );
 }

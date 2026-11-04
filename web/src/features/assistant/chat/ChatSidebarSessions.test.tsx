@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSidebarSessions } from './ChatSidebarSessions';
+import { NewChatButton } from './NewChatButton';
 import { readChatSidebarState, sortChatSidebarSessions, visibleChatSidebarSessions, writeChatSidebarState } from './chatSidebarState';
 import { installSessionTools } from './sessionTools';
 
@@ -50,11 +51,10 @@ describe('chat sidebar sessions', () => {
     expect(sortChatSidebarSessions(unsorted).map((session) => session.id)).toEqual(['chat:new', 'chat:middle', 'chat:old']);
   });
 
-  it('renders Pinned before Sessions with one New control and row actions', () => {
+  it('renders Pinned before Sessions with row actions', () => {
     renderSidebar('chat:one');
 
     expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Pinned', 'Sessions']);
-    expect(screen.getAllByRole('button', { name: 'New chat' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Second chat' }).closest('.assistant-chatgpt-row')).not.toHaveClass('active');
     expect(screen.getByRole('button', { name: 'First chat' }).closest('.assistant-chatgpt-row')).toHaveClass('active');
     expect(screen.getByRole('button', { name: 'Pin First chat' })).toBeInTheDocument();
@@ -68,6 +68,7 @@ describe('chat sidebar sessions', () => {
 
   it('selects a session and starts a new chat that keeps its interaction settings', async () => {
     renderSidebar();
+    render(<NewChatButton />);
     fireEvent.click(screen.getByRole('button', { name: 'First chat' }));
     expect(onSelect).toHaveBeenCalledWith(sessions[0]);
     window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', { detail: { sessionId: 'chat:one', session: sessions[0] } }));
