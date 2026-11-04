@@ -2,12 +2,13 @@ import type { components } from '../api/generated';
 import { createApi } from '../api/gateway';
 import { liveConversationStore } from './live-conversation-store';
 import { pipelineFetch } from '../../../api/fetchPipeline';
-import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_PERF_EVENT, CHARACTER_AVATAR_RUNTIME_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 let liveCallPrewarmInstalled = false;
 
 const PREWARM_TTL_MS = 5 * 60_000;
 const PREWARM_RETRY_MS = 5_000;
+const CALL_ID_HEADER = 'X-Omnix-Call-Id';
 
 type LiveCallRuntime = components['schemas']['CharacterLiveCallRuntime'];
 
@@ -17,6 +18,9 @@ const PREWARM_LANGUAGE = 'English';
 const warmedAt = new Map<string, number>();
 const attemptedAt = new Map<string, number>();
 const inflight = new Map<string, Promise<void>>();
+// Who a chat is talking to: what a turn finds waiting was started for that identity's prompt, so a chat switched to
+// another identity needs warming again, however recently it was warmed.
+let chatIdentity = '';
 
 export function initializeLiveCallPrewarmController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
@@ -28,38 +32,51 @@ export function initializeLiveCallPrewarmController(): () => void {
     if (!sessionId) return;
     void prewarmLiveCall(sessionId);
   };
+  const followIdentity = (event: Event) => {
+    const runtime = (event as CustomEvent<Partial<LiveCallRuntime> | null>).detail;
+    if (runtime) chatIdentity = identityOf(runtime);
+  };
   window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
   window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
+  window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, followIdentity);
 
   return () => {
     window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
+    window.removeEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, followIdentity);
+    chatIdentity = '';
     liveCallPrewarmInstalled = false;
   };
+}
+
+function identityOf(runtime: Partial<LiveCallRuntime>): string {
+  return [runtime.interaction_mode, runtime.character_id, runtime.character_profile_version].join(':');
 }
 
 export async function prewarmLiveCall(
   sessionId: string,
   fetchImpl: typeof fetch = pipelineFetch,
 ): Promise<void> {
-  const existing = inflight.get(sessionId);
+  const key = `${sessionId}|${chatIdentity}`;
+  const existing = inflight.get(key);
   if (existing) return existing;
 
   const currentTime = Date.now();
-  const lastWarm = warmedAt.get(sessionId) ?? 0;
+  const lastWarm = warmedAt.get(key) ?? 0;
   if (currentTime - lastWarm <= PREWARM_TTL_MS) return;
-  const lastAttempt = attemptedAt.get(sessionId) ?? 0;
+  const lastAttempt = attemptedAt.get(key) ?? 0;
   if (currentTime - lastAttempt <= PREWARM_RETRY_MS) return;
-  attemptedAt.set(sessionId, currentTime);
+  attemptedAt.set(key, currentTime);
 
-  const task = runPrewarm(sessionId, fetchImpl)
-    .finally(() => inflight.delete(sessionId));
-  inflight.set(sessionId, task);
+  const task = runPrewarm(sessionId, key, fetchImpl)
+    .finally(() => inflight.delete(key));
+  inflight.set(key, task);
   return task;
 }
 
 async function runPrewarm(
   sessionId: string,
+  key: string,
   fetchImpl: typeof fetch,
 ): Promise<void> {
   const startedAt = now();
@@ -68,11 +85,17 @@ async function runPrewarm(
     const client = createApi({ fetchImpl });
     const speaker = resolveSpeaker(await fetchRuntime(client, sessionId));
     const language = PREWARM_LANGUAGE;
-    const { data, error, response } = await client.POST('/api/live-call/sessions/{session_id}/prewarm', {
+    const warm = (headers?: Record<string, string>) => client.POST('/api/live-call/sessions/{session_id}/prewarm', {
       params: { path: { session_id: sessionId } },
       body: { speaker, language },
       keepalive: true,
+      headers,
     });
+    // What a turn finds waiting is held per gateway process, and a call's turns run in two: the worker for speculative
+    // ones, the call's replica for the rest. The call's id reaches the replica (the same process, with no replicas).
+    const onReplica = warm({ [CALL_ID_HEADER]: encodeURIComponent(sessionId) }).catch(() => null);
+    const { data, error, response } = await warm();
+    void onReplica;
     // The prewarm route answers with an untyped status object, on failure too.
     const payload = asRecord(data ?? error);
     if (!response.ok) {
@@ -99,7 +122,7 @@ async function runPrewarm(
       ttsStatus,
     };
     if (fullyWarmed) {
-      warmedAt.set(sessionId, Date.now());
+      warmedAt.set(key, Date.now());
       dispatchPerformance('live_call_prewarm_completed', details);
       return;
     }

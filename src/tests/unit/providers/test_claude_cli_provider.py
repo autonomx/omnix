@@ -221,7 +221,7 @@ def test_a_repeated_kind_of_call_takes_a_process_started_ahead_of_it(pooled) -> 
 
 def test_the_pool_keeps_few_processes_and_retires_idle_ones(pooled) -> None:
     provider, pool = pooled
-    pool.IDLE_SECONDS = 0.05
+    pool.IDLE_SECONDS = 2.0  # long enough for the calls below on a busy machine
     for system in ("A", "B", "C"):
         for _ in range(2):
             provider.chat_completion([ChatMessage("system", system), ChatMessage("user", "hi")])
@@ -229,7 +229,9 @@ def test_the_pool_keeps_few_processes_and_retires_idle_ones(pooled) -> None:
     assert len(_WaitingPopen.killed) == 1
     import time
 
-    time.sleep(0.3)
+    deadline = time.monotonic() + 10
+    while (pool._warm or len(_WaitingPopen.killed) < 3) and time.monotonic() < deadline:
+        time.sleep(0.05)
     assert pool._warm == {}  # idle ones are retired
     assert len(_WaitingPopen.killed) == 3
     assert all(not Path(record["cwd"]).exists() for record in _FakePopen.calls)
@@ -270,6 +272,28 @@ def test_every_turn_of_a_call_takes_a_waiting_process_though_its_context_changes
     assert len(_FakePopen.calls) == 3
     assert next_waiting["prompt"].endswith("Likes coffee now.\n\nUSER: again")
     pool.close()
+
+
+def test_a_live_turn_logs_whether_a_process_was_waiting_and_no_text(pooled, monkeypatch) -> None:
+    provider, pool = pooled
+    logged: list[tuple[str, dict]] = []
+    monkeypatch.setattr(module, "stream_log", lambda _stream, _source, event, **fields: logged.append((event, fields)))
+    messages = [ChatMessage("system", "You are Aria.\n\nSpeak briefly."), ChatMessage("user", "hello there")]
+
+    provider.chat_completion(messages, live_turn=True)  # nothing was warmed: this one starts its own
+    provider.chat_completion(messages, live_turn=True)
+    provider.warm_live_turn([ChatMessage("system", "You are Aria.\n\nSpeak differently."), ChatMessage("user", "x")])
+    provider.chat_completion(messages)  # not a live turn: not logged
+    pool.close()
+
+    turns = [fields for event, fields in logged if event == "claude_cli_live_turn"]
+    assert [fields["waiting_process"] for fields in turns] == [False, True]
+    warmed = next(fields for event, fields in logged if event == "claude_cli_process_warmed")
+    assert warmed["kind"] != turns[0]["kind"]  # the warm-up's prompt differs: it is a different kind of call
+    # A diff of the parts' hashes says which part of the prompt moved; the log holds no text.
+    assert warmed["system_parts"][0] == turns[0]["system_parts"][0]
+    assert warmed["system_parts"][1] != turns[0]["system_parts"][1]
+    assert "Aria" not in json.dumps(logged) and "hello" not in json.dumps(logged)
 
 
 def test_a_spoken_turn_does_not_take_a_process_started_for_another_kind_of_call(pooled) -> None:

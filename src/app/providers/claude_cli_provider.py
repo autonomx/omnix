@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
 from app.config.env import environment_copy as _process_environment
+from app.observability.tts_stream_diagnostics import stream_log
 
 from .base import (
     BaseProvider,
@@ -87,6 +88,13 @@ def _call_kind(
     """Calls of one kind start the same process: the same CLI, model, effort, system prompt, schema and thinking."""
     material = json.dumps([executable, model, effort, system, schema, live_turn], sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _live_process_log(event: str, kind: str, model: str, system: str, **fields: Any) -> None:
+    """A live turn's process, without its text: a miss shows as two kinds, and the parts' hashes say which part moved."""
+    parts = [hashlib.sha256(part.encode("utf-8")).hexdigest()[:6] for part in system.split("\n\n")][:40]
+    stream_log("gateway-claude-cli", "provider", event, kind=kind[:12], model=model, system_chars=len(system),
+               system_parts=parts, **fields)
 
 
 def _discard(process: subprocess.Popen[str], workdir: str) -> None:
@@ -421,6 +429,7 @@ class ClaudeCliProvider(BaseProvider):
         system, _ = split_messages(list(messages))
         kind = _call_kind(executable, selected_model, self.effort, system, None, True)
         _WARM_POOL.refill(kind, lambda: self._spawn(executable, selected_model, system, None, live_turn=True), live=True)
+        _live_process_log("claude_cli_process_warmed", kind, selected_model, system)
 
     def _command(self, executable: str, model: str, system_file: Path, schema: dict[str, Any] | None = None) -> list[str]:
         command = [
@@ -480,6 +489,8 @@ class ClaudeCliProvider(BaseProvider):
         kind = _call_kind(executable, model, self.effort, system, schema, live_turn)
         spawn = lambda: self._spawn(executable, model, system, schema, live_turn=live_turn)  # noqa: E731
         warm = _WARM_POOL.take(kind)
+        if live_turn:
+            _live_process_log("claude_cli_live_turn", kind, model, system, waiting_process=warm is not None)
         process, workdir = warm if warm is not None else spawn()
         try:
             with self._processes_lock:
