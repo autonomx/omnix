@@ -62,6 +62,12 @@ def _speaker_blend(value: Any) -> list[tuple[str, float]]:
     return parts
 
 
+# The chunk sizes live speech asks for: a reply's first phrase, then the rest.
+_LIVE_CHUNK_SIZES = (2, 4)
+_WARM_TEXT = "Ready to answer."
+_WARM_MAX_NEW_TOKENS = 48
+
+
 def _clone_conditioning(kwargs: dict[str, Any], model_config: dict[str, Any], saved_text: str) -> tuple[str, bool]:
     ref_text = str(kwargs.get("ref_text") or saved_text).strip()
     xvec_only = kwargs.get("xvec_only")
@@ -881,6 +887,38 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                         "error": str(fallback_exc or e)
                     }
     
+    def voice_ready(self, speaker: Optional[str]) -> bool:
+        """Whether a phrase in this voice has nothing to prepare first: the engine's graphs and the voice's prompt."""
+        model = _model_loader.model
+        if model is None or not getattr(model, "_warmed_up", False):
+            return False
+        ref_audio_path, saved_ref_text = _clone_reference(speaker)
+        if not ref_audio_path:
+            return False
+        ref_text, xvec_only = _clone_conditioning({}, self._model_config, saved_ref_text)
+        # The vendored model's key, for a live phrase (no appended silence, no blend).
+        return (str(ref_audio_path), ref_text, xvec_only, False, ()) in getattr(model, "_voice_prompt_cache", {})
+
+    def warm_voice(
+        self, speaker: Optional[str], language: Optional[str] = None, *, device_permit_held: bool = False,
+    ) -> bool:
+        """Prepare what a voice's first phrase would otherwise wait for; False when it was all ready already.
+
+        The first generation after a load builds the GPU graphs (about 15 s, measured 2026-11-04). It renders at each
+        chunk size live speech asks for, to its end, so its decode shapes are prepared too.
+        """
+        if self.voice_ready(speaker):
+            return False
+        for chunk_size in _LIVE_CHUNK_SIZES:
+            for _chunk in self.generate_audio_stream(
+                _WARM_TEXT, speaker=speaker, language=language or "English", chunk_size=chunk_size,
+                temperature=0.6, top_k=20, top_p=0.85, repetition_penalty=1.05, append_silence=False,
+                max_new_tokens=_WARM_MAX_NEW_TOKENS, non_streaming_mode=False, parity_mode=False,
+                _device_permit_held=device_permit_held,
+            ):
+                pass
+        return True
+
     def generate_audio_stream(
         self, text: str, speaker: Optional[str] = None,
         language: Optional[str] = None, **kwargs,

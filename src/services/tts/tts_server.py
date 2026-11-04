@@ -44,9 +44,14 @@ from services.tts.tts_requests import (
     TtsGenerationParametersRequest,
     TtsProviderSelectRequest,
     TtsVoiceCloneRequest,
+    TtsWarmVoiceRequest,
 )
 
 logger = logging.getLogger(__name__)
+
+# The startup warm-up waits its turn for the GPU; a call's only takes a free moment (a busy engine is already speaking).
+ENGINE_WARM_PERMIT_SECONDS = 30.0
+VOICE_WARM_PERMIT_SECONDS = 0.2
 
 app = FastAPI(title="Omnix TTS Service", version="1.0")
 app.add_middleware(ModelServiceMiddleware)
@@ -434,6 +439,39 @@ async def _enter_device_permit(permit: Any) -> None:
         raise
 
 
+def _warm_loaded_engine(provider: Any) -> None:
+    """Build what the engine's first generation would otherwise build during someone's first call.
+
+    The service warms itself because it owns the model: the launcher starts the gateway first, so the gateway's own
+    warm-up finds no service to ask and gives up. Below live speech in the permit queue.
+    """
+    from app.platform.voice.tts_runtime_actions import warmup_speaker
+    from app.platform.voice.tts_runtime_state import startup_warmup_enabled
+
+    if not hasattr(provider, "warm_voice") or not startup_warmup_enabled():
+        return
+    started = time.perf_counter()
+    begun = False
+    try:
+        speaker = warmup_speaker(provider)
+        if not speaker:
+            voice_debug_log("tts", "tts_engine_warm_skipped", reason="no_voice")
+            return
+        _begin_generation()
+        begun = True
+        with device_permit_slot("tts", priority="interactive", timeout_seconds=ENGINE_WARM_PERMIT_SECONDS):
+            provider.warm_voice(speaker, device_permit_held=True)
+        elapsed_ms = round((time.perf_counter() - started) * 1000.0, 1)
+        logger.info("TTS engine warmed in %.1f s", elapsed_ms / 1000.0)
+        voice_debug_log("tts", "tts_engine_warmed", speaker=speaker, elapsed_ms=elapsed_ms)
+    except Exception as exc:  # noqa: BLE001 - a first call then warms it, as it always could
+        logger.warning("The TTS engine could not be warmed at startup", exc_info=True)
+        voice_debug_log("tts", "tts_engine_warm_failed", error=type(exc).__name__)
+    finally:
+        if begun:
+            _end_generation()
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _TTS_MODEL_OWNER_GUARD
@@ -477,6 +515,8 @@ async def on_startup() -> None:
     )
     if status.get("ok"):
         print(f"[TTS SERVER] READY provider={_TTS_PROVIDER_NAME}")
+        threading.Thread(target=_warm_loaded_engine, args=(_TTS_PROVIDER,), name="omnix-tts-engine-warm",
+                         daemon=True).start()
     else:
         print(f"[TTS SERVER] NOT READY provider={_TTS_PROVIDER_NAME} error={status.get('error')}")
 
@@ -938,6 +978,39 @@ def _generate_stream_audio(request: TtsGenerateStreamRequest):
             status_code=500,
             headers={"X-Omnix-Voice-Trace": trace_id},
         )
+
+
+@app.post("/api/tts/live-call/warm-voice")
+async def warm_live_call_voice(request: TtsWarmVoiceRequest) -> dict[str, str]:
+    """A call's warm-up: nothing when the voice is ready, and it gives way when the engine is busy.
+
+    It never holds up a reply: live speech is ahead of it in the permit queue, and a busy engine means it is already
+    speaking. Its answer is advice, so nothing here is an error for the caller.
+    """
+    provider = _TTS_PROVIDER
+    if provider is None or not hasattr(provider, "warm_voice"):
+        return {"status": "unsupported"}
+    if request.provider and request.provider != _TTS_PROVIDER_NAME:
+        return {"status": "other_engine"}
+    if await asyncio.to_thread(provider.voice_ready, request.speaker):
+        return {"status": "ready"}
+    permit = device_permit_slot("tts", priority="interactive", timeout_seconds=VOICE_WARM_PERMIT_SECONDS)
+    try:
+        await _enter_device_permit(permit)
+    except DevicePermitError:  # includes the permit being unavailable
+        return {"status": "busy"}
+    try:
+        try:
+            _begin_generation()
+        except EngineLoading:
+            return {"status": "busy"}
+        try:
+            await asyncio.to_thread(provider.warm_voice, request.speaker, request.language, device_permit_held=True)
+        finally:
+            _end_generation()
+    finally:
+        await asyncio.to_thread(permit.__exit__, None, None, None)
+    return {"status": "warmed"}
 
 
 @app.post("/api/tts/live-call/stream")

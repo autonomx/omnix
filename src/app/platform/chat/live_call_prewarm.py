@@ -474,6 +474,23 @@ def _warm_tts(speaker: str | None, language: str) -> _WarmResult:
             detail="tts_provider_unavailable",
         )
 
+    # An engine that can say what a voice needs does only that, ahead of no live phrase: a reply must never wait on this.
+    warm_voice = getattr(provider, "warm_voice", None)
+    if callable(warm_voice):
+        try:
+            outcome = warm_voice(speaker, language)
+        except Exception as exc:  # noqa: BLE001 - warm-up must never block live calls.
+            return _WarmResult(
+                status="failed",
+                elapsed_ms=(time.perf_counter() - started) * 1000.0,
+                detail=f"{type(exc).__name__}:{exc}",
+            )
+        return _WarmResult(
+            status="warmed",
+            elapsed_ms=(time.perf_counter() - started) * 1000.0,
+            detail=str(outcome),
+        )
+
     # Build the warm-up through the same chat-stream policy used by live voice.
     # Faster Qwen's first-token path is sensitive to decoder/chunk shapes; the
     # old six-character, one-step warm-up did not prepare the 4-step / ~42-token

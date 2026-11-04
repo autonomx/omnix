@@ -339,3 +339,38 @@ def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
         "fake-provider",
         "fake-model",
     )
+
+
+def test_an_engine_that_can_warm_a_voice_generates_nothing_for_the_call(monkeypatch) -> None:
+    prewarm.clear_live_call_prewarm_state()
+    warmed: list[tuple] = []
+
+    class _VoiceWarmingProvider:
+        def warm_voice(self, speaker, language):
+            warmed.append((speaker, language))
+            return "ready"
+
+        def generate_audio_stream(self, **_kwargs):
+            raise AssertionError("a call's warm-up must not hold the engine for a generation")
+
+    monkeypatch.setattr(prewarm, "get_tts_provider", lambda: _VoiceWarmingProvider())
+
+    result = prewarm._warm_tts("Jinx", "English")
+
+    assert result.status == "warmed" and result.detail == "ready"
+    assert warmed == [("Jinx", "English")]
+
+
+def test_a_failed_voice_warm_up_is_reported_and_never_raised(monkeypatch) -> None:
+    class _Unreachable:
+        def warm_voice(self, _speaker, _language):
+            raise ConnectionError("no service")
+
+        def generate_audio_stream(self, **_kwargs):
+            raise AssertionError("not asked: warming a voice failed, and that is the answer")
+
+    monkeypatch.setattr(prewarm, "get_tts_provider", lambda: _Unreachable())
+
+    result = prewarm._warm_tts("Jinx", "English")
+
+    assert result.status == "failed" and "ConnectionError" in (result.detail or "")

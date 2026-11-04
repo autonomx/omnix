@@ -59,6 +59,13 @@ class TtsGenerateStreamRequest(BaseModel):
     parity_mode: bool | None = None
 
 
+class TtsWarmVoiceRequest(BaseModel):
+    speaker: str = "default"
+    language: str = "en"
+    # The engine the caller expects; a different one is left alone (warming never switches engines).
+    provider: str = ""
+
+
 class TtsVoiceCloneRequest(BaseModel):
     voice_id: str
     gender: str = "neutral"

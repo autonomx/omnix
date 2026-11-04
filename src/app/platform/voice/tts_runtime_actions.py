@@ -37,14 +37,15 @@ def _has_transcript(speaker: str) -> bool:
     return bool(path and (transcript or reference_transcript(path)))
 
 
-def _select_speaker(provider: Any) -> str | None:
+def warmup_speaker(provider: Any) -> str | None:
+    """The voice a warm-up renders with: the configured one, or the first the engine can use."""
     configured = configured_speaker()
     if configured:
         return configured
     try:
         speakers = provider.get_speakers()
     except Exception:
-        logger.debug("suppressed error in %s", "_select_speaker", exc_info=True)
+        logger.debug("suppressed error in %s", "warmup_speaker", exc_info=True)
         return None
     candidates = [
         value for value in (
@@ -96,7 +97,7 @@ def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
         if isinstance(result, dict) and not result.get("running"):
             raise RuntimeError(str(result.get("error") or result.get("message") or "tts_provider_start_failed"))
 
-        speaker = _select_speaker(provider)
+        speaker = warmup_speaker(provider)
         with STATE_LOCK:
             STATE.update(speaker=speaker, model_loaded=True)
         if provider_supports(selected_tts_provider_id(), STREAMING, "tts"):

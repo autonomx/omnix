@@ -153,6 +153,18 @@ class QwenHttpGatewayProvider:
             for request in requests
         ]
 
+    def warm_voice(self, speaker=None, language=None):
+        """Have the service prepare a voice for a call: at once when it is ready, and never ahead of live speech."""
+        response = self.http.post(
+            self.base_url + '/api/tts/live-call/warm-voice',
+            json={'speaker': speaker or 'default', 'language': language or 'en', 'provider': self.provider_name},
+            timeout=(5, 120),
+            headers=service_headers(),
+            retry=False,
+        )
+        response.raise_for_status()
+        return response.json().get('status')
+
     def generate_audio_stream(self, text, speaker=None, language=None, **kwargs):
         started = time.perf_counter()
         allowed = {'chunk_size', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'append_silence', 'max_new_tokens',
