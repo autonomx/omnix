@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { RpgStoryScene } from './RpgStoryScene';
 import { previewHeroSummary, previewRecentEvents, previewSessionSummary } from './rpgUiPreview';
@@ -6,37 +6,43 @@ import { renderWithProviders } from '../../test/renderWithProviders';
 
 
 describe('RpgStoryScene', () => {
-  it('renders scene context, dialogue, recent events, and child controls', () => {
+  it('renders the place, the time, the story and its controls, with nothing else around them', () => {
     renderWithProviders(
       <RpgStoryScene
         heroSummary={previewHeroSummary}
         recentEvents={previewRecentEvents}
         selectedSessionSummary={previewSessionSummary}
+        timeLabel="Day 1 • 09:00"
       >
         <button type="button">Submit RPG turn</button>
       </RpgStoryScene>
     );
 
     expect(screen.getByRole('region', { name: /Glimmerdeep Pass/ })).toBeInTheDocument();
-    expect(screen.getByText('Story / scene')).toBeInTheDocument();
-    expect(screen.getByText('Preview campaign')).toBeInTheDocument();
-    expect(screen.getByText('Turn 12')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Glimmerdeep Pass' })).toBeInTheDocument();
+    expect(screen.getByText('Day 1 • 09:00')).toBeInTheDocument();
     expect(screen.getByLabelText('Glimmerdeep Pass scene preview')).toBeInTheDocument();
     expect(screen.getByText('Alyndra (You)')).toBeInTheDocument();
     expect(screen.getByText('Omnix (Narrator)')).toBeInTheDocument();
     expect(screen.getByLabelText('Conversation')).toHaveClass('rpg-dialogue-stack');
-    expect(screen.getByText('You arrived at Glimmerdeep Pass.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeInTheDocument();
-    const childControls = screen.getByRole('button', { name: 'Submit RPG turn' });
-    const recentEventsToggle = screen.getByRole('button', { name: 'Recent events' });
-    expect(childControls.compareDocumentPosition(recentEventsToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Recent events' })).not.toBeInTheDocument(); // the Journal's history
+    expect(screen.queryByText('Turn 12')).not.toBeInTheDocument();
+  });
 
-    expect(recentEventsToggle).toHaveAttribute('aria-expanded', 'false');
-    expect(recentEventsToggle.closest('.rpg-event-strip')).toHaveClass('is-collapsed');
-
-    fireEvent.click(recentEventsToggle);
-    expect(recentEventsToggle).toHaveAttribute('aria-expanded', 'true');
-    expect(recentEventsToggle.closest('.rpg-event-strip')).toHaveClass('is-expanded');
+  it('gives a fight the stage above the story', () => {
+    renderWithProviders(
+      <RpgStoryScene
+        heroSummary={previewHeroSummary}
+        recentEvents={[]}
+        selectedSessionSummary={previewSessionSummary}
+        stage={<div>The board</div>}
+      >
+        <button type="button">Submit RPG turn</button>
+      </RpgStoryScene>
+    );
+    const board = screen.getByText('The board');
+    expect(board.compareDocumentPosition(screen.getByLabelText('Conversation')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('renders the bounded durable transcript without dropping messages after the oldest ten', () => {
@@ -87,5 +93,47 @@ describe('RpgStoryScene', () => {
     expect(card.querySelectorAll('li')).toHaveLength(2);
     expect(screen.getByText('-3 silver')).toHaveClass('rpg-outcome-fact-loss');
     expect(screen.getByText('+Healing Potion')).toHaveClass('rpg-outcome-fact-gain');
+  });
+
+  describe('following the story', () => {
+    const say = (count: number) => Array.from({ length: count }, (_, index) => ({
+      id: `message:${index}`, interactionId: `interaction:${index}`, avatar: 'O', speaker: 'Omnix (Narrator)',
+      text: `Line ${index}`, tone: 'narrator' as const,
+    }));
+    const scene = (count: number) => (
+      <RpgStoryScene
+        heroSummary={previewHeroSummary}
+        recentEvents={[]}
+        selectedSessionSummary={{ ...previewSessionSummary, id: `live-follow-${expect.getState().currentTestName}`, source: 'live' }}
+        storyMessages={say(count)}
+      >
+        <button type="button">Submit RPG turn</button>
+      </RpgStoryScene>
+    );
+    /** jsdom has no layout: the story is 100px tall and each message 50px. */
+    const lay = (log: HTMLElement) => {
+      Object.defineProperty(log, 'clientHeight', { configurable: true, value: 100 });
+      Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => log.querySelectorAll('article').length * 50 });
+    };
+
+    it('shows the newest words when they arrive', () => {
+      const { rerender } = renderWithProviders(scene(4));
+      const log = screen.getByLabelText('Conversation');
+      lay(log);
+      rerender(scene(5));
+      log.scrollTop = 150; // at the end: 150 + 100 is what was 250 tall
+      rerender(scene(6));
+      expect(log.scrollTop).toBe(300);
+    });
+
+    it('leaves a player who has scrolled back where they are', () => {
+      const { rerender } = renderWithProviders(scene(4));
+      const log = screen.getByLabelText('Conversation');
+      lay(log);
+      rerender(scene(5));
+      log.scrollTop = 20;
+      rerender(scene(6));
+      expect(log.scrollTop).toBe(20);
+    });
   });
 });

@@ -40,7 +40,25 @@ def player_session_view(session: Any) -> Any:
     if isinstance(player, Mapping):
         view["simulation_state"]["player_state"] = {k: v for k, v in player.items() if k not in _PLAYER_PRIVATE}
     view["runtime_state"] = {key: value for key, value in runtime.items() if key in RUNTIME_VIEW}
+    view["here"] = _here(simulation)
     return view
+
+
+def _here(simulation: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Who is here and where the paths lead, by name: what looking around tells the hero, and no more of the world."""
+    from app.apps.rpg.foundation.state import access as sections
+    from app.apps.rpg.rules import routines
+
+    raw_world = sections.world_model_of(simulation)
+    world = raw_world if isinstance(raw_world, Mapping) else {}
+    raw_index = sections.npc_index_of(simulation)
+    raw_people = world.get("npcs")
+    people = {**(raw_index if isinstance(raw_index, Mapping) else {}),
+              **(raw_people if isinstance(raw_people, Mapping) else {})}
+    location_id, present = routines.present_now(simulation)
+    named = [str(person.get("name") or "") for person in (people.get(npc_id) for npc_id in present)
+             if isinstance(person, Mapping)]
+    return {"people": [name for name in dict.fromkeys(named) if name], "exits": routines.paths_from(world, location_id)}
 
 
 def _with_pack_actions(state: Mapping[str, Any], simulation: Mapping[str, Any]) -> dict[str, Any]:

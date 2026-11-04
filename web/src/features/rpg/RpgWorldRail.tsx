@@ -2,13 +2,16 @@ import { Progress, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { rpgSessionClient } from './api/rpgSessionClient';
+import { rpgLocalMap } from './rpgLocalMap';
 import { RpgMapDialog } from './RpgMapDialog';
 import { RpgTacticalGrid } from './RpgTacticalGrid';
-import type { RpgCheckpointSummaryPreview, RpgJobCardPreview, RpgNpcRelationshipPreview, RpgSessionSummaryPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
+import type { RpgCheckpointSummaryPreview, RpgHerePreview, RpgJobCardPreview, RpgSessionSummaryPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
 import './RpgVisualAssets.css';
 import './RpgWorldRail.css';
 
 const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
+/** The conditions that change what the hero does now; the rest are in the World panel. */
+const NEAR_CONDITIONS: ReadonlySet<string> = new Set(['Weather', 'Temperature', 'Light', 'Hazards']);
 
 interface RpgReportAssetPreview {
   id: unknown;
@@ -25,20 +28,20 @@ interface RpgWorldRailProps {
   currentMapId?: string | null;
   /** The jobs, autoplay and assets card shows with Developer tools on. */
   developerTools?: boolean;
+  here: RpgHerePreview;
   isAutoplayPending: boolean;
   isRefreshingJobs: boolean;
   jobCards: RpgJobCardPreview[];
-  npcRelationships: RpgNpcRelationshipPreview[];
   onRefreshJobs: () => void;
+  onSelectCommand: (command: string) => void;
   onToggleAutoplay: () => void;
-  reportsHref: string;
   rpgAssets: RpgReportAssetPreview[];
   rpgJobCount: number;
-  rpgReportCount: number;
   selectedSessionSummary: RpgSessionSummaryPreview;
   worldStateRows: RpgWorldStateRowPreview[];
 }
 
+/** What the hero can act on where they stand: the map, who is here and where the paths lead. */
 export function RpgWorldRail({
   autoplayRunning,
   autoplayStatusLabel,
@@ -46,11 +49,12 @@ export function RpgWorldRail({
   checkpointSummary,
   currentMapId,
   developerTools = false,
+  here,
   isAutoplayPending,
   isRefreshingJobs,
   jobCards,
-  npcRelationships,
   onRefreshJobs,
+  onSelectCommand,
   onToggleAutoplay,
   rpgAssets,
   rpgJobCount,
@@ -71,20 +75,15 @@ export function RpgWorldRail({
   const activeMapId = currentMapId?.trim() || queriedMapId;
   const visibleJobCards = jobCards.slice(0, 3);
   const visibleAssets = rpgAssets.slice(0, 3);
-  // A session launched from a published world stands on a local map with a tactical grid.
-  const mapInstanceId = typeof stateRecord.current_map_instance_id === 'string' ? stateRecord.current_map_instance_id.trim() : '';
-  const playerActorId = mapInstanceId ? `player:${selectedSessionSummary.id}` : '';
-  const heroName = heroNameFrom(stateRecord);
+  const { heroName, mapInstanceId, playerActorId } = rpgLocalMap(sessionRecord, selectedSessionSummary.id);
   const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && (activeMapId || mapInstanceId));
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const conditions = worldStateRows.filter((row) => NEAR_CONDITIONS.has(row.label));
 
   return (
     <>
       <aside className={railClassName} aria-label="World and places">
-        <section className="rpg-card rpg-map-card">
-          <div className="rpg-section-heading">
-            <p className="eyebrow">World & location</p>
-          </div>
+        <section className="rpg-card rpg-map-card" aria-label="Map">
           <div role="img" className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : mapInstanceId ? 'rpg-map-preview rpg-map-preview-has-grid' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
             {isPreview ? (
               <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
@@ -95,43 +94,44 @@ export function RpgWorldRail({
             )}
             {isPreview || !mapInstanceId ? <span className="rpg-map-pin" aria-hidden="true" /> : null}
           </div>
-          <strong>{selectedSessionSummary.location}</strong>
-          {isPreview ? <small>Preview artwork</small> : <small>{mapInstanceId ? 'Local map: what your character has seen' : activeMapId ? 'Region map' : 'Maps appear when the world provides them.'}</small>}
           <button className="rpg-secondary-button" disabled={!canOpenLiveMap} onClick={() => setIsMapOpen(true)} type="button">
             Open interactive map
           </button>
         </section>
 
-        <section className="rpg-card rpg-world-grid-card">
-          <div className="rpg-world-state">
-            <p className="eyebrow">World state</p>
-            {worldStateRows.map((row) => (
-              <div className="rpg-world-state-row" key={row.label}>
-                <span aria-hidden="true">{row.icon}</span>
-                <span>{row.label}</span>
-                <strong>{row.value}</strong>
+        <section className="rpg-card rpg-here-card" aria-label="Here">
+          <p className="eyebrow">Here</p>
+          {here.people.length ? (
+            <div role="group" className="rpg-here-list" aria-label="People here">
+              {here.people.map((name) => (
+                <button key={name} onClick={() => onSelectCommand(`I talk to ${name}.`)} title={`Talk to ${name}`} type="button">
+                  {name}
+                </button>
+              ))}
+            </div>
+          ) : <p className="rpg-here-empty">No one else is here.</p>}
+          {here.exits.length ? (
+            <>
+              <p className="eyebrow">Paths</p>
+              <div role="group" className="rpg-here-list" aria-label="Paths from here">
+                {here.exits.map((name) => (
+                  <button key={name} onClick={() => onSelectCommand(`go to ${name}`)} title={`Go to ${name}`} type="button">
+                    {name}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rpg-card">
-          <p className="eyebrow">People you know</p>
-          <div className="rpg-list-stack">
-            {npcRelationships.length ? (
-              npcRelationships.map((npc) => (
-                <article className="rpg-relationship-row" key={npc.name}>
-                  <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">{npc.name[0]}</span>
-                  <strong>{npc.name}</strong>
-                  <small>{npc.stance}</small>
-                  <span className="rpg-party-health"><span style={{ width: `${npc.score}%` }} /></span>
-                  <small>{npc.score}</small>
-                </article>
-              ))
-            ) : (
-              <p className="rpg-empty-state">No one here knows you well yet.</p>
-            )}
-          </div>
+            </>
+          ) : null}
+          {conditions.length ? (
+            <dl className="rpg-here-conditions">
+              {conditions.map((row) => (
+                <div className={row.label === 'Hazards' ? 'is-hazard' : undefined} key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </section>
 
         {developerTools ? (
@@ -191,14 +191,6 @@ export function RpgWorldRail({
       ) : null}
     </>
   );
-}
-
-function heroNameFrom(state: Record<string, unknown>): string {
-  for (const key of ['player', 'hero', 'character']) {
-    const name = recordValue(state[key]).name;
-    if (typeof name === 'string' && name.trim()) return name.trim();
-  }
-  return 'You';
 }
 
 function recordValue(value: unknown): Record<string, unknown> {

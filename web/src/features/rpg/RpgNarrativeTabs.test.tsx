@@ -69,3 +69,47 @@ describe('RpgNarrativeTabs what has changed', () => {
     expect(screen.getByRole('tabpanel')).toHaveTextContent('Nothing you have done has changed the world yet.');
   });
 });
+
+describe('RpgNarrativeTabs quests and history', () => {
+  it('lists every quest with how it stands, and can open on them', () => {
+    renderWithProviders(
+      <RpgNarrativeTabs
+        initialTab="quests"
+        journalDetail={journalDetail}
+        journalEntries={days(1)}
+        logEntries={[]}
+        quests={[{ icon: '*', title: 'Black Rain Rising', detail: 'Prevent a flood.', status: 'active' }]}
+        recentEvents={[]}
+      />,
+    );
+    const panel = screen.getByRole('tabpanel', { name: 'Quests' });
+    expect(within(panel).getByRole('heading', { name: 'Black Rain Rising' })).toBeInTheDocument();
+    expect(panel).toHaveTextContent('active');
+    expect(panel).toHaveTextContent('Prevent a flood.');
+  });
+
+  it('keeps one history in place of three logs, and filters it', () => {
+    const logEntries = [
+      { time: 'Turn 2', title: 'Completed turn', detail: 'Command: look around' },
+      { time: 'Turn 1', title: 'Helix', detail: 'Helix says: all is well.' },
+    ];
+    renderWithProviders(
+      <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={days(1)} logEntries={logEntries} recentEvents={['A bell rings.']} />,
+    );
+    expect(screen.queryByRole('tab', { name: 'Dialogue log' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'What you did' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+    const panel = screen.getByRole('tabpanel', { name: 'History' });
+    expect(panel).toHaveTextContent('Command: look around');
+    expect(panel).toHaveTextContent('Helix says: all is well.');
+    expect(panel).toHaveTextContent('A bell rings.');
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'What was said' }));
+    expect(panel).toHaveTextContent('Helix says: all is well.');
+    expect(panel).not.toHaveTextContent('A bell rings.');
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'What you did' }));
+    expect(panel).toHaveTextContent('Command: look around');
+    expect(panel).not.toHaveTextContent('Helix says');
+  });
+});

@@ -356,6 +356,14 @@ def present_now(simulation: Mapping[str, Any]) -> tuple[str, list[str]]:
             [_s(npc) for npc in _l(presence.get("present_npc_ids")) if _s(npc)])
 
 
+def paths_from(world_model: Mapping[str, Any], location_id: str) -> list[str]:
+    """The places the paths from here lead to, by name."""
+    places = _d(world_model.get("locations"))
+    named = [_s(_d(places.get(_s(place_id))).get("name"))
+             for place_id in _d(_d(places.get(location_id)).get("exits")).values()]
+    return [place for place in dict.fromkeys(named) if place]
+
+
 def comings_and_goings(world_model: Mapping[str, Any], before: list[str], after: list[str],
                        moved_to: Mapping[str, Whereabouts]) -> list[str]:
     """What the hero sees of the people around them as time passes: who leaves (and for where), who arrives."""

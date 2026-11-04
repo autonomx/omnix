@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { rpgCampaignLoreClient } from './api/rpgCampaignLoreClient';
 import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
+import { RpgHeaderMoreMenu } from './RpgHeaderMoreMenu';
 import { RpgLorePanel } from './RpgLorePanel';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
 import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
@@ -23,6 +24,7 @@ interface RpgWorkspaceHeaderProps {
   isPlayerRailCollapsed: boolean;
   isWorldRailCollapsed: boolean;
   module: OmnixModuleDefinition;
+  onOpenVoices?: () => void;
   onToggleDeveloperTools?: () => void;
   onToggleLiveData: () => void;
   onTogglePlayerRail: () => void;
@@ -41,6 +43,7 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
     isLiveDataExpanded,
     isPlayerRailCollapsed,
     isWorldRailCollapsed,
+    onOpenVoices,
     onToggleDeveloperTools,
     onToggleLiveData,
     onTogglePlayerRail,
@@ -136,20 +139,37 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
     <>
       <div className="rpg-workspace-header-content">
         <button
-          className="rpg-secondary-button rpg-lore-entry-control"
-          type="button"
-          onClick={() => setIsLoreOpen(true)}
-        >
-          World Lore
-        </button>
-        <button
           className="rpg-secondary-button rpg-world-library-entry-control"
           type="button"
           onClick={openWorldLibrary}
         >
           Worlds &amp; Campaigns
         </button>
-        <div role="group" className="rpg-unified-header-controls" aria-label="Workspace layout controls">
+        <RpgHeaderMoreMenu>
+          {(closeMenu) => (
+            <>
+          <button
+            className="rpg-secondary-button rpg-lore-entry-control"
+            type="button"
+            onClick={() => {
+              closeMenu();
+              setIsLoreOpen(true);
+            }}
+          >
+            World Lore
+          </button>
+          {onOpenVoices ? (
+            <button
+              className="rpg-secondary-button"
+              type="button"
+              onClick={() => {
+                closeMenu();
+                onOpenVoices();
+              }}
+            >
+              Voices
+            </button>
+          ) : null}
           <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden((value) => !value)}>
             {isHidden ? 'Show header' : 'Hide header'}
           </button>
@@ -188,7 +208,9 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
               Developer tools
             </button>
           ) : null}
-        </div>
+            </>
+          )}
+        </RpgHeaderMoreMenu>
       </div>
 
       {campaignLauncherHomeGrid ? createPortal(

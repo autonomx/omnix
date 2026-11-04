@@ -1,0 +1,102 @@
+/* RpgPlayPanels' own styles: the bar under the play screen and the panel it opens. */
+@layer features {
+  .rpg-play-bar {
+    display: grid;
+    flex: none;
+    gap: 0.45rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 0.6rem;
+  }
+
+  .rpg-play-bar button {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.7rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    font-weight: 700;
+    min-height: 2.75rem;
+    padding: 0.4rem 0.5rem;
+    touch-action: manipulation;
+  }
+
+  .rpg-play-bar button:hover {
+    background: color-mix(in srgb, var(--accent-violet-540) 16%, transparent);
+  }
+
+  .rpg-play-bar button.is-open {
+    background: color-mix(in srgb, var(--accent-violet-540) 28%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 52%, transparent);
+  }
+
+  .rpg-play-bar button:focus-visible,
+  .rpg-play-panel-close:focus-visible {
+    border-color: color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    outline: none;
+  }
+
+  /* Over the right of the screen, between the header and the bar: the story stays in view beside it. */
+  .rpg-play-panel {
+    background: var(--bg-slate-130);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 28%, transparent);
+    border-radius: 0.85rem;
+    bottom: 4.4rem;
+    box-shadow: -0.75rem 0 2rem color-mix(in srgb, var(--c-neutral-0) 34%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: calc(100% - 1.5rem);
+    min-height: 0;
+    padding: 0.85rem;
+    position: absolute;
+    right: 0.75rem;
+    top: 3.9rem;
+    width: min(42rem, 52%);
+    z-index: 30;
+  }
+
+  .rpg-play-panel-header {
+    align-items: center;
+    display: flex;
+    flex: none;
+    justify-content: space-between;
+  }
+
+  .rpg-play-panel-header h2 {
+    color: var(--fg-slate-970-2);
+    font-size: 1.1rem;
+    margin: 0;
+    outline: none;
+  }
+
+  .rpg-play-panel-close {
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
+    border-radius: 0.55rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    font-size: 1.2rem;
+    height: 2.25rem;
+    line-height: 1;
+    width: 2.25rem;
+  }
+
+  .rpg-play-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  @media (max-width: 1180px) {
+    .rpg-play-panel {
+      bottom: 3.75rem;
+      left: 0.45rem;
+      max-width: none;
+      right: 0.45rem;
+      top: 3.1rem;
+      width: auto;
+    }
+  }
+}

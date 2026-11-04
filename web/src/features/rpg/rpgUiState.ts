@@ -1,16 +1,16 @@
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { buildInteractionStoryMessages, buildJournalDetail, buildJournalEntries, buildRecentEvents, buildRpgTurnJobTimelineEvents, buildStoryMessages, buildTimelineEvents } from './rpgStoryState';
-import { NOT_TRACKED, activeQuests, equippedGear, heroStats, hotbarAbilities, inventoryItems, npcRelationships, partyMembers, previewHeroSummary, previewJobs, previewSessionSummary, previewSurvival, previewWorldStateRows, quickActions } from './rpgUiPreview';
-import { compactTimestamp, emptyHeroStats, emptyStat, firstArray, firstNumber, firstRecord, firstString, formatCurrency, formatNumber, getEnvironmentSnapshot, getPlayerRecord, getSessionRecords, iconForEquipment, iconForInventory, initialFor, metricLabel, metricPercent, questIcon, quickActionIcon, quickActionLabel, readMetric, recordValue, relationshipScore, stanceForScore, timestampRank, titleCase, toStat } from './rpgUiRecords';
+import { NOT_TRACKED, activeQuests, heroStats, hotbarAbilities, inventoryItems, npcRelationships, partyMembers, previewHere, previewHeroSummary, previewJobs, previewSessionSummary, previewSurvival, previewWorldStateRows, quickActions } from './rpgUiPreview';
+import { compactTimestamp, emptyHeroStats, emptyStat, firstArray, firstNumber, firstRecord, firstString, formatCurrency, formatNumber, getEnvironmentSnapshot, getPlayerRecord, getSessionRecords, iconForInventory, initialFor, metricLabel, metricPercent, questIcon, quickActionIcon, quickActionLabel, readMetric, recordValue, relationshipScore, stanceForScore, timestampRank, titleCase, toStat } from './rpgUiRecords';
 import { buildWorldChanges, type RpgWorldChangesPreview } from './rpgWorldChanges';
-import type { RpgAsset, RpgCheckpointSummaryPreview, RpgGearPreview, RpgHeroSummaryPreview, RpgHotbarAbilityPreview, RpgInventoryItemPreview, RpgJob, RpgJobCardPreview, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgNpcRelationshipPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgQuickActionPreview, RpgReport, RpgSession, RpgSessionSummaryPreview, RpgStatPreview, RpgStoryMessagePreview, RpgSurvivalNeedPreview, RpgSurvivalPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
+import type { RpgAsset, RpgCheckpointSummaryPreview, RpgHerePreview, RpgHeroSummaryPreview, RpgHotbarAbilityPreview, RpgInventoryItemPreview, RpgJob, RpgJobCardPreview, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgNpcRelationshipPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgQuickActionPreview, RpgReport, RpgSession, RpgSessionSummaryPreview, RpgStatPreview, RpgStoryMessagePreview, RpgSurvivalNeedPreview, RpgSurvivalPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
 
 export interface RpgWorkspaceState {
   heroSummary: RpgHeroSummaryPreview;
   heroStats: RpgStatPreview[];
   survival: RpgSurvivalPreview;
-  equippedGear: RpgGearPreview[];
+  here: RpgHerePreview;
   partyMembers: RpgPartyMemberPreview[];
   activeQuests: RpgQuestPreview[];
   quickActions: RpgQuickActionPreview[];
@@ -55,9 +55,12 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
   const selectedResponseSession = requestedSessionId && sessionMatchesId(sources.selectedSession, requestedSessionId)
     ? sources.selectedSession
     : undefined;
+  // The campaign as it was loaded knows where the hero is and how many turns it has; the list's row can lag behind.
+  const loadedSummary = selectedResponseSession ? toSessionSummary(selectedResponseSession, 0) : undefined;
   const selectedSessionSummary =
-    selectedInventorySummary
-    ?? (selectedResponseSession ? toSessionSummary(selectedResponseSession, 0) : undefined)
+    (selectedInventorySummary && loadedSummary
+      ? { ...selectedInventorySummary, location: loadedSummary.location, summary: loadedSummary.summary, turnLabel: loadedSummary.turnLabel }
+      : selectedInventorySummary ?? loadedSummary)
     ?? (requestedSessionId ? pendingSessionSummary(requestedSessionId) : sessionSummaries[0])
     ?? previewSessionSummary;
   const selectedSession =
@@ -92,7 +95,7 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     heroSummary,
     heroStats: buildHeroStats(selectedSession),
     survival: buildSurvivalState(selectedSession),
-    equippedGear: buildEquippedGear(selectedSession),
+    here: buildHere(selectedSession),
     partyMembers: buildPartyMembers(selectedSession),
     activeQuests: buildActiveQuests(selectedSession),
     quickActions: buildQuickActions(selectedSession),
@@ -170,7 +173,13 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     metadata?.updated_at,
     latestTimeline?.time,
   );
-  const turnCount = firstNumber(session.turn_count, session.turns, session.current_turn, manifest?.turn_count, metadata?.turn_count, state?.turn_count);
+  // A record's count can lag behind another's (a manifest still at 0 beside a sheet at 7), and a campaign whose counts
+  // have all fallen behind still shows the turns its story log holds: the most any of them knows.
+  const turnCount = Math.max(
+    ...[session.turn_count, session.turns, session.current_turn, manifest?.turn_count, metadata?.turn_count, state?.turn_count]
+      .map((count) => firstNumber(count) ?? 0),
+    firstArray(recordValue(session.runtime_state)?.recent_interactions).length,
+  );
   const checkpointLabel = firstString(session.checkpoint_id, session.checkpoint, session.checkpoint_path, session.storage_path, payload?.checkpoint_id) ?? 'Checkpoint indexed';
   const title = firstString(session.title, session.name, session.label, manifest?.title, session.session_id, session.id, manifest?.session_id, manifest?.id) ?? id;
   const location = firstString(
@@ -201,7 +210,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     location,
     summary,
     updatedAt: compactTimestamp(updatedRaw) ?? 'Updated time unknown',
-    turnLabel: typeof turnCount === 'number' && turnCount > 0 ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
+    turnLabel: turnCount > 0 ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
     checkpointLabel,
     sortRank: timestampRank(updatedRaw),
     lastPlayedMs: timestampRank(updatedRaw) || undefined,
@@ -309,17 +318,11 @@ function buildSurvivalState(session: RpgSession | undefined): RpgSurvivalPreview
   };
 }
 
-function buildEquippedGear(session: RpgSession | undefined): RpgGearPreview[] {
-  if (!session) return equippedGear;
-  const player = getPlayerRecord(session);
-  const equipment = firstArray(player?.equipment, player?.equipped, player?.gear, recordValue(player?.inventory)?.equipped);
-  if (!equipment.length) return [];
-  return equipment.slice(0, 5).map((item, index) => {
-    const record = recordValue(item) ?? { name: item };
-    const slot = firstString(record.slot, record.type, record.category) ?? `Slot ${index + 1}`;
-    const name = firstString(record.name, record.label, record.id) ?? `Equipped item ${index + 1}`;
-    return { icon: iconForEquipment(slot, name), name, slot: titleCase(slot) };
-  });
+function buildHere(session: RpgSession | undefined): RpgHerePreview {
+  if (!session) return previewHere;
+  const here = recordValue(session.here);
+  const names = (value: unknown) => firstArray(value).filter((name): name is string => typeof name === 'string' && Boolean(name.trim()));
+  return { people: names(here?.people), exits: names(here?.exits) };
 }
 
 function buildPartyMembers(session: RpgSession | undefined): RpgPartyMemberPreview[] {
@@ -342,11 +345,11 @@ function buildActiveQuests(session: RpgSession | undefined): RpgQuestPreview[] {
   const roots = getSessionRecords(session);
   const quests = firstArray(...roots.flatMap((root) => [root.quests, root.active_quests, root.objectives, recordValue(root.journal)?.quests]));
   if (!quests.length) return [];
-  return quests.slice(0, 4).map((quest, index) => {
+  return quests.map((quest, index) => {
     const record = recordValue(quest) ?? { title: quest };
     const title = firstString(record.title, record.name, record.id) ?? `Quest ${index + 1}`;
-    const detail = firstString(record.detail, record.description, record.objective, record.next_step, record.summary) ?? 'Objective indexed in live session state.';
-    return { icon: questIcon(record.status), title, detail };
+    const detail = firstString(record.detail, record.description, record.objective, record.next_step, record.summary) ?? '';
+    return { icon: questIcon(record.status), title, detail, status: firstString(record.status) };
   });
 }
 

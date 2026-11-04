@@ -47,7 +47,7 @@ describe('rpgSessionClient.submitTurnJob', () => {
     gateway(Response.json({ ok: true, contract_version: 'rpg_turn_response_v2', response: 'You see a door.' }));
     const createJob = vi.spyOn(omnixApiClient, 'createJob');
 
-    await expect(rpgSessionClient.submitTurnJob(turnRequest)).rejects.toThrow('did not return its job');
+    await expect(rpgSessionClient.submitTurnJob(turnRequest)).resolves.toBeNull(); // done, with no job to follow
     expect(createJob).not.toHaveBeenCalled();
   });
 

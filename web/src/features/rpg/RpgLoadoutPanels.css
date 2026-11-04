@@ -41,7 +41,7 @@
     background: color-mix(in srgb, var(--bg-slate-130) 58%, transparent);
     display: grid;
     gap: 0.55rem;
-    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    grid-template-columns: 2rem minmax(0, 1fr) auto auto;
     min-height: 3rem;
     padding: 0.4rem 0.6rem;
     position: relative;
@@ -67,6 +67,13 @@
     color: var(--fg-slate-890);
     font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
+  }
+
+  .rpg-item-slot small.rpg-item-worn {
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 30%, transparent);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    padding: 0 0.35rem;
   }
 
   .rpg-inventory-search {

@@ -4,7 +4,7 @@ import type { UseFormRegisterReturn } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgActionComposer } from './RpgActionComposer';
 import { rpgSessionClient } from './api/rpgSessionClient';
-import { previewSessionSummary, quickActions } from './rpgUiPreview';
+import { quickActions } from './rpgUiPreview';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {
@@ -29,7 +29,6 @@ function renderComposer(overrides: Partial<Parameters<typeof RpgActionComposer>[
       quickActions={quickActions}
       selectedSessionId=""
       sessionRegistration={registration('sessionId')}
-      sessionSummaries={[previewSessionSummary]}
       {...overrides}
     />
   );
@@ -46,7 +45,7 @@ describe('RpgActionComposer', () => {
 
     expect(screen.getByRole('heading', { name: 'Your turn' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Session' })).toHaveTextContent('Preview campaign — preview-session');
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument(); // the Campaign Menu switches campaigns
     expect(screen.getByRole('textbox', { name: 'Command' })).toHaveAttribute('aria-invalid', 'false');
 
     fireEvent.click(screen.getByRole('button', { name: 'Investigate' }));
@@ -56,8 +55,27 @@ describe('RpgActionComposer', () => {
     );
   });
 
+  it('sends the turn on Enter and starts a new line on Shift+Enter', () => {
+    const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
+    renderComposer({ onSubmit });
+    const command = screen.getByRole('textbox', { name: 'Command' });
+
+    fireEvent.keyDown(command, { key: 'Enter', shiftKey: true });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(command, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the game master from beside the turn', () => {
+    const onAskGameMaster = vi.fn();
+    renderComposer({ onAskGameMaster });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the game master' }));
+    expect(onAskGameMaster).toHaveBeenCalledTimes(1);
+  });
+
   it('renders pending and invalid states for queued turn submission', () => {
-    renderComposer({ hasCommandError: true, isPending: true, sessionSummaries: [] });
+    renderComposer({ hasCommandError: true, isPending: true });
 
     expect(screen.getByRole('button', { name: /Sending/ })).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Command' })).toHaveAttribute('aria-invalid', 'true');

@@ -1,11 +1,29 @@
 /* The play screen's layout and what its components share (RQ-7.5); it loads after their own styles. */
 @layer features {
+  /* The page does not scroll: the story fills what the screen leaves, and each side scrolls on its own. */
+  .omnix-shell:has(.rpg-workstation) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .omnix-main:has(.rpg-workstation) {
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .rpg-workstation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    margin: 0;
+    min-height: 0;
+    position: relative;
     background:
     radial-gradient(circle at 22% 8%, color-mix(in srgb, var(--accent-violet-540) 18%, transparent), transparent 30rem),
     radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--c-cyan-720) 12%, transparent), transparent 26rem),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent), color-mix(in srgb, var(--bg-slate-130) 94%, transparent));
-    padding: 1rem;
+    padding: 0.6rem 0.75rem;
   }
 
   .rpg-workstation-header {
@@ -19,11 +37,11 @@
   .rpg-unified-header {
     align-items: center;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem 0.75rem;
-    margin-bottom: 0.85rem;
+    flex: none;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
     min-width: 0;
-    padding: 0.6rem 0.75rem;
+    padding: 0.35rem 0.5rem;
     border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 14px;
     background: color-mix(in srgb, var(--bg-indigo-210) 82%, transparent);
@@ -35,7 +53,7 @@
     align-items: center;
     display: flex;
     min-width: 0;
-    flex: 1 1 20rem;
+    flex: 1 1 0;
   }
 
   /* The campaign launcher inside the header is part of the bar, not a second bar. */
@@ -122,15 +140,40 @@
 
   .rpg-dashboard-grid {
     display: grid;
-    gap: 0.85rem;
-    grid-template-columns: minmax(16rem, 0.85fr) minmax(30rem, 2.15fr) minmax(18rem, 1fr);
+    flex: 1 1 0;
+    gap: 0.6rem;
+    grid-template-columns: 16rem minmax(0, 1fr) 18rem;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
   }
 
   .rpg-center-stage {
-    display: grid;
-    gap: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     min-width: 0;
-    align-content: start;
+  }
+
+  .rpg-center-stage > .rpg-story-card {
+    flex: 1 1 0;
+  }
+
+  .rpg-character-status {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .rpg-character-status > p {
+    color: var(--fg-slate-730);
+    margin: 0;
+  }
+
+  /* Inside the bar's panel a card is not a card within a card. */
+  .rpg-play-panel-body > .rpg-card {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
   }
 
   .rpg-section-heading {
@@ -324,9 +367,8 @@
   .rpg-tabs {
     border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
     display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
-    overflow-x: auto;
-    scrollbar-gutter: stable;
   }
 
   .rpg-journal-grid {
@@ -395,12 +437,6 @@
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  @media (max-width: 1380px) {
-    .rpg-dashboard-grid {
-      grid-template-columns: minmax(15rem, 0.85fr) minmax(28rem, 1.8fr);
-    }
-  }
-
   @media (max-width: 980px) {
     .rpg-workstation-header,
     .rpg-header-actions {
@@ -413,12 +449,7 @@
       justify-content: flex-start;
     }
 
-    .rpg-dashboard-grid,
     .rpg-journal-grid {
-      grid-template-areas:
-      "command"
-      "submit"
-      "session";
       grid-template-columns: 1fr;
     }
   }
@@ -438,30 +469,20 @@
   }
 
   .rpg-dashboard-grid-left-collapsed {
-    grid-template-columns: minmax(0, 2.15fr) minmax(18rem, 1fr);
+    grid-template-columns: minmax(0, 1fr) 18rem;
   }
 
   .rpg-dashboard-grid-right-collapsed {
-    grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 2.15fr);
+    grid-template-columns: 16rem minmax(0, 1fr);
   }
 
   .rpg-dashboard-grid-left-collapsed.rpg-dashboard-grid-right-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .rpg-left-rail.rpg-rail-expanded,
-  .rpg-right-rail.rpg-rail-expanded {
-    max-height: none;
-    overflow: visible;
-  }
-
   .rpg-journal-detail,
   .rpg-combat-deltas {
     overflow-wrap: anywhere;
-  }
-
-  .rpg-world-grid-card .rpg-card {
-    overflow-wrap: normal;
   }
 
   .rpg-tabs button {
@@ -496,43 +517,32 @@
     white-space: nowrap;
   }
 
-  @media (max-width: 1380px) {
-    .rpg-dashboard-grid-left-collapsed {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .rpg-dashboard-grid-right-collapsed {
-      grid-template-columns: minmax(15rem, 0.85fr) minmax(28rem, 1.8fr);
-    }
-
-    .rpg-dashboard-grid-left-collapsed.rpg-dashboard-grid-right-collapsed {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
+  /* Narrow: the hero's strip, the story and composer, and the bar. */
   @media (max-width: 1180px) {
     .rpg-workstation {
-      padding: 0.85rem;
+      padding: 0.45rem;
+    }
+
+    .rpg-unified-header {
+      margin-bottom: 0.4rem;
+      padding: 0.25rem 0.35rem;
     }
 
     .rpg-dashboard-grid,
     .rpg-dashboard-grid-left-collapsed,
     .rpg-dashboard-grid-right-collapsed,
     .rpg-dashboard-grid-left-collapsed.rpg-dashboard-grid-right-collapsed {
-      grid-template-columns: minmax(0, 1fr);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .rpg-center-stage {
+      flex: 1 1 0;
     }
   }
 
   @media (max-width: 760px) {
-    .rpg-workstation {
-      padding: 0.65rem;
-    }
-
-    .rpg-primary-button,
-    .rpg-secondary-button {
-      width: 100%;
-    }
-
     .rpg-resource-grid,
     .rpg-combat-overview,
     .rpg-combat-actions,

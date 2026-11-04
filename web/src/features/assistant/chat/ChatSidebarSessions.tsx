@@ -8,7 +8,6 @@ import {
   type SidebarSession,
   type SidebarState,
 } from './chatSidebarState';
-import { startBlankChat } from './sessionTools';
 
 const STATUS_VISIBLE_MS = 6_000;
 
@@ -31,7 +30,6 @@ export type ChatSidebarSessionsProps<T extends SidebarSession> = {
 export function ChatSidebarSessions<T extends SidebarSession>({ sessions, loading, failed, selectedSessionId, onSelect, onDelete }: ChatSidebarSessionsProps<T>) {
   const [state, setState] = useState<SidebarState>(() => readChatSidebarState());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sharedSessionApplied = useRef(false);
@@ -89,19 +87,6 @@ export function ChatSidebarSessions<T extends SidebarSession>({ sessions, loadin
     sharedSessionApplied.current = true;
     onSelect(session);
   });
-
-  async function createChat(): Promise<void> {
-    setCreating(true);
-    showStatus('Creating new chat...');
-    try {
-      await startBlankChat();
-      setStatus(null);
-    } catch (error) {
-      showStatus(error instanceof Error ? error.message : 'New chat could not be created.', true);
-    } finally {
-      setCreating(false);
-    }
-  }
 
   function togglePinned(sessionId: string): void {
     updateState((current) => ({ ...current, [sessionId]: { ...current[sessionId], pinned: !current[sessionId]?.pinned, archived: false } }));
@@ -182,12 +167,6 @@ export function ChatSidebarSessions<T extends SidebarSession>({ sessions, loadin
     );
   }
 
-  const newChatButton = (
-    <button type="button" className="assistant-chatgpt-new" aria-label={creating ? 'Creating new chat' : 'New chat'} aria-busy={creating || undefined} title="New chat" disabled={creating} onClick={() => void createChat()}>
-      <span aria-hidden="true">＋</span><span>{creating ? 'Creating...' : 'New'}</span>
-    </button>
-  );
-
   return (
     <div className="assistant-chatgpt-sidebar" ref={hostRef}>
       {!failed ? (
@@ -199,7 +178,7 @@ export function ChatSidebarSessions<T extends SidebarSession>({ sessions, loadin
         </section>
       ) : null}
       <section className="assistant-chatgpt-section" aria-labelledby="assistant-chatgpt-sessions">
-        <header><h2 id="assistant-chatgpt-sessions">Sessions</h2>{newChatButton}</header>
+        <header><h2 id="assistant-chatgpt-sessions">Sessions</h2></header>
         <div className="assistant-chatgpt-list">
           {failed ? <p className="assistant-chatgpt-empty">Chat sessions failed to load.</p>
             : loading ? <p className="assistant-chatgpt-empty">Loading chat sessions...</p>

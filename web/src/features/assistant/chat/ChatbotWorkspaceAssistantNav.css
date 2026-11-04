@@ -28,10 +28,6 @@
     outline: none;
   }
 
-  .assistant-chat-sidebar {
-    grid-template-rows: auto auto minmax(7rem, auto) minmax(5rem, auto) minmax(0, 1fr);
-  }
-
   .assistant-chat-layout-sidebar-minimized {
     --assistant-chat-list-width: 3.75rem;
   }
@@ -94,7 +90,7 @@
 
   .assistant-chat-sidebar-minimized .assistant-sidebar-nav button span:nth-child(2),
   .assistant-chat-sidebar-minimized .assistant-sidebar-section,
-  .assistant-chat-sidebar-minimized > .assistant-chatgpt-sidebar {
+  .assistant-chat-sidebar-minimized .assistant-chatgpt-sidebar {
     display: none;
   }
 

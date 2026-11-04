@@ -35,12 +35,6 @@ export interface RpgSurvivalPreview {
   warnings: string[];
 }
 
-export interface RpgGearPreview {
-  icon: string;
-  name: string;
-  slot: string;
-}
-
 export interface RpgPartyMemberPreview {
   avatar: string;
   name: string;
@@ -53,6 +47,13 @@ export interface RpgQuestPreview {
   icon: string;
   title: string;
   detail: string;
+  status?: string;
+}
+
+/** Who is here and where the paths lead, by name (the player view's). */
+export interface RpgHerePreview {
+  people: string[];
+  exits: string[];
 }
 
 export interface RpgQuickActionPreview {

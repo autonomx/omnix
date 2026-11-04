@@ -9,12 +9,12 @@ import { createTestQueryClient } from '../../test/renderWithProviders';
 
 type LoadoutTabsProps = Parameters<typeof RpgLoadoutTabs>[0];
 
-function renderLoadoutTabs(props: LoadoutTabsProps) {
+function renderLoadoutTabs({ section = 'pack', ...props }: Omit<LoadoutTabsProps, 'section'> & { section?: LoadoutTabsProps['section'] }) {
   const queryClient = createTestQueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <RpgLoadoutTabs {...props} />
+      <RpgLoadoutTabs {...props} section={section} />
     </QueryClientProvider>,
   );
 }
@@ -96,15 +96,33 @@ afterEach(() => {
 });
 
 describe('RpgLoadoutTabs', () => {
-  it('renders inventory by default and switches to abilities and hotbar panels', () => {
+  it('shows the pack on its own, each action saying what it does', () => {
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn() });
 
-    expect(screen.getByRole('tab', { name: 'Inventory' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tabpanel', { name: 'Inventory' })).toHaveTextContent('12');
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Carried items' })).toHaveTextContent('12');
     expect(screen.getByRole('button', { name: 'Healing potion' })).toBeInTheDocument();
     expect(screen.getByLabelText('Selected item details: Healing potion')).toHaveTextContent('Nothing more is known of it.');
-    expect(screen.getByRole('region', { name: 'Selected item' })).toHaveTextContent('Item details and actions');
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Use' })).toHaveTextContent('Use');
+  });
+
+  it('marks what the hero is wearing in the pack', () => {
+    renderLoadoutTabs({
+      hotbarAbilities,
+      inventoryItems: [{ icon: 'x', count: '1', label: 'Travel Cloak', worn: true }, { icon: 'x', count: '1', label: 'Torch', worn: false }],
+      onSelectCommand: vi.fn(),
+    });
+    expect(screen.getByRole('button', { name: 'Travel Cloak' })).toHaveTextContent('Worn');
+    expect(screen.getByRole('button', { name: 'Torch' })).not.toHaveTextContent('Worn');
+  });
+
+  it('opens the character on how the hero stands and switches to abilities and hotbar', () => {
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), section: 'character', statusPanel: <p>Level 14 Ranger</p> });
+
+    expect(screen.getByRole('tab', { name: 'Status' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Status' })).toHaveTextContent('Level 14 Ranger');
+    expect(screen.queryByRole('tab', { name: 'Inventory' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }));
 
@@ -121,7 +139,7 @@ describe('RpgLoadoutTabs', () => {
 
   it('turns ability interactions into replay-preserving commands without a live session', () => {
     const onSelectCommand = vi.fn();
-    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand });
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand, section: 'character' });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }));
     const activeAbility = screen.getByRole('complementary', { name: 'Active ability: Aimed Shot' });
@@ -182,7 +200,7 @@ describe('RpgLoadoutTabs', () => {
     const onSelectCommand = vi.fn();
     const { getRpgSession } = mockLiveItemApis(liveAbilitySession());
 
-    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand, selectedSessionId: 'session-live' });
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand, section: 'character', selectedSessionId: 'session-live' });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Skills' }));
     expect(await screen.findByText('Swordsmanship')).toBeInTheDocument();

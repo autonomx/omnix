@@ -1,7 +1,7 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgWorldRail } from './RpgWorldRail';
-import { npcRelationships, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiPreview';
+import { previewHere, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiPreview';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 
@@ -12,14 +12,13 @@ const baseProps = {
   developerTools: true, // the jobs card is a developer panel
   isAutoplayPending: false,
   isRefreshingJobs: false,
+  here: previewHere,
   jobCards: previewJobs,
-  npcRelationships,
   onRefreshJobs: vi.fn(),
+  onSelectCommand: vi.fn(),
   onToggleAutoplay: vi.fn(),
-  reportsHref: '/api/reports',
   rpgAssets: [{ id: 'asset-1', module: 'rpg', file_name: 'checkpoint-001.json', type: 'rpg_checkpoint' }],
   rpgJobCount: 0,
-  rpgReportCount: 2,
   selectedSessionSummary: previewSessionSummary,
   worldStateRows: previewWorldStateRows,
 };
@@ -30,9 +29,9 @@ describe('RpgWorldRail', () => {
 
     expect(screen.getByRole('complementary', { name: 'World and places' })).toBeInTheDocument();
     expect(screen.getByLabelText('Glimmerdeep Pass travel map')).toBeInTheDocument();
-    expect(screen.getByText('Calendar / Season')).toBeInTheDocument();
     expect(screen.getByText('Hazards')).toBeInTheDocument();
-    expect(screen.getByText('People you know')).toBeInTheDocument();
+    expect(screen.queryByText('Calendar / Season')).not.toBeInTheDocument(); // in the World panel
+    expect(screen.queryByText('People you know')).not.toBeInTheDocument(); // in the World panel
     expect(screen.getByText('RPG jobs')).toBeInTheDocument();
 
     expect(screen.queryByText('Autoplay & reports')).not.toBeInTheDocument();
@@ -96,6 +95,21 @@ describe('RpgWorldRail', () => {
     renderWithProviders(<RpgWorldRail {...baseProps} developerTools={false} />);
     expect(screen.queryByText('RPG jobs')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start autoplay' })).not.toBeInTheDocument();
-    expect(screen.getByText('People you know')).toBeInTheDocument();
+  });
+
+  it('prepares a turn from who is here and where the paths lead', () => {
+    const onSelectCommand = vi.fn();
+    renderWithProviders(<RpgWorldRail {...baseProps} developerTools={false} onSelectCommand={onSelectCommand} />);
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'People here' })).getByRole('button', { name: 'Thorin Ironfist' }));
+    expect(onSelectCommand).toHaveBeenLastCalledWith('I talk to Thorin Ironfist.');
+    fireEvent.click(within(screen.getByRole('group', { name: 'Paths from here' })).getByRole('button', { name: 'Frostbound Hollow' }));
+    expect(onSelectCommand).toHaveBeenLastCalledWith('go to Frostbound Hollow');
+  });
+
+  it('says so when no one else is here and offers no paths it does not know', () => {
+    renderWithProviders(<RpgWorldRail {...baseProps} developerTools={false} here={{ people: [], exits: [] }} />);
+    expect(screen.getByText('No one else is here.')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Paths from here' })).not.toBeInTheDocument();
   });
 });

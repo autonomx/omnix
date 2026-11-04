@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any, Mapping, Sequence, cast
 
 from app.apps.rpg.foundation.dynamic_npc_profiles import load_npc_profile
+from app.apps.rpg.foundation.state.people import world_people
 from app.apps.rpg.foundation.state.sections import read_path
 from app.apps.rpg.world.npc_biography_registry import find_npc_biography
 
@@ -273,6 +274,7 @@ def ensure_encountered_npc_lore(
     ensured: list[str] = []
     created: list[str] = []
     changed = False
+    world_person_ids = world_people(_mapping(_sections.simulation_state_of(session)))
 
     for runtime_id in encountered_npc_ids(session, explicit_npc_ids=explicit_npc_ids):
         entity_id = next(
@@ -305,8 +307,10 @@ def ensure_encountered_npc_lore(
             session_profile.get("name"),
             dynamic.get("name"),
             registry.get("name"),
-            runtime_id.split(":", 1)[-1].replace("_", " ").title(),
         )
+        if not name and runtime_id not in world_person_ids:
+            continue  # no record names them and the world has no such person: an id alone gets no biography
+        name = name or runtime_id.split(":", 1)[-1].replace("_", " ").title()
         role = _first(
             existing.get("role"),
             session_profile.get("role"),

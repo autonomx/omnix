@@ -33,7 +33,7 @@ interface BuildSelectedItemActionsInput {
 const ACTIONS: Record<RpgItemUiActionKind, { label: string; detail: (name: string) => string }> = {
   use: { label: 'Use', detail: (name) => `Use the ${name}.` },
   equip: { label: 'Equip', detail: (name) => `Wear or wield the ${name}.` },
-  unequip: { label: 'Unequip', detail: (name) => `Put the ${name} away; it stays in your pack.` },
+  unequip: { label: 'Unequip', detail: (name) => `Put the ${name} away; it stays in your inventory.` },
   drop: { label: 'Drop', detail: (name) => `Put the ${name} down here.` },
   sell: { label: 'Sell', detail: (name) => `Offer the ${name} to someone here who buys.` },
 };

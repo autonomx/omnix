@@ -1,4 +1,4 @@
-import type { RpgGearPreview, RpgHeroSummaryPreview, RpgHotbarAbilityPreview, RpgInventoryItemPreview, RpgJobCardPreview, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgNpcRelationshipPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgQuickActionPreview, RpgSessionSummaryPreview, RpgStatPreview, RpgSurvivalPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
+import type { RpgHerePreview, RpgHeroSummaryPreview, RpgHotbarAbilityPreview, RpgInventoryItemPreview, RpgJobCardPreview, RpgJournalDetailPreview, RpgJournalEntryPreview, RpgNpcRelationshipPreview, RpgPartyMemberPreview, RpgQuestPreview, RpgQuickActionPreview, RpgSessionSummaryPreview, RpgStatPreview, RpgSurvivalPreview, RpgWorldStateRowPreview } from './rpgUiTypes';
 
 export const NOT_TRACKED = 'Not tracked yet';
 
@@ -17,13 +17,6 @@ export const heroStats: RpgStatPreview[] = [
   { label: 'HP', value: '86 / 110', percent: 78, tone: 'danger' },
   { label: 'Stamina', value: '72 / 100', percent: 72, tone: 'success' },
   { label: 'Mana', value: '64 / 120', percent: 53, tone: 'mana' },
-];
-
-export const equippedGear: RpgGearPreview[] = [
-  { icon: '🏹', name: 'Longbow of the Boreal Wind', slot: 'Weapon' },
-  { icon: '🛡️', name: 'Shadow Leather Armor +2', slot: 'Armor' },
-  { icon: '🦉', name: 'Cloak of the Owl', slot: 'Cloak' },
-  { icon: '💍', name: 'Band of Keen Senses', slot: 'Ring' },
 ];
 
 export const partyMembers: RpgPartyMemberPreview[] = [
@@ -85,6 +78,11 @@ export const hotbarAbilities: RpgHotbarAbilityPreview[] = [
   { key: '5', icon: '⟡', label: 'Volley', abilityId: 'recon_volley', description: 'Pressure several targets with a rapid spread of arrows.' },
   { key: '6', icon: '⇥', label: 'Dash', abilityId: 'recon_dash', description: 'Spend stamina to cross dangerous ground quickly.' },
 ];
+
+export const previewHere: RpgHerePreview = {
+  people: ['Thorin Ironfist'],
+  exits: ['The northern archway', 'Frostbound Hollow'],
+};
 
 export const previewSurvival: RpgSurvivalPreview = {
   actions: [

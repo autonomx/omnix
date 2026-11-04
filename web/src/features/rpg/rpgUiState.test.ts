@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
 import { rpgTurnOutputText } from './rpgStoryState';
 import { createRpgWorkspaceState, progressPercent, safeSessionId } from './rpgUiState';
+import { speakerLabel } from './rpgUiRecords';
 import { fixture } from '../../test/fixture';
 
 describe('rpg UI state', () => {
@@ -297,7 +298,6 @@ describe('rpg UI state', () => {
       { label: 'Stamina', value: '31 / 40', percent: 78, tone: 'success' },
       { label: 'Mana', value: '8 / 20', percent: 40, tone: 'mana' },
     ]);
-    expect(state.equippedGear[0]).toMatchObject({ name: 'Shortbow', slot: 'Weapon' });
     expect(state.partyMembers[0]).toMatchObject({ avatar: 'B', name: 'Bran', role: 'Lv. 2 Innkeeper', hp: '18 / 22', percent: 82 });
     expect(state.activeQuests[0]).toMatchObject({ title: 'Find the Quarry Trail', detail: 'Ask Bran about the old quarry road.' });
     expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
@@ -356,7 +356,6 @@ describe('rpg UI state', () => {
 
     expect(state.heroSummary).toMatchObject({ source: 'live', name: 'Elara', subtitle: 'Level 1 • Frontier Scout', xpLabel: '0 / 100', gold: '0g' });
     expect(state.heroStats.map((stat) => stat.value)).toEqual(['92 / 92', '91 / 91', '30 / 30']);
-    expect(state.equippedGear[0]).toMatchObject({ name: 'Travel cloak', slot: 'Clothing' });
     expect(state.partyMembers).toEqual([]);
     expect(state.activeQuests[0]).toMatchObject({ title: 'Rumor at the Rusty Flagon', detail: 'Ask Bran which rumor is true.' });
     expect(state.quickActions).toEqual([{ command: 'Talk to Bran', icon: '☯', label: 'Talk' }]);
@@ -760,5 +759,62 @@ describe('rpgTurnOutputText', () => {
   it('still reads outputs that carry the text', () => {
     expect(rpgTurnOutputText({ type: 'rpg_turn_response', content: 'You see a door.' })).toBe('You see a door.');
     expect(rpgTurnOutputText(undefined)).toBeUndefined();
+  });
+});
+
+describe('createRpgWorkspaceState and the campaign as loaded', () => {
+  const listed = { manifest: { session_id: 'session:played', title: 'Played', updated_at: '2026-06-16T00:00:00Z', turn_count: 0 }, state: { location: 'Old Town' } };
+
+  it('takes the place and the turn from the loaded campaign, not the list row that lags behind it', () => {
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [listed] },
+      selectedSessionId: 'session:played',
+      selectedSession: { manifest: listed.manifest, state: { location: 'Night Market', turn_count: 7 } },
+    });
+    expect(state.selectedSessionSummary).toMatchObject({ title: 'Played', location: 'Night Market', turnLabel: 'Turn 7' });
+    expect(state.journalDetail.bullets).toContain('Turn 7');
+  });
+
+  it('counts the turns the story holds when the count has not caught up', () => {
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [listed] },
+      selectedSessionId: 'session:played',
+      selectedSession: {
+        manifest: listed.manifest,
+        state: { location: 'Old Town' },
+        runtime_state: { recent_interactions: [{ player_input: 'I ask Helix' }, { player_input: 'I look' }] },
+      },
+    });
+    expect(state.selectedSessionSummary.turnLabel).toBe('Turn 2');
+  });
+
+  it('reads who is here and where the paths lead from the player view', () => {
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [listed] },
+      selectedSessionId: 'session:played',
+      selectedSession: { manifest: listed.manifest, state: {}, here: { people: ['Helix', 7, ''], exits: ['Night Market'] } },
+    });
+    expect(state.here).toEqual({ people: ['Helix'], exits: ['Night Market'] });
+  });
+
+  it('keeps every quest with how it stands', () => {
+    const quests = Array.from({ length: 6 }, (_, index) => ({ title: `Quest ${index}`, status: index ? 'available' : 'completed' }));
+    const state = createRpgWorkspaceState({
+      inventory: { sessions: [listed] },
+      selectedSessionId: 'session:played',
+      selectedSession: { manifest: listed.manifest, state: { quests } },
+    });
+    expect(state.activeQuests).toHaveLength(6);
+    expect(state.activeQuests[0]).toMatchObject({ title: 'Quest 0', status: 'completed', detail: '' });
+  });
+});
+
+describe('speakerLabel', () => {
+  it('never shows the player a raw person id', () => {
+    expect(speakerLabel('npc:helix')).toBe('Helix');
+    expect(speakerLabel('npc:old_harbor-master')).toBe('Old harbor master');
+    expect(speakerLabel('npc:')).toBe('Someone');
+    expect(speakerLabel('Captain Rhea')).toBe('Captain Rhea');
+    expect(speakerLabel('Omnix (Narrator)')).toBe('Omnix (Narrator)');
   });
 });

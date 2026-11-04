@@ -1,9 +1,9 @@
 import { Button } from '@mantine/core';
-import type { ChangeEvent, FormEventHandler } from 'react';
+import type { FormEventHandler, KeyboardEvent } from 'react';
 import { useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { rpgSessionClient } from './api/rpgSessionClient';
-import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiTypes';
+import type { RpgQuickActionPreview } from './rpgUiTypes';
 import './RpgActionComposer.css';
 
 interface RpgActionComposerProps {
@@ -12,6 +12,8 @@ interface RpgActionComposerProps {
   isPending: boolean;
   /** The campaign being played, when there is one: what Undo rewinds. */
   liveSessionId: string;
+  /** Opens the talk with the game master, which changes nothing in the story. */
+  onAskGameMaster?: () => void;
   /** A card plays at once (EV-9); an action without one fills the command to send. */
   onQuickAction: (action: RpgQuickActionPreview) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -20,7 +22,6 @@ interface RpgActionComposerProps {
   quickActions: RpgQuickActionPreview[];
   selectedSessionId: string;
   sessionRegistration: UseFormRegisterReturn<'sessionId'>;
-  sessionSummaries: RpgSessionSummaryPreview[];
 }
 
 /** The player's turn: what they type, the scene's suggestions, and undoing the last turn. */
@@ -29,19 +30,21 @@ export function RpgActionComposer({
   hasCommandError,
   isPending,
   liveSessionId,
+  onAskGameMaster,
   onQuickAction,
   onSubmit,
   onTurnApplied,
   quickActions,
   selectedSessionId,
   sessionRegistration,
-  sessionSummaries,
 }: RpgActionComposerProps) {
   const [isUndoing, setIsUndoing] = useState(false);
-  const selectedSessionHasOption = !selectedSessionId || sessionSummaries.some((session) => session.id === selectedSessionId);
 
-  const handleSessionSelectChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    void sessionRegistration.onChange(event);
+  // Enter sends the turn; Shift+Enter starts a new line (RQ-7.6: play from the keyboard).
+  const sendOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
   };
 
   const undoLastTurn = async () => {
@@ -63,21 +66,10 @@ export function RpgActionComposer({
         <div className="rpg-action-composer-heading">
           <h3 id="rpg-turn-request-title">Your turn</h3>
         </div>
-        <label className="rpg-session-field" title="Session">
-          <span className="rpg-field-label">Session</span>
-          <select {...sessionRegistration} value={selectedSessionId} onChange={handleSessionSelectChange}>
-            <option value="">New or current session</option>
-            {!selectedSessionHasOption ? <option value={selectedSessionId}>Launching session — {selectedSessionId}</option> : null}
-            {sessionSummaries.map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.title === session.id ? session.id : `${session.title} — ${session.id}`}
-              </option>
-            ))}
-          </select>
-        </label>
+        <input type="hidden" {...sessionRegistration} value={selectedSessionId} />
         <label className="rpg-command-field">
           <span className="rpg-field-label">Command</span>
-          <textarea rows={1} aria-invalid={hasCommandError} placeholder="What do you want to do?" {...commandRegistration} />
+          <textarea rows={1} aria-invalid={hasCommandError} onKeyDown={sendOnEnter} placeholder="What do you want to do?" {...commandRegistration} />
         </label>
         <Button
           aria-label={isPending ? 'Sending your turn' : 'Submit RPG turn'}
@@ -98,10 +90,21 @@ export function RpgActionComposer({
         >
           <span aria-hidden="true">↶</span>
         </button>
+        {onAskGameMaster ? (
+          <button
+            aria-label="Ask the game master"
+            className="rpg-undo-button rpg-ask-button"
+            onClick={onAskGameMaster}
+            title="Ask the game master: a question changes nothing in the story"
+            type="button"
+          >
+            <span aria-hidden="true">?</span>
+          </button>
+        ) : null}
       </form>
       <div role="group" className="rpg-quick-actions" aria-label="Quick RPG actions">
         {quickActions.map((action) => (
-          <button key={`${action.label}:${action.command}`} type="button" onClick={() => onQuickAction(action)}>
+          <button key={`${action.label}:${action.command}`} title={action.label} type="button" onClick={() => onQuickAction(action)}>
             <span className="rpg-quick-action-icon" aria-hidden="true">{action.icon}</span>
             <span className="rpg-quick-action-label">{action.label}</span>
           </button>

@@ -1,0 +1,199 @@
+{
+ "measured_on": "2026-11-03",
+ "runs": [
+  {
+   "viewport": "phone",
+   "size": [
+    360,
+    740
+   ],
+   "session_id": "rpg_B5osLoWxdlaGDs6g",
+   "tasks": [
+    {
+     "name": "start",
+     "ok": true,
+     "seconds": 0.9,
+     "detail": "rpg_B5osLoWxdlaGDs6g"
+    },
+    {
+     "name": "take_quest",
+     "ok": true,
+     "seconds": 3.2,
+     "detail": "Voices in the Phone active"
+    },
+    {
+     "name": "travel",
+     "ok": true,
+     "seconds": 2.8,
+     "detail": "location:aurelia:starfall-village"
+    },
+    {
+     "name": "here_and_map",
+     "ok": true,
+     "seconds": 0.3,
+     "detail": "a path to Valecourt; the map opens"
+    },
+    {
+     "name": "buy_and_undo",
+     "ok": true,
+     "seconds": 3.4,
+     "detail": "paid 36 copper, undone"
+    },
+    {
+     "name": "buy_and_sell",
+     "ok": true,
+     "seconds": 7.1,
+     "detail": "sold for 15 copper"
+    },
+    {
+     "name": "equip",
+     "ok": true,
+     "seconds": 2.4,
+     "detail": "Travel Cloak off and on"
+    },
+    {
+     "name": "finish_quest",
+     "ok": true,
+     "seconds": 16.5,
+     "detail": "First Night in Aurelia completed"
+    },
+    {
+     "name": "rest",
+     "ok": true,
+     "seconds": 4.5,
+     "detail": "turn 10"
+    },
+    {
+     "name": "save_point",
+     "ok": true,
+     "seconds": 3.6,
+     "detail": "back at location:aurelia:wayfarer-guild"
+    },
+    {
+     "name": "fight_on_grid",
+     "ok": true,
+     "seconds": 21.7,
+     "detail": "Echo Wolf struck from the grid; enemy_fled"
+    },
+    {
+     "name": "resume_after_away",
+     "ok": true,
+     "seconds": 0.9,
+     "detail": "the world went on"
+    }
+   ],
+   "passed": 12,
+   "total": 12,
+   "axe_serious_or_critical": [],
+   "axe_other": [
+    "heading-order",
+    "heading-order",
+    "heading-order",
+    "aria-allowed-role",
+    "heading-order",
+    "heading-order"
+   ],
+   "horizontal_overflow_px": 0,
+   "page_scroll_px": 0,
+   "errors": []
+  },
+  {
+   "viewport": "desktop",
+   "size": [
+    1440,
+    900
+   ],
+   "session_id": "rpg_y-eL_SyAftU2ZiJg",
+   "tasks": [
+    {
+     "name": "start",
+     "ok": true,
+     "seconds": 1.5,
+     "detail": "rpg_y-eL_SyAftU2ZiJg"
+    },
+    {
+     "name": "take_quest",
+     "ok": true,
+     "seconds": 2.8,
+     "detail": "Voices in the Phone active"
+    },
+    {
+     "name": "travel",
+     "ok": true,
+     "seconds": 2.8,
+     "detail": "location:aurelia:starfall-village"
+    },
+    {
+     "name": "here_and_map",
+     "ok": true,
+     "seconds": 0.2,
+     "detail": "a path to Valecourt; the map opens"
+    },
+    {
+     "name": "buy_and_undo",
+     "ok": true,
+     "seconds": 3.3,
+     "detail": "paid 36 copper, undone"
+    },
+    {
+     "name": "buy_and_sell",
+     "ok": true,
+     "seconds": 8.8,
+     "detail": "sold for 15 copper"
+    },
+    {
+     "name": "equip",
+     "ok": true,
+     "seconds": 2.4,
+     "detail": "Travel Cloak off and on"
+    },
+    {
+     "name": "finish_quest",
+     "ok": true,
+     "seconds": 15.6,
+     "detail": "First Night in Aurelia completed"
+    },
+    {
+     "name": "rest",
+     "ok": true,
+     "seconds": 4.0,
+     "detail": "turn 10"
+    },
+    {
+     "name": "save_point",
+     "ok": true,
+     "seconds": 4.2,
+     "detail": "back at location:aurelia:wayfarer-guild"
+    },
+    {
+     "name": "fight_on_grid",
+     "ok": true,
+     "seconds": 21.3,
+     "detail": "Echo Wolf struck from the grid; enemy_fled"
+    },
+    {
+     "name": "resume_after_away",
+     "ok": true,
+     "seconds": 0.8,
+     "detail": "the world went on"
+    }
+   ],
+   "passed": 12,
+   "total": 12,
+   "axe_serious_or_critical": [],
+   "axe_other": [
+    "heading-order",
+    "heading-order",
+    "heading-order",
+    "aria-allowed-role",
+    "heading-order",
+    "aria-allowed-role",
+    "heading-order"
+   ],
+   "horizontal_overflow_px": 0,
+   "page_scroll_px": 0,
+   "errors": []
+  }
+ ],
+ "all_pass": true
+}

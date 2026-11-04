@@ -182,16 +182,6 @@ export function titleCase(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function iconForEquipment(slot: string, name: string): string {
-  const text = `${slot} ${name}`.toLowerCase();
-  if (text.includes('bow')) return '🏹';
-  if (text.includes('armor') || text.includes('shield')) return '🛡️';
-  if (text.includes('ring')) return '💍';
-  if (text.includes('cloak')) return '🦉';
-  if (text.includes('sword') || text.includes('blade')) return '⚔';
-  return '◇';
-}
-
 export function iconForInventory(label: string): string {
   const text = label.toLowerCase();
   if (text.includes('potion') || text.includes('heal')) return '🧪';
@@ -209,4 +199,12 @@ export function questIcon(status: unknown): string {
   if (text.includes('failed')) return '×';
   if (text.includes('urgent')) return '▲';
   return '◆';
+}
+
+/** The name a speaker goes by. A person the world does not name reaches the story as a raw id ("npc:helix"): the
+ * player reads a name, not an id. */
+export function speakerLabel(speaker: string): string {
+  if (!/^npc:/i.test(speaker)) return speaker;
+  const words = speaker.slice(4).replace(/[_-]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Someone';
 }

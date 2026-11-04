@@ -36,31 +36,6 @@
     text-transform: uppercase;
   }
 
-  .assistant-chatgpt-new {
-    align-items: center;
-    background: transparent;
-    border: 0;
-    border-radius: 0.55rem;
-    color: var(--omnix-text);
-    cursor: pointer;
-    display: inline-flex;
-    font-weight: 700;
-    gap: 0.3rem;
-    min-height: 2rem;
-    padding: 0 0.55rem;
-  }
-
-  .assistant-chatgpt-new:hover,
-  .assistant-chatgpt-new:focus-visible {
-    background: color-mix(in srgb, var(--wash-neutral-1000) 7%, transparent);
-    outline: none;
-  }
-
-  .assistant-chatgpt-new span:first-child {
-    font-size: 1.1rem;
-    line-height: 1;
-  }
-
   .assistant-chatgpt-list {
     display: grid;
     gap: 0.12rem;
@@ -274,13 +249,37 @@
   }
 }
 
-/* Sidebar layout: the session list fills the rail and scrolls on its own. */
+/* Sidebar layout: New chat keeps its row; the views and the sessions below it scroll together. */
 @layer features {
-  .assistant-chat-sidebar > .assistant-chatgpt-sidebar {
-    grid-row: 2 / -1;
+  .assistant-chat-sidebar .assistant-chat-sidebar-new {
+    padding-bottom: 0.18rem;
+  }
+
+  .assistant-chat-sidebar .assistant-chat-sidebar-new.scrolled {
+    border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 18%, transparent);
+  }
+
+  .assistant-chat-sidebar-new button:disabled {
+    cursor: progress;
+    opacity: 0.7;
+  }
+
+  .assistant-chat-sidebar-scroll {
+    display: flex;
+    flex-direction: column;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+  }
+
+  .assistant-chat-sidebar-scroll > .assistant-sidebar-nav {
+    flex: none;
+    padding-top: 0.18rem;
+  }
+
+  .assistant-chat-sidebar-scroll > .assistant-chatgpt-sidebar {
+    flex: 1 0 auto;
   }
 }

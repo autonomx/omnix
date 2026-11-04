@@ -4,17 +4,18 @@ A player starts a campaign in a bundled world (Aurelia), takes a quest, travels,
 again and sells from the pack, takes off and puts on what they wear, finishes the quest, rests, names a save point
 and returns to it, fights on the grid, and comes back after time away. Each task is driven through the play screen
 only; whether it happened is read from the campaign itself (``GET /api/rpg/sessions/{id}``), never from the page's
-wording. Each viewport also gets an axe pass (serious or critical issues fail) and a check that nothing scrolls
-sideways.
+wording. Each viewport also gets an axe pass, with each of the play bar's panels open as well (serious or critical
+issues fail), and a check that the page scrolls neither sideways nor down: the story and composer stay on screen.
 
-It needs a running gateway (PostgreSQL, sign-in off) and the web app pointed at it, for example::
+It needs a running gateway (PostgreSQL, sign-in off, the web app's origin allowed) and the web app pointed at it::
 
-    OMNIX_AUTH_MODE=disabled OMNIX_GATEWAY_PORT=8765 python -m app.composition.gateway.main
+    OMNIX_AUTH_MODE=disabled OMNIX_GATEWAY_PORT=8765 OMNIX_ALLOWED_ORIGINS=http://127.0.0.1:5180 python -m app.composition.gateway.main
     VITE_GATEWAY_ORIGIN=http://127.0.0.1:8765 npm --prefix web run dev -- --port 5180 --strictPort
     python scripts/rpg_core_tasks.py --web http://127.0.0.1:5180 --gateway http://127.0.0.1:8765 --out report.json
 
-The storyteller need not be configured: the outcome of a turn is the game's own, and its prose may come later or not
-at all. Python Playwright drives Chromium (``--chrome`` names a browser build when Playwright's own is older).
+RPG's model route must answer, on the owner's gate model (Haiku, effort low): a typed turn is read by it, and an
+unread one is "Nothing comes of that". The outcome of a turn is still the game's own, and its prose may come later or
+not at all. A database without the bundled world gets it installed and adopted first. Python Playwright drives Chromium (``--chrome`` names a browser build when Playwright's own is older).
 """
 from __future__ import annotations
 
@@ -32,6 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 AXE = ROOT / "node_modules" / "axe-core" / "axe.min.js"
 VIEWPORTS = {"phone": (360, 740), "desktop": (1440, 900)}
 WORLD = "Aurelia: Echoes Beyond the Gate"
+WORLD_ID = "world:aurelia-echoes-beyond-the-gate"
+BUNDLE = ROOT / "resources" / "examples" / "rpg" / "world-bundles" / "aurelia-echoes-beyond-the-gate.omnix-world.zip"
+PANELS = ("Inventory", "Character", "Journal", "World")
 TURN_SECONDS = 120.0
 
 
@@ -50,6 +54,7 @@ class Run:
     session_id: str = ""
     axe: list[dict[str, Any]] = field(default_factory=list)
     overflow_px: int = 0
+    page_scroll_px: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -114,13 +119,14 @@ class Screen:
         )
 
     def play(self, command: str) -> None:
+        self.close_panel()
         self.page.get_by_placeholder("What do you want to do?").fill(command)
         self.button("Submit RPG turn").click()
         self.page.wait_for_timeout(300)
         self.idle()
 
     def session_id(self) -> str:
-        return self.page.locator("select[name=sessionId]").input_value()
+        return self.page.locator("input[name=sessionId]").input_value()
 
     def scene(self) -> str:
         return self.page.locator("#rpg-story-scene-title").inner_text()
@@ -131,9 +137,24 @@ class Screen:
         if card:
             self.page.get_by_role("dialog").get_by_role("button", name=re.compile(f"^{re.escape(card)}")).first.click()
 
+    def bar_button(self, name: str) -> Any:
+        return self.page.get_by_role("navigation", name="Play panels").get_by_role("button", name=name, exact=True)
+
+    def open_panel(self, name: str) -> Any:
+        """A panel of the play bar, open; what it holds."""
+        button = self.bar_button(name)
+        if button.get_attribute("aria-expanded") != "true":
+            button.click()
+        return self.page.locator("#rpg-play-panel")
+
+    def close_panel(self) -> None:
+        close = self.page.get_by_role("button", name="Close panel", exact=True)
+        if close.count():
+            close.click()
+
     def inventory_item(self, name: str) -> list[str]:
         """Selects a carried item; the actions its toolbar offers."""
-        self.page.get_by_role("tab", name="Inventory", exact=True).click()
+        self.open_panel("Inventory")
         self.page.get_by_role("group", name="Inventory item slots").get_by_role("button", name=name, exact=True).click()
         self.page.wait_for_timeout(500)
         return [button.get_attribute("aria-label") or "" for button in self.item_actions().get_by_role("button").all()]
@@ -149,6 +170,24 @@ def until(check: Callable[[], bool], timeout: float = 30.0) -> bool:
             return True
         time.sleep(0.5)
     return check()
+
+
+def install_world(gateway: str) -> None:
+    """The bundled world, imported and adopted, on a database that does not have it yet."""
+    base = gateway.rstrip("/")
+    with urllib.request.urlopen(f"{base}/api/rpg/worlds", timeout=30) as response:
+        if any(world.get("id") == WORLD_ID for world in json.load(response).get("worlds") or ()):
+            return
+
+    def post(path: str, body: bytes, content_type: str) -> dict[str, Any]:
+        request = urllib.request.Request(f"{base}{path}", data=body, method="POST",
+                                         headers={"Content-Type": content_type, "X-Omnix-Client": "rpg-core-tasks"})
+        with urllib.request.urlopen(request, timeout=180) as response:
+            return json.load(response)
+
+    imported = post("/api/rpg/worlds/import", BUNDLE.read_bytes(), "application/zip")
+    post(f"/api/rpg/worlds/{WORLD_ID}/adopt", json.dumps({"bundle_sha256": imported["bundle_sha256"]}).encode(),
+         "application/json")
 
 
 def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir: Path) -> Run:
@@ -249,13 +288,16 @@ def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir:
 
     def finish_quest() -> str:
         screen.play("go to Wayfarers' Guild")
+        screen.play("I ask Miri Kestrel to register me with the guild.")  # the quest's steps: reach, register, a companion
+        screen.play("I ask Miri Kestrel to join my party as my companion.")
         check(campaign.quest("First Night in Aurelia") == "completed", "First Night in Aurelia is not complete")
         check(campaign.inventory().get("Wayfarer Sigil", 0) >= 1, "no reward")
         return "First Night in Aurelia completed"
 
     def rest() -> str:
         turns = campaign.turn_count()
-        screen.button("Rest").click()  # it prepares the command; the player sends it
+        # It prepares the command and closes the panel; the player sends it.
+        screen.open_panel("Character").get_by_role("button", name="Rest", exact=True).click()
         check("rest" in page.get_by_placeholder("What do you want to do?").input_value().lower(), "Rest wrote no command")
         screen.button("Submit RPG turn").click()
         page.wait_for_timeout(300)
@@ -287,7 +329,6 @@ def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir:
             screen.play("I attack the Echo Wolf.")
         check(campaign.combat().get("active") is True, "no fight began")
         foe = next(str(row.get("name")) for row in campaign.combat()["participants"].values() if row.get("side") == "enemy")
-        screen.button("Open interactive map").click()
         grid = page.get_by_role("region", name="Local tactical map")
         attack = grid.get_by_role("button", name=re.compile(f"^Attack {re.escape(foe)}$"))
         attack.wait_for(timeout=30_000)
@@ -296,13 +337,32 @@ def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir:
         attack.click()
         check(until(lambda: len(campaign.combat().get("combat_log") or ()) > log or not campaign.combat().get("active")),
               "the grid attack was no blow")
-        screen.button("Close map").click()
         for _ in range(30):
             if not campaign.combat().get("active"):
                 break
             screen.play(f"I attack the {foe}.")
         check(not campaign.combat().get("active"), "the fight did not end")
         return f"{foe} struck from the grid; {campaign.combat().get('ended_reason')}"
+
+    def here_and_map() -> str:
+        """Who is here and where the paths lead, and the map: beside the story, or in the World panel on a phone."""
+        screen.close_panel()
+        paths = page.get_by_role("group", name="Paths from here")
+        if not paths.is_visible():
+            screen.open_panel("World")
+        check(paths.get_by_role("button").count() > 0, "no paths are offered from here")
+        target = paths.get_by_role("button").first
+        place = target.inner_text()
+        target.click()  # it prepares the command and closes the panel; the player sends it or not
+        check(place in page.get_by_placeholder("What do you want to do?").input_value(), f"{place} wrote no command")
+        page.get_by_placeholder("What do you want to do?").fill("")
+        if not screen.button("Open interactive map").is_visible():
+            screen.open_panel("World")
+        screen.button("Open interactive map").click()
+        page.get_by_role("region", name="Local tactical map").wait_for(timeout=30_000)
+        screen.button("Close map").click()
+        screen.close_panel()
+        return f"a path to {place}; the map opens"
 
     def resume_after_away() -> str:
         turns_before = campaign.session().get("runtime_state", {}).get("state_revision")
@@ -322,7 +382,7 @@ def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir:
         return "the world went on"
 
     for name, body in (("start", start), ("take_quest", take_quest), ("travel", travel),
-                       ("buy_and_undo", buy_and_undo), ("buy_and_sell", buy_and_sell), ("equip", equip),
+                       ("here_and_map", here_and_map), ("buy_and_undo", buy_and_undo), ("buy_and_sell", buy_and_sell), ("equip", equip),
                        ("finish_quest", finish_quest), ("rest", rest), ("save_point", save_point),
                        ("fight_on_grid", fight_on_grid), ("resume_after_away", resume_after_away)):
         if name != "start" and campaign is None:
@@ -332,9 +392,24 @@ def run_viewport(browser: Any, args: argparse.Namespace, viewport: str, out_dir:
 
     page.screenshot(path=str(out_dir / f"core-{viewport}.png"))
     page.add_script_tag(content=AXE.read_text(encoding="utf-8"))
-    result.axe = page.evaluate("""async () => (await axe.run()).violations
-        .map(v => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, help: v.help }))""")
-    result.overflow_px = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+
+    def audit(where: str) -> None:
+        found = page.evaluate("""async () => (await axe.run()).violations
+            .map(v => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, help: v.help }))""")
+        result.axe.extend({**row, "where": where} for row in found)
+        result.overflow_px = max(result.overflow_px, page.evaluate(
+            "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"))
+        result.page_scroll_px = max(result.page_scroll_px, page.evaluate(
+            "() => document.documentElement.scrollHeight - document.documentElement.clientHeight"))
+
+    screen.close_panel()
+    audit("play")
+    for panel in PANELS:
+        screen.open_panel(panel)
+        page.wait_for_timeout(500)
+        page.screenshot(path=str(out_dir / f"core-{viewport}-{panel.lower()}.png"))
+        audit(panel)
+        screen.close_panel()
     context.close()
     return result
 
@@ -353,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out).parent if args.out else ROOT / "output" / "rpg-core-tasks"
     out_dir.mkdir(parents=True, exist_ok=True)
     viewports = list(VIEWPORTS) if args.viewport == "both" else [args.viewport]
+    install_world(args.gateway)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=not args.headed, executable_path=args.chrome or None)
         runs = [run_viewport(browser, args, viewport, out_dir) for viewport in viewports]
@@ -366,11 +442,12 @@ def main(argv: list[str] | None = None) -> int:
             "passed": sum(task.ok for task in run.tasks), "total": len(run.tasks),
             "axe_serious_or_critical": [v for v in run.axe if v["impact"] in ("serious", "critical")],
             "axe_other": [v["id"] for v in run.axe if v["impact"] not in ("serious", "critical")],
-            "horizontal_overflow_px": run.overflow_px, "errors": run.errors[:20],
+            "horizontal_overflow_px": run.overflow_px, "page_scroll_px": run.page_scroll_px, "errors": run.errors[:20],
         } for run in runs],
     }
     report["all_pass"] = all(
         run["passed"] == run["total"] and not run["axe_serious_or_critical"] and run["horizontal_overflow_px"] <= 0
+        and run["page_scroll_px"] <= 0
         for run in report["runs"]
     )
     text = json.dumps(report, indent=1, ensure_ascii=False)

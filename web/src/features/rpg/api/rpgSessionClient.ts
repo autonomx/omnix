@@ -306,27 +306,27 @@ export const rpgSessionClient = {
   },
 
   /**
-   * Applies an `rpg.turn` through the foreground session route and returns the
-   * job the gateway completed with it; without that route (or a session and
-   * command) the request becomes an ordinary queued job.
+   * Applies an `rpg.turn` through the foreground session route. The turn is done when the route answers, and there is
+   * no job to follow unless the gateway names one (null); without that route (or a session and command) the request
+   * becomes an ordinary queued job.
    */
-  async submitTurnJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
-    const foregroundTurn = await createForegroundTurnJob(request);
-    return foregroundTurn ?? omnixApiClient.createJob(request, options);
+  async submitTurnJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord | null> {
+    const foregroundTurn = await applyForegroundTurn(request);
+    return foregroundTurn.applied ? foregroundTurn.job : omnixApiClient.createJob(request, options);
   },
 };
 
-/** The turn's `rpg.turn.foreground_record` job, which the gateway completes in the turn's transaction. */
-async function createForegroundTurnJob(request: CreateJobRequest): Promise<JobRecord | null> {
+/** Plays the turn on its campaign's route, if it can; a job comes back only if the gateway keeps one for the turn. */
+async function applyForegroundTurn(request: CreateJobRequest): Promise<{ applied: boolean; job: JobRecord | null }> {
   const requestRecord = request as Record<string, unknown>;
   if (requestRecord.module !== 'rpg' || requestRecord.type !== 'rpg.turn') {
-    return null;
+    return { applied: false, job: null };
   }
   const sessionId = stringValue(asRecord(requestRecord.input_ref).session_id);
   const command = stringValue(asRecord(requestRecord.input_payload).command);
   const card = asRecord(requestRecord.input_payload).card;
   if (!sessionId || !command) {
-    return null;
+    return { applied: false, job: null };
   }
   let result: RpgTurnResponse;
   try {
@@ -337,13 +337,9 @@ async function createForegroundTurnJob(request: CreateJobRequest): Promise<JobRe
     })) as RpgTurnResponse;
   } catch (error) {
     if (isNotFound(error)) {
-      return null;
+      return { applied: false, job: null };
     }
     throw error;
   }
-  if (!result.job_id) {
-    // The turn was applied; queueing it again would apply it twice.
-    throw new Error('The RPG turn was applied, but the gateway did not return its job.');
-  }
-  return omnixApiClient.getJob(result.job_id);
+  return { applied: true, job: result.job_id ? await omnixApiClient.getJob(result.job_id) : null };
 }

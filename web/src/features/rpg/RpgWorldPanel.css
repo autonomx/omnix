@@ -1,0 +1,23 @@
+/* RpgWorldPanel's own styles. */
+@layer features {
+  .rpg-world-panel {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .rpg-world-people {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .rpg-world-panel-section {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .rpg-world-panel-section h3 {
+    color: var(--fg-slate-970-2);
+    font-size: 0.95rem;
+  }
+}
