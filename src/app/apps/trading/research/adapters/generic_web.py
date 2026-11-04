@@ -10,11 +10,25 @@ from .base import AdapterExecutionResult
 from typing import Any, cast
 
 
+_RESEARCH_DISABLED = "web_unavailable:research_feature_disabled"
+
+
+def _research_enabled() -> bool:
+    from app.runtime.config import get_runtime_config
+    from app.runtime.feature_catalog import enabled_feature_ids
+
+    return "research" in enabled_feature_ids(get_runtime_config())
+
+
 class GenericWebAdapter:
+    """Reads the web through the research feature. Without it (a trading-only install leaves its code out) there is
+    no web to read: searches and extractions return no evidence and say why."""
+
     name = "generic_web"
 
     def __init__(self, search_service=None, extractor_factory=None) -> None:
-        if search_service is None:
+        research_enabled = (search_service is None or extractor_factory is None) and _research_enabled()
+        if search_service is None and research_enabled:
             from app.platform.research.contracts import (
                 ProviderFallbackSearchClient,
                 QuickSearchService,
@@ -34,7 +48,7 @@ class GenericWebAdapter:
                 research_policy=settings.policy,
                 max_extracts=min(2, settings.max_extracts),
             )
-        if extractor_factory is None:
+        if extractor_factory is None and research_enabled:
             from app.platform.research.contracts import ReadablePageExtractor
             extractor_factory = ReadablePageExtractor
         self.search_service = search_service
@@ -45,6 +59,8 @@ class GenericWebAdapter:
         # provider (for example Brave). Backtests install a context-local hard guard
         # so a future Hermes integration cannot silently spend live search quota.
         assert_external_web_search_allowed()
+        if self.search_service is None:
+            return AdapterExecutionResult(detail=_RESEARCH_DISABLED, warnings=(_RESEARCH_DISABLED,))
         q = query or f"{identity.symbol} {identity.legal_name or ''} latest news filing financing".strip()
         execution = self.search_service.search(q, limit)
         captured = datetime.now(timezone.utc)
@@ -89,6 +105,8 @@ class GenericWebAdapter:
         return AdapterExecutionResult(evidence=tuple(evidence), detail=detail)
 
     def extract(self, identity: IssuerIdentity, *, locator: str) -> AdapterExecutionResult:
+        if self.extractor_factory is None:
+            return AdapterExecutionResult(detail=_RESEARCH_DISABLED, warnings=(_RESEARCH_DISABLED,))
         page = self.extractor_factory().extract(locator)
         content = " ".join(page.text.split()).strip()
         if not content:
