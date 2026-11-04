@@ -3,7 +3,7 @@
  "runtime": "stt-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/stt.windows-x64.lock.txt",
- "lock_sha256": "63e29a0a31156036bbef51b4feca9ab875ea47852023180e388da03e559ee703",
+ "lock_sha256": "0e2855c492a86323cea2626f1c3600379ec281f56fdd1e7be06e48ed16e1039b",
  "files": [
   {
    "name": "absl-py",
@@ -133,12 +133,12 @@
   },
   {
    "name": "certifi",
-   "version": "2026.7.22",
-   "filename": "certifi-2026.7.22-py3-none-any.whl",
-   "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
-   "size": 136983,
+   "version": "2026.10.23",
+   "filename": "certifi-2026.10.23-py3-none-any.whl",
+   "sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1",
+   "size": 135082,
    "source": "index",
-   "url": "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl"
+   "url": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl"
   },
   {
    "name": "cffi",
@@ -961,12 +961,12 @@
   },
   {
    "name": "pillow",
-   "version": "12.3.0",
-   "filename": "pillow-12.3.0-cp311-cp311-win_amd64.whl",
-   "sha256": "8e95e1385e4998ae9694eeaa4730ba5457ff61185b3a55e2e7bea0880aef452a",
-   "size": 7233653,
+   "version": "13.0.0",
+   "filename": "pillow-13.0.0-cp311-cp311-win_amd64.whl",
+   "sha256": "d7710eb676e9bb68965cb045be0d333b4c0d7f9dfbaa7fbf121385b1588683d3",
+   "size": 7278471,
    "source": "index",
-   "url": "https://files.pythonhosted.org/packages/63/c6/4bad1b18d132a50b27e1365e1ab163616f7a5bb56d330f66f9d1d9d4f9d4/pillow-12.3.0-cp311-cp311-win_amd64.whl"
+   "url": "https://files.pythonhosted.org/packages/7d/f6/6e2d96413e4c9dbec12ea584d9e646d602877d4cce3ea669099f959deac6/pillow-13.0.0-cp311-cp311-win_amd64.whl"
   },
   {
    "name": "platformdirs",
