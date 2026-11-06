@@ -12,7 +12,7 @@
 }
 
 .character-memory-error {
-  color: var(--c-red-500, #f87171);
+  color: var(--c-red-500);
   font-size: 0.82rem;
   margin: 0 0 0.8rem;
 }

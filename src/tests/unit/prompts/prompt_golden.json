@@ -79,6 +79,10 @@
     "sha256": "630d4a78135f78d0327c87120a866a09f87aa69d5128f2c8394b691e1b1bd4cd",
     "version": "2"
   },
+  "assistant_memory.conversation_reading.system_prompt": {
+    "sha256": "a0898b496c0736222a029feca983a46939d0b435bc8ba840454cf8f48387ff3e",
+    "version": "10"
+  },
   "assistant_memory.initiative.prompt_directive": {
     "sha256": "fb46f32d0e36bb146fa20195ecb51ddc68274d6923e7e14dc060bae61cb47d40",
     "version": "1"
@@ -205,6 +209,10 @@
   },
   "chat.live_conversation_proactive.prompt_5": {
     "sha256": "fb153065e725d60a888f62108a177ec5d47ece55a08e0f6306faed6514731c33",
+    "version": "1"
+  },
+  "chat.live_overlap_judge.system_prompt": {
+    "sha256": "5cb06d606fd4ae9b1b0b9e306c9a64f4d15556b8caa957de4b96ee7082f88ef7",
     "version": "1"
   },
   "chat.session_defaults.legacy_default_prompt": {

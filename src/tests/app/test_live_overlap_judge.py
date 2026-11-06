@@ -151,7 +151,7 @@ def test_a_transcript_is_data_that_cannot_close_its_quotes(client) -> None:
 
     messages = provider.calls[0]["messages"]
     assert messages[0].role == "system"
-    assert messages[0].content == judge.SYSTEM_PROMPT  # stable, so the call's waiting process fits every judgement
+    assert messages[0].content == judge.SYSTEM_PROMPT.text  # stable, so the call's waiting process fits every judgement
     assert json.dumps(speech, ensure_ascii=False) in messages[1].content
     assert messages[1].content.count("\nListener said: ") == 1
 
@@ -186,7 +186,7 @@ def test_warming_the_judge_starts_the_process_a_judgement_will_take(monkeypatch)
 
     assert provider.warmed[0]["model"] == "haiku"
     # The waiting process is chosen by its system prompt: warm and judge must share it.
-    assert provider.warmed[0]["messages"][0].content == judge.SYSTEM_PROMPT
+    assert provider.warmed[0]["messages"][0].content == judge.SYSTEM_PROMPT.text
 
 
 def test_warming_never_fails_a_call_and_skips_a_provider_with_no_waiting_process(monkeypatch) -> None:

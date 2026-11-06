@@ -4,12 +4,11 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from pathlib import Path
 
 import psycopg
 import pytest
 
-from app.persistence import migrations as migrations_module
+from app.persistence.migrations import discover_migrations
 from tests.support.database import admin_database_url
 
 pytestmark = [
@@ -20,7 +19,7 @@ pytestmark = [
     ),
 ]
 
-MIGRATION = Path(migrations_module.__file__).parent / "migrations" / "0194_chats_remember_by_default.sql"
+MIGRATION = next(item.path for item in discover_migrations() if item.version == "0194_chats_remember_by_default")
 
 
 def _session(admin, mode: str, *, settings: dict | None = None, memory_enabled: bool = False) -> str:

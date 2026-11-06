@@ -235,6 +235,12 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/platform/assistant_memory/conversation_reading.py",
+      "symbol": "_READER_EXECUTOR",
+      "category": "cache",
+      "reason": "Fixed process-local worker pool (two threads) that bounds a conversation reading's model call by its timeout; the reading job, its retries and the readings themselves are durable in PostgreSQL."
+    },
+    {
       "path": "src/app/platform/assistant_memory/structured_provider.py",
       "symbol": "_PROVIDER_EXECUTOR",
       "category": "cache",
