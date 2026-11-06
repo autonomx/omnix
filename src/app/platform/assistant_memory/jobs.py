@@ -1,6 +1,7 @@
 """Durable, idempotent post-turn structured memory jobs."""
 from __future__ import annotations
 
+import logging
 import hashlib
 from typing import TYPE_CHECKING, Any
 
@@ -27,10 +28,14 @@ from .structured_provider import StructuredProposalProvider
 if TYPE_CHECKING:
     from app.conversation.contracts import TranscriptReader
 
+# Enough of the conversation to complete a sentence said in pieces, and no more: this goes to the model on every turn.
+_EARLIER_TURNS = 4
+_EARLIER_TURN_CHARS = 400
 MEMORY_SUGGEST_JOB_TYPE = "assistant.memory.suggest"
 MEMORY_IMPORT_JOB_TYPE = "assistant.memory.import"
 MEMORY_CONSOLIDATE_JOB_TYPE = "assistant.memory.consolidate"
 HISTORY_COMPACT_JOB_TYPE = "assistant.history.compact"
+MEMORY_READ_JOB_TYPE = "assistant.memory.read_conversation"
 
 
 class MemorySuggestionJobInput(BaseModel):
@@ -47,6 +52,21 @@ class MemorySuggestionJobResult(BaseModel):
     record_ids: list[str] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     skipped_reasons: list[str] = Field(default_factory=list)
+
+
+class ConversationReadingJobInput(BaseModel):
+    """Read the next unread stretch of one owner's conversations (see conversation_reading.py)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: str
+    owner_type: str
+    owner_id: str
+    through_sequence: int
+    idempotency_key: str
+
+
+logger = logging.getLogger(__name__)
 
 
 def memory_suggestions_enabled() -> bool:
@@ -144,6 +164,17 @@ def _complete_result(
     )
 
 
+def _turns_before(session: Any, message: Any) -> list[dict[str, str]]:
+    """The conversation just before a message, enough to complete a sentence said in pieces."""
+    turns: list[dict[str, str]] = []
+    for item in session.messages:
+        if item.id == message.id:
+            break
+        if item.role in {"user", "assistant"} and str(item.content or "").strip():
+            turns.append({"role": item.role, "content": str(item.content)[:_EARLIER_TURN_CHARS]})
+    return turns[-_EARLIER_TURNS:]
+
+
 def process_memory_suggestion_job(
     job: JobRecord,
     *,
@@ -170,6 +201,16 @@ def process_memory_suggestion_job(
             execution.job, chat_store=chat_store, memory_service=memory_service,
             proposal_provider=proposal_provider, execution=execution,
         )
+
+
+def _record_turn_for_reading(session: Any, message: Any) -> None:
+    """The turn goes in the owner's log for the conversation reader; saving memories does not depend on it."""
+    from .conversation_reading import record_turn
+
+    try:
+        record_turn(session, message)
+    except Exception:  # noqa: BLE001 - that turn goes unread; the facts below still get saved
+        logger.warning("memory_conversation_turn_not_recorded", exc_info=True)
 
 
 def _process_claimed_memory_job(
@@ -206,12 +247,17 @@ def _process_claimed_memory_job(
         elif message.metadata.get("memory_command"):
             result.skipped_reasons.append("explicit_memory_command")
         else:
+            _record_turn_for_reading(session, message)
             service = memory_service or default_memory_service()
             context = resolve_session_memory_scope(session)
+            if proposal_provider is None:
+                # Only the fixed patterns can run: say so, or a turn with no memories looks like nothing worth keeping.
+                result.skipped_reasons.append("structured_provider_unavailable")
             proposals, skipped = extract_structured_memory_proposals(
                 message.content,
                 source_message_id=message.id,
                 proposal_provider=proposal_provider,
+                earlier_messages=_turns_before(session, message),
             )
             result.skipped_reasons.extend(skipped)
     with execution.write_result(service):
@@ -241,6 +287,8 @@ __all__ = [
     "HISTORY_COMPACT_JOB_TYPE",
     "MEMORY_CONSOLIDATE_JOB_TYPE",
     "MEMORY_IMPORT_JOB_TYPE",
+    "ConversationReadingJobInput",
+    "MEMORY_READ_JOB_TYPE",
     "MEMORY_SUGGEST_JOB_TYPE",
     "MemorySuggestionJobInput",
     "MemorySuggestionJobResult",

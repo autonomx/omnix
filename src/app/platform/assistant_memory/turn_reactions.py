@@ -30,6 +30,27 @@ class _TurnCompleted(BaseModel):
     memory_writes_allowed: bool
 
 
+class _ChatDeleted(BaseModel):
+    """The fields of chat's ``chat.session.deleted`` payload this consumer reads."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    session_id: str
+
+
+def forget_deleted_chat(_connection: Any, event: dict[str, Any]) -> dict[str, Any]:
+    """Purge a deleted chat's turns and readings; memories saved from it stay in the Memory tab."""
+    from app.persistence.runtime import uses_postgresql_runtime
+
+    if not uses_postgresql_runtime():
+        return {"skipped": "no_memory_log"}
+    from .v2.runtime import PostgresMemoryV2Runtime
+    from .v2.understanding import forget_chat_everywhere
+
+    chat = _ChatDeleted.model_validate(event["payload"])
+    return {"purged": forget_chat_everywhere(PostgresMemoryV2Runtime(), str(event["workspace_id"]), chat.session_id)}
+
+
 def suggest_memories_after_turn(_connection: Any, event: dict[str, Any]) -> dict[str, Any]:
     """Queue the turn's memory suggestion job; idempotent, so a redelivered event queues nothing new."""
     turn = _TurnCompleted.model_validate(event["payload"])

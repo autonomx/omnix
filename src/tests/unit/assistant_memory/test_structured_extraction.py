@@ -305,3 +305,104 @@ def test_repeated_routine_is_merged_without_duplicate_record() -> None:
     assert first.id == second.id
     assert second.structured_payload["evidence_count"] == 2
     assert len(service.list_active(_context())) == 1
+
+
+class _Rows:
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+
+    def propose(self, _content: str) -> list[dict]:
+        return self.rows
+
+
+def test_details_a_model_adds_to_a_simple_fact_do_not_lose_the_fact() -> None:
+    # Real output for "I live in Toronto": rejected for its payload, nearly every real fact was lost (2026-11-05).
+    proposals, skipped = extract_structured_memory_proposals(
+        "I live in Toronto.",
+        source_message_id="message:1",
+        proposal_provider=_Rows([{
+            "kind": "semantic_fact", "claim_type": "user_asserted", "category": "fact",
+            "content": "User lives in Toronto", "payload": {"location": "Toronto", "country": "Canada"},
+            "confidence": 0.95, "contradiction_key": "residence_location",
+        }]),
+    )
+
+    assert [proposal.content for proposal in proposals] == ["User lives in Toronto"]
+    assert proposals[0].payload == {}
+    assert proposals[0].claim_type == "user_asserted"
+    assert proposals[0].contradiction_key == "residence_location"
+    assert "structured_provider_unsupported_payload" not in skipped
+
+
+def test_a_richer_kind_with_details_that_do_not_fit_is_kept_as_a_plain_fact() -> None:
+    proposals, _skipped = extract_structured_memory_proposals(
+        "My sister Amy just moved to Vancouver.",
+        source_message_id="message:1",
+        proposal_provider=_Rows([{
+            "kind": "episode", "claim_type": "user_asserted", "category": "fact",
+            "content": "Amy moved to Vancouver", "payload": {"person": "Amy", "not_a_field": True},
+            "confidence": 1.0, "contradiction_key": None,
+        }]),
+    )
+
+    assert [(proposal.kind, proposal.content, proposal.payload) for proposal in proposals] == [
+        ("semantic_fact", "Amy moved to Vancouver", {}),
+    ]
+
+
+def test_a_secret_is_still_refused_whatever_the_model_proposes() -> None:
+    proposals, _skipped = extract_structured_memory_proposals(
+        "My password is hunter2.",
+        source_message_id="message:1",
+        proposal_provider=_Rows([{
+            "kind": "semantic_fact", "claim_type": "user_asserted", "category": "fact",
+            "content": "User's password is hunter2", "payload": {}, "confidence": 1.0, "contradiction_key": None,
+        }]),
+    )
+
+    assert proposals == []
+
+
+class _Recording(_Rows):
+    def __init__(self, rows: list[dict]) -> None:
+        super().__init__(rows)
+        self.earlier: list[dict] | None = None
+
+    def propose(self, _content: str, *, earlier=()) -> list[dict]:
+        self.earlier = list(earlier)
+        return self.rows
+
+
+def _fact(content: str) -> dict:
+    return {
+        "kind": "preference", "claim_type": "user_asserted", "category": "preference", "content": content,
+        "payload": {}, "confidence": 0.95, "contradiction_key": None,
+    }
+
+
+def test_a_sentence_said_in_pieces_is_understood_from_the_turns_before_it() -> None:
+    # Real: "I like", a question from the character, then "chocolate." A memory of it rests on the user's earlier words.
+    earlier = [
+        {"role": "user", "content": "I like"},
+        {"role": "assistant", "content": "Yeah? You like what?"},
+    ]
+    provider = _Recording([_fact("User likes chocolate")])
+
+    proposals, _skipped = extract_structured_memory_proposals(
+        "chocolate.", source_message_id="message:1", proposal_provider=provider, earlier_messages=earlier,
+    )
+
+    assert provider.earlier == earlier
+    assert [proposal.content for proposal in proposals] == ["User likes chocolate"]
+
+
+def test_what_only_the_assistant_said_is_no_memory_of_the_user() -> None:
+    proposals, skipped = extract_structured_memory_proposals(
+        "Sure.",
+        source_message_id="message:1",
+        proposal_provider=_Recording([_fact("User hates Piltover")]),
+        earlier_messages=[{"role": "assistant", "content": "You hate Piltover, everyone does."}],
+    )
+
+    assert proposals == []
+    assert "structured_provider_unsupported_claim" in skipped

@@ -7,6 +7,7 @@ import { CharacterAvatarPanel } from './CharacterAvatarPanel';
 import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvatarClient';
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
 import { CharacterHermesPanel } from './CharacterHermesPanel';
+import { CharacterMemoryPanel, SYSTEM_ASSISTANT_MEMORY_OWNER } from './CharacterMemoryPanel';
 import { CharacterVoiceBackfillButton } from './CharacterVoiceBackfillButton';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
@@ -18,10 +19,10 @@ const NO_ACTIONS = { delete_memories: false, delete_transcripts: false, unlink_v
 type CharacterDraft = typeof EMPTY_DRAFT;
 type CharacterActions = typeof NO_ACTIONS;
 
-type CharacterSection = 'profile' | 'voice' | 'avatar' | 'backfill' | 'data' | 'danger' | 'assistant';
+type CharacterSection = 'profile' | 'voice' | 'avatar' | 'backfill' | 'memory' | 'data' | 'danger' | 'assistant';
 const CHARACTER_SECTIONS: [CharacterSection, string][] = [
   ['profile', 'Profile'], ['voice', 'Voice'], ['avatar', 'Live avatar'], ['backfill', 'Cloned voices'],
-  ['data', 'Data'], ['danger', 'Danger zone'], ['assistant', 'System Assistant'],
+  ['memory', 'Memory'], ['data', 'Data'], ['danger', 'Danger zone'], ['assistant', 'System Assistant'],
 ];
 
 export function CharacterManagementPanel({
@@ -297,6 +298,10 @@ export function CharacterManagementPanel({
                 <CharacterBackfillSection />
               </CharacterSectionPanel>
 
+              <CharacterSectionPanel section="memory" activeSection={activeSection}>
+                {activeSection === 'memory' ? <CharacterMemoryPanel ownerId={selected.id} ownerName={selected.display_name} /> : null}
+              </CharacterSectionPanel>
+
               <CharacterSectionPanel section="data" activeSection={activeSection}>
                 <CharacterDataSummary
                   characterId={selected.id}
@@ -328,7 +333,10 @@ export function CharacterManagementPanel({
         </div>
 
         <CharacterSectionPanel section="assistant" activeSection={activeSection}>
-          <div className="character-dashboard-grid"><AssistantAvatarPanel /></div>
+          <div className="character-dashboard-grid">
+            <AssistantAvatarPanel />
+            {activeSection === 'assistant' ? <CharacterMemoryPanel ownerId={SYSTEM_ASSISTANT_MEMORY_OWNER} ownerName="System Assistant" /> : null}
+          </div>
         </CharacterSectionPanel>
       </div>
     </article>

@@ -25,9 +25,12 @@ def test_chat_session_scope_is_server_owned_and_legacy_safe(tmp_path):
     assert session.profile_id == DEFAULT_PROFILE_ID
     assert session.workspace_id == DEFAULT_WORKSPACE_ID
     assert session.project_id is None
-    assert session.memory_enabled is False
+    # The server decides, not the request: since 2026-11-05 a System Assistant chat remembers (owner decision).
+    assert session.memory_enabled is True
     assert session.memory_snapshot_id is None
     assert session.memory_record_count == 0
+    declined = store.create_session(CreateChatSessionRequest.model_validate({"title": "Asked not to", "memory_enabled": False}))
+    assert declined.memory_enabled is True
 
 
 def test_legacy_chat_payload_receives_memory_scope_defaults():

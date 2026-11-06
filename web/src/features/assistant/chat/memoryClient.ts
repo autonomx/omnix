@@ -55,6 +55,59 @@ function memory<T>(call: Promise<{ data?: T; error?: unknown; response: Response
 const memoryPath = (record: ManagedMemoryRecord) => ({ memory_id: record.id });
 const revision = (sessionId: string, record: ManagedMemoryRecord) => ({ session_id: sessionId, expected_revision: record.revision });
 
+export type OwnerMemoryView = components['schemas']['OwnerMemoryView'];
+
+const ownerPath = (ownerId: string) => ({ owner_id: ownerId });
+
+/** What one character, or the System Assistant, remembers: read and edited with no chat open. */
+export type OwnerUnderstanding = components['schemas']['OwnerUnderstanding'];
+export type UnderstandingKind = 'person' | 'earlier' | 'connection' | 'relationship' | 'mood' | 'episode' | 'lesson' | 'trigger'
+  | 'stance' | 'promise' | 'joke';
+
+export const ownerMemoryClient = {
+  read(ownerId: string): Promise<OwnerMemoryView> {
+    return memory(api.GET('/api/memory-owners/{owner_id}', { params: { path: ownerPath(ownerId) } }));
+  },
+  add(ownerId: string, category: MemoryCategory, content: string): Promise<ManagedMemoryRecord> {
+    return memory(api.POST('/api/memory-owners/{owner_id}/records', {
+      params: { path: ownerPath(ownerId) },
+      body: { category, content },
+    }));
+  },
+  edit(ownerId: string, record: ManagedMemoryRecord, content: string): Promise<ManagedMemoryRecord> {
+    return memory(api.PATCH('/api/memory-owners/{owner_id}/records/{memory_id}', {
+      params: { path: { ...ownerPath(ownerId), memory_id: record.id } },
+      body: { content, expected_revision: record.revision },
+    }));
+  },
+  forget(ownerId: string, record: ManagedMemoryRecord): Promise<unknown> {
+    return memory(api.DELETE('/api/memory-owners/{owner_id}/records/{memory_id}', {
+      params: { path: { ...ownerPath(ownerId), memory_id: record.id }, query: { expected_revision: record.revision } },
+    }));
+  },
+  approve(ownerId: string, candidateId: string): Promise<ManagedMemoryRecord> {
+    return memory(api.POST('/api/memory-owners/{owner_id}/suggestions/{candidate_id}/approve', {
+      params: { path: { ...ownerPath(ownerId), candidate_id: candidateId } },
+    }));
+  },
+  dismiss(ownerId: string, candidateId: string): Promise<unknown> {
+    return memory(api.POST('/api/memory-owners/{owner_id}/suggestions/{candidate_id}/reject', {
+      params: { path: { ...ownerPath(ownerId), candidate_id: candidateId } },
+    }));
+  },
+  forgetUnderstanding(ownerId: string, kind: UnderstandingKind, key: string): Promise<unknown> {
+    return memory(api.DELETE('/api/memory-owners/{owner_id}/understanding/{kind}/{key}', {
+      params: { path: { ...ownerPath(ownerId), kind, key } },
+    }));
+  },
+  rewordUnderstanding(ownerId: string, kind: UnderstandingKind, key: string, text: string): Promise<unknown> {
+    return memory(api.PATCH('/api/memory-owners/{owner_id}/understanding/{kind}/{key}', {
+      params: { path: { ...ownerPath(ownerId), kind, key } },
+      body: { text },
+    }));
+  },
+};
+
 export const memoryClient = {
   list(sessionId: string, query = '', scope: MemoryScope | '' = '', category: MemoryCategory | '' = ''): Promise<ManagedMemoryList> {
     return memory(api.GET('/api/assistant/memory', {

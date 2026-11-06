@@ -54,6 +54,31 @@
       "metadata": {
         "assistant_turn_id": "assistant-turn:<uuid:2>",
         "generation_status": "completed",
+        "memory_context": {
+          "budget": {
+            "estimated_tokens": 12,
+            "section_tokens": {
+              "recent_messages": 0
+            },
+            "truncated_sections": [],
+            "usable_input_tokens": 61440
+          },
+          "excluded_reason_counts": {},
+          "invalidated_count": 0,
+          "memory_enabled": true,
+          "owner_id": "system-assistant",
+          "owner_type": "system",
+          "selected_memory_count": 0,
+          "selected_memory_ids": [],
+          "shared_allowed_categories": [],
+          "shared_excluded_reason_counts": {},
+          "shared_memory_access": "none",
+          "shared_selected_memory_count": 0,
+          "shared_selected_memory_ids": [],
+          "snapshot_id": null,
+          "snapshot_revision": null,
+          "status": "snapshot_missing"
+        },
         "model_id": "fixture-model",
         "provider_id": "fixture",
         "reply_to_message_id": "msg:<uuid:1>",
@@ -228,6 +253,31 @@
       "metadata": {
         "assistant_turn_id": "assistant-turn:<uuid:2>",
         "generation_status": "completed",
+        "memory_context": {
+          "budget": {
+            "estimated_tokens": 12,
+            "section_tokens": {
+              "recent_messages": 0
+            },
+            "truncated_sections": [],
+            "usable_input_tokens": 61440
+          },
+          "excluded_reason_counts": {},
+          "invalidated_count": 0,
+          "memory_enabled": true,
+          "owner_id": "system-assistant",
+          "owner_type": "system",
+          "selected_memory_count": 0,
+          "selected_memory_ids": [],
+          "shared_allowed_categories": [],
+          "shared_excluded_reason_counts": {},
+          "shared_memory_access": "none",
+          "shared_selected_memory_count": 0,
+          "shared_selected_memory_ids": [],
+          "snapshot_id": null,
+          "snapshot_revision": null,
+          "status": "snapshot_missing"
+        },
         "model_id": "fixture-model",
         "provider_id": "fixture",
         "resolved_model": "fixture-model",
@@ -246,7 +296,7 @@
         "effective_identity_hash": "094c309ad1e2fa9ab42f657b41b19861b0a1520dbcad6dd952fe4c73bb199e62",
         "id": "chat:<uuid:3>",
         "interaction_mode": "system",
-        "memory_enabled": false,
+        "memory_enabled": true,
         "memory_last_refreshed_at": "<timestamp>",
         "memory_record_count": 0,
         "memory_snapshot_id": null,
@@ -306,6 +356,31 @@
             "metadata": {
               "assistant_turn_id": "assistant-turn:<uuid:2>",
               "generation_status": "completed",
+              "memory_context": {
+                "budget": {
+                  "estimated_tokens": 12,
+                  "section_tokens": {
+                    "recent_messages": 0
+                  },
+                  "truncated_sections": [],
+                  "usable_input_tokens": 61440
+                },
+                "excluded_reason_counts": {},
+                "invalidated_count": 0,
+                "memory_enabled": true,
+                "owner_id": "system-assistant",
+                "owner_type": "system",
+                "selected_memory_count": 0,
+                "selected_memory_ids": [],
+                "shared_allowed_categories": [],
+                "shared_excluded_reason_counts": {},
+                "shared_memory_access": "none",
+                "shared_selected_memory_count": 0,
+                "shared_selected_memory_ids": [],
+                "snapshot_id": null,
+                "snapshot_revision": null,
+                "status": "snapshot_missing"
+              },
               "model_id": "fixture-model",
               "provider_id": "fixture",
               "reply_to_message_id": "msg:<uuid:1>",

@@ -81,3 +81,29 @@ def test_default_provider_can_be_forced_to_deterministic_mode(monkeypatch) -> No
     monkeypatch.setenv("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE", "deterministic")
 
     assert default_structured_proposal_provider() is None
+
+
+def test_a_provider_with_live_turns_extracts_without_thinking_first(monkeypatch) -> None:
+    # On a real call's turns thinking took 18-20 s, sometimes past the deadline, against 2-5 s.
+    from app.platform.assistant_memory import structured_provider
+
+    live = FakeChatProvider(json.dumps({"proposals": []}))
+    monkeypatch.setattr(structured_provider, "provider_supports", lambda _provider, capability: capability == structured_provider.LIVE_TURNS)
+    ProviderStructuredProposalProvider(live, timeout_seconds=1).propose("Anything.")
+    assert live.calls[0]["live_turn"] is True
+
+    other = FakeChatProvider(json.dumps({"proposals": []}))
+    monkeypatch.setattr(structured_provider, "provider_supports", lambda _provider, _capability: False)
+    ProviderStructuredProposalProvider(other, timeout_seconds=1).propose("Anything.")
+    assert "live_turn" not in other.calls[0]
+
+
+def test_the_model_sees_the_turns_before_the_message(monkeypatch) -> None:
+    provider = FakeChatProvider(json.dumps({"proposals": []}))
+    earlier = [{"role": "user", "content": "I like"}]
+
+    ProviderStructuredProposalProvider(provider, timeout_seconds=1).propose("chocolate.", earlier=earlier)
+
+    sent = json.loads(provider.calls[0]["messages"][-1].content)
+    assert sent["earlier_conversation"] == earlier
+    assert sent["user_message"] == "chocolate."

@@ -50,6 +50,7 @@ def setup_runtime(tmp_path, monkeypatch):
 def test_enqueue_is_feature_gated_and_idempotent(tmp_path, monkeypatch):
     job_store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_MEMORY_AUTOMATIC_DIRECT_ASSERTIONS", "0")
     assert enqueue_memory_suggestion_job("chat:one", "msg:one", job_store=job_store) is None
 
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")
@@ -87,6 +88,7 @@ def test_deterministic_extractor_accepts_durable_patterns_and_rejects_risky_cont
 
 def test_processing_creates_pending_candidate_and_retry_does_not_duplicate(tmp_path, monkeypatch):
     job_store, memory_service, chat_store, session = setup_runtime(tmp_path, monkeypatch)
+    monkeypatch.setenv("OMNIX_MEMORY_AUTOMATIC_DIRECT_ASSERTIONS", "0")  # the review path; automatic saves are tested below
     appended = chat_store.begin_user_message(
         session.id,
         SendChatMessageRequest(content="I prefer narrow auditable pull requests"),
@@ -117,3 +119,33 @@ def test_processing_creates_pending_candidate_and_retry_does_not_duplicate(tmp_p
     assert memory_service.list_active(resolve_chat_scope(session.id)) == []
 
 
+def test_the_job_handler_gives_the_job_the_model(monkeypatch):
+    # Real: the handler passed no model, so every job ran the fixed patterns alone and saved next to nothing.
+    from types import SimpleNamespace
+
+    from app.platform.assistant_memory import feature, structured_provider
+
+    seen = {}
+    sentinel = object()
+    monkeypatch.setattr(structured_provider, "default_structured_proposal_provider", lambda: sentinel)
+    monkeypatch.setattr(feature, "process_memory_suggestion_job", lambda job, **options: seen.update(options))
+    monkeypatch.setattr(feature, "default_memory_service", lambda: None)
+    job = SimpleNamespace(id="job:1", lease=None)
+    store = SimpleNamespace(get_job=lambda _id: job)
+
+    feature._execute_memory_suggestion(SimpleNamespace(services=SimpleNamespace(chat=object()), job_store=store), job)
+
+    assert seen["proposal_provider"] is sentinel
+
+
+def test_a_job_with_no_model_says_so(tmp_path, monkeypatch):
+    job_store, memory_service, chat_store, session = setup_runtime(tmp_path, monkeypatch)
+    appended = chat_store.begin_user_message(session.id, SendChatMessageRequest(content="Nothing to remember in this one."))
+    assert appended is not None
+    _, message = appended
+    job = enqueue_memory_suggestion_job(session.id, message.id, job_store=job_store)
+    assert job is not None
+
+    result = process_memory_suggestion_job(job, chat_store=chat_store, memory_service=memory_service, job_store=job_store)
+
+    assert "structured_provider_unavailable" in result.skipped_reasons

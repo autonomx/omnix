@@ -87,6 +87,7 @@ class _CharacterSessionMixin(_ChatStoreBase):
             interaction_mode=interaction.interaction_mode,
             character_id=interaction.character_id,
             voice_asset_id=interaction.voice_asset_id,
+            memory_enabled=interaction.interaction_mode == "system",
             read_memory=interaction.read_memory,
             write_memory=interaction.write_memory,
             shared_memory_access=interaction.shared_memory_access,
@@ -147,6 +148,8 @@ class _CharacterSessionMixin(_ChatStoreBase):
         session.interaction_mode = interaction.interaction_mode
         session.character_id = interaction.character_id
         session.voice_asset_id = interaction.voice_asset_id
+        if interaction.interaction_mode == "system":
+            session.memory_enabled = True
         session.read_memory = interaction.read_memory
         session.write_memory = interaction.write_memory
         session.shared_memory_access = interaction.shared_memory_access

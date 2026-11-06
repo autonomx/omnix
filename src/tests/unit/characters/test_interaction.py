@@ -97,7 +97,7 @@ def test_character_resolution_uses_server_profile_and_default_voice(
 
 def test_character_memory_policy_requires_feature_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
-    monkeypatch.delenv("OMNIX_CHARACTER_MEMORY_ENABLED", raising=False)
+    monkeypatch.setenv("OMNIX_CHARACTER_MEMORY_ENABLED", "0")
 
     with pytest.raises(ValueError, match="character memory is disabled"):
         resolve_interaction_context(

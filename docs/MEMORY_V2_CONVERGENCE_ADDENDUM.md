@@ -242,3 +242,79 @@ G. Production Operations
 This addendum is the required architecture revision for the convergence work. It narrows
 and strengthens the original frozen architecture; it does not weaken Observation Log
 authority, ownership isolation, grant authorization, or transactional cutover semantics.
+
+## 11. Conversation readings (2026-11-05)
+
+Conversations now feed the derived state this architecture describes: each finished turn is
+written to the owner's Observation Log (`user_said`, `assistant_generated`), and when the talk
+has gone quiet for five minutes, or reached 40 unread user turns, a background job has the
+model read that stretch of one chat (`assistant_memory/conversation_reading.py`). No part of
+this is on the path of a reply.
+
+**A reading is stored as an observation (`conversation_reading`), which bends section 4.** An
+observation records what happened, and a reading records what a model concluded. It goes in the
+log anyway because a governance rebuild replays the log and deletes what its plan leaves out, so
+the alternative is calling the model again over the whole history on every forget. Instead the
+planner (`v2/understanding.MemoryPlanner`, the one planner of a space) is deterministic and needs
+no model, so a rebuild is exact and immediate. The bend is bounded: a reading carries
+`assistant_inference` trust and cites the `user_said` observations it rests on.
+
+A reading runs on a stronger model than a live call (`OMNIX_MEMORY_READING_MODEL`; Sonnet on the
+Claude CLI), because nobody waits for it and Haiku took role-play literally.
+
+What a reading may contain is decided by code, not the model: note aspects and moods are closed
+lists, a note or connection must cite the user's own turns, and a connection must name something
+the user said. Secrets and sensitive inferences are refused. Relationship scores stay out of the
+prompt (section 7), and a mood is stated with its age and only for a week (section 8).
+
+A reading also lists the person's reactions to replies, after VoiceMem's reaction attribution
+(`rightbrain/brain.py`, `learn_from_reaction`): corrected, pushed back, brushed off, thanked,
+approved or mood changed, with what in the reply caused it and the lasting pattern it shows. Code
+keeps a reaction only when it is the person's turn answering a reply and its pattern is a short
+phrase (VoiceMem's trait titles: no subject, no full stop). As there, a correction or pushback
+means the reply did not help and thanks or approval that it did, whatever the model says. Each
+pattern is a lesson; a reaction showing it again adds evidence instead of a second lesson, matched
+by the known lesson's number the reader is shown (where VoiceMem compares embeddings) or by the
+same words, and keeps the wording it was first seen with. Lessons are trait assertions
+(`lesson_<aspect>`, revision = times seen); the six seen most reach every reply. Two parts of
+VoiceMem are left out: the fixed word lists that force a reaction to count, since the whole stretch
+is read by a stronger model, and reading each turn as it happens, which waits on a decision about
+per-turn learning.
+
+Three more come from VoiceMem. A reading lists triggers, what brings on a feeling and what it
+concerns ("Stressed when deadlines move", about "manager"): VoiceMem's situation patterns anchored to
+entities. The names must be the user's own words, a trigger seen again adds evidence as a lesson
+does, and it reaches a reply only when the turn names what it concerns: the prompt skips triggers
+that general retrieval returns, because retrieval falls back to every active item when no word
+matches. A note the reader marks as turned around (not refined) keeps the note before it as a
+superseded assertion, as VoiceMem keeps a contradicted state marked old; replies see it as "Changed
+3 weeks ago; before that: ...", and it can be forgotten on its own. The person's own rewording
+clears that history. Finally, every retrieved fact carries when it became known
+(`RetrievalCandidate.learned_at`) and is rendered "noted 3 months ago". VoiceMem writes the date,
+but our prompts state no date, so an age is what a reply can use.
+
+VoiceMem models only the user. A reading here also notes the owner's own side, so that a
+character can change too: its stance toward the person (one sentence spoken to it), what it
+promised (resting on its own turns only; open until a later reading marks it kept or dropped) and
+running jokes (at least two turns, or a known joke seen again). They are assertions on the owner as
+subject (`own_stance`, `running_joke` in relationship, `promised` in open_loop) and reach every reply
+from the understanding alone: the prompt skips their retrieval copies, and marks promises with their
+own category, because a saved memory can be an `open_loop` too.
+
+What helps, what puts the person off, and the lessons reach the prompt as guidance ("Works with
+them: ...", "Puts them off: ..."), with a line telling the owner to act on them in its own voice.
+Measured on the live model (Haiku 4.5) with Jinx's real memory, the same "build me something, don't
+ask questions" opener: as plain notes about the person she used them to describe them and asked
+about 8 questions (2 tries); without memory about 3.6 (7 tries); as guidance about 2.3 (7 tries).
+So the reader writes what_helps and what_to_avoid as advice to the owner, and each reaction carries
+advice (VoiceMem's `next_time`, which it dropped because nothing read it); a lesson reaches a reply
+as its newest advice. A note on how the person talks that mentions transcription is dropped in code
+as well as forbidden in the prompt: the model noted "transcription-style slips" despite the rule.
+Only that aspect is checked, because speech-to-text can be a subject the person cares about.
+
+Forgetting one item rewrites every reading that holds it and purges the originals, and
+`_redact_decisions_after` clears later decision sets too, because a plan re-emits every reading. A
+deleted chat (`chat.session.deleted`) purges its turns, its readings, and every later reading,
+since those saw the earlier conclusions; the remaining turns are read again. A note the person
+reworded is not overwritten by a later reading. Memories saved from a chat stay when it is deleted:
+they are listed in the Memory tab and are forgotten there.

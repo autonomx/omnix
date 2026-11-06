@@ -36,6 +36,8 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py` | GET | `/api/rpg/sessions/{session_id}/export` | A campaign package, downloaded as a JSON file (its shape documented) |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_voice_routes.py` | POST | `/api/rpg/sessions/{session_id}/speech-audio` | A sentence's PCM16 audio, streamed as it is synthesized |
 | `src/app/apps/audiobook/routes.py` | DELETE | `/api/audiobook/projects/{project_id}` | 204 No Content |
+| `src/app/apps/character_interactions/routes.py` | DELETE | `/api/memory-owners/{owner_id}/records/{memory_id}` | 204 No Content |
+| `src/app/apps/character_interactions/routes.py` | POST | `/api/memory-owners/{owner_id}/suggestions/{candidate_id}/reject` | 204 No Content |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/source/download` | Source file bytes; format-specific media type |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/cover` | JPEG or PNG bytes |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/previews/{job_id}/audio` | WAV audio bytes |

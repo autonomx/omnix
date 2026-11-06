@@ -1,6 +1,7 @@
 """Resolve authoritative memory into trusted chat prompt items (chat calls it through CHAT_MEMORY, PA-3.2)."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -19,6 +20,9 @@ from .contracts import (
     select_memory_records,
 )
 from .v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
+
+
+logger = logging.getLogger(__name__)
 
 
 def chat_memory_enabled() -> bool:
@@ -78,6 +82,9 @@ def _candidate_is_shared(candidate: Any) -> bool:
 
 
 def _v2_prompt_item(candidate: Any, *, shared: bool) -> PromptMemoryItem:
+    from .v2.understanding_view import how_long_ago
+
+    learned_at = getattr(candidate, "learned_at", None)
     return PromptMemoryItem(
         memory_id=candidate.ref_id,
         content=candidate.content,
@@ -85,6 +92,7 @@ def _v2_prompt_item(candidate: Any, *, shared: bool) -> PromptMemoryItem:
         category=candidate.domain,
         revision=1,
         source="shared_memory_v2" if shared else "memory_v2",
+        noted=how_long_ago(learned_at, datetime.now(timezone.utc)) if learned_at is not None else None,
     )
 
 
@@ -145,6 +153,36 @@ def _granted_only_v2_items(
     return selected
 
 
+def _understanding_items(
+    runtime: Any,
+    space: MemorySpaceKey,
+    visible_scopes: tuple[VisibilityScope, ...],
+    query_text: str | None,
+) -> list[PromptMemoryItem]:
+    """Who this person is to the owner: wanted on every reply, not only when the turn's words match."""
+    from .v2.understanding_view import how_long_ago, prompt_items, read_understanding
+
+    try:
+        understood = read_understanding(runtime.database, space, visible_scopes, episodes=2, moods=1)
+    except Exception:  # noqa: BLE001 - a reply goes ahead without it
+        logger.warning("memory_understanding_unavailable", exc_info=True)
+        return []
+    now = datetime.now(timezone.utc)
+    return [
+        PromptMemoryItem(
+            memory_id=item.key if item.kind in {"mood", "episode"} else f"{item.kind}:{item.key}",
+            content=item.text,
+            scope="retrieved",
+            category=item.category,
+            revision=1,
+            source="memory_v2",
+            # Impressions carry their own sense of time, or none; a connection is a fact like a saved memory.
+            noted=how_long_ago(item.at, now) if item.kind == "connection" and item.at is not None else None,
+        )
+        for item in prompt_items(understood, query_text or "", now=now)
+    ]
+
+
 def _resolve_v2_prompt_memory(
     session: ChatSession,
     *,
@@ -185,6 +223,9 @@ def _resolve_v2_prompt_memory(
                 source="character" if character_session else "system",
             ))
             used_tokens += estimate_memory_tokens(record.content)
+        for item in _understanding_items(runtime, space, visible_scopes, query_text):
+            selected.append(item)
+            used_tokens += estimate_memory_tokens(item.content)
 
     query = RetrievalQuery(
         query_id=f"prompt-memory:{session.id}"[:200],
@@ -223,9 +264,16 @@ def _resolve_v2_prompt_memory(
             "graph_revision": state.graph_revision,
             "index_graph_revision": runtime.search_index.index_graph_revision(space),
         }
+    from .v2.understanding import UNDERSTANDING_ONLY_PREFIXES
+
     seen = {item.content for item in selected}
+    chosen_ids = {item.memory_id for item in selected}
     for item in retrieved:
-        if item.content not in seen:
+        # Retrieval falls back to everything when no word matches, and words these differently: what sets off a
+        # mood waits to be named, and the owner's own side comes from the understanding, worded for the owner.
+        if item.memory_id.startswith(UNDERSTANDING_ONLY_PREFIXES):
+            continue
+        if item.content not in seen and item.memory_id not in chosen_ids:
             seen.add(item.content)
             selected.append(item)
 

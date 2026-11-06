@@ -37,7 +37,11 @@ SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
 _CANONICAL_MIGRATION_CHECKSUMS = {
     "0083_trading_evidence_execution_v3": (
         "44753b480f6fa7b74bbd52d1c5f5f2142e52e8b6a5f776ed7cd44900a2b20ca0"
-    )
+    ),
+    # Applied before it had its omnix-migration header (2026-11-05); the header added no SQL.
+    "0196_memory_v2_conversation_reading": (
+        "420e86fbabc4e7406f0b1a940b62df55e7e0ac3acdab774889df63daa45bb9c2"
+    ),
 }
 
 _LEGACY_MIGRATION_CHECKSUMS: dict[str, frozenset[str]] = {
@@ -47,7 +51,10 @@ _LEGACY_MIGRATION_CHECKSUMS: dict[str, frozenset[str]] = {
             "37abdf0f320e07b8c43dc6a1fcd8cf7adc657bd4fae010b3b905bbd55c9aeb1c",
             "453e6d11f5d9cd33d159c0cef4b736088fb83c96b02bca11a9da7b3149472aab",
         }
-    )
+    ),
+    "0196_memory_v2_conversation_reading": frozenset(
+        {"4f597c92b3fca2da66fa5930c30697f2b7ba8aac1d623f1604b9ca3e17e045ba"}
+    ),
 }
 
 

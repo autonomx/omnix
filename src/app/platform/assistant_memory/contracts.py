@@ -1,11 +1,13 @@
 """Stable memory services consumed by prompt and conversation features."""
 from __future__ import annotations
 
+from typing import Any
+
 from importlib import import_module
 
 from app.platform.assistant_memory.owner_defaults import default_memory_service
 from app.platform.assistant_memory.selection import estimate_memory_tokens, select_memory_records
-from app.platform.assistant_memory.service import MemoryService
+from app.platform.assistant_memory.service import MemoryPolicyError, MemoryService
 from app.platform.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
 
 from app.platform.assistant_memory.companion_context import build_companion_context_packet
@@ -32,9 +34,32 @@ from app.platform.assistant_memory.settings import (
 )
 from app.platform.assistant_memory.temporal_retrieval import retrieve_temporal_context
 
+def read_owner_understanding(owner_type: str, owner_id: str, profile_id: str) -> list[Any]:
+    """What an owner has understood about this person (``v2/understanding_view``), loaded only when asked for."""
+    from .v2.understanding_view import read_owner_understanding as read
+
+    return read(owner_type, owner_id, profile_id)
+
+
+def forget_owner_understanding(owner_type: str, owner_id: str, profile_id: str, kind: str, key: str) -> int:
+    from .v2.understanding_view import forget_owner_understanding as forget
+
+    return forget(owner_type, owner_id, profile_id, kind, key)
+
+
+def correct_owner_understanding(owner_type: str, owner_id: str, profile_id: str, kind: str, key: str, text: str) -> bool:
+    from .v2.understanding_view import correct_owner_understanding as correct
+
+    return correct(owner_type, owner_id, profile_id, kind, key, text)
+
+
 __all__ = [
+    "correct_owner_understanding",
+    "forget_owner_understanding",
+    "read_owner_understanding",
     "ASSISTANT_MEMORY_SETTINGS_KEY",
     "AssistantMemoryRuntimeSettings",
+    "MemoryPolicyError",
     "MemoryService",
     "RefreshSessionMemoryRequest",
     "build_companion_context_packet",

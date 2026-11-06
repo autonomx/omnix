@@ -780,7 +780,28 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self._repository.create_session(session)
 
     def delete_session(self, session_id: str) -> bool:
-        return self._repository.delete_session(session_id)
+        deleted = self._repository.delete_session(session_id)
+        if deleted:
+            self._publish_session_deleted(session_id)
+        return deleted
+
+    def _publish_session_deleted(self, session_id: str) -> None:
+        """Tell other modules a chat is gone, after its own transaction committed; a chat's memory goes with it."""
+        from app.platform.chat.turn_events import CHAT_SESSION_DELETED, ChatSessionDeleted
+
+        context = self._repository.context
+        event = ChatSessionDeleted(session_id=session_id, user_id=context.user_id)
+        with unit_of_work(self._repository.database) as work:
+            work.outbox.append(
+                context,
+                aggregate_type="chat_session",
+                aggregate_id=session_id,
+                event_type=CHAT_SESSION_DELETED,
+                payload=event.model_dump(mode="json"),
+                event_key=f"{CHAT_SESSION_DELETED}:{session_id}",
+                skip_existing=True,
+            )
+            work.commit()
 
     def update_delivery_metadata(
         self,

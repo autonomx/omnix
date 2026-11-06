@@ -25,6 +25,39 @@ def _assert_all_object_properties_required(node: Any) -> None:
         _assert_all_object_properties_required(value)
 
 
+def test_a_field_named_like_an_annotation_survives_projection() -> None:
+    """Found on real calls: the model was told title was both required and not allowed."""
+    from pydantic import BaseModel, ConfigDict, Field
+
+    class Inner(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        title: str = Field(title="An annotation", description="Also an annotation")
+        description: str
+        default: str = "x"
+        examples: list[str]
+
+    class Outer(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        title: str
+        inner: Inner
+        maybe: Inner | None
+
+    for provider_name in ("claude_cli", "chatgpt_codex", "lmstudio"):
+        for profile in ("local", "default"):
+            for mode in (StructuredMode.JSON_SCHEMA, StructuredMode.JSON_OBJECT):
+                schema = project_provider_schema(
+                    Outer.model_json_schema(), mode=mode, provider_name=provider_name, schema_profile=profile,
+                )
+                assert set(schema["properties"]) == {"title", "inner", "maybe"}
+                inner = schema["properties"]["inner"]
+                definition = inner if "properties" in inner else schema["$defs"]["Inner"]
+                assert {"title", "description", "default", "examples"} <= set(definition["properties"])
+                assert "An annotation" not in str(schema), "annotations still go"
+                assert not (set(definition.get("required", ())) - set(definition["properties"])), "no field both required and absent"
+
+
 def test_chatgpt_codex_semantic_task_schema_requires_every_property_recursively() -> None:
     schema = project_provider_schema(
         SemanticTask.model_json_schema(),

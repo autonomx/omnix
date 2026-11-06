@@ -59,7 +59,7 @@ class MemoryJobExecution:
             record = work.jobs.claim_next(
                 self.store.context, worker_id=self.worker_id,
                 resource_classes=["cpu"], lease_seconds=self.lease_seconds,
-                job_id=self.job.id, job_types=["assistant.memory.suggest"],
+                job_id=self.job.id, job_types=[self.job.type],
             )
             if record is not None:
                 self.lease_token = record["lease_token"]

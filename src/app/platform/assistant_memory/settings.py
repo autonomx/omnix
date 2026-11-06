@@ -41,13 +41,15 @@ _RUNTIME_SETTINGS_LOADER: ContextVar[
 class AssistantMemoryRuntimeSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    curated_memory_enabled: bool = False
-    suggestions_enabled: bool = False
+    # Owner decision 2026-11-05: characters and the System Assistant remember on their own; each one's Memory tab shows
+    # what, to correct or forget. Inferred memories still wait for approval.
+    curated_memory_enabled: bool = True
+    suggestions_enabled: bool = True
     history_recall_enabled: bool = False
     compaction_enabled: bool = False
     hermes_sync_enabled: bool = False
     require_approval_for_inferred_memory: bool = True
-    automatic_direct_assertion_memory: bool = False
+    automatic_direct_assertion_memory: bool = True
     proactive_memory_enabled: bool = True
     paralinguistic_signals_enabled: bool = True
     transcript_retention_enabled: bool = True

@@ -136,8 +136,8 @@
     "version": "1"
   },
   "assistant_memory.structured_provider.system_prompt": {
-    "sha256": "39c9128cd127e1cccccd4e54b61cf26abca0e8a6ff45e6fee1bcc43adf629bb9",
-    "version": "1"
+    "sha256": "182b75d7c52b2f5f74935d774816d5e3387fb04e943b0b43cad3843ebe7d2872",
+    "version": "3"
   },
   "audiobook.performance_direction": {
     "sha256": "574018a294604000a7f3926357d8dc6633c49dc2be068d1e2a5d57b222583c30",

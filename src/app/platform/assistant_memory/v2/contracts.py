@@ -42,6 +42,8 @@ ObservationEventType = Literal[
     # One revision of a curated memory record (saved, approved, edited, moved,
     # pinned or archived) written while Memory v2 is authoritative.
     "curated_memory",
+    # What was understood from a stretch of conversation (see understanding.py).
+    "conversation_reading",
 ]
 ObservationSourceType = Literal[
     "user",
@@ -135,6 +137,7 @@ class Observation(FrozenContract):
             "imported_legacy_memory": {"import", "migration"},
             "acoustic_observation": {"acoustic"},
             "curated_memory": {"user", "assistant", "system", "external", "import"},
+            "conversation_reading": {"user", "assistant"},
         }
         if self.provenance.source_type not in expected_sources[self.event_type]:
             raise ValueError("observation event_type and provenance source_type disagree")
@@ -364,6 +367,7 @@ class RetrievalCandidate(FrozenContract):
     prompt_eligible: bool = True
     policy: DerivedPolicyEnvelope | None = None
     source_space: MemorySpaceKey | None = None
+    learned_at: datetime | None = None  # when what it says became known: a reply can tell old from current
 
 
 class RetrievalSourceRevision(FrozenContract):

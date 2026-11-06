@@ -30,3 +30,12 @@ def test_known_0083_historical_checksums_are_accepted_but_unknown_drift_is_not()
     assert not _checksum_is_accepted(
         replace(migration, checksum="1" * 64), historical[0]
     )
+
+
+def test_0196_applied_before_its_header_is_still_accepted():
+    # Live applied it on 2026-11-05 without the omnix-migration header the lint requires; adding it changed no SQL.
+    migration = next(item for item in discover_migrations() if item.version == "0196_memory_v2_conversation_reading")
+
+    assert migration.phase == "expand"
+    assert _checksum_is_accepted(migration, "4f597c92b3fca2da66fa5930c30697f2b7ba8aac1d623f1604b9ca3e17e045ba")
+    assert not _checksum_is_accepted(migration, "0" * 64)

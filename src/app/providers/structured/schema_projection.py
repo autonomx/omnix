@@ -13,6 +13,10 @@ _DROP_KEYS = {
     "examples",
     "title",
 }
+# Under these keywords the keys are the names of fields and definitions, whatever they are called. A field
+# named "title" is not the annotation "title": dropping it left it required but not allowed, a schema nothing
+# can satisfy, and a model given one answers in prose or sends null.
+_NAME_MAPS = {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
 
 
 def _resolve_ref(root: Mapping[str, Any], ref: str) -> Any:
@@ -63,6 +67,17 @@ def _project_node(
             or key in extra_drop_keys
             or (key == "$defs" and inline_refs)
         ):
+            continue
+        if key in _NAME_MAPS and isinstance(value, Mapping):
+            projected[key] = {
+                name: _project_node(
+                    member,
+                    root=root,
+                    inline_refs=inline_refs,
+                    extra_drop_keys=extra_drop_keys,
+                )
+                for name, member in value.items()
+            }
             continue
         projected[key] = _project_node(
             value,

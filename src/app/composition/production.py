@@ -294,6 +294,21 @@ def create_production_app(config: RuntimeConfig | None = None):
             )
         )
 
+        def queue_conversation_readings(_task_context) -> None:
+            from app.platform.assistant_memory.conversation_reading import queue_due_readings
+
+            queue_due_readings(services.jobs)
+
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="memory-v2.conversation-reading",
+                run=queue_conversation_readings,
+                interval_seconds=60,
+                timeout_seconds=60,
+                executor="thread",
+            )
+        )
+
         def relay_outbox(_task_context) -> None:
             from app.events.outbox_relay import OutboxRelayWorker
 

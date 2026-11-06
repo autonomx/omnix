@@ -169,7 +169,7 @@ def test_snapshot_routes_expose_state_refresh_and_revision_conflicts(tmp_path):
 
     before = client.get(f"/api/chat/sessions/{session.id}/memory")
     assert before.status_code == 200
-    assert before.json()["memory_enabled"] is False
+    assert before.json()["memory_enabled"] is True  # a System Assistant chat remembers from its start
 
     refreshed = client.post(
         f"/api/chat/sessions/{session.id}/memory/refresh",

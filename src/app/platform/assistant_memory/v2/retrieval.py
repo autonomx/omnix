@@ -72,7 +72,7 @@ def _object_text(value: GraphValue) -> str:
 
 def _assertion_content(item: GraphAssertion) -> str:
     # A seeded assertion is a curated memory whose text is the memory itself.
-    if item.assertion_type == "seeded":
+    if item.assertion_type == "seeded" or item.domain == "trait":
         return _object_text(item.object)
     return f"{item.subject.entity_id} {item.predicate.replace('_', ' ')} {_object_text(item.object)}"
 
@@ -237,6 +237,7 @@ class UnifiedMemoryV2Retriever:
             reasons=tuple(reasons),
             evidence_observation_ids=evidence_ids,
             policy=policy,
+            learned_at=item.valid_from,
         )
 
     @staticmethod
@@ -276,6 +277,7 @@ class UnifiedMemoryV2Retriever:
             ),
             evidence_observation_ids=hit.evidence_observation_ids,
             policy=hit.policy,
+            learned_at=hit.valid_from,
         )
 
     def _embedding_candidates(self, query: RetrievalQuery) -> list[RetrievalCandidate]:
@@ -347,6 +349,7 @@ class UnifiedMemoryV2Retriever:
             reasons=tuple(reasons),
             evidence_observation_ids=item.observation_ids,
             policy=policy,
+            learned_at=item.ended_at or item.started_at,
         )
 
     def _relationship_candidate(

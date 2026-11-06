@@ -302,7 +302,7 @@ class PostgresMemoryV2SearchIndex:
                 # A seeded assertion is a curated memory whose text is the memory itself.
                 content = (
                     _object_text(object_value)
-                    if row[17] == "seeded"
+                    if row[17] == "seeded" or row[5] == "trait"
                     else f"{row[2]!s} {str(row[3]).replace('_', ' ')} {_object_text(object_value)}"
                 )
                 policy = _policy_from_columns(row, 9)

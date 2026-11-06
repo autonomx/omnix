@@ -48,6 +48,7 @@ def test_persisted_settings_enforce_independent_server_features(monkeypatch):
         AssistantMemorySettingsUpdate(
             curated_memory_enabled=True,
             suggestions_enabled=False,
+            automatic_direct_assertion_memory=False,
             history_recall_enabled=True,
             compaction_enabled=False,
             hermes_sync_enabled=True,

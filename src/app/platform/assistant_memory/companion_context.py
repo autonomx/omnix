@@ -36,6 +36,11 @@ _CATEGORY_SECTION: dict[str, CompanionSection] = {
     "relationship": "relationship_context",
     "project": "active_goals",
     "fact": "stable_profile",
+    "trait": "communication_preferences",
+    "affect": "relationship_context",
+    "episode": "recent_episodes",
+    "promise": "open_loops",
+    "guidance": "communication_preferences",
 }
 _CATEGORY_BASE = {
     "instruction": 500,
@@ -43,6 +48,11 @@ _CATEGORY_BASE = {
     "relationship": 425,
     "project": 375,
     "fact": 325,
+    "trait": 440,
+    "affect": 420,
+    "episode": 350,
+    "promise": 430,
+    "guidance": 460,
 }
 _SCOPE_BASE = {"session": 80, "project": 60, "workspace": 40, "global": 20}
 _SECTION_ORDER: tuple[CompanionSection, ...] = (

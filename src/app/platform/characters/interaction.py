@@ -35,7 +35,8 @@ def character_mode_enabled() -> bool:
 
 
 def character_memory_enabled() -> bool:
-    return _env_flag("OMNIX_CHARACTER_MEMORY_ENABLED")
+    """Characters remember across their chats unless an install turns it off."""
+    return _env_flag("OMNIX_CHARACTER_MEMORY_ENABLED", "1")
 
 
 def character_shared_memory_enabled() -> bool:
@@ -123,7 +124,10 @@ def resolve_interaction_context(
         if not character_shared_memory_enabled():
             raise CharacterInteractionError("shared character memory access is disabled")
         _validate_shared_memory_policy(character)
-    if (selection.read_memory or selection.write_memory) and not character_memory_enabled():
+    if character_memory_enabled():
+        # Memory belongs to the character, not to one chat: every chat with it reads and adds to the same memory.
+        selection = selection.model_copy(update={"read_memory": True, "write_memory": True})
+    elif selection.read_memory or selection.write_memory:
         raise CharacterInteractionError("character memory is disabled")
 
     # A character's governed default voice is authoritative for Character Mode.

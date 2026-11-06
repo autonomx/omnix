@@ -123,7 +123,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_BROWSER_EXE` | string | — | launcher | Controls browser exe for launcher. |
 | `OMNIX_CHARACTER_CLOUD_SYNC_ENABLED` | boolean | — | tooling | Controls character cloud sync enabled for tooling. |
 | `OMNIX_CHARACTER_HERMES_SYNC_ENABLED` | boolean | — | characters | Controls character hermes sync enabled for characters. |
-| `OMNIX_CHARACTER_MEMORY_ENABLED` | boolean | — | characters | Controls character memory enabled for characters. |
+| `OMNIX_CHARACTER_MEMORY_ENABLED` | boolean | `1` | characters | Controls character memory enabled for characters. |
 | `OMNIX_CHARACTER_MODE_ENABLED` | string | — | characters, launcher | Controls character mode enabled for characters, launcher. |
 | `OMNIX_CHARACTER_SHARED_MEMORY_ENABLED` | boolean | — | characters | Controls character shared memory enabled for characters. |
 | `OMNIX_CHAT_COMPACTION_THRESHOLD` | string | `40` | chat | Controls chat compaction threshold for chat. |
@@ -215,10 +215,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LOG_LEVELS` | string | — | observability | Controls log levels for observability. |
 | `OMNIX_MEMORY_EMBEDDINGS` | string | `1` | assistant-memory | Controls memory embeddings for assistant-memory. |
 | `OMNIX_MEMORY_EMBEDDING_MODEL_DIR` | string | — | assistant-memory | Controls memory embedding model dir for assistant-memory. |
+| `OMNIX_MEMORY_READING_MODEL` | string | — | assistant-memory | Controls memory reading model for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE` | string | — | assistant-memory | Controls memory structured extraction mode for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL` | string | — | assistant-memory | Controls memory structured extraction model for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER` | string | — | assistant-memory | Controls memory structured extraction provider for assistant-memory. |
-| `OMNIX_MEMORY_STRUCTURED_EXTRACTION_TIMEOUT_SECONDS` | string | `8` | assistant-memory | Controls memory structured extraction timeout seconds for assistant-memory. |
+| `OMNIX_MEMORY_STRUCTURED_EXTRACTION_TIMEOUT_SECONDS` | string | `30` | assistant-memory | Controls memory structured extraction timeout seconds for assistant-memory. |
 | `OMNIX_MIGRATE_ON_START` | boolean | `false` | production.py | Controls migrate on start for production.py. |
 | `OMNIX_MIGRATION_DATABASE_URL` | string | — | kernel | Controls migration database url for kernel. |
 | `OMNIX_MODELS_DIR` | string | — | kernel | Controls models dir for kernel. |

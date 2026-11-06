@@ -24,6 +24,8 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("GET", "/api/trading/snapshots/{snapshot_id}.png"),
     ("DELETE", "/api/trading/snapshots/{snapshot_id}"),
     ("DELETE", "/api/audiobook/projects/{project_id}"),
+    ("DELETE", "/api/memory-owners/{owner_id}/records/{memory_id}"),
+    ("POST", "/api/memory-owners/{owner_id}/suggestions/{candidate_id}/reject"),
     ("DELETE", "/api/voice/scripts/{script_id}"),
     ("POST", "/api/voice/takes/{take_id}/pin"),
     ("GET", "/api/voice/transcripts/{asset_id}/export"),

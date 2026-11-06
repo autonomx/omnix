@@ -352,7 +352,9 @@ class PostgresMemoryV2CuratedRecords:
                   LEFT JOIN omnix_memory_v2_observation_dispositions d
                     ON d.observation_id = o.observation_id
                  WHERE o.principal_id = %s AND o.owner_type = %s AND o.owner_id = %s
-                   AND o.event_type IN ('{CURATED_EVENT}', '{LEGACY_EVENT}')
+                   AND o.event_type IN (
+                       '{CURATED_EVENT}', '{LEGACY_EVENT}', 'user_said', 'assistant_generated', 'conversation_reading'
+                   )
                    AND COALESCE(d.state, 'active') <> 'purged'
                  ORDER BY o.authority_sequence
                 """,
@@ -394,15 +396,17 @@ class MemoryV2CuratedConvergence:
 
     def __init__(self, database: PostgresDatabase | None = None, *, worker: Any = None) -> None:
         from .operations import PostgresMemoryV2ConvergenceWorker
+        from .understanding import MemoryPlanner
 
         self.database = database or default_database()
         self.worker = worker or PostgresMemoryV2ConvergenceWorker(self.database)
+        self.planner = MemoryPlanner(self.database)
 
     def run(self, *, space: MemorySpaceKey | None = None, max_steps: int = 200) -> int:
         """Run claimed jobs until none is due (or ``max_steps``). Returns steps run."""
         steps = 0
         while steps < max_steps:
-            derived = self.worker.derive_once(curated_planner, space=space)
+            derived = self.worker.derive_once(self.planner, space=space)
             projected = self.worker.project_once(space=space)
             if not derived and not projected:
                 break

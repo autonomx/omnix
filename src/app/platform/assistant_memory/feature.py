@@ -6,7 +6,9 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.platform.assistant_memory.jobs import (
+    MEMORY_READ_JOB_TYPE,
     MEMORY_SUGGEST_JOB_TYPE,
+    ConversationReadingJobInput,
     MemorySuggestionJobInput,
     process_memory_suggestion_job,
 )
@@ -26,6 +28,8 @@ def _execute_memory_suggestion(
     context: JobExecutionContext,
     job: JobRecord,
 ) -> JobRecord:
+    from app.platform.assistant_memory.structured_provider import default_structured_proposal_provider
+
     services = context.services
     chat_store = getattr(services, "chat", None)
     if chat_store is None:
@@ -35,9 +39,23 @@ def _execute_memory_suggestion(
         chat_store=chat_store,
         memory_service=default_memory_service(),
         job_store=context.job_store,
+        proposal_provider=default_structured_proposal_provider(),
         already_claimed=job.lease is not None,
     )
     return context.job_store.get_job(job.id) or job
+
+
+def _execute_conversation_reading(context: JobExecutionContext, job: JobRecord) -> JobRecord:
+    from app.platform.assistant_memory.conversation_reading import default_conversation_reader, process_reading_job
+
+    process_reading_job(job, job_store=context.job_store, reader=default_conversation_reader())
+    return context.job_store.get_job(job.id) or job
+
+
+def _forget_deleted_chat(connection: Any, event: dict[str, Any]) -> dict[str, Any]:
+    from .turn_reactions import forget_deleted_chat
+
+    return forget_deleted_chat(connection, event)
 
 
 def _suggest_memories_after_turn(connection: Any, event: dict[str, Any]) -> dict[str, Any]:
@@ -52,6 +70,13 @@ _TURN_SUGGESTIONS = OutboxConsumer(
     aggregate_types=frozenset({"chat_session"}),
     handler=_suggest_memories_after_turn,
     event_type_pattern="chat.turn.completed",
+)
+# A deleted chat's turns leave the owner's log, with what was read from them.
+_DELETED_CHATS = OutboxConsumer(
+    consumer_name="assistant-memory.deleted-chats",
+    aggregate_types=frozenset({"chat_session"}),
+    handler=_forget_deleted_chat,
+    event_type_pattern="chat.session.deleted",
 )
 
 
@@ -94,8 +119,16 @@ FEATURE = FeatureModule(
             timeout_seconds=300,
             max_attempts=3,
         ),
+        JobHandlerSpec(
+            type=MEMORY_READ_JOB_TYPE,
+            handler=_execute_conversation_reading,
+            input_model=ConversationReadingJobInput,
+            resource_class=ResourceClass.CPU,
+            timeout_seconds=300,
+            max_attempts=2,
+        ),
     ),
-    outbox_consumers=(_TURN_SUGGESTIONS,),
+    outbox_consumers=(_TURN_SUGGESTIONS, _DELETED_CHATS),
     # Chat's memory: prompt memory, memory commands, snapshots and settings (PA-3.2).
     contributions=(ContributionSpec(CHAT_MEMORY, _chat_memory),),
     settings=(assistant_memory_setting_spec(),),

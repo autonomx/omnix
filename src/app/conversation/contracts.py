@@ -240,6 +240,7 @@ class PromptMemoryItem(BaseModel):
         "memory_v2",
         "shared_memory_v2",
     ] = "system"
+    noted: str | None = None  # how long ago it became known, such as "3 months ago"
 
 
 class DeliveryCheckpointRecorder(Protocol):

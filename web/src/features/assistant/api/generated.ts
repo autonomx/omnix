@@ -2089,6 +2089,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live-call/sessions/{session_id}/overlap-judgement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Judge Live Overlap */
+        post: operations["judge_live_overlap_api_live_call_sessions__session_id__overlap_judgement_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/live-call/sessions/{session_id}/prewarm": {
         parameters: {
             query?: never;
@@ -2292,6 +2309,116 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/memory-owners/{owner_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Owner Memory */
+        get: operations["read_owner_memory_api_memory_owners__owner_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory-owners/{owner_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Owner Memory */
+        post: operations["add_owner_memory_api_memory_owners__owner_id__records_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory-owners/{owner_id}/records/{memory_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget Owner Memory */
+        delete: operations["forget_owner_memory_api_memory_owners__owner_id__records__memory_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit Owner Memory */
+        patch: operations["edit_owner_memory_api_memory_owners__owner_id__records__memory_id__patch"];
+        trace?: never;
+    };
+    "/api/memory-owners/{owner_id}/suggestions/{candidate_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Owner Memory Suggestion */
+        post: operations["approve_owner_memory_suggestion_api_memory_owners__owner_id__suggestions__candidate_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory-owners/{owner_id}/suggestions/{candidate_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Owner Memory Suggestion */
+        post: operations["reject_owner_memory_suggestion_api_memory_owners__owner_id__suggestions__candidate_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory-owners/{owner_id}/understanding/{kind}/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget Owner Understanding
+         * @description Forget one thing understood about the person, so that its words leave the log too.
+         */
+        delete: operations["forget_owner_understanding_api_memory_owners__owner_id__understanding__kind___key__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Correct Owner Understanding
+         * @description The person's own wording replaces a note on them or how the relationship stands.
+         */
+        patch: operations["correct_owner_understanding_api_memory_owners__owner_id__understanding__kind___key__patch"];
         trace?: never;
     };
     "/api/task-graph-runs/{run_id}": {
@@ -3501,7 +3628,7 @@ export interface components {
         AssistantMemoryRuntimeSettings: {
             /**
              * Automatic Direct Assertion Memory
-             * @default false
+             * @default true
              */
             automatic_direct_assertion_memory: boolean;
             /**
@@ -3522,7 +3649,7 @@ export interface components {
             companion_rollout_stage: "authority_only" | "shadow" | "read_only_pilot" | "explicit_typed" | "review_required" | "automatic_assertions" | "gentle_initiative" | "active_initiative" | "paralinguistic_pilot";
             /**
              * Curated Memory Enabled
-             * @default false
+             * @default true
              */
             curated_memory_enabled: boolean;
             /**
@@ -3572,7 +3699,7 @@ export interface components {
             show_memory_use_indicator: boolean;
             /**
              * Suggestions Enabled
-             * @default false
+             * @default true
              */
             suggestions_enabled: boolean;
             /**
@@ -4786,6 +4913,11 @@ export interface components {
         CompatibilityHandoffPayload: core["schemas"]["CompatibilityHandoffPayload"];
         /** CompleteJobRequest */
         CompleteJobRequest: core["schemas"]["CompleteJobRequest"];
+        /** CorrectUnderstandingRequest */
+        CorrectUnderstandingRequest: {
+            /** Text */
+            text: string;
+        };
         /** CreateCharacterAvatarGenerationRequest */
         CreateCharacterAvatarGenerationRequest: {
             /**
@@ -5025,6 +5157,17 @@ export interface components {
             sensitivity?: "normal" | "sensitive" | "secret";
             /** Session Id */
             session_id: string;
+        };
+        /** CreateOwnerMemoryRequest */
+        CreateOwnerMemoryRequest: {
+            /**
+             * Category
+             * @default fact
+             * @enum {string}
+             */
+            category?: "preference" | "fact" | "project" | "relationship" | "instruction";
+            /** Content */
+            content: string;
         };
         /** DeepResearchPlanUpdateRequest */
         DeepResearchPlanUpdateRequest: {
@@ -6491,6 +6634,11 @@ export interface components {
             language?: string;
             /** Speaker */
             speaker?: string | null;
+            /**
+             * Warm Overlap Judge
+             * @default false
+             */
+            warm_overlap_judge?: boolean;
         };
         /**
          * LiveCallSpeechStyle
@@ -7766,6 +7914,80 @@ export interface components {
              * @enum {string}
              */
             status: "open" | "resolved" | "abandoned" | "superseded";
+        };
+        /** OverlapJudgementRequest */
+        OverlapJudgementRequest: {
+            /**
+             * Assistant Text
+             * @default
+             */
+            assistant_text?: string;
+            /** Transcript */
+            transcript: string;
+        };
+        /** OverlapJudgementResponse */
+        OverlapJudgementResponse: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "stop" | "continue";
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "model" | "fallback";
+        };
+        /**
+         * OwnerMemoryView
+         * @description What a character or the System Assistant remembers, and what is waiting to be accepted.
+         */
+        OwnerMemoryView: {
+            /** Owner Id */
+            owner_id: string;
+            /** Records */
+            records: components["schemas"]["MemoryRecord"][];
+            /** Suggestions */
+            suggestions: components["schemas"]["app__conversation__memory_contracts__MemoryCandidate"][];
+            understanding: components["schemas"]["OwnerUnderstanding"];
+        };
+        /**
+         * OwnerSide
+         * @description The owner's own side: how it has come to stand toward the person, what it promised, what they joke about.
+         */
+        OwnerSide: {
+            /** Jokes */
+            jokes: components["schemas"]["UnderstoodJoke"][];
+            /** Promises */
+            promises: components["schemas"]["UnderstoodPromise"][];
+            /** Stance */
+            stance: string | null;
+            /** Stance Updated At */
+            stance_updated_at: string | null;
+        };
+        /**
+         * OwnerUnderstanding
+         * @description What the owner has come to understand about the person from their conversations.
+         */
+        OwnerUnderstanding: {
+            /** Connections */
+            connections: components["schemas"]["UnderstoodConnection"][];
+            /** Episodes */
+            episodes: components["schemas"]["UnderstoodEpisode"][];
+            /** Lessons */
+            lessons: components["schemas"]["UnderstoodLesson"][];
+            /** Moods */
+            moods: components["schemas"]["UnderstoodMood"][];
+            own_side: components["schemas"]["OwnerSide"];
+            /** Person */
+            person: components["schemas"]["UnderstoodNote"][];
+            relationship: components["schemas"]["UnderstoodRelationship"] | null;
+            /** Triggers */
+            triggers: components["schemas"]["UnderstoodTrigger"][];
         };
         /** PackModelLicence */
         PackModelLicence: core["schemas"]["PackModelLicence"];
@@ -9305,6 +9527,164 @@ export interface components {
              */
             top_p?: number;
         };
+        /** UnderstandingChanged */
+        UnderstandingChanged: {
+            /**
+             * Changed
+             * @default true
+             */
+            changed: boolean;
+        };
+        /** UnderstoodConnection */
+        UnderstoodConnection: {
+            /** Key */
+            key: string;
+            /** Object */
+            object: string;
+            /** Relation */
+            relation: string;
+            /** Subject */
+            subject: string;
+        };
+        /**
+         * UnderstoodEarlier
+         * @description A view the note turned away from, and when it changed.
+         */
+        UnderstoodEarlier: {
+            /** Statement */
+            statement: string;
+            /** Until */
+            until: string | null;
+        };
+        /** UnderstoodEpisode */
+        UnderstoodEpisode: {
+            /** At */
+            at: string | null;
+            /** Key */
+            key: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /** UnderstoodJoke */
+        UnderstoodJoke: {
+            /** Joke */
+            joke: string;
+            /** Key */
+            key: string;
+            /**
+             * Seen
+             * @default 1
+             */
+            seen: number;
+            /** Since */
+            since: string | null;
+        };
+        /**
+         * UnderstoodLesson
+         * @description A pattern the person's reactions to replies showed, and how often it was seen.
+         */
+        UnderstoodLesson: {
+            /** Advice */
+            advice: string | null;
+            /** Aspect */
+            aspect: string;
+            /** Key */
+            key: string;
+            /** Lesson */
+            lesson: string;
+            /**
+             * Seen
+             * @default 1
+             */
+            seen: number;
+            /** Since */
+            since: string | null;
+        };
+        /** UnderstoodMood */
+        UnderstoodMood: {
+            /** At */
+            at: string | null;
+            /** Emotion */
+            emotion: string;
+            /** Key */
+            key: string;
+        };
+        /** UnderstoodNote */
+        UnderstoodNote: {
+            /** Aspect */
+            aspect: string;
+            /**
+             * Corrected
+             * @default false
+             */
+            corrected: boolean;
+            /** Earlier */
+            earlier: components["schemas"]["UnderstoodEarlier"][];
+            /** Key */
+            key: string;
+            /** Statement */
+            statement: string;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /**
+         * UnderstoodPromise
+         * @description Something the owner told the person it would do, and whether that has happened.
+         */
+        UnderstoodPromise: {
+            /**
+             * Kept
+             * @default false
+             */
+            kept: boolean;
+            /** Key */
+            key: string;
+            /** Since */
+            since: string | null;
+            /** What */
+            what: string;
+        };
+        /** UnderstoodRelationship */
+        UnderstoodRelationship: {
+            /** Closeness */
+            closeness: number | null;
+            /**
+             * Corrected
+             * @default false
+             */
+            corrected: boolean;
+            /** Ease */
+            ease: number | null;
+            /** Statement */
+            statement: string;
+            /** Trust */
+            trust: number | null;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /**
+         * UnderstoodTrigger
+         * @description What brings on a feeling in the person, what it concerns, and how often it was seen.
+         */
+        UnderstoodTrigger: {
+            /** About */
+            about: string[];
+            /** Emotion */
+            emotion: string;
+            /** Key */
+            key: string;
+            /** Pattern */
+            pattern: string;
+            /**
+             * Seen
+             * @default 1
+             */
+            seen: number;
+            /** Since */
+            since: string | null;
+        };
         /**
          * UpdateCharacterRequest
          * @description Partial profile update with optimistic version protection.
@@ -9363,6 +9743,13 @@ export interface components {
             expected_revision: number;
             /** Session Id */
             session_id: string;
+        };
+        /** UpdateOwnerMemoryRequest */
+        UpdateOwnerMemoryRequest: {
+            /** Content */
+            content: string;
+            /** Expected Revision */
+            expected_revision: number;
         };
         /** UpdateVoiceProfileGovernanceRequest */
         UpdateVoiceProfileGovernanceRequest: {
@@ -14590,6 +14977,41 @@ export interface operations {
             };
         };
     };
+    judge_live_overlap_api_live_call_sessions__session_id__overlap_judgement_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlapJudgementRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlapJudgementResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     prewarm_live_call_api_live_call_sessions__session_id__prewarm_post: {
         parameters: {
             query?: never;
@@ -15013,6 +15435,272 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    read_owner_memory_api_memory_owners__owner_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerMemoryView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_owner_memory_api_memory_owners__owner_id__records_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOwnerMemoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_owner_memory_api_memory_owners__owner_id__records__memory_id__delete: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                owner_id: string;
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_owner_memory_api_memory_owners__owner_id__records__memory_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOwnerMemoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_owner_memory_suggestion_api_memory_owners__owner_id__suggestions__candidate_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_owner_memory_suggestion_api_memory_owners__owner_id__suggestions__candidate_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_owner_understanding_api_memory_owners__owner_id__understanding__kind___key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+                kind: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnderstandingChanged"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_owner_understanding_api_memory_owners__owner_id__understanding__kind___key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+                kind: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectUnderstandingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnderstandingChanged"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

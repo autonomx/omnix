@@ -833,7 +833,7 @@
     "type": "boolean"
   },
   {
-    "default": null,
+    "default": "1",
     "description": "Controls character memory enabled for characters.",
     "feature": "characters",
     "name": "OMNIX_CHARACTER_MEMORY_ENABLED",
@@ -1478,6 +1478,13 @@
   },
   {
     "default": null,
+    "description": "Controls memory reading model for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_MEMORY_READING_MODEL",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls memory structured extraction mode for assistant-memory.",
     "feature": "assistant-memory",
     "name": "OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE",
@@ -1498,7 +1505,7 @@
     "type": "string"
   },
   {
-    "default": "8",
+    "default": "30",
     "description": "Controls memory structured extraction timeout seconds for assistant-memory.",
     "feature": "assistant-memory",
     "name": "OMNIX_MEMORY_STRUCTURED_EXTRACTION_TIMEOUT_SECONDS",

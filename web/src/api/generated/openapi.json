@@ -2784,7 +2784,7 @@
         "additionalProperties": false,
         "properties": {
           "automatic_direct_assertion_memory": {
-            "default": false,
+            "default": true,
             "title": "Automatic Direct Assertion Memory",
             "type": "boolean"
           },
@@ -2815,7 +2815,7 @@
             "type": "string"
           },
           "curated_memory_enabled": {
-            "default": false,
+            "default": true,
             "title": "Curated Memory Enabled",
             "type": "boolean"
           },
@@ -2871,7 +2871,7 @@
             "type": "boolean"
           },
           "suggestions_enabled": {
-            "default": false,
+            "default": true,
             "title": "Suggestions Enabled",
             "type": "boolean"
           },
@@ -11938,6 +11938,21 @@
         "title": "CorporateEventCalendar",
         "type": "object"
       },
+      "CorrectUnderstandingRequest": {
+        "properties": {
+          "text": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "CorrectUnderstandingRequest",
+        "type": "object"
+      },
       "CreateAudiobookProject": {
         "properties": {
           "author": {
@@ -12569,6 +12584,33 @@
           "content"
         ],
         "title": "CreateManagedMemoryRequest",
+        "type": "object"
+      },
+      "CreateOwnerMemoryRequest": {
+        "properties": {
+          "category": {
+            "default": "fact",
+            "enum": [
+              "preference",
+              "fact",
+              "project",
+              "relationship",
+              "instruction"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "CreateOwnerMemoryRequest",
         "type": "object"
       },
       "CreateSpeaker": {
@@ -28514,6 +28556,11 @@
               }
             ],
             "title": "Speaker"
+          },
+          "warm_overlap_judge": {
+            "default": false,
+            "title": "Warm Overlap Judge",
+            "type": "boolean"
           }
         },
         "title": "LiveCallPrewarmRequest",
@@ -34243,6 +34290,70 @@
         "title": "OutcomeMeasurementsV1",
         "type": "object"
       },
+      "OverlapJudgementRequest": {
+        "properties": {
+          "assistant_text": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Assistant Text",
+            "type": "string"
+          },
+          "transcript": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "OverlapJudgementRequest",
+        "type": "object"
+      },
+      "OverlapJudgementResponse": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "stop",
+              "continue"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source": {
+            "enum": [
+              "model",
+              "fallback"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "source",
+          "elapsed_ms",
+          "reason"
+        ],
+        "title": "OverlapJudgementResponse",
+        "type": "object"
+      },
       "OvernightArmConfig-Input": {
         "additionalProperties": false,
         "description": "One overnight research arm: a candidate qualifies when every rule holds.\n\n``change`` is the decision price versus the prior regular close; ``volume_ratio``\nis the session's regular volume so far versus the 20-session average daily\nvolume; ``close_location`` is where the price sits in the session's range\n(0 = low, 1 = high).",
@@ -34583,6 +34694,162 @@
           "arms"
         ],
         "title": "OvernightShadowConfig",
+        "type": "object"
+      },
+      "OwnerMemoryView": {
+        "description": "What a character or the System Assistant remembers, and what is waiting to be accepted.",
+        "properties": {
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/app__conversation__memory_contracts__MemoryCandidate"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "understanding": {
+            "$ref": "#/components/schemas/OwnerUnderstanding"
+          }
+        },
+        "required": [
+          "owner_id",
+          "records",
+          "suggestions",
+          "understanding"
+        ],
+        "title": "OwnerMemoryView",
+        "type": "object"
+      },
+      "OwnerSide": {
+        "description": "The owner's own side: how it has come to stand toward the person, what it promised, what they joke about.",
+        "properties": {
+          "jokes": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodJoke"
+            },
+            "title": "Jokes",
+            "type": "array"
+          },
+          "promises": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodPromise"
+            },
+            "title": "Promises",
+            "type": "array"
+          },
+          "stance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stance"
+          },
+          "stance_updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stance Updated At"
+          }
+        },
+        "required": [
+          "stance",
+          "stance_updated_at",
+          "promises",
+          "jokes"
+        ],
+        "title": "OwnerSide",
+        "type": "object"
+      },
+      "OwnerUnderstanding": {
+        "description": "What the owner has come to understand about the person from their conversations.",
+        "properties": {
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodConnection"
+            },
+            "title": "Connections",
+            "type": "array"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodEpisode"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "lessons": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodLesson"
+            },
+            "title": "Lessons",
+            "type": "array"
+          },
+          "moods": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodMood"
+            },
+            "title": "Moods",
+            "type": "array"
+          },
+          "own_side": {
+            "$ref": "#/components/schemas/OwnerSide"
+          },
+          "person": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodNote"
+            },
+            "title": "Person",
+            "type": "array"
+          },
+          "relationship": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnderstoodRelationship"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodTrigger"
+            },
+            "title": "Triggers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "person",
+          "lessons",
+          "triggers",
+          "own_side",
+          "connections",
+          "relationship",
+          "moods",
+          "episodes"
+        ],
+        "title": "OwnerUnderstanding",
         "type": "object"
       },
       "PackModelLicence": {
@@ -71463,6 +71730,441 @@
         "title": "TurnOutcome",
         "type": "object"
       },
+      "UnderstandingChanged": {
+        "properties": {
+          "changed": {
+            "default": true,
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "UnderstandingChanged",
+        "type": "object"
+      },
+      "UnderstoodConnection": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "object": {
+            "title": "Object",
+            "type": "string"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "subject",
+          "relation",
+          "object"
+        ],
+        "title": "UnderstoodConnection",
+        "type": "object"
+      },
+      "UnderstoodEarlier": {
+        "description": "A view the note turned away from, and when it changed.",
+        "properties": {
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "statement",
+          "until"
+        ],
+        "title": "UnderstoodEarlier",
+        "type": "object"
+      },
+      "UnderstoodEpisode": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "summary",
+          "at"
+        ],
+        "title": "UnderstoodEpisode",
+        "type": "object"
+      },
+      "UnderstoodJoke": {
+        "properties": {
+          "joke": {
+            "title": "Joke",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "seen": {
+            "default": 1,
+            "title": "Seen",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "key",
+          "joke",
+          "seen",
+          "since"
+        ],
+        "title": "UnderstoodJoke",
+        "type": "object"
+      },
+      "UnderstoodLesson": {
+        "description": "A pattern the person's reactions to replies showed, and how often it was seen.",
+        "properties": {
+          "advice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advice"
+          },
+          "aspect": {
+            "title": "Aspect",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lesson": {
+            "title": "Lesson",
+            "type": "string"
+          },
+          "seen": {
+            "default": 1,
+            "title": "Seen",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "key",
+          "aspect",
+          "lesson",
+          "advice",
+          "seen",
+          "since"
+        ],
+        "title": "UnderstoodLesson",
+        "type": "object"
+      },
+      "UnderstoodMood": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "emotion": {
+            "title": "Emotion",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "emotion",
+          "at"
+        ],
+        "title": "UnderstoodMood",
+        "type": "object"
+      },
+      "UnderstoodNote": {
+        "properties": {
+          "aspect": {
+            "title": "Aspect",
+            "type": "string"
+          },
+          "corrected": {
+            "default": false,
+            "title": "Corrected",
+            "type": "boolean"
+          },
+          "earlier": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodEarlier"
+            },
+            "title": "Earlier",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "key",
+          "aspect",
+          "statement",
+          "corrected",
+          "updated_at",
+          "earlier"
+        ],
+        "title": "UnderstoodNote",
+        "type": "object"
+      },
+      "UnderstoodPromise": {
+        "description": "Something the owner told the person it would do, and whether that has happened.",
+        "properties": {
+          "kept": {
+            "default": false,
+            "title": "Kept",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "what",
+          "kept",
+          "since"
+        ],
+        "title": "UnderstoodPromise",
+        "type": "object"
+      },
+      "UnderstoodRelationship": {
+        "properties": {
+          "closeness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closeness"
+          },
+          "corrected": {
+            "default": false,
+            "title": "Corrected",
+            "type": "boolean"
+          },
+          "ease": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ease"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "trust": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "statement",
+          "closeness",
+          "trust",
+          "ease",
+          "corrected",
+          "updated_at"
+        ],
+        "title": "UnderstoodRelationship",
+        "type": "object"
+      },
+      "UnderstoodTrigger": {
+        "description": "What brings on a feeling in the person, what it concerns, and how often it was seen.",
+        "properties": {
+          "about": {
+            "items": {
+              "type": "string"
+            },
+            "title": "About",
+            "type": "array"
+          },
+          "emotion": {
+            "title": "Emotion",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          },
+          "seen": {
+            "default": 1,
+            "title": "Seen",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "key",
+          "emotion",
+          "pattern",
+          "about",
+          "seen",
+          "since"
+        ],
+        "title": "UnderstoodTrigger",
+        "type": "object"
+      },
       "UpdateAudiobookProject": {
         "properties": {
           "author": {
@@ -71681,6 +72383,27 @@
           "content"
         ],
         "title": "UpdateManagedMemoryRequest",
+        "type": "object"
+      },
+      "UpdateOwnerMemoryRequest": {
+        "properties": {
+          "content": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "content",
+          "expected_revision"
+        ],
+        "title": "UpdateOwnerMemoryRequest",
         "type": "object"
       },
       "UpdateVoiceProfileGovernanceRequest": {
@@ -89703,6 +90426,55 @@
         ]
       }
     },
+    "/api/live-call/sessions/{session_id}/overlap-judgement": {
+      "post": {
+        "operationId": "judge_live_overlap_api_live_call_sessions__session_id__overlap_judgement_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverlapJudgementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlapJudgementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Judge Live Overlap"
+      }
+    },
     "/api/live-call/sessions/{session_id}/prewarm": {
       "post": {
         "operationId": "prewarm_live_call_api_live_call_sessions__session_id__prewarm_post",
@@ -90270,6 +91042,438 @@
           }
         },
         "summary": "Live Voice Execution Lane Status"
+      }
+    },
+    "/api/memory-owners/{owner_id}": {
+      "get": {
+        "operationId": "read_owner_memory_api_memory_owners__owner_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerMemoryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Owner Memory",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
+    "/api/memory-owners/{owner_id}/records": {
+      "post": {
+        "operationId": "add_owner_memory_api_memory_owners__owner_id__records_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOwnerMemoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Owner Memory",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
+    "/api/memory-owners/{owner_id}/records/{memory_id}": {
+      "delete": {
+        "operationId": "forget_owner_memory_api_memory_owners__owner_id__records__memory_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forget Owner Memory",
+        "tags": [
+          "characters"
+        ]
+      },
+      "patch": {
+        "operationId": "edit_owner_memory_api_memory_owners__owner_id__records__memory_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnerMemoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Owner Memory",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
+    "/api/memory-owners/{owner_id}/suggestions/{candidate_id}/approve": {
+      "post": {
+        "operationId": "approve_owner_memory_suggestion_api_memory_owners__owner_id__suggestions__candidate_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Owner Memory Suggestion",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
+    "/api/memory-owners/{owner_id}/suggestions/{candidate_id}/reject": {
+      "post": {
+        "operationId": "reject_owner_memory_suggestion_api_memory_owners__owner_id__suggestions__candidate_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Owner Memory Suggestion",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
+    "/api/memory-owners/{owner_id}/understanding/{kind}/{key}": {
+      "delete": {
+        "description": "Forget one thing understood about the person, so that its words leave the log too.",
+        "operationId": "forget_owner_understanding_api_memory_owners__owner_id__understanding__kind___key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnderstandingChanged"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forget Owner Understanding",
+        "tags": [
+          "characters"
+        ]
+      },
+      "patch": {
+        "description": "The person's own wording replaces a note on them or how the relationship stands.",
+        "operationId": "correct_owner_understanding_api_memory_owners__owner_id__understanding__kind___key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectUnderstandingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnderstandingChanged"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Correct Owner Understanding",
+        "tags": [
+          "characters"
+        ]
       }
     },
     "/api/model-packs": {

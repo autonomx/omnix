@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -210,6 +210,17 @@ def _input_rejection(text: str) -> str | None:
     return None
 
 
+def memory_text_rejection(text: str) -> str | None:
+    """Why inferred text must not be kept: a secret, outside instructions or a sensitive trait."""
+    rejected = _input_rejection(text)
+    if rejected:
+        return rejected
+    lowered = f" {_normalize_text(text).casefold()} "
+    if any(f" {term} " in lowered or f" {term}." in lowered or f" {term}," in lowered for term in _SENSITIVE_INFERENCE_TERMS):
+        return "sensitive_inference"
+    return None
+
+
 def _terms(value: str) -> frozenset[str]:
     return frozenset(
         term.casefold()
@@ -258,25 +269,26 @@ def _validate_provider_rows(
         if candidate.category != _DEFAULT_CATEGORY[candidate.kind]:
             skipped.append("structured_provider_category_mismatch")
             continue
-        if candidate.kind in _SIMPLE_KINDS and candidate.payload:
-            skipped.append("structured_provider_unsupported_payload")
-            continue
         if not _supported_by_source(source, candidate):
             skipped.append("structured_provider_unsupported_claim")
             continue
+        kind, category = candidate.kind, candidate.category
         try:
-            payload = validate_typed_payload(candidate.kind, candidate.payload)
+            # The content is the memory. Models add details of their own ({"location": "Toronto"}), and a simple kind
+            # has no use for them: refusing the row for that lost nearly every real fact (2026-11-05).
+            payload = validate_typed_payload(kind, {} if kind in _SIMPLE_KINDS else candidate.payload)
         except (KeyError, TypeError, ValueError, ValidationError):
+            # Likewise a richer kind whose details do not fit: what was said is still worth keeping, as a plain fact.
             skipped.append("structured_provider_invalid_payload")
-            continue
+            kind, category, payload = "semantic_fact", "fact", {}
         confidence = min(
             candidate.confidence,
             0.99 if candidate.claim_type == "user_asserted" else 0.80,
         )
         accepted.append(
             _proposal(
-                kind=candidate.kind,
-                category=candidate.category,
+                kind=kind,
+                category=category,
                 content=normalized_content,
                 payload=payload,
                 confidence=confidence,
@@ -459,8 +471,13 @@ def extract_structured_memory_proposals(
     *,
     source_message_id: str,
     proposal_provider: StructuredProposalProvider | None = None,
+    earlier_messages: Sequence[dict[str, str]] = (),
 ) -> tuple[list[StructuredMemoryProposal], list[str]]:
-    """Extract provider proposals, validate them, then use a deterministic fallback."""
+    """Extract provider proposals, validate them, then use a deterministic fallback.
+
+    ``earlier_messages`` are the turns before this one, as {"role", "content"}: a sentence said in pieces only means
+    something with them. A proposal must rest on what the user said, never on what the assistant said.
+    """
 
     text = _normalize_text(content)
     rejection = _input_rejection(text)
@@ -474,10 +491,15 @@ def extract_structured_memory_proposals(
     provider_skips: list[str] = []
     if proposal_provider is not None:
         try:
-            rows = proposal_provider.propose(text)
+            rows = (
+                proposal_provider.propose(text, earlier=earlier_messages)
+                if earlier_messages
+                else proposal_provider.propose(text)
+            )
+            users_words = [item["content"] for item in earlier_messages if item.get("role") == "user"]
             proposals, provider_skips = _validate_provider_rows(
                 rows,
-                source=text,
+                source=" ".join([*users_words, text]),
                 source_message_id=source_message_id,
             )
             if proposals:
