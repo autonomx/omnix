@@ -275,6 +275,7 @@ _HTML = r"""
   <div class="toolbar">
     <button id="start-auto" type="button">Start enabled services</button>
     <button id="open-app-private" type="button">Open app privately</button>
+    <button id="restart-all" type="button">Restart all</button>
     <button id="stop-all" class="stop" type="button">Stop all</button>
   </div>
   <div id="services" class="grid"></div>
@@ -370,6 +371,32 @@ _HTML = r"""
     }
   }
 
+  // Stop everything, start as the launcher does (migrations first), then start again whatever had been started by
+  // hand. Made of the existing routes, so this operator surface gains no route.
+  async function restartAll() {
+    if (busy) return;
+    busy = true;
+    showError('');
+    try {
+      const before = await api('/api/services');
+      const byHand = (before.services || [])
+        .filter((service) => service.status === 'running' && !service.auto_start)
+        .map((service) => service.id);
+      await api('/api/services/stop-all', { method: 'POST' });
+      const started = await api('/api/services/start-auto', { method: 'POST' });
+      if (started.started?.migrate?.ok) {
+        for (const id of byHand) {
+          await api(`/api/services/${encodeURIComponent(id)}/start`, { method: 'POST' });
+        }
+      }
+      await refresh();
+    } catch (error) {
+      showError(error && error.message ? error.message : String(error));
+    } finally {
+      busy = false;
+    }
+  }
+
   async function openAppPrivate() {
     if (busy) return;
     busy = true;
@@ -443,6 +470,7 @@ _HTML = r"""
 
   byId('start-auto').addEventListener('click', () => runAction('/api/services/start-auto'));
   byId('open-app-private').addEventListener('click', openAppPrivate);
+  byId('restart-all').addEventListener('click', restartAll);
   byId('stop-all').addEventListener('click', () => runAction('/api/services/stop-all'));
   servicesEl.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-service-id][data-action]');
