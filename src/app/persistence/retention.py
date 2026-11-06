@@ -85,7 +85,8 @@ def _jobs(connection: Any, days: int, batch: int) -> int:
             WHERE foreign_key.contype = 'f' AND foreign_key.conparentid = 0
               AND foreign_key.confrelid = 'omnix_jobs'::regclass
               AND foreign_key.confdeltype IN ('a', 'r')
-            ORDER BY 1, 2, foreign_key.conname"""
+            ORDER BY 1, 2, foreign_key.conname
+            LIMIT 64"""
     ).fetchall()
     still_needed = [
         sql.SQL("AND NOT EXISTS (SELECT 1 FROM {holder} AS holder WHERE {match})").format(
