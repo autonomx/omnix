@@ -26,6 +26,7 @@ class LiveVoicePromptContext:
     context_items: list[dict[str, Any]] | None
     assembly: PromptAssembly | None = None
     rendered: RenderedPrompt | None = None
+    profile: Any | None = None  # the person's Live Chat settings, read once per turn
     settings_scope: AbstractContextManager[None] | None = None
     dependency_token: Token[dict[str, Any] | None] | None = None
     dependency_timings: dict[str, Any] | None = None
@@ -84,13 +85,15 @@ def _prompt_cache_stage(
 def _companion_context_stage(
     context: LiveVoicePromptContext,
 ) -> LiveVoicePromptContext:
-    from app.platform.live_voice.prompt.companion_context import build_companion_prompt
+    from app.platform.live_voice.prompt.companion_context import build_companion_prompt, load_live_profile
 
+    context.profile = load_live_profile(context.session.id)
     context.assembly, context.rendered = build_companion_prompt(
         context.store,
         context.session,
         context.user_message,
         context.context_items,
+        profile=context.profile,
     )
     return context
 
@@ -105,7 +108,7 @@ def _spoken_style_stage(
 
     if context.assembly is None or context.rendered is None:
         raise RuntimeError("live_voice_prompt_assembly_missing")
-    apply_live_voice_spoken_style(context.rendered)
+    apply_live_voice_spoken_style(context.rendered, context.profile)
     record_spoken_style_diagnostics(context.assembly, context.rendered)
     return context
 

@@ -17,7 +17,6 @@ import {
   type ResponseOnsetStyle,
   type TopicContinuity,
   liveConversationProfileClient,
-  migrateLegacyConversationSettingsOnce,
   mirrorProfileForLegacyRuntime,
 } from './liveConversationProfileClient';
 import {
@@ -40,7 +39,6 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
     setStatus(null);
     void (async () => {
       try {
-        const migration = migrateLegacyConversationSettingsOnce().catch(() => false);
         if (sessionId) {
           const envelope = await liveConversationProfileClient.get(sessionId);
           if (cancelled) return;
@@ -54,28 +52,6 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
           setSource('user_defaults');
           mirrorProfileForLegacyRuntime(defaults);
         }
-        // Migration is best-effort and must never block the visible controls. If it
-        // changes defaults, refresh the effective profile once it completes.
-        void migration.then(async (migrated) => {
-          if (!migrated || cancelled) return;
-          try {
-            if (sessionId) {
-              const envelope = await liveConversationProfileClient.get(sessionId);
-              if (cancelled) return;
-              setProfile(envelope.effective);
-              setSource(envelope.source);
-              mirrorProfileForLegacyRuntime(envelope.effective);
-            } else {
-              const defaults = await liveConversationProfileClient.defaults();
-              if (cancelled) return;
-              setProfile(defaults);
-              setSource('user_defaults');
-              mirrorProfileForLegacyRuntime(defaults);
-            }
-          } catch {
-            // Keep the already loaded profile when the optional refresh fails.
-          }
-        });
       } catch (error) {
         if (!cancelled) setStatus(error instanceof Error ? error.message : 'Live Chat profile could not be loaded.');
       }
@@ -83,23 +59,21 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
     return () => { cancelled = true; };
   }, [sessionId]);
 
+  // A change is the person's setting, not this chat's: a per-chat save looked lost as soon as a new chat
+  // started from the defaults. A chat with an older override of its own follows the defaults from then on.
   async function update(patch: LiveConversationProfilePatch): Promise<void> {
     if (!profile || saving) return;
     setSaving(true);
     setStatus(null);
     try {
-      if (sessionId) {
-        const envelope = await liveConversationProfileClient.update(sessionId, patch);
-        setProfile(envelope.effective);
-        setSource(envelope.source);
-        mirrorProfileForLegacyRuntime(envelope.effective);
-      } else {
-        const defaults = await liveConversationProfileClient.updateDefaults(patch);
-        setProfile(defaults);
-        setSource('user_defaults');
-        mirrorProfileForLegacyRuntime(defaults);
+      let effective = await liveConversationProfileClient.updateDefaults(patch);
+      if (sessionId && source === 'session_override') {
+        effective = (await liveConversationProfileClient.clear(sessionId)).effective;
       }
-      setStatus(sessionId ? 'Session presence profile saved.' : 'Default presence profile saved.');
+      setProfile(effective);
+      setSource('user_defaults');
+      mirrorProfileForLegacyRuntime(effective);
+      setStatus('Saved as your Live Chat settings.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Live Chat profile could not be saved.');
     } finally {

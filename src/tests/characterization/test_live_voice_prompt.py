@@ -48,7 +48,8 @@ def test_live_voice_prompt_matches_pre_refactor_golden(monkeypatch) -> None:
         source="character",
     )
     conversation_profile = SimpleNamespace(
-        initiative_mode="gentle", emotional_attunement=0.2
+        initiative_mode="gentle", emotional_attunement=0.2,
+        response_length="conversational", conversation_stance="automatic", talkativeness=50,
     )
     current_message = ChatMessage(
         id="message:voice-current",
@@ -167,7 +168,7 @@ def test_live_voice_prompt_matches_pre_refactor_golden(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         companion_context,
-        "_effective_profile",
+        "effective_live_profile",
         lambda _session_id: conversation_profile,
     )
     monkeypatch.setattr(

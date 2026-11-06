@@ -200,7 +200,9 @@ def _profile_signature(store: Any) -> tuple[str, int, int] | None:
         stat = path.stat()
         return str(path), int(stat.st_mtime_ns), int(stat.st_size)
     except FileNotFoundError:
-        return str(path), 0, 0
+        # A file store whose file is not written yet; a store with no file at all (PostgreSQL names itself
+        # "postgresql:/...") has nothing to sign, and a constant signature kept a changed profile for five minutes.
+        return (str(path), 0, 0) if path.parent.is_dir() else None
     except OSError:
         return None
 

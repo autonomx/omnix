@@ -69,7 +69,7 @@ def _merge_memory(
     return list(merged.values())
 
 
-def _effective_profile(session_id: str) -> LiveConversationProfile:
+def effective_live_profile(session_id: str) -> LiveConversationProfile:
     try:
         from app.platform.live_voice.prompt.cache import get_live_conversation_profile_cached
 
@@ -79,6 +79,11 @@ def _effective_profile(session_id: str) -> LiveConversationProfile:
         ).effective
     except Exception:
         return LiveConversationProfile()
+
+
+def load_live_profile(session_id: str) -> LiveConversationProfile:
+    """The person's Live Chat settings for this turn, read once and shared by the prompt's stages."""
+    return _timed("profile_ms", effective_live_profile, session_id)
 
 
 def _create_memory_service(factory: Callable[[], Any]) -> Any:
@@ -119,6 +124,7 @@ def build_companion_prompt(
     session: Any,
     user_message: Any,
     context_items: list[dict[str, Any]] | None,
+    profile: LiveConversationProfile | None = None,
 ):
     from app.providers.service import get_global_system_prompt
 
@@ -139,7 +145,8 @@ def build_companion_prompt(
         getattr(session, "transcript_policy", "persistent") != "persistent"
         or not settings.transcript_retention_enabled
     )
-    profile = _timed("profile_ms", _effective_profile, session.id)
+    if profile is None:
+        profile = load_live_profile(session.id)
     if profile.initiative_mode == "active" and not rollout.active_initiative_enabled:
         profile = profile.model_copy(update={"initiative_mode": "gentle"})
     temporal_result = None

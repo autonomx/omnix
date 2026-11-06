@@ -20,7 +20,6 @@ const defaultProfile = {
 beforeEach(() => {
   window.localStorage.clear();
   liveConversationStore.reset();
-  window.localStorage.setItem('omnix.liveConversation.serverProfileMigrated.v1', 'done');
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = input.toString();
     if (url === '/api/characters') return Response.json({ characters: [] });

@@ -1,8 +1,5 @@
  
-import {
-  readLiveConversationSettings,
-  updateLiveConversationSettings,
-} from '../workspace/live-voice-conversation-settings';
+import { updateLiveConversationSettings } from '../workspace/live-voice-conversation-settings';
 import type { components } from '../api/generated';
 import { unwrapAs } from '../../../api/http';
 import { emitOmnixEvent, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../../events/bus';
@@ -29,9 +26,6 @@ export type LiveConversationProfileEnvelope = components['schemas']['LiveConvers
 export type LiveConversationProfilePatch = Partial<Omit<LiveConversationProfile, 'profile_version'>>;
 
 export const LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY = 'omnix.liveConversation.effectiveProfile';
-const MIGRATION_KEY = 'omnix.liveConversation.serverProfileMigrated.v1';
-const CANONICAL_LEGACY_KEY = 'omnix.liveConversation.settings';
-const ASSISTANT_LEGACY_KEY = 'omnix.chatbot.assistantSettings';
 
 function profileCall<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
   return unwrapAs(call, (error) => `Live Chat profile request failed with status ${error.status}.`);
@@ -73,22 +67,4 @@ export function readEffectiveLiveConversationProfile(): LiveConversationProfile 
   } catch {
     return null;
   }
-}
-
-export async function migrateLegacyConversationSettingsOnce(): Promise<boolean> {
-  if (typeof window === 'undefined' || window.localStorage.getItem(MIGRATION_KEY) === 'done') return false;
-  const hasLegacySettings = window.localStorage.getItem(CANONICAL_LEGACY_KEY) !== null
-    || window.localStorage.getItem(ASSISTANT_LEGACY_KEY) !== null;
-  if (!hasLegacySettings) {
-    window.localStorage.setItem(MIGRATION_KEY, 'done');
-    return false;
-  }
-  const legacy = readLiveConversationSettings();
-  await liveConversationProfileClient.updateDefaults({
-    conversation_pace: legacy.conversationPace,
-    interruption_preference: legacy.interruptionPreference,
-    assistant_backchannel_mode: legacy.backchannelMode,
-  });
-  window.localStorage.setItem(MIGRATION_KEY, 'done');
-  return true;
 }

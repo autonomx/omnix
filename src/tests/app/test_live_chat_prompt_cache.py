@@ -134,6 +134,28 @@ def test_profile_cache_uses_file_signature_and_observes_updates(
     assert read_calls == 2
 
 
+def test_a_profile_kept_in_the_database_is_read_every_time() -> None:
+    # Its store names itself "postgresql:/...", a path with no file. On Linux (not Windows, where the name is invalid)
+    # it was signed as an unwritten file, the same signature every time, so a changed setting reached replies up to
+    # five minutes late.
+    prompt_cache._reset_live_prompt_cache_for_tests()
+
+    class _DatabaseStore:
+        path = Path("postgresql:/live-conversation-profiles")
+
+        def __init__(self) -> None:
+            self.talkativeness = 10
+
+        def get(self, _session_id: str) -> SimpleNamespace:
+            return SimpleNamespace(effective=SimpleNamespace(talkativeness=self.talkativeness))
+
+    store = _DatabaseStore()
+    assert prompt_cache.get_live_conversation_profile_cached(store, "chat:test").effective.talkativeness == 10
+    store.talkativeness = 80
+
+    assert prompt_cache.get_live_conversation_profile_cached(store, "chat:test").effective.talkativeness == 80
+
+
 def test_prompt_dependency_cache_expires_and_supports_invalidation(monkeypatch) -> None:
     now = [5.0]
     cache: OrderedDict[str, object] = OrderedDict()

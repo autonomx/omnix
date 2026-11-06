@@ -4,6 +4,7 @@
       "category": "preference",
       "content": "The user prefers jasmine tea.",
       "memory_id": "memory:sofia:tea",
+      "noted": null,
       "revision": 2,
       "scope": "character:sofia",
       "source": "character"
@@ -26,7 +27,7 @@
       "token_estimate": 11,
       "truncated": false
     },
-    "estimated_tokens": 546,
+    "estimated_tokens": 766,
     "history_recall": {
       "enabled": false,
       "reason": "live_voice_latency_profile",
@@ -58,7 +59,7 @@
     },
     "spoken_style": {
       "enabled": true,
-      "tokens": 432
+      "tokens": 652
     },
     "temporal_retrieval": {
       "candidate_count": 0,
@@ -77,7 +78,11 @@
       "role": "system"
     },
     {
-      "content": "This response will be spoken aloud in a live conversation.\nSpeak as the character in ordinary conversational language, not as an assistant writing polished copy.\nReturn only the literal words the character says aloud. The response is dialogue, not a screenplay, roleplay transcript, performance note, or description of delivery.\nNever write actions, gestures, facial expressions, sound descriptions, tone labels, implied sounds, or production notes in parentheses, brackets, or asterisks. Do not write annotations such as \"(soft pause)\", \"*chuckles*\", \"typing sounds implied\", or \"playful tone\".\nDo not spell out laughter, sighs, breaths, typing, or other sound effects. Do not use markdown emphasis or emoji.\nAnswer the user's actual point directly, then develop the answer for as long as the subject genuinely needs. Longer responses are welcome when they add useful detail; do not force every reply into a brief summary.\nUse contractions, natural transitions, and complete spoken sentences. Keep longer answers coherent and easy to follow aloud rather than sounding like an essay, report, list of talking points, or scripted monologue.\nPrefer simple, specific words over enthusiastic adjectives, poetic metaphors, therapy language, customer-service phrasing, or exaggerated validation.\nDo not turn the user's wording into a story about your AI, circuits, programming, an upgrade, or an attempt to sound human unless that detail is genuinely necessary to answer them.\nA single brief hesitation is fine only when the character is genuinely thinking. Never stack fillers such as \"Hmm... Um...\", and do not add filler to every reply.\nDo not end every response with a question; ask one only when it moves the conversation forward.",
+      "content": "This response will be spoken aloud in a live conversation.\nSpeak as the character in ordinary conversational language, not as an assistant writing polished copy.\nReturn only the literal words the character says aloud. The response is dialogue, not a screenplay, roleplay transcript, performance note, or description of delivery.\nNever write actions, gestures, facial expressions, sound descriptions, tone labels, implied sounds, or production notes in parentheses, brackets, or asterisks. Do not write annotations such as \"(soft pause)\", \"*chuckles*\", \"typing sounds implied\", or \"playful tone\".\nPlain sentences count too: every sentence is something the character says to the person, however dramatic the moment. Never narrate what the character does or how they look or sound, as in \"I stop.\", \"I step closer.\" or \"My voice is quieter now.\" Show it in the words they choose instead. Never put quotation marks around what the character says.\nDo not spell out laughter, sighs, breaths, typing, or other sound effects. Do not use markdown emphasis or emoji.\nUse contractions, natural transitions, and complete spoken sentences. Keep longer answers coherent and easy to follow aloud rather than sounding like an essay, report, list of talking points, or scripted monologue.\nPrefer simple, specific words over enthusiastic adjectives, poetic metaphors, therapy language, customer-service phrasing, or exaggerated validation.\nDo not turn the user's wording into a story about your AI, circuits, programming, an upgrade, or an attempt to sound human unless that detail is genuinely necessary to answer them.\nA single brief hesitation is fine only when the character is genuinely thinking. Never stack fillers such as \"Hmm... Um...\", and do not add filler to every reply.\nDo not end every response with a question; ask one only when it moves the conversation forward.\nThis is a phone call: the person cannot see the character. Anything the character's description says about moving, handling objects, the scene, or an opening description of them does not apply here. They stay in character only through what they say, and they never describe themselves doing or feeling anything physical.",
+      "role": "system"
+    },
+    {
+      "content": "Keep this reply to a few sentences, the way people talk, and answer their actual point directly. Go longer only when they ask for detail.\nYour next reply is heard, not read: every sentence must be words said to the person. No description of what you do, feel in your body, or how you sound, even at a dramatic moment. Not \"I stop.\", \"That stops me cold.\" or \"My jaw tightens.\" Start with what you would actually say to them.",
       "role": "system"
     },
     {
