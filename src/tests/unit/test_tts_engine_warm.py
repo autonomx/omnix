@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.persistence.device_permits import DevicePermitUnavailable
 from app.providers import faster_qwen3_tts_provider as qwen
+from services.tts import tts_engine_warm as warm
 
 
 TOKEN = secrets.token_urlsafe(32)
@@ -46,6 +47,8 @@ def server(monkeypatch):
     previous = (tts_server._TTS_PROVIDER, tts_server._TTS_PROVIDER_NAME, tts_server._IN_FLIGHT_COUNT)
     monkeypatch.setattr(tts_server, "device_permit_slot", lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(tts_server, "voice_debug_log", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(warm, "device_permit_slot", lambda *_args, **_kwargs: nullcontext())
+    monkeypatch.setattr(warm, "voice_debug_log", lambda *_args, **_kwargs: None)
     yield tts_server
     tts_server._TTS_PROVIDER, tts_server._TTS_PROVIDER_NAME, tts_server._IN_FLIGHT_COUNT = previous
 
@@ -54,7 +57,7 @@ def _warm_at_startup(server, engine, *, enabled: bool = True) -> None:
     with (patch("app.platform.voice.tts_runtime_state.startup_warmup_enabled", return_value=enabled),
           patch("app.platform.voice.tts_runtime_actions.configured_speaker", return_value=None),
           patch("app.platform.voice.tts_runtime_actions._has_transcript", return_value=True)):
-        server._warm_loaded_engine(engine)
+        warm.warm_loaded_engine(engine, begin=server._begin_generation, end=server._end_generation)
 
 
 def test_the_service_warms_its_engine_holding_a_permit(server) -> None:
@@ -65,13 +68,13 @@ def test_the_service_warms_its_engine_holding_a_permit(server) -> None:
         permits.append({"model_class": model_class, **options})
         return nullcontext()
 
-    with patch.object(server, "device_permit_slot", slot):
+    with patch.object(warm, "device_permit_slot", slot):
         _warm_at_startup(server, engine)
 
     assert engine.warmed == [("Jinx", None, True)]
     # Behind live speech in the queue, which asks as "realtime".
     assert permits == [{"model_class": "tts", "priority": "interactive",
-                        "timeout_seconds": server.ENGINE_WARM_PERMIT_SECONDS}]
+                        "timeout_seconds": warm.ENGINE_WARM_PERMIT_SECONDS}]
     assert server._IN_FLIGHT_COUNT == 0
 
 

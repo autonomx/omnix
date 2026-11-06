@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { emitOmnixEvent } from '../../../events/bus';
+import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, emitOmnixEvent } from '../../../events/bus';
 import { liveConversationProfileClient, type LiveConversationProfile } from '../chat/liveConversationProfileClient';
 import { initializeLiveConversationStoreBridge } from './live-conversation-store-bridge';
 import { liveConversationStore } from './live-conversation-store';
@@ -33,6 +33,24 @@ describe('live conversation store bridge', () => {
     }));
 
     expect(liveConversationStore.getState().sessionId).toBe('chat:new-call');
+  });
+
+  it('keeps the floor with a reply still playing after a final, and frees it otherwise', () => {
+    // Real: one ignored noise left the floor unclaimed, and the rest of the reply had no overlap protection.
+    const final = () => window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'stt_final_received', transcript: '' },
+    }));
+    const playback = (speaking: boolean) => window.dispatchEvent(new CustomEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, {
+      detail: { speaking },
+    }));
+
+    playback(true);
+    final();
+    expect(liveConversationStore.getState().conversation.floorOwner).toBe('assistant');
+
+    playback(false);
+    final();
+    expect(liveConversationStore.getState().conversation.floorOwner).toBe('unclaimed');
   });
 
   it('takes the chat session selected before the bridge was installed', () => {

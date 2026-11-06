@@ -116,10 +116,11 @@ class _WarmPool:
     twice, at most ``MAX_WARM`` processes, each retired after ``IDLE_SECONDS``.
     A live call's process is started on its first ask and waits through the pauses
     of a call, ``LIVE_IDLE_SECONDS``; the call's warm-up, which repeats on speech
-    after five quiet minutes, starts another when that one has gone.
+    after five quiet minutes, starts another when that one has gone. A call holds two
+    kinds, its replies and its overlap judge, and the third place is for a switch of identity.
     """
 
-    MAX_WARM = 2
+    MAX_WARM = 3
     IDLE_SECONDS = 120.0
     LIVE_IDLE_SECONDS = 360.0
     MIN_USES = 2
@@ -542,6 +543,9 @@ class ClaudeCliProvider(BaseProvider):
                 process.wait()
             finally:
                 timer.cancel()
+                # A caller that stops reading ends the request now: its stderr stays open until the process goes.
+                if process.poll() is None:
+                    process.kill()
                 stderr_reader.join(timeout=1)
             if result is None:
                 if time.monotonic() - started >= timeout:

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -222,18 +224,16 @@ def test_a_repeated_kind_of_call_takes_a_process_started_ahead_of_it(pooled) -> 
 def test_the_pool_keeps_few_processes_and_retires_idle_ones(pooled) -> None:
     provider, pool = pooled
     pool.IDLE_SECONDS = 2.0  # long enough for the calls below on a busy machine
-    for system in ("A", "B", "C"):
+    for system in ("A", "B", "C", "D"):
         for _ in range(2):
             provider.chat_completion([ChatMessage("system", system), ChatMessage("user", "hi")])
     assert len(pool._warm) == pool.MAX_WARM  # the oldest waiting process made room
     assert len(_WaitingPopen.killed) == 1
-    import time
-
     deadline = time.monotonic() + 10
-    while (pool._warm or len(_WaitingPopen.killed) < 3) and time.monotonic() < deadline:
+    while (pool._warm or len(_WaitingPopen.killed) < 4) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert pool._warm == {}  # idle ones are retired
-    assert len(_WaitingPopen.killed) == 3
+    assert len(_WaitingPopen.killed) == 4
     assert all(not Path(record["cwd"]).exists() for record in _FakePopen.calls)
 
 
@@ -353,6 +353,46 @@ def test_stopping_reading_a_reply_ends_the_cli_call(monkeypatch) -> None:
 
     assert len(_WaitingPopen.killed) == 1
     assert not Path(_FakePopen.calls[0]["cwd"]).exists()
+
+
+class _StderrUntilKilled:
+    """A real process's stderr: reading it ends only when the process does."""
+
+    def __init__(self) -> None:
+        self.ended = threading.Event()
+
+    def read(self) -> str:
+        self.ended.wait(timeout=10)
+        return ""
+
+
+class _RunningPopen(_StreamingPopen):
+    def __init__(self, command, **kwargs):
+        super().__init__(command, **kwargs)
+        self.stderr = _StderrUntilKilled()
+
+    def kill(self):
+        self.stderr.ended.set()
+        super().kill()
+
+
+def test_stopping_reading_ends_the_call_at_once(monkeypatch) -> None:
+    # Real: stderr was awaited before the kill, so every stopped call took a second longer than it needed. A judgement
+    # of speech over a reply missed its deadline by that second, every time.
+    _FakePopen.calls = []
+    _WaitingPopen.killed = []
+    monkeypatch.setattr(module, "resolve_claude_executable", lambda _path: "claude")
+    monkeypatch.setattr(module.subprocess, "Popen", _RunningPopen)
+    monkeypatch.setattr(module, "_WARM_POOL", module._WarmPool())
+    _FakePopen.stdout_text = _events("one ", "two")
+    provider = module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli"))
+
+    stream = provider.chat_completion([ChatMessage("user", "go")], stream=True)
+    next(stream)
+    started = time.perf_counter()
+    stream.close()
+
+    assert time.perf_counter() - started < 0.5
 
 
 def test_a_schema_call_streams_its_structured_answer_as_it_is_written(provider) -> None:

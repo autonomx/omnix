@@ -20,14 +20,31 @@ describe('live voice overlap classifier', () => {
     expect(shouldConfirmInterruption(classifyOverlap('I need to change the destination now'), 'balanced')).toBe(true);
   });
 
-  it('keeps acknowledgements and noise non-authoritative', () => {
-    expect(classifyOverlap('mhm').intent).toBe('backchannel');
-    expect(classifyOverlap('yeah').intent).toBe('backchannel');
-    expect(classifyOverlap('Yeah, okay.').intent).toBe('backchannel');
-    expect(classifyOverlap('right right').intent).toBe('backchannel');
-    expect(classifyOverlap('yeah how is the farm').intent).toBe('interrupt');
+  it('leaves short remarks to the model, whatever the words', () => {
+    // No list of reactions: people say anything. Only the model tells these apart.
+    for (const remark of ['mhm', 'yeah', 'Yeah, okay.', 'right right', 'Uh', 'Huh?', 'Cool.', 'Sweet', 'Really?', 'What?', 'Hang on.', 'Vale.']) {
+      const assessment = classifyOverlap(remark);
+      expect(assessment.intent, remark).toBe('uncertain');
+      expect(shouldConfirmInterruption(assessment, 'easy'), remark).toBe(false);
+    }
+  });
+
+  it('knows noise without the model', () => {
     expect(classifyOverlap('[cough]').intent).toBe('noise');
-    expect(shouldConfirmInterruption(classifyOverlap('right'), 'easy')).toBe(false);
+    expect(classifyOverlap('...').intent).toBe('noise');
+  });
+
+  it.each([
+    'No, not much.',
+    "I don't have to explain anything.",
+    'Uh, what about the corn',
+    'Cool, but where did you go',
+    'What do you mean',
+    'yeah how is the farm',
+  ])('still lets "%s" interrupt', (speech) => {
+    const assessment = classifyOverlap(speech);
+    expect(assessment.intent).toBe('interrupt');
+    expect(shouldConfirmInterruption(assessment, 'easy')).toBe(true);
   });
 
   it('recognizes likely assistant echo', () => {

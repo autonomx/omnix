@@ -61,9 +61,9 @@ describe('the final transcript of a turn that began over the assistant', () => {
     expect(assessFinalOverlap('uncertain', 'what about the corn')?.intent).toBe('interrupt');
   });
 
-  it('stays suppressed when all its words are still only an acknowledgement, a stop or noise', () => {
-    expect(assessFinalOverlap('backchannel', 'Yeah.')?.intent).toBe('backchannel');
-    expect(assessFinalOverlap('backchannel', 'Yeah, okay.')?.intent).toBe('backchannel');
+  it('leaves a short remark to the model, and a stop or noise stays what it is', () => {
+    expect(assessFinalOverlap('backchannel', 'Yeah.')?.intent).toBe('uncertain');
+    expect(assessFinalOverlap('uncertain', 'Yeah, okay.')?.intent).toBe('uncertain');
     expect(assessFinalOverlap('hard_stop', 'Stop.')?.intent).toBe('hard_stop');
     expect(assessFinalOverlap('noise', '[noise]')?.intent).toBe('noise');
   });
@@ -71,5 +71,13 @@ describe('the final transcript of a turn that began over the assistant', () => {
   it('keeps an interruption already acted on, and has nothing to judge without an overlap', () => {
     expect(assessFinalOverlap('interrupt', 'okay')).toBeNull();
     expect(assessFinalOverlap(null, 'okay')).toBeNull();
+    expect(assessFinalOverlap('interrupt', 'okay', '', true)).toBeNull();
+    expect(assessFinalOverlap(null, 'okay', '', false)).toBeNull();
+  });
+
+  it('judges a turn that began before the reply started playing when its final lands on the reply', () => {
+    // Real: "Uh" opened just before the audio started, so nothing judged it, and it stopped the reply.
+    expect(assessFinalOverlap(null, 'Uh', '', true)?.intent).toBe('uncertain');
+    expect(assessFinalOverlap(null, 'No, not much.', '', true)?.intent).toBe('interrupt');
   });
 });

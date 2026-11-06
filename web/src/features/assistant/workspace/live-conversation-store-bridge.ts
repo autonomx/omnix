@@ -235,7 +235,9 @@ function mapPerfEvent(detail: UnknownDetail): void {
     const text = stringValue(detail.text) || stringValue(detail.transcript);
     if (text) liveConversationStore.dispatch({ type: 'transcript_final', text });
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'finalizing' } });
-    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'floor_owner', value: 'unclaimed' } });
+    // A reply still playing keeps the floor: speech over the rest of it is still overlap, to be judged and not a new turn.
+    const assistantSpeaking = liveConversationStore.getState().conversation.assistantTurn === 'speaking';
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'floor_owner', value: assistantSpeaking ? 'assistant' : 'unclaimed' } });
   }
   if (stage === 'endpoint_pause' || stage === 'semantic_pause') {
     liveConversationStore.dispatch({ type: 'conversation', event: { type: 'user_turn', value: 'paused' } });

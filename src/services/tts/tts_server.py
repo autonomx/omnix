@@ -36,6 +36,7 @@ from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
 from app.providers.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 from app.providers.tts_generation_parameters import generation_overrides
+from services.tts.tts_engine_warm import warm_loaded_engine
 from services.tts.tts_port_preflight import _preflight_tts_port
 from services.tts.tts_requests import (
     MAX_TTS_TEXT_CHARS as MAX_TTS_TEXT_CHARS,
@@ -49,8 +50,7 @@ from services.tts.tts_requests import (
 
 logger = logging.getLogger(__name__)
 
-# The startup warm-up waits its turn for the GPU; a call's only takes a free moment (a busy engine is already speaking).
-ENGINE_WARM_PERMIT_SECONDS = 30.0
+# A call's warm-up only takes a free moment: a busy engine is already speaking.
 VOICE_WARM_PERMIT_SECONDS = 0.2
 
 app = FastAPI(title="Omnix TTS Service", version="1.0")
@@ -439,39 +439,6 @@ async def _enter_device_permit(permit: Any) -> None:
         raise
 
 
-def _warm_loaded_engine(provider: Any) -> None:
-    """Build what the engine's first generation would otherwise build during someone's first call.
-
-    The service warms itself because it owns the model: the launcher starts the gateway first, so the gateway's own
-    warm-up finds no service to ask and gives up. Below live speech in the permit queue.
-    """
-    from app.platform.voice.tts_runtime_actions import warmup_speaker
-    from app.platform.voice.tts_runtime_state import startup_warmup_enabled
-
-    if not hasattr(provider, "warm_voice") or not startup_warmup_enabled():
-        return
-    started = time.perf_counter()
-    begun = False
-    try:
-        speaker = warmup_speaker(provider)
-        if not speaker:
-            voice_debug_log("tts", "tts_engine_warm_skipped", reason="no_voice")
-            return
-        _begin_generation()
-        begun = True
-        with device_permit_slot("tts", priority="interactive", timeout_seconds=ENGINE_WARM_PERMIT_SECONDS):
-            provider.warm_voice(speaker, device_permit_held=True)
-        elapsed_ms = round((time.perf_counter() - started) * 1000.0, 1)
-        logger.info("TTS engine warmed in %.1f s", elapsed_ms / 1000.0)
-        voice_debug_log("tts", "tts_engine_warmed", speaker=speaker, elapsed_ms=elapsed_ms)
-    except Exception as exc:  # noqa: BLE001 - a first call then warms it, as it always could
-        logger.warning("The TTS engine could not be warmed at startup", exc_info=True)
-        voice_debug_log("tts", "tts_engine_warm_failed", error=type(exc).__name__)
-    finally:
-        if begun:
-            _end_generation()
-
-
 @app.on_event("startup")
 async def on_startup() -> None:
     global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _TTS_MODEL_OWNER_GUARD
@@ -515,8 +482,8 @@ async def on_startup() -> None:
     )
     if status.get("ok"):
         print(f"[TTS SERVER] READY provider={_TTS_PROVIDER_NAME}")
-        threading.Thread(target=_warm_loaded_engine, args=(_TTS_PROVIDER,), name="omnix-tts-engine-warm",
-                         daemon=True).start()
+        threading.Thread(target=warm_loaded_engine, args=(_TTS_PROVIDER,), name="omnix-tts-engine-warm", daemon=True,
+                         kwargs={"begin": _begin_generation, "end": _end_generation}).start()
     else:
         print(f"[TTS SERVER] NOT READY provider={_TTS_PROVIDER_NAME} error={status.get('error')}")
 

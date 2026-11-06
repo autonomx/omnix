@@ -4,11 +4,15 @@ import { acceptedFinalSuppressionReason } from './live-accepted-final-routing';
 import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
-import { controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, renderTranscript, setPanelStatus } from './live-voice-controller-state';
-import { assessFinalOverlap, interruptOnFinalOverlap } from './live-voice-preview';
+import { controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, renderTranscript, setPanelStatus, type LiveVoiceSession } from './live-voice-controller-state';
+import { assessFinalOverlap, dispatchAssistantVoiceInterrupt, interruptOnFinalOverlap } from './live-voice-preview';
 import { replayFinalizationBuffer } from './live-voice-finalization';
+import { judgeOverlap } from './live-voice-overlap-judge';
 import { resetTurnState } from './live-voice-session-lifecycle';
-import { emitOmnixEvent, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT } from '../../../events/bus';
+import { ASSISTANT_AUDIO_DUCK_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT } from '../../../events/bus';
+
+// The reply sinks at once while the model decides, so the listener hears it give way before they know the outcome.
+const JUDGING_GAIN = 0.18;
 
 export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal): Promise<LiveFinalRoutingResult> {
   const session = controller.activeSession;
@@ -17,11 +21,13 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
   }
   const receivedAt = performance.now();
   const partialOverlapIntent = session.overlapIntent;
-  const finalOverlapAssessment = assessFinalOverlap(partialOverlapIntent, final.text, currentAssistantSpeechText());
+  const assistantSpeaking = liveVoiceAssistantIsSpeaking();
+  const finalOverlapAssessment = assessFinalOverlap(partialOverlapIntent, final.text, currentAssistantSpeechText(), assistantSpeaking);
   const overlapIntent = finalOverlapAssessment?.intent ?? partialOverlapIntent;
-  interruptOnFinalOverlap(session, finalOverlapAssessment, liveVoiceAssistantIsSpeaking());
+  interruptOnFinalOverlap(session, finalOverlapAssessment, assistantSpeaking);
   const interruptionDispatched = session.interruptionDispatched;
   const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
+  const needsJudgement = !suppressionReason && overlapIntent === 'uncertain' && assistantSpeaking;
   const continuation = session.finalizationBuffer.drain();
   emitOmnixEvent(LIVE_STT_SPECULATION_FINAL_EVENT, {
     chatSessionId: final.chatSessionId,
@@ -60,14 +66,15 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
   }, 'live_voice_controller');
   resetTurnState(session);
   try {
-    if (suppressionReason) {
+    const judgedListening = needsJudgement && await overlapIsOnlyListening(session, card, final);
+    if (suppressionReason || judgedListening) {
       const result = ignoredRoutingResult(final);
       session.reporter.record('coordination_completed', {
         segment_id: final.segmentId,
         result_id: final.resultId,
         source_sequence: final.sourceSequence,
         outcome: result.outcome,
-        suppression_reason: suppressionReason,
+        suppression_reason: suppressionReason ?? 'judged_listening',
         overlap_intent: overlapIntent,
         overlap_confidence: finalOverlapAssessment?.confidence,
         overlap_reason: finalOverlapAssessment?.reason,
@@ -136,6 +143,46 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
       text: final.text,
     });
     replayFinalizationBuffer(session, continuation);
+  }
+}
+
+/**
+ * True when the reply should play on and the remark goes no further. A reply that ended while the model was deciding
+ * is not cut off by anything, so the remark goes on as an ordinary turn, whatever the verdict: it may be an answer.
+ */
+async function overlapIsOnlyListening(
+  session: LiveVoiceSession,
+  card: HTMLElement,
+  final: AcceptedVoiceFinal,
+): Promise<boolean> {
+  const startedAt = performance.now();
+  emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { ducked: true, gain: JUDGING_GAIN, reason: 'overlap-judging', timestamp: startedAt });
+  try {
+    const verdict = await judgeOverlap(final.chatSessionId, final.text, currentAssistantSpeechText());
+    if (controller.activeSession !== session) return true;
+    const stillSpeaking = liveVoiceAssistantIsSpeaking();
+    session.reporter.record('overlap_judged', {
+      decision: verdict.decision,
+      decided_by: verdict.source,
+      reason: verdict.reason,
+      elapsed_ms: Math.round(performance.now() - startedAt),
+      transcript_chars: final.text.trim().length,
+      still_speaking: stillSpeaking,
+    }, 'live_voice_controller');
+    if (!stillSpeaking) return false;
+    const stop = verdict.decision === 'stop';
+    dispatchLiveVoicePerfEvent({
+      stage: 'overlap_classified',
+      timestamp: new Date().toISOString(),
+      intent: stop ? 'interrupt' : 'backchannel',
+      confidence: verdict.source === 'model' ? 0.8 : 0.1,
+      reason: verdict.reason ?? 'model_judged',
+      transcriptChars: final.text.trim().length,
+    });
+    if (stop) dispatchAssistantVoiceInterrupt(card, 'interrupt', 0.8);
+    return !stop;
+  } finally {
+    emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { ducked: false, gain: 1, reason: 'overlap-judged', timestamp: performance.now() });
   }
 }
 

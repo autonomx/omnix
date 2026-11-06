@@ -13,6 +13,8 @@ export type AcceptedFinalSuppressionReason =
  * A non-empty `uncertain` overlap is meaningful user speech until proven
  * otherwise. It must continue through the normal coordinator so the active
  * assistant response can be interrupted or superseded by the new comment.
+ * While the assistant is still speaking, the model first judges whether it
+ * should stop (`live-voice-final-routing.ts`).
  */
 export function acceptedFinalSuppressionReason(
   text: string,

@@ -25,7 +25,7 @@ class BlockingAfterInitialQwenChunkProvider:
 
     def generate_audio_stream(self, **_kwargs: Any):
         # Four Qwen codec steps materialize two 3,840-sample transport frames.
-        yield [0.006] * 7_680, 24_000, {"chunk_index": 0}
+        yield [0.1] * 7_680, 24_000, {"chunk_index": 0}
         self.allow_finish.wait(timeout=1.0)
         self.finished.set()
 
@@ -37,7 +37,7 @@ class BlockingAfterTwoStepQwenChunkProvider:
 
     def generate_audio_stream(self, **_kwargs: Any):
         # Two Qwen codec steps fill one 3,840-sample transport frame.
-        yield [0.006] * 3_840, 24_000, {"chunk_index": 0}
+        yield [0.1] * 3_840, 24_000, {"chunk_index": 0}
         self.allow_finish.wait(timeout=1.0)
         self.finished.set()
 

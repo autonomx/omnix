@@ -99,7 +99,8 @@ def test_what_a_live_call_holds_per_process_follows_its_replica():
     # So do the processes waiting for a call's turns: a warm-up carrying the call's id reaches the replica its turns use.
     for path in (AVATAR_WEBSOCKET_PATH, '/api/live/speculation/tts-prefetch',
                  '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel',
-                 '/api/live-call/sessions/chat%3Aabc/prewarm'):
+                 '/api/live-call/sessions/chat%3Aabc/prewarm',
+                 '/api/live-call/sessions/chat%3Aabc/overlap-judgement'):
         assert bound.fullmatch(path)
     for path in ('/api/live/speculation/sessions/s/stream', '/api/tts/live-call/other', '/api/settings'):
         assert not bound.fullmatch(path)

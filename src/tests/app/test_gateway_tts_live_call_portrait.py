@@ -162,17 +162,23 @@ def test_a_portrait_never_sees_a_silent_take_and_is_not_paused_while_it_is_repla
 def test_a_portrait_needs_more_queued_audio_before_a_phrase_is_held(monkeypatch) -> None:
     # This much covers the generation alone (about 1.7 s expected), not also the second the portrait renders ahead.
     provider = SilentOnceAfterTheOpening(opening_seconds=2.2)
-    client, _logged = _configure_gateway(monkeypatch, provider)
+    client, logged = _configure_gateway(monkeypatch, provider)
     link = FakeLink()
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as websocket:
         _portrait_call(websocket, client, link)
         websocket.send_json(_owned_request("Yeah man, I really like it.", 0))
         _until_done(websocket)
+        link.sent.clear()
         websocket.send_json(_owned_request("Like when you write quality code.", 1))
         _until_done(websocket)
         websocket.send_json({"type": "close", "reason": "finished"})
 
-    assert len(provider.calls) == 2
+    # Not held: the phrase streams, and only its silent take is replaced, unheard by the portrait too.
+    assert len(provider.calls) == 3
+    takes = [details for _stream, _source, event, details in logged if event == "phrase_speech_check"]
+    assert [take.get("streamed") for take in takes] == [True]
+    copied = sum(entry[3] for entry in link.sent if isinstance(entry, tuple) and entry[1] == "seg-1") // 2
+    assert copied == pytest.approx(24_000 * 1.4, rel=0.2)
 
 
 def test_pcm_offsets_count_each_phrases_own_samples() -> None:

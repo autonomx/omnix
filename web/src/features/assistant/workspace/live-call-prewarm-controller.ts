@@ -85,16 +85,18 @@ async function runPrewarm(
     const client = createApi({ fetchImpl });
     const speaker = resolveSpeaker(await fetchRuntime(client, sessionId));
     const language = PREWARM_LANGUAGE;
-    const warm = (headers?: Record<string, string>) => client.POST('/api/live-call/sessions/{session_id}/prewarm', {
+    const warm = (warmOverlapJudge: boolean, headers?: Record<string, string>) => client.POST('/api/live-call/sessions/{session_id}/prewarm', {
       params: { path: { session_id: sessionId } },
-      body: { speaker, language },
+      body: { speaker, language, warm_overlap_judge: warmOverlapJudge },
       keepalive: true,
       headers,
     });
     // What a turn finds waiting is held per gateway process, and a call's turns run in two: the worker for speculative
     // ones, the call's replica for the rest. The call's id reaches the replica (the same process, with no replicas).
-    const onReplica = warm({ [CALL_ID_HEADER]: encodeURIComponent(sessionId) }).catch(() => null);
-    const { data, error, response } = await warm();
+    // Speech over the assistant is judged on the replica; a half duplex call's microphone is closed while it speaks.
+    const overlapPossible = liveConversationStore.getState().duplex.configuredMode !== 'half_duplex';
+    const onReplica = warm(overlapPossible, { [CALL_ID_HEADER]: encodeURIComponent(sessionId) }).catch(() => null);
+    const { data, error, response } = await warm(false);
     void onReplica;
     // The prewarm route answers with an untyped status object, on failure too.
     const payload = asRecord(data ?? error);

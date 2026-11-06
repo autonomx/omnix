@@ -17,11 +17,15 @@ export type OverlapAssessment = {
 
 const HARD_STOP_PATTERN = /^(?:stop|wait|hold on|cancel|pause|quiet|be quiet|no|nope|that's wrong|that is wrong)[.!?\s-]*$/i;
 const CORRECTION_PATTERN = /\b(?:no|not|wrong|actually|correction|I meant|you said|that's not|that is not)\b/i;
-const QUESTION_PATTERN = /(?:[?？]|^(?:what|why|when|where|who|how|can|could|would|should|did|do|does|is|are)\b)/i;
-const ACKNOWLEDGEMENT = '(?:m+h+m+|mhm+|uh[ -]?huh|yeah|yep|right|okay|ok|got it|sure|I see|mm+)';
-const BACKCHANNEL_PATTERN = new RegExp(`^${ACKNOWLEDGEMENT}(?:[,.!\\s-]+${ACKNOWLEDGEMENT})*[.!\\s-]*$`, 'i');
+const QUESTION_OPENING_PATTERN = /^(?:what|why|when|where|who|how|can|could|would|should|did|do|does|is|are)\b/i;
 const NON_SPEECH_PATTERN = /^(?:\[?(?:noise|cough|breath|music|silence|background)\]?|[.!,…\s-]*)$/i;
 
+/**
+ * What can be settled at once from the words alone, because it has to act at once: an explicit stop, a correction, a
+ * question, or a remark too long to be a reaction. People react in any words, so nothing here tries to list them:
+ * what remains is `uncertain`, and the call's model judges it once its final transcript is in
+ * (`live-voice-overlap-judge.ts`, `live-voice-final-routing.ts`).
+ */
 export function classifyOverlap(
   transcript: string,
   assistantText = '',
@@ -31,10 +35,10 @@ export function classifyOverlap(
   if (NON_SPEECH_PATTERN.test(text)) return { intent: 'noise', confidence: 0.96, reason: 'non_speech_marker' };
   if (isLikelyEcho(text, assistantText)) return { intent: 'noise', confidence: 0.9, reason: 'assistant_echo' };
   if (HARD_STOP_PATTERN.test(text)) return { intent: 'hard_stop', confidence: 0.99, reason: 'explicit_stop' };
-  if (BACKCHANNEL_PATTERN.test(text)) return { intent: 'backchannel', confidence: 0.92, reason: 'brief_acknowledgement' };
   if (CORRECTION_PATTERN.test(text)) return { intent: 'interrupt', confidence: 0.9, reason: 'correction' };
-  if (QUESTION_PATTERN.test(text)) return { intent: 'interrupt', confidence: 0.86, reason: 'question' };
   const words = text.split(/\s+/).filter(Boolean);
+  // One word is not yet a question: it may be a first partial, or a reaction such as "Really?".
+  if (words.length >= 2 && QUESTION_OPENING_PATTERN.test(text)) return { intent: 'interrupt', confidence: 0.86, reason: 'question' };
   if (words.length >= 4 || text.length >= 24) {
     return { intent: 'interrupt', confidence: 0.74, reason: 'sustained_overlap' };
   }

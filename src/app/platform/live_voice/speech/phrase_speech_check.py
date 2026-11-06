@@ -4,10 +4,11 @@ Qwen sometimes emits near-silence for a phrase instead of speaking it, often run
 it. It is random: the same phrase speaks on another take. Real takes of a cloned voice came out silent in 16% of
 renders and 5% after one retry, with 7 of 127 good takes retried needlessly.
 
-A phrase can only be judged once it is complete or has clearly gone silent, so it is held back only while audio
-already sent covers the wait.
-Generation is several times faster than playback, so after a reply's first phrases there is usually plenty; before
-that, or when the check would risk an audible gap, the phrase streams as it always did.
+A phrase can only be judged once it is complete or has clearly gone silent, so it is held back whole only while audio
+already sent covers the wait. Generation is several times faster than playback, so after a reply's first phrases there
+is usually plenty. Before that, or when the check would risk an audible gap, the phrase streams from its first voice:
+nothing is sent until a take has started speaking, so a silent one is replaced before anyone hears it, which costs only
+the moments it takes to tell. A cached speculation goes the same way: it was made by the same engine.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ import logging
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
+from itertools import chain
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,9 @@ CAUTIOUS_GENERATION_SECONDS_PER_AUDIO_SECOND = 0.6
 # Normal speech; slower takes run long, but the token budget would overstate the wait and hold back too few phrases.
 EXPECTED_CHARS_PER_SECOND = 12.0
 MAX_RETRIES = 2
+# A take with no words is worth nothing, and telling takes about 0.5 s. Real calls: 13% of first takes came out silent,
+# 28% of retries, and three in a row lost a sentence to 3.9 s of silence (2026-11-04).
+MAX_SILENT_RETRIES = 4
 # A portrait renders about this far ahead of playback (StreamSettings.render_ahead_seconds), and a phrase's held end
 # frames commit with padding just before their play time unless the next phrase has arrived. Holding a phrase is safe
 # for it only when the phrase still arrives this far ahead.
@@ -50,6 +55,8 @@ _GONE_SILENT_SECONDS = 1.2
 # costs only a retry.
 _DIFFERENT_VOICE_SCORE = 0.45
 _LIKENESS_MIN_VOICED_SECONDS = 1.2
+# Enough voice to tell a take has started speaking, and not just clicked. A frame alone is not enough for this.
+_FIRST_VOICE_SECONDS = 2 * _FRAME_SECONDS
 
 
 @dataclass(frozen=True)
@@ -145,22 +152,89 @@ def _hardly_spoken(take: SpeechTake, text_chars: int) -> bool:
     return take.voiced_seconds < text_chars / _FASTEST_VOICED_CHARS_PER_SECOND * _HARDLY_SPOKEN_SHARE
 
 
-def _streamed_or(
+def _streamed_from_first_voice(
     generate: Callable[[], Iterator[tuple[Any, int, Any]]],
-    fallback: list[tuple[Any, int, Any]],
+    *,
+    text_chars: int,
+    to_pcm: Callable[[Any], bytes],
+    stopped: Callable[[], bool],
+    is_cached: Callable[[Any], bool],
+    on_take: Callable[..., None],
+    attempt: int = 0,
+    fallback: list[tuple[Any, int, Any]] | None = None,
+    started: tuple[tuple[Any, int, Any], Iterator[tuple[Any, int, Any]]] | None = None,
 ) -> Iterator[tuple[Any, int, Any]]:
-    """A new take as it is made; ``fallback`` if it fails before its first chunk."""
-    try:
-        stream = generate()
-        first = next(stream, None)
-    except Exception:  # noqa: BLE001 - what the listener would have had anyway still goes out
-        logger.warning("A retry of a phrase with no speech failed", exc_info=True)
-        first, stream = None, iter(())
-    if first is None:
-        yield from fallback
-        return
-    yield first
-    yield from stream
+    """A take as it is made, from the moment it speaks; a take that does not speak is replaced unheard.
+
+    ``started`` is a stream whose first chunk has already been read. When no take speaks, what there is goes out.
+    """
+    last: list[tuple[Any, int, Any]] = list(fallback or [])
+    while True:
+        stream: Iterator[tuple[Any, int, Any]] | None = None
+        chunks: list[tuple[Any, int, Any]] = []
+        watch: TakeWatch | None = None
+        first_voiced: int | None = None
+        try:
+            if started is not None:
+                first, stream = started
+                started = None
+                pending = chain([first], stream)
+            else:
+                try:
+                    stream = pending = generate()
+                except Exception:
+                    if attempt == 0:
+                        raise
+                    logger.warning("A retry of a phrase with no speech failed", exc_info=True)
+                    yield from last
+                    return
+            try:
+                for chunk in pending:
+                    if stopped():
+                        return
+                    chunks.append(chunk)
+                    watch = watch or TakeWatch(chunk[1])
+                    watch.add(to_pcm(chunk[0]))
+                    if first_voiced is None and watch.take.voiced_seconds > 0:
+                        first_voiced = len(chunks) - 1
+                    if watch.take.voiced_seconds >= _FIRST_VOICE_SECONDS:
+                        # The wait for a voice is won back by not playing the quiet it waited through. One chunk stays
+                        # for a soft first sound. A cached speculation goes out whole: its portrait has a copy of it.
+                        lead = 0 if is_cached(chunks[0][2]) else max(0, (first_voiced or 0) - 1)
+                        yield from chunks[lead:]
+                        yield from pending
+                        return
+                    if watch.gone_silent(text_chars):
+                        break
+                else:
+                    # It ended before it could reach the bar: only a take long enough to judge and with no voice is silent.
+                    ended = watch.take if watch else SpeechTake(0.0, 0.0)
+                    if ended.voiced_seconds > 0 or ended.seconds < _FRAME_SECONDS:
+                        yield from chunks
+                        return
+            except Exception as exc:
+                if attempt == 0 and not last:
+                    raise
+                # Nothing of this take has gone out, so what was already made still can.
+                logger.warning("A retry of a phrase with no speech failed", exc_info=True)
+                on_take(attempt=attempt, error=type(exc).__name__, streamed=True)
+                yield from (chunks or last)
+                return
+        finally:
+            # Frees the engine now rather than whenever the abandoned generator is collected.
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        take = watch.take if watch else SpeechTake(0.0, 0.0)
+        on_take(attempt=attempt, missing="too_little_speech", streamed=True, seconds=round(take.seconds, 3),
+                voiced_seconds=round(take.voiced_seconds, 3))
+        last = chunks or last
+        if stopped():
+            return
+        if attempt >= MAX_SILENT_RETRIES:
+            yield from last
+            return
+        attempt += 1
 
 
 def speech_checked_audio(
@@ -179,13 +253,15 @@ def speech_checked_audio(
     """The phrase's audio chunks: checked and retried when queued audio allows, otherwise streamed untouched."""
     expected_wait = text_chars / EXPECTED_CHARS_PER_SECOND * CAUTIOUS_GENERATION_SECONDS_PER_AUDIO_SECOND
     if runway_seconds() < expected_wait:
-        yield from generate()
+        yield from _streamed_from_first_voice(
+            generate, text_chars=text_chars, to_pcm=to_pcm, stopped=stopped, is_cached=is_cached, on_take=on_take,
+        )
         return
 
     on_hold()
     best: list[tuple[Any, int, Any]] | None = None
     best_rank: tuple[bool, bool, float, float] | None = None
-    for attempt in range(MAX_RETRIES + 1):
+    for attempt in range(MAX_SILENT_RETRIES + 1):
         started_at = time.perf_counter()
         chunks: list[tuple[Any, int, Any]] = []
         pcm: list[bytes] = []
@@ -199,16 +275,20 @@ def speech_checked_audio(
                     return
                 if not chunks and is_cached(chunk[2]):
                     # A promoted speculation: its portrait and startup runway depend on it arriving as made.
-                    yield chunk
-                    yield from stream
+                    yield from _streamed_from_first_voice(
+                        generate, text_chars=text_chars, to_pcm=to_pcm, stopped=stopped, is_cached=is_cached,
+                        on_take=on_take, attempt=attempt, fallback=best, started=(chunk, stream),
+                    )
                     return
                 chunks.append(chunk)
                 watch = watch or TakeWatch(chunk[1])
                 pcm.append(to_pcm(chunk[0]))
                 watch.add(pcm[-1])
-                # The last attempt runs to its end, and so does a take with some of its words and no time for another.
-                if (attempt < MAX_RETRIES and watch.gone_silent(text_chars)
-                        and (runway_seconds() >= expected_wait or _hardly_spoken(watch.take, text_chars))):
+                # A take with some of its words runs to its end when it is the last or there is no time for another.
+                if watch.gone_silent(text_chars) and (
+                    _hardly_spoken(watch.take, text_chars)
+                    or (attempt < MAX_RETRIES and runway_seconds() >= expected_wait)
+                ):
                     stopped_early = True
                     break
         except Exception as exc:
@@ -244,15 +324,19 @@ def speech_checked_audio(
         rank = (not stopped_early, judged, 1.0 if score is None else score, take.voiced_seconds)
         if best_rank is None or rank > best_rank:
             best, best_rank = chunks, rank
-        if stopped():
+        hardly_spoken = _hardly_spoken(take, text_chars)
+        if stopped() or attempt >= (MAX_SILENT_RETRIES if hardly_spoken else MAX_RETRIES):
             break
         if runway_seconds() >= expected_wait:
             continue
-        if attempt < MAX_RETRIES and _hardly_spoken(take, text_chars):
+        if hardly_spoken:
             # Playing this take is seconds of silence and the words lost; waiting for another costs less at worst.
             # Nothing is held any longer: it goes out as it is made.
             on_take(attempt=attempt + 1, streamed=True)
-            yield from _streamed_or(generate, best or [])
+            yield from _streamed_from_first_voice(
+                generate, text_chars=text_chars, to_pcm=to_pcm, stopped=stopped, is_cached=is_cached,
+                on_take=on_take, attempt=attempt + 1, fallback=best,
+            )
             return
         break
     yield from best or ()

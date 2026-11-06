@@ -133,14 +133,16 @@ export function overlapAwaitsInterruption(
 
 /**
  * A partial's intent describes only the words so far: "Yeah" is a backchannel, the sentence it starts is not. The
- * final has all the words, so it decides, except for an interruption already acted on.
+ * final has all the words, so it decides, except for an interruption already acted on. A turn that began just before
+ * the reply's audio started has no partial intent, but its final lands on the assistant's speech all the same.
  */
 export function assessFinalOverlap(
   partialIntent: OverlapIntent | null,
   transcript: string,
   assistantText = '',
+  assistantSpeaking = false,
 ): OverlapAssessment | null {
-  if (partialIntent === null || partialIntent === 'interrupt') return null;
+  if (partialIntent === 'interrupt' || (partialIntent === null && !assistantSpeaking)) return null;
   return classifyOverlap(transcript, assistantText);
 }
 

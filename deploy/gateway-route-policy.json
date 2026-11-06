@@ -12,7 +12,7 @@
     "/api/tts/live-call/websocket"
   ],
   "live_call_websocket_path": "/api/tts/live-call/websocket",
-  "live_call_bound_pattern": "^(?:/api/tts/live-call/avatar-websocket|/api/live/speculation/tts-prefetch(?:/[^/]+/(?:accept|cancel))?|/api/live-call/sessions/[^/]+/prewarm)$",
+  "live_call_bound_pattern": "^(?:/api/tts/live-call/avatar-websocket|/api/live/speculation/tts-prefetch(?:/[^/]+/(?:accept|cancel))?|/api/live-call/sessions/[^/]+/(?:prewarm|overlap-judgement))$",
   "live_chat_pattern": "^/api/chat/sessions/[^/]+/messages/stream$",
   "call_id_header": "x-omnix-call-id",
   "call_affinity_cookie": "omnix_call_affinity",

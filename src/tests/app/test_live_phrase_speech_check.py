@@ -92,13 +92,32 @@ def test_a_good_take_goes_out_with_no_second_generation() -> None:
     assert logged[0]["missing"] is None
 
 
-def test_retries_are_bounded_and_the_last_attempt_always_runs_to_its_end() -> None:
-    a_little = _take((2.9, 0.001), (0.3, 0.1))
-    produced, logged, requested = _checked([SILENT, SILENT, a_little, SILENT])
+def test_a_take_with_some_of_its_words_gets_two_retries_and_the_last_runs_to_its_end() -> None:
+    a_little = _take((0.3, 0.1), (2.6, 0.001))
+    produced, logged, requested = _checked([a_little])
 
     assert requested == [0, 1, 2]
     assert [entry["stopped_early"] for entry in logged] == [True, True, False]
-    assert [len(chunk[0]) for chunk in produced] == [len(part[0]) for part in a_little]
+    assert sum(len(chunk[0]) for chunk in produced) == sum(len(part[0]) for part in a_little)
+
+
+def test_a_silent_take_is_tried_longer_than_a_partial_one_and_never_plays_to_its_end() -> None:
+    # Real: three silent takes in a row, and the last played as 3.9 s of silence with a sentence lost.
+    long_silence = _take(*[(0.32, 0.001)] * 12)
+    produced, logged, requested = _checked([long_silence])
+
+    assert requested == [0, 1, 2, 3, 4]
+    assert [entry["stopped_early"] for entry in logged] == [True] * 5
+    assert sum(len(chunk[0]) for chunk in produced) / RATE < 1.5
+
+
+def test_a_fifth_take_that_speaks_is_the_one_heard() -> None:
+    long_silence = _take(*[(0.32, 0.001)] * 12)
+    produced, logged, requested = _checked([long_silence, long_silence, long_silence, long_silence, SPOKEN])
+
+    assert requested == [0, 1, 2, 3, 4]
+    assert logged[-1]["missing"] is None
+    assert [len(chunk[0]) for chunk in produced] == [len(SPOKEN[0][0])]
 
 
 def test_of_complete_takes_the_one_with_the_most_speech_is_kept() -> None:
@@ -335,13 +354,80 @@ def test_it_says_when_a_phrase_is_being_held_and_only_then() -> None:
     assert held == [60.0]
 
 
-def test_a_cached_speculation_is_passed_straight_through() -> None:
-    cached = _take((0.2, 0.001), (0.2, 0.001), timing={"cached": True})
+def test_a_cached_speculation_that_speaks_is_passed_straight_through() -> None:
+    cached = _take((0.2, 0.1), (0.2, 0.1), timing={"cached": True})
     produced, logged, requested = _checked([cached])
 
     assert requested == [0]
     assert len(produced) == 2
     assert logged == []
+
+
+def test_a_cached_speculation_with_no_words_is_replaced_unheard() -> None:
+    # Real: "Yeah, well," a reply's first phrase from the cache, played as 2.7 s of silence.
+    cached = _take(*[(0.32, 0.001)] * 8, timing={"cached": True})
+    produced, logged, requested = _checked([cached, SPOKEN], runway=0.0, text_chars=11)
+
+    assert requested == [0, 1]
+    assert [len(chunk[0]) for chunk in produced] == [len(SPOKEN[0][0])]
+    assert logged[0]["missing"] == "too_little_speech"
+
+
+def test_a_first_phrase_with_no_words_is_replaced_before_anyone_hears_it() -> None:
+    silent = _take(*[(0.32, 0.001)] * 8)
+    produced, logged, requested = _checked([silent, silent, SPOKEN], runway=0.0)
+
+    assert requested == [0, 1, 2]
+    assert [len(chunk[0]) for chunk in produced] == [len(SPOKEN[0][0])]
+    assert [entry["streamed"] for entry in logged] == [True, True]
+
+
+def test_a_first_phrase_starts_at_its_first_voice_keeping_one_quiet_chunk_for_a_soft_first_sound() -> None:
+    leading = _take((0.16, 0.001), (0.16, 0.001), (0.16, 0.002), (0.3, 0.1), (0.3, 0.1))
+    produced, logged, requested = _checked([leading], runway=0.0)
+
+    assert requested == [0]
+    assert [float(np.asarray(chunk[0])[0]) for chunk in produced] == pytest.approx([0.002, 0.1, 0.1])
+    assert logged == []
+
+
+def test_a_cached_speculation_keeps_its_lead_in_because_its_portrait_has_a_copy() -> None:
+    cached = _take((0.16, 0.001), (0.16, 0.001), (0.3, 0.1), timing={"cached": True})
+    produced, _logged, requested = _checked([cached], runway=0.0)
+
+    assert requested == [0]
+    assert len(produced) == 3
+
+
+def test_a_first_phrase_that_never_speaks_gives_up_and_stays_short() -> None:
+    silent = _take(*[(0.32, 0.001)] * 12)
+    produced, logged, requested = _checked([silent], runway=0.0)
+
+    assert requested == [0, 1, 2, 3, 4]
+    assert sum(len(chunk[0]) for chunk in produced) / RATE < 1.5
+
+
+def test_a_first_phrase_that_ends_without_speaking_is_tried_again() -> None:
+    too_short = _take((0.3, 0.001))
+    produced, _logged, requested = _checked([too_short, SPOKEN], runway=0.0)
+
+    assert requested == [0, 1]
+    assert [len(chunk[0]) for chunk in produced] == [len(SPOKEN[0][0])]
+
+
+@pytest.mark.parametrize("take", [_take((0.1, 0.1)), _take((0.008, 0.1))])
+def test_a_first_phrase_too_short_to_reach_the_bar_is_not_thrown_away(take) -> None:
+    produced, logged, requested = _checked([take, SPOKEN], runway=0.0)
+
+    assert requested == [0]
+    assert len(produced) == 1
+    assert logged == []
+
+
+def test_a_first_phrase_interrupted_while_waiting_for_voice_sends_nothing() -> None:
+    produced, _logged, _requested = _checked([SILENT], runway=0.0, stopped=lambda: True)
+
+    assert produced == []
 
 
 def test_an_interrupted_phrase_stops_and_sends_nothing() -> None:

@@ -8,9 +8,9 @@ from collections.abc import Callable, Iterator
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.settings.access import load_settings
@@ -45,6 +45,20 @@ def _prewarm_now() -> float:
 class LiveCallPrewarmRequest(BaseModel):
     speaker: str | None = Field(default=None, max_length=160)
     language: str = Field(default="English", min_length=1, max_length=40)
+    # Asked of the process that will judge speech over the assistant, and only for a call that can overlap at all.
+    warm_overlap_judge: bool = False
+
+
+class OverlapJudgementRequest(BaseModel):
+    transcript: str = Field(min_length=1, max_length=400)
+    assistant_text: str = Field(default="", max_length=1000)
+
+
+class OverlapJudgementResponse(BaseModel):
+    decision: Literal["stop", "continue"]
+    source: Literal["model", "fallback"]
+    reason: str | None = None
+    elapsed_ms: float
 
 
 @dataclass(frozen=True)
@@ -135,8 +149,27 @@ def register_live_call_prewarm_routes(router: APIRouter,
     *,
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
 ) -> None:
-    """Register a side-effect-free warm-up endpoint used when a call opens."""
+    """Register a side-effect-free warm-up endpoint used when a call opens, and the judge it warms."""
 
+    @router.post(
+        "/api/live-call/sessions/{session_id}/overlap-judgement",
+        response_model=OverlapJudgementResponse,
+    )
+    async def judge_live_overlap(session_id: str, request: OverlapJudgementRequest) -> dict[str, Any]:
+        # Loaded on first use: only a call with speech over its assistant needs it.
+        from .live_overlap_judge import judge_overlap
+
+        session = await asyncio.to_thread(chat_store_factory().get_session, session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="session_not_found")
+        provider_id, model_id, _execution_lane = _configured_live_route()
+        return await judge_overlap(
+            session_id=session_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            transcript=request.transcript,
+            assistant_text=request.assistant_text,
+        )
 
     @router.post(
         "/api/live-call/sessions/{session_id}/prewarm",
@@ -163,6 +196,11 @@ def register_live_call_prewarm_routes(router: APIRouter,
             provider_id,
             model_id,
         )
+        # Ahead of the deduplication below: another request for this chat may already own the warm-up, without this.
+        if request.warm_overlap_judge:
+            from .live_overlap_judge import warm_overlap_judge
+
+            await asyncio.to_thread(warm_overlap_judge, provider_id, model_id)
         key = _prewarm_key(
             session=session,
             provider_id=provider_id,
@@ -546,6 +584,8 @@ def _warm_tts(speaker: str | None, language: str) -> _WarmResult:
 
 __all__ = [
     "LiveCallPrewarmRequest",
+    "OverlapJudgementRequest",
+    "OverlapJudgementResponse",
     "clear_live_call_prewarm_state",
     "live_call_provider_affinity",
     "register_live_call_prewarm_routes",
