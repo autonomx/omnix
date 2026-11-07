@@ -218,3 +218,20 @@ describe('a memory owner\'s memory tab', () => {
     expect(calls[0].path).toBe('/api/memory-owners/system-assistant');
   });
 });
+
+describe('character memory panel when loading fails', () => {
+  it('offers to try again, so a failure while the gateway restarts does not stay on screen', async () => {
+    let up = false;
+    vi.stubGlobal('fetch', vi.fn(async () => (up
+      ? Response.json({ owner_id: 'jinx', records: [record], suggestions: [] })
+      : new Response('gateway restarting', { status: 503 }))));
+
+    renderPanel();
+    expect(await screen.findByText(/Memories could not be loaded/)).toBeInTheDocument();
+    up = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('Lives in Toronto')).toBeInTheDocument();
+    expect(screen.queryByText(/Memories could not be loaded/)).not.toBeInTheDocument();
+  });
+});

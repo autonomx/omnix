@@ -73,7 +73,11 @@ export function CharacterMemoryPanel({ ownerId, ownerName }: { ownerId: string; 
     </p>
     {error ? <p className="character-memory-error" role="alert">{error}</p> : null}
     {memoryQuery.isPending ? <p>Loading memories…</p> : null}
-    {memoryQuery.isError ? <p className="character-memory-error" role="alert">Memories could not be loaded.</p> : null}
+    {/* A failure while the gateway restarts would otherwise stay until the panel is opened again. */}
+    {memoryQuery.isError ? <p className="character-memory-error" role="alert">
+      Memories could not be loaded.{' '}
+      <button type="button" onClick={() => void memoryQuery.refetch()} disabled={memoryQuery.isFetching}>Try again</button>
+    </p> : null}
 
     {suggestions.length ? <div className="character-memory-group">
       <h5>Waiting for your OK</h5>
