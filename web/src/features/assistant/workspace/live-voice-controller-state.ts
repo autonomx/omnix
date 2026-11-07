@@ -62,6 +62,9 @@ export type LiveVoiceSession = {
   sttFinalRequestedAt: number | null;
   partialTranscript: string;
   partialTranscriptUpdatedAt: number;
+  /** Smart Turn's verdict on the current pause, from its end-of-utterance candidate; cleared when speech resumes after a pause. */
+  turnComplete: number | null;
+  turnCompleteAt: number | null;
   floorState: UserFloorState;
   overlapIntent: OverlapIntent | null;
   interruptionDispatched: boolean;
@@ -75,6 +78,7 @@ export type ProviderEndpointCandidate = {
   sequence: number;
   probability: number;
   modelTimeMs?: number;
+  turnComplete?: number;
 };
 
 export type EndpointCommitState = {
@@ -89,6 +93,8 @@ export type EndpointCommitState = {
   semanticProbabilityDone?: number;
   transcriptWords?: number;
   correctionPending?: boolean;
+  turnComplete?: number | null;
+  pace?: ConversationPace;
 };
 
 export const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
@@ -165,6 +171,8 @@ export function createLiveVoiceSessionShell({ card, chatSessionId, stream, audio
     sttFinalRequestedAt: null,
     partialTranscript: '',
     partialTranscriptUpdatedAt: performance.now(),
+    turnComplete: null,
+    turnCompleteAt: null,
     floorState: reduceUserFloor('idle', { type: 'listen' }),
     overlapIntent: null,
     interruptionDispatched: false,

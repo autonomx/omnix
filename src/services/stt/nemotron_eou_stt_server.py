@@ -42,7 +42,10 @@ install_nemotron_eou_websocket(app, manager=model_manager)
 
 @app.on_event("startup")
 async def warm_hybrid_stt() -> None:
+    from app.providers.smart_turn import load_smart_turn
+
     await asyncio.to_thread(model_manager.warm_streaming_runtime)
+    await asyncio.to_thread(load_smart_turn)
 
 
 @app.get("/health")

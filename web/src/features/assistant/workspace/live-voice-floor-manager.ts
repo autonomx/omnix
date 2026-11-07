@@ -69,6 +69,26 @@ const AUTHORITATIVE_EOU_FALLBACK_MS: Record<ConversationPace, number> = {
   reflective: 800,
 };
 
+// The voice says they are done: Smart Turn (from the STT service) heard a finished turn in how they spoke. Parakeet's
+// EOU fires at mid-sentence pauses too, which is why the general wait above is 500 ms; when Smart Turn is this sure,
+// a short pause is enough. Below this threshold the turn keeps the general wait, so it is never cut sooner.
+const SMART_TURN_COMPLETE_PROBABILITY = 0.8;
+const SMART_TURN_CONFIRMATION_MS: Record<ConversationPace, number> = {
+  quick: 160,
+  balanced: 200,
+  reflective: 450,
+};
+
+// Off since 2026-11-06: in a real call 2 of the 4 turns it ended early cut the speaker off mid-sentence ("You're
+// making" scored 0.98). Every pause is still scored and logged (stt_endpoint_candidate.turn_complete), so a safe
+// setting can be found from real calls before this is turned on again.
+export const SMART_TURN_ENDS_TURNS_SOONER = false;
+
+export function voiceSaysTurnComplete(turnComplete?: number | null): boolean {
+  return SMART_TURN_ENDS_TURNS_SOONER
+    && typeof turnComplete === 'number' && turnComplete >= SMART_TURN_COMPLETE_PROBABILITY;
+}
+
 // Final-only providers cannot supply the transcript needed by semantic EOT until
 // after finalization has already been requested. Use a short acoustic fallback
 // only when the negotiated capability set proves that no pre-final evidence is
@@ -162,10 +182,11 @@ export function assessSemanticTurn(
 export function semanticFinalizeDelay(
   transcript: string,
   pace: ConversationPace = 'balanced',
+  turnComplete: number | null = null,
 ): number {
   const profile = conversationTimingProfile(pace);
   if (liveSttUsesAuthoritativeEou()) {
-    return authoritativeEouFallbackDelay(pace);
+    return authoritativeEouFallbackDelay(pace, turnComplete);
   }
   if (!transcript.trim() && liveSttUsesFinalOnlyEndpointing()) {
     return finalOnlyAcousticFinalizeDelay(pace);
@@ -177,8 +198,11 @@ export function semanticFinalizeDelay(
   );
 }
 
-export function authoritativeEouFallbackDelay(pace: ConversationPace = 'balanced'): number {
-  return AUTHORITATIVE_EOU_FALLBACK_MS[pace];
+export function authoritativeEouFallbackDelay(
+  pace: ConversationPace = 'balanced',
+  turnComplete: number | null = null,
+): number {
+  return voiceSaysTurnComplete(turnComplete) ? SMART_TURN_CONFIRMATION_MS[pace] : AUTHORITATIVE_EOU_FALLBACK_MS[pace];
 }
 
 export function finalOnlyAcousticFinalizeDelay(pace: ConversationPace = 'balanced'): number {

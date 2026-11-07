@@ -83,7 +83,7 @@ def test_an_nvidia_pc_gets_the_recommended_voice_bundles(shipped) -> None:
     assert found["voice-input"].status in {"fits", "warn"}
     assert found["voice-input"].runtimes == ["torch-windows-x64", "stt-windows-x64"]
     assert found["voice-input"].model_bytes == shipped.model("nemotron-speech-streaming-en-0.6b").size + \
-        shipped.model("parakeet-realtime-eou-120m-v1").size
+        shipped.model("parakeet-realtime-eou-120m-v1").size + shipped.model("smart-turn-v3.2").size
 
 
 def test_an_amd_pc_sees_the_gpu_bundles_greyed_with_the_reason(shipped) -> None:

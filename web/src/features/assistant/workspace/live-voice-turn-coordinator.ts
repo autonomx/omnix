@@ -1,4 +1,5 @@
 import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
+import { type ConversationPace, authoritativeEouFallbackDelay, voiceSaysTurnComplete } from './live-voice-floor-manager';
 import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
 import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_COORDINATION_TERMINAL_EVENT, LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../../events/bus';
 
@@ -26,6 +27,9 @@ export type EndpointFusionInput = {
   semanticProbabilityDone: number;
   transcriptWords: number;
   correctionPending: boolean;
+  /** Smart Turn's probability that the voice finished its turn, from the STT service; absent without it. */
+  turnComplete?: number | null;
+  pace?: ConversationPace;
 };
 
 export type LiveVoiceTurnTimelineDetail = {
@@ -71,9 +75,12 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
   // captured intra-sentence pause (478 ms). Resumed speech cancels private work, so this
   // recovers LLM/TTS lead time without making an early EOU user-visible.
   if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
-    const requiredSilenceMs = complete && input.transcriptWords >= 2
-      ? AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS
-      : AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS;
+    // How they sounded tells a finished turn from a mid-sentence pause, which the 500 ms bound only waits out.
+    const requiredSilenceMs = voiceSaysTurnComplete(input.turnComplete)
+      ? authoritativeEouFallbackDelay(input.pace ?? 'balanced', input.turnComplete)
+      : complete && input.transcriptWords >= 2
+        ? AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS
+        : AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS;
     if (silence >= requiredSilenceMs) return 'commit';
     const speculationReady = silence >= AUTHORITATIVE_EOU_SPECULATION_MIN_SILENCE_MS
       && input.transcriptWords >= 2

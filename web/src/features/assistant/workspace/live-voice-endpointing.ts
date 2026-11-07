@@ -1,6 +1,6 @@
 /** Provider endpoint candidates and partial transcripts: whether a pause ends the turn. */
 import { liveConversationStore } from './live-conversation-store';
-import { assessSemanticTurn } from './live-voice-floor-manager';
+import { assessSemanticTurn, voiceSaysTurnComplete } from './live-voice-floor-manager';
 import { type StreamingSttSegmentState } from './live-voice-websocket';
 import { endpointFusionAction } from './live-voice-turn-coordinator';
 import { EndpointCommitState, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, STT_SEGMENT_TELEMETRY_INTERVAL_MS, controller, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, readConversationPace, renderTranscript } from './live-voice-controller-state';
@@ -44,6 +44,8 @@ export function shouldCommitProviderEndpoint(state: EndpointCommitState): boolea
     semanticProbabilityDone: state.semanticProbabilityDone ?? 1,
     transcriptWords: state.transcriptWords ?? 2,
     correctionPending: state.correctionPending ?? false,
+    turnComplete: state.turnComplete ?? null,
+    pace: state.pace,
   }) === 'commit';
 }
 
@@ -55,10 +57,19 @@ export function handleProviderEndpointCandidate(card: HTMLElement, event: Provid
   const pauseElapsedMs = session.pauseStartedAt === null
     ? 0
     : Math.max(0, now - session.pauseStartedAt);
-  const assessment = assessSemanticTurn(candidateText, readConversationPace());
+  const pace = readConversationPace();
+  const assessment = assessSemanticTurn(candidateText, pace);
   const transcriptStableMs = Math.max(0, now - session.partialTranscriptUpdatedAt);
   const transcriptWords = candidateText ? candidateText.split(/\s+/u).length : 0;
   const correctionPending = assessment.reason === 'self_correction';
+  // Kept through the tail of the voice: Parakeet often fires before the browser hears the pause. Not while the
+  // assistant speaks (the overlap judge owns that), nor for one word: on 2026-11-06 both of the turns cut short by
+  // a confident verdict were a word or a short phrase said over a reply.
+  const turnComplete = typeof event.turnComplete === 'number' && transcriptWords >= 2 && !liveVoiceAssistantIsSpeaking()
+    ? event.turnComplete
+    : null;
+  session.turnComplete = turnComplete;
+  session.turnCompleteAt = turnComplete === null ? null : now;
   const fusionAction = endpointFusionAction({
     endpointProbability: event.probability,
     endpointThreshold: session.sttAuthority.endpointThreshold,
@@ -67,6 +78,8 @@ export function handleProviderEndpointCandidate(card: HTMLElement, event: Provid
     semanticProbabilityDone: assessment.probabilityDone,
     transcriptWords,
     correctionPending,
+    turnComplete,
+    pace,
   });
   session.reporter.record('stt_endpoint_candidate', {
     provider: event.provider,
@@ -79,6 +92,7 @@ export function handleProviderEndpointCandidate(card: HTMLElement, event: Provid
     transcript_stable_ms: Math.round(transcriptStableMs),
     semantic_probability_done: assessment.probabilityDone,
     semantic_reason: assessment.reason,
+    turn_complete: turnComplete,
     endpoint_fusion_action: fusionAction,
     authority_enabled: session.sttAuthority.authorityEnabled,
     pause_elapsed_ms: Math.round(pauseElapsedMs),
@@ -135,7 +149,15 @@ export function handleProviderEndpointCandidate(card: HTMLElement, event: Provid
     semanticProbabilityDone: assessment.probabilityDone,
     transcriptWords,
     correctionPending,
-  })) return;
+    turnComplete,
+    pace,
+  })) {
+    // A finished-sounding turn needs a shorter pause than the watchdog was armed for: bring it forward.
+    if (voiceSaysTurnComplete(turnComplete) && session.silenceTimer !== null && !session.finalRequested) {
+      rescheduleSemanticFinalization(session);
+    }
+    return;
+  }
   requestFinalTranscript(session, 'provider_endpoint', event);
 }
 

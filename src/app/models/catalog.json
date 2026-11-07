@@ -140,7 +140,8 @@
           "accelerator": "cuda",
           "models": [
             "nemotron-speech-streaming-en-0.6b",
-            "parakeet-realtime-eou-120m-v1"
+            "parakeet-realtime-eou-120m-v1",
+            "smart-turn-v3.2"
           ],
           "runtimes": [
             "stt-windows-x64"
@@ -1026,6 +1027,33 @@
       "residency": "helper",
       "capabilities": [
         "end_of_utterance"
+      ],
+      "voice_studio": false
+    },
+    "smart-turn-v3.2": {
+      "label": "Pipecat Smart Turn v3.2",
+      "kind": "stt",
+      "service": "stt",
+      "repo": "pipecat-ai/smart-turn-v3",
+      "revision": "f766f81d3cfdf7737ac64aad813d91bbfd56bf93",
+      "source": "huggingface",
+      "files": {
+        "smart-turn-v3.2-cpu.onnx": {
+          "sha256": "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
+          "size": 8679182
+        }
+      },
+      "licence": {
+        "id": "BSD-2-Clause",
+        "url": "https://github.com/pipecat-ai/smart-turn/blob/main/LICENSE",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 0.0,
+      "residency": "helper",
+      "capabilities": [
+        "end_of_turn"
       ],
       "voice_studio": false
     },

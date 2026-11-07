@@ -28,6 +28,8 @@ export function resetTurnState(session: LiveVoiceSession): void {
   session.sttFinalRequestedAt = null;
   session.partialTranscript = '';
   session.partialTranscriptUpdatedAt = performance.now();
+  session.turnComplete = null;
+  session.turnCompleteAt = null;
   session.speculationSegmentId = null;
   session.speculationSourceSequence = null;
   session.overlapIntent = null;

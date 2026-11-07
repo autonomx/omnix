@@ -10,14 +10,16 @@ import { resetTurnState, stopLiveVoice } from './live-voice-session-lifecycle';
 import { ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 const micLevelWindows = new WeakMap<LiveVoiceSession, ReturnType<typeof createMicLevelWindow>>();
+const TURN_VERDICT_TAIL_MS = 400;
 
 export function semanticFinalizationRemainingMs(
   text: string,
   pace: ConversationPace,
   pauseElapsedMs: number,
   transcriptStableMs: number = Number.POSITIVE_INFINITY,
+  turnComplete: number | null = null,
 ): number {
-  const targetDelayMs = semanticFinalizeDelay(text, pace);
+  const targetDelayMs = semanticFinalizeDelay(text, pace, turnComplete);
   const pauseRemainingMs = targetDelayMs - Math.max(0, pauseElapsedMs);
   // When authoritative EOU is negotiated, the semantic timeout is only a
   // watchdog for a missed or delayed EOU. Nemotron partials can legitimately
@@ -30,6 +32,16 @@ export function semanticFinalizationRemainingMs(
     ? targetDelayMs - Math.max(0, transcriptStableMs)
     : 0;
   return Math.max(0, pauseRemainingMs, transcriptRemainingMs);
+}
+
+/**
+ * Smart Turn's verdict as a pause begins. Parakeet often fires on the tail of the voice, before the browser hears the
+ * pause (11 of 23 verdicts on 2026-11-06 came within 10 ms of it), so a verdict from that tail still counts; one
+ * older than the tail was about an earlier pause they talked through.
+ */
+export function turnVerdictAtPause(turnComplete: number | null, verdictAt: number | null, pauseStartedAt: number): number | null {
+  if (turnComplete === null || verdictAt === null) return null;
+  return pauseStartedAt - verdictAt > TURN_VERDICT_TAIL_MS ? null : turnComplete;
 }
 
 export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void {
@@ -75,7 +87,10 @@ export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array
     });
   }
   if (confirmedSpeech) {
-    if (session.pauseStartedAt !== null) clearAuthoritativePreview(session, true);
+    if (session.pauseStartedAt !== null) {
+      clearAuthoritativePreview(session, true);
+      session.turnComplete = null;  // they went on after a pause: what was heard of it no longer holds
+    }
     session.speechDetected = true;
     session.pauseStartedAt = null;
     if (!assistantOwnsFloor) {
@@ -92,6 +107,7 @@ export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array
     }
   } else if (session.speechDetected && !session.silenceTimer) {
     session.pauseStartedAt = performance.now();
+    session.turnComplete = turnVerdictAtPause(session.turnComplete, session.turnCompleteAt, session.pauseStartedAt);
     session.floorState = reduceUserFloor(session.floorState, { type: 'pause' });
     scheduleSemanticFinalization(session);
     scheduleAuthoritativePreview(session);
@@ -176,7 +192,7 @@ export function armSemanticFinalizationTimer(
   const now = performance.now();
   const pace = readConversationPace();
   const assessment = assessSemanticTurn(session.partialTranscript, pace);
-  const targetDelayMs = semanticFinalizeDelay(session.partialTranscript, pace);
+  const targetDelayMs = semanticFinalizeDelay(session.partialTranscript, pace, session.turnComplete);
   const pauseElapsedMs = session.pauseStartedAt === null
     ? 0
     : Math.max(0, now - session.pauseStartedAt);
@@ -186,6 +202,7 @@ export function armSemanticFinalizationTimer(
     pace,
     pauseElapsedMs,
     transcriptStableMs,
+    session.turnComplete,
   );
   if (session.silenceTimer) clearTimeout(session.silenceTimer);
   dispatchLiveVoicePerfEvent({
@@ -218,6 +235,7 @@ export function shouldDeferSemanticTimeout(session: LiveVoiceSession): boolean {
     pace,
     pauseElapsedMs,
     transcriptStableMs,
+    session.turnComplete,
   );
   if (remainingMs <= 1) return false;
   const assessment = assessSemanticTurn(session.partialTranscript, pace);

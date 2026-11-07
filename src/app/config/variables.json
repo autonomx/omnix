@@ -1932,6 +1932,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls smart turn model for providers.",
+    "feature": "providers",
+    "name": "OMNIX_SMART_TURN_MODEL",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls software revision for kernel.",
     "feature": "kernel",

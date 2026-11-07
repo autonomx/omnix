@@ -5,3 +5,5 @@ torchaudio==2.6.0+cu124
 fastapi
 uvicorn[standard]
 python-multipart
+# Smart Turn (end of turn from the voice): CPU inference of its ONNX model.
+onnxruntime>=1.18,<2

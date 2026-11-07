@@ -280,6 +280,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_SECRET_STORE_PATH` | string | — | security | Controls secret store path for security. |
 | `OMNIX_SEC_USER_AGENT` | string | — | trading | Controls sec user agent for trading. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
+| `OMNIX_SMART_TURN_MODEL` | string | — | providers | Controls smart turn model for providers. |
 | `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
 | `OMNIX_START_HERMES` | boolean | — | launcher | Controls start hermes for launcher. |

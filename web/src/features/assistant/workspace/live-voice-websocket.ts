@@ -46,6 +46,8 @@ export type StreamingSttEndpointCandidate = {
   sequence: number;
   probability: number;
   modelTimeMs?: number;
+  /** Smart Turn: the probability, from how they sounded, that the speaker is done. */
+  turnComplete?: number;
 };
 
 export type StreamingSttPreviewResult = {
@@ -928,6 +930,7 @@ export class StreamingSttWebSocketClient {
           sourceSequence: message.sequence,
           probability: message.probability,
           modelTimeMs: message.modelTimeMs,
+          turnComplete: message.turnComplete,
         });
         this.options.onEndpointCandidate?.(message);
         return;

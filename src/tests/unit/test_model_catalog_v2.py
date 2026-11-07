@@ -48,11 +48,12 @@ def test_the_shipped_catalog_loads_and_every_bundle_is_installable() -> None:
                 assert pack.platform == variant.platform
 
 
-def test_live_voice_input_on_windows_installs_both_stt_models() -> None:
-    # Nemotron gives the transcript and the EOU model the end of the utterance (nemotron_eou_streaming.py).
+def test_live_voice_input_on_windows_installs_every_stt_model() -> None:
+    # Nemotron gives the transcript and the EOU model the end of the utterance (nemotron_eou_streaming.py); Smart Turn
+    # tells from the voice whether that end is the end of the turn (smart_turn.py).
     variant = catalog.load().bundle("voice-input").variant("windows-x64")
     assert variant is not None
-    assert set(variant.models) == {"nemotron-speech-streaming-en-0.6b", "parakeet-realtime-eou-120m-v1"}
+    assert set(variant.models) == {"nemotron-speech-streaming-en-0.6b", "parakeet-realtime-eou-120m-v1", "smart-turn-v3.2"}
 
 
 def test_macos_voice_input_uses_parakeet_mlx_without_torch() -> None:

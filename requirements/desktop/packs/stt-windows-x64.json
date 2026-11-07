@@ -3,7 +3,7 @@
  "runtime": "stt-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/stt.windows-x64.lock.txt",
- "lock_sha256": "0e2855c492a86323cea2626f1c3600379ec281f56fdd1e7be06e48ed16e1039b",
+ "lock_sha256": "d3f6867c133e55b2ab137e1c3c024ba3af8d315cd2d75ba8c77ac93fdd57329d",
  "files": [
   {
    "name": "absl-py",
@@ -319,6 +319,15 @@
    "size": 109077,
    "source": "index",
    "url": "https://files.pythonhosted.org/packages/a9/3b/b74ae9db2f78f1354278731372ae89870626be7b86cbb46b8d707acd1a98/filelock-4.0.6-py3-none-any.whl"
+  },
+  {
+   "name": "flatbuffers",
+   "version": "25.12.19",
+   "filename": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+   "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+   "size": 26661,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl"
   },
   {
    "name": "fonttools",
@@ -832,6 +841,15 @@
    "size": 17215684,
    "source": "index",
    "url": "https://files.pythonhosted.org/packages/54/57/cc0a9f2cf4522e42829d089927b4b75924d32f50dca237482e7b741df003/onnx-1.22.0-cp311-cp311-win_amd64.whl"
+  },
+  {
+   "name": "onnxruntime",
+   "version": "1.30.0",
+   "filename": "onnxruntime-1.30.0-cp311-cp311-win_amd64.whl",
+   "sha256": "0edd0145a6e3fce8a1276491dc784d615e3c58bcb952c9b4e5c876d5c6a12ad7",
+   "size": 14309136,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/66/68/b8aaade8c1883f569228f4b57201cce922bb7d4af6f977d619520a733430/onnxruntime-1.30.0-cp311-cp311-win_amd64.whl"
   },
   {
    "name": "opentelemetry-api",

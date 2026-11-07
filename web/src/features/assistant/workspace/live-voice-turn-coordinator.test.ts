@@ -5,7 +5,7 @@ import {
   noteLiveSttNegotiation,
   resetLiveSttCapabilityState,
 } from './live-stt-capability-state';
-import { assessSemanticTurn, semanticFinalizeDelay } from './live-voice-floor-manager';
+import { SMART_TURN_ENDS_TURNS_SOONER, assessSemanticTurn, semanticFinalizeDelay } from './live-voice-floor-manager';
 import { LiveVoiceTurnCoordinator, endpointFusionAction, initializeLiveVoiceTranscriptReconciliation, removeTransientFinalUserRows, resetLiveVoiceTurnCoordinatorForTests, type LiveVoiceTurnTimelineDetail } from './live-voice-turn-coordinator';
 import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
 import { LIVE_COORDINATION_TERMINAL_EVENT, LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../../events/bus';
@@ -185,6 +185,38 @@ describe('live voice turn coordinator', () => {
     expect(semanticFinalizeDelay('', 'balanced')).toBe(500);
     expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(500);
     expect(semanticFinalizeDelay('We should take the road because', 'balanced')).toBe(500);
+  });
+
+  it('waits the general bound even when the voice sounds finished: the shortcut cut people off', () => {
+    // On 2026-11-06 a confident Smart Turn score ended 2 of 4 turns mid-sentence; it is scored and logged only.
+    noteLiveSttNegotiation('nemotron_parakeet_eou', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'partial_transcripts',
+      'authoritative_eou',
+    ]);
+    const pause = (silenceMs: number, turnComplete: number | null, pace?: 'quick' | 'balanced' | 'reflective') => endpointFusionAction({
+      endpointProbability: 1,
+      endpointThreshold: 0.5,
+      silenceMs,
+      transcriptStableMs: 300,
+      semanticProbabilityDone: 0.78,
+      transcriptWords: 4,
+      correctionPending: false,
+      turnComplete,
+      pace,
+    });
+
+    expect(SMART_TURN_ENDS_TURNS_SOONER).toBe(false);
+    expect(pause(210, 0.97)).toBe('speculate');
+    expect(pause(170, 0.98, 'quick')).toBe('speculate');
+    expect(pause(478, 0.06)).toBe('speculate');
+    expect(pause(510, 0.97)).toBe('commit');
+    expect(pause(510, null)).toBe('commit');
+    expect(semanticFinalizeDelay('The road looks dangerous', 'balanced', 0.97)).toBe(500);
+    expect(semanticFinalizeDelay('The road looks dangerous', 'balanced', 0.5)).toBe(500);
+    expect(semanticFinalizeDelay('The road looks dangerous', 'reflective', 0.97)).toBe(800);
   });
 
   it('commits newly complete delayed text immediately after a mature acoustic pause', () => {

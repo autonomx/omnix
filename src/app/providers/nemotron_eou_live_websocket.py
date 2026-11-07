@@ -33,6 +33,7 @@ from app.providers.nemotron_eou_streaming import (
     NemotronEouModelManager,
     model_manager,
 )
+from app.providers.smart_turn import turn_complete_probability
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,9 @@ async def _drain_stream_audio(
             # still active, a later true endpoint must still be deliverable.
             segment.eou_emitted = True
             segment.eou_candidate_count += 1
+            # Parakeet fires inside sentences too; how they sound says whether they are done (about 12 ms).
+            turn_started = time.perf_counter()
+            turn_complete = await asyncio.to_thread(turn_complete_probability, bytes(segment.primary_audio))
             endpoint = {
                 "provider": PROVIDER_NAME,
                 "segmentId": segment.segment_id,
@@ -318,6 +322,8 @@ async def _drain_stream_audio(
                 "modelTimeMs": model_time_ms,
                 "signal": "eou",
             }
+            if turn_complete is not None:
+                endpoint["turnComplete"] = round(turn_complete, 3)
             await _safe_send(websocket, send_lock, {"type": "endpoint_score", **endpoint})
             await _safe_send(websocket, send_lock, {"type": "endpoint_candidate", **endpoint})
             _metric(
@@ -328,6 +334,8 @@ async def _drain_stream_audio(
                 model_time_ms=model_time_ms,
                 nemotron_ms=round(update.nemotron_ms, 3),
                 eou_ms=round(update.eou_ms, 3),
+                turn_complete=endpoint.get("turnComplete"),
+                turn_ms=round((time.perf_counter() - turn_started) * 1000.0, 3),
             )
 
 
