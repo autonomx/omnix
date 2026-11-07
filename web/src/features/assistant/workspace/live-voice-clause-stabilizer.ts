@@ -27,8 +27,9 @@ type ClausePolicy = {
 // for reliable local TTS lexical coverage. The first clause uses a smaller
 // bounded window because the user has already experienced STT + LLM latency
 // before any audio can begin. Below about 26 characters the engine far more often
-// produces a phrase's length in near-silence instead of its words, and by the time
-// a later clause commits, audio is already queued ahead of it.
+// produced a phrase's length in near-silence instead of its words (measured before
+// Jinx's clip was re-cut on 2026-11-05; see SENTENCE_PER_TAKE_CLAUSES for after), and
+// by the time a later clause commits, audio is already queued ahead of it.
 const DEFAULT_MINIMUM = 26;
 const DEFAULT_LOOKAHEAD = 12;
 const DEFAULT_MAXIMUM = 64;
@@ -37,6 +38,11 @@ const DEFAULT_FIRST_MINIMUM = 8;
 const DEFAULT_FIRST_LOOKAHEAD = 4;
 const DEFAULT_FIRST_MAXIMUM = 56;
 const DEFAULT_FIRST_DEADLINE_MS = 55;
+// A reply's first clauses play as they are made (no queued audio to check them against), and there several short
+// sentences in one take lose words: "Right. No. Not really. I had one once," played "Right." and near-silence
+// (2026-11-06). On Jinx's clip, 48 takes each of six such lines: one take per sentence heard 96.7% of the words with
+// no take losing a quarter, against 88.7% and 5 packed. So these end at every sentence, however short.
+const SENTENCE_PER_TAKE_CLAUSES = 3;
 const STRONG_BOUNDARY = /[.!?][\]})"'’”]*(?=\s|$)/g;
 const WEAK_BOUNDARY = /[,;:][\]})"'’”]*(?=\s|$)/g;
 const ABBREVIATION = /(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-Z])\.$/i;
@@ -150,7 +156,8 @@ export class StableClauseAccumulator {
 
   private nextBoundary(nowMs: number): { end: number; reason: ClauseCommitReason } | null {
     const policy = this.currentPolicy();
-    const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, policy.minimum);
+    const sentenceMinimum = this.committedClauseCount < SENTENCE_PER_TAKE_CLAUSES ? 1 : policy.minimum;
+    const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, sentenceMinimum);
     const weak = findStableWeakBoundary(this.buffer, policy.minimum, policy.lookahead);
     const naturalBoundary = weak !== null && (strong === null || weak < strong)
       ? { end: weak, reason: 'stable-boundary' as const }

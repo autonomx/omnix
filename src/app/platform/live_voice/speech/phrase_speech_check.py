@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass
 from itertools import chain
 from typing import Any
@@ -152,6 +152,25 @@ def _hardly_spoken(take: SpeechTake, text_chars: int) -> bool:
     return take.voiced_seconds < text_chars / _FASTEST_VOICED_CHARS_PER_SECOND * _HARDLY_SPOKEN_SHARE
 
 
+def _rest_until_silent(
+    pending: Iterator[tuple[Any, int, Any]],
+    watch: TakeWatch,
+    *,
+    text_chars: int,
+    to_pcm: Callable[[Any], bytes],
+    stopped: Callable[[], bool],
+) -> Generator[tuple[Any, int, Any], None, bool]:
+    """The rest of a speaking take, until it goes silent with too little said for its text: then True, unplayed."""
+    for chunk in pending:
+        if stopped():
+            return False
+        watch.add(to_pcm(chunk[0]))
+        if watch.gone_silent(text_chars):
+            return True
+        yield chunk
+    return False
+
+
 def _streamed_from_first_voice(
     generate: Callable[[], Iterator[tuple[Any, int, Any]]],
     *,
@@ -169,11 +188,13 @@ def _streamed_from_first_voice(
     ``started`` is a stream whose first chunk has already been read. When no take speaks, what there is goes out.
     """
     last: list[tuple[Any, int, Any]] = list(fallback or [])
+    replayed = False
     while True:
         stream: Iterator[tuple[Any, int, Any]] | None = None
         chunks: list[tuple[Any, int, Any]] = []
         watch: TakeWatch | None = None
         first_voiced: int | None = None
+        lost_midway = False
         try:
             if started is not None:
                 first, stream = started
@@ -202,8 +223,19 @@ def _streamed_from_first_voice(
                         # for a soft first sound. A cached speculation goes out whole: its portrait has a copy of it.
                         lead = 0 if is_cached(chunks[0][2]) else max(0, (first_voiced or 0) - 1)
                         yield from chunks[lead:]
-                        yield from pending
-                        return
+                        if is_cached(chunks[0][2]):
+                            yield from pending
+                            return
+                        # A take can start speaking and then lose its words: "Right." and then 4 s of near-silence
+                        # where "No. Not really. I had one once," should be (2026-11-06). Its start has been heard,
+                        # so the whole phrase is said again, once; a second loss is cut short instead of played.
+                        went_silent = yield from _rest_until_silent(
+                            pending, watch, text_chars=text_chars, to_pcm=to_pcm, stopped=stopped,
+                        )
+                        if not went_silent or replayed or stopped():
+                            return
+                        replayed = lost_midway = True
+                        break
                     if watch.gone_silent(text_chars):
                         break
                 else:
@@ -226,6 +258,14 @@ def _streamed_from_first_voice(
             if callable(close):
                 close()
         take = watch.take if watch else SpeechTake(0.0, 0.0)
+        if lost_midway:
+            on_take(attempt=attempt, missing="went_silent_midway", streamed=True, seconds=round(take.seconds, 3),
+                    voiced_seconds=round(take.voiced_seconds, 3))
+            last = []  # what it did say has been heard: never play it again as a fallback
+            if stopped():
+                return
+            attempt += 1
+            continue
         on_take(attempt=attempt, missing="too_little_speech", streamed=True, seconds=round(take.seconds, 3),
                 voiced_seconds=round(take.voiced_seconds, 3))
         last = chunks or last

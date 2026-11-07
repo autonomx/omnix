@@ -27,15 +27,24 @@ describe('stable live voice clauses', () => {
     expect(accumulator.pendingText()).toBe('text');
   });
 
-  it('does not commit a punctuated first prefix below its configured audio floor', () => {
+  it('ends a reply\'s first clauses at every sentence, however short', () => {
+    // Played as made with nothing to check them against, packed short sentences lost words ("Right. No. Not really.
+    // I had one once," played "Right." and near-silence); one take per sentence heard 96.7% of words against 88.7%.
     const accumulator = new StableClauseAccumulator({
       firstClauseMinimumCharacters: 8,
       firstClauseDeadlineMs: 20,
     });
 
-    expect(accumulator.append('Right.', 0)).toEqual([]);
-    expect(accumulator.append(' Let me check.', 5)).toEqual([
-      { text: 'Right. Let me check.', reason: 'strong-boundary' },
+    expect(accumulator.append('Right.', 0)).toEqual([{ text: 'Right.', reason: 'strong-boundary' }]);
+    expect(accumulator.append(' No. Not really. I had one once, a long time ago.', 5)).toEqual([
+      { text: 'No.', reason: 'strong-boundary' },
+      { text: 'Not really.', reason: 'strong-boundary' },
+      { text: 'I had one once, a long time ago.', reason: 'strong-boundary' },
+    ]);
+    // From the fourth clause on, audio is queued ahead and checked, so short sentences pack together again.
+    expect(accumulator.append(' Then it went wrong.', 10)).toEqual([]);
+    expect(accumulator.append(' So I stopped.', 12)).toEqual([
+      { text: 'Then it went wrong. So I stopped.', reason: 'strong-boundary' },
     ]);
   });
 

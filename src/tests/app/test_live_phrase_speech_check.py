@@ -475,3 +475,53 @@ def test_the_runway_is_what_was_sent_less_what_has_played_since() -> None:
     assert runway.seconds(generation_epoch=3, now=500.0) == 0.0
     # An interrupted reply's queue is gone: the next generation starts from nothing.
     assert runway.seconds(generation_epoch=4, now=103.0) == 0.0
+
+
+def _chunked(*parts: tuple[float, float]) -> list[tuple[np.ndarray, int, dict[str, Any]]]:
+    """A take as the engine streams it, in 80 ms chunks, so a silence can be noticed as it happens."""
+    chunks = []
+    for seconds, level in parts:
+        for _ in range(round(seconds / 0.08)):
+            chunks.append((_audio(0.08, level), RATE, {}))
+    return chunks
+
+
+def _played_seconds(produced: list[Any]) -> float:
+    return sum(len(chunk[0]) for chunk in produced) / RATE
+
+
+def test_a_take_that_starts_speaking_and_loses_its_words_is_said_again_whole() -> None:
+    # 2026-11-06: "Right. No. Not really. I had one once," with no runway played "Right." and then near-silence.
+    lost = _chunked((0.4, 0.1), (4.5, 0.001))
+    whole = _chunked((2.4, 0.1))
+    produced, logged, requested = _checked([lost, whole], runway=0.0, text_chars=38)
+
+    assert len(requested) == 2
+    assert any(entry.get("missing") == "went_silent_midway" for entry in logged)
+    # The start that was heard, at most 1.2 s of the quiet before it was noticed, then the whole phrase again.
+    assert 2.4 + 0.4 <= _played_seconds(produced) <= 2.4 + 0.4 + 1.3
+
+
+def test_a_second_loss_is_cut_short_instead_of_played() -> None:
+    lost = _chunked((0.4, 0.1), (4.5, 0.001))
+    produced, logged, requested = _checked([lost, lost, _chunked((2.4, 0.1))], runway=0.0, text_chars=38)
+
+    assert len(requested) == 2  # one replay, never a third take of the same words
+    assert _played_seconds(produced) <= 2 * (0.4 + 1.3)
+
+
+def test_a_take_that_keeps_speaking_plays_whole_once() -> None:
+    speaking = _chunked((0.4, 0.1), (0.3, 0.001), (2.0, 0.1))
+    produced, logged, requested = _checked([speaking], runway=0.0, text_chars=38)
+
+    assert len(requested) == 1
+    assert not any(entry.get("missing") for entry in logged)
+    assert _played_seconds(produced) == pytest.approx(2.72, abs=0.01)
+
+
+def test_a_cached_speculation_still_goes_out_as_made() -> None:
+    cached = [(chunk, rate, {"cached": True}) for chunk, rate, _timing in _chunked((0.4, 0.1), (4.5, 0.001))]
+    produced, logged, requested = _checked([cached], runway=0.0, text_chars=38)
+
+    assert len(requested) == 1  # its portrait has a copy of it
+    assert _played_seconds(produced) == pytest.approx(4.88, abs=0.01)
