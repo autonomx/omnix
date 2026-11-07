@@ -887,6 +887,20 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                         "error": str(fallback_exc or e)
                     }
     
+    # Generates from a clip given per call (``reference_audio``), which ``forget_reference`` drops afterwards.
+    supports_reference_trials = True
+
+    def forget_reference(self, path: str) -> int:
+        """Drop what the model prepared for a trial clip, so trials leave nothing behind; how many entries."""
+        model = _model_loader.model
+        cache = getattr(model, "_voice_prompt_cache", None) if model is not None else None
+        if not isinstance(cache, dict):
+            return 0
+        stale = [key for key in cache if isinstance(key, tuple) and key and key[0] == str(path)]
+        for key in stale:
+            cache.pop(key, None)
+        return len(stale)
+
     def voice_ready(self, speaker: Optional[str]) -> bool:
         """Whether a phrase in this voice has nothing to prepare first: the engine's graphs and the voice's prompt."""
         model = _model_loader.model
@@ -956,7 +970,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         """
         provider_entry_at = time.perf_counter()
         try:
-            ref_audio_path, saved_ref_text = _clone_reference(speaker)
+            # A trial clip (choosing a clone's section) is used as given, with no library voice behind it.
+            trial_reference = kwargs.pop("reference_audio", None)
+            if trial_reference:
+                ref_audio_path, saved_ref_text = str(trial_reference), ""
+            else:
+                ref_audio_path, saved_ref_text = _clone_reference(speaker)
             ref_text, xvec_only = _clone_conditioning(kwargs, self._model_config, saved_ref_text)
             
             if not ref_audio_path:

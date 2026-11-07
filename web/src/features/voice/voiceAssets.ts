@@ -90,3 +90,20 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
+
+/** What "Pick the best section" chose when the voice was cloned, for its library card; null when it did not run. */
+export function voiceSectionSummary(asset: VoiceAsset): { label: string; title: string } | null {
+  const choice = voiceAssetMetadata(asset).section_choice as {
+    sample_seconds?: unknown;
+    chosen?: { start?: unknown; end?: unknown; silent?: unknown; takes?: unknown; whole?: unknown };
+    candidates?: unknown;
+  } | undefined;
+  const chosen = choice?.chosen;
+  if (!chosen || typeof chosen.start !== 'number' || typeof chosen.end !== 'number') return null;
+  const tried = Array.isArray(choice?.candidates) ? choice.candidates.length : 1;
+  const sample = typeof choice?.sample_seconds === 'number' ? ` of ${choice.sample_seconds.toFixed(1)} s` : '';
+  return {
+    label: chosen.whole === true ? 'whole sample tested best' : `best ${(chosen.end - chosen.start).toFixed(1)} s section`,
+    title: `Picked from ${tried} sections${sample}: ${Number(chosen.silent ?? 0)} of ${Number(chosen.takes ?? 0)} test takes went silent.`,
+  };
+}

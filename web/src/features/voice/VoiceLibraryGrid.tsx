@@ -7,6 +7,7 @@ import {
   voiceInitial,
   voiceLanguage,
   voiceProfileName,
+  voiceSectionSummary,
   voiceSource,
   type VoiceAsset,
 } from './voiceAssets';
@@ -97,6 +98,7 @@ export function VoiceLibraryGrid({
             const favourite = favourites.has(id);
             const check = voiceAssetMetadata(asset).sample_check as { warnings?: unknown } | undefined;
             const warnings = Array.isArray(check?.warnings) ? check.warnings.length : 0;
+            const section = voiceSectionSummary(asset);
             return (
               <article className="voice-card" role="listitem" key={id}>
                 <div className="voice-card-top">
@@ -107,6 +109,7 @@ export function VoiceLibraryGrid({
                 <div className="voice-card-tags">
                   <span className="ready-chip">{voiceSource(asset)}</span>
                   {voiceLanguage(asset) ? <span className="voice-tag">{voiceLanguage(asset)}</span> : null}
+                  {section ? <span className="voice-tag" title={section.title}>{section.label}</span> : null}
                   {warnings ? <span className="voice-tag voice-tag-warn" title="The sample check reported issues when this voice was cloned.">sample check: {warnings}</span> : null}
                 </div>
                 <div className="voice-library-actions">

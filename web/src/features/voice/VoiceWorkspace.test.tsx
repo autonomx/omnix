@@ -290,6 +290,9 @@ describe('VoiceWorkspace', () => {
     expect(payload.generate_transcript).toBe(false);
     expect(payload.stt_provider_id).toBe('parakeet');
     expect(payload.quality).toBe('Standard');
+    // On unless turned off: the clone keeps the section of the sample whose test takes go silent least.
+    expect(screen.getByRole('checkbox', { name: /Pick the best section/ })).toBeChecked();
+    expect(payload.pick_best_section).toBe(true);
     expect(await screen.findByText(/Background noise is high\./)).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]);

@@ -212,6 +212,56 @@ def test_cloning_can_isolate_and_enhance_the_sample_first(stores, client) -> Non
     assert voice.storage_path.endswith(".wav")
 
 
+def test_cloning_keeps_the_best_section_and_the_whole_sample(stores, client, monkeypatch, tmp_path: Path) -> None:
+    from app.platform.voice import clip_selection
+
+    section = _wav(seconds=6.5)
+    report = {"sample_seconds": 18.0, "chosen": {"start": 4.0, "end": 10.5, "text": "the words of the section.",
+                                                 "takes": 12, "silent": 0, "likeness": 0.71, "lead_seconds": 0.08},
+              "candidates": [], "test_lines": 6, "takes_per_line": 2}
+    seen: list[dict[str, Any]] = []
+
+    def choose(audio: bytes, *, manual_text: str = "", language: str = "") -> clip_selection.SectionChoice:
+        seen.append({"manual_text": manual_text, "language": language, "audio": audio})
+        return clip_selection.SectionChoice(audio=section, text="the words of the section.", report=report)
+
+    monkeypatch.setattr(clip_selection, "choose_section_with_services", choose)
+    store = _JobStore()
+    payload = {"profile_name": "Host", "sample_audio_base64": base64.b64encode(_wav(seconds=18.0)).decode("ascii"),
+               "source_file_name": "interview.wav", "reference_text": "typed words", "quality": "Draft",
+               "pick_best_section": True}
+    job = _job("voice-cloning.create-profile", payload)
+    voice_jobs.execute_voice_studio_job(store, job)
+
+    assert job.id in store.completed, store.failed.get(job.id)
+    assert seen and seen[0]["manual_text"] == "typed words"
+    voice = next(asset for asset in stores.assets.values() if asset.type == AssetType.VOICE_PROFILE)
+    assert Path(voice.storage_path).read_bytes() == section
+    assert voice.metadata["reference_text"] == "the words of the section."
+    assert voice.metadata["section_choice"] == report
+    # The whole cleaned sample is kept, outside the voice folder the library lists.
+    kept = tmp_path / "voice_clone_sources" / "Host.wav"
+    assert kept.read_bytes() == seen[0]["audio"]
+    assert "Picked the best 6.5 s section of 18.0 s (0 of 12 test takes silent)" in store.completed[job.id].logs[0]["content"]
+    assert store.completed[job.id].output_refs[0]["section_choice"] == report
+
+
+def test_cloning_without_the_option_uses_the_whole_sample(stores, client, monkeypatch) -> None:
+    from app.platform.voice import clip_selection
+
+    monkeypatch.setattr(clip_selection, "choose_section_with_services",
+                        lambda *_a, **_k: pytest.fail("the section choice ran with the option off"))
+    store = _JobStore()
+    payload = {"profile_name": "Whole", "sample_audio_base64": base64.b64encode(_wav(seconds=12.0)).decode("ascii"),
+               "source_file_name": "whole.wav", "reference_text": "hello", "quality": "Draft"}
+    job = _job("voice-cloning.create-profile", payload)
+    voice_jobs.execute_voice_studio_job(store, job)
+
+    assert job.id in store.completed, store.failed.get(job.id)
+    voice = next(asset for asset in stores.assets.values() if asset.type == AssetType.VOICE_PROFILE)
+    assert "section_choice" not in voice.metadata
+
+
 # --- Watermarking -----------------------------------------------------------------------------
 
 
@@ -320,9 +370,16 @@ def test_resampling_keeps_length_and_rate_ratio() -> None:
     assert audio_server.resample(samples, 16_000, 16_000) is samples
 
 
-@pytest.mark.parametrize("subtype", ["OPUS", "VORBIS"])
-def test_isolating_ogg_hands_the_separator_a_format_its_wav_stems_can_keep(monkeypatch, subtype: str) -> None:
-    """The separator writes WAV stems with the input's subtype, which WAV cannot hold for Ogg's codecs."""
+@pytest.mark.parametrize(("container", "subtype", "filename"), [
+    ("OGG", "OPUS", "voice-note.ogg"),
+    ("OGG", "VORBIS", "voice-note.ogg"),
+    # libsndfile reports WAV as able to hold MP3, then cannot write it: every MP3 voice sample failed (2026-11-07).
+    ("MP3", "MPEG_LAYER_III", "sample.mp3"),
+])
+def test_isolating_compressed_audio_hands_the_separator_a_format_its_wav_stems_can_keep(
+    monkeypatch, container: str, subtype: str, filename: str,
+) -> None:
+    """The separator writes WAV stems with the input's subtype, which WAV cannot hold for compressed codecs."""
     import soundfile as sf
 
     from services.audio import audio_server
@@ -341,9 +398,9 @@ def test_isolating_ogg_hands_the_separator_a_format_its_wav_stems_can_keep(monke
 
     monkeypatch.setitem(audio_server.SEPARATORS, "roformer", SimpleNamespace(get=_Separator))
     upload = io.BytesIO()
-    sf.write(upload, np.zeros(4_800, dtype=np.float32), 48_000, format="OGG", subtype=subtype)
+    sf.write(upload, np.zeros(4_800, dtype=np.float32), 48_000, format=container, subtype=subtype)
 
-    result = audio_server.isolate(upload.getvalue(), "voice-note.ogg", "roformer")
+    result = audio_server.isolate(upload.getvalue(), filename, "roformer")
 
     assert seen == [(".wav", "PCM_16")]
     assert result["sample_rate"] == 48_000

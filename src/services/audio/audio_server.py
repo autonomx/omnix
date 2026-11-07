@@ -220,7 +220,9 @@ def separation_source(payload: bytes, suffix: str) -> tuple[bytes, str]:
         subtype = sf.info(io.BytesIO(payload)).subtype
     except sf.LibsndfileError:
         return payload, suffix
-    if sf.check_format("WAV", subtype):
+    # Only plain samples go in as they are. libsndfile says WAV can hold MP3 (check_format is True for
+    # MPEG_LAYER_III) but cannot write it, so every MP3 sample failed to isolate (2026-11-07, a voice re-clone).
+    if subtype.startswith("PCM_") or subtype in {"FLOAT", "DOUBLE"}:
         return payload, suffix
     samples, rate = decode(payload)
     return wav_bytes(samples, rate), ".wav"

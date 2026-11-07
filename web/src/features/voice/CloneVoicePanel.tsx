@@ -20,6 +20,7 @@ interface VoiceCloneFormValues {
   generateTranscript: boolean;
   isolateVocals: boolean;
   enhanceSample: boolean;
+  pickBestSection: boolean;
 }
 
 type CloneSourceKind = 'upload' | 'record';
@@ -63,7 +64,7 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
   const formDefaults = (): VoiceCloneFormValues => ({
     providerId: defaults.providerId, profileName: '', language: defaults.language,
     quality: normalizeQuality(defaults.quality), notes: '', referenceText: '', generateTranscript: true,
-    isolateVocals: false, enhanceSample: false,
+    isolateVocals: false, enhanceSample: false, pickBestSection: true,
   });
   const { register, handleSubmit, reset, getValues, setValue, formState: { errors, isDirty } } = useForm<VoiceCloneFormValues>({ defaultValues: formDefaults() });
 
@@ -106,6 +107,7 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
           generate_transcript: values.generateTranscript,
           isolate_vocals: values.isolateVocals,
           enhance_sample: values.enhanceSample,
+          pick_best_section: values.pickBestSection,
           stt_provider_id: defaults.sttProviderId || null,
           source_kind: cloneSource,
           source_file_name: selectedSampleName,
@@ -252,6 +254,7 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
           <label><input type="checkbox" disabled={!audioTools.data?.available} {...register('isolateVocals')} /> Isolate vocals first</label>
           <label><input type="checkbox" disabled={!audioTools.data?.available} {...register('enhanceSample')} /> Clean up noise</label>
           {audioTools.isPending || audioTools.data?.available ? null : <small>{audioTools.data?.detail || 'The audio service did not answer.'} Checking again…</small>}
+          <label title="Tries a few 5 to 9 second sections of the sample on the voice engine and keeps the one whose test lines go silent least. Adds a minute or two; the whole sample is kept too."><input type="checkbox" {...register('pickBestSection')} /> Pick the best section</label>
         </div>
         <label>Reference transcript (optional)<textarea rows={3} placeholder="Paste the exact spoken words, or transcribe the selected sample with STT." {...register('referenceText')} /></label>
         <Group className="voice-transcribe-action" justify="space-between" align="center"><Text size="xs">Use STT now so you can verify the exact words before cloning.</Text><Button type="button" size="sm" variant="outline" loading={transcribing} disabled={!selectedSample || transcribing} onClick={() => transcribeMutation.mutate()}>Generate Transcript</Button></Group>

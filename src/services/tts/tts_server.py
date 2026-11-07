@@ -37,6 +37,7 @@ from app.security.model_service import ModelServiceMiddleware
 from app.providers.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 from app.providers.tts_generation_parameters import generation_overrides
 from services.tts.tts_engine_warm import warm_loaded_engine
+from services.tts.tts_trial_takes import install_trial_takes
 from services.tts.tts_port_preflight import _preflight_tts_port
 from services.tts.tts_requests import (
     MAX_TTS_TEXT_CHARS as MAX_TTS_TEXT_CHARS,
@@ -1090,6 +1091,8 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
         background=BackgroundTask(finalize_stream),
     )
 
+
+install_trial_takes(app, sys.modules[__name__])  # /api/tts/trial_takes: choosing a clone's section
 
 @app.post("/api/tts/voice_clone")
 async def voice_clone(

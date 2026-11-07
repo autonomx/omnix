@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import mimetypes
 import re
 import tempfile
@@ -23,6 +24,8 @@ from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest
 from app.jobs.inline_execution import mark_inline_execution, require_execution_authority
 
 from .script import DEFAULT_UNTAGGED_SPEAKER, MAX_PAUSE_MS, parse_script, script_speakers
+
+logger = logging.getLogger(__name__)
 
 VOICE_STUDIO_JOB_TYPES = {
     "tts.synthesize",
@@ -245,12 +248,24 @@ def execute_clone_profile(job: JobRecord, payload: dict[str, Any], audio_bytes: 
     suffix = cleaned_suffix or suffix
 
     voice_id = _safe_segment(profile_name)
+    section = _best_section(payload, audio_bytes, cleaned_suffix, sample_report)
+    if section is not None and section.audio is not None:
+        # The whole cleaned sample stays, outside the voice folder (the library lists every audio file in it).
+        require_execution_authority(job_store, job.id)
+        _keep_whole_sample(voice_id, audio_bytes)
+        audio_bytes, suffix = section.audio, ".wav"
     clone_dir = _voice_clone_dir()
     clone_dir.mkdir(parents=True, exist_ok=True)
     clone_path = clone_dir / f"{voice_id}{suffix}"
     require_execution_authority(job_store, job.id)
     clone_path.write_bytes(audio_bytes)
-    reference_text, transcript_source, stt_provider = _reference_transcript(payload, clone_path)
+    if section is not None and section.audio is not None:
+        # The section's own words: a transcript of the whole sample would not match the clip.
+        reference_text = section.text
+        transcript_source = "manual" if _text(payload.get("reference_text")) else "stt"
+        stt_provider = "" if transcript_source == "manual" else "timed"
+    else:
+        reference_text, transcript_source, stt_provider = _reference_transcript(payload, clone_path)
     require_execution_authority(job_store, job.id)
     transcript_path = _write_reference_metadata(
         clone_dir=clone_dir,
@@ -296,6 +311,7 @@ def execute_clone_profile(job: JobRecord, payload: dict[str, Any], audio_bytes: 
                 "has_audio": True,
                 "source": "blended" if payload.get("blend") else "designed" if payload.get("design") else "cloned",
                 "sample_check": sample_report.as_metadata(),
+                **({"section_choice": section.report} if section is not None and section.report else {}),
                 **({"sample_preparation": preparation["steps"]} if preparation.get("steps") else {}),
                 **({"design": dict(payload["design"])} if payload.get("design") else {}),
                 **({"blend": dict(payload["blend"])} if payload.get("blend") else {}),
@@ -308,11 +324,44 @@ def execute_clone_profile(job: JobRecord, payload: dict[str, Any], audio_bytes: 
     output_ref = _asset_output_ref(asset, title=profile_name)
     output_ref["sample_check"] = sample_report.as_metadata()
     warnings = " ".join(sample_report.warnings)
+    chosen = section.report.get("chosen") if section is not None and section.audio is not None else None
+    picked = (
+        f". Picked the best {chosen['end'] - chosen['start']:.1f} s section of {section.report['sample_seconds']:.1f} s"
+        f" ({chosen['silent']} of {chosen['takes']} test takes silent)"
+        if chosen else ""
+    )
+    if chosen:
+        output_ref["section_choice"] = section.report
     return {
-        "content": f"Voice clone '{profile_name}' saved to {clone_path}" + (f". {warnings}" if warnings else ""),
+        "content": f"Voice clone '{profile_name}' saved to {clone_path}{picked}" + (f". {warnings}" if warnings else ""),
         "log_message": "Voice clone profile stored locally",
         "output_refs": [output_ref],
     }
+
+
+def _best_section(payload: dict[str, Any], audio: bytes, cleaned_suffix: str | None, report: Any) -> Any:
+    """The clone form's "Pick the best section" (on unless turned off): None when it does not apply."""
+    if not payload.get("pick_best_section") or cleaned_suffix != ".wav" or not getattr(report, "checked", False):
+        return None
+    from .clip_selection import choose_section_with_services
+
+    try:
+        choice = choose_section_with_services(
+            audio, manual_text=_text(payload.get("reference_text")), language=_text(payload.get("language")),
+        )
+    except Exception as exc:  # noqa: BLE001 - the whole sample still clones
+        logger.warning("Clone section choice failed", exc_info=True)
+        report.warnings.append(f"The best section could not be picked ({type(exc).__name__}); the whole sample is used.")
+        return None
+    if choice.warning:
+        report.warnings.append(choice.warning)
+    return choice
+
+
+def _keep_whole_sample(voice_id: str, audio: bytes) -> None:
+    folder = resources_data_root() / "voice_clone_sources"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{voice_id}.wav").write_bytes(audio)
 
 
 def _prepare_sample(audio: bytes, filename: str, payload: dict[str, Any]) -> dict[str, Any]:
