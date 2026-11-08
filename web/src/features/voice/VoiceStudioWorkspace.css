@@ -39,6 +39,12 @@
   .voice-generate-row { align-items: center; display: flex; gap: 0.75rem; justify-content: flex-end; }
   .generate-speech-button { min-height: 2.75rem; padding-inline: 1.4rem; }
   .voice-success-note { background: color-mix(in srgb, var(--c-green-720) 12%, transparent); border: 1px solid color-mix(in srgb, var(--c-green-720) 18%, transparent); border-radius: 0.35rem; color: var(--fg-green-870); font-size: 0.78rem; padding: 0.45rem 0.55rem; }
+  .voice-render-progress { border: 1px solid color-mix(in srgb, var(--c-blue-710) 14%, transparent); border-radius: 0.35rem; display: grid; gap: 0.4rem; padding: 0.55rem 0.65rem; }
+  .voice-render-progress-head { align-items: baseline; display: flex; font-size: 0.8rem; gap: 0.75rem; justify-content: space-between; }
+  .voice-render-progress-head b { font-variant-numeric: tabular-nums; }
+  .voice-render-progress-track { background: color-mix(in srgb, var(--c-blue-710) 18%, transparent); border-radius: 999px; height: 0.5rem; overflow: hidden; }
+  .voice-render-progress-track span { background: linear-gradient(90deg, var(--c-sky-800), var(--accent-indigo-600)); display: block; height: 100%; transition: width 0.3s linear; }
+  @media (prefers-reduced-motion: reduce) { .voice-render-progress-track span { transition: none; } }
 
   /* Inspector. */
   .voice-inspector { align-content: start; display: grid; gap: 0.2rem; padding: 0.4rem 0.9rem; }

@@ -20,7 +20,7 @@ from app.providers.tts_service import voice_stem
 from app.persistence.blob_store import default_blob_store
 from app.runtime.paths import resources_data_root
 
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
+from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobProgress, JobRecord
 from app.jobs.inline_execution import mark_inline_execution, require_execution_authority
 
 from .script import DEFAULT_UNTAGGED_SPEAKER, MAX_PAUSE_MS, parse_script, script_speakers
@@ -597,8 +597,12 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
 
     spans: list[AudioSpan] = []
     segment_outputs: list[dict[str, Any]] = []
+    # One step per line, then one for assembling and saving the take.
+    steps = len(segments) + 1
     for position, segment in enumerate(segments):
         speaker_name = _text(segment.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
+        _report_tts_progress(job_store, job, position, steps,
+                             f"Line {position + 1} of {len(segments)} ({speaker_name})")
         assignment = assignments_by_speaker.get(speaker_name.casefold(), {})
         voice_id = _text(assignment.get("voice_id")) or primary_voice
         generated_speaker = voice_stem(voice_id) or speaker_name or default_speaker
@@ -656,6 +660,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
 
     if not spans:
         raise ValueError("No TTS audio segments were generated")
+    _report_tts_progress(job_store, job, len(segments), steps, "Assembling the take")
     # Pauses and per-speaker loudness, the same assembly audiobook chapters use.
     assembled = assemble_chapter(spans, policy=PausePolicy())
     raw_settings = payload.get("output_settings")
@@ -729,6 +734,17 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
         "log_message": "Voice Studio speech generated per script segment and saved",
         "output_refs": [output_ref],
     }
+
+
+def _report_tts_progress(job_store: Any, job: JobRecord, done: int, total: int, message: str) -> None:
+    """How far a render is, for Voice Studio's progress bar; best effort, never fails the render."""
+    update = getattr(job_store, "update_progress", None)
+    if update is None:
+        return
+    try:
+        update(job.id, JobProgress(current=done, total=max(total, 1), message=message))
+    except Exception:
+        logger.debug("Could not report render progress of %s", job.id, exc_info=True)
 
 
 def _volume_db(output_settings: dict[str, Any], neutral: float) -> float:

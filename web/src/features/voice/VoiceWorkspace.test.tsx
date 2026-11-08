@@ -127,7 +127,10 @@ describe('VoiceWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
     expect(await screen.findByText('Generating new speech… · 1 speaker')).toBeInTheDocument();
+    expect(await screen.findByRole('progressbar', { name: 'Speech generation progress' })).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.queryByText(/TTS job queued/)).not.toBeInTheDocument();
     expect(await screen.findByText('New speech · 1 speaker', {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar', { name: 'Speech generation progress' })).not.toBeInTheDocument();
     expect(document.querySelector('audio')).toHaveAttribute('src', '/api/assets/audio%3Anew/audio');
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => requestPath(input as RequestInfo | URL) === '/api/voice/assets/audio%3Anew/peaks')).toBe(true));
   });

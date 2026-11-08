@@ -211,6 +211,41 @@ def test_a_render_uses_pauses_delivery_and_effects_on_the_whole_take(monkeypatch
     assert metadata["duration"] > 0.5 + 0.6 + 0.5 + 0.3
 
 
+def test_a_render_reports_progress_line_by_line_then_assembly(monkeypatch, stores) -> None:
+    class _ProgressStore(_JobStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.progress: list[tuple[float, int, str | None]] = []
+
+        def update_progress(self, job_id: str, progress: Any) -> None:
+            self.progress.append((progress.current, progress.total, progress.message))
+
+    engine = _Engine("faster-qwen3-tts")
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    store = _ProgressStore()
+    job = _job("tts.multi_speaker_synthesize", {"text": "dave: one\nbob: two"})
+    voice_jobs.execute_voice_studio_job(store, job)
+    assert job.id in store.completed, store.failed.get(job.id)
+    assert store.progress == [
+        (0, 3, "Line 1 of 2 (dave)"),
+        (1, 3, "Line 2 of 2 (bob)"),
+        (2, 3, "Assembling the take"),
+    ]
+
+
+def test_a_failing_progress_report_never_fails_the_render(monkeypatch, stores) -> None:
+    class _BrokenProgressStore(_JobStore):
+        def update_progress(self, job_id: str, progress: Any) -> None:
+            raise RuntimeError("database away")
+
+    engine = _Engine("faster-qwen3-tts")
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    store = _BrokenProgressStore()
+    job = _job("tts.synthesize", {"text": "hi"})
+    voice_jobs.execute_voice_studio_job(store, job)
+    assert job.id in store.completed, store.failed.get(job.id)
+
+
 def test_qwen_never_receives_a_delivery_instruction(monkeypatch, stores) -> None:
     qwen = _Engine("faster-qwen3-tts")
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: qwen)

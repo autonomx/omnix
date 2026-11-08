@@ -17,6 +17,7 @@ import { DesignTool } from './DesignTool';
 import { JobsTray } from './JobsTray';
 import { firstResultAsset } from './resultList';
 import { RenderCheckPanel } from './RenderCheckPanel';
+import { RenderProgress } from './RenderProgress';
 import { ScriptCast } from './ScriptCast';
 import { parseScriptSegments, parseScriptSpeakers, type ScriptSegmentRow, type ScriptSpeakerRow } from './scriptLines';
 import { rememberTool, rememberedTool, shippedTools, type StudioToolId } from './studioTools';
@@ -461,7 +462,10 @@ ${text}` : text))} />
                   <Button className="generate-speech-button" type="button" loading={createJobMutation.isPending} onClick={() => createJobMutation.mutate(undefined)}>Generate Speech</Button>
                 </div>
                 {message ? <div className="voice-success-note" role="status">{message}</div> : null}
-                <FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="TTS request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.status === 'failed' ? undefined : createJobMutation.data?.id} pendingMessage="Queueing TTS job…" successPrefix="TTS job queued" />
+                {pendingPlaybackJobId ? (
+                  <RenderProgress key={pendingPlaybackJobId} job={pendingPlaybackJobQuery.data} estimatedSeconds={estimateDurationFromText(scriptText)} />
+                ) : null}
+                <FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="TTS request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} pendingMessage="Queueing TTS job…" successPrefix="TTS job queued" />
                 <FeatureValidationMessage show={Boolean(generationFailure)} message={generationFailure} />
                 {currentOutput?.assetId ? <RenderCheckPanel key={currentOutput.assetId} assetId={currentOutput.assetId} /> : null}
               </section>
