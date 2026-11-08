@@ -15,6 +15,7 @@ import {
 } from './live-chat-fullscreen-controller';
 import { LiveConversationControls } from './LiveConversationControls';
 import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPanel';
+import { LiveMuteButton } from './LiveMuteButton';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
 import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 import './LiveChatPanel.css';
@@ -108,6 +109,7 @@ export function LiveChatPanel({ sessionId, onSessionResolved, onToggleCall }: Li
             >
               Fullscreen
             </button>
+            <LiveMuteButton className="live-chat-secondary-action" />
             <button type="button" onClick={toggleCall}>{snapshot.connected ? 'End Call' : 'Start Call'}</button>
           </div>
         </header>

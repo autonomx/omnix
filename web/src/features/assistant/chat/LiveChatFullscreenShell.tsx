@@ -14,6 +14,7 @@ import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
 import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar } from './liveCharacterAvatarBridge';
+import { LiveMuteButton } from './LiveMuteButton';
 import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
@@ -37,6 +38,18 @@ export type LiveChatFullscreenShellProps = {
   /** Starts or ends the live call. */
   onToggleCall: () => void;
 };
+
+/** The call card's line about the microphone. */
+function microphoneStatusLabel(
+  snapshot: ReturnType<typeof selectLiveChatSnapshot>,
+  conversation: ReturnType<typeof useLiveConversationState>['conversation'],
+  muted: boolean,
+): string {
+  if (!snapshot.connected) return 'Microphone offline';
+  if (muted) return 'Microphone muted';
+  if (conversation.assistantTurn === 'speaking' && snapshot.duplexMode === 'half_duplex') return 'Microphone paused during playback';
+  return conversation.userTurn === 'speaking' ? 'Hearing you' : 'Microphone listening';
+}
 
 export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall }: LiveChatFullscreenShellProps) {
   const fullscreen = useLiveChatFullscreenState();
@@ -83,13 +96,7 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
 
   if (!fullscreen.immersive || typeof document === 'undefined') return null;
 
-  const microphoneStatus = !snapshot.connected
-    ? 'Microphone offline'
-    : runtime.conversation.assistantTurn === 'speaking' && snapshot.duplexMode === 'half_duplex'
-      ? 'Microphone paused during playback'
-      : runtime.conversation.userTurn === 'speaking'
-        ? 'Hearing you'
-        : 'Microphone listening';
+  const microphoneStatus = microphoneStatusLabel(snapshot, runtime.conversation, presentation.micMuted);
   const duplexLabel = snapshot.duplexMode === 'echo_aware' ? 'Echo-aware' : 'Safe half-duplex';
   const displayIdentity = characterRuntime?.display_name?.trim() || snapshot.identity;
 
@@ -172,10 +179,13 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
               <strong>Live voice</strong>
               <span>{microphoneStatus} · {duplexLabel}</span>
             </div>
-            <button className={snapshot.connected ? 'danger' : undefined} type="button" onClick={toggleCall}>
-              <span aria-hidden="true">{snapshot.connected ? '■' : '●'}</span>
-              {snapshot.connected ? 'End voice chat' : 'Start voice chat'}
-            </button>
+            <div className="live-chat-fullscreen-call-buttons">
+              <LiveMuteButton />
+              <button className={snapshot.connected ? 'danger' : undefined} type="button" onClick={toggleCall}>
+                <span aria-hidden="true">{snapshot.connected ? '■' : '●'}</span>
+                {snapshot.connected ? 'End voice chat' : 'Start voice chat'}
+              </button>
+            </div>
             <small>{snapshot.state}. You can interrupt naturally when echo-aware mode is active.</small>
           </section>
 

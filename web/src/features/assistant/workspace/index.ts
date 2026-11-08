@@ -349,7 +349,7 @@ export type {
 export { useAvatarPresence } from './live-avatar-presence';
 export type { AvatarPresence, AvatarPresenceCue } from './live-avatar-presence';
 export { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCaptureLabels, useLiveCallPresentation } from './live-call-presentation-store';
-export { isLiveVoiceControllerInstalled, startLiveVoiceCall, toggleLiveVoiceCall } from './live-voice-controller';
+export { isLiveVoiceControllerInstalled, setLiveVoiceMuted, startLiveVoiceCall, toggleLiveVoiceCall } from './live-voice-controller';
 export { isLiveVoiceUnifiedAudioInstalled } from './live-voice-unified-audio-controller';
 export { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 export { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';

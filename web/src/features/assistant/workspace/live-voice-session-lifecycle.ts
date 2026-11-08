@@ -1,4 +1,5 @@
 /** Ending a capture call and resetting its turn state. */
+import { liveCallPresentationStore } from './live-call-presentation-store';
 import { liveConversationStore } from './live-conversation-store';
 import { reduceUserFloor } from './live-voice-floor-manager';
 import { type StreamingSttConnectionStatus } from './live-voice-websocket';
@@ -48,6 +49,7 @@ export function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnect
   }
   setPanelStatus(card, nextStatus);
   resetVoiceVisualizer(card);
+  liveCallPresentationStore.update({ micMuted: false });
 }
 
 export function cleanupSession(session: LiveVoiceSession): void {

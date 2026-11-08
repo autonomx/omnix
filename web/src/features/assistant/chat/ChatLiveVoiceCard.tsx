@@ -20,6 +20,7 @@ import { Live2DMotionControl } from './Live2DMotionControl';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { CapabilityNotice } from '../../setup';
 import { LiveCallVisual } from './LiveCallVisual';
+import { LiveMuteButton } from './LiveMuteButton';
 import { LivePortraitLoadControl } from './portrait/LivePortraitLoadControl';
 
 type ChatLiveVoiceCardProps = {
@@ -79,7 +80,7 @@ export function ChatLiveVoiceCard({
   const captureLabels = livePresentation.captureOwned ? liveCaptureLabels(livePresentation.captureStatus) : null;
   const liveVoiceState = captureLabels ? captureLabels.state : liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
   const liveConnectionLabel = captureLabels ? captureLabels.connection : liveVoiceActive ? 'Connected' : 'Disconnected';
-  const liveInputLabel = captureLabels ? (livePresentation.hearing ? 'Hearing you' : captureLabels.input) : liveVoiceActive ? 'Listening' : 'Idle';
+  const liveInputLabel = captureLabels ? (livePresentation.micMuted && livePresentation.captureActive ? 'Muted' : livePresentation.hearing ? 'Hearing you' : captureLabels.input) : liveVoiceActive ? 'Listening' : 'Idle';
   const liveVoiceInputMode = livePresentation.captureOwned
     ? livePresentation.hearing ? 'active' : livePresentation.captureStatus === 'connected' ? 'listening' : livePresentation.captureStatus
     : undefined;
@@ -113,7 +114,7 @@ export function ChatLiveVoiceCard({
       <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
       <CapabilityNotice capability="live_stt" purpose="Live voice" />
       <CapabilityNotice capability="tts" purpose="Spoken replies" />
-      <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={onClear}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={onToggleCall}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><SendVoiceTextButton control={control} draft={liveDraftText} pending={sendPending} onSend={onSendVoiceText} /></div>
+      <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={onClear}>Clear</button><LiveMuteButton /><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={onToggleCall}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><SendVoiceTextButton control={control} draft={liveDraftText} pending={sendPending} onSend={onSendVoiceText} /></div>
       <div className="assistant-voice-transcript" ref={voiceTranscriptRef} role="region" aria-label="Live voice transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={onClear}>Clear</button></div>{transcriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{chatMessageText(message)}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!transcriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
       <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => onAutoSpeakChange(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
       <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>

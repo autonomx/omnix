@@ -29,6 +29,8 @@ export type LiveCallPresentationState = {
   taskInstruction: string;
   /** The unified audio path's latest status line. */
   streamStatus: string | null;
+  /** The person muted their microphone: the call hears silence until they unmute. A new call starts unmuted. */
+  micMuted: boolean;
 };
 
 export const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
@@ -58,6 +60,7 @@ function initialState(): LiveCallPresentationState {
     autoSpeak: false,
     taskInstruction: typeof window === 'undefined' ? '' : storedTaskInstruction(),
     streamStatus: null,
+    micMuted: false,
   };
 }
 

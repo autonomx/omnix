@@ -402,17 +402,41 @@
     padding: 0.75rem;
   }
 
-  .live-chat-fullscreen-call-card > div {
+  .live-chat-fullscreen-call-card > div:first-child {
     display: grid;
     gap: 0.18rem;
   }
 
-  .live-chat-fullscreen-call-card > div span {
+  .live-chat-fullscreen-call-card > div:first-child span {
     color: var(--immersive-muted);
     font-size: 0.7rem;
   }
 
-  .live-chat-fullscreen-call-card > button {
+  .live-chat-fullscreen-call-buttons {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .live-chat-fullscreen-call-buttons > button.live-mute-button {
+    background: var(--immersive-panel-soft);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-810) 24%, transparent);
+    color: inherit;
+    padding: 0 1rem;
+  }
+
+  .live-chat-fullscreen-call-buttons > button.live-mute-button.muted {
+    background: linear-gradient(100deg, var(--c-red-640), var(--c-red-640));
+    border-color: transparent;
+    color: var(--c-neutral-1000);
+  }
+
+  .live-chat-fullscreen-call-buttons > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .live-chat-fullscreen-call-buttons > button {
     align-items: center;
     background: linear-gradient(100deg, var(--c-pink-600), var(--accent-purple-500));
     border: 0;
@@ -426,7 +450,7 @@
     min-height: 2.75rem;
   }
 
-  .live-chat-fullscreen-call-card > button.danger {
+  .live-chat-fullscreen-call-buttons > button.danger {
     background: linear-gradient(100deg, var(--c-pink-530), var(--accent-purple-480));
   }
 

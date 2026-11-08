@@ -237,7 +237,7 @@ function evaluateInitiative(): void {
     userRequestedTime: THINKING_PATTERN.test(transcript),
     sensitiveDictation: SENSITIVE_PATTERN.test(transcript),
     tabVisible: document.visibilityState === 'visible',
-    muted: false,
+    muted: liveCallPresentationStore.getState().micMuted,
     requestInFlight: Boolean(requestController || pending),
     hasMeaningfulReason: Boolean(reason),
     previousPromptIgnored,

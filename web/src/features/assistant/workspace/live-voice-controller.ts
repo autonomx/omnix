@@ -74,6 +74,23 @@ export function startLiveVoiceCall(card: HTMLElement): void {
   if (!isCardStartingOrActive(card)) void startLiveVoice(card);
 }
 
+/**
+ * Mutes or unmutes the call's microphone, as a call app's mute button does. Muted, the capture keeps running but the
+ * call is sent silence, so nothing said reaches speech recognition; a turn under way ends as if the person stopped.
+ */
+export function setLiveVoiceMuted(muted: boolean): void {
+  if (liveCallPresentationStore.getState().micMuted === muted) return;
+  liveCallPresentationStore.update({ micMuted: muted, ...(muted ? { hearing: false } : {}) });
+  controller.activeSession?.reporter.record('live_call_microphone', { muted }, 'live_voice_controller');
+}
+
+/** Hands a microphone frame to the card's running call; muted, the call is handed silence of the same length. */
+export function deliverCaptureFrame(card: HTMLElement, audio: Float32Array): void {
+  const session = controller.activeSession;
+  if (session?.card !== card) return;
+  processAudioFrame(session, liveCallPresentationStore.getState().micMuted ? new Float32Array(audio.length) : audio);
+}
+
 /** Starts or ends capture for the call card. */
 export function toggleLiveVoiceCall(card: HTMLElement): void {
   toggleLiveVoice(card);
@@ -89,6 +106,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
   if (controller.activeSession) stopLiveVoice(controller.activeSession.card, 'idle');
   const token = ++controller.startToken;
   controller.pendingStart = { card, token };
+  liveCallPresentationStore.update({ micMuted: false });
   setPanelStatus(card, 'connecting');
   emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, {
     token,
@@ -157,10 +175,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       onError: (message) => showLiveVoiceError(card, message),
     });
     const shell = createLiveVoiceSessionShell({ card, chatSessionId: sessionId, stream, audioContext, source, client, reporter, sttAuthority });
-    audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => {
-      const session = controller.activeSession;
-      if (session?.card === card) processAudioFrame(session, audio);
-    });
+    audioPipeline = await createLiveVoiceAudioPipeline(audioContext, (audio) => deliverCaptureFrame(card, audio));
     source.connect(audioPipeline.node);
     await ensureAudioContextRunning(audioContext);
     const session: LiveVoiceSession = { ...shell, audioPipeline };

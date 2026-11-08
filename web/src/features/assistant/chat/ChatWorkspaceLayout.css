@@ -246,6 +246,11 @@
     border-color: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
   }
 
+  .assistant-voice-controls .live-mute-button.muted {
+    background: color-mix(in srgb, var(--c-red-640) 22%, transparent);
+    border-color: color-mix(in srgb, var(--c-red-640) 65%, transparent);
+  }
+
   .assistant-voice-transcript {
     border-top: 1px solid var(--omnix-border);
     display: grid;
