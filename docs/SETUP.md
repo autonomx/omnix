@@ -436,7 +436,7 @@ Only set `HERMES_ENABLED=true` after the sidecar is reachable. See [HERMES_SIDEC
 `python -m app.composition.launcher start` starts Omnix on every platform; `start_all.bat`
 and `start_all.sh` are thin wrappers around it. The launcher:
 
-- refuses to start while another launcher answers on port `5055`;
+- refuses to start while another launcher is running or still starting;
 - checks that the TTS and STT runtimes run Python 3.11 (a missing one is a
   warning: that voice service does not start);
 - sets the service URLs and the live-agent/Hermes, Kasa, image-service and

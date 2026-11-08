@@ -395,7 +395,7 @@ hermes model</code></pre></div>
 <h2 id="11-launcher-dashboard">11. Launcher dashboard</h2>
 <p><code>python -m app.composition.launcher start</code> starts Omnix on every platform; <code>start_all.bat</code> and <code>start_all.sh</code> are thin wrappers around it. The launcher:</p>
 <ul>
-<li>refuses to start while another launcher answers on port <code>5055</code>;</li>
+<li>refuses to start while another launcher is running or still starting;</li>
 <li>checks that the TTS and STT runtimes run Python 3.11 (a missing one is a</li>
 <p>warning: that voice service does not start);</p>
 <li>sets the service URLs and the live-agent/Hermes, Kasa, image-service and</li>

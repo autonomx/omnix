@@ -99,6 +99,7 @@ def test_a_missing_voice_runtime_warns_and_a_wrong_python_fails(tmp_path) -> Non
 @pytest.fixture
 def steps(monkeypatch):
     calls: list[str] = []
+    monkeypatch.setattr(startup, "claim_launcher", lambda _root: object())
     monkeypatch.setattr(startup, "launcher_already_running", lambda _port=5055: False)
     monkeypatch.setattr(startup, "interpreter_problems", lambda _config: ([], []))
     monkeypatch.setattr(startup, "apply_launcher_environment", lambda _root: {})
@@ -142,6 +143,24 @@ def test_a_second_launcher_is_refused_before_anything_starts(steps, monkeypatch)
     monkeypatch.setattr(startup, "launcher_already_running", lambda _port=5055: True)
     assert launcher_main.start(_args()) == 1
     assert steps == []
+
+
+def test_a_launcher_still_starting_refuses_a_second_one(steps, monkeypatch) -> None:
+    # 2026-11-08: the dashboard port opens only after startup, so a second launcher passed the
+    # port check 17 s into the first one's startup and stopped its gateway as a "conflicting" process.
+    monkeypatch.setattr(startup, "claim_launcher", lambda _root: None)
+    assert launcher_main.start(_args()) == 1
+    assert steps == []
+
+
+def test_the_launcher_lock_has_one_holder_and_is_released(tmp_path) -> None:
+    first = startup.claim_launcher(tmp_path)
+    assert first is not None
+    assert startup.claim_launcher(tmp_path) is None
+    first.close()
+    again = startup.claim_launcher(tmp_path)
+    assert again is not None
+    again.close()
 
 
 def test_the_wrappers_only_call_the_python_launcher() -> None:

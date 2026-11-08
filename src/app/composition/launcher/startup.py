@@ -7,7 +7,7 @@ holds the launcher's defaults and checks:
 
 - the service environment: fixed local service URLs, then defaults an
   operator may override by setting the variable first;
-- a second launcher refuses to start while the dashboard port answers;
+- a second launcher refuses to start, from the first one's first moment;
 - the TTS and STT interpreters exist and run Python 3.11;
 - an existing PostgreSQL container is started and waited for until healthy.
 """
@@ -20,6 +20,7 @@ import subprocess
 import time
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
+from typing import BinaryIO
 
 from app.config.env import environment
 
@@ -107,6 +108,33 @@ def apply_launcher_environment(root: Path, env: MutableMapping[str, str] | None 
                     env["PATH"] = str(candidate.parent) + os.pathsep + env.get("PATH", "")
                 break
     return env
+
+
+def claim_launcher(root: Path) -> BinaryIO | None:
+    """Take the one-launcher lock, or ``None`` when another launcher holds it.
+
+    The caller keeps the returned file open for as long as it runs; the system
+    releases the lock when the process ends, however it ends. The dashboard port
+    cannot answer this alone: it opens only after startup, which waits for the
+    gateway, and a second launcher in that gap evicts the first one's services.
+    """
+    path = root / "resources" / "data" / "launcher.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a+b")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
 
 
 def launcher_already_running(port: int = 5055) -> bool:

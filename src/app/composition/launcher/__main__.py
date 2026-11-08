@@ -95,6 +95,7 @@ def start(args: argparse.Namespace) -> int:
         WEB_URL,
         apply_launcher_environment,
         banner,
+        claim_launcher,
         ensure_postgres_container,
         interpreter_problems,
         launcher_already_running,
@@ -103,8 +104,10 @@ def start(args: argparse.Namespace) -> int:
     if sys.version_info[:2] != (3, 11):
         return _fail(f"Omnix requires Python 3.11; this is {sys.version.split()[0]} ({sys.executable}). Run setup.")
     serving = not (args.postgres_only or args.check)
-    if serving and launcher_already_running(LAUNCHER_PORT):
-        return _fail(f"a launcher is already listening on {LAUNCHER_URL}. Use the existing dashboard or stop it first.")
+    # Held until this process ends: the local keeps the lock's file open while the dashboard serves below.
+    launcher_lock = claim_launcher(ROOT) if serving else None
+    if serving and (launcher_lock is None or launcher_already_running(LAUNCHER_PORT)):
+        return _fail(f"a launcher is already running. Use its dashboard at {LAUNCHER_URL} (it opens once its services have started) or stop it first.")
     if not args.postgres_only:
         errors, warnings = interpreter_problems(load_launcher_config(ROOT))
         for warning in warnings:

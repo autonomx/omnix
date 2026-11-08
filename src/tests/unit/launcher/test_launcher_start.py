@@ -48,6 +48,7 @@ def test_start_stops_when_migrations_fail(monkeypatch):
 
     monkeypatch.setattr(launcher, "_module", fake_module)
     monkeypatch.setattr(sys, "version_info", (3, 11, 0))
+    monkeypatch.setattr(startup, "claim_launcher", lambda _root: object())
     monkeypatch.setattr(startup, "launcher_already_running", lambda _port=5055: False)
     monkeypatch.setattr(startup, "interpreter_problems", lambda _config: ([], []))
     monkeypatch.setattr(startup, "apply_launcher_environment", lambda _root: {})
