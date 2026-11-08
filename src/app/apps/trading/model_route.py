@@ -27,16 +27,14 @@ class TradingModel:
 def trading_model() -> TradingModel:
     """The Trading model setting; the default provider when it is unset or cannot be read."""
     try:
-        from app.settings.effective_defaults import load_effective_profile, setting_text
+        from app.settings.effective_defaults import load_effective_profile, route_model_name, setting_text
 
         row = load_effective_profile().global_settings.routing.task_overrides.get(TRADING_ROUTE_KEY) or {}
         provider = setting_text(row.get("providerId") or row.get("provider_id")).removeprefix("llm:")
-        model = setting_text(row.get("modelId") or row.get("model_id"))
+        model = route_model_name(row.get("modelId") or row.get("model_id"))
     except Exception:  # noqa: BLE001 - research keeps working on the default provider
         logger.warning("trading_model_setting_unreadable", exc_info=True)
         return TradingModel()
-    if model.startswith("llm:"):  # the settings list offers facade ids: "llm:lmstudio:<model>"
-        model = model.split(":", 2)[-1]
     return TradingModel(provider or None, model or None)
 
 

@@ -53,6 +53,15 @@ def test_a_chosen_provider_and_model_serve_both_memory_jobs(monkeypatch, provide
     assert reader.model_id == "gpt-5.6-sol" and proposer.model == "gpt-5.6-sol"
 
 
+def test_a_model_chosen_from_the_settings_list_reaches_the_provider_by_its_own_name(monkeypatch, providers) -> None:
+    _setting(monkeypatch, {"providerId": "claude_cli", "modelId": "llm:claude_cli:claude-sonnet-5-5"})
+
+    reader = conversation_reading.default_conversation_reader()
+    proposer = structured_provider.default_structured_proposal_provider()
+
+    assert reader.model_id == "claude-sonnet-5-5" and proposer.model == "claude-sonnet-5-5"
+
+
 def test_a_chosen_provider_without_a_model_uses_that_providers_own_choice(monkeypatch, providers) -> None:
     _setting(monkeypatch, {"providerId": "lmstudio", "modelId": ""})
 

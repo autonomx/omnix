@@ -51,6 +51,12 @@ def setting_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def route_model_name(value: Any) -> str:
+    """The model name a provider expects, from a routing override's model: the settings list stores ``llm:<provider>:<model>``."""
+    text = setting_text(value)
+    return text.split(":", 2)[-1] if text.startswith("llm:") else text
+
+
 def _missing(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
