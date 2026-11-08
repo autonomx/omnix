@@ -132,6 +132,23 @@ def test_lmstudio_uses_projected_json_schema_and_returns_typed_value() -> None:
     assert gateway.last_diagnostics.selected_mode is StructuredMode.JSON_SCHEMA
 
 
+def test_a_contract_that_needs_no_thinking_asks_only_providers_that_can_answer_without_it() -> None:
+    import dataclasses
+
+    quick = dataclasses.replace(EXAMPLE_CONTRACT, thinking=False)
+    payload = {"name": "alpha", "count": 3, "enabled": True, "tags": []}
+    claude = FakeProvider([_response(payload), _response(payload)], provider_name="claude_cli")
+    lmstudio = FakeProvider([_response(payload)])
+
+    StructuredOutputGateway(claude).generate(_messages(), contract=quick)
+    StructuredOutputGateway(claude).generate(_messages(), contract=EXAMPLE_CONTRACT)
+    StructuredOutputGateway(lmstudio).generate(_messages(), contract=quick)
+
+    assert claude.calls[0]["thinking"] is False
+    assert "thinking" not in claude.calls[1]  # contracts think unless they say otherwise
+    assert "thinking" not in lmstudio.calls[0]  # a provider that cannot is never sent the option
+
+
 def test_openai_compatible_profile_prefers_json_object() -> None:
     provider = FakeProvider(
         [_response({"name": "remote", "count": 1, "enabled": True, "tags": []})],

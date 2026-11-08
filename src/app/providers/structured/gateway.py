@@ -153,6 +153,12 @@ def _provider_capabilities(provider: Any, model: str) -> StructuredCapabilities:
     )
 
 
+def _answers_without_thinking(provider: Any) -> bool:
+    from app.providers.catalog import THINKING_OFF, provider_supports
+
+    return provider_supports(provider, THINKING_OFF)
+
+
 def _response_options(
     contract: StructuredContract[Any],
     *,
@@ -442,6 +448,8 @@ class StructuredOutputGateway(Generic[T]):
             options.setdefault("temperature", contract.temperature)
             if contract.max_tokens is not None:
                 options.setdefault("max_tokens", contract.max_tokens)
+            if not contract.thinking and _answers_without_thinking(self.provider):
+                options.setdefault("thinking", False)
             projected_schema = project_provider_schema(
                 _output_schema(contract.output_model),
                 mode=mode,

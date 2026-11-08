@@ -251,6 +251,23 @@ def test_a_spoken_turn_answers_without_thinking_and_no_other_call_does(provider)
     assert spoken["command"][spoken["command"].index("--effort") + 1] == "high"
 
 
+def test_a_call_that_asks_for_no_thinking_answers_without_it(pooled) -> None:
+    provider, pool = pooled
+    messages = [ChatMessage("system", "Classify."), ChatMessage("user", "weather?")]
+
+    provider.chat_completion(messages)  # thinks, and leaves a process of its kind waiting
+    provider.chat_completion(messages, thinking=False)  # a different kind: never the waiting thinking one
+
+    answered = [call for call in _FakePopen.calls if call.get("prompt") == "weather?"]
+    assert len(answered) == 2
+    assert "MAX_THINKING_TOKENS" not in answered[0]["env"]
+    assert answered[1]["env"]["MAX_THINKING_TOKENS"] == "0"
+    assert module._call_kind("c", "m", "", "s", None) != module._call_kind("c", "m", "", "s", None, thinking=False)
+    # A spoken turn's kind is unchanged by the option: its waiting process still matches.
+    assert module._call_kind("c", "m", "", "s", None, True) == module._call_kind("c", "m", "", "s", None, True, False)
+    pool.close()
+
+
 def test_every_turn_of_a_call_takes_a_waiting_process_though_its_context_changes(pooled) -> None:
     provider, pool = pooled
     def turn(memory: str, text: str) -> list[ChatMessage]:

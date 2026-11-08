@@ -12,7 +12,8 @@ streaming and single responses. A JSON Schema response format is passed to the
 CLI's own ``--json-schema`` validation as well as to the prompt.
 
 A spoken turn (``live_turn=True``) answers without thinking first, whatever the
-model and effort, and its call keeps a process ready: ``warm_live_turn`` starts
+model and effort, as does a call made with ``thinking=False`` (a quick structured
+classification, say: ``catalog.THINKING_OFF``). A spoken turn's call keeps a process ready: ``warm_live_turn`` starts
 the first one, and a system message that changes between turns (``per_turn``)
 goes with the turn, so every turn of a call can take the waiting process.
 """
@@ -84,9 +85,13 @@ class ClaudeCliTimeout(ProviderError):
 
 def _call_kind(
     executable: str, model: str, effort: str, system: str, schema: dict[str, Any] | None, live_turn: bool = False,
+    thinking: bool = True,
 ) -> str:
     """Calls of one kind start the same process: the same CLI, model, effort, system prompt, schema and thinking."""
-    material = json.dumps([executable, model, effort, system, schema, live_turn], sort_keys=True, ensure_ascii=False)
+    material = [executable, model, effort, system, schema, live_turn]
+    if not thinking and not live_turn:  # a spoken turn never thinks: its kind stays as it was
+        material.append("no_thinking")
+    material = json.dumps(material, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -389,7 +394,7 @@ class ClaudeCliProvider(BaseProvider):
         schema = _response_schema(kwargs.get("response_format"))
         events = self._run(
             selected_model, system, prompt, timeout=timeout, owner=current_turn_owner(), schema=schema,
-            live_turn=bool(kwargs.get("live_turn")),
+            live_turn=bool(kwargs.get("live_turn")), thinking=kwargs.get("thinking") is not False,
         )
         if stream:
             def traced() -> Iterator[ChatResponse]:
@@ -456,12 +461,14 @@ class ClaudeCliProvider(BaseProvider):
 
     def _spawn(
         self, executable: str, model: str, system: str, schema: dict[str, Any] | None, *, live_turn: bool = False,
+        thinking: bool = True,
     ) -> tuple[subprocess.Popen[str], str]:
         """Start one ``claude -p`` in its own empty working directory; it waits for its prompt on stdin."""
         workdir = tempfile.mkdtemp(prefix="omnix-claude-")
         system_file = Path(workdir) / "system.txt"
         system_file.write_text(system or "You are a helpful assistant.", encoding="utf-8")
-        environment = {**self._environment(), **_LIVE_TURN_ENVIRONMENT} if live_turn else self._environment()
+        quiet = live_turn or not thinking
+        environment = {**self._environment(), **_LIVE_TURN_ENVIRONMENT} if quiet else self._environment()
         kwargs: dict[str, Any] = {
             "stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
             "cwd": workdir, "env": environment, "text": True, "encoding": "utf-8", "errors": "replace",
@@ -476,7 +483,7 @@ class ClaudeCliProvider(BaseProvider):
 
     def _run(
         self, model: str, system: str, prompt: str, *, timeout: float, owner: str | None,
-        schema: dict[str, Any] | None = None, live_turn: bool = False,
+        schema: dict[str, Any] | None = None, live_turn: bool = False, thinking: bool = True,
     ) -> Iterator[ChatResponse]:
         """Run one ``claude -p`` call; yield text deltas, then one final chunk with the result.
 
@@ -487,8 +494,8 @@ class ClaudeCliProvider(BaseProvider):
         if not executable:
             raise ConnectionError(f"Claude CLI executable not found: {self.claude_path}")
         key = owner or f"call:{id(threading.current_thread())}:{time.monotonic_ns()}"
-        kind = _call_kind(executable, model, self.effort, system, schema, live_turn)
-        spawn = lambda: self._spawn(executable, model, system, schema, live_turn=live_turn)  # noqa: E731
+        kind = _call_kind(executable, model, self.effort, system, schema, live_turn, thinking)
+        spawn = lambda: self._spawn(executable, model, system, schema, live_turn=live_turn, thinking=thinking)  # noqa: E731
         warm = _WARM_POOL.take(kind)
         if live_turn:
             _live_process_log("claude_cli_live_turn", kind, model, system, waiting_process=warm is not None)

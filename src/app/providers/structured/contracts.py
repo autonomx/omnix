@@ -64,6 +64,9 @@ class StructuredContract(Generic[T]):
     max_json_nodes: int | None = None
     max_json_string_length: int | None = None
     max_json_array_length: int | None = None
+    # False: a provider that can (``catalog.THINKING_OFF``) answers without thinking first. For quick
+    # classifications, where thinking costs seconds and the answer is a small object.
+    thinking: bool = True
 
     @property
     def qualified_id(self) -> str:

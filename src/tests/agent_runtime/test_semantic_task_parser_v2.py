@@ -430,3 +430,10 @@ def test_semantic_task_cache_is_sensitive_to_current_environment(monkeypatch) ->
     )
 
     assert len(provider.calls) == 2
+
+
+def test_the_semantic_task_parse_asks_for_no_thinking() -> None:
+    # Owner decision 2026-11-07: a parse answers quickly, without thinking first, where the provider can.
+    from app.platform.agent_runtime import semantic_task_parser
+
+    assert semantic_task_parser._SEMANTIC_TASK_CONTRACT.thinking is False

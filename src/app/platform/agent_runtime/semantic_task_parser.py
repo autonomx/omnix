@@ -166,6 +166,9 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
     schema_name="agent_runtime_semantic_task_v2",
     temperature=0.0,
     max_tokens=460,
+    # Owner decision 2026-11-07: speed over a little agent-routing accuracy. On Claude CLI Haiku 4.5 the 100-case
+    # semantic matrix passed 65 without thinking against 72 with it (chat lane equal), at a median 3.8 s against 17 s.
+    thinking=False,
 )
 
 _CACHE_LOCK = threading.Lock()
