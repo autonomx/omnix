@@ -37,7 +37,8 @@ AIShadowRegime = Literal[
     "distribution_fade",
     "high_variance",
 ]
-AI_SHADOW_POLICY_VERSION = "ai-shadow-policy-v1"
+# v2: the task states what confidence means (one model answered 0 for every decision without it).
+AI_SHADOW_POLICY_VERSION = "ai-shadow-policy-v2"
 MAX_NORMALIZED_UNITS = Decimal("1.5")
 ADD_UNITS = Decimal("0.5")
 REDUCE_UNITS = Decimal("0.5")
@@ -465,7 +466,9 @@ def _build_payload(
             "for a confirmed improving trend. Avoid reacting to one noisy bar unless "
             "the thesis materially changed. Overbought momentum can be strength in a "
             "trend. Always provide a causal invalidation price when entering/adding "
-            "if the supplied evidence supports one."
+            "if the supplied evidence supports one. confidence is an integer from 1 "
+            "to 100: how strongly the supplied evidence supports the action you chose, "
+            "whichever action that is, so a skip you are sure of scores high."
         ),
         "normalization": {
             "enter_units": "1.0",

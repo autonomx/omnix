@@ -33,6 +33,7 @@ from app.providers.structured.errors import StructuredDecodeError
 from app.providers.structured.parsing import decode_json_object
 
 from . import strategy_ai_shadow as shadow
+from .model_route import no_thinking_options, trading_provider
 from .structured_llm import sends_json_schema
 from .strategy_repository import StrategyEvent, default_strategy_repository
 
@@ -260,7 +261,7 @@ def get_trading_research_provider():
     """Return a provider instance isolated from foreground Chat/Agent traffic."""
 
     global _PROVIDER_INSTANCE, _PROVIDER_KEY
-    foreground = get_provider()
+    foreground = trading_provider(get_provider)
     if foreground is None:
         return None
     key = _provider_key(foreground)
@@ -466,6 +467,7 @@ def _chat_call_unlocked(
                     request_timeout_seconds=attempt_timeout,
                     temperature=0,
                     max_tokens=max_tokens,
+                    **no_thinking_options(provider),
                 )
             else:
                 # Compatibility is selected before the call; never interpret an
@@ -691,7 +693,8 @@ def _assess_holding_lane(
         if output_attempt:
             messages.append(
                 ChatMessage(
-                    role="system",
+                    # Not "system": a local model's template (Qwen's) refuses a system message after the first turn.
+                    role="user",
                     content=(
                         "STRUCTURED OUTPUT REPAIR: the prior response failed validation "
                         f"with {first_output_error.code if first_output_error else 'unknown_error'}. "

@@ -48,15 +48,15 @@ def _call(provider, **kwargs):
 
 
 def test_the_analyzer_request_reaches_the_provider_unchanged() -> None:
-    local = FakeProvider("lmstudio", '{"instrument_id": "AAPL"}')
+    plain = FakeProvider("cerebras", '{"instrument_id": "AAPL"}')
     codex = FakeProvider("chatgpt_codex", '{"instrument_id": "AAPL"}')
 
-    reply = _call(local)
+    reply = _call(plain)
     _call(codex)
 
     assert reply.value == Decision(instrument_id="AAPL")
     assert reply.response.model == "served-model"
-    assert local.calls == [{
+    assert plain.calls == [{
         "stream": False, "model": "m", "response_format": {"type": "json_object"},
         "request_timeout_seconds": 45.0, "temperature": 0, "max_tokens": 500,
     }]

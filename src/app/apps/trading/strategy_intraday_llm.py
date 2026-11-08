@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.providers import ChatMessage
 
 from .gapper_dataset import GapperCandidate
+from .model_route import trading_provider
 from .strategy_intraday_learning import IntradayLearningSnapshot
 from .structured_llm import TradingModelOutputError, trading_model_call, sends_json_schema
 from .trading_ai_budget import INTRADAY_LLM_LIVE_CONTRACT
@@ -87,9 +88,7 @@ class IntradayLLMResult(BaseModel):
 
 
 def _default_provider():
-    from app.providers.service import get_provider
-
-    provider = get_provider()
+    provider = trading_provider()
     if provider is not None and sends_json_schema(provider):
         return _IntradaySchemaProviderProxy(provider)
     return provider
@@ -769,8 +768,8 @@ class IntradayLLMAnalyzer:
                 schema_name="intraday_llm_batch_response",
                 model=model,
                 max_tokens=max(900, 350 * len(rows)),
-                # A Codex provider is wrapped in _IntradaySchemaProviderProxy,
-                # which supplies the strict schema itself.
+                # A provider that takes a schema is wrapped in
+                # _IntradaySchemaProviderProxy, which supplies the strict schema itself.
                 response_format={"type": "json_object"},
             )
         except TradingModelOutputError as exc:

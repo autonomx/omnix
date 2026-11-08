@@ -15,7 +15,9 @@ gives each tier its own cap as a share of the day's calls:
 live reserve. A call over its tier's cap raises ``TradingAIBudgetExhausted``
 before any provider request; ``can_acquire`` lets a caller skip building a
 request that would be refused. ``OMNIX_TRADING_AI_DAILY_CALL_BUDGET=0`` turns
-the budget off. Research only: nothing here grants execution authority.
+the budget off, and it does not apply while trading runs on a local model,
+which spends no provider quota. Research only: nothing here grants execution
+authority.
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ from typing import Any, Literal
 from app.config.env import environment
 
 from .evidence_storage import default_evidence_backend
+from .model_route import trading_provider_is_local
 from .us_equity_calendar import EASTERN
 
 Tier = Literal["live", "shadow", "research"]
@@ -114,10 +117,12 @@ class TradingAIBudget:
         backend: Any | None = None,
         daily_calls: int | Callable[[], int] = daily_call_budget,
         clock: Callable[[], datetime] | None = None,
+        unmetered: Callable[[], bool] = lambda: False,
     ) -> None:
         self._backend = backend
         self._daily_calls = daily_calls
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._unmetered = unmetered
         # Serializes check-and-count within a process; across processes the
         # overshoot is at most one call per concurrent caller.
         self._lock = Lock()
@@ -129,6 +134,8 @@ class TradingAIBudget:
         return self._backend
 
     def _limit(self) -> int:
+        if self._unmetered():
+            return 0  # as if the budget were off: nothing is counted or refused
         return self._daily_calls() if callable(self._daily_calls) else int(self._daily_calls)
 
     def _day(self):
@@ -182,7 +189,7 @@ def default_trading_ai_budget() -> TradingAIBudget:
     if _default_budget is None:
         with _default_lock:
             if _default_budget is None:
-                _default_budget = TradingAIBudget()
+                _default_budget = TradingAIBudget(unmetered=trading_provider_is_local)
     return _default_budget
 
 

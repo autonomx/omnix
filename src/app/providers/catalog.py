@@ -107,7 +107,7 @@ CATALOG: tuple[ProviderSpec, ...] = (
     _llm("llamacpp", "llamacpp_provider", "LlamaCppProvider", STREAMING, MODELS, LOCAL_DEVICE),
     _llm(
         "lmstudio", "lmstudio_provider", "LMStudioProvider",
-        STREAMING, MODELS, CANCELLATION, LOCAL_DEVICE, RUNTIME_STATS, THINKING_TOGGLE, LOADED_MODEL,
+        STREAMING, MODELS, CANCELLATION, LOCAL_DEVICE, RUNTIME_STATS, THINKING_TOGGLE, THINKING_OFF, LOADED_MODEL,
         NATIVE_JSON_SCHEMA,
     ),
     _llm("openai_compatible", "openai_compatible_provider", "OpenAICompatibleProvider", STREAMING, MODELS),
