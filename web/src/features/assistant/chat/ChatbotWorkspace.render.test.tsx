@@ -163,6 +163,16 @@ describe('ChatMessageItem with generative UI', () => {
     expect(actions.play).toHaveBeenCalledWith('Revenue held.\n\nRevenue $6,930.');
   });
 
+  it('names who answered: the chat’s character, or the System Assistant', () => {
+    const { unmount } = render(<ChatMessageItem message={plainMessage} sessionId="chat:ui" feedback={undefined} menuOpen={false} streaming={false} actions={actions} speakerName="Jinx" />, { wrapper });
+    expect(screen.getByText('Jinx', { selector: 'strong' })).toBeInTheDocument();
+    unmount();
+
+    render(<ChatMessageItem message={plainMessage} sessionId="chat:ui" feedback={undefined} menuOpen={false} streaming={false} actions={actions} />, { wrapper });
+    expect(screen.getByText('System Assistant', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByText('personality')).toBeNull();
+  });
+
   it('re-renders only the message whose props changed', () => {
     const list = (plain: typeof plainMessage) => (
       <>

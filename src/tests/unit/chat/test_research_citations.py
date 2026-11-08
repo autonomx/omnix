@@ -51,4 +51,5 @@ def test_completed_quick_reply_persists_validation_and_manifest(tmp_path) -> Non
     assert saved.metadata["research_status"] == "completed"
     assert saved.metadata["source_manifest_id"] == "manifest:one"
     assert saved.metadata["citation_validation"]["valid"] is True
-    assert "structured output was unavailable" in saved.content
+    assert "Research validation note" not in saved.content  # its citations hold: no note for the reader
+    assert "structured_output_unavailable" in saved.metadata["citation_validation"]["warnings"]

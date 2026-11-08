@@ -42,10 +42,12 @@ type ChatMessageItemProps = {
   uiActive?: boolean;
   /** Earlier submissions to this reply's widgets, by block id (GUI-5.3). */
   uiSubmissions?: Record<string, ChatUiSubmission>;
+  /** Who answers in this chat: the character's name, or the System Assistant. */
+  speakerName?: string;
 };
 
 /** One message of the transcript; it re-renders only when its own props change (WP-9.5). */
-export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionId, feedback, menuOpen, streaming, actions, uiActive = false, uiSubmissions }: ChatMessageItemProps) {
+export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionId, feedback, menuOpen, streaming, actions, uiActive = false, uiSubmissions, speakerName = 'System Assistant' }: ChatMessageItemProps) {
   const research = isDeepResearchMessage(message.metadata);
   // Validated generative UI renders as components; anything else renders exactly as before.
   const ui = useMemo(
@@ -70,7 +72,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionI
     <article className={`assistant-chat-message ${message.role}`}>
       {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
       <div className="assistant-chat-bubble">
-        <header><strong>{assistant ? 'personality' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
+        <header><strong>{assistant ? speakerName : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
         {images.length ? (
           <div className="assistant-chat-message-images">
             {images.map((dataUrl, index) => <img className="assistant-chat-message-image" src={dataUrl} alt={index === 0 ? 'User-provided attachment' : `User-provided attachment ${index + 1}`} key={`${message.id}:image:${index}`} />)}

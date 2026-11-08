@@ -18,7 +18,7 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
     activeMessageCount, activeSessionError, activeSessionLoading, applySuggestedPrompt, assistantMessageFeedback,
     assistantSettings, chatImageError, chatJobInProgress, chatModels, chatProviders, displayedMessages,
     displayedSessionId, enabledToolCount, errors, handleComposerPaste, handleMessagesScroll, handleSubmit,
-    isChatFullscreen, latestAssistantMessage, liveVoiceActive, messageActions, messagesContainerRef, messagesEndRef,
+    isChatFullscreen, latestAssistantMessage, liveCallRuntime, liveVoiceActive, messageActions, messagesContainerRef, messagesEndRef,
     openMessageActionMenuId, pastedChatImages, pastedChatTextFile, pcmStream, playAssistantResponseAudio,
     quickSearchProgress, refreshActivityPanel, register, runtimeConfig, selectedPersonalityLabel, selectedSessionId,
     sendMutation, sessionsLoading, setActiveUtilityPanel, setChatImageError, setIsChatFullscreen,
@@ -30,6 +30,7 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
   const uiSubmissions = useMemo(() => chatUiSubmissions(displayedMessages), [displayedMessages]);
   const lastMessage = displayedMessages[displayedMessages.length - 1];
   const activeUiMessageId = lastMessage?.role === 'assistant' && !sendMutation.isPending && !chatJobInProgress ? lastMessage.id : null;
+  const speakerName = liveCallRuntime?.display_name || 'System Assistant';
   return (
     <>
       <ChatHeader fullscreen={isChatFullscreen} onToggleFullscreen={() => setIsChatFullscreen((current) => !current)}>
@@ -60,6 +61,7 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
             actions={messageActions}
             uiActive={activeUiMessageId === message.id}
             uiSubmissions={uiSubmissions.get(message.id)}
+            speakerName={speakerName}
           />
         )} /> : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
         {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}

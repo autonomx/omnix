@@ -161,6 +161,25 @@ def _chat_evidence_input(requirement: Any, content: str) -> dict[str, Any] | Non
     return None
 
 
+# What the person reads when a question needs current information Chat could not get: what happened and what they
+# can do about it. The technical detail goes to the message's metadata (``semantic_gate.detail``).
+_LOOK_IT_UP = "Turn on Quick search in the + menu, or the matching tool in Tools, and ask again."
+_EVIDENCE_FAILURE_REPLIES = {
+    "external_evidence_forbidden": "You asked me not to use outside sources, so I can't check the current answer to that.",
+    "evidence_requirements_unsatisfied": (
+        "I looked, but what came back wasn't recent or reliable enough to answer that. Try asking again in a moment."
+    ),
+    "chat_evidence_execution_failed": "I tried to look that up, but the lookup failed. Try asking again in a moment.",
+    "chat_evidence_subject_unresolved": "I need a bit more to look that up. Which place or thing do you mean?",
+}
+
+
+def _evidence_failure_reply(reason: str) -> str:
+    return _EVIDENCE_FAILURE_REPLIES.get(
+        reason, f"That needs current information I can't look up from here right now. {_LOOK_IT_UP}",
+    )
+
+
 def _chat_evidence_failure(
     decision: OmnixRouteDecision,
     *,
@@ -173,10 +192,7 @@ def _chat_evidence_failure(
     evidence_set: Any | None = None,
 ) -> GeneralizedChatResult:
     return GeneralizedChatResult(
-        content=(
-            "I can't safely answer this current-state request without the required "
-            f"governed evidence. {detail}"
-        ).strip(),
+        content=_evidence_failure_reply(reason),
         metadata={
             "generation_status": "completed",
             "omnix_route": decision.model_dump(mode="json"),
@@ -192,6 +208,7 @@ def _chat_evidence_failure(
             "semantic_gate": {
                 "accepted": False,
                 "reason": reason,
+                "detail": detail,  # for diagnostics; the reply says it in plain words
             },
         },
     )

@@ -202,9 +202,12 @@ def source_manifest_id(context_items: list[dict[str, Any]]) -> str | None:
 
 
 def _append_visible_notice(text: str, validation: CitationValidation) -> str:
+    """A note for the reader only when the citations have a problem.
+
+    A plain-text answer (``structured_output_unavailable``) is the usual case, since replies are generated as text;
+    when its citations check out it needs no note, and the fallback stays in ``citation_validation``.
+    """
     notices = []
-    if "structured_output_unavailable" in validation.warnings:
-        notices.append("structured output was unavailable, so citation-constrained plain text was used")
     if validation.missing_citations:
         notices.append("the answer could not be linked to the retrieved source labels")
     if validation.unknown_labels:

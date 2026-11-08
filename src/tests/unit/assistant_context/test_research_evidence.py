@@ -48,11 +48,14 @@ def test_structured_unknown_citation_is_rejected_and_reported() -> None:
     assert "the answer could not be linked" in rendered.content
 
 
-def test_plain_text_fallback_is_visible_and_citation_constrained() -> None:
+def test_a_plain_text_answer_is_citation_checked_and_needs_no_note_when_its_citations_hold() -> None:
     rendered = render_answer_with_compatibility_fallback("The release is current [S1].", ["S1"])
     assert rendered.validation.valid is True
     assert rendered.validation.structured is False
-    assert "structured output was unavailable" in rendered.content
+    assert "structured_output_unavailable" in rendered.validation.warnings  # recorded, not shown
+    assert rendered.content == "The release is current [S1]."
+    uncited = render_answer_with_compatibility_fallback("The release is current.", ["S1"])
+    assert "the answer could not be linked to the retrieved source labels" in uncited.content
 
 
 def test_missing_and_unknown_citations_are_reported() -> None:
