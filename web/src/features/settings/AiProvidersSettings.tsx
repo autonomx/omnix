@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
+import { MemoryModelSection } from './MemoryModelSection';
 import { ProviderDefaultsSection } from './ProviderDefaultsSection';
 import { ProviderRegistrySection } from './ProviderRegistrySection';
 import { ProviderRoutingSection } from './ProviderRoutingSection';
@@ -32,6 +33,7 @@ export function AiProvidersSettings() {
         <p>Manage provider defaults, connection status, and model routing.</p>
       </div>
       <ProviderDefaultsSection payload={payload} />
+      <MemoryModelSection payload={payload} />
       <ProviderRegistrySection payload={payload} loading={loading} actionStatus={actionStatus} onRefresh={loadProviders} />
       <ProviderRoutingSection payload={payload} />
     </div>

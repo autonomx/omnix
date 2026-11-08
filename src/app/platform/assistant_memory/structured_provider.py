@@ -197,15 +197,18 @@ def default_structured_proposal_provider() -> StructuredProposalProvider | None:
     try:
         from app.providers import service as provider_service
 
-        provider_name = (
+        from .model_route import memory_route
+
+        # The Memory model setting (``model_route``), unless the environment names a provider.
+        provider_name, chosen_model = memory_route(
             environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER") or ""
-        ).strip()
-        provider = provider_service.get_provider(provider_name or None)
+        )
+        provider = provider_service.get_provider(provider_name)
         if provider is None:
             return None
         model = (
             environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL") or ""
-        ).strip() or None
+        ).strip() or chosen_model
         try:
             timeout = float(
                 environment().get(

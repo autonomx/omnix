@@ -369,11 +369,14 @@ def default_conversation_reader() -> ConversationReader | None:
     try:
         from app.providers import service as provider_service
 
-        name = (environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER") or "").strip()
-        provider = provider_service.get_provider(name or None)
+        from .model_route import memory_route
+
+        # The Memory model setting (``model_route``), unless the environment names a provider.
+        name, chosen_model = memory_route(environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER") or "")
+        provider = provider_service.get_provider(name)
         if provider is None:
             return None
-        model = (environment().get("OMNIX_MEMORY_READING_MODEL") or "").strip() or None
+        model = (environment().get("OMNIX_MEMORY_READING_MODEL") or "").strip() or chosen_model
         return ProviderConversationReader(
             provider, model=model or _READING_MODEL_BY_PROVIDER.get(str(getattr(provider, "provider_name", ""))),
         )

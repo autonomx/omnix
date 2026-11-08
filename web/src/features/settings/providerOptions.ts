@@ -32,3 +32,8 @@ export function modelOptions(payload: ProviderFacadePayload | undefined, provide
     .sort((left, right) => Number(right.catalog) - Number(left.catalog) || (left.catalog ? 0 : left.label.localeCompare(right.label)))
     .map(({ id, label }) => ({ id, label }));
 }
+
+/** The options, with the current value first when the list no longer offers it (marked unavailable). */
+export function optionsWithCurrent(options: ProviderOption[], current: string): ProviderOption[] {
+  return current && !options.some((option) => option.id === current) ? [{ id: current, label: `${current} (unavailable)` }, ...options] : options;
+}

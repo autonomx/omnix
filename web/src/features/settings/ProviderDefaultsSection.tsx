@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { omnixApiClient, type CodexAuthStatus, type ProviderFacadePayload } from '../../api/client';
-import { modelOptions, providerOptions } from './providerOptions';
+import { modelOptions, optionsWithCurrent, providerOptions } from './providerOptions';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
@@ -17,10 +17,6 @@ const defaultReasoningEffortOptions = [
 ];
 const LUNA_MODEL_ID = 'gpt-5.6-luna';
 const extraHighReasoningOption = { id: 'xhigh', label: 'extra high' };
-
-function optionsWithCurrent(options: Array<{ id: string; label: string }>, current: string) {
-  return current && !options.some((option) => option.id === current) ? [{ id: current, label: `${current} (unavailable)` }, ...options] : options;
-}
 
 function providerModelId(model: ProviderFacadePayload['models'][number]): string {
   const metadata = model.metadata as Record<string, unknown> | undefined;
