@@ -980,6 +980,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assistant/tools/abilities/{owner_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Owner Abilities Endpoint */
+        get: operations["owner_abilities_endpoint_api_assistant_tools_abilities__owner_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant/tools/abilities/{owner_id}/{ability_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Owner Ability Endpoint
+         * @description The person grants or withdraws one ability: the only way a speaker gets one.
+         */
+        put: operations["set_owner_ability_endpoint_api_assistant_tools_abilities__owner_id___ability_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assistant/tools/config": {
         parameters: {
             query?: never;
@@ -7943,6 +7980,27 @@ export interface components {
             source: "model" | "fallback";
         };
         /**
+         * OwnerAbilitiesPayload
+         * @description What a speaker (a character, or the System Assistant) may use in calls: each ability and its grant.
+         */
+        OwnerAbilitiesPayload: {
+            /** Abilities */
+            abilities: components["schemas"]["OwnerAbility"][];
+            /** Owner Id */
+            owner_id: string;
+        };
+        /** OwnerAbility */
+        OwnerAbility: {
+            /** Granted */
+            granted: boolean;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+        };
+        /**
          * OwnerMemoryView
          * @description What a character or the System Assistant remembers, and what is waiting to be accepted.
          */
@@ -8790,6 +8848,11 @@ export interface components {
         };
         /** SetDefaultModels */
         SetDefaultModels: core["schemas"]["SetDefaultModels"];
+        /** SetOwnerAbilityRequest */
+        SetOwnerAbilityRequest: {
+            /** Granted */
+            granted: boolean;
+        };
         /** SetSessionInteractionRequest */
         SetSessionInteractionRequest: {
             /** Character Id */
@@ -12441,6 +12504,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResearchRuntimeStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    owner_abilities_endpoint_api_assistant_tools_abilities__owner_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerAbilitiesPayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_owner_ability_endpoint_api_assistant_tools_abilities__owner_id___ability_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_id: string;
+                ability_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetOwnerAbilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerAbilitiesPayload"];
                 };
             };
             /** @description Validation Error */

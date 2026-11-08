@@ -207,6 +207,8 @@ _LAZY_EXPORTS = {
     "stream_proactive_turn_chunks": "live_conversation_proactive",
     "ChatSessionStore": "character_store",
     "default_chat_store": "character_store",
+    # The request a Quick Search through CHAT_RESEARCH reads (a call looking something up).
+    "AssistantContextChatRequest": "assistant_context.models",
 }
 
 

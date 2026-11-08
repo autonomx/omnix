@@ -238,11 +238,51 @@ def stream_low_latency_reply(
         provider_iteration_started = time.perf_counter()
         first_provider_text_ms: float | None = None
         first_client_chunk_ms: float | None = None
+        # A reply may be a request to look something up (llm.call_tools): its start is held until that is clear.
+        gate = _ability_gate(session) if live_turn else None
+        lookups: list[dict[str, Any]] = []
 
-        for chunk in response:
-            resolved_model = getattr(chunk, "model", None) or resolved_model
-            usage = getattr(chunk, "usage", None) or usage
-            text = getattr(chunk, "content", "") or ""
+        def provider_text() -> Iterator[str]:
+            nonlocal resolved_model, usage
+            for chunk in response:
+                resolved_model = getattr(chunk, "model", None) or resolved_model
+                usage = getattr(chunk, "usage", None) or usage
+                text = getattr(chunk, "content", "") or ""
+                if gate is None:
+                    if text:
+                        yield text
+                    continue
+                released = gate.push(text)
+                if released:
+                    yield released
+                if gate.request is not None:
+                    close = getattr(response, "close", None)
+                    if callable(close):
+                        close()
+                    return
+            if gate is not None:
+                tail = gate.finish()
+                if tail:
+                    yield tail
+
+        def texts() -> Iterator[Any]:
+            yield from provider_text()
+            if gate is None or gate.request is None:
+                return
+            yield from _answer_after_request(
+                self, session, gate.request, spoken_before=gate.spoken, provider=provider, messages=messages,
+                model_name=model_name,
+                completion_kwargs=completion_kwargs, lookups=lookups, routing_deadline_at=routing_deadline_at,
+            )
+
+        for text in texts():
+            if text is SAY_NOW:  # the waiting line goes out whole, before the lookup blocks
+                waiting = chunker.flush()
+                if waiting:
+                    if first_client_chunk_ms is None:
+                        first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
+                    yield {"type": "text_chunk", "text": waiting}
+                continue
             if not text:
                 continue
             if first_provider_text_ms is None:
@@ -318,8 +358,82 @@ def stream_low_latency_reply(
                 **memory_metadata,
                 **history_metadata,
                 **({"usage": usage_payload} if usage_payload is not None else {}),
+                **({"call_lookups": lookups} if lookups else {}),
             },
         }
+
+
+# Yielded after the waiting line: what the chunker holds is sent now, not after the lookup.
+SAY_NOW: Any = object()
+
+
+def _ability_gate(session: Any) -> Any:
+    from app.platform.live_voice.llm.call_tools import RequestGate, abilities_prompt, granted_abilities
+
+    return RequestGate() if abilities_prompt(granted_abilities(session)) else None
+
+
+def _answer_after_request(
+    self: Any,
+    session: Any,
+    request: Any,
+    *,
+    spoken_before: str = "",
+    provider: Any,
+    messages: list[Any],
+    model_name: str,
+    completion_kwargs: dict[str, Any],
+    lookups: list[dict[str, Any]],
+    routing_deadline_at: float | None,
+) -> Iterator[Any]:
+    """Say the waiting line, check the grant in code, run the search, then stream the model's answer to it."""
+    from app.platform.assistant_tools.contracts import authorize
+    from app.platform.live_voice.llm.call_tools import (
+        answer_instructions, granted_abilities, owner_of, run_web_search,
+    )
+    from app.providers import ChatMessage as ProviderMessage
+
+    decision = authorize(owner_of(session), request.ability, grants=granted_abilities(session))
+    # A lookup runs when granted; an action would wait for the person's confirmation, which calls do not ask yet.
+    runs = decision.allowed and not decision.confirm
+    # Words the reply said before its request line ("Let me check.") are the waiting line; else the request's own.
+    lead_in = " ".join(spoken_before.split())
+    said = request.say if runs and not lead_in else ""
+    if said:
+        yield said + " "
+    if runs:
+        yield SAY_NOW
+    lookup = run_web_search(request.query, identity=str(getattr(session, "id", "") or "")) if runs else None
+    lookups.append({
+        "ability": request.ability, "query": request.query, "allowed": decision.allowed, "reason": decision.reason,
+        "status": lookup.status if lookup else "not_run", "results": len(lookup.results) if lookup else 0,
+        "elapsed_ms": lookup.elapsed_ms if lookup else 0.0,
+    })
+    stream_log(
+        "gateway-live-chat-first-token", "runtime", "live_chat_call_lookup",
+        ability=request.ability, allowed=decision.allowed, reason=decision.reason,
+        status=lookups[-1]["status"], results=lookups[-1]["results"], elapsed_ms=lookups[-1]["elapsed_ms"],
+    )
+    note = answer_instructions(request, lead_in or said, lookup)
+    follow_up = [*messages, ProviderMessage(role="system", content=note, per_turn=True)]
+    kwargs = dict(completion_kwargs)
+    remaining = remaining_turn_seconds(routing_deadline_at)
+    if remaining is not None and remaining > 0:
+        kwargs["request_timeout_seconds"] = remaining
+    response = provider.chat_completion(messages=follow_up, model=model_name, stream=True, **kwargs)
+    # A second request is never run: an answer that asks again is cut there.
+    from app.platform.live_voice.llm.call_tools import RequestGate
+
+    gate = RequestGate()
+    for chunk in response:
+        released = gate.push(getattr(chunk, "content", "") or "")
+        if released:
+            yield released
+        if gate.request is not None:
+            break
+    tail = gate.finish()
+    if tail:
+        yield tail
 
 
 def observe_live_voice_provider_stream(response: Any) -> Iterator[Any]:

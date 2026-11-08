@@ -34696,6 +34696,56 @@
         "title": "OvernightShadowConfig",
         "type": "object"
       },
+      "OwnerAbilitiesPayload": {
+        "description": "What a speaker (a character, or the System Assistant) may use in calls: each ability and its grant.",
+        "properties": {
+          "abilities": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerAbility"
+            },
+            "title": "Abilities",
+            "type": "array"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner_id",
+          "abilities"
+        ],
+        "title": "OwnerAbilitiesPayload",
+        "type": "object"
+      },
+      "OwnerAbility": {
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "granted"
+        ],
+        "title": "OwnerAbility",
+        "type": "object"
+      },
       "OwnerMemoryView": {
         "description": "What a character or the System Assistant remembers, and what is waiting to be accepted.",
         "properties": {
@@ -61207,6 +61257,19 @@
         "title": "SetDocumentOverride",
         "type": "object"
       },
+      "SetOwnerAbilityRequest": {
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "granted"
+        ],
+        "title": "SetOwnerAbilityRequest",
+        "type": "object"
+      },
       "SetPerformanceResult": {
         "properties": {
           "changed": {
@@ -80091,6 +80154,110 @@
           }
         },
         "summary": "Assistant Tools",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/abilities/{owner_id}": {
+      "get": {
+        "operationId": "owner_abilities_endpoint_api_assistant_tools_abilities__owner_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerAbilitiesPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Owner Abilities Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/abilities/{owner_id}/{ability_id}": {
+      "put": {
+        "description": "The person grants or withdraws one ability: the only way a speaker gets one.",
+        "operationId": "set_owner_ability_endpoint_api_assistant_tools_abilities__owner_id___ability_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner_id",
+            "required": true,
+            "schema": {
+              "title": "Owner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ability_id",
+            "required": true,
+            "schema": {
+              "title": "Ability Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOwnerAbilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerAbilitiesPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Owner Ability Endpoint",
         "tags": [
           "assistant-tools"
         ]

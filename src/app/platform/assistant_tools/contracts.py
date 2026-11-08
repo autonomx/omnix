@@ -47,6 +47,10 @@ _LAZY_EXPORTS = {
     "github_repository_from_remote": "repo_adapter",
     "AssistantCapabilityDashboard": "capability_dashboard",
     "build_assistant_capability_dashboard": "capability_dashboard",
+    # What a speaker may use in calls, and the check before it runs.
+    "SYSTEM_OWNER_ID": "owner_grants",
+    "authorize": "owner_grants",
+    "owner_grants": "owner_grants",
 }
 
 

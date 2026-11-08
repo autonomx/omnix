@@ -166,7 +166,7 @@ export function useStreamedVoiceTurns({
           ? `/api/assistant/context/chat/sessions/${streamSessionId}/messages/stream`
           : `/api/chat/sessions/${streamSessionId}/messages/stream`,
         { body },
-      )).catch(statusError('Chat stream'));
+      ), { liveCallTurn: liveVoiceActiveRef.current }).catch(statusError('Chat stream'));
       if (!response.body) throw new Error(`Chat stream failed with status ${response.status}.`);
       markVoiceTurnPerformance('chatResponseReceivedAt');
       recordVoiceTurnDiagnostic('chat_response_opened', { status: response.status });

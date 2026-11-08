@@ -70,7 +70,8 @@ FEATURE = FeatureModule(
     id="live-voice",
     title="Live voice",
     tier="platform",
-    depends_on=("chat", "characters", "assistant-memory"),
+    # Grants decide what a call may look up or do (assistant_tools.owner_grants).
+    depends_on=("chat", "characters", "assistant-memory", "assistant-tools"),
     # The speech contract's TTS ports (PA-3.3).
     uses=("voice",),
     contributions=(ContributionSpec(CHARACTER_SNAPSHOT_OBSERVERS, _snapshot_cache_observer),

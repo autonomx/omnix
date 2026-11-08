@@ -8,6 +8,7 @@ import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvata
 import { characterClient, type CharacterDataExport, type CharacterProfile } from './characterClient';
 import { CharacterHermesPanel } from './CharacterHermesPanel';
 import { CharacterMemoryPanel, SYSTEM_ASSISTANT_MEMORY_OWNER } from './CharacterMemoryPanel';
+import { OwnerAbilitiesPanel } from './OwnerAbilitiesPanel';
 import { CharacterVoiceBackfillButton } from './CharacterVoiceBackfillButton';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
@@ -299,7 +300,7 @@ export function CharacterManagementPanel({
               </CharacterSectionPanel>
 
               <CharacterSectionPanel section="memory" activeSection={activeSection}>
-                {activeSection === 'memory' ? <CharacterMemoryPanel ownerId={selected.id} ownerName={selected.display_name} /> : null}
+                {activeSection === 'memory' ? <><OwnerAbilitiesPanel ownerId={selected.id} ownerName={selected.display_name} /><CharacterMemoryPanel ownerId={selected.id} ownerName={selected.display_name} /></> : null}
               </CharacterSectionPanel>
 
               <CharacterSectionPanel section="data" activeSection={activeSection}>
@@ -335,7 +336,7 @@ export function CharacterManagementPanel({
         <CharacterSectionPanel section="assistant" activeSection={activeSection}>
           <div className="character-dashboard-grid">
             <AssistantAvatarPanel />
-            {activeSection === 'assistant' ? <CharacterMemoryPanel ownerId={SYSTEM_ASSISTANT_MEMORY_OWNER} ownerName="System Assistant" /> : null}
+            {activeSection === 'assistant' ? <><OwnerAbilitiesPanel ownerId={SYSTEM_ASSISTANT_MEMORY_OWNER} ownerName="System Assistant" /><CharacterMemoryPanel ownerId={SYSTEM_ASSISTANT_MEMORY_OWNER} ownerName="System Assistant" /></> : null}
           </div>
         </CharacterSectionPanel>
       </div>

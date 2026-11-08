@@ -306,6 +306,11 @@ class LiveVoiceChatPort(Protocol):
 
     def new_text_chunker(self) -> Any: ...
 
+    def new_request_gate(self) -> Any:
+        """Holds back a reply's start until it is clear whether it asks for an ability: ``push(text) -> str``,
+        ``finish() -> str``, ``request`` (set once a request line is read)."""
+        ...
+
 
 def estimate_tokens(text: str) -> int:
     """Conservative, provider-independent estimate for UTF-8 text."""

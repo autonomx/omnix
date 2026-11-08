@@ -444,10 +444,18 @@ def _generate_side_effect_free(
         response = live_voice.observe_live_voice_provider_stream(raw_response)
         chunker = live_voice.new_text_chunker()
         full_text = ""
+        # An early start never runs an ability: one that asks to look something up stops before anything is said,
+        # and the turn itself runs the request.
+        gate = live_voice.new_request_gate()
         for chunk in response:
             if cancel_event is not None and cancel_event.is_set():
                 return
-            text = getattr(chunk, "content", "") or ""
+            text = gate.push(getattr(chunk, "content", "") or "")
+            if gate.request is not None:
+                close = getattr(raw_response, "close", None)
+                if callable(close):
+                    close()
+                raise RuntimeError("speculation_needs_a_lookup")
             if not text:
                 continue
             full_text += text
@@ -459,6 +467,11 @@ def _generate_side_effect_free(
                 })
         if cancel_event is not None and cancel_event.is_set():
             return
+        tail = gate.finish()
+        if tail:
+            full_text += tail
+            for ready in chunker.push(tail):
+                yield _sse({"type": "text_chunk", "generation_id": speculation.generation_id, "text": ready})
         remaining = chunker.flush()
         if remaining:
             yield _sse({

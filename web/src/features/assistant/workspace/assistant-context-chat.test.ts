@@ -51,6 +51,20 @@ describe('sendChatWithAssistantContext', () => {
     });
   });
 
+  it('keeps a live call turn on the chat route when research is the only context tool on', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 200 })));
+    assistantContextStore.update({ researchMode: 'quick' });
+    const { calls, send } = recordingSender();
+
+    await expect(sendChatWithAssistantContext('s1', { content: "how's the weather?" }, send, { liveCallTurn: true }))
+      .resolves.toBe('chat');
+    expect(calls).toEqual([{ route: 'chat', body: { content: "how's the weather?" } }]);
+
+    assistantContextStore.update({ agentMode: true });
+    await expect(sendChatWithAssistantContext('s1', { content: 'fix it' }, send, { liveCallTurn: true }))
+      .resolves.toBe('context');
+  });
+
   it('falls back to the chat route with the original message when the gateway has no context route', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 200 })));
     assistantContextStore.update({ researchMode: 'quick' });

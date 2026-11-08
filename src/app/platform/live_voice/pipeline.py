@@ -110,7 +110,33 @@ def _spoken_style_stage(
         raise RuntimeError("live_voice_prompt_assembly_missing")
     apply_live_voice_spoken_style(context.rendered, context.profile)
     record_spoken_style_diagnostics(context.assembly, context.rendered)
+    _add_call_abilities(context)
     return context
+
+
+def _add_call_abilities(context: LiveVoicePromptContext) -> None:
+    """How to ask for the abilities the speaker was granted (``llm.call_tools``), after the spoken style.
+
+    Stable across a call's turns, so the system prompt still chooses the waiting process. None granted: nothing added.
+    """
+    from app.conversation.contracts import estimate_tokens
+    from app.platform.chat.contracts import RenderedPromptMessage
+    from app.platform.live_voice.llm.call_tools import abilities_prompt, granted_abilities
+
+    instructions = abilities_prompt(granted_abilities(context.session))
+    rendered = context.rendered
+    if not instructions or rendered is None:
+        return
+    first_turn = next(
+        (index for index, message in enumerate(rendered.messages) if message.role in {"user", "assistant"}),
+        len(rendered.messages),
+    )
+    rendered.messages.insert(first_turn, RenderedPromptMessage(role="system", content=instructions))
+    tokens = estimate_tokens(instructions)
+    rendered.diagnostics.estimated_tokens += tokens
+    rendered.diagnostics.section_tokens["live_voice_abilities"] = tokens
+    if context.assembly is not None:
+        context.assembly.diagnostics["live_voice_abilities"] = {"web_search": True, "tokens": tokens}
 
 
 def _finish_prompt_stages(context: LiveVoicePromptContext) -> None:

@@ -71,6 +71,8 @@
     "POST /api/assistant/research/credentials": "research",
     "GET /api/assistant/research/status": "research",
     "GET /api/assistant/tools": "kernel",
+    "GET /api/assistant/tools/abilities/{owner_id}": "assistant-tools",
+    "PUT /api/assistant/tools/abilities/{owner_id}/{ability_id}": "assistant-tools",
     "GET /api/assistant/tools/config": "assistant-tools",
     "POST /api/assistant/tools/config": "assistant-tools",
     "GET /api/assistant/tools/connect/github/callback": "assistant-tools",

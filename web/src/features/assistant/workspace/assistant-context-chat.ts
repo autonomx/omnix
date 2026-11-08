@@ -23,17 +23,23 @@ type DesktopFrames = Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>>
  * or when the gateway has no context route, to the chat route. The
  * session's research mode is saved after the request settles, so saving it
  * never delays the response.
+ *
+ * A live call's turn is not sent to the context route for research alone:
+ * the call's own model looks things up when the speaker may, and the
+ * context route's planning would hold the reply for many seconds.
  */
 export async function sendChatWithAssistantContext<T>(
   sessionId: string,
   body: Record<string, unknown>,
   send: (route: AssistantChatRoute, body: Record<string, unknown>) => Promise<T>,
+  { liveCallTurn = false }: { liveCallTurn?: boolean } = {},
 ): Promise<T> {
   adoptActiveSession(sessionId);
   const context = assistantContextStore.getState();
   const { agentMode, researchMode, desktopShare, localWorkspace } = context;
   if (localWorkspace) storeLocalWorkspace(sessionId, localWorkspace);
-  const enhanced = agentMode || researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
+  const researching = researchMode !== 'disabled' && !liveCallTurn;
+  const enhanced = agentMode || researching || desktopShare !== null || localWorkspace !== null;
   const request = enhanced ? sendThroughContext(sessionId, body, context, send) : send('chat', body);
   if (!enhanced) {
     dispatchPerformance('assistant_context_chat_request_dispatched', { sessionId, agentMode, researchMode, enhanced, persistenceDeferred: true });

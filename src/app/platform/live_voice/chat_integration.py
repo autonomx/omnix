@@ -143,6 +143,11 @@ class LiveVoiceChatIntegration:
 
         return LowLatencyTextChunker()
 
+    def new_request_gate(self) -> Any:
+        from .llm.call_tools import RequestGate
+
+        return RequestGate()
+
 
 def create_live_voice_chat_port() -> LiveVoiceChatPort:
     return LiveVoiceChatIntegration()

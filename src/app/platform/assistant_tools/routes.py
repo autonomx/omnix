@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.config.env import environment
 
 import asyncio
+import re
 from typing import Annotated
 from urllib.parse import urlencode
 
@@ -41,6 +42,39 @@ from .proposals import (
 
 class AssistantToolIntentRequest(BaseModel):
     message: str = ""
+
+
+class OwnerAbility(BaseModel):
+    id: str
+    label: str
+    kind: str
+    granted: bool
+
+
+class OwnerAbilitiesPayload(BaseModel):
+    """What a speaker (a character, or the System Assistant) may use in calls: each ability and its grant."""
+
+    owner_id: str
+    abilities: list[OwnerAbility]
+
+
+class SetOwnerAbilityRequest(BaseModel):
+    granted: bool
+
+
+_OWNER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+
+
+def _owner_abilities(owner_id: str) -> OwnerAbilitiesPayload:
+    from .owner_grants import ABILITIES, owner_grants
+
+    if not _OWNER_ID.match(owner_id):
+        raise HTTPException(status_code=422, detail="invalid owner id")
+    grants = owner_grants(owner_id)
+    return OwnerAbilitiesPayload(owner_id=owner_id, abilities=[
+        OwnerAbility(id=ability.id, label=ability.label, kind=ability.kind, granted=grants.get(ability.id, False))
+        for ability in ABILITIES.values()
+    ])
 
 
 def create_assistant_tool_router() -> APIRouter:
@@ -93,6 +127,25 @@ def create_assistant_tool_router() -> APIRouter:
     @router.post("/api/assistant/tools/intent", response_model=AssistantToolIntent, tags=["assistant-tools"])
     def assistant_tool_intent_endpoint(request: AssistantToolIntentRequest) -> AssistantToolIntent:
         return detect_assistant_tool_intent(request.message)
+
+    @router.get("/api/assistant/tools/abilities/{owner_id}", response_model=OwnerAbilitiesPayload, tags=["assistant-tools"])
+    def owner_abilities_endpoint(owner_id: str) -> OwnerAbilitiesPayload:
+        return _owner_abilities(owner_id)
+
+    @router.put(
+        "/api/assistant/tools/abilities/{owner_id}/{ability_id}", response_model=OwnerAbilitiesPayload,
+        tags=["assistant-tools"],
+    )
+    def set_owner_ability_endpoint(owner_id: str, ability_id: str, request: SetOwnerAbilityRequest) -> OwnerAbilitiesPayload:
+        """The person grants or withdraws one ability: the only way a speaker gets one."""
+        from .owner_grants import set_owner_grant
+
+        _owner_abilities(owner_id)  # validates the owner id
+        try:
+            set_owner_grant(owner_id, ability_id, request.granted)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown ability") from exc
+        return _owner_abilities(owner_id)
 
     @router.get("/api/assistant/tools/dashboard", response_model=AssistantCapabilityDashboard, tags=["assistant-tools"])
     def assistant_tool_dashboard_endpoint() -> AssistantCapabilityDashboard:
