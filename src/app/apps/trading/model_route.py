@@ -7,9 +7,11 @@ provider's configured model. Research only: which model answers grants nothing, 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 from app.providers.catalog import LOADED_MODEL, LOCAL_DEVICE, THINKING_OFF, provider_supports
 
@@ -19,6 +21,15 @@ TRADING_ROUTE_KEY = "trading-research"
 # A real day's catalyst prompt reached 21,041 tokens, before the reply.
 MIN_LOCAL_CONTEXT_TOKENS = 32_000
 LOCAL_OUTPUT_MULTIPLIER = 2
+# Live batches reached 14 stocks and 26,000 prompt tokens, past the 30-45 s deadlines.
+LOCAL_BATCH_STOCKS = 5
+LOCAL_LANE_WAIT_SECONDS = 60.0
+LOCAL_MODEL_LANE = threading.RLock()
+T = TypeVar("T")
+
+
+class TradingLocalLaneBusy(RuntimeError):
+    """Another local model call held the lane for the whole wait; this one was not sent."""
 
 
 class TradingLocalModelNotReady(RuntimeError):
@@ -110,6 +121,29 @@ def local_output_limit(provider: Any, max_tokens: int) -> int:
     return max_tokens * LOCAL_OUTPUT_MULTIPLIER if is_local_provider(provider) else max_tokens
 
 
+@contextmanager
+def local_model_lane(provider: Any) -> Iterator[None]:
+    """One local model call at a time: concurrent calls on one GPU ran past every deadline on 2026-11-09."""
+    if not is_local_provider(provider):
+        yield
+        return
+    if not LOCAL_MODEL_LANE.acquire(timeout=LOCAL_LANE_WAIT_SECONDS):
+        raise TradingLocalLaneBusy(f"waited_seconds={LOCAL_LANE_WAIT_SECONDS:.0f}")
+    try:
+        yield
+    finally:
+        LOCAL_MODEL_LANE.release()
+
+
+def local_batch_rows(rows: Sequence[T], *, is_open: Callable[[T], bool]) -> list[T]:
+    """On a local model, what a call may cover: stocks with something open first, then the best-ranked, up to the cap."""
+    if not trading_provider_is_local():
+        return list(rows)
+    open_rows = [row for row in rows if is_open(row)]
+    held = {id(row) for row in open_rows}
+    return (open_rows + [row for row in rows if id(row) not in held])[:LOCAL_BATCH_STOCKS]
+
+
 def trading_provider_is_local() -> bool:
     """Whether trading's calls run on this machine, so they spend no provider quota.
 
@@ -136,7 +170,12 @@ def no_thinking_options(provider: Any) -> dict[str, bool]:
 
 
 __all__ = [
+    "LOCAL_BATCH_STOCKS",
+    "LOCAL_MODEL_LANE",
     "LOCAL_OUTPUT_MULTIPLIER",
+    "TradingLocalLaneBusy",
+    "local_batch_rows",
+    "local_model_lane",
     "LocalModelReadiness",
     "MIN_LOCAL_CONTEXT_TOKENS",
     "TRADING_ROUTE_KEY",

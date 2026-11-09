@@ -39,7 +39,8 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 # canonical-2: on a local model a batch is schema-bound per stock and one bad stock no longer fails the others.
-AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-2"
+# canonical-3: on a local model a call covers at most five stocks, armed plans first.
+AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-3"
 AI_SHADOW_V3_CONTRACT = "trading.ai_shadow_v3.batch"
 RUNNER_GEOMETRY_CHALLENGER_VERSION = "runner-geometry-challenger-v1"
 

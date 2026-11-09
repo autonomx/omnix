@@ -38,7 +38,8 @@ AIShadowRegime = Literal[
     "high_variance",
 ]
 # v2: the task states what confidence means (one model answered 0 for every decision without it).
-AI_SHADOW_POLICY_VERSION = "ai-shadow-policy-v2"
+# v3: the model's own invalidation price is enforced; a local-model call covers at most five stocks.
+AI_SHADOW_POLICY_VERSION = "ai-shadow-policy-v3"
 MAX_NORMALIZED_UNITS = Decimal("1.5")
 ADD_UNITS = Decimal("0.5")
 REDUCE_UNITS = Decimal("0.5")

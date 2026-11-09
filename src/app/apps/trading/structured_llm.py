@@ -40,7 +40,7 @@ from app.providers.structured import (
 from app.providers.structured.errors import StructuredDecodeError, StructuredSchemaError
 from app.providers.structured.schema_projection import project_provider_schema
 
-from .model_route import local_output_limit, no_thinking_options
+from .model_route import local_model_lane, local_output_limit, no_thinking_options
 from .trading_ai_budget import TradingAIBudget, default_trading_ai_budget
 
 T = TypeVar("T", bound=BaseModel)
@@ -180,9 +180,10 @@ def trading_model_call(
         deadline_seconds=request_timeout_seconds + 5.0,
     )
     try:
-        value = StructuredOutputGateway[T](analyzer_request).generate(
-            messages, contract=contract, model=model, retry_budget=retry_budget,
-        )
+        with local_model_lane(provider):
+            value = StructuredOutputGateway[T](analyzer_request).generate(
+                messages, contract=contract, model=model, retry_budget=retry_budget,
+            )
     except (StructuredOutputExhausted, StructuredOutputError) as exc:
         cause = exc.last_error if isinstance(exc, StructuredOutputExhausted) else exc
         reason: OutputFailure | None = (

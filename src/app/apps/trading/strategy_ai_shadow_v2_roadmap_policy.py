@@ -40,6 +40,7 @@ from .strategy_ai_shadow_v2 import (
     CatalystIntelligenceSnapshot,
 )
 from .strategy_repository import StrategyEvent
+from .model_route import local_batch_rows
 from .trading_ai_budget import TradingAIBudgetExhausted, default_trading_ai_budget, research_decision_slot
 
 _ALPHA_ERROR_COOLDOWN = timedelta(seconds=60)
@@ -623,6 +624,9 @@ async def _run_arm_policy(
     observed_spreads: dict[str, Decimal] = {}
     cohort = _cohort_context(rows)
     paired = _paired_arm(arm)
+    rows = local_batch_rows(
+        rows, is_open=lambda row: monitor._position(events, arm, row["candidate"].instrument_id).is_long,
+    )
 
     for source in rows:
         row = dict(source)

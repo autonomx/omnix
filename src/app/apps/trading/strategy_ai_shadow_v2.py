@@ -21,7 +21,8 @@ from .research.contracts import TradingEvidence, TradingResearchReport
 
 AI_SHADOW_V2_VERSION = "ai-shadow-v2"
 # roadmap-3: on a local model a batch is schema-bound per stock and one bad stock no longer fails the others.
-AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-3"
+# roadmap-4: on a local model a call covers at most five stocks, open positions first.
+AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-4"
 # What a state needs; a schema requires it on a local model, and a decision without it is only a watch.
 _V2_STATE_REQUIRES = {"armed": ("trigger",), "enter": ("invalidation_price", "target_1")}
 AI_SHADOW_V2_CONTRACT = "trading.ai_shadow_v2.batch"

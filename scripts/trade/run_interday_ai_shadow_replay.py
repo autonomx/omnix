@@ -469,9 +469,8 @@ class ReplayMarket:
         self, instrument_id, *, decision_completed_at, actionable_at=None, market_snapshot_as_of=None, binding_id=None, purpose="EXECUTION",
     ) -> CausalExecutionSelection | None:
         actionable = actionable_at or decision_completed_at
-        # An order works from its paper latency on. A retry passes the original decision time and must read the
-        # market now: re-reading the first quote after that time would refuse it the same way forever.
-        earliest = max(decision_completed_at, actionable, self.clock.now()) + ORDER_LATENCY
+        # An order works from its paper latency on.
+        earliest = max(decision_completed_at, actionable) + ORDER_LATENCY
         quote = self.archive.quote(self.symbols[instrument_id], after=earliest)
         if quote is None:
             return None
@@ -501,7 +500,9 @@ def replay_steps(session: date, *, until: time | None = None) -> list[datetime]:
     ]
 
 
-def build_cohort(archive: AlpacaArchive, session: date, previous_session: date, *, assets_file: Path = ASSETS_FILE) -> list[Gainer]:
+def build_cohort(
+    archive: AlpacaArchive, session: date, previous_session: date, *, assets_file: Path = ASSETS_FILE, size: int = COHORT_SIZE,
+) -> list[Gainer]:
     symbols = listed_common_symbols(assets_file)
     day = lambda value: datetime.combine(value, time(0), tzinfo=ET)  # noqa: E731
     adjusted = archive.bars(symbols, timeframe="1Day", start=day(previous_session), end=day(session) + timedelta(days=1), adjustment="split")
@@ -516,7 +517,7 @@ def build_cohort(archive: AlpacaArchive, session: date, previous_session: date, 
     start = datetime.combine(session, time(4, 0), tzinfo=ET)
     cutoff = datetime.combine(session, time(9, 15), tzinfo=ET)
     premarket = archive.bars(sorted(previous_close), timeframe="5Min", start=start, end=cutoff, adjustment="raw")
-    return rank_premarket_gainers(previous_close, premarket, cutoff=cutoff.astimezone(UTC))
+    return rank_premarket_gainers(previous_close, premarket, cutoff=cutoff.astimezone(UTC), size=size)
 
 
 def freeze_cohort(gainers: list[Gainer], session: date, config: Any) -> Any:
@@ -614,14 +615,23 @@ def event_row(event: Any) -> dict[str, Any]:
     }
 
 
-async def run_replay(monitors: dict[str, Any], clock: SimClock, steps: list[datetime], *, progress=print) -> dict[str, Counter]:
+async def run_replay(
+    monitors: dict[str, Any], clock: SimClock, steps: list[datetime], *, progress=print, concurrent: bool = False,
+) -> dict[str, Counter]:
+    """Run each step's monitors one after another, or together as the live scheduler does (queueing included)."""
     failures: dict[str, Counter] = {name: Counter() for name in monitors}
     for index, step in enumerate(steps, 1):
         started = time_module.monotonic()
-        for name, monitor in monitors.items():
+        if concurrent:
             clock.set(step)
-            monitor.last_error = None
-            await monitor.run_once()
+            for monitor in monitors.values():
+                monitor.last_error = None
+            await asyncio.gather(*(monitor.run_once() for monitor in monitors.values()))
+        for name, monitor in monitors.items():
+            if not concurrent:
+                clock.set(step)
+                monitor.last_error = None
+                await monitor.run_once()
             if monitor.last_error:
                 failures[name][str(monitor.last_error)[:200]] += 1
         progress(f"{index}/{len(steps)} {step.astimezone(ET):%H:%M:%S} ET in {time_module.monotonic() - started:.1f}s")
@@ -635,6 +645,8 @@ def main() -> int:
     parser.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
     parser.add_argument("--lmstudio-url", default="http://127.0.0.1:1234")
     parser.add_argument("--until", type=time.fromisoformat, default=None, help="stop after this ET time (a short check)")
+    parser.add_argument("--cohort-size", type=int, default=COHORT_SIZE, help="stocks in the universe (live reached 14)")
+    parser.add_argument("--concurrent", action="store_true", help="run the monitors together, as the live scheduler does")
     args = parser.parse_args()
 
     # Evidence from a replay must never reach the live database.
@@ -647,8 +659,8 @@ def main() -> int:
     output = args.cache_root / args.session.isoformat()
     archive = AlpacaArchive(output / "alpaca")
     config = managed_finviz_shadow_document("replay")
-    gainers = build_cohort(archive, args.session, args.previous_session)
-    if len(gainers) < COHORT_SIZE:
+    gainers = build_cohort(archive, args.session, args.previous_session, size=args.cohort_size)
+    if len(gainers) < args.cohort_size:
         raise SystemExit(f"cohort has only {len(gainers)} names")
     universe = freeze_cohort(gainers, args.session, config)
     with (output / "cohort.csv").open("w", newline="", encoding="utf-8") as handle:
@@ -689,7 +701,9 @@ def main() -> int:
     repository.on_append = on_append
     monitors = build_monitors(clock, repository, ReplayTriggerRepository(), ReplayResearchRepository(news_evidence(news_rows, instruments)), market)
     steps = replay_steps(args.session, until=args.until)
-    failures = asyncio.run(run_replay(monitors, clock, steps, progress=lambda line: print(line, flush=True)))
+    failures = asyncio.run(
+        run_replay(monitors, clock, steps, progress=lambda line: print(line, flush=True), concurrent=args.concurrent)
+    )
     events_file.close()
 
     summary = {

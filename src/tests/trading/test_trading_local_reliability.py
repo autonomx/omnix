@@ -376,3 +376,202 @@ def test_force_flat_gives_the_exit_its_arms_feature_snapshot(monkeypatch) -> Non
     )
 
     assert [item["feature_snapshot"]["policy"] for item in captured] == ["minute", "event"]
+
+
+@pytest.fixture
+def local_trading(monkeypatch):
+    monkeypatch.setattr(model_route, "trading_provider_is_local", lambda: True)
+
+
+def test_a_local_call_covers_five_stocks_open_ones_first(local_trading) -> None:
+    rows = [{"name": f"S{index}", "open": index in {6, 7}} for index in range(9)]
+
+    limited = model_route.local_batch_rows(rows, is_open=lambda row: row["open"])
+
+    assert [row["name"] for row in limited] == ["S6", "S7", "S0", "S1", "S2"]
+
+
+def test_more_than_five_open_stocks_still_stop_at_five(local_trading) -> None:
+    rows = [{"name": f"S{index}", "open": True} for index in range(7)]
+
+    assert len(model_route.local_batch_rows(rows, is_open=lambda row: row["open"])) == 5
+
+
+def test_a_hosted_provider_is_not_capped(monkeypatch) -> None:
+    monkeypatch.setattr(model_route, "trading_provider_is_local", lambda: False)
+    rows = list(range(9))
+
+    assert model_route.local_batch_rows(rows, is_open=lambda _: False) == rows
+
+
+def test_a_second_local_call_waits_for_the_lane_and_gives_up_when_busy(monkeypatch) -> None:
+    import threading
+
+    monkeypatch.setattr(model_route, "LOCAL_LANE_WAIT_SECONDS", 0.01)
+    held, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with model_route.local_model_lane("lmstudio"):
+            held.set()
+            release.wait(5)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    held.wait(5)
+    try:
+        with pytest.raises(model_route.TradingLocalLaneBusy):
+            with model_route.local_model_lane("lmstudio"):
+                pass
+    finally:
+        release.set()
+        holder.join()
+
+
+def test_a_hosted_provider_never_waits_for_the_lane() -> None:
+    with model_route.LOCAL_MODEL_LANE:
+        with model_route.local_model_lane("claude_cli"):
+            pass
+
+
+def _decision(at: datetime, state: str, stop) -> SimpleNamespace:
+    return SimpleNamespace(
+        event_type="ai_shadow_decision", instrument_id=IDS[0], state=state, observed_at=at, event_id=str(at),
+        payload={"policy": "minute", "decision": {"action": state, "invalidation_price": stop}},
+    )
+
+
+def _ts(minute: int) -> datetime:
+    return datetime(2026, 11, 9, 15, minute, tzinfo=timezone.utc)
+
+
+def _long(entry_minute: int = 1) -> SimpleNamespace:
+    return SimpleNamespace(is_long=True, entry_time=_ts(entry_minute))
+
+
+def _stop(events, position=None):
+    from app.apps.trading.strategy_ai_shadow_monitor import _model_stop_price
+
+    return _model_stop_price(events, policy="minute", instrument_id=IDS[0], position=position or _long())
+
+
+def test_the_model_can_raise_its_stop_but_not_lower_it() -> None:
+    events = [_decision(_ts(0), "enter", "3.15"), _decision(_ts(5), "hold", "3.40"), _decision(_ts(9), "hold", "2.00")]
+
+    assert _stop(events) == Decimal("3.40")
+
+
+def test_an_earlier_trades_stop_does_not_carry_over() -> None:
+    events = [
+        _decision(_ts(0), "enter", "9.00"),
+        _decision(_ts(2), "exit", None),
+        _decision(_ts(10), "enter", "3.15"),
+    ]
+
+    assert _stop(events, _long(11)) == Decimal("3.15")
+
+
+def test_no_stop_without_an_open_position_or_a_stated_price() -> None:
+    assert _stop([_decision(_ts(0), "enter", None)]) is None
+    assert _stop([_decision(_ts(0), "enter", "3")], SimpleNamespace(is_long=False, entry_time=None)) is None
+
+
+def _policy_monitor(monkeypatch):
+    from app.apps.trading import strategy_ai_shadow_monitor as module
+
+    monitor = module.TradingAIShadowMonitor(strategy_repository_factory=lambda: None, market_service_factory=lambda: None)
+
+    async def prepared(*, rows, **_):
+        return rows
+
+    monkeypatch.setattr(monitor, "_prepare_policy_rows", prepared)
+    return module, monitor
+
+
+def _risk():
+    from datetime import time
+
+    return SimpleNamespace(strategy_id="s", risk=SimpleNamespace(
+        force_flat_et=time(15, 55), kill_switch=False, last_entry_et=time(11, 30), one_trade_per_symbol_per_day=False,
+    ))
+
+
+def test_a_close_through_the_models_stop_exits_without_asking_the_model(monkeypatch) -> None:
+    module, monitor = _policy_monitor(monkeypatch)
+    applied: list[dict] = []
+
+    async def capture(**kwargs):
+        applied.append(kwargs)
+
+    def forbidden():
+        raise AssertionError("the model must not be asked")
+
+    monkeypatch.setattr(monitor, "_apply_decision", capture)
+    monkeypatch.setattr(monitor, "analyzer_factory", forbidden)
+    fill = SimpleNamespace(
+        event_type="ai_shadow_fill", instrument_id=IDS[0], observed_at=_ts(1), event_id="f", state="filled",
+        payload={"policy": "minute", "position_after": {
+            "policy": "minute", "instrument_id": IDS[0], "normalized_units": "1", "entry_time": _ts(1).isoformat(),
+        }},
+    )
+    row = {
+        "candidate": SimpleNamespace(instrument_id=IDS[0]), "observed_at": _ts(30),
+        "bars": [SimpleNamespace(close=Decimal("2.99"))], "learning": None, "universe_id": "u", "feature_snapshot": {},
+    }
+
+    asyncio.run(monitor._run_policy(
+        policy="minute", rows=[row], config=_risk(), repository=None, market_service=None,
+        events=[_decision(_ts(0), "enter", "3.15"), fill],
+    ))
+
+    assert applied[0]["decision"].action == "exit"
+    assert applied[0]["trigger_reasons"] == ("model_stop_breached",)
+
+
+def test_a_retry_looks_after_the_previous_attempt_not_the_refused_quote(monkeypatch) -> None:
+    _module, monitor = _policy_monitor(monkeypatch)
+    moments = iter([_ts(30), _ts(31), _ts(32), _ts(33)])
+    monitor.now_factory = lambda: next(moments)
+    original = _ts(10)
+
+    assert monitor._retry_actionable_at("minute", IDS[0], original) == original
+    assert monitor._retry_actionable_at("minute", IDS[0], original) == _ts(30)
+    assert monitor._retry_actionable_at("minute", IDS[0], original) == _ts(31)
+    assert monitor._retry_actionable_at("event", IDS[0], original) == original  # the other arm's order is its own
+
+
+def test_c_and_d_send_the_open_position_inside_the_five(monkeypatch, local_trading) -> None:
+    module, monitor = _policy_monitor(monkeypatch)
+    sent: list[list[str]] = []
+
+    class Stop(Exception):
+        pass
+
+    class Analyzer:
+        def assess(self, *, policy, rows):
+            sent.append([row["instrument_id"] for row in rows])
+            raise Stop
+
+    async def no_append(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(monitor, "analyzer_factory", Analyzer)
+    monkeypatch.setattr(monitor, "_append", no_append)
+    monkeypatch.setattr(module, "trade_log", lambda *a, **k: None)
+    open_id = "equity:US:S7"
+    fill = SimpleNamespace(
+        event_type="ai_shadow_fill", instrument_id=open_id, observed_at=_ts(1), event_id="f", state="filled",
+        payload={"policy": "minute", "position_after": {"policy": "minute", "instrument_id": open_id, "normalized_units": "1"}},
+    )
+    rows = [
+        {
+            "candidate": SimpleNamespace(instrument_id=f"equity:US:S{index}"), "observed_at": _ts(30),
+            "bars": [SimpleNamespace(close=Decimal("5"))], "learning": None, "universe_id": "u", "feature_snapshot": {},
+        }
+        for index in range(9)
+    ]
+
+    asyncio.run(monitor._run_policy(
+        policy="minute", rows=rows, config=_risk(), repository=None, market_service=None, events=[fill],
+    ))
+
+    assert sent[0][0] == open_id and len(sent[0]) == 5

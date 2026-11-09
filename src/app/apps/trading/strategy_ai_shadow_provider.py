@@ -15,7 +15,6 @@ import copy
 import hashlib
 import inspect
 import json
-import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -34,7 +33,7 @@ from app.providers.structured.parsing import decode_json_object
 
 from . import strategy_ai_shadow as shadow
 from .local_batch import per_instrument_format
-from .model_route import is_local_provider, local_output_limit, no_thinking_options, trading_provider
+from .model_route import LOCAL_MODEL_LANE, is_local_provider, local_output_limit, no_thinking_options, trading_provider
 from .structured_llm import sends_json_schema
 from .strategy_repository import StrategyEvent, default_strategy_repository
 
@@ -220,7 +219,7 @@ class PersistentCircuitState(_CircuitState):
         self._hydrated = True
 
 
-_PROVIDER_LOCK = threading.RLock()
+_PROVIDER_LOCK = LOCAL_MODEL_LANE  # one lane with every other trading call to a local model
 _PROVIDER_INSTANCE = None
 _PROVIDER_KEY: tuple[object, ...] | None = None
 _CIRCUIT = PersistentCircuitState()

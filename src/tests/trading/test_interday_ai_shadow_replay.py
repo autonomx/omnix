@@ -106,14 +106,35 @@ def test_a_fill_uses_the_first_quote_after_the_decision() -> None:
     assert selection.observation.source_time >= decided + replay.ORDER_LATENCY
 
 
-def test_a_retried_order_reads_the_market_now_not_its_first_quote() -> None:
+def test_a_fill_looks_only_after_the_time_the_monitor_passes() -> None:
     archive = _Archive()
-    now = _at(10, 30, 5)
-    market = _market(now, archive)
+    market = _market(_at(10, 30, 5), archive)
 
-    market.first_causal_after(INSTRUMENT, decision_completed_at=_at(10, 0, 22), actionable_at=_at(10, 0, 22))
+    market.first_causal_after(INSTRUMENT, decision_completed_at=_at(10, 29, 5), actionable_at=_at(10, 29, 5))
 
-    assert archive.asked[-1]["after"] == now + replay.ORDER_LATENCY
+    assert archive.asked[-1]["after"] == _at(10, 29, 5) + replay.ORDER_LATENCY
+
+
+def test_concurrent_mode_runs_every_monitor_together() -> None:
+    import asyncio
+
+    calls: list[str] = []
+
+    class Monitor:
+        last_error = None
+
+        def __init__(self, name):
+            self.name = name
+
+        async def run_once(self):
+            calls.append(f"start-{self.name}")
+            await asyncio.sleep(0)
+            calls.append(f"end-{self.name}")
+
+    clock = replay.SimClock(_at(9, 31))
+    asyncio.run(replay.run_replay({"A": Monitor("A"), "B": Monitor("B")}, clock, [_at(9, 31)], progress=lambda _: None, concurrent=True))
+
+    assert calls[:2] == ["start-A", "start-B"]
 
 
 def test_a_fill_quote_is_taken_at_the_current_second() -> None:
