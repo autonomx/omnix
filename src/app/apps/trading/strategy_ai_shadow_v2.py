@@ -642,7 +642,7 @@ class CatalystIntelligenceAnalyzer:
             morning_context=morning_context,
             empirical_persistence_rate=empirical_persistence_rate,
             empirical_sample_size=empirical_sample_size,
-            original=self._assess_core,
+            original=type(self)._assess_core,  # the policy passes the analyzer itself
         )
         return normalize_catalyst_provenance(snapshot)
 
