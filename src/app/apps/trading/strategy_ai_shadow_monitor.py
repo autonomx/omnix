@@ -1,7 +1,7 @@
 """Interday SHADOW experiment: the AI arms of the substrategy group.
 
 A/B (deterministic V2 and Stoch trend capture) are produced by the canonical
-strategy monitor. This monitor adds C/D: a stateful every-minute AI policy and a
+strategy monitor. This monitor adds C/D: a stateful five-minute AI policy and a
 stateful event-driven AI policy over the identical frozen cohort. It never
 creates paper orders or protections. The linked standalone ``stoch-rsi-5min``,
 ``stoch-rsi-5min-early-single``, ``stoch-rsi-5min-fast`` and
@@ -81,6 +81,7 @@ from .strategy_session_evidence import (
     _FullSessionMarketServiceProxy,
 )
 from .trade_logging import trade_log
+from .trading_ai_budget import research_decision_slot
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import after_regular_close
 
@@ -1815,6 +1816,9 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 policy=policy,
                 instrument_id=candidate.instrument_id,
             )
+            # A model call can take over a minute. Stops, fills and retries above still run on every pass.
+            if previous is not None and research_decision_slot(previous.observed_at) >= research_decision_slot(observed_at):
+                continue
             previous_feature = (
                 previous.payload.get("feature_snapshot")
                 if previous is not None
@@ -1836,7 +1840,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 if not reasons:
                     continue
             else:
-                reasons = ("completed_1m_bar",)
+                reasons = ("five_minute_slot",)
 
             analyzer_row = {
                 "instrument_id": candidate.instrument_id,

@@ -527,6 +527,75 @@ def test_a_close_through_the_models_stop_exits_without_asking_the_model(monkeypa
     assert applied[0]["trigger_reasons"] == ("model_stop_breached",)
 
 
+def _flat_row(at: datetime) -> dict:
+    return {
+        "candidate": SimpleNamespace(instrument_id=IDS[0]), "observed_at": at,
+        "bars": [SimpleNamespace(close=Decimal("5"))], "learning": None, "universe_id": "u", "feature_snapshot": {},
+    }
+
+
+def _earlier_decision(policy: str, at: datetime) -> SimpleNamespace:
+    return SimpleNamespace(
+        event_type="ai_shadow_decision", instrument_id=IDS[0], state="skip", observed_at=at, event_id=str(at),
+        payload={"policy": policy, "decision": {"action": "skip", "invalidation_price": None}, "feature_snapshot": None},
+    )
+
+
+def _asked(monkeypatch, policy: str, row_at: datetime, earlier_at: datetime) -> int:
+    module, monitor = _policy_monitor(monkeypatch)
+    calls: list[str] = []
+
+    class Stop(Exception):
+        pass
+
+    class Analyzer:
+        def assess(self, *, policy, rows):
+            calls.append(policy)
+            raise Stop
+
+    async def no_append(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(monitor, "analyzer_factory", Analyzer)
+    monkeypatch.setattr(monitor, "_append", no_append)
+    monkeypatch.setattr(module, "trade_log", lambda *a, **k: None)
+    asyncio.run(monitor._run_policy(
+        policy=policy, rows=[_flat_row(row_at)], config=_risk(), repository=None, market_service=None,
+        events=[_earlier_decision(policy, earlier_at)],
+    ))
+    return len(calls)
+
+
+@pytest.mark.parametrize("policy", ["minute", "event"])
+def test_c_and_d_ask_the_model_once_per_five_minute_slot(monkeypatch, policy) -> None:
+    assert _asked(monkeypatch, policy, row_at=_ts(33), earlier_at=_ts(31)) == 0
+    assert _asked(monkeypatch, policy, row_at=_ts(35), earlier_at=_ts(31)) == 1
+
+
+def test_the_stop_is_still_checked_inside_a_slot(monkeypatch) -> None:
+    _module, monitor = _policy_monitor(monkeypatch)
+    applied: list[dict] = []
+
+    async def capture(**kwargs):
+        applied.append(kwargs)
+
+    monkeypatch.setattr(monitor, "_apply_decision", capture)
+    fill = SimpleNamespace(
+        event_type="ai_shadow_fill", instrument_id=IDS[0], observed_at=_ts(1), event_id="f", state="filled",
+        payload={"policy": "minute", "position_after": {
+            "policy": "minute", "instrument_id": IDS[0], "normalized_units": "1", "entry_time": _ts(1).isoformat(),
+        }},
+    )
+    row = {**_flat_row(_ts(33)), "bars": [SimpleNamespace(close=Decimal("2.99"))]}
+
+    asyncio.run(monitor._run_policy(
+        policy="minute", rows=[row], config=_risk(), repository=None, market_service=None,
+        events=[_decision(_ts(0), "enter", "3.15"), _decision(_ts(31), "hold", "3.15"), fill],
+    ))
+
+    assert applied[0]["trigger_reasons"] == ("model_stop_breached",)
+
+
 def test_a_retry_looks_after_the_previous_attempt_not_the_refused_quote(monkeypatch) -> None:
     _module, monitor = _policy_monitor(monkeypatch)
     moments = iter([_ts(30), _ts(31), _ts(32), _ts(33)])

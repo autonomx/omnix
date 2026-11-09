@@ -39,7 +39,8 @@ AIShadowRegime = Literal[
 ]
 # v2: the task states what confidence means (one model answered 0 for every decision without it).
 # v3: the model's own invalidation price is enforced; a local-model call covers at most five stocks.
-AI_SHADOW_POLICY_VERSION = "ai-shadow-policy-v3"
+# v4: each arm asks the model at most once per clock-aligned five-minute slot.
+AI_SHADOW_POLICY_VERSION = "ai-shadow-policy-v4"
 MAX_NORMALIZED_UNITS = Decimal("1.5")
 ADD_UNITS = Decimal("0.5")
 REDUCE_UNITS = Decimal("0.5")
@@ -303,7 +304,7 @@ def policy_feature_snapshot(
 ) -> dict[str, Any]:
     """Project the shared causal snapshot onto one experimental arm.
 
-    The every-minute arm is intentionally "pure AI": it may use generic market,
+    The "minute" arm (now on five-minute slots) is intentionally "pure AI": it may use generic market,
     indicator, cohort and execution evidence, but it must not see the canonical
     V2 state machine or the deterministic intraday-learning interpretation.
     The event-driven arm is explicitly hybrid and receives those fields.

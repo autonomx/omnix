@@ -138,7 +138,7 @@ def _row(
 
 
 @pytest.mark.anyio
-async def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change() -> None:
+async def test_minute_policy_runs_each_new_slot_but_event_policy_requires_change() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -167,7 +167,7 @@ async def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change(
         events=events,
     )
 
-    second = _row(START + timedelta(minutes=1), _feature())
+    second = _row(START + timedelta(minutes=5), _feature())
     await monitor._run_policy(
         policy="minute",
         rows=[second],
@@ -465,7 +465,7 @@ async def test_event_policy_reacts_to_material_state_change() -> None:
         "session_high": "11.2",
         "current_volume_ratio_to_prior10": "2.0",
     }
-    second = _row(START + timedelta(minutes=1), changed)
+    second = _row(START + timedelta(minutes=5), changed)
     await monitor._run_policy(
         policy="event",
         rows=[second],
@@ -796,7 +796,7 @@ async def test_same_max_minute_allows_late_symbol_request_signature() -> None:
         policy="minute",
         rows=[
             _row(minute_one, _feature("10.1"), instrument_id=instrument_a),
-            _row(START, _feature("9.9"), instrument_id=instrument_b),
+            _row(START - timedelta(minutes=5), _feature("9.9"), instrument_id=instrument_b),
         ],
         config=config,
         repository=repository,

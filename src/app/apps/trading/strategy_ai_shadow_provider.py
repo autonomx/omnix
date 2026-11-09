@@ -598,8 +598,8 @@ def _output_error(content: str, requested_ids: set[str]):
 def _cadence(policy: shadow.AIShadowPolicy) -> str:
     if policy == "minute":
         return (
-            "You are the PURE EVERY-MINUTE policy. Re-evaluate each supplied symbol "
-            "on every completed one-minute bar using only the generic causal market, "
+            "You are the PURE FIVE-MINUTE policy. Re-evaluate each supplied symbol "
+            "every five minutes using only the generic causal market, "
             "indicator, cohort and execution evidence supplied to you. You are not "
             "given the canonical deterministic strategy state or its intraday-learning "
             "classification. Preserve the prior thesis unless the new evidence justifies "
