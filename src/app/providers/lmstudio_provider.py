@@ -662,6 +662,11 @@ class LMStudioProvider(BaseProvider):
 
     def loaded_model_key(self) -> str | None:
         """The key of the chat model LM Studio has loaded; None when none is or it cannot be told."""
+        loaded = self.loaded_model()
+        return loaded[0] if loaded is not None else None
+
+    def loaded_model(self) -> tuple[str, int | None] | None:
+        """The loaded chat model's key and context length; None when none is or it cannot be told."""
         try:
             response = self._make_request("get", "/api/v1/models", timeout=_LOADED_MODEL_TIMEOUT_SECONDS)
             try:
@@ -673,7 +678,10 @@ class LMStudioProvider(BaseProvider):
         models = listing.get("models") if isinstance(listing, dict) else None
         for model in models if isinstance(models, list) else ():
             if isinstance(model, dict) and model.get("type") != "embedding" and model.get("loaded_instances") and model.get("key"):
-                return str(model["key"])
+                instance = model["loaded_instances"][0]
+                config = instance.get("config") if isinstance(instance, dict) else None
+                context = config.get("context_length") if isinstance(config, dict) else None
+                return str(model["key"]), context if isinstance(context, int) else None
         return None
 
     def get_models(self) -> List[ModelInfo]:

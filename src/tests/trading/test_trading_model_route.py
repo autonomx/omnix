@@ -29,7 +29,9 @@ def _setting(monkeypatch, row: dict | None) -> None:
 
 
 def _instance(name: str, model: str = "configured") -> SimpleNamespace:
-    return SimpleNamespace(provider_name=name, config=ProviderConfig(provider_type=name, model=model))
+    return SimpleNamespace(
+        provider_name=name, config=ProviderConfig(provider_type=name, model=model), loaded_model_key=lambda: model,
+    )
 
 
 @pytest.fixture

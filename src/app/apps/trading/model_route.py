@@ -16,12 +16,28 @@ from app.providers.catalog import LOADED_MODEL, LOCAL_DEVICE, THINKING_OFF, prov
 logger = logging.getLogger(__name__)
 
 TRADING_ROUTE_KEY = "trading-research"
+# A real day's catalyst prompt reached 21,041 tokens, before the reply.
+MIN_LOCAL_CONTEXT_TOKENS = 32_000
+LOCAL_OUTPUT_MULTIPLIER = 2
+
+
+class TradingLocalModelNotReady(RuntimeError):
+    """The pinned local model is not the one loaded; no request was sent."""
 
 
 @dataclass(frozen=True)
 class TradingModel:
     provider_id: str | None = None  # None: the default LLM provider
     model_id: str | None = None  # None: that provider's configured model
+
+
+@dataclass(frozen=True)
+class LocalModelReadiness:
+    applicable: bool  # False: trading is not on a provider that keeps a model loaded
+    ready: bool
+    model: str | None = None
+    context_length: int | None = None
+    problems: tuple[str, ...] = ()
 
 
 def trading_model() -> TradingModel:
@@ -50,11 +66,48 @@ def trading_provider(default_lookup: Callable[[], Any] | None = None) -> Any:
     if chosen.provider_id is None and chosen.model_id is None:
         return (default_lookup or provider_service.get_provider)()
     provider = provider_service.get_routed_provider(chosen.provider_id, chosen.model_id)
-    if provider is not None and chosen.model_id is None and provider_supports(provider, LOADED_MODEL):
-        loaded = provider.loaded_model_key()
-        if loaded:
-            return provider_service.get_routed_provider(chosen.provider_id, loaded)
+    if provider is None or not provider_supports(provider, LOADED_MODEL):
+        return provider
+    loaded = provider.loaded_model_key()
+    if chosen.model_id is None:
+        return provider_service.get_routed_provider(chosen.provider_id, loaded) if loaded else provider
+    if loaded != chosen.model_id:
+        # Asking for another model makes LM Studio load it, at a default context, over what the person loaded.
+        raise TradingLocalModelNotReady(f"pinned={chosen.model_id};loaded={loaded}")
     return provider
+
+
+def local_model_readiness() -> LocalModelReadiness:
+    """Whether the local model trading will use is loaded, the pinned one, and large enough for its prompts."""
+    from app.providers import service as provider_service
+
+    chosen = trading_model()
+    provider = (
+        provider_service.get_routed_provider(chosen.provider_id, chosen.model_id)
+        if chosen.provider_id is not None or chosen.model_id is not None
+        else provider_service.get_provider()
+    )
+    if provider is None or not provider_supports(provider, LOADED_MODEL):
+        return LocalModelReadiness(applicable=False, ready=True)
+    loaded = provider.loaded_model()
+    if loaded is None:
+        return LocalModelReadiness(applicable=True, ready=False, problems=("NO_MODEL_LOADED",))
+    model, context = loaded
+    problems: list[str] = []
+    if chosen.model_id is not None and model != chosen.model_id:
+        problems.append("WRONG_MODEL_LOADED")
+    if context is not None and context < MIN_LOCAL_CONTEXT_TOKENS:
+        problems.append("CONTEXT_TOO_SMALL")
+    return LocalModelReadiness(applicable=True, ready=not problems, model=model, context_length=context, problems=tuple(problems))
+
+
+def is_local_provider(provider: Any) -> bool:
+    return provider_supports(provider, LOCAL_DEVICE)
+
+
+def local_output_limit(provider: Any, max_tokens: int) -> int:
+    """A local model's output costs no quota, and its answers ran past limits sized for a hosted model's."""
+    return max_tokens * LOCAL_OUTPUT_MULTIPLIER if is_local_provider(provider) else max_tokens
 
 
 def trading_provider_is_local() -> bool:
@@ -83,8 +136,15 @@ def no_thinking_options(provider: Any) -> dict[str, bool]:
 
 
 __all__ = [
+    "LOCAL_OUTPUT_MULTIPLIER",
+    "LocalModelReadiness",
+    "MIN_LOCAL_CONTEXT_TOKENS",
     "TRADING_ROUTE_KEY",
+    "TradingLocalModelNotReady",
     "TradingModel",
+    "is_local_provider",
+    "local_model_readiness",
+    "local_output_limit",
     "no_thinking_options",
     "trading_model",
     "trading_provider",

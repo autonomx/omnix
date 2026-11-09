@@ -14,7 +14,8 @@ export function TradingModelSection({ payload }: { payload?: ProviderFacadePaylo
       description="Runs trading's AI research during market hours. A local model spends none of your provider's usage limit. This is research only: it never places orders."
       providerLabel="Trading provider"
       modelLabel="Trading model"
-      modelHelp={(provider, modelChosen) => (provider === 'lmstudio' && !modelChosen ? 'Provider default uses whichever model is loaded in LM Studio. Keep it loaded during market hours.' : undefined)}
+      typedModel={(provider) => provider === 'lmstudio'}
+      modelHelp={(provider) => (provider === 'lmstudio' ? 'Blank uses whichever model is loaded. Enter a model key to pin it: trading then pauses if another model is loaded.' : undefined)}
     />
   );
 }

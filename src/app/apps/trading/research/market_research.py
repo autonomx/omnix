@@ -16,7 +16,7 @@ from ..indicators.engine import (
     relative_strength_index,
     simple_moving_average,
 )
-from ..model_route import no_thinking_options, trading_provider
+from ..model_route import local_output_limit, no_thinking_options, trading_provider
 from ..models import BarsResponse
 from ..service import TradingMarketDataService, default_market_data_service
 from app.prompts import prompt_template
@@ -238,7 +238,7 @@ def _call_provider(provider: Any, messages: list[ChatMessage], model: str | None
                 model=model,
                 stream=False,
                 temperature=0,
-                max_tokens=1_200,
+                max_tokens=local_output_limit(provider, 1_200),
                 **no_thinking_options(provider),
             )
         )

@@ -52,7 +52,7 @@ describe('Trading model', () => {
     taskOverrides = { ...taskOverrides, [TRADING_ROUTE_KEY]: { providerId: 'lmstudio', modelId: '' } };
     render(<TradingModelSection payload={payload} />);
 
-    expect(screen.getByText('Provider default uses whichever model is loaded in LM Studio. Keep it loaded during market hours.')).toBeInTheDocument();
+    expect(screen.getByText('Blank uses whichever model is loaded. Enter a model key to pin it: trading then pauses if another model is loaded.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/^Trading model/), { target: { value: 'qwen/qwen3.8-27b' } });
 
     expect(dispatch).toHaveBeenLastCalledWith({

@@ -40,7 +40,7 @@ from app.providers.structured import (
 from app.providers.structured.errors import StructuredDecodeError, StructuredSchemaError
 from app.providers.structured.schema_projection import project_provider_schema
 
-from .model_route import no_thinking_options
+from .model_route import local_output_limit, no_thinking_options
 from .trading_ai_budget import TradingAIBudget, default_trading_ai_budget
 
 T = TypeVar("T", bound=BaseModel)
@@ -160,7 +160,7 @@ def trading_model_call(
         "response_format": response_format or trading_response_format(provider, output_model, schema_name),
         "request_timeout_seconds": request_timeout_seconds,
         "temperature": 0,
-        "max_tokens": max_tokens,
+        "max_tokens": local_output_limit(provider, max_tokens),
         **no_thinking_options(provider),
     }
     analyzer_request = _AnalyzerRequest(provider, request)

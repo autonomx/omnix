@@ -15,10 +15,12 @@ type TaskModelSectionProps = {
   modelLabel: string;
   /** Help under the model field, given the provider in effect and whether a model is chosen. */
   modelHelp?: (provider: string, modelChosen: boolean) => string | undefined;
+  /** Whether the model is typed, for a provider whose models the list does not know. */
+  typedModel?: (provider: string) => boolean;
 };
 
 /** Which provider and model one background feature uses. Unset, it follows the default provider. */
-export function TaskModelSection({ payload, routeKey, title, description, providerLabel, modelLabel, modelHelp }: TaskModelSectionProps) {
+export function TaskModelSection({ payload, routeKey, title, description, providerLabel, modelLabel, modelHelp, typedModel }: TaskModelSectionProps) {
   const { state, dispatch } = useSettingsProfileContext();
   const overrides = state.draft.global.routing.taskOverrides;
   const chosen: TaskRoute = overrides[routeKey] ?? { providerId: '', modelId: '' };
@@ -47,10 +49,14 @@ export function TaskModelSection({ payload, routeKey, title, description, provid
           </select>
         </SettingsField>
         <SettingsField label={modelLabel} help={modelHelp?.(provider, Boolean(chosen.modelId))}>
-          <select value={chosen.modelId} onChange={(event) => choose({ ...chosen, modelId: event.currentTarget.value })}>
-            <option value="">Provider default</option>
-            {models.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
+          {typedModel?.(provider) ? (
+            <input value={chosen.modelId} placeholder="Provider default" onChange={(event) => choose({ ...chosen, modelId: event.currentTarget.value.trim() })} />
+          ) : (
+            <select value={chosen.modelId} onChange={(event) => choose({ ...chosen, modelId: event.currentTarget.value })}>
+              <option value="">Provider default</option>
+              {models.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          )}
         </SettingsField>
       </div>
     </SettingsSection>

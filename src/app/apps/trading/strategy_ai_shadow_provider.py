@@ -33,7 +33,8 @@ from app.providers.structured.errors import StructuredDecodeError
 from app.providers.structured.parsing import decode_json_object
 
 from . import strategy_ai_shadow as shadow
-from .model_route import no_thinking_options, trading_provider
+from .local_batch import per_instrument_format
+from .model_route import is_local_provider, local_output_limit, no_thinking_options, trading_provider
 from .structured_llm import sends_json_schema
 from .strategy_repository import StrategyEvent, default_strategy_repository
 
@@ -295,7 +296,15 @@ def _uses_dedicated_lane(analyzer: shadow.AIShadowPolicyAnalyzer) -> bool:
     return analyzer.provider_factory is get_trading_research_provider
 
 
+def _request_rejected(exc: BaseException) -> bool:
+    """The provider answered and refused this request (too long for its context, say): it is not down."""
+    text = str(exc).casefold()
+    return "http error 400" in text and "failed to load" not in text
+
+
 def _transport_failure(exc: BaseException) -> bool:
+    if _request_rejected(exc):
+        return False
     if isinstance(exc, (ProviderConnectionError, TimeoutError, OSError)):
         return True
     text = str(exc).casefold()
@@ -466,7 +475,7 @@ def _chat_call_unlocked(
                     response_format=response_format,
                     request_timeout_seconds=attempt_timeout,
                     temperature=0,
-                    max_tokens=max_tokens,
+                    max_tokens=local_output_limit(provider, max_tokens),
                     **no_thinking_options(provider),
                 )
             else:
@@ -708,6 +717,13 @@ def _assess_holding_lane(
         if provider is None:
             raise AIShadowReliabilityError("ai_shadow_provider_unavailable")
         model = getattr(getattr(provider, "config", None), "model", None) or None
+        if native_schema and is_local_provider(provider):
+            response_format = per_instrument_format(
+                shadow.AIShadowDecision,
+                [str(row["instrument_id"]) for row in rows],
+                requires={},
+                schema_name="ai_shadow_batch_response",
+            )
         provider, response = _chat_call(
             self,
             messages=messages,

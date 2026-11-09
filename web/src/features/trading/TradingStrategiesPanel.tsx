@@ -549,6 +549,7 @@ export function TradingStrategiesPanel() {
   const latestStochTrendEntry = useMemo(() => latestByEventType(events, 'stoch_trend_capture_entry'), [events]);
   const latestStochExecutionSummary = useMemo(() => latestByEventType(events, 'stoch_trend_execution_summary'), [events]);
   const latestIntradayLlm = useMemo(() => latestByEventType(events, 'intraday_llm'), [events]);
+  const localModelReadiness = useMemo(() => latestByEventType(events, 'local_model_readiness').get('__provider__'), [events]);
   const latestAiMinuteDecision = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_decision', 'minute'), [events]);
   const latestAiEventDecision = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_decision', 'event'), [events]);
   const latestAiMinuteTrade = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_trade', 'minute'), [events]);
@@ -1149,6 +1150,12 @@ export function TradingStrategiesPanel() {
             <span>{item.strategy_kind} · {item.mode.replace('_', ' ')}{item.parent_strategy_id ? ' · interday child' : ''}</span>
           </button>
         )) : <p>No strategies configured.</p>}
+        {localModelReadiness?.state === 'not_ready' ? (
+          <div className="trading-strategy-safety" role="alert">
+            <strong>Local AI model not ready</strong>
+            <small>{Array.isArray(localModelReadiness.payload?.problems) ? localModelReadiness.payload.problems.join(', ') : 'Check LM Studio.'}</small>
+          </div>
+        ) : null}
         <div className="trading-strategy-safety">
           <strong>Paper execution boundary</strong>
           <small>AI and model scores are shadow-only. No live broker route. AUTO PAPER requires deterministic gates, server risk approval, and eligible execution evidence.</small>
