@@ -71,6 +71,7 @@ MAX_QUOTE_SPREAD_BPS = Decimal("150")
 QUOTE_LOOKBACK = timedelta(minutes=30)
 QUOTE_LOOKAHEAD = timedelta(seconds=60)
 QUOTE_BUCKET_SECONDS = 15
+ORDER_LATENCY = timedelta(milliseconds=250)  # PaperExecutionPolicy.latency_ms
 
 
 def utc_iso(value: datetime) -> str:
@@ -446,14 +447,15 @@ class ReplayMarket:
             rejection_reasons=() if eligible else ("REPLAY_SPREAD_ABOVE_LIMIT",),
         )
 
-    def observation_as_of(self, instrument_id: str, as_of: datetime) -> ExecutionObservation | None:
+    def observation_as_of(self, instrument_id: str, as_of: datetime, *, bucket_seconds: int = QUOTE_BUCKET_SECONDS) -> ExecutionObservation | None:
         seconds = int(as_of.timestamp())
-        bucket = datetime.fromtimestamp(seconds - seconds % QUOTE_BUCKET_SECONDS, UTC)
+        bucket = datetime.fromtimestamp(seconds - seconds % bucket_seconds, UTC)
         quote = self.archive.quote(self.symbols[instrument_id], before=bucket)
         return None if quote is None else self._observation(instrument_id, quote)
 
     def execution_observation(self, instrument_id, binding_id=None, **_):
-        observation = self.observation_as_of(instrument_id, self.clock.now())
+        # V2 fills from this quote: it must be current, or it predates the decision it is meant to fill.
+        observation = self.observation_as_of(instrument_id, self.clock.now(), bucket_seconds=1)
         if observation is None:
             raise ValueError("replay_quote_unavailable")
         return observation
@@ -467,7 +469,9 @@ class ReplayMarket:
         self, instrument_id, *, decision_completed_at, actionable_at=None, market_snapshot_as_of=None, binding_id=None, purpose="EXECUTION",
     ) -> CausalExecutionSelection | None:
         actionable = actionable_at or decision_completed_at
-        earliest = max(decision_completed_at, actionable)
+        # An order works from its paper latency on. A retry passes the original decision time and must read the
+        # market now: re-reading the first quote after that time would refuse it the same way forever.
+        earliest = max(decision_completed_at, actionable, self.clock.now()) + ORDER_LATENCY
         quote = self.archive.quote(self.symbols[instrument_id], after=earliest)
         if quote is None:
             return None

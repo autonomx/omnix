@@ -346,3 +346,33 @@ def test_the_monitor_registers_once() -> None:
 
     assert create_trading_local_model_monitor_task(context) is not None
     assert create_trading_local_model_monitor_task(context) is None
+
+
+def test_force_flat_gives_the_exit_its_arms_feature_snapshot(monkeypatch) -> None:
+    from datetime import time
+
+    from app.apps.trading import strategy_ai_shadow_monitor as module
+
+    monitor = module.TradingAIShadowMonitor(strategy_repository_factory=lambda: None, market_service_factory=lambda: None)
+    captured: list[dict] = []
+
+    async def capture(**kwargs):
+        captured.append(kwargs["row"])
+
+    monkeypatch.setattr(monitor, "_apply_decision", capture)
+    monkeypatch.setattr(module, "_position_from_latest_fill", lambda *a, **k: SimpleNamespace(is_long=True))
+    monkeypatch.setattr(module, "_pending_exit_intent", lambda *a, **k: None)
+    row = {
+        "candidate": SimpleNamespace(instrument_id=IDS[0]), "bars": [], "learning": None,
+        "feature_by_policy": {"minute": {"policy": "minute"}, "event": {"policy": "event"}},
+    }
+
+    asyncio.run(
+        monitor._force_flat_open_positions(
+            rows=[row], config=SimpleNamespace(risk=SimpleNamespace(force_flat_et=time(15, 55))),
+            repository=None, market_service=None, events=[],
+            now=datetime(2026, 11, 6, 20, 56, tzinfo=timezone.utc),
+        )
+    )
+
+    assert [item["feature_snapshot"]["policy"] for item in captured] == ["minute", "event"]

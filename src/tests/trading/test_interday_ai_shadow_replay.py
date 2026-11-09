@@ -102,8 +102,27 @@ def test_a_fill_uses_the_first_quote_after_the_decision() -> None:
 
     selection = market.first_causal_after(INSTRUMENT, decision_completed_at=decided, actionable_at=_at(10, 0, 5))
 
-    assert archive.asked[-1]["after"] == decided
-    assert selection.observation.source_time >= decided
+    assert archive.asked[-1]["after"] == decided + replay.ORDER_LATENCY
+    assert selection.observation.source_time >= decided + replay.ORDER_LATENCY
+
+
+def test_a_retried_order_reads_the_market_now_not_its_first_quote() -> None:
+    archive = _Archive()
+    now = _at(10, 30, 5)
+    market = _market(now, archive)
+
+    market.first_causal_after(INSTRUMENT, decision_completed_at=_at(10, 0, 22), actionable_at=_at(10, 0, 22))
+
+    assert archive.asked[-1]["after"] == now + replay.ORDER_LATENCY
+
+
+def test_a_fill_quote_is_taken_at_the_current_second() -> None:
+    archive = _Archive()
+    now = _at(10, 0, 7)
+
+    _market(now, archive).execution_observation(INSTRUMENT)
+
+    assert archive.asked[-1]["before"] == now
 
 
 def test_a_decision_sees_only_quotes_already_known() -> None:

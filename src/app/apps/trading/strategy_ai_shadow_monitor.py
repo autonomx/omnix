@@ -1936,6 +1936,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 )
                 forced_row = dict(row)
                 forced_row["observed_at"] = now
+                forced_row["feature_snapshot"] = row["feature_by_policy"][policy]
                 pending_exit = _pending_exit_intent(
                     events,
                     policy=policy,
