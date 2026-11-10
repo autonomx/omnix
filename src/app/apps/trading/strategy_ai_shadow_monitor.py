@@ -89,6 +89,10 @@ logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_ai_shadow_monitor"
+# A retried order uses a quote at most this old (simulate_ai_shadow_fill's capture lag), judged from just before it
+# (more than the 250 ms paper latency).
+RETRY_QUOTE_MAX_AGE = timedelta(seconds=60)
+RETRY_QUOTE_LEAD = timedelta(seconds=1)
 _EVENT_TYPES = (
     "state",
     "shadow_execution",
@@ -1589,11 +1593,30 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         )
 
     def _retry_actionable_at(self, policy: str, instrument_id: str, original: datetime) -> datetime:
-        """When a retried order may next look for a quote: after the last attempt, or it re-reads the same refused quote."""
-        key = (policy, instrument_id, original.astimezone(timezone.utc).isoformat())
+        """The moment a retried order is judged from: just before the newest quote, when one is fresh and new.
+
+        A retry once took the first quote after its last attempt. Passes run minutes apart and quotes arrive sparsely,
+        so that quote was often more than a minute past the moment it was judged from and was refused as too late,
+        every time (an exit waited 40 minutes on 2026-11-10). The newest quote known now is used instead, if it
+        arrived after the last attempt and is at most a minute old; otherwise the retry waits for one.
+        """
+        now = self.now_factory().astimezone(timezone.utc)
+        original = original.astimezone(timezone.utc)
+        key = (policy, instrument_id, original.isoformat())
         previous = self._retry_attempted_at.get(key)
-        self._retry_attempted_at[key] = self.now_factory().astimezone(timezone.utc)
-        return original if previous is None else max(original, previous)
+        self._retry_attempted_at[key] = now
+        if previous is None:
+            # First the rule every order has: the first quote after the decision, when it came within the age limit.
+            early = self.execution_plane.latest(instrument_id, as_of=min(now, original + RETRY_QUOTE_MAX_AGE))
+            if early is not None and early.recorded_at >= original:
+                return original
+        envelope = self.execution_plane.latest(instrument_id, as_of=now)
+        if envelope is not None:
+            quoted_at = envelope.observation.source_time.astimezone(timezone.utc)
+            new_since_last_attempt = previous is None or envelope.recorded_at > previous
+            if new_since_last_attempt and now - quoted_at <= RETRY_QUOTE_MAX_AGE:
+                return max(original, quoted_at - RETRY_QUOTE_LEAD)
+        return max(original, previous or original, now - RETRY_QUOTE_MAX_AGE)
 
     async def _run_policy(
         self,

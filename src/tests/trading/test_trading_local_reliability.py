@@ -596,16 +596,78 @@ def test_the_stop_is_still_checked_inside_a_slot(monkeypatch) -> None:
     assert applied[0]["trigger_reasons"] == ("model_stop_breached",)
 
 
-def test_a_retry_looks_after_the_previous_attempt_not_the_refused_quote(monkeypatch) -> None:
-    _module, monitor = _policy_monitor(monkeypatch)
-    moments = iter([_ts(30), _ts(31), _ts(32), _ts(33)])
-    monitor.now_factory = lambda: next(moments)
-    original = _ts(10)
+class _Plane:
+    def __init__(self) -> None:
+        self.quote: tuple[datetime, datetime] | None = None  # (source time, recorded at)
 
-    assert monitor._retry_actionable_at("minute", IDS[0], original) == original
-    assert monitor._retry_actionable_at("minute", IDS[0], original) == _ts(30)
-    assert monitor._retry_actionable_at("minute", IDS[0], original) == _ts(31)
-    assert monitor._retry_actionable_at("event", IDS[0], original) == original  # the other arm's order is its own
+    def latest(self, instrument_id, *, as_of=None):
+        if self.quote is None or (as_of is not None and self.quote[1] > as_of):
+            return None
+        source, recorded = self.quote
+        return SimpleNamespace(observation=SimpleNamespace(source_time=source), recorded_at=recorded)
+
+
+def _retrying_monitor(monkeypatch, moments):
+    _module, monitor = _policy_monitor(monkeypatch)
+    pending = iter(moments)
+    monitor.now_factory = lambda: next(pending)
+    monitor.execution_plane = _Plane()
+    return monitor
+
+
+def _sec(minute: int, second: int) -> datetime:
+    return _ts(minute).replace(second=second)
+
+
+def test_a_retry_is_judged_from_just_before_the_newest_fresh_quote(monkeypatch) -> None:
+    from datetime import timedelta
+
+    monitor = _retrying_monitor(monkeypatch, [_sec(37, 9)])
+    monitor.execution_plane.quote = (_sec(37, 2), _sec(37, 3))
+
+    # TTEC on 2026-11-10: the first quote after 14:35:31 came 98 s later and was refused as too late.
+    assert monitor._retry_actionable_at("event", IDS[0], _sec(35, 31)) == _sec(37, 2) - timedelta(seconds=1)
+
+
+def test_a_stale_quote_makes_the_retry_wait_for_a_fresh_one(monkeypatch) -> None:
+    from datetime import timedelta
+
+    monitor = _retrying_monitor(monkeypatch, [_sec(40, 0)])
+    monitor.execution_plane.quote = (_sec(37, 0), _sec(37, 0))
+
+    assert monitor._retry_actionable_at("event", IDS[0], _sec(30, 0)) == _sec(40, 0) - timedelta(seconds=60)
+
+
+def test_a_quote_already_tried_is_not_tried_again(monkeypatch) -> None:
+    monitor = _retrying_monitor(monkeypatch, [_sec(37, 9), _sec(37, 30)])
+    monitor.execution_plane.quote = (_sec(37, 2), _sec(37, 3))
+    original = _sec(35, 31)
+
+    monitor._retry_actionable_at("event", IDS[0], original)
+    assert monitor._retry_actionable_at("event", IDS[0], original) == _sec(37, 9)  # waits for a quote after 37:09
+
+
+def test_a_first_retry_keeps_the_first_quote_after_the_decision_when_it_was_in_time(monkeypatch) -> None:
+    monitor = _retrying_monitor(monkeypatch, [_sec(39, 0)])
+    monitor.execution_plane.quote = (_sec(35, 40), _sec(35, 41))
+
+    assert monitor._retry_actionable_at("event", IDS[0], _sec(35, 31)) == _sec(35, 31)
+
+
+def test_a_retry_never_looks_before_its_decision(monkeypatch) -> None:
+    monitor = _retrying_monitor(monkeypatch, [_sec(36, 0)])
+    monitor.execution_plane.quote = (_sec(35, 20), _sec(35, 21))
+
+    assert monitor._retry_actionable_at("event", IDS[0], _sec(35, 31)) == _sec(35, 31)
+
+
+def test_each_arms_retry_is_its_own(monkeypatch) -> None:
+    monitor = _retrying_monitor(monkeypatch, [_sec(37, 9), _sec(37, 10)])
+    monitor.execution_plane.quote = (_sec(37, 2), _sec(37, 3))
+    original = _sec(35, 31)
+
+    first = monitor._retry_actionable_at("event", IDS[0], original)
+    assert monitor._retry_actionable_at("minute", IDS[0], original) == first
 
 
 def test_c_and_d_send_the_open_position_inside_the_five(monkeypatch, local_trading) -> None:
