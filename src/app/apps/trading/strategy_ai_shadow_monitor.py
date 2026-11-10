@@ -36,6 +36,7 @@ from .execution_observation_plane import (
 from .ibkr_settings import ibkr_live_quotes_authorized
 from .gapper_dataset import GapperCandidate
 from .indicator_signals import multi_timeframe_indicator_context
+from .held_quote_demand import default_held_quote_demand
 from .model_route import local_batch_rows
 from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
@@ -261,6 +262,15 @@ def _position_from_latest_fill(
         return AIShadowPositionState.model_validate(latest.payload["position_after"])
     except Exception:
         return AIShadowPositionState(policy=policy, instrument_id=instrument_id)
+
+
+def _has_open_work(events: list[StrategyEvent], policy: AIShadowPolicy, instrument_id: str) -> bool:
+    """A position, or an order still waiting to fill."""
+    return (
+        _position_from_latest_fill(events, policy=policy, instrument_id=instrument_id).is_long
+        or _pending_exit_intent(events, policy=policy, instrument_id=instrument_id) is not None
+        or _pending_entry_intent(events, policy=policy, instrument_id=instrument_id) is not None
+    )
 
 
 def _model_stop_price(
@@ -1628,6 +1638,16 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         market_service: TradingMarketDataService,
         events: list[StrategyEvent],
     ) -> None:
+        traded = {
+            event.instrument_id
+            for event in events
+            if event.event_type in {"ai_shadow_fill", "ai_shadow_entry_intent", "ai_shadow_exit_intent"}
+            and event.payload.get("policy") == policy
+        }
+        default_held_quote_demand().hold(
+            (instrument_id for instrument_id in traded if _has_open_work(events, policy, instrument_id)),
+            now=self.now_factory(),
+        )
         rows = await self._prepare_policy_rows(
             policy=policy,
             rows=rows,
@@ -1638,15 +1658,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if not rows:
             return
 
-        def has_open_work(row: dict[str, Any]) -> bool:
-            instrument_id = row["candidate"].instrument_id
-            return (
-                _position_from_latest_fill(events, policy=policy, instrument_id=instrument_id).is_long
-                or _pending_exit_intent(events, policy=policy, instrument_id=instrument_id) is not None
-                or _pending_entry_intent(events, policy=policy, instrument_id=instrument_id) is not None
-            )
-
-        rows = local_batch_rows(rows, is_open=has_open_work)
+        rows = local_batch_rows(rows, is_open=lambda row: _has_open_work(events, policy, row["candidate"].instrument_id))
 
         due: list[dict[str, Any]] = []
         reasons_by_id: dict[str, tuple[str, ...]] = {}

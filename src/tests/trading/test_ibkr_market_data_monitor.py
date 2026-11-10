@@ -276,3 +276,49 @@ async def test_ibkr_monitor_holds_the_gateway_connection_without_strategy_demand
     monitor = await run(stopped)
     assert stopped.connect_calls == 1
     assert monitor.last_error == "RuntimeError: ibkr_gateway_handshake_timeout"
+
+
+def test_held_stocks_get_lines_before_existing_and_new_demand(tmp_path):
+    monitor, _, _ = _monitor(tmp_path)
+    monitor.market_data_line_budget = 2
+    monitor._keys = {"equity:NASDAQ:AAA": "key-aaa", "equity:NASDAQ:BBB": "key-bbb"}
+
+    admitted = monitor._admitted_demand(
+        {"equity:NASDAQ:AAA", "equity:NASDAQ:BBB", "equity:NASDAQ:TTEC"},
+        priority={"equity:NASDAQ:TTEC"},
+    )
+
+    assert admitted == {"equity:NASDAQ:TTEC", "equity:NASDAQ:AAA"}
+    assert monitor.held_without_line_count == 0
+
+
+def test_held_stocks_beyond_the_budget_are_reported(monkeypatch, tmp_path):
+    monitor, _, _ = _monitor(tmp_path)
+    monitor.market_data_line_budget = 1
+    logged = []
+    monkeypatch.setattr(monitor_module, "trade_log", lambda *args, **kwargs: logged.append(kwargs))
+
+    admitted = monitor._admitted_demand({"equity:US:A", "equity:US:B"}, priority={"equity:US:A", "equity:US:B"})
+
+    assert admitted == {"equity:US:A"}
+    assert monitor.held_without_line_count == 1
+    assert logged[0]["denied"] == ["equity:US:B"]
+
+
+def test_a_universe_that_cannot_be_resolved_is_reported_not_silently_dropped(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    monitor, _, _ = _monitor(tmp_path)
+    logged = []
+    monkeypatch.setattr(monitor_module, "trade_log", lambda *args, **kwargs: logged.append(kwargs))
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("union failed")
+
+    monkeypatch.setattr(monitor_module, "resolve_v2_runtime_archive", broken)
+    config = SimpleNamespace(strategy_id="interday", active_universe_id=None, strategy_kind="gap_pullback_v1")
+    repository = SimpleNamespace(list_configs=lambda active_only=False: [config])
+
+    assert monitor._active_demand(repository, now=NOW) == set()
+    assert monitor.demand_error_count == 1
+    assert logged[0]["strategy_id"] == "interday" and "union failed" in logged[0]["detail"]

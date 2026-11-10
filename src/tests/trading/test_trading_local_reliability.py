@@ -706,3 +706,43 @@ def test_c_and_d_send_the_open_position_inside_the_five(monkeypatch, local_tradi
     ))
 
     assert sent[0][0] == open_id and len(sent[0]) == 5
+
+
+def test_held_quote_demand_lapses_unless_named_again() -> None:
+    from datetime import timedelta
+
+    from app.apps.trading.held_quote_demand import HeldQuoteDemand
+
+    demand = HeldQuoteDemand(hold_for=timedelta(minutes=15))
+    demand.hold(["equity:US:TTEC"], now=_ts(0))
+
+    assert demand.current(now=_ts(14)) == {"equity:US:TTEC"}
+    assert demand.current(now=_ts(15)) == set()
+
+
+def test_c_and_d_name_the_stocks_they_hold_even_without_a_usable_row(monkeypatch) -> None:
+    from app.apps.trading.held_quote_demand import HeldQuoteDemand
+
+    module, monitor = _policy_monitor(monkeypatch)
+    demand = HeldQuoteDemand()
+    monkeypatch.setattr(module, "default_held_quote_demand", lambda: demand)
+    monitor.now_factory = lambda: _ts(30)
+
+    async def no_rows(*, rows, **_):
+        return []  # the held stock's bars were incomplete this pass
+
+    monkeypatch.setattr(monitor, "_prepare_policy_rows", no_rows)
+    fill = SimpleNamespace(
+        event_type="ai_shadow_fill", instrument_id=IDS[0], observed_at=_ts(1), event_id="f", state="filled",
+        payload={"policy": "minute", "position_after": {"policy": "minute", "instrument_id": IDS[0], "normalized_units": "1"}},
+    )
+    closed = SimpleNamespace(
+        event_type="ai_shadow_fill", instrument_id=IDS[1], observed_at=_ts(2), event_id="g", state="filled",
+        payload={"policy": "minute", "position_after": {"policy": "minute", "instrument_id": IDS[1], "normalized_units": "0"}},
+    )
+
+    asyncio.run(monitor._run_policy(
+        policy="minute", rows=[], config=_risk(), repository=None, market_service=None, events=[fill, closed],
+    ))
+
+    assert demand.current(now=_ts(31)) == {IDS[0]}

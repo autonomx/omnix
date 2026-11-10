@@ -32,6 +32,7 @@ from .llm_reliability_metrics import (
     classify_llm_failure,
 )
 from .market_data_recovery import RecoveredBarSeries, RecoveryAttempt
+from .held_quote_demand import default_held_quote_demand
 from .model_route import local_batch_rows
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
@@ -877,6 +878,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         prepared: list[dict[str, Any]] = []
         prepared_rows: dict[str, dict[str, Any]] = {}
         armed_instruments = {plan.instrument_id for plan in active_plans if plan.arm_id == AI_SHADOW_V3_POLICY_VERSION}
+        default_held_quote_demand().hold(armed_instruments, now=self.now_factory())
         for row in local_batch_rows(rows, is_open=lambda item: item["candidate"].instrument_id in armed_instruments):
             candidate = row["candidate"]
             feature = row["feature"]

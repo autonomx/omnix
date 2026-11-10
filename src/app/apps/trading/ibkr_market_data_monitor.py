@@ -26,6 +26,7 @@ from .execution_observation_plane import (
     ExecutionObservationPlane,
     default_execution_observation_plane,
 )
+from .held_quote_demand import HeldQuoteDemand, default_held_quote_demand
 from .ibkr_evidence import IbkrEvidenceStore, default_ibkr_evidence_store
 from .ibkr_settings import load_ibkr_settings
 from .providers.ibkr import IbkrEquityProvider
@@ -36,6 +37,7 @@ from .strategy_shadow_universe import (
     resolve_v2_runtime_archive,
 )
 from .streaming.manager import StreamingQuoteUpdate
+from .trade_logging import trade_log
 from .us_equity_calendar import us_equity_session
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
@@ -86,6 +88,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         interval_seconds: float | None = None,
         evidence_store: IbkrEvidenceStore | None = None,
         market_data_line_budget: int | None = None,
+        held_quotes: HeldQuoteDemand | None = None,
     ) -> None:
         self.strategy_repository_factory = strategy_repository_factory
         self.market_service_factory = market_service_factory
@@ -97,6 +100,9 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             1,
             int(market_data_line_budget or _market_data_line_budget()),
         )
+        self.held_quotes = held_quotes or default_held_quote_demand()
+        self.demand_error_count = 0
+        self.held_without_line_count = 0
         self._keys: dict[str, str] = {}
         self._callbacks: dict[str, Callable] = {}
         self.last_run_at: datetime | None = None
@@ -139,7 +145,14 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
                             repository,
                             now=now,
                         )
-                except Exception:
+                except Exception as exc:
+                    # Silently dropping a strategy's stocks left them without live quotes; say so.
+                    self.demand_error_count += 1
+                    self.last_error = f"demand/{config.strategy_id}: {type(exc).__name__}: {exc}"
+                    trade_log(
+                        "auto_trading", "ibkr_demand_universe_error", strategy_id=config.strategy_id,
+                        error_type=type(exc).__name__, detail=str(exc)[:500], execution_authority=False,
+                    )
                     universe = None
             if universe is None:
                 continue
@@ -149,11 +162,19 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
                     demanded.add(instrument_id)
         return demanded
 
-    def _admitted_demand(self, demanded: set[str]) -> set[str]:
-        """Preserve existing lines first, then admit deterministic new demand."""
+    def _admitted_demand(self, demanded: set[str], priority: set[str] | None = None) -> set[str]:
+        """Held stocks first, then existing lines, then deterministic new demand."""
 
-        existing = sorted(set(self._keys) & demanded)
-        selected = existing[: self.market_data_line_budget]
+        held = sorted((priority or set()) & demanded)
+        selected = held[: self.market_data_line_budget]
+        self.held_without_line_count = len(held) - len(selected)
+        if self.held_without_line_count:
+            trade_log(
+                "auto_trading", "ibkr_held_quote_without_line", denied=held[len(selected):],
+                line_budget=self.market_data_line_budget, execution_authority=False,
+            )
+        existing = sorted((set(self._keys) & demanded) - set(selected))
+        selected.extend(existing[: self.market_data_line_budget - len(selected)])
         remaining = self.market_data_line_budget - len(selected)
         if remaining > 0:
             new_demand = sorted(demanded - set(selected))
@@ -363,9 +384,10 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         if not isinstance(provider, IbkrEquityProvider):
             raise TypeError("IBKR registry provider has unexpected type")
 
-        demanded = self._active_demand(repository, now=now)
+        held = self.held_quotes.current(now=now)
+        demanded = self._active_demand(repository, now=now) | held
         self.demanded_instrument_count = len(demanded)
-        admitted = self._admitted_demand(demanded)
+        admitted = self._admitted_demand(demanded, priority=held)
 
         for instrument_id in sorted(set(self._keys) - admitted):
             self._remove_subscription(market_service, provider, instrument_id)
@@ -423,6 +445,8 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             "market_data_line_budget": self.market_data_line_budget,
             "budget_denied_instrument_count": self.budget_denied_instrument_count,
             "active_subscription_count": len(self._keys),
+            "demand_error_count": self.demand_error_count,
+            "held_without_line_count": self.held_without_line_count,
             "subscription_create_count": self.subscription_create_count,
             "subscription_remove_count": self.subscription_remove_count,
             "subscription_error_count": self.subscription_error_count,

@@ -40,6 +40,7 @@ from .strategy_ai_shadow_v2 import (
     CatalystIntelligenceSnapshot,
 )
 from .strategy_repository import StrategyEvent
+from .held_quote_demand import default_held_quote_demand
 from .model_route import local_batch_rows
 from .trading_ai_budget import TradingAIBudgetExhausted, default_trading_ai_budget, research_decision_slot
 
@@ -624,9 +625,15 @@ async def _run_arm_policy(
     observed_spreads: dict[str, Decimal] = {}
     cohort = _cohort_context(rows)
     paired = _paired_arm(arm)
-    rows = local_batch_rows(
-        rows, is_open=lambda row: monitor._position(events, arm, row["candidate"].instrument_id).is_long,
-    )
+    held = {
+        event.instrument_id
+        for event in events
+        if event.event_type == "ai_v2_fill"
+        and event.payload.get("arm") == arm
+        and monitor._position(events, arm, event.instrument_id).is_long
+    }
+    default_held_quote_demand().hold(held, now=self.now_factory())
+    rows = local_batch_rows(rows, is_open=lambda row: row["candidate"].instrument_id in held)
 
     for source in rows:
         row = dict(source)
