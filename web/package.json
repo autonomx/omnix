@@ -37,7 +37,7 @@
     "@tanstack/react-router": "^1.170.15",
     "@tanstack/react-virtual": "^3.14.13",
     "codemirror": "^6.0.2",
-    "lightweight-charts": "^5.1.0",
+    "lightweight-charts": "^5.2.1",
     "openapi-fetch": "^0.17.0",
     "pixi.js": "^8.13.1",
     "react": "^19.2.0",
