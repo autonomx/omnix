@@ -9,6 +9,7 @@ import type {
   SpeechPerformancePlan,
   SpeechSynthesisOptions,
 } from './live-speech-performance-contract';
+import type { LiveVoiceCueId } from './live-voice-cue-bank';
 import { decideResponseCue, type ResponseCueDecision } from './live-voice-cue-policy';
 import {
   humanizeSpeechPerformance,
@@ -80,16 +81,16 @@ export function createLiveSpeechSynthesisOptions(
 }
 
 export function selectLiveResponseCue(
+  tagCue: LiveVoiceCueId | null | undefined,
   text: string,
   plan: SpeechPerformancePlan | undefined,
-  phraseIndex: number,
   now = Date.now(),
 ): ResponseCueDecision {
   installResetListeners();
   const decision = decideResponseCue(
+    tagCue,
     text,
     plan,
-    phraseIndex,
     responseCueSequence,
     now,
     lastResponseCueAt,

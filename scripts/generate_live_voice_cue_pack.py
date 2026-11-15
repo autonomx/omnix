@@ -92,7 +92,7 @@ def main() -> int:
         prompts.update(EXPERIMENTAL_NONVERBAL_PROMPTS)
     for raw in args.prompt:
         cue_id, separator, text = raw.partition("=")
-        if not separator or cue_id not in {"mhm", "hmm", "inhale", "amused_exhale"} or not text.strip():
+        if not separator or cue_id not in {"mhm", "hmm", "inhale", "amused_exhale", "sigh"} or not text.strip():
             raise SystemExit(f"Invalid --prompt value: {raw!r}")
         prompts[cue_id] = text.strip()
 

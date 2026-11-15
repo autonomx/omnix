@@ -3,6 +3,7 @@ import {
   resetAssistantTurnCompletionContext,
 } from './live-turn-context';
 import { emitOmnixEvent, LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT } from '../../../events/bus';
+import { stripSoundTags } from './live-voice-sound-tags';
 
 
 export type LiveAssistantTurnSummary = {
@@ -39,7 +40,7 @@ export function summarizeAssistantTurn(
   turnId: string | null,
   turnKind: 'greeting' | 'response',
 ): LiveAssistantTurnSummary {
-  const normalized = text.replace(/\s+/g, ' ').trim();
+  const normalized = stripSoundTags(text).replace(/\s+/g, ' ').trim();
   const words = normalized.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
   const questions = normalized.match(/[?？]+/g) ?? [];
   return {
@@ -102,7 +103,7 @@ export function readCurrentAssistantDiagnosticText(): string {
   for (const pending of pendingDiagnostics.values()) {
     if (!current || pending.updatedAtMs > current.updatedAtMs) current = pending;
   }
-  return current?.text ?? '';
+  return current ? stripSoundTags(current.text) : '';
 }
 
 export function pendingAssistantDiagnosticCount(): number {

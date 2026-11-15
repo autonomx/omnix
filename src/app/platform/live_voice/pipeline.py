@@ -111,7 +111,35 @@ def _spoken_style_stage(
     apply_live_voice_spoken_style(context.rendered, context.profile)
     record_spoken_style_diagnostics(context.assembly, context.rendered)
     _add_call_abilities(context)
+    _add_sound_tags(context)
     return context
+
+
+def _add_sound_tags(context: LiveVoicePromptContext) -> None:
+    """Offer the sound tags the call's voice has clips for (``prompt.sound_tags``), after the abilities."""
+    from app.conversation.contracts import estimate_tokens
+    from app.platform.chat.contracts import RenderedPromptMessage
+    from app.platform.live_voice.prompt.cache import resolve_live_voice_speaker_cached
+    from app.platform.live_voice.prompt.sound_tags import offered_sound_tags, sound_tags_prompt
+    from app.platform.live_voice.transport.cue_asset_routes import voice_cue_ids
+
+    rendered = context.rendered
+    if rendered is None:
+        return
+    tags = offered_sound_tags(context.profile, voice_cue_ids(resolve_live_voice_speaker_cached(context.session)))
+    instructions = sound_tags_prompt(tags)
+    if not instructions:
+        return
+    first_turn = next(
+        (index for index, message in enumerate(rendered.messages) if message.role in {"user", "assistant"}),
+        len(rendered.messages),
+    )
+    rendered.messages.insert(first_turn, RenderedPromptMessage(role="system", content=instructions))
+    tokens = estimate_tokens(instructions)
+    rendered.diagnostics.estimated_tokens += tokens
+    rendered.diagnostics.section_tokens["live_voice_sound_tags"] = tokens
+    if context.assembly is not None:
+        context.assembly.diagnostics["live_voice_sound_tags"] = {"tags": list(tags), "tokens": tokens}
 
 
 def _add_call_abilities(context: LiveVoicePromptContext) -> None:

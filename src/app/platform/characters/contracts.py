@@ -46,6 +46,7 @@ __all__ = [
 _LAZY_EXPORTS = {
     "CharacterLiveCallRuntime": "live_call",
     "resolve_live_call_runtime": "live_call",
+    "resolve_live_call_voice": "live_call",
     "default_character_avatar_service": "avatar_service",
     "portrait_emotion_label": "avatar_models",
     "LiveConversationProfileEnvelope": "live_conversation_profile",

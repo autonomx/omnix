@@ -126,25 +126,12 @@ def normalize_speech_style(raw: dict[str, Any] | None) -> LiveCallSpeechStyle:
     )
 
 
-def resolve_live_call_runtime(
-    session: ChatSession,
-    *,
-    character_service_factory: Callable[[], CharacterService] = default_character_service,
-    avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
-) -> CharacterLiveCallRuntime:
-    """Resolve one session without accepting prompt, namespace, or profile data from the browser."""
-
-    started = time.perf_counter()
-    interaction = resolve_system_session_identity(session)
-    character_service = character_service_factory()
-    character: CharacterProfileSnapshot | None = None
-    avatar_pack: CharacterAvatarPack | None = None
-    if interaction.interaction_mode == "character":
-        character = character_service.resolve_snapshot(interaction.character_id or "")
-        avatar_pack = avatar_service_factory().resolve(interaction.character_id)
-    else:
-        # The System Assistant has a live avatar of its own (Chat, Characters; the first-run setup).
-        avatar_pack = avatar_service_factory().resolve(SYSTEM_ASSISTANT_ID)
+def resolve_live_call_voice(
+    interaction: Any,
+    character: CharacterProfileSnapshot | None,
+    character_service: CharacterService,
+) -> tuple[str | None, str | None, str | None]:
+    """The call's voice asset, the speaker ID TTS uses, and why a character's voice was refused."""
 
     # The character profile's governed voice is authoritative for live calls,
     # even when an older session still carries a previous voice override.
@@ -176,7 +163,32 @@ def resolve_live_call_runtime(
             # system voice while surfacing the exact asset problem for diagnostics.
             voice_error = str(exc)
             voice_asset_id = None
-    voice_speaker_id = _voice_speaker_id(voice_asset_id, character_service)
+    return voice_asset_id, _voice_speaker_id(voice_asset_id, character_service), voice_error
+
+
+def resolve_live_call_runtime(
+    session: ChatSession,
+    *,
+    character_service_factory: Callable[[], CharacterService] = default_character_service,
+    avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
+) -> CharacterLiveCallRuntime:
+    """Resolve one session without accepting prompt, namespace, or profile data from the browser."""
+
+    started = time.perf_counter()
+    interaction = resolve_system_session_identity(session)
+    character_service = character_service_factory()
+    character: CharacterProfileSnapshot | None = None
+    avatar_pack: CharacterAvatarPack | None = None
+    if interaction.interaction_mode == "character":
+        character = character_service.resolve_snapshot(interaction.character_id or "")
+        avatar_pack = avatar_service_factory().resolve(interaction.character_id)
+    else:
+        # The System Assistant has a live avatar of its own (Chat, Characters; the first-run setup).
+        avatar_pack = avatar_service_factory().resolve(SYSTEM_ASSISTANT_ID)
+
+    voice_asset_id, voice_speaker_id, voice_error = resolve_live_call_voice(
+        interaction, character, character_service
+    )
     # Live-call greetings are generated ephemerally by the active LLM. Keep the
     # legacy field empty so old browser playback code cannot race that stream.
     greeting = ""
@@ -237,4 +249,5 @@ __all__ = [
     "LiveCallSpeechStyle",
     "normalize_speech_style",
     "resolve_live_call_runtime",
+    "resolve_live_call_voice",
 ]

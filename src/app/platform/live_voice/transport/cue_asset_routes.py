@@ -18,14 +18,14 @@ _ROUTE_SENTINEL = "_omnix_live_voice_cue_assets_registered"
 LIVE_VOICE_CUE_MANIFEST_PATH = "/api/voice/cues/{voice_id}/manifest"
 LIVE_VOICE_CUE_FILE_PATH = "/api/voice/cues/{voice_id}/{cue_id}/{variant_id}.wav"
 CUE_SCHEMA_VERSION = 1
-SUPPORTED_CUES = {"mhm", "hmm", "inhale", "amused_exhale"}
+SUPPORTED_CUES = {"mhm", "hmm", "inhale", "amused_exhale", "sigh"}
 SAFE_VOICE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,119}$")
-SAFE_VARIANT_ID = re.compile(r"^(mhm|hmm|inhale|amused_exhale)-v([1-9][0-9]?)$")
+SAFE_VARIANT_ID = re.compile(r"^(mhm|hmm|inhale|amused_exhale|sigh)-v([1-9][0-9]?)$")
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 class LiveVoiceCueAsset(BaseModel):
-    cue_id: Literal["mhm", "hmm", "inhale", "amused_exhale"]
+    cue_id: Literal["mhm", "hmm", "inhale", "amused_exhale", "sigh"]
     variant_id: str
     url: str
     sample_rate: int | None = Field(default=None, ge=8_000, le=192_000)
@@ -40,9 +40,13 @@ class LiveVoiceCueManifest(BaseModel):
     assets: list[LiveVoiceCueAsset] = Field(default_factory=list)
 
 
-def live_voice_cue_root() -> Path:
+def _cue_root_path() -> Path:
     override = str(_env_str("OMNIX_LIVE_VOICE_CUE_ROOT") or "").strip()
-    root = Path(override) if override else resources_data_root() / "voice_cues"
+    return Path(override) if override else resources_data_root() / "voice_cues"
+
+
+def live_voice_cue_root() -> Path:
+    root = _cue_root_path()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -138,6 +142,26 @@ def register_live_voice_cue_asset_routes(router: APIRouter, state: Any) -> None:
             headers=headers,
             stat_result=stat_result,
         )
+
+
+def voice_cue_ids(voice_id: str | None) -> frozenset[str]:
+    """The cues the voice has at least one clip for; empty for an unknown or unsafe voice ID. Creates nothing."""
+    normalized = str(voice_id or "").strip()
+    if not SAFE_VOICE_ID.fullmatch(normalized) or normalized in {".", ".."}:
+        return frozenset()
+    root = _cue_root_path()
+    voice_dir = root / normalized
+    try:
+        if voice_dir.resolve().parent != root.resolve() or not voice_dir.is_dir():
+            return frozenset()
+    except OSError:
+        return frozenset()
+    found: set[str] = set()
+    for path in voice_dir.glob("*.wav"):
+        parsed = _parse_variant(path.stem)
+        if parsed is not None and path.is_file():
+            found.add(parsed[0])
+    return frozenset(found)
 
 
 def _voice_directory(voice_id: str) -> Path:

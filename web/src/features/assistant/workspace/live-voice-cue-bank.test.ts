@@ -88,4 +88,28 @@ describe('live voice cue bank', () => {
     });
     expect(fallback?.samples.length).toBeGreaterThan(2_000);
   });
+
+  it('plays a clip the voice has when the requested variant slot is missing', () => {
+    const register = (variantId: string, marker: number) => registerVoiceCueSamples({
+      voiceId: 'Jinx',
+      cueId: 'sigh',
+      variantId,
+      samples: new Float32Array([marker, marker]),
+      sampleRate: 24_000,
+    });
+    register('sigh-v1', 0.1);
+    register('sigh-v2', 0.2);
+
+    const pick = (variantId: string) => resolveCueSamples('sigh', variantId, 24_000, {
+      voiceId: 'Jinx',
+      allowProceduralFallback: false,
+    });
+    expect(hasVoiceCueSamples('Jinx', 'sigh', 'sigh-v4')).toBe(true);
+    expect(pick('sigh-v2')?.samples[0]).toBeCloseTo(0.2);
+    expect(pick('sigh-v3')?.samples[0]).toBeCloseTo(0.1);
+    expect(pick('sigh-v4')?.samples[0]).toBeCloseTo(0.2);
+    expect(pick('sigh-v4')?.source).toBe('voice_asset');
+    expect(hasVoiceCueSamples('Jinx', 'amused_exhale', 'amused_exhale-v1')).toBe(false);
+    expect(hasVoiceCueSamples('Maya', 'sigh', 'sigh-v1')).toBe(false);
+  });
 });

@@ -1,6 +1,6 @@
 import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
 
-export type LiveVoiceCueId = 'mhm' | 'hmm' | 'inhale' | 'amused_exhale';
+export type LiveVoiceCueId = 'mhm' | 'hmm' | 'inhale' | 'amused_exhale' | 'sigh';
 export type CueSampleSource = 'voice_asset' | 'procedural_fallback';
 
 export type CueSampleResolution = {
@@ -74,10 +74,21 @@ export function hasVoiceCueSamples(
   variantId: string,
 ): boolean {
   const normalizedVoice = normalizeVoiceId(voiceId);
-  return Boolean(
-    normalizedVoice
-    && voiceCueAssets.has(voiceCueKey(normalizedVoice, cueId, variantId)),
-  );
+  return Boolean(normalizedVoice && registeredVoiceCueKey(normalizedVoice, cueId, variantId));
+}
+
+/**
+ * A voice may have fewer approved clips than variant slots. A slot it lacks plays one of the
+ * clips it has for the same cue, picked by slot number, so a tag never falls silent.
+ */
+function registeredVoiceCueKey(voiceId: string, cueId: LiveVoiceCueId, variantId: string): string | null {
+  const exact = voiceCueKey(voiceId, cueId, variantId);
+  if (voiceCueAssets.has(exact)) return exact;
+  const prefix = `${voiceId}\u0000${cueId}\u0000`;
+  const available = [...voiceCueAssets.keys()].filter((key) => key.startsWith(prefix)).sort();
+  if (available.length === 0) return null;
+  const slot = Number(/-v(\d+)$/.exec(normalizeVariantId(variantId))?.[1] ?? 1);
+  return available[(Math.max(1, slot) - 1) % available.length] ?? null;
 }
 
 export function resolveCueSamples(
@@ -92,7 +103,8 @@ export function resolveCueSamples(
   const playbackSampleRate = normalizeSampleRate(sampleRate);
   const voiceId = normalizeVoiceId(options.voiceId);
   if (voiceId) {
-    const asset = voiceCueAssets.get(voiceCueKey(voiceId, cueId, variantId));
+    const key = registeredVoiceCueKey(voiceId, cueId, variantId);
+    const asset = key ? voiceCueAssets.get(key) : undefined;
     if (asset) {
       return {
         samples: resampleFloat32(asset.samples, asset.sampleRate, playbackSampleRate),
@@ -206,11 +218,13 @@ function createHum(cueId: 'mhm' | 'hmm', variant: number, sampleRate: number): F
 }
 
 function createBreath(
-  cueId: 'inhale' | 'amused_exhale',
+  cueId: 'inhale' | 'amused_exhale' | 'sigh',
   variant: number,
   sampleRate: number,
 ): Float32Array {
-  const durationMs = cueId === 'inhale' ? 250 + variant * 24 : 330 + variant * 30;
+  const durationMs = cueId === 'inhale'
+    ? 250 + variant * 24
+    : cueId === 'sigh' ? 520 + variant * 40 : 330 + variant * 30;
   const length = Math.max(1, Math.round(sampleRate * durationMs / 1_000));
   const output = new Float32Array(length);
   const random = seededRandom((variant + 1) * (cueId === 'inhale' ? 7_919 : 10_007));

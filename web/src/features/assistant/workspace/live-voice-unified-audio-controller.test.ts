@@ -68,6 +68,7 @@ import {
   shouldUseUnifiedLiveVoiceAudio,
 } from './live-voice-unified-audio-controller';
 import { pipelineFetch } from '../../../api/fetchPipeline';
+import { resetLiveSpeechCueState } from './live-speech-synthesis-options';
 import { liveCallPresentationStore, liveCallVoiceMode } from './live-call-presentation-store';
 import { liveConversationStore } from './live-conversation-store';
 import { livePortrait } from '../chat/portrait/livePortrait';
@@ -332,7 +333,7 @@ describe('live voice unified audio controller', () => {
     }));
     streamEvents = [
       { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:plan' } } },
-      { type: 'text_chunk', text: 'I think the safer option is to wait.' },
+      { type: 'text_chunk', text: '[hmm] I think the safer option is to wait.' },
       { type: 'done' },
     ];
 
@@ -340,6 +341,7 @@ describe('live voice unified audio controller', () => {
     await response.text();
 
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
+    expect(mocks.session.enqueueOutputPhrase.mock.calls[0]?.[0]).toBe('I think the safer option is to wait.');
     const options = mocks.session.enqueueOutputPhrase.mock.calls[0]?.[3];
     expect(options?.performancePlan).toMatchObject({
       speech_act: 'reflection',
@@ -361,6 +363,60 @@ describe('live voice unified audio controller', () => {
       }),
       'controller',
     );
+  });
+
+  it('plays a tag after the last words once they are queued, and drops a tag with no words', async () => {
+    resetLiveSpeechCueState();
+    window.localStorage.setItem('omnix.liveConversation.effectiveProfile', JSON.stringify({
+      presence_preset: 'listener',
+      talkativeness: 50,
+      conversation_stance: 'listen',
+      conversation_pace: 'reflective',
+      interruption_preference: 'balanced',
+      assistant_backchannel_mode: 'natural',
+      initiative_mode: 'gentle',
+      idle_threshold_ms: 15_000,
+      long_pause_behavior: 'wait',
+      response_length: 'conversational',
+      response_onset_style: 'reflective',
+      emotional_attunement: 'expressive',
+      topic_continuity: 'natural',
+      max_idle_prompts: 1,
+      duplex_mode: 'echo_aware',
+      pronunciation_save_policy: 'ask',
+      profile_version: 1,
+    }));
+    streamEvents = [
+      { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:trail' } } },
+      { type: 'text_chunk', text: 'That went well. [chuckle' },
+      { type: 'text_chunk', text: ']' },
+      { type: 'done' },
+    ];
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    await response.text();
+
+    await waitFor(() => expect(mocks.session.enqueueCue).toHaveBeenCalledTimes(1));
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1);
+    expect(mocks.session.enqueueOutputPhrase.mock.calls[0]?.[0]).toBe('That went well.');
+    expect(mocks.session.enqueueCue.mock.calls[0]?.[0]).toBe('amused_exhale');
+    expect(mocks.session.enqueueOutputPhrase.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.session.enqueueCue.mock.invocationCallOrder[0]);
+
+    resetLiveSpeechCueState();
+    mocks.session.enqueueCue.mockClear();
+    streamEvents = [
+      { type: 'user_message', message: { id: 'u2', metadata: { assistant_turn_id: 'assistant-turn:bare' } } },
+      { type: 'text_chunk', text: '[sigh]' },
+      { type: 'done' },
+    ];
+    const bare = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    await bare.text();
+    await waitFor(() => expect(mocks.recordSpy).toHaveBeenCalledWith(
+      'response_cue_skipped',
+      expect.objectContaining({ cue_id: 'sigh', reason: 'no_speech_queued' }),
+      'controller',
+    ));
+    expect(mocks.session.enqueueCue).not.toHaveBeenCalled();
   });
 
   it('generates one transient greeting only after runtime and microphone connection are ready', async () => {

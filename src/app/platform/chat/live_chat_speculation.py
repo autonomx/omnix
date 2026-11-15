@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.conversation.sound_tags import split_sound_tags
 from app.providers.service import provider_lease
 from app.platform.chat import (
     ChatMessage,
@@ -479,9 +480,11 @@ def _generate_side_effect_free(
                 "generation_id": speculation.generation_id,
                 "text": remaining,
             })
+        content, sound_tags = split_sound_tags(full_text.strip())
         with _SPECULATION_LOCK:
-            speculation.content = full_text.strip()
+            speculation.content = content
             speculation.metadata = {
+                **({"sound_tags": [{"tag": tag.tag, "at": tag.at} for tag in sound_tags]} if sound_tags else {}),
                 "provider_id": speculation.provider_id,
                 "model_id": speculation.model_id,
                 "resolved_model": speculation.model_id,

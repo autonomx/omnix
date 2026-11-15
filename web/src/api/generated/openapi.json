@@ -30340,7 +30340,8 @@
               "mhm",
               "hmm",
               "inhale",
-              "amused_exhale"
+              "amused_exhale",
+              "sigh"
             ],
             "title": "Cue Id",
             "type": "string"

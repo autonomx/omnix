@@ -68,10 +68,10 @@ vi.mock('./live-voice-humanization-flags', () => ({
 
 vi.mock('./live-speech-synthesis-options', () => ({
   createLiveSpeechSynthesisOptions: () => ({}),
-  selectLiveResponseCue: (_phrase: string, _plan: unknown, phraseIndex: number) => (
-    phraseIndex === 0
-      ? { allowed: true, cueId: 'inhale', variantId: 'inhale-v1', reason: 'test' }
-      : { allowed: false, cueId: null, variantId: null, reason: 'opening_only' }
+  selectLiveResponseCue: (tagCue: string | null) => (
+    tagCue
+      ? { allowed: true, cueId: tagCue, variantId: `${tagCue}-v1`, reason: 'test' }
+      : { allowed: false, cueId: null, variantId: null, reason: 'no_tag' }
   ),
 }));
 
@@ -106,7 +106,7 @@ function renderLiveVoice(): void {
 function chatStreamResponse(): Response {
   const events = [
     { type: 'user_message', message: { id: 'u1', metadata: { assistant_turn_id: 'assistant-turn:ordering' } } },
-    { type: 'text_chunk', text: 'First phrase is ready for speech.' },
+    { type: 'text_chunk', text: '[hmm] First phrase is ready for speech.' },
     { type: 'text_chunk', text: 'Second phrase must stay behind the first.' },
     { type: 'session', session: { id: 's1', messages: [{ id: 'a1', role: 'assistant' }] } },
     { type: 'done' },

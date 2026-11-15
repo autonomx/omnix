@@ -20,6 +20,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from app.conversation.sound_tags import strip_sound_tags
 from app.platform.chat.contracts import (
     merge_provider_response_metrics,
     model_key,
@@ -232,7 +233,8 @@ def _remember_response_state(
     normalized_session = str(session_id or "").strip()
     normalized_model = str(model_id or "").strip()
     normalized_response = str(response_id or "").strip()
-    normalized_assistant = str(assistant_text or "").strip()
+    # The reply is saved without its sound tags, so the next turn's history holds the stripped text.
+    normalized_assistant = strip_sound_tags(str(assistant_text or "").strip())
     if not carry_allowed:
         _invalidate_state(normalized_session)
         return False

@@ -34,6 +34,7 @@ _CACHE_LOCK = threading.RLock()
 _CHARACTER_SNAPSHOTS: OrderedDict[tuple[str, int], "_CacheEntry"] = OrderedDict()
 _IDENTITY_CONTEXTS: OrderedDict[tuple[Any, ...], _CacheEntry] = OrderedDict()
 _PROFILE_ENVELOPES: OrderedDict[tuple[Any, ...], _CacheEntry] = OrderedDict()
+_VOICE_SPEAKERS: OrderedDict[tuple[Any, ...], _CacheEntry] = OrderedDict()
 _PROMPT_STAGE_TIMINGS: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_live_prompt_stage_timings",
     default=None,
@@ -62,7 +63,7 @@ def _cache_now() -> float:
 
 
 def _prune_expired_locked(now: float) -> None:
-    for cache in (_CHARACTER_SNAPSHOTS, _IDENTITY_CONTEXTS, _PROFILE_ENVELOPES):
+    for cache in (_CHARACTER_SNAPSHOTS, _IDENTITY_CONTEXTS, _PROFILE_ENVELOPES, _VOICE_SPEAKERS):
         for key, entry in list(cache.items()):
             if entry.expires_at <= now:
                 cache.pop(key, None)
@@ -108,6 +109,8 @@ def _invalidate_character(character_id: str) -> None:
             _CHARACTER_SNAPSHOTS.pop(key, None)
         for key in [key for key in _IDENTITY_CONTEXTS if key[1] == normalized]:
             _IDENTITY_CONTEXTS.pop(key, None)
+        for key in [key for key in _VOICE_SPEAKERS if key[1] == normalized]:
+            _VOICE_SPEAKERS.pop(key, None)
 
 
 class CharacterSnapshotCacheObserver:
@@ -190,6 +193,48 @@ def resolve_system_session_identity_cached(session: Any) -> Any:
     _record_flag("identity_cache_hit", False)
     _record_stage("identity_ms", (time.perf_counter() - started) * 1000.0)
     return _clone(result)
+
+
+def resolve_live_voice_speaker_cached(session: Any) -> str | None:
+    """The speaker ID the call's voice plays as (the voice-cue folder name), or None when the server knows none.
+
+    The System Assistant's voice is usually chosen in the browser, so a session without a voice asset has none here.
+    """
+    key = _identity_key(session)
+    with _CACHE_LOCK:
+        cached = _cache_get(_VOICE_SPEAKERS, key)
+    if cached is not None:
+        return cached[0]
+    try:
+        speaker = _resolve_voice_speaker(session, key)
+    except Exception as exc:  # a voice lookup never stops a live reply
+        stream_log(
+            "gateway-live-chat-first-token",
+            "runtime",
+            "live_voice_speaker_lookup_failed",
+            error=type(exc).__name__,
+        )
+        return None
+    with _CACHE_LOCK:
+        _bounded_put(_VOICE_SPEAKERS, key, (speaker,))
+    return speaker
+
+
+def _resolve_voice_speaker(session: Any, key: tuple[Any, ...]) -> str | None:
+    from app.platform.characters.contracts import resolve_live_call_voice
+
+    interaction = resolve_system_session_identity_cached(session)
+    service = default_character_service()
+    snapshot = None
+    if key[0] == "character":
+        character_id, version = key[1], key[2]
+        if character_id and isinstance(version, int) and version > 0:
+            with _CACHE_LOCK:
+                snapshot = _cache_get(_CHARACTER_SNAPSHOTS, (character_id, version))
+        if snapshot is None:
+            snapshot = service.resolve_snapshot(character_id)
+            cache_character_snapshot(snapshot)
+    return resolve_live_call_voice(interaction, snapshot, service)[1]
 
 
 def _profile_signature(store: Any) -> tuple[str, int, int] | None:
@@ -282,6 +327,7 @@ def clear_live_prompt_caches() -> None:
         _CHARACTER_SNAPSHOTS.clear()
         _IDENTITY_CONTEXTS.clear()
         _PROFILE_ENVELOPES.clear()
+        _VOICE_SPEAKERS.clear()
 
 
 def _reset_live_prompt_cache_for_tests() -> None:
@@ -295,6 +341,7 @@ __all__ = [
     "CharacterSnapshotCacheObserver",
     "get_live_conversation_profile_cached",
     "record_prompt_stage_time",
+    "resolve_live_voice_speaker_cached",
     "resolve_system_session_identity_cached",
     "time_prompt_dependency",
     "begin_prompt_stage_timings",

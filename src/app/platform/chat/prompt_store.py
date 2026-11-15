@@ -15,6 +15,7 @@ from app.conversation.contracts import (
     AcceptedChatActivityRecorder,
     LiveVoiceChatPort,
 )
+from app.conversation.sound_tags import strip_sound_tags_from_stream
 
 from .compaction import (
     DEFAULT_RECENT_MESSAGE_LIMIT,
@@ -874,12 +875,16 @@ class ChatSessionStore(JsonChatSessionStore):
                 routing_deadline_at=routing_deadline_at,
             )
 
-        yield from live_voice.stream_with_retry(
+        events = live_voice.stream_with_retry(
             stream_factory,
             fallback_factory,
             provider_id=routed_provider_id,
             model_id=routed_model_id,
         )
+        if live_voice.is_live_voice_message(user_message):
+            # The browser plays a call's sound tags; the saved reply keeps only the words.
+            events = strip_sound_tags_from_stream(events)
+        yield from events
 
     def _stream_provider_reply_chunks_once(
         self,

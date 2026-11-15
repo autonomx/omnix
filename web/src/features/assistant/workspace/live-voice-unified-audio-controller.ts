@@ -21,6 +21,8 @@ import {
   mergeStreamText,
   type StableClause,
 } from './live-voice-clause-stabilizer';
+import type { LiveVoiceCueId } from './live-voice-cue-bank';
+import { stripSoundTags } from './live-voice-sound-tags';
 import {
   advanceDeliveryLedger,
   appendDeliveryPhrase,
@@ -378,7 +380,10 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
     deadlineTimer = null;
   };
   const commit = (ready: StableClause[]): void => {
-    ready.forEach((clause) => queuePhrase(clause.text, turn, clause.reason));
+    ready.forEach((clause) => {
+      if (clause.text) queuePhrase(clause.text, turn, clause.reason, clause.cue ?? null);
+      else if (clause.cue) queueTrailingCue(clause.cue, turn);
+    });
   };
   const ingestText = (text: string): void => {
     if (turn.flags.stableClauses) {
@@ -438,7 +443,7 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
       }
     }
     if (turn.flags.stableClauses) commit(clauses.flush());
-    else if (fallbackText.trim()) queuePhrase(fallbackText, turn, 'stream-end');
+    else if (fallbackText.trim()) queuePhrase(stripSoundTags(fallbackText), turn, 'stream-end');
   } finally {
     clearDeadlineTimer();
     // Whether the stream finished or failed, the portrait commits the turn's last frames once its phrases are made.
@@ -500,7 +505,38 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
   if (activeTurn?.generation === turn.generation) activeTurn = null;
 }
 
-function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
+// A tag after a reply's last words plays once that speech is queued. With no speech queued the worklet would never
+// start the turn, so the sound is dropped.
+function queueTrailingCue(tagCue: LiveVoiceCueId, turn: ActiveLiveTurn): void {
+  if (turn.generation !== playbackGeneration || turn.abortController.signal.aborted) return;
+  if (turn.phraseCount === 0 || !turn.flags.responseCues) {
+    turn.reporter.record('response_cue_skipped', {
+      cue_id: tagCue,
+      reason: turn.phraseCount === 0 ? 'no_speech_queued' : 'rollout_disabled',
+      turn_kind: turn.kind,
+    }, 'controller');
+    return;
+  }
+  const cue = selectLiveResponseCue(tagCue, '', turn.previousPerformancePlan ?? undefined);
+  turn.reporter.record('response_cue_queued', {
+    cue_id: tagCue,
+    response_cue: cue.allowed ? cue.cueId : null,
+    response_cue_reason: cue.reason,
+    after_phrase_index: turn.phraseCount - 1,
+    turn_kind: turn.kind,
+  }, 'controller');
+  if (!cue.allowed || !cue.cueId || !cue.variantId) return;
+  const { cueId, variantId } = cue;
+  const previousAudioTask = turn.audioTasks[turn.audioTasks.length - 1] ?? Promise.resolve();
+  const audioTask = previousAudioTask.catch(() => undefined).then(async () => {
+    const session = await turn.sessionPromise;
+    await session.enqueueCue(cueId, variantId, 0.62);
+  });
+  turn.audioTasks.push(audioTask);
+  void audioTask.catch(() => undefined);
+}
+
+function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string, tagCue: LiveVoiceCueId | null = null): void {
   const phrase = text.trim();
   if (!phrase || turn.generation !== playbackGeneration || turn.abortController.signal.aborted) return;
   if (!SPEAKABLE_TEXT_PATTERN.test(phrase)) {
@@ -544,7 +580,7 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     )
     : null;
   const cue = turn.flags.responseCues
-    ? selectLiveResponseCue(phrase, performancePlan, phraseIndex)
+    ? selectLiveResponseCue(tagCue, phrase, performancePlan)
     : { allowed: false, cueId: null, variantId: null, reason: 'rollout_disabled' };
 
   appendDeliveryPhrase(turn.delivery, phraseIndex, phrase);

@@ -7,7 +7,7 @@ import { api } from '../api/gateway';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const MAX_ASSETS_PER_PACK = 32;
 const MAX_ASSET_BYTES = 2_000_000;
-const SUPPORTED_CUES = new Set<LiveVoiceCueId>(['mhm', 'hmm', 'inhale', 'amused_exhale']);
+const SUPPORTED_CUES = new Set<LiveVoiceCueId>(['mhm', 'hmm', 'inhale', 'amused_exhale', 'sigh']);
 
 export type LiveVoiceCuePackLoadResult = {
   voiceId: string;

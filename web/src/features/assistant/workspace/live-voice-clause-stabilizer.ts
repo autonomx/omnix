@@ -1,8 +1,14 @@
+import type { LiveVoiceCueId } from './live-voice-cue-bank';
+import { markSoundTags, removeBracketedText, takeSoundMarks } from './live-voice-sound-tags';
+
 export type ClauseCommitReason = 'strong-boundary' | 'stable-boundary' | 'deadline' | 'maximum' | 'stream-end';
 
 export type StableClause = {
+  /** Empty only for a sound tag the reply ended on, which plays after the last words. */
   text: string;
   reason: ClauseCommitReason;
+  /** The reply's sound tag that plays just before this clause. */
+  cue?: LiveVoiceCueId | null;
 };
 
 export type ClauseStabilizerOptions = {
@@ -64,6 +70,8 @@ const NON_SPEECH_EMOJI_ONLY = /^(?=[\s\S]*\p{Extended_Pictographic})[\s\p{Extend
 
 export class StableClauseAccumulator {
   private buffer = '';
+  // A sound tag that came after a clause's words, or alone, plays before the next clause.
+  private carriedCue: LiveVoiceCueId | null = null;
   private openedAtMs: number | null = null;
   private committedClauseCount = 0;
   private readonly normalPolicy: ClausePolicy;
@@ -109,7 +117,7 @@ export class StableClauseAccumulator {
   append(fragment: string, nowMs = performance.now()): StableClause[] {
     const normalized = fragment.trim();
     if (!normalized) return [];
-    this.buffer = mergeStreamText(this.buffer, normalized);
+    this.buffer = markSoundTags(mergeStreamText(this.buffer, normalized));
     if (this.openedAtMs === null) this.openedAtMs = nowMs;
     return this.takeReady(nowMs);
   }
@@ -121,23 +129,37 @@ export class StableClauseAccumulator {
       if (!boundary) break;
       const text = this.buffer.slice(0, boundary.end).trim();
       this.buffer = this.buffer.slice(boundary.end).trimStart();
-      const spokenText = sanitizeLiveVoiceSpokenText(text);
-      if (spokenText) {
-        committed.push({ text: spokenText, reason: boundary.reason });
-        this.committedClauseCount += 1;
-      }
+      const clause = this.commitClause(text, boundary.reason);
+      if (clause) committed.push(clause);
       this.openedAtMs = this.buffer ? nowMs : null;
     }
     return committed;
   }
 
   flush(): StableClause[] {
-    const text = sanitizeLiveVoiceSpokenText(this.buffer.trim());
+    const clause = this.commitClause(this.buffer.trim(), 'stream-end');
     this.buffer = '';
     this.openedAtMs = null;
-    if (!text) return [];
+    if (clause) return [clause];
+    const cue = this.carriedCue;
+    this.carriedCue = null;
+    return cue ? [{ text: '', reason: 'stream-end', cue }] : [];
+  }
+
+  private commitClause(text: string, reason: ClauseCommitReason): StableClause | null {
+    const marks = takeSoundMarks(text);
+    const spokenText = sanitizeLiveVoiceSpokenText(marks.text);
+    if (!spokenText) {
+      this.carriedCue ??= marks.cue;
+      return null;
+    }
+    let cue = this.carriedCue;
+    let next: LiveVoiceCueId | null = null;
+    if (marks.cue && marks.leading) cue ??= marks.cue;
+    else if (marks.cue) next = marks.cue;
+    this.carriedCue = next;
     this.committedClauseCount += 1;
-    return [{ text, reason: 'stream-end' }];
+    return cue ? { text: spokenText, reason, cue } : { text: spokenText, reason };
   }
 
   pendingText(): string {
@@ -197,7 +219,7 @@ export class StableClauseAccumulator {
 
 export function sanitizeLiveVoiceSpokenText(text: string): string {
   const original = text.trim();
-  let cleaned = text
+  let cleaned = removeBracketedText(text)
     .replace(EMPHASISED_PARENTHETICAL, ' ')
     .replace(PLAIN_PARENTHETICAL, (match, content: string) => (
       isStageDirection(content) ? ' ' : match
