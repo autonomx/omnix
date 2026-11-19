@@ -1417,10 +1417,10 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/trading/strategy_ai_shadow_provider.py",
-      "symbol": "_PROVIDER_LOCK",
+      "path": "src/app/apps/trading/model_route.py",
+      "symbol": "LOCAL_MODEL_LANE",
       "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+      "reason": "Process-local mutex serializes this process's calls to the local model; it does not carry durable state across replicas."
     },
     {
       "path": "src/app/apps/trading/strategy_discovery_acquisition.py",

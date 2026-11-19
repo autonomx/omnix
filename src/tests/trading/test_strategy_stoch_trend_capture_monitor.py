@@ -798,6 +798,19 @@ def test_bar_closes_are_aligned_to_the_open_and_wait_out_the_grace() -> None:
     assert latest_bar_close(datetime(2026, 9, 2, 14, 32, 59, tzinfo=timezone.utc)) == EXIT_SIGNAL_AT
 
 
+def test_the_sweep_follows_the_market_calendar() -> None:
+    # The day after Thanksgiving closes at 13:00 ET (18:00 UTC); an ordinary day runs on.
+    assert latest_bar_close(datetime(2026, 11, 27, 17, 57, 2, tzinfo=timezone.utc)) == datetime(
+        2026, 11, 27, 17, 57, tzinfo=timezone.utc
+    )
+    assert latest_bar_close(datetime(2026, 11, 27, 18, 3, 2, tzinfo=timezone.utc)) is None
+    assert latest_bar_close(datetime(2026, 11, 25, 18, 3, 2, tzinfo=timezone.utc)) == datetime(
+        2026, 11, 25, 18, 3, tzinfo=timezone.utc
+    )
+    # Thanksgiving itself has no session.
+    assert latest_bar_close(datetime(2026, 11, 26, 15, 0, 2, tzinfo=timezone.utc)) is None
+
+
 def test_the_session_history_keys_entries_and_actions_as_the_pass_does() -> None:
     def event(instrument, event_type, action=None):
         return SimpleNamespace(

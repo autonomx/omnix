@@ -16,10 +16,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import REGULAR_OPEN, regular_close_time, regular_holidays
 from app.runtime.features import FeatureContext
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
@@ -50,8 +51,6 @@ from .strategy_stoch_trend_capture import evaluate_stoch_trend_capture
 from .trade_logging import trade_log
 
 SWEEP_INTERVAL_SECONDS = 5.0
-REGULAR_OPEN_ET = time(9, 30)
-REGULAR_CLOSE_ET = time(16, 0)
 BAR_SECONDS = 180
 # A bar is looked for this long after it closes, so its last minute has time to arrive.
 SLOT_GRACE = timedelta(seconds=2)
@@ -72,9 +71,13 @@ def stoch_sweep_enabled() -> bool:
 def latest_bar_close(now: datetime) -> datetime | None:
     """The end of the latest regular-session 3m bar that should be final now, or None."""
     looked_at = (now - SLOT_GRACE).astimezone(_ET)
-    if looked_at.weekday() >= 5 or not REGULAR_OPEN_ET <= now.astimezone(_ET).time() < REGULAR_CLOSE_ET:
+    day = looked_at.date()
+    if day.weekday() >= 5 or day in regular_holidays(day.year):
         return None
-    opened = datetime.combine(looked_at.date(), REGULAR_OPEN_ET, tzinfo=_ET)
+    # An early close (13:00 ET) ends the session's bars early.
+    if not REGULAR_OPEN <= now.astimezone(_ET).time() < regular_close_time(day):
+        return None
+    opened = datetime.combine(day, REGULAR_OPEN, tzinfo=_ET)
     elapsed = int((looked_at - opened).total_seconds())
     if elapsed < BAR_SECONDS:
         return None
