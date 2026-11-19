@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -250,7 +251,7 @@ class _QueuedLane:
         self.clock = clock
         self.wait = wait
         self.granted = granted
-        self.inner = reliability.threading.RLock()
+        self.inner = threading.RLock()
         self.timeouts = []
 
     def acquire(self, blocking=True, timeout=-1):

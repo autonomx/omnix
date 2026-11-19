@@ -15,7 +15,6 @@ import copy
 import hashlib
 import inspect
 import json
-import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -33,6 +32,8 @@ from app.providers.structured.errors import StructuredDecodeError
 from app.providers.structured.parsing import decode_json_object
 
 from . import strategy_ai_shadow as shadow
+from .local_batch import per_instrument_format
+from .model_route import LOCAL_MODEL_LANE, is_local_provider, local_output_limit, no_thinking_options, trading_provider
 from .structured_llm import sends_json_schema
 from .strategy_repository import StrategyEvent, default_strategy_repository
 
@@ -218,7 +219,7 @@ class PersistentCircuitState(_CircuitState):
         self._hydrated = True
 
 
-_PROVIDER_LOCK = threading.RLock()
+_PROVIDER_LOCK = LOCAL_MODEL_LANE  # one lane with every other trading call to a local model
 _PROVIDER_INSTANCE = None
 _PROVIDER_KEY: tuple[object, ...] | None = None
 _CIRCUIT = PersistentCircuitState()
@@ -260,7 +261,7 @@ def get_trading_research_provider():
     """Return a provider instance isolated from foreground Chat/Agent traffic."""
 
     global _PROVIDER_INSTANCE, _PROVIDER_KEY
-    foreground = get_provider()
+    foreground = trading_provider(get_provider)
     if foreground is None:
         return None
     key = _provider_key(foreground)
@@ -294,7 +295,15 @@ def _uses_dedicated_lane(analyzer: shadow.AIShadowPolicyAnalyzer) -> bool:
     return analyzer.provider_factory is get_trading_research_provider
 
 
+def _request_rejected(exc: BaseException) -> bool:
+    """The provider answered and refused this request (too long for its context, say): it is not down."""
+    text = str(exc).casefold()
+    return "http error 400" in text and "failed to load" not in text
+
+
 def _transport_failure(exc: BaseException) -> bool:
+    if _request_rejected(exc):
+        return False
     if isinstance(exc, (ProviderConnectionError, TimeoutError, OSError)):
         return True
     text = str(exc).casefold()
@@ -465,7 +474,8 @@ def _chat_call_unlocked(
                     response_format=response_format,
                     request_timeout_seconds=attempt_timeout,
                     temperature=0,
-                    max_tokens=max_tokens,
+                    max_tokens=local_output_limit(provider, max_tokens),
+                    **no_thinking_options(provider),
                 )
             else:
                 # Compatibility is selected before the call; never interpret an
@@ -588,8 +598,8 @@ def _output_error(content: str, requested_ids: set[str]):
 def _cadence(policy: shadow.AIShadowPolicy) -> str:
     if policy == "minute":
         return (
-            "You are the PURE EVERY-MINUTE policy. Re-evaluate each supplied symbol "
-            "on every completed one-minute bar using only the generic causal market, "
+            "You are the PURE FIVE-MINUTE policy. Re-evaluate each supplied symbol "
+            "every five minutes using only the generic causal market, "
             "indicator, cohort and execution evidence supplied to you. You are not "
             "given the canonical deterministic strategy state or its intraday-learning "
             "classification. Preserve the prior thesis unless the new evidence justifies "
@@ -691,7 +701,8 @@ def _assess_holding_lane(
         if output_attempt:
             messages.append(
                 ChatMessage(
-                    role="system",
+                    # Not "system": a local model's template (Qwen's) refuses a system message after the first turn.
+                    role="user",
                     content=(
                         "STRUCTURED OUTPUT REPAIR: the prior response failed validation "
                         f"with {first_output_error.code if first_output_error else 'unknown_error'}. "
@@ -705,6 +716,13 @@ def _assess_holding_lane(
         if provider is None:
             raise AIShadowReliabilityError("ai_shadow_provider_unavailable")
         model = getattr(getattr(provider, "config", None), "model", None) or None
+        if native_schema and is_local_provider(provider):
+            response_format = per_instrument_format(
+                shadow.AIShadowDecision,
+                [str(row["instrument_id"]) for row in rows],
+                requires={},
+                schema_name="ai_shadow_batch_response",
+            )
         provider, response = _chat_call(
             self,
             messages=messages,

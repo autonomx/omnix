@@ -127,6 +127,6 @@ def test_native_schema_providers_receive_the_output_schema() -> None:
     # Claude CLI enforces --json-schema; without it the model guessed the shape.
     assert sends_json_schema("claude_cli") and sends_json_schema("chatgpt_codex")
     assert not sends_json_schema("cerebras")
-    assert not sends_json_schema("lmstudio")  # unchanged: a local model's schema support varies
+    assert sends_json_schema("lmstudio")  # it refuses a bare JSON-object request
     claude = trading_response_format(_Provider(), _Answer, "answer")
     assert claude["type"] == "json_schema" and claude["json_schema"]["schema"]["properties"]["ok"]

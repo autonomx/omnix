@@ -99,10 +99,12 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
     from app.apps.trading.strategy_ai_shadow_monitor import create_trading_ai_shadow_monitor_task
     from app.apps.trading.strategy_ai_shadow_v2_monitor import create_trading_ai_shadow_v2_monitor_task
     from app.apps.trading.strategy_ai_shadow_v3_monitor import create_trading_ai_shadow_v3_monitor_task
+    from app.apps.trading.strategy_local_model_monitor import create_trading_local_model_monitor_task
     from app.apps.trading.strategy_deep_recovery_monitor import create_trading_strategy_deep_recovery_shadow_monitor_task
     from app.apps.trading.strategy_dynamic_discovery_monitor import create_interday_dynamic_discovery_monitor_task
     from app.apps.trading.strategy_interday_learning_monitor import create_interday_learning_monitor_task
     from app.apps.trading.strategy_monitor import create_trading_strategy_monitor_task
+    from app.apps.trading.strategy_stoch_sweep import create_trading_stoch_sweep_task
     from app.apps.trading.strategy_prospective_economic_monitor import create_trading_strategy_prospective_economic_monitor_task
     from app.apps.trading.strategy_research_monitor import create_trading_strategy_research_monitor_task
     from app.apps.trading.strategy_research_outcome_monitor import create_trading_strategy_research_outcome_monitor_task
@@ -127,10 +129,12 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
         create_trading_ai_shadow_monitor_task,
         create_trading_ai_shadow_v2_monitor_task,
         create_trading_ai_shadow_v3_monitor_task,
+        create_trading_local_model_monitor_task,
         create_trading_strategy_deep_recovery_shadow_monitor_task,
         create_interday_dynamic_discovery_monitor_task,
         create_interday_learning_monitor_task,
         create_trading_strategy_monitor_task,
+        create_trading_stoch_sweep_task,
         create_trading_strategy_prospective_economic_monitor_task,
         create_trading_strategy_research_monitor_task,
         create_trading_strategy_research_outcome_monitor_task,

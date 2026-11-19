@@ -28,6 +28,8 @@ from .feature_qualification import (
     FeatureRequirement,
     qualify_bar_feature,
 )
+from .local_batch import local_batch_call
+from .model_route import is_local_provider
 from .models import MarketBar
 from .research import _provider_identity, default_research_provider
 from .strategy_ai_shadow_v2 import build_market_structure_snapshot
@@ -36,7 +38,9 @@ from .trigger_plan import AuthoritativeTradeGeometry, TriggerCondition
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-1"
+# canonical-2: on a local model a batch is schema-bound per stock and one bad stock no longer fails the others.
+# canonical-3: on a local model a call covers at most five stocks, armed plans first.
+AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-3"
 AI_SHADOW_V3_CONTRACT = "trading.ai_shadow_v3.batch"
 RUNNER_GEOMETRY_CHALLENGER_VERSION = "runner-geometry-challenger-v1"
 
@@ -303,20 +307,47 @@ class AIShadowV3Analyzer:
             "geometry_suggestion, evidence_for, evidence_against, thesis, "
             "execution_authority."
         )
-        messages = [
-            ChatMessage(role="system", content=system),
-            ChatMessage(
-                role="user",
-                content=json.dumps(
-                    {
-                        "policy_version": AI_SHADOW_V3_POLICY_VERSION,
-                        "candidates": rows,
-                    },
-                    sort_keys=True,
-                    default=str,
+
+        def build_messages(batch: list[dict[str, Any]]) -> list[ChatMessage]:
+            return [
+                ChatMessage(role="system", content=system),
+                ChatMessage(
+                    role="user",
+                    content=json.dumps(
+                        {
+                            "policy_version": AI_SHADOW_V3_POLICY_VERSION,
+                            "candidates": batch,
+                        },
+                        sort_keys=True,
+                        default=str,
+                    ),
                 ),
-            ),
-        ]
+            ]
+
+        if is_local_provider(provider):
+            started = monotonic_time.monotonic()
+            try:
+                batch = local_batch_call(
+                    provider,
+                    rows=rows,
+                    build_messages=build_messages,
+                    item_model=AIShadowV3Decision,
+                    requires={"armed": ("trigger",)},
+                    contract_id=AI_SHADOW_V3_CONTRACT,
+                    schema_name="ai_shadow_v3_batch_response",
+                    model=model,
+                    max_tokens=lambda count: max(1200, 420 * count),
+                )
+            except TradingModelOutputError as exc:
+                raise RuntimeError(f"ai_shadow_v3_invalid_json:{exc.reason};detail={exc.detail[:300]}") from exc
+            return AIShadowV3AnalysisResult(
+                provider=str(provider_name),
+                model=str(getattr(batch.response, "model", "") or model or "") or None,
+                decisions=batch.items,
+                provider_latency_ms=Decimal(str((monotonic_time.monotonic() - started) * 1000)),
+            )
+
+        messages = build_messages(rows)
         response_format: dict[str, Any]
         if sends_json_schema(provider_name):
             schema = project_provider_schema(

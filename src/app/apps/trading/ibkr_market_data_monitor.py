@@ -26,6 +26,7 @@ from .execution_observation_plane import (
     ExecutionObservationPlane,
     default_execution_observation_plane,
 )
+from .held_quote_demand import HeldQuoteDemand, default_held_quote_demand
 from .ibkr_evidence import IbkrEvidenceStore, default_ibkr_evidence_store
 from .ibkr_settings import load_ibkr_settings
 from .providers.ibkr import IbkrEquityProvider
@@ -36,6 +37,7 @@ from .strategy_shadow_universe import (
     resolve_v2_runtime_archive,
 )
 from .streaming.manager import StreamingQuoteUpdate
+from .trade_logging import trade_log
 from .us_equity_calendar import us_equity_session
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
@@ -73,6 +75,22 @@ def _market_data_line_budget() -> int:
     return max(1, value)
 
 
+def _quote_line_epoch(diagnostics: dict[str, Any]) -> tuple[object, ...] | None:
+    """What must stay the same for a quote line to have run unbroken; None when it is down."""
+    if not diagnostics.get("connected"):
+        return None
+    transport = diagnostics.get("transport")
+    transport = transport if isinstance(transport, dict) else {}
+    farms = transport.get("farm_status")
+    if isinstance(farms, dict) and farms.get("market_data") == "DISCONNECTED":
+        return None
+    return (
+        diagnostics.get("connect_count"),
+        diagnostics.get("reconnect_count"),
+        transport.get("quote_line_break_count"),
+    )
+
+
 class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
     error_event = "ibkr_market_data_monitor_error"
 
@@ -86,6 +104,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         interval_seconds: float | None = None,
         evidence_store: IbkrEvidenceStore | None = None,
         market_data_line_budget: int | None = None,
+        held_quotes: HeldQuoteDemand | None = None,
     ) -> None:
         self.strategy_repository_factory = strategy_repository_factory
         self.market_service_factory = market_service_factory
@@ -97,8 +116,16 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             1,
             int(market_data_line_budget or _market_data_line_budget()),
         )
+        self.held_quotes = held_quotes or default_held_quote_demand()
+        self.demand_error_count = 0
+        self.held_without_line_count = 0
         self._keys: dict[str, str] = {}
         self._callbacks: dict[str, Callable] = {}
+        # Since when each line has run unbroken (see _quote_line_epoch); a fill may take a
+        # line's standing quote only inside such a span.
+        self._line_up_since: dict[str, datetime] = {}
+        self._line_epoch: tuple[object, ...] | None = None
+        self.line_confirmation_count = 0
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.demanded_instrument_count = 0
@@ -139,7 +166,14 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
                             repository,
                             now=now,
                         )
-                except Exception:
+                except Exception as exc:
+                    # Silently dropping a strategy's stocks left them without live quotes; say so.
+                    self.demand_error_count += 1
+                    self.last_error = f"demand/{config.strategy_id}: {type(exc).__name__}: {exc}"
+                    trade_log(
+                        "auto_trading", "ibkr_demand_universe_error", strategy_id=config.strategy_id,
+                        error_type=type(exc).__name__, detail=str(exc)[:500], execution_authority=False,
+                    )
                     universe = None
             if universe is None:
                 continue
@@ -149,11 +183,19 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
                     demanded.add(instrument_id)
         return demanded
 
-    def _admitted_demand(self, demanded: set[str]) -> set[str]:
-        """Preserve existing lines first, then admit deterministic new demand."""
+    def _admitted_demand(self, demanded: set[str], priority: set[str] | None = None) -> set[str]:
+        """Held stocks first, then existing lines, then deterministic new demand."""
 
-        existing = sorted(set(self._keys) & demanded)
-        selected = existing[: self.market_data_line_budget]
+        held = sorted((priority or set()) & demanded)
+        selected = held[: self.market_data_line_budget]
+        self.held_without_line_count = len(held) - len(selected)
+        if self.held_without_line_count:
+            trade_log(
+                "auto_trading", "ibkr_held_quote_without_line", denied=held[len(selected):],
+                line_budget=self.market_data_line_budget, execution_authority=False,
+            )
+        existing = sorted((set(self._keys) & demanded) - set(selected))
+        selected.extend(existing[: self.market_data_line_budget - len(selected)])
         remaining = self.market_data_line_budget - len(selected)
         if remaining > 0:
             new_demand = sorted(demanded - set(selected))
@@ -298,7 +340,8 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         market_service: TradingMarketDataService,
         provider: IbkrEquityProvider,
         instrument_id: str,
-    ) -> None:
+    ) -> str | None:
+        """Hold the line; its binding id when the subscription was renewed without error."""
         binding = provider.get_binding(instrument_id)
         listener_id = f"ibkr-plane:{instrument_id}"
         if instrument_id not in self._callbacks:
@@ -322,6 +365,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             provider.subscribe_quote(instrument_id, callback)
             if created:
                 self.subscription_create_count += 1
+            return binding.binding_id
         except Exception as exc:
             self.subscription_error_count += 1
             self.last_error = f"{instrument_id}: {type(exc).__name__}: {exc}"
@@ -330,6 +374,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
                 self.now_factory().astimezone(_ET).date(),
                 f"{type(exc).__name__}:{exc}",
             )
+            return None
 
     def _remove_subscription(
         self,
@@ -339,6 +384,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
     ) -> None:
         key = self._keys.pop(instrument_id, None)
         callback = self._callbacks.pop(instrument_id, None)
+        self._line_up_since.pop(instrument_id, None)
         if key is None:
             return
         listener_id = f"ibkr-plane:{instrument_id}"
@@ -363,9 +409,10 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         if not isinstance(provider, IbkrEquityProvider):
             raise TypeError("IBKR registry provider has unexpected type")
 
-        demanded = self._active_demand(repository, now=now)
+        held = self.held_quotes.current(now=now)
+        demanded = self._active_demand(repository, now=now) | held
         self.demanded_instrument_count = len(demanded)
-        admitted = self._admitted_demand(demanded)
+        admitted = self._admitted_demand(demanded, priority=held)
 
         for instrument_id in sorted(set(self._keys) - admitted):
             self._remove_subscription(market_service, provider, instrument_id)
@@ -392,13 +439,28 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             historical_cache_hit_count=int(runtime_diagnostics.get("historical_cache_hit_count", 0) or 0),
         )
 
+        epoch = _quote_line_epoch(runtime_diagnostics)
+        if epoch is None or epoch != self._line_epoch:
+            self._line_up_since.clear()
+        self._line_epoch = epoch
+
         before = self.recorded_observation_count
         for instrument_id in sorted(admitted):
-            self._ensure_subscription(
+            binding_id = self._ensure_subscription(
                 market_service,
                 provider,
                 instrument_id,
             )
+            if binding_id is None or epoch is None:
+                self._line_up_since.pop(instrument_id, None)
+                continue
+            self.plane.confirm_line(
+                instrument_id,
+                binding_id=binding_id,
+                up_since=self._line_up_since.setdefault(instrument_id, now),
+                confirmed_at=now,
+            )
+            self.line_confirmation_count += 1
 
         self.last_run_at = now
         # Write the quote evidence queued by the network thread since the last cycle.
@@ -423,12 +485,15 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             "market_data_line_budget": self.market_data_line_budget,
             "budget_denied_instrument_count": self.budget_denied_instrument_count,
             "active_subscription_count": len(self._keys),
+            "demand_error_count": self.demand_error_count,
+            "held_without_line_count": self.held_without_line_count,
             "subscription_create_count": self.subscription_create_count,
             "subscription_remove_count": self.subscription_remove_count,
             "subscription_error_count": self.subscription_error_count,
             "live_event_count": self.live_event_count,
             "nonlive_event_count": self.nonlive_event_count,
             "recorded_observation_count": self.recorded_observation_count,
+            "line_confirmation_count": self.line_confirmation_count,
             "authority_mode": "LIVE_DATA" if settings.live_authority_enabled else "ZERO_AUTHORITY_OBSERVATION",
             "order_execution_authority": False,
         }

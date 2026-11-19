@@ -1,7 +1,7 @@
 """Interday SHADOW experiment: the AI arms of the substrategy group.
 
 A/B (deterministic V2 and Stoch trend capture) are produced by the canonical
-strategy monitor. This monitor adds C/D: a stateful every-minute AI policy and a
+strategy monitor. This monitor adds C/D: a stateful five-minute AI policy and a
 stateful event-driven AI policy over the identical frozen cohort. It never
 creates paper orders or protections. The linked standalone ``stoch-rsi-5min``,
 ``stoch-rsi-5min-early-single``, ``stoch-rsi-5min-fast`` and
@@ -29,6 +29,7 @@ from app.runtime.features import FeatureContext
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution_observation_plane import (
+    STANDING_QUOTE_MAX_AGE_SECONDS,
     ExecutionObservationPlane,
     default_execution_observation_plane,
     first_causal_execution,
@@ -36,6 +37,9 @@ from .execution_observation_plane import (
 from .ibkr_settings import ibkr_live_quotes_authorized
 from .gapper_dataset import GapperCandidate
 from .indicator_signals import multi_timeframe_indicator_context
+from .held_quote_demand import default_held_quote_demand
+from .model_route import local_batch_rows
+from .paper import PaperExecutionPolicy
 from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
     ExecutionInputGap,
@@ -80,6 +84,7 @@ from .strategy_session_evidence import (
     _FullSessionMarketServiceProxy,
 )
 from .trade_logging import trade_log
+from .trading_ai_budget import research_decision_slot
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import after_regular_close
 
@@ -87,6 +92,10 @@ logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_ai_shadow_monitor"
+# A retried order uses a quote at most this old (simulate_ai_shadow_fill's capture lag), judged from just before it
+# (more than the 250 ms paper latency).
+RETRY_QUOTE_MAX_AGE = timedelta(seconds=60)
+RETRY_QUOTE_LEAD = timedelta(seconds=1)
 _EVENT_TYPES = (
     "state",
     "shadow_execution",
@@ -255,6 +264,48 @@ def _position_from_latest_fill(
         return AIShadowPositionState.model_validate(latest.payload["position_after"])
     except Exception:
         return AIShadowPositionState(policy=policy, instrument_id=instrument_id)
+
+
+def _has_open_work(events: list[StrategyEvent], policy: AIShadowPolicy, instrument_id: str) -> bool:
+    """A position, or an order still waiting to fill."""
+    return (
+        _position_from_latest_fill(events, policy=policy, instrument_id=instrument_id).is_long
+        or _pending_exit_intent(events, policy=policy, instrument_id=instrument_id) is not None
+        or _pending_entry_intent(events, policy=policy, instrument_id=instrument_id) is not None
+    )
+
+
+def _model_stop_price(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    instrument_id: str,
+    position: AIShadowPositionState,
+) -> Decimal | None:
+    """The highest invalidation price the model has set for this open trade; it can raise a stop, never lower one."""
+    if not position.is_long or position.entry_time is None:
+        return None
+    decisions = sorted(
+        (
+            event
+            for event in events
+            if event.event_type == "ai_shadow_decision"
+            and event.instrument_id == instrument_id
+            and event.payload.get("policy") == policy
+            and isinstance(event.payload.get("decision"), dict)
+        ),
+        key=lambda event: event.observed_at,
+    )
+    entries = [event for event in decisions if event.observed_at <= position.entry_time and event.state == "enter"]
+    if not entries:
+        return None
+    started = entries[-1].observed_at
+    stops = [
+        Decimal(str(event.payload["decision"]["invalidation_price"]))
+        for event in decisions
+        if event.observed_at >= started and event.payload["decision"].get("invalidation_price") is not None
+    ]
+    return max(stops) if stops else None
 
 
 def _previous_decision(
@@ -623,6 +674,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self.market_service_factory = market_service_factory
         self.analyzer_factory = analyzer_factory
         self.execution_plane = execution_plane or default_execution_observation_plane()
+        self._retry_attempted_at: dict[tuple[str, str, str], datetime] = {}
         self.now_factory = now_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
         self.last_run_at: datetime | None = None
@@ -906,6 +958,9 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 market_snapshot_as_of=observed_at,
                 binding_id=candidate.binding_id,
                 ibkr_live=await asyncio.to_thread(ibkr_live_quotes_authorized),
+                standing_max_age_seconds=STANDING_QUOTE_MAX_AGE_SECONDS,
+                standing_latency_seconds=Decimal(PaperExecutionPolicy().latency_ms) / 1000,
+                now=self.now_factory(),
             )
             if selection is None:
                 if side == "buy" and pending_entry is None:
@@ -991,6 +1046,10 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 )
                 return
             execution = _execution_payload(selection.observation)
+            if selection.selection_basis == "standing":
+                # The line check proved this book still stood when the order became active,
+                # so the order is priced on it at that moment.
+                execution["source_time"] = selection.priced_at
             execution["causal_execution_selection"] = selection.model_dump(mode="json")
 
         if side == "buy":
@@ -1102,6 +1161,8 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             "side": side,
             "requested_units": str(units),
             "simulation": simulation.model_dump(mode="json"),
+            # Which quote priced the fill: the one standing on a live line, or the first after.
+            "causal_execution_selection": execution.get("causal_execution_selection"),
             "position_before": position.model_dump(mode="json"),
             "position_after": persisted_after.model_dump(mode="json"),
             "closed_position": after.model_dump(mode="json") if closed_trade else None,
@@ -1552,6 +1613,32 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             market_service=market_service,
         )
 
+    def _retry_actionable_at(self, policy: str, instrument_id: str, original: datetime) -> datetime:
+        """The moment a retried order is judged from: just before the newest quote, when one is fresh and new.
+
+        A retry once took the first quote after its last attempt. Passes run minutes apart and quotes arrive sparsely,
+        so that quote was often more than a minute past the moment it was judged from and was refused as too late,
+        every time (an exit waited 40 minutes on 2026-11-10). The newest quote known now is used instead, if it
+        arrived after the last attempt and is at most a minute old; otherwise the retry waits for one.
+        """
+        now = self.now_factory().astimezone(timezone.utc)
+        original = original.astimezone(timezone.utc)
+        key = (policy, instrument_id, original.isoformat())
+        previous = self._retry_attempted_at.get(key)
+        self._retry_attempted_at[key] = now
+        if previous is None:
+            # First the rule every order has: the first quote after the decision, when it came within the age limit.
+            early = self.execution_plane.latest(instrument_id, as_of=min(now, original + RETRY_QUOTE_MAX_AGE))
+            if early is not None and early.recorded_at >= original:
+                return original
+        envelope = self.execution_plane.latest(instrument_id, as_of=now)
+        if envelope is not None:
+            quoted_at = envelope.observation.source_time.astimezone(timezone.utc)
+            new_since_last_attempt = previous is None or envelope.recorded_at > previous
+            if new_since_last_attempt and now - quoted_at <= RETRY_QUOTE_MAX_AGE:
+                return max(original, quoted_at - RETRY_QUOTE_LEAD)
+        return max(original, previous or original, now - RETRY_QUOTE_MAX_AGE)
+
     async def _run_policy(
         self,
         *,
@@ -1562,6 +1649,16 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         market_service: TradingMarketDataService,
         events: list[StrategyEvent],
     ) -> None:
+        traded = {
+            event.instrument_id
+            for event in events
+            if event.event_type in {"ai_shadow_fill", "ai_shadow_entry_intent", "ai_shadow_exit_intent"}
+            and event.payload.get("policy") == policy
+        }
+        default_held_quote_demand().hold(
+            (instrument_id for instrument_id in traded if _has_open_work(events, policy, instrument_id)),
+            now=self.now_factory(),
+        )
         rows = await self._prepare_policy_rows(
             policy=policy,
             rows=rows,
@@ -1571,6 +1668,8 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         )
         if not rows:
             return
+
+        rows = local_batch_rows(rows, is_open=lambda row: _has_open_work(events, policy, row["candidate"].instrument_id))
 
         due: list[dict[str, Any]] = []
         reasons_by_id: dict[str, tuple[str, ...]] = {}
@@ -1626,7 +1725,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     batch_result=None,
                     trigger_reasons=("durable_exit_retry",),
                     record_decision=False,
-                    decision_completed_at=actionable_at,
+                    decision_completed_at=self._retry_actionable_at(policy, candidate.instrument_id, actionable_at),
                 )
                 continue
             if not position.is_long and pending_entry is not None:
@@ -1706,10 +1805,36 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     batch_result=None,
                     trigger_reasons=("durable_entry_retry",),
                     record_decision=False,
-                    decision_completed_at=actionable_at,
+                    decision_completed_at=self._retry_actionable_at(policy, candidate.instrument_id, actionable_at),
                     reference_price_override=_decimal(
                         pending_entry.payload.get("reference_price")
                     ),
+                )
+                continue
+            stop = _model_stop_price(events, policy=policy, instrument_id=candidate.instrument_id, position=position)
+            if stop is not None and row["bars"] and row["bars"][-1].close <= stop:
+                await self._apply_decision(
+                    policy=policy,
+                    decision=AIShadowDecision(
+                        instrument_id=candidate.instrument_id,
+                        action="exit",
+                        confidence=100,
+                        market_regime="unresolved",
+                        expected_horizon_minutes=1,
+                        thesis="The model's own invalidation price was breached.",
+                        reason=f"A finished bar closed at or below the invalidation price {stop}.",
+                        invalidation_price=None,
+                    ),
+                    row=row,
+                    candidate=candidate,
+                    bars=row["bars"],
+                    config=config,
+                    repository=repository,
+                    market_service=market_service,
+                    events=events,
+                    result=row["learning"],
+                    batch_result=None,
+                    trigger_reasons=("model_stop_breached",),
                 )
                 continue
             if not position.is_long:
@@ -1737,6 +1862,9 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 policy=policy,
                 instrument_id=candidate.instrument_id,
             )
+            # A model call can take over a minute. Stops, fills and retries above still run on every pass.
+            if previous is not None and research_decision_slot(previous.observed_at) >= research_decision_slot(observed_at):
+                continue
             previous_feature = (
                 previous.payload.get("feature_snapshot")
                 if previous is not None
@@ -1758,7 +1886,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 if not reasons:
                     continue
             else:
-                reasons = ("completed_1m_bar",)
+                reasons = ("five_minute_slot",)
 
             analyzer_row = {
                 "instrument_id": candidate.instrument_id,
@@ -1936,6 +2064,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 )
                 forced_row = dict(row)
                 forced_row["observed_at"] = now
+                forced_row["feature_snapshot"] = row["feature_by_policy"][policy]
                 pending_exit = _pending_exit_intent(
                     events,
                     policy=policy,
@@ -1960,9 +2089,13 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     ),
                     record_decision=pending_exit is None,
                     decision_completed_at=(
-                        _payload_datetime(
-                            pending_exit.payload.get("execution_actionable_at"),
-                            pending_exit.observed_at,
+                        self._retry_actionable_at(
+                            policy,
+                            candidate.instrument_id,
+                            _payload_datetime(
+                                pending_exit.payload.get("execution_actionable_at"),
+                                pending_exit.observed_at,
+                            ),
                         )
                         if pending_exit is not None
                         else now

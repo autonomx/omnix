@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, cast
@@ -11,6 +12,7 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from . import strategy_session_evidence as _session_evidence
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
+from .held_quote_demand import default_held_quote_demand
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .research.policy import ResearchPolicyDecision
 from .service import TradingMarketDataService
@@ -59,14 +61,36 @@ from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
 
 
-async def evaluate_candidates(
-    monitor: StrategyRunHost,
+# Stoch states in which an entry or exit order may come next: the stock keeps a live
+# IBKR quote line, so its fill is priced on the NBBO (owner decision 2026-11-12).
+STOCH_QUOTE_LINE_STATES = frozenset({
+    "setup_armed",
+    "entry_armed",
+    "range_active",
+    "range_exit_armed",
+    "trend_active",
+    "trend_partial_armed",
+    "trend_runner",
+    "trend_exit_armed",
+})
+
+
+def hold_stoch_quote_line(snapshot, instrument_id: str, *, now: datetime) -> bool:
+    """Ask the IBKR monitor for the stock's live line while the arm may trade it."""
+    if snapshot.state not in STOCH_QUOTE_LINE_STATES:
+        return False
+    default_held_quote_demand().hold({instrument_id}, now=now)
+    return True
+
+
+def session_market_service(
     config: TradingStrategyConfigDocument,
-    strategy_repository: TradingStrategyRepository,
     market_service: TradingMarketDataService,
     universe,
-) -> list[_EntryProposal]:
-    now = datetime.now(timezone.utc)
+    *,
+    now: datetime,
+) -> TradingMarketDataService:
+    """The market service as a pass over this session sees it (current-session and full-session proxies)."""
     universe_session_date = getattr(universe, "session_date", None)
     if config.mode == "shadow" and (
         universe_session_date is None
@@ -87,6 +111,382 @@ async def evaluate_candidates(
         observed_at=now,
         allow_shadow_fallback=config.mode == "shadow",
     ))
+    return market_service
+
+
+@dataclass(frozen=True)
+class CandidateSessionBars:
+    primary_error: Exception | None
+    shared_recovery: Any
+    base_bars: list
+    gap_pullback_coverage: Any
+    current_ready: bool
+    integrity_reason: str
+    bar_source: str
+
+
+async def load_candidate_session_bars(
+    market_service: TradingMarketDataService,
+    universe,
+    candidate,
+    *,
+    now_utc: datetime,
+    legacy_candidate_contract: bool,
+) -> CandidateSessionBars:
+    """A candidate's finalized session 1m bars, and whether they are ready for evaluation."""
+    primary_error: Exception | None = None
+    shared_recovery = None
+    try:
+        recovery_method = getattr(market_service, "recovered_bars", None)
+        if callable(recovery_method):
+            shared_recovery = await asyncio.to_thread(
+                recovery_method,
+                candidate.instrument_id,
+                "1m",
+                500,
+                candidate.binding_id,
+                session_date=universe.session_date,
+                as_of=now_utc,
+            )
+            if shared_recovery.report.primary_error:
+                primary_error = RuntimeError(shared_recovery.report.primary_error)
+            raw_bars = list(shared_recovery.bars)
+        else:
+            response = await asyncio.to_thread(
+                market_service.bars,
+                candidate.instrument_id,
+                "1m",
+                500,
+                candidate.binding_id,
+            )
+            raw_bars = list(response.bars)
+        if legacy_candidate_contract:
+            base_bars = [bar for bar in raw_bars if bar.is_final]
+        else:
+            base_bars = _finalized_bars_for_session(
+                raw_bars,
+                universe.session_date,
+            )
+    except Exception as exc:
+        primary_error = exc
+        base_bars = []
+
+    gap_pullback_coverage = None
+    if legacy_candidate_contract:
+        current_ready = bool(base_bars)
+        integrity_reason = (
+            "CURRENT_SESSION_1M_READY"
+            if current_ready
+            else "CURRENT_SESSION_1M_UNAVAILABLE"
+        )
+    elif now_utc.astimezone(_ET).date() < universe.session_date or (
+        now_utc.astimezone(_ET).date() == universe.session_date
+        and now_utc.astimezone(_ET).time() < _REGULAR_OPEN
+    ):
+        current_ready = False
+        integrity_reason = "CURRENT_SESSION_NOT_STARTED"
+    elif not base_bars:
+        current_ready = False
+        integrity_reason = "CURRENT_SESSION_1M_UNAVAILABLE"
+    else:
+        report = shared_recovery.report if shared_recovery is not None else None
+        gap_pullback_coverage = qualify_bar_feature(
+            base_bars,
+            FeatureRequirement(
+                requirement_id="gap-pullback-session-evidence-v1",
+                feature_name="gap_pullback_session_ohlcv",
+                interval="1m",
+                dependency_class="SESSION_CUMULATIVE",
+            ),
+            instrument_id=candidate.instrument_id,
+            session_date=universe.session_date,
+            observed_at=now_utc,
+            confirmed_nontrading_starts=(
+                report.confirmed_nontrading_starts
+                if report is not None
+                else ()
+            ),
+            knowledge_mode=(
+                report.knowledge_mode
+                if report is not None
+                else "live"
+            ),
+            knowledge_cutoff=(
+                report.knowledge_cutoff
+                if report is not None
+                else now_utc
+            ),
+        )
+        current_ready = gap_pullback_coverage.status != "INVALID"
+        integrity_reason = (
+            "GAP_PULLBACK_REQUIRED_FEATURES_READY"
+            if current_ready
+            else "GAP_PULLBACK_REQUIRED_FEATURES_INVALID"
+        )
+    bar_source = (
+        "shared_recovery:"
+        + ",".join(shared_recovery.report.source_providers)
+        if shared_recovery is not None
+        else "configured_history"
+    )
+    return CandidateSessionBars(
+        primary_error=primary_error,
+        shared_recovery=shared_recovery,
+        base_bars=base_bars,
+        gap_pullback_coverage=gap_pullback_coverage,
+        current_ready=current_ready,
+        integrity_reason=integrity_reason,
+        bar_source=bar_source,
+    )
+
+
+async def capture_stoch_action(
+    monitor: StrategyRunHost,
+    config: TradingStrategyConfigDocument,
+    strategy_repository: TradingStrategyRepository,
+    market_service: TradingMarketDataService,
+    *,
+    universe_id: str,
+    instrument_id: str,
+    binding_id: str | None,
+    snapshot,
+    action: StochExecutionAction,
+    action_time: datetime,
+) -> dict[str, Any]:
+    """Capture the quote for one Stoch exit action, simulate its fill and record it. Research only."""
+    try:
+        action_evidence = await asyncio.to_thread(
+            observe_shadow_execution,
+            market_service,
+            instrument_id=instrument_id,
+            binding_id=binding_id,
+        )
+        action_simulation = simulate_stoch_execution(
+            action_evidence.execution,
+            action=action,
+            instrument_id=instrument_id,
+            binding_id=binding_id,
+            decision_at=action_time,
+            requested_fraction=stoch_requested_fraction_for_action(
+                action,
+                snapshot,
+            ),
+            reference_price=(
+                snapshot.runner_exit_price
+                if action == "force_flat"
+                else None
+            ),
+        )
+        action_payload = {
+            "universe_id": universe_id,
+            "policy_version": snapshot.policy_version,
+            "action": action,
+            "decision_at": action_time,
+            "execution": action_evidence.execution,
+            "execution_simulation": action_simulation.model_dump(
+                mode="json"
+            ),
+            "research_only": True,
+            "execution_authority": False,
+        }
+    except Exception as exc:
+        action_payload = {
+            "universe_id": universe_id,
+            "policy_version": snapshot.policy_version,
+            "action": action,
+            "decision_at": action_time,
+            "execution": None,
+            "execution_simulation": None,
+            "detail": f"{type(exc).__name__}: {exc}",
+            "research_only": True,
+            "execution_authority": False,
+        }
+    await monitor._event(
+        strategy_repository,
+        config,
+        instrument_id=instrument_id,
+        event_type="stoch_trend_execution",
+        state=action,
+        reason_code="STOCH_EXECUTION_ACTION_CAPTURED",
+        observed_at=action_time,
+        payload=action_payload,
+    )
+    return action_payload
+
+
+async def capture_stoch_entry(
+    monitor: StrategyRunHost,
+    config: TradingStrategyConfigDocument,
+    strategy_repository: TradingStrategyRepository,
+    market_service: TradingMarketDataService,
+    *,
+    universe,
+    candidate,
+    snapshot,
+    observed_at: datetime,
+    captured_entry_signals: set[tuple[str, str]],
+) -> dict[str, Any] | None:
+    """Record a Stoch entry's evidence once per signal; returns the payload written, or None.
+
+    Execution conditions are captured exactly when the first 3m oversold signal becomes
+    actionable. A later look must not backfill entry eligibility from changed quotes: once
+    the next 3m bar is final, the entry is recorded as missed instead.
+    """
+    signal_time = snapshot.entry_signal_time
+    if signal_time is None:
+        return None
+    signal_key = (candidate.instrument_id, signal_time.astimezone(timezone.utc).isoformat())
+    if signal_key in captured_entry_signals:
+        return None
+    if snapshot.state == "entry_armed":
+        try:
+            entry_evidence = await asyncio.to_thread(
+                observe_shadow_execution,
+                market_service,
+                instrument_id=candidate.instrument_id,
+                binding_id=candidate.binding_id,
+            )
+            risk_decision = stoch_trend_capture_risk_decision(
+                entry_evidence.execution,
+                max_spread_bps=config.risk.max_spread_bps,
+            )
+            entry_simulation = (
+                simulate_stoch_execution(
+                    entry_evidence.execution,
+                    action="entry",
+                    instrument_id=candidate.instrument_id,
+                    binding_id=candidate.binding_id,
+                    decision_at=signal_time,
+                    requested_fraction=Decimal("1"),
+                )
+                if risk_decision.allowed
+                else None
+            )
+            source_time = entry_evidence.execution.get("source_time")
+            capture_lag_seconds = None
+            if isinstance(source_time, datetime):
+                capture_lag_seconds = (
+                    source_time.astimezone(timezone.utc) - signal_time.astimezone(timezone.utc)
+                ).total_seconds()
+            entry_payload = {
+                "universe_id": universe.universe_id,
+                "policy_version": snapshot.policy_version,
+                "entry_signal_time": signal_time,
+                "execution_capture_observed_at": observed_at,
+                "execution_capture_lag_seconds": capture_lag_seconds,
+                "risk_decision": risk_decision.model_dump(mode="json"),
+                "execution": entry_evidence.execution,
+                "execution_simulation": (
+                    entry_simulation.model_dump(mode="json")
+                    if entry_simulation is not None
+                    else None
+                ),
+                "research_only": True,
+                "execution_authority": False,
+            }
+        except Exception as exc:
+            entry_payload = {
+                "universe_id": universe.universe_id,
+                "policy_version": snapshot.policy_version,
+                "entry_signal_time": signal_time,
+                "execution_capture_observed_at": observed_at,
+                "risk_decision": {
+                    "allowed": False,
+                    "reason_codes": ["STOCH_TREND_EXECUTION_EVIDENCE_ERROR"],
+                },
+                "execution_simulation": None,
+                "detail": f"{type(exc).__name__}: {exc}",
+                "research_only": True,
+                "execution_authority": False,
+            }
+    elif snapshot.entry_time is not None:
+        # First observed only after the next 3m bar was already final. Never backfill the
+        # entry with a later quote: an explicit fail-closed record keeps reconstructed
+        # returns from masquerading as prospectively executable trades.
+        entry_payload = {
+            "universe_id": universe.universe_id,
+            "policy_version": snapshot.policy_version,
+            "entry_signal_time": signal_time,
+            "entry_time": snapshot.entry_time,
+            "execution_capture_observed_at": observed_at,
+            "execution_capture_lag_seconds": None,
+            "risk_decision": {
+                "allowed": False,
+                "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
+            },
+            "execution": None,
+            "execution_simulation": None,
+            "detail": (
+                "No point-in-time execution observation was captured "
+                "before the next finalized 3m entry bar."
+            ),
+            "research_only": True,
+            "execution_authority": False,
+        }
+    else:
+        return None
+    # Idempotency is bound to the signal time: the first record of a signal wins, whether
+    # captured or missed, and a repeated look at the same armed state adds nothing.
+    await monitor._event(
+        strategy_repository,
+        config,
+        instrument_id=candidate.instrument_id,
+        event_type="stoch_trend_capture_entry",
+        state="entry_evidence",
+        reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
+        observed_at=signal_time,
+        payload=entry_payload,
+    )
+    captured_entry_signals.add(signal_key)
+    return entry_payload
+
+
+async def stoch_session_events(
+    strategy_repository: TradingStrategyRepository,
+    config: TradingStrategyConfigDocument,
+    session_date,
+) -> list:
+    """The session's recorded Stoch entries and execution actions for one configuration."""
+    session_start_et = datetime(
+        session_date.year,
+        session_date.month,
+        session_date.day,
+        tzinfo=_ET,
+    )
+    session_end_et = session_start_et + timedelta(days=1)
+    event_types = ("stoch_trend_capture_entry", "stoch_trend_execution")
+    if hasattr(strategy_repository, "events_by_types_between"):
+        return await asyncio.to_thread(
+            strategy_repository.events_by_types_between,
+            config.strategy_id,
+            event_types=event_types,
+            start_time=session_start_et.astimezone(timezone.utc),
+            end_time=session_end_et.astimezone(timezone.utc),
+            limit=2_000,
+        )
+    return [
+        event
+        for event in await asyncio.to_thread(
+            strategy_repository.recent_events,
+            config.strategy_id,
+            4_000,
+        )
+        if event.event_type in event_types
+        and session_start_et.astimezone(timezone.utc)
+        <= event.observed_at.astimezone(timezone.utc)
+        < session_end_et.astimezone(timezone.utc)
+    ]
+
+
+async def evaluate_candidates(
+    monitor: StrategyRunHost,
+    config: TradingStrategyConfigDocument,
+    strategy_repository: TradingStrategyRepository,
+    market_service: TradingMarketDataService,
+    universe,
+) -> list[_EntryProposal]:
+    now = datetime.now(timezone.utc)
+    market_service = session_market_service(config, market_service, universe, now=now)
     if isinstance(universe, GapperUniverseSnapshot):
         session_assessment = assess_session_evaluability(universe, config.config)
         await monitor._event(
@@ -117,43 +517,10 @@ async def evaluate_candidates(
     ] = {}
     stoch_execution_history_available = True
     if config.config.stoch_trend_capture_enabled:
-        session_start_et = datetime(
-            universe.session_date.year,
-            universe.session_date.month,
-            universe.session_date.day,
-            tzinfo=_ET,
-        )
-        session_end_et = session_start_et + timedelta(days=1)
         try:
-            if hasattr(strategy_repository, "events_by_types_between"):
-                prior_stoch_events = await asyncio.to_thread(
-                    strategy_repository.events_by_types_between,
-                    config.strategy_id,
-                    event_types=(
-                        "stoch_trend_capture_entry",
-                        "stoch_trend_execution",
-                    ),
-                    start_time=session_start_et.astimezone(timezone.utc),
-                    end_time=session_end_et.astimezone(timezone.utc),
-                    limit=2_000,
-                )
-            else:
-                prior_stoch_events = [
-                    event
-                    for event in await asyncio.to_thread(
-                        strategy_repository.recent_events,
-                        config.strategy_id,
-                        4_000,
-                    )
-                    if event.event_type
-                    in {
-                        "stoch_trend_capture_entry",
-                        "stoch_trend_execution",
-                    }
-                    and session_start_et.astimezone(timezone.utc)
-                    <= event.observed_at.astimezone(timezone.utc)
-                    < session_end_et.astimezone(timezone.utc)
-                ]
+            prior_stoch_events = await stoch_session_events(
+                strategy_repository, config, universe.session_date
+            )
 
             for event in prior_stoch_events:
                 payload = event.payload if isinstance(event.payload, dict) else {}
@@ -242,102 +609,21 @@ async def evaluate_candidates(
                 },
             )
 
-        primary_error: Exception | None = None
-        shared_recovery = None
         stoch_capture = None
-        try:
-            recovery_method = getattr(market_service, "recovered_bars", None)
-            if callable(recovery_method):
-                shared_recovery = await asyncio.to_thread(
-                    recovery_method,
-                    candidate.instrument_id,
-                    "1m",
-                    500,
-                    candidate.binding_id,
-                    session_date=universe.session_date,
-                    as_of=now_utc,
-                )
-                if shared_recovery.report.primary_error:
-                    primary_error = RuntimeError(shared_recovery.report.primary_error)
-                raw_bars = list(shared_recovery.bars)
-            else:
-                response = await asyncio.to_thread(
-                    market_service.bars,
-                    candidate.instrument_id,
-                    "1m",
-                    500,
-                    candidate.binding_id,
-                )
-                raw_bars = list(response.bars)
-            if legacy_candidate_contract:
-                base_bars = [bar for bar in raw_bars if bar.is_final]
-            else:
-                base_bars = _finalized_bars_for_session(
-                    raw_bars,
-                    universe.session_date,
-                )
-        except Exception as exc:
-            primary_error = exc
-            base_bars = []
-
-        gap_pullback_coverage = None
-        if legacy_candidate_contract:
-            current_ready = bool(base_bars)
-            integrity_reason = (
-                "CURRENT_SESSION_1M_READY"
-                if current_ready
-                else "CURRENT_SESSION_1M_UNAVAILABLE"
-            )
-        elif now_utc.astimezone(_ET).date() < universe.session_date or (
-            now_utc.astimezone(_ET).date() == universe.session_date
-            and now_utc.astimezone(_ET).time() < _REGULAR_OPEN
-        ):
-            current_ready = False
-            integrity_reason = "CURRENT_SESSION_NOT_STARTED"
-        elif not base_bars:
-            current_ready = False
-            integrity_reason = "CURRENT_SESSION_1M_UNAVAILABLE"
-        else:
-            report = shared_recovery.report if shared_recovery is not None else None
-            gap_pullback_coverage = qualify_bar_feature(
-                base_bars,
-                FeatureRequirement(
-                    requirement_id="gap-pullback-session-evidence-v1",
-                    feature_name="gap_pullback_session_ohlcv",
-                    interval="1m",
-                    dependency_class="SESSION_CUMULATIVE",
-                ),
-                instrument_id=candidate.instrument_id,
-                session_date=universe.session_date,
-                observed_at=now_utc,
-                confirmed_nontrading_starts=(
-                    report.confirmed_nontrading_starts
-                    if report is not None
-                    else ()
-                ),
-                knowledge_mode=(
-                    report.knowledge_mode
-                    if report is not None
-                    else "live"
-                ),
-                knowledge_cutoff=(
-                    report.knowledge_cutoff
-                    if report is not None
-                    else now_utc
-                ),
-            )
-            current_ready = gap_pullback_coverage.status != "INVALID"
-            integrity_reason = (
-                "GAP_PULLBACK_REQUIRED_FEATURES_READY"
-                if current_ready
-                else "GAP_PULLBACK_REQUIRED_FEATURES_INVALID"
-            )
-        bar_source = (
-            "shared_recovery:"
-            + ",".join(shared_recovery.report.source_providers)
-            if shared_recovery is not None
-            else "configured_history"
+        loaded = await load_candidate_session_bars(
+            market_service,
+            universe,
+            candidate,
+            now_utc=now_utc,
+            legacy_candidate_contract=legacy_candidate_contract,
         )
+        primary_error = loaded.primary_error
+        shared_recovery = loaded.shared_recovery
+        base_bars = loaded.base_bars
+        gap_pullback_coverage = loaded.gap_pullback_coverage
+        current_ready = loaded.current_ready
+        integrity_reason = loaded.integrity_reason
+        bar_source = loaded.bar_source
 
         # Finviz learning is a non-canonical SHADOW experiment. It may use
         # current Alpaca IEX indicator history to rescue a missing Yahoo
@@ -645,6 +931,7 @@ async def evaluate_candidates(
                     execution_authority=False,
                 )
             else:
+                hold_stoch_quote_line(stoch_capture, candidate.instrument_id, now=now_utc)
                 stoch_observed_at = stoch_capture.as_of or base_bars[-1].end_time
                 await monitor._event(
                     strategy_repository,
@@ -664,159 +951,20 @@ async def evaluate_candidates(
                     },
                 )
 
-                # Capture authoritative execution conditions exactly when the
-                # first 3m oversold signal becomes actionable. Later cycles
-                # must not backfill entry eligibility from changed quotes.
-                stoch_signal_key = (
-                    candidate.instrument_id,
-                    stoch_capture.entry_signal_time.astimezone(timezone.utc).isoformat(),
-                ) if stoch_capture.entry_signal_time is not None else None
-                if (
-                    stoch_capture.state == "entry_armed"
-                    and stoch_capture.entry_signal_time is not None
-                    and stoch_execution_history_available
-                    and stoch_signal_key not in captured_stoch_entry_signals
-                ):
-                    try:
-                        entry_evidence = await asyncio.to_thread(
-                            observe_shadow_execution,
-                            market_service,
-                            instrument_id=candidate.instrument_id,
-                            binding_id=candidate.binding_id,
-                        )
-                        risk_decision = stoch_trend_capture_risk_decision(
-                            entry_evidence.execution,
-                            max_spread_bps=config.risk.max_spread_bps,
-                        )
-                        entry_simulation = (
-                            simulate_stoch_execution(
-                                entry_evidence.execution,
-                                action="entry",
-                                instrument_id=candidate.instrument_id,
-                                binding_id=candidate.binding_id,
-                                decision_at=stoch_capture.entry_signal_time,
-                                requested_fraction=Decimal("1"),
-                            )
-                            if risk_decision.allowed
-                            else None
-                        )
-                        source_time = entry_evidence.execution.get("source_time")
-                        capture_lag_seconds = None
-                        if isinstance(source_time, datetime):
-                            capture_lag_seconds = (
-                                source_time.astimezone(timezone.utc)
-                                - stoch_capture.entry_signal_time.astimezone(timezone.utc)
-                            ).total_seconds()
-                        entry_payload = {
-                            "universe_id": universe.universe_id,
-                            "policy_version": stoch_capture.policy_version,
-                            "entry_signal_time": stoch_capture.entry_signal_time,
-                            "execution_capture_observed_at": stoch_observed_at,
-                            "execution_capture_lag_seconds": capture_lag_seconds,
-                            "risk_decision": risk_decision.model_dump(mode="json"),
-                            "execution": entry_evidence.execution,
-                            "execution_simulation": (
-                                entry_simulation.model_dump(mode="json")
-                                if entry_simulation is not None
-                                else None
-                            ),
-                            "research_only": True,
-                            "execution_authority": False,
-                        }
-                    except Exception as exc:
-                        entry_payload = {
-                            "universe_id": universe.universe_id,
-                            "policy_version": stoch_capture.policy_version,
-                            "entry_signal_time": stoch_capture.entry_signal_time,
-                            "execution_capture_observed_at": stoch_observed_at,
-                            "risk_decision": {
-                                "allowed": False,
-                                "reason_codes": ["STOCH_TREND_EXECUTION_EVIDENCE_ERROR"],
-                            },
-                            "execution_simulation": None,
-                            "detail": f"{type(exc).__name__}: {exc}",
-                            "research_only": True,
-                            "execution_authority": False,
-                        }
-                    # Bind idempotency to the signal timestamp. If polling
-                    # sees the same armed state more than once, the first
-                    # causal capture wins rather than creating duplicates.
-                    await monitor._event(
-                        strategy_repository,
+                if stoch_execution_history_available:
+                    entry_payload = await capture_stoch_entry(
+                        monitor,
                         config,
-                        instrument_id=candidate.instrument_id,
-                        event_type="stoch_trend_capture_entry",
-                        state="entry_evidence",
-                        reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
-                        observed_at=stoch_capture.entry_signal_time,
-                        payload=entry_payload,
-                    )
-                    assert stoch_signal_key is not None
-                    captured_stoch_entry_signals.add(stoch_signal_key)
-                    stoch_entry_payload_by_instrument[
-                        candidate.instrument_id
-                    ] = entry_payload
-                elif (
-                    stoch_signal_key is not None
-                    and stoch_capture.entry_time is not None
-                    and stoch_execution_history_available
-                    and stoch_signal_key not in captured_stoch_entry_signals
-                ):
-                    # The monitor first observed this signal only after the
-                    # next 3m bar was already finalized. Never backfill the
-                    # entry with a later quote: persist an explicit
-                    # fail-closed evidence record so reconstructed returns
-                    # cannot masquerade as prospectively executable trades.
-                    await monitor._event(
                         strategy_repository,
-                        config,
-                        instrument_id=candidate.instrument_id,
-                        event_type="stoch_trend_capture_entry",
-                        state="entry_evidence",
-                        reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
-                        observed_at=cast(datetime, stoch_capture.entry_signal_time),
-                        payload={
-                            "universe_id": universe.universe_id,
-                            "policy_version": stoch_capture.policy_version,
-                            "entry_signal_time": stoch_capture.entry_signal_time,
-                            "entry_time": stoch_capture.entry_time,
-                            "execution_capture_observed_at": stoch_observed_at,
-                            "execution_capture_lag_seconds": None,
-                            "risk_decision": {
-                                "allowed": False,
-                                "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
-                            },
-                            "execution": None,
-                            "execution_simulation": None,
-                            "detail": (
-                                "No point-in-time execution observation was captured "
-                                "before the next finalized 3m entry bar."
-                            ),
-                            "research_only": True,
-                            "execution_authority": False,
-                        },
+                        market_service,
+                        universe=universe,
+                        candidate=candidate,
+                        snapshot=stoch_capture,
+                        observed_at=stoch_observed_at,
+                        captured_entry_signals=captured_stoch_entry_signals,
                     )
-                    captured_stoch_entry_signals.add(stoch_signal_key)
-                    stoch_entry_payload_by_instrument[candidate.instrument_id] = {
-                        "universe_id": universe.universe_id,
-                        "policy_version": stoch_capture.policy_version,
-                        "entry_signal_time": stoch_capture.entry_signal_time,
-                        "entry_time": stoch_capture.entry_time,
-                        "execution_capture_observed_at": stoch_observed_at,
-                        "execution_capture_lag_seconds": None,
-                        "risk_decision": {
-                            "allowed": False,
-                            "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
-                        },
-                        "execution": None,
-                        "execution_simulation": None,
-                        "detail": (
-                            "No point-in-time execution observation was captured "
-                            "before the next finalized 3m entry bar."
-                        ),
-                        "research_only": True,
-                        "execution_authority": False,
-                    }
+                    if entry_payload is not None:
+                        stoch_entry_payload_by_instrument[candidate.instrument_id] = entry_payload
 
         if config.config.stoch_trend_capture_enabled and stoch_capture is not None:
             execution_action = stoch_execution_action_for_snapshot(stoch_capture)
@@ -831,62 +979,17 @@ async def evaluate_candidates(
                     stoch_execution_history_available
                     and action_key not in captured_stoch_execution_actions
                 ):
-                    try:
-                        action_evidence = await asyncio.to_thread(
-                            observe_shadow_execution,
-                            market_service,
-                            instrument_id=candidate.instrument_id,
-                            binding_id=candidate.binding_id,
-                        )
-                        action_simulation = simulate_stoch_execution(
-                            action_evidence.execution,
-                            action=action,
-                            instrument_id=candidate.instrument_id,
-                            binding_id=candidate.binding_id,
-                            decision_at=action_time,
-                            requested_fraction=stoch_requested_fraction_for_action(
-                                action,
-                                stoch_capture,
-                            ),
-                            reference_price=(
-                                stoch_capture.runner_exit_price
-                                if action == "force_flat"
-                                else None
-                            ),
-                        )
-                        action_payload = {
-                            "universe_id": universe.universe_id,
-                            "policy_version": stoch_capture.policy_version,
-                            "action": action,
-                            "decision_at": action_time,
-                            "execution": action_evidence.execution,
-                            "execution_simulation": action_simulation.model_dump(
-                                mode="json"
-                            ),
-                            "research_only": True,
-                            "execution_authority": False,
-                        }
-                    except Exception as exc:
-                        action_payload = {
-                            "universe_id": universe.universe_id,
-                            "policy_version": stoch_capture.policy_version,
-                            "action": action,
-                            "decision_at": action_time,
-                            "execution": None,
-                            "execution_simulation": None,
-                            "detail": f"{type(exc).__name__}: {exc}",
-                            "research_only": True,
-                            "execution_authority": False,
-                        }
-                    await monitor._event(
-                        strategy_repository,
+                    action_payload = await capture_stoch_action(
+                        monitor,
                         config,
+                        strategy_repository,
+                        market_service,
+                        universe_id=universe.universe_id,
                         instrument_id=candidate.instrument_id,
-                        event_type="stoch_trend_execution",
-                        state=action,
-                        reason_code="STOCH_EXECUTION_ACTION_CAPTURED",
-                        observed_at=action_time,
-                        payload=action_payload,
+                        binding_id=candidate.binding_id,
+                        snapshot=stoch_capture,
+                        action=action,
+                        action_time=action_time,
                     )
                     captured_stoch_execution_actions.add(action_key)
                     stoch_action_payloads_by_instrument.setdefault(

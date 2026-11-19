@@ -139,14 +139,17 @@ def test_a_contract_that_needs_no_thinking_asks_only_providers_that_can_answer_w
     payload = {"name": "alpha", "count": 3, "enabled": True, "tags": []}
     claude = FakeProvider([_response(payload), _response(payload)], provider_name="claude_cli")
     lmstudio = FakeProvider([_response(payload)])
+    openrouter = FakeProvider([_response(payload)], provider_name="openrouter")
 
     StructuredOutputGateway(claude).generate(_messages(), contract=quick)
     StructuredOutputGateway(claude).generate(_messages(), contract=EXAMPLE_CONTRACT)
     StructuredOutputGateway(lmstudio).generate(_messages(), contract=quick)
+    StructuredOutputGateway(openrouter).generate(_messages(), contract=quick)
 
     assert claude.calls[0]["thinking"] is False
     assert "thinking" not in claude.calls[1]  # contracts think unless they say otherwise
-    assert "thinking" not in lmstudio.calls[0]  # a provider that cannot is never sent the option
+    assert lmstudio.calls[0]["thinking"] is False
+    assert "thinking" not in openrouter.calls[0]  # a provider that cannot is never sent the option
 
 
 def test_openai_compatible_profile_prefers_json_object() -> None:

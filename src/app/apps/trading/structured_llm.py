@@ -40,6 +40,7 @@ from app.providers.structured import (
 from app.providers.structured.errors import StructuredDecodeError, StructuredSchemaError
 from app.providers.structured.schema_projection import project_provider_schema
 
+from .model_route import local_model_lane, local_output_limit, no_thinking_options
 from .trading_ai_budget import TradingAIBudget, default_trading_ai_budget
 
 T = TypeVar("T", bound=BaseModel)
@@ -62,9 +63,10 @@ class TradingModelReply(Generic[T]):
     response: Any  # the provider's reply: content, usage and serving model
 
 
-# Providers whose native schema support validates the reply before returning it:
-# the Claude CLI passes ``--json-schema`` and returns ``structured_output``.
-_VALIDATING_NATIVE_SCHEMA_PROVIDERS = frozenset({"claude_cli"})
+# Providers whose native schema support holds the reply to the schema: the Claude
+# CLI passes ``--json-schema`` and returns ``structured_output``; LM Studio
+# constrains generation to it, and refuses a bare JSON-object request outright.
+_VALIDATING_NATIVE_SCHEMA_PROVIDERS = frozenset({"claude_cli", "lmstudio"})
 
 
 def sends_json_schema(provider: Any) -> bool:
@@ -158,7 +160,8 @@ def trading_model_call(
         "response_format": response_format or trading_response_format(provider, output_model, schema_name),
         "request_timeout_seconds": request_timeout_seconds,
         "temperature": 0,
-        "max_tokens": max_tokens,
+        "max_tokens": local_output_limit(provider, max_tokens),
+        **no_thinking_options(provider),
     }
     analyzer_request = _AnalyzerRequest(provider, request)
     contract = StructuredContract(
@@ -177,9 +180,10 @@ def trading_model_call(
         deadline_seconds=request_timeout_seconds + 5.0,
     )
     try:
-        value = StructuredOutputGateway[T](analyzer_request).generate(
-            messages, contract=contract, model=model, retry_budget=retry_budget,
-        )
+        with local_model_lane(provider):
+            value = StructuredOutputGateway[T](analyzer_request).generate(
+                messages, contract=contract, model=model, retry_budget=retry_budget,
+            )
     except (StructuredOutputExhausted, StructuredOutputError) as exc:
         cause = exc.last_error if isinstance(exc, StructuredOutputExhausted) else exc
         reason: OutputFailure | None = (

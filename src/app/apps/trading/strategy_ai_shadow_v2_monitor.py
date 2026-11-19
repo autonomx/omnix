@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import TradingResearchRepository, default_research_repository
+from .model_route import local_batch_rows
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
@@ -912,7 +913,11 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
                 return candidate.instrument_id, None, exc
 
         catalyst_by_id: dict[str, CatalystIntelligenceSnapshot] = {}
-        for instrument_id, value, error in await asyncio.gather(*(refresh(c) for c in universe.candidates)):
+        catalyst_targets = local_batch_rows(
+            list(universe.candidates),
+            is_open=lambda candidate: any(_position(events, arm, candidate.instrument_id).is_long for arm in _ARMS),
+        )
+        for instrument_id, value, error in await asyncio.gather(*(refresh(c) for c in catalyst_targets)):
             if value is not None:
                 catalyst_by_id[instrument_id] = value
             if error is not None:

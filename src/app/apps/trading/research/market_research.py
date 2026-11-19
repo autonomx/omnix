@@ -16,6 +16,7 @@ from ..indicators.engine import (
     relative_strength_index,
     simple_moving_average,
 )
+from ..model_route import local_model_lane, local_output_limit, no_thinking_options, trading_provider
 from ..models import BarsResponse
 from ..service import TradingMarketDataService, default_market_data_service
 from app.prompts import prompt_template
@@ -108,7 +109,7 @@ def default_research_provider() -> Any:
     getter = getattr(provider_service, "get_provider", None)
     if not callable(getter):
         raise RuntimeError("omnix_provider_registry_unavailable")
-    provider = getter()
+    provider = trading_provider(getter)
     if provider is None:
         raise RuntimeError("omnix_provider_unavailable")
     return provider
@@ -231,15 +232,17 @@ def _provider_text(result: Any) -> str:
 
 def _call_provider(provider: Any, messages: list[ChatMessage], model: str | None) -> str:
     if hasattr(provider, "chat_completion") and callable(provider.chat_completion):
-        return _provider_text(
-            provider.chat_completion(
-                messages,
-                model=model,
-                stream=False,
-                temperature=0,
-                max_tokens=1_200,
+        with local_model_lane(provider):
+            return _provider_text(
+                provider.chat_completion(
+                    messages,
+                    model=model,
+                    stream=False,
+                    temperature=0,
+                    max_tokens=local_output_limit(provider, 1_200),
+                    **no_thinking_options(provider),
+                )
             )
-        )
     plain_messages = [message.to_dict() for message in messages]
     if hasattr(provider, "chat") and callable(provider.chat):
         return _provider_text(provider.chat(messages=plain_messages, model=model))

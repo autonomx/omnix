@@ -12,13 +12,19 @@ from app.providers import ChatMessage
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
 
+from .local_batch import local_batch_call
+from .model_route import is_local_provider
 from .models import MarketBar
 from .structured_llm import trading_model_call, sends_json_schema
 from .research import _call_provider, _json_payload, _provider_identity, default_research_provider
 from .research.contracts import TradingEvidence, TradingResearchReport
 
 AI_SHADOW_V2_VERSION = "ai-shadow-v2"
-AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-2"
+# roadmap-3: on a local model a batch is schema-bound per stock and one bad stock no longer fails the others.
+# roadmap-4: on a local model a call covers at most five stocks, open positions first.
+AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-4"
+# What a state needs; a schema requires it on a local model, and a decision without it is only a watch.
+_V2_STATE_REQUIRES = {"armed": ("trigger",), "enter": ("invalidation_price", "target_1")}
 AI_SHADOW_V2_CONTRACT = "trading.ai_shadow_v2.batch"
 AIShadowV2Arm = Literal[
     "morning_control",
@@ -642,7 +648,7 @@ class CatalystIntelligenceAnalyzer:
             morning_context=morning_context,
             empirical_persistence_rate=empirical_persistence_rate,
             empirical_sample_size=empirical_sample_size,
-            original=self._assess_core,
+            original=type(self)._assess_core,  # the policy passes the analyzer itself
         )
         return normalize_catalyst_provenance(snapshot)
 
@@ -721,10 +727,25 @@ class AIShadowV2Analyzer:
             "target_2, trigger, extension_risk, evidence_for, evidence_against, thesis_changed, thesis, "
             "execution_authority. execution_authority must be false."
         )
-        messages = [
-            ChatMessage(role="system", content=system),
-            ChatMessage(role="user", content=json.dumps({"arm": arm, "candidates": rows}, sort_keys=True, default=str)),
-        ]
+        def build_messages(batch: list[dict[str, Any]]) -> list[ChatMessage]:
+            return [
+                ChatMessage(role="system", content=system),
+                ChatMessage(role="user", content=json.dumps({"arm": arm, "candidates": batch}, sort_keys=True, default=str)),
+            ]
+
+        if is_local_provider(provider):
+            return local_batch_call(
+                provider,
+                rows=rows,
+                build_messages=build_messages,
+                item_model=AIShadowV2AlphaDecision,
+                requires=_V2_STATE_REQUIRES,
+                contract_id=AI_SHADOW_V2_CONTRACT,
+                schema_name="ai_shadow_v2_batch_response",
+                model=model,
+                max_tokens=lambda count: max(1200, 500 * count),
+            ).items
+        messages = build_messages(rows)
         if sends_json_schema(provider_name):
             schema = project_provider_schema(
                 AIShadowV2BatchResponse.model_json_schema(),

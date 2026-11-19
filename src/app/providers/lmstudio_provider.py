@@ -32,6 +32,7 @@ _NATIVE_V1_CHAT_ENDPOINT = "/api/v1/chat"
 _OPENAI_CHAT_COMPLETIONS_ENDPOINT = "/v1/chat/completions"
 _DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _STREAM_CANCEL_POLL_SECONDS = 0.025
+_LOADED_MODEL_TIMEOUT_SECONDS = 1.0
 
 
 def _native_v1_usage(stats: Any) -> Dict[str, int] | None:
@@ -264,7 +265,8 @@ class LMStudioProvider(BaseProvider):
             payload["reasoning"] = kwargs["reasoning"]
         else:
             template_kwargs = kwargs.get("chat_template_kwargs")
-            if isinstance(template_kwargs, dict) and template_kwargs.get("enable_thinking") is False:
+            template_off = isinstance(template_kwargs, dict) and template_kwargs.get("enable_thinking") is False
+            if template_off or kwargs.get("thinking") is False:
                 payload["reasoning"] = "off"
         return payload
 
@@ -340,6 +342,9 @@ class LMStudioProvider(BaseProvider):
                 for key in ["max_tokens", "top_p", "chat_template_kwargs"]:
                     if key in kwargs:
                         payload[key] = kwargs[key]
+                if kwargs.get("thinking") is False:
+                    # catalog.THINKING_OFF. This endpoint ignores enable_thinking for a model such as Qwen 3.8.
+                    payload["reasoning_effort"] = "none"
                 result = (
                     self._stream_completion(
                         payload,
@@ -654,6 +659,30 @@ class LMStudioProvider(BaseProvider):
             raise ConnectionError(f"Stream error: {exc}") from exc
         finally:
             response.close()
+
+    def loaded_model_key(self) -> str | None:
+        """The key of the chat model LM Studio has loaded; None when none is or it cannot be told."""
+        loaded = self.loaded_model()
+        return loaded[0] if loaded is not None else None
+
+    def loaded_model(self) -> tuple[str, int | None] | None:
+        """The loaded chat model's key and context length; None when none is or it cannot be told."""
+        try:
+            response = self._make_request("get", "/api/v1/models", timeout=_LOADED_MODEL_TIMEOUT_SECONDS)
+            try:
+                listing = response.json()
+            finally:
+                response.close()
+        except (ConnectionError, OSError, ValueError):
+            return None
+        models = listing.get("models") if isinstance(listing, dict) else None
+        for model in models if isinstance(models, list) else ():
+            if isinstance(model, dict) and model.get("type") != "embedding" and model.get("loaded_instances") and model.get("key"):
+                instance = model["loaded_instances"][0]
+                config = instance.get("config") if isinstance(instance, dict) else None
+                context = config.get("context_length") if isinstance(config, dict) else None
+                return str(model["key"]), context if isinstance(context, int) else None
+        return None
 
     def get_models(self) -> List[ModelInfo]:
         try:

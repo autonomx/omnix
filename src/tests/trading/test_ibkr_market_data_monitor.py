@@ -10,6 +10,7 @@ from app.apps.trading import ibkr_market_data_monitor as monitor_module
 from app.apps.trading.execution import ExecutionObservation, assess_execution_observation
 from app.apps.trading.execution_observation_plane import ExecutionObservationPlane
 from app.apps.trading.evidence_storage import MemoryIbkrSessionEvidence
+from app.apps.trading.held_quote_demand import HeldQuoteDemand
 from app.apps.trading.ibkr_evidence import IbkrEvidenceStore
 from app.apps.trading.ibkr_market_data_monitor import TradingIbkrMarketDataMonitor
 from app.apps.trading.streaming.manager import StreamingQuoteUpdate
@@ -18,6 +19,12 @@ from app.apps.trading.streaming.manager import StreamingQuoteUpdate
 ET = ZoneInfo("America/New_York")
 INSTRUMENT = "equity:NASDAQ:AAPL"
 NOW = datetime(2026, 9, 17, 14, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _no_held_quotes(monkeypatch):
+    # Monitors read the process's held-quote demand; stocks other tests' arms held stay out of it.
+    monkeypatch.setattr(monitor_module, "default_held_quote_demand", HeldQuoteDemand)
 
 
 def _monitor(tmp_path):
@@ -276,3 +283,143 @@ async def test_ibkr_monitor_holds_the_gateway_connection_without_strategy_demand
     monitor = await run(stopped)
     assert stopped.connect_calls == 1
     assert monitor.last_error == "RuntimeError: ibkr_gateway_handshake_timeout"
+
+
+def test_held_stocks_get_lines_before_existing_and_new_demand(tmp_path):
+    monitor, _, _ = _monitor(tmp_path)
+    monitor.market_data_line_budget = 2
+    monitor._keys = {"equity:NASDAQ:AAA": "key-aaa", "equity:NASDAQ:BBB": "key-bbb"}
+
+    admitted = monitor._admitted_demand(
+        {"equity:NASDAQ:AAA", "equity:NASDAQ:BBB", "equity:NASDAQ:TTEC"},
+        priority={"equity:NASDAQ:TTEC"},
+    )
+
+    assert admitted == {"equity:NASDAQ:TTEC", "equity:NASDAQ:AAA"}
+    assert monitor.held_without_line_count == 0
+
+
+def test_held_stocks_beyond_the_budget_are_reported(monkeypatch, tmp_path):
+    monitor, _, _ = _monitor(tmp_path)
+    monitor.market_data_line_budget = 1
+    logged = []
+    monkeypatch.setattr(monitor_module, "trade_log", lambda *args, **kwargs: logged.append(kwargs))
+
+    admitted = monitor._admitted_demand({"equity:US:A", "equity:US:B"}, priority={"equity:US:A", "equity:US:B"})
+
+    assert admitted == {"equity:US:A"}
+    assert monitor.held_without_line_count == 1
+    assert logged[0]["denied"] == ["equity:US:B"]
+
+
+def test_a_universe_that_cannot_be_resolved_is_reported_not_silently_dropped(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    monitor, _, _ = _monitor(tmp_path)
+    logged = []
+    monkeypatch.setattr(monitor_module, "trade_log", lambda *args, **kwargs: logged.append(kwargs))
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("union failed")
+
+    monkeypatch.setattr(monitor_module, "resolve_v2_runtime_archive", broken)
+    config = SimpleNamespace(strategy_id="interday", active_universe_id=None, strategy_kind="gap_pullback_v1")
+    repository = SimpleNamespace(list_configs=lambda active_only=False: [config])
+
+    assert monitor._active_demand(repository, now=NOW) == set()
+    assert monitor.demand_error_count == 1
+    assert logged[0]["strategy_id"] == "interday" and "union failed" in logged[0]["detail"]
+
+
+def test_line_checks_vouch_only_for_an_unbroken_live_line(monkeypatch, tmp_path):
+    """Each healthy cycle confirms the line; a reconnect or a broken line starts a new span."""
+    from datetime import timedelta
+
+    clock = {"now": NOW}
+    state = {"connected": True, "connect_count": 1, "reconnect_count": 0, "breaks": 0, "farm": "OK"}
+
+    class FakeRuntime:
+        enabled = True
+
+        def is_connected(self):
+            return state["connected"]
+
+        def diagnostics(self):
+            return {
+                "connected": state["connected"],
+                "connect_count": state["connect_count"],
+                "reconnect_count": state["reconnect_count"],
+                "active_quote_subscriptions": 1,
+                "transport": {
+                    "farm_status": {"market_data": state["farm"]},
+                    "quote_line_break_count": state["breaks"],
+                },
+            }
+
+    class FakeProvider:
+        runtime = FakeRuntime()
+
+    class FakeRegistry:
+        def provider(self, provider_id):
+            return FakeProvider()
+
+    class FakeMarketService:
+        registry = FakeRegistry()
+
+    monkeypatch.setattr(monitor_module, "IbkrEquityProvider", FakeProvider)
+    plane = ExecutionObservationPlane()
+    monitor = TradingIbkrMarketDataMonitor(
+        plane=plane,
+        evidence_store=IbkrEvidenceStore(MemoryIbkrSessionEvidence()),
+        now_factory=lambda: clock["now"],
+    )
+    monitor.strategy_repository_factory = object
+    monitor.market_service_factory = FakeMarketService
+    monkeypatch.setattr(monitor, "_active_demand", lambda _repository, *, now: {INSTRUMENT})
+    ensure_ok = {"value": True}
+    monkeypatch.setattr(
+        monitor,
+        "_ensure_subscription",
+        lambda _service, _provider, _instrument: "ibkr:socket:" + INSTRUMENT if ensure_ok["value"] else None,
+    )
+    monitor._record_quote(
+        StreamingQuoteUpdate(
+            binding_id="ibkr:socket:" + INSTRUMENT,
+            instrument_id=INSTRUMENT,
+            provider="ibkr",
+            source_time=NOW,
+            received_at=NOW,
+            bid=Decimal("100.00"),
+            ask=Decimal("100.02"),
+            last=Decimal("100.01"),
+            market_data_type="LIVE",
+            live_entitled=True,
+        )
+    )
+
+    def cycle(seconds):
+        clock["now"] = NOW + timedelta(seconds=seconds)
+        monitor._run_once_blocking()
+        return plane.line_confirmations(INSTRUMENT)[-1].up_since if plane.line_confirmations(INSTRUMENT) else None
+
+    assert cycle(0) == NOW
+    assert cycle(5) == NOW  # unbroken: the span carries on
+    count = len(plane.line_confirmations(INSTRUMENT))
+
+    state["breaks"] = 1  # e.g. a 2103 farm drop or a line error since the last check
+    assert cycle(10) == NOW + timedelta(seconds=10)
+
+    state["reconnect_count"] = 1
+    state["connect_count"] = 2
+    assert cycle(15) == NOW + timedelta(seconds=15)
+
+    state["farm"] = "DISCONNECTED"
+    cycle(20)
+    state["farm"] = "OK"
+    ensure_ok["value"] = False
+    cycle(25)
+    assert len(plane.line_confirmations(INSTRUMENT)) == count + 2  # neither cycle vouched
+
+    ensure_ok["value"] = True
+    assert cycle(30) == NOW + timedelta(seconds=30)
+    assert monitor.diagnostics()["line_confirmation_count"] == count + 3

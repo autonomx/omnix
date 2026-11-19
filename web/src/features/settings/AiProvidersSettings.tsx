@@ -4,6 +4,7 @@ import { MemoryModelSection } from './MemoryModelSection';
 import { ProviderDefaultsSection } from './ProviderDefaultsSection';
 import { ProviderRegistrySection } from './ProviderRegistrySection';
 import { ProviderRoutingSection } from './ProviderRoutingSection';
+import { TradingModelSection } from './TradingModelSection';
 import './AiProvidersSettings.css';
 
 export function AiProvidersSettings() {
@@ -34,6 +35,7 @@ export function AiProvidersSettings() {
       </div>
       <ProviderDefaultsSection payload={payload} />
       <MemoryModelSection payload={payload} />
+      <TradingModelSection payload={payload} />
       <ProviderRegistrySection payload={payload} loading={loading} actionStatus={actionStatus} onRefresh={loadProviders} />
       <ProviderRoutingSection payload={payload} />
     </div>
