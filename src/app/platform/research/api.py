@@ -184,59 +184,52 @@ class ChatResearchAdapter:
         turn: ResearchTurn,
         send_request: Any,
     ) -> SendChatMessageResponse:
-        decision, settings, policy = turn.state
-        research_provider = settings.effective_provider
-        research_provider_chain = list(settings.effective_provider_chain)
-        max_pages = _deep_research_page_limit(request, settings)
         appended = chat_store.begin_user_message(
             session_id,
             send_request,
-            context_diagnostics={
-                "web_research_mode": "deep",
-                "web_search_status": "queued_as_durable_research_job",
-                "research_provider": research_provider,
-                "research_provider_chain": research_provider_chain,
-                "research_requested_mode": decision.requested_mode,
-                "research_effective_mode": decision.effective_mode,
-                "research_release_status": decision.status,
-                "research_release_reason": decision.reason,
-                "research_compatibility_warnings": request.internal_research_warnings,
-            },
+            context_diagnostics=_queued_diagnostics(request, turn),
         )
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         session, user_message = appended
-        research_input = _with_research_plan(
-            DeepResearchJobInput(
-                session_id=session.id,
-                user_message_id=user_message.id,
-                question=request.content,
-                provider_id=request.provider_id or session.provider_id,
-                model_id=request.model_id or session.model_id,
-                research_provider=research_provider,
-                research_provider_chain=research_provider_chain,
-                max_steps=settings.max_steps,
-                max_queries=min(max_pages, settings.max_queries),
-                max_sources=max_pages,
-                max_extracts=min(max_pages, settings.max_extracts),
-                search_cache_ttl_seconds=policy.search_cache_ttl_seconds,
-                extraction_cache_ttl_seconds=policy.extraction_cache_ttl_seconds,
-                hermes_planner_enabled=decision.use_hermes_planner,
-                awaiting_plan_approval=True,
-                metadata={
-                    "agent_mode": request.agent_mode,
-                    "dry_run": request.dry_run,
-                    "diagnostics_enabled": settings.show_diagnostics,
-                    "research_release": decision.model_dump(mode="json"),
-                    "research_compatibility_warnings": request.internal_research_warnings,
-                },
-            )
+        research_input = _deep_research_input(
+            request, turn, session_id=session.id, user_message_id=user_message.id,
+            provider_id=request.provider_id or session.provider_id, model_id=request.model_id or session.model_id,
+            awaiting_plan_approval=True,
         )
         job = job_store.create_job(create_deep_research_job_request(research_input))
         linked = link_user_message_to_research_job(chat_store, session.id, user_message.id, job.id)
         if linked is not None:
             session, user_message = linked
         return SendChatMessageResponse(session=session, user_message=user_message, job=job)
+
+    def begin_call_research(
+        self,
+        session: Any,
+        question: str,
+        *,
+        task_id: str,
+        user_message_id: str,
+        job_store: Any,
+    ) -> JobRecord | None:
+        """Research a live call asked for, once per task id; ``None`` when deep research is not available now.
+
+        The person asked in the call and the speaker holds the ``deep_research`` grant, so there is no plan to approve:
+        it runs with the configured budget. The release policy still decides whether deep research may run at all.
+        """
+        from app.platform.chat.contracts import AssistantContextChatRequest
+
+        request = AssistantContextChatRequest(content=question, web_research_mode="deep")
+        turn = self.resolve_turn(request, session.id)
+        if turn.unavailable is not None or turn.effective_mode != "deep":
+            return None
+        research_input = _deep_research_input(
+            request, turn, session_id=session.id, user_message_id=user_message_id,
+            provider_id=session.provider_id, model_id=session.model_id, awaiting_plan_approval=False,
+            call_task_id=task_id,
+        )
+        job = job_store.create_job_once(create_deep_research_job_request(research_input), idempotency_key=task_id)
+        return _start_research_execution(job_store, job)
 
     def quick_context(
         self,
@@ -324,6 +317,63 @@ def _quick_search_for(request: Any, web_search_factory: Callable[..., Any]) -> Q
         client_factory=create_client,
         research_policy=policy,
         extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
+    )
+
+
+def _queued_diagnostics(request: Any, turn: ResearchTurn) -> dict[str, Any]:
+    decision, settings, _policy = turn.state
+    return {
+        "web_research_mode": "deep",
+        "web_search_status": "queued_as_durable_research_job",
+        "research_provider": settings.effective_provider,
+        "research_provider_chain": list(settings.effective_provider_chain),
+        "research_requested_mode": decision.requested_mode,
+        "research_effective_mode": decision.effective_mode,
+        "research_release_status": decision.status,
+        "research_release_reason": decision.reason,
+        "research_compatibility_warnings": request.internal_research_warnings,
+    }
+
+
+def _deep_research_input(
+    request: Any,
+    turn: ResearchTurn,
+    *,
+    session_id: str,
+    user_message_id: str,
+    provider_id: str | None,
+    model_id: str | None,
+    awaiting_plan_approval: bool,
+    call_task_id: str | None = None,
+) -> DeepResearchJobInput:
+    decision, settings, policy = turn.state
+    max_pages = _deep_research_page_limit(request, settings)
+    return _with_research_plan(
+        DeepResearchJobInput(
+            session_id=session_id,
+            user_message_id=user_message_id,
+            question=request.content,
+            provider_id=provider_id,
+            model_id=model_id,
+            research_provider=settings.effective_provider,
+            research_provider_chain=list(settings.effective_provider_chain),
+            max_steps=settings.max_steps,
+            max_queries=min(max_pages, settings.max_queries),
+            max_sources=max_pages,
+            max_extracts=min(max_pages, settings.max_extracts),
+            search_cache_ttl_seconds=policy.search_cache_ttl_seconds,
+            extraction_cache_ttl_seconds=policy.extraction_cache_ttl_seconds,
+            hermes_planner_enabled=decision.use_hermes_planner,
+            awaiting_plan_approval=awaiting_plan_approval,
+            call_task_id=call_task_id,
+            metadata={
+                "agent_mode": request.agent_mode,
+                "dry_run": request.dry_run,
+                "diagnostics_enabled": settings.show_diagnostics,
+                "research_release": decision.model_dump(mode="json"),
+                "research_compatibility_warnings": request.internal_research_warnings,
+            },
+        )
     )
 
 

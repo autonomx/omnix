@@ -87,6 +87,19 @@ class LiveCallPreloadState(BaseModel):
     resolved_at: str
 
 
+class LiveCallSceneGuest(BaseModel):
+    """A guest on the call (companion 5.5): the voice and face a turn uses when it names them as its speaker."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    character_id: str
+    display_name: str
+    voice_asset_id: str | None = None
+    voice_speaker_id: str | None = None
+    avatar_pack: CharacterAvatarPack | None = None
+    speech_style: LiveCallSpeechStyle
+
+
 class CharacterLiveCallRuntime(BaseModel):
     """Trusted browser-safe runtime used to start and render a live call."""
 
@@ -108,6 +121,8 @@ class CharacterLiveCallRuntime(BaseModel):
     shared_memory_access: Literal["none", "read_only"] = "none"
     memory_snapshot_id: str | None = None
     preload: LiveCallPreloadState
+    # Everyone else on the call, by seat; empty outside a scene.
+    scene_guests: list[LiveCallSceneGuest] = Field(default_factory=list)
 
 
 def normalize_speech_style(raw: dict[str, Any] | None) -> LiveCallSpeechStyle:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 from collections.abc import Iterator
 from typing import Any, TypeVar, cast, overload
@@ -168,6 +168,9 @@ class PostgresJobStoreAdapter:
                 "metadata": metadata,
                 "correlation_id": current_log_context().get("request_id"),
             }
+            delay = int(getattr(request, "_available_after_seconds", 0) or 0)
+            if delay > 0:
+                payload["available_at"] = datetime.now(timezone.utc) + timedelta(seconds=delay)
             if job_id is None:
                 record = work.jobs.create_job(self.context, payload)
                 created = True

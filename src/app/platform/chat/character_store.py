@@ -9,9 +9,12 @@ from app.runtime.ports import Port, required
 
 from app.conversation.contracts import InteractionMode, InteractionSelection, SetSessionInteractionRequest, SharedMemoryAccess, TranscriptPolicy
 
+from app.conversation.scene import scene_of
+
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
 from .prompt_store import ChatSessionStore as BaseChatSessionStore, chat_sqlite_store_enabled
+from .scene import SUSPECTED_ECHO_KEY, stamp_speaker
 from .sqlite_store import InMemoryChatSessionStore as BaseInMemoryChatSessionStore
 from .store import serialized_chat_mutation
 
@@ -266,15 +269,18 @@ class _CharacterSessionMixin(_ChatStoreBase):
                 interrupted_content = " ".join(
                     part.strip() for part in generated_parts if part.strip()
                 ).strip()
+                interrupted_metadata = {
+                    "generation_status": "interrupted",
+                    "delivery_status": "interrupted",
+                    "assistant_turn_id": assistant_turn_id,
+                }
+                # A scene member's cut-off reply is still theirs (companion 5.2).
+                stamp_speaker(interrupted_metadata, scene_of(session))
                 self.complete_streamed_reply(
                     session.id,
                     user_message.id,
                     interrupted_content,
-                    {
-                        "generation_status": "interrupted",
-                        "delivery_status": "interrupted",
-                        "assistant_turn_id": assistant_turn_id,
-                    },
+                    interrupted_metadata,
                 )
             raise
         except Exception:
@@ -477,6 +483,11 @@ def _start_assistant_turn(
         "assistant_turn_id": record.assistant_turn_id,
         "assistant_turn": record.model_dump(mode="json"),
     })
+    if request.heard_turn_id:
+        user_message.metadata["heard_turn_id"] = request.heard_turn_id
+    if getattr(request, "_suspected_echo", False):
+        # Admission found the person's words repeat a character's line (companion 6.5).
+        user_message.metadata[SUSPECTED_ECHO_KEY] = True
     return record
 
 

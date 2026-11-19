@@ -26,6 +26,8 @@ from app.platform.chat import (
     SendChatMessageRequest,
     default_chat_store,
 )
+from app.platform.chat.live_agent_store import has_pending_proposal, is_proposal_answer
+from app.platform.chat.scene import has_scene_guests, scenes_available, seats_taken
 from app.platform.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.catalog import CANCELLATION, LIVE_TURNS, RUNTIME_STATS, THINKING_TOGGLE, provider_supports
@@ -76,6 +78,8 @@ class _Speculation:
     source_sequence: int
     created_at: float
     execution_lane: str = "session"
+    # A character chat can gain guests before the accept; with guests the server chooses the speaker (5.2).
+    scene_possible: bool = False
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     completed: bool = False
@@ -182,6 +186,11 @@ def register_live_chat_speculation_routes(router: APIRouter,
         )
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
+        if is_proposal_answer(request.content) and has_pending_proposal(session):
+            raise HTTPException(status_code=409, detail="speculation_answers_proposal")
+        if await asyncio.to_thread(has_scene_guests, session):
+            # A speculated reply is the host's; with guests the server chooses who answers (companion 5.2).
+            raise HTTPException(status_code=409, detail="speculation_in_scene")
         provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
             request.provider_id or session.provider_id,
             request.model_id or session.model_id,
@@ -207,6 +216,7 @@ def register_live_chat_speculation_routes(router: APIRouter,
             source_sequence=request.source_sequence,
             created_at=time.time(),
             execution_lane=execution_lane,
+            scene_possible=scenes_available(session),
         )
         with _SPECULATION_LOCK:
             _prune_speculations()
@@ -273,7 +283,14 @@ def register_live_chat_speculation_routes(router: APIRouter,
             if not transcripts_are_compatible(speculation.candidate_text, request.final_text):
                 raise HTTPException(status_code=409, detail="speculation_transcript_mismatch")
 
+        if speculation.scene_possible and await asyncio.to_thread(seats_taken, session_id):
+            raise HTTPException(status_code=409, detail="speculation_in_scene")
         store = chat_store_factory()
+        if is_proposal_answer(request.final_text):
+            # The primed copy may predate the proposal; read the session as it is now.
+            current = await asyncio.to_thread(store.get_session, session_id)
+            if current is not None and has_pending_proposal(current):
+                raise HTTPException(status_code=409, detail="speculation_answers_proposal")
         persist_started = time.perf_counter()
         begin_started = time.perf_counter()
         appended = await asyncio.to_thread(

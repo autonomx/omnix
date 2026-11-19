@@ -9,6 +9,7 @@ import {
   liveCallVoiceMode,
   liveCaptureLabels,
   useLiveCallPresentation,
+  sendHeldFinal,
   useLiveVoiceTranscript,
 } from '../workspace';
 import type { CharacterLiveCallRuntime } from './characterClient';
@@ -20,7 +21,10 @@ import { Live2DMotionControl } from './Live2DMotionControl';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { CapabilityNotice } from '../../setup';
 import { LiveCallVisual } from './LiveCallVisual';
+import { LiveCallTaskChips } from './LiveCallTaskChips';
 import { LiveMuteButton } from './LiveMuteButton';
+import { LiveQuietButton } from './LiveQuietButton';
+import { LiveShowButton } from './LiveShowButton';
 import { LivePortraitLoadControl } from './portrait/LivePortraitLoadControl';
 
 type ChatLiveVoiceCardProps = {
@@ -114,8 +118,9 @@ export function ChatLiveVoiceCard({
       <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
       <CapabilityNotice capability="live_stt" purpose="Live voice" />
       <CapabilityNotice capability="tts" purpose="Spoken replies" />
-      <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={onClear}>Clear</button><LiveMuteButton /><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={onToggleCall}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><SendVoiceTextButton control={control} draft={liveDraftText} pending={sendPending} onSend={onSendVoiceText} /></div>
-      <div className="assistant-voice-transcript" ref={voiceTranscriptRef} role="region" aria-label="Live voice transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={onClear}>Clear</button></div>{transcriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{chatMessageText(message)}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!transcriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
+      <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={onClear}>Clear</button><LiveMuteButton /><LiveQuietButton /><LiveShowButton /><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={onToggleCall}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><SendVoiceTextButton control={control} draft={liveDraftText} pending={sendPending} onSend={onSendVoiceText} /></div>
+      <LiveCallTaskChips />
+      <div className="assistant-voice-transcript" ref={voiceTranscriptRef} role="region" aria-label="Live voice transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={onClear}>Clear</button></div>{transcriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{chatMessageText(message)}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={`${row.speaker === 'Omnix' ? 'assistant' : 'user'}${row.held ? ' held' : ''}`} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id} data-live-voice-held={row.held}><span><strong>{row.held ? 'Another voice' : row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time>{row.held === 'pending' ? <button type="button" className="assistant-voice-send-anyway" onClick={() => void sendHeldFinal(row.id)}>Send anyway</button> : null}</span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!transcriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
       <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => onAutoSpeakChange(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
       <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
       <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={onTestInput}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div><DesktopShareStatusRow /><DesktopCompanionControls /><DesktopCompanionTextSurface /></div>

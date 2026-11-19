@@ -36,6 +36,9 @@ class DeepResearchJobInput(BaseModel):
     research_plan: ResearchPlan | None = None
     planner_backend: str = "local"
     awaiting_plan_approval: bool = False
+    # Set when a live call started the research: its turn already has its spoken reply, so the result is appended
+    # as a message of its own, identified by this id (``chat.live_call_tasks``).
+    call_task_id: str | None = Field(default=None, max_length=200)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -255,12 +258,7 @@ def execute_research_job(
         **result.metadata,
     }
     require_execution_authority(job_store, job.id)
-    saved = chat_store.complete_streamed_reply(
-        request.session_id,
-        request.user_message_id,
-        result.content,
-        metadata,
-    )
+    saved = _save_result(chat_store, request, result.content, metadata)
     if saved is None:
         deep_research_log(
             job.id,
@@ -312,6 +310,17 @@ def execute_research_job(
         job_status=getattr(completed or job, "status", None),
     )
     return completed or job
+
+
+def _save_result(chat_store: Any, request: DeepResearchJobInput, content: str, metadata: dict[str, Any]) -> Any:
+    """The research reply: the asking turn's reply, or, for a call's task, a message of its own (once, by task id)."""
+    if not request.call_task_id:
+        return chat_store.complete_streamed_reply(request.session_id, request.user_message_id, content, metadata)
+    appended = chat_store.append_assistant_message(request.session_id, content, {
+        **metadata, "turn_id": request.call_task_id, "call_task_id": request.call_task_id,
+        "call_task_asked_in": request.user_message_id,
+    })
+    return appended[0] if appended is not None else None
 
 
 def save_research_checkpoint(

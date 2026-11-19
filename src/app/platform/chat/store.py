@@ -538,6 +538,7 @@ class ChatSessionStore:
         self._save_session(session)
         return session
 
+    @serialized_chat_mutation
     def update_message_metadata(
         self,
         *,
@@ -552,6 +553,28 @@ class ChatSessionStore:
         if message is None or not metadata:
             return False
         message.metadata.update(metadata)
+        self._save_session(session)
+        return True
+
+    @serialized_chat_mutation
+    def claim_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        require: dict[str, Any],
+        patch: dict[str, Any],
+    ) -> bool:
+        """Merge ``patch`` only while every ``require`` condition holds (``message_claims``); whether it did."""
+        from app.platform.chat.message_claims import conditions_hold
+
+        session = self.get_session(session_id)
+        if session is None or not patch:
+            return False
+        message = next((item for item in session.messages if item.id == message_id), None)
+        if message is None or not conditions_hold(message.metadata, require):
+            return False
+        message.metadata.update(patch)
         self._save_session(session)
         return True
 
@@ -799,6 +822,9 @@ class ChatSessionStore:
             temporary.unlink(missing_ok=True)
 
     def _save_session(self, session: ChatSession) -> None:
+        from app.conversation.scene import refuse_scene_view
+
+        refuse_scene_view(session)
         sessions = self._load_sessions()
         for index, existing in enumerate(sessions):
             if existing.id == session.id:

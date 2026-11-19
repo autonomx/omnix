@@ -26,6 +26,7 @@ export type BatchItem = components['schemas']['BatchItem'];
 export type ClientCredential = components['schemas']['ClientCredential'];
 export type ClientCredentialList = components['schemas']['ClientCredentialList'];
 export type Dictation = components['schemas']['Dictation'];
+export type VoiceprintStatus = components['schemas']['VoiceprintStatus'];
 
 async function exportError(response: Response): Promise<Error> {
   let detail = '';
@@ -215,6 +216,33 @@ export const voiceApiClient = {
       throw new Error(detail || `Dictation failed (HTTP ${response.status}).`);
     }
     return (await response.json()) as Dictation;
+  },
+
+  /** Whether this account has a voiceprint (never the print itself). */
+  async voiceprintStatus(): Promise<VoiceprintStatus> {
+    return sendGatewayCall(() => api.GET('/api/stt/voiceprint'));
+  },
+
+  /** Enrol or re-enrol from read passages (16 kHz mono 16-bit WAV); the speech service turns them into a print. */
+  async enrolVoiceprint(passages: Blob[]): Promise<VoiceprintStatus> {
+    const form = new FormData();
+    passages.forEach((passage, index) => form.append('files', passage, `passage-${index + 1}.wav`));
+    const response = await pipelineFetch('/api/stt/voiceprint', { method: 'POST', body: form });
+    if (!response.ok) {
+      let message = '';
+      try {
+        const parsed = (await response.json()) as { detail?: { message?: unknown } };
+        message = typeof parsed.detail?.message === 'string' ? parsed.detail.message : '';
+      } catch {
+        // A body that is not JSON keeps the status alone.
+      }
+      throw new Error(message || `Your voice could not be learned (HTTP ${response.status}).`);
+    }
+    return (await response.json()) as VoiceprintStatus;
+  },
+
+  async deleteVoiceprint(): Promise<VoiceprintStatus> {
+    return sendGatewayCall(() => api.DELETE('/api/stt/voiceprint'));
   },
 
   /** Queue a fresh copy of a failed or cancelled job. */

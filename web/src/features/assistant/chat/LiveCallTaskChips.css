@@ -1,0 +1,90 @@
+@layer features {
+  .live-call-task-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .live-call-task-chip {
+    align-items: center;
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: var(--omnix-text);
+    display: inline-flex;
+    font-size: 0.82rem;
+    gap: 0.45rem;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.2rem 0.25rem 0.2rem 0.6rem;
+  }
+
+  .live-call-task-chip-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .live-call-task-chip-spinner {
+    animation: live-call-task-chip-spin 1s linear infinite;
+    border: 2px solid color-mix(in srgb, var(--omnix-text) 25%, transparent);
+    border-radius: 50%;
+    border-top-color: var(--omnix-text);
+    flex: none;
+    height: 0.7rem;
+    width: 0.7rem;
+  }
+
+  .live-call-task-chip button {
+    background: transparent;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: inherit;
+    flex: none;
+    font-size: 0.78rem;
+    min-height: 1.6rem;
+    padding: 0 0.6rem;
+  }
+
+  .live-call-proposal {
+    align-items: center;
+    color: var(--omnix-text);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    gap: 0.45rem;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .live-call-proposal button {
+    background: transparent;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: inherit;
+    font-size: 0.85rem;
+    min-height: 2rem;
+    padding: 0 0.9rem;
+  }
+
+  .live-call-proposal button:first-child {
+    background: color-mix(in srgb, var(--omnix-text) 10%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .live-call-task-chip-spinner {
+      animation: none;
+    }
+  }
+
+  @keyframes live-call-task-chip-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}

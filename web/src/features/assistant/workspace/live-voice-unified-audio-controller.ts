@@ -27,6 +27,7 @@ import {
   advanceDeliveryLedger,
   appendDeliveryPhrase,
   createLiveVoiceDeliveryLedger,
+  noteProactiveDelivery,
   instrumentDeliveryReporter,
   removeDeliveryLedgerRow,
   renderDeliveryLedger,
@@ -45,6 +46,9 @@ import {
 import { openStream, statusError } from '../../../api/transport';
 import { chatStreamEventSchema, parseJson } from '../../../api/schemas/streams';
 import { liveCallPresentationStore } from './live-call-presentation-store';
+import { takeHeardProposalTurnId } from './live-call-proposal-question';
+import { sceneSpeakerFrom, sceneSpeakerVoiceId } from './live-call-scene';
+import { readLatestTrustedCharacterRuntime } from '../chat/characterClient';
 import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
@@ -194,7 +198,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestIn
   const abortController = new AbortController();
   connectAbortSignal(init?.signal, abortController);
   const preparedInit = kind === 'response'
-    ? injectLiveTurnIds(init, ids, abortController.signal)
+    ? injectLiveTurnIds(init, ids, abortController.signal, sessionId)
     : { ...init, signal: abortController.signal };
   const response = await fetchImpl(input, preparedInit);
   if (!response.body || !response.ok) return response;
@@ -209,7 +213,10 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestIn
     renderDeliveryLedger(ledger);
     recordDeliveryCheckpoint(reporter, ledger);
   });
-  const voiceId = selectedVoiceId();
+  // A guest's turn speaks in the guest's voice; a new voice opens a new audio session (companion 5.5).
+  const sceneSpeakerId = sceneSpeakerFrom(response);
+  const voiceId = sceneSpeakerVoiceId(sceneSpeakerId, readLatestTrustedCharacterRuntime()?.scene_guests, selectedVoiceId());
+  liveCallPresentationStore.update({ sceneSpeakerId });
   const startedAtMs = performance.now();
   const sharedAudio = await ensureSharedAudioSession(sessionId, voiceId);
   const sessionPromise = sharedAudio.sessionPromise;
@@ -235,11 +242,13 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestIn
     previousPerformancePlan: null,
   };
   activeTurn = turn;
+  if (kind === 'greeting') noteProactiveDelivery(sessionId, delivery);
   reporter.record('turn_intercepted', {
     session_id: sessionId,
     request_path: url.pathname,
     turn_kind: kind,
     voice_id: voiceId,
+    scene_speaker_id: sceneSpeakerId,
     auto_speak: true,
     humanization_flags: flags,
     user_turn_id: kind === 'response' ? ids.userTurnId : null,
@@ -819,10 +828,17 @@ function extractLiveVoiceTurnId(init: RequestInit | undefined): string | null {
   }
 }
 
-function injectLiveTurnIds(init: RequestInit | undefined, ids: LiveTurnIds, signal: AbortSignal): RequestInit {
+function injectLiveTurnIds(
+  init: RequestInit | undefined,
+  ids: LiveTurnIds,
+  signal: AbortSignal,
+  sessionId: string,
+): RequestInit {
   if (typeof init?.body !== 'string') return { ...init, signal };
   try {
     const payload = JSON.parse(init.body) as Record<string, unknown>;
+    // The person began speaking after a proposal's question did: the server may read this turn as its answer.
+    const heardTurnId = takeHeardProposalTurnId(sessionId);
     return {
       ...init,
       signal,
@@ -830,6 +846,7 @@ function injectLiveTurnIds(init: RequestInit | undefined, ids: LiveTurnIds, sign
         ...payload,
         user_turn_id: ids.userTurnId,
         speech_segment_id: ids.speechSegmentId,
+        ...(heardTurnId ? { heard_turn_id: heardTurnId } : {}),
       }),
     };
   } catch {

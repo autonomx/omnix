@@ -6,6 +6,7 @@ import {
   type ManagedMemoryRecord,
   type MemoryCategory,
 } from './memoryClient';
+import { characterClient } from './characterClient';
 import { CharacterUnderstandingPanel } from './CharacterUnderstandingPanel';
 import './CharacterMemoryPanel.css';
 
@@ -62,6 +63,16 @@ export function CharacterMemoryPanel({ ownerId, ownerName }: { ownerId: string; 
 
   const records = memoryQuery.data?.records ?? [];
   const suggestions = memoryQuery.data?.suggestions ?? [];
+  // What was learned about another character on a call goes under that character, apart from what is about you.
+  const aboutYou = records.filter((record) => !record.about_character_id);
+  const aboutCharacters = groupByCharacter(records);
+  const namesQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'characters', 'memory-names'],
+    queryFn: () => characterClient.list(true),
+    enabled: aboutCharacters.length > 0,
+  });
+  const nameOf = (characterId: string) => namesQuery.data?.characters.find((item) => item.id === characterId)?.display_name
+    ?? characterId;
 
   return <section className="character-dashboard-section character-memory-section" aria-label={`${ownerName} memory`}>
     <header className="character-section-heading">
@@ -97,9 +108,20 @@ export function CharacterMemoryPanel({ ownerId, ownerName }: { ownerId: string; 
     </div> : null}
 
     {memoryQuery.data && !records.length ? <p className="character-memory-empty">Nothing yet. {ownerName} will remember what comes up in your chats.</p> : null}
-    {records.length ? <ul className="character-memory-list">
-      {records.map((record) => <MemoryRow key={record.id} ownerId={ownerId} record={record} refreshed={refreshed} />)}
+    {aboutYou.length ? <ul className="character-memory-list">
+      {aboutYou.map((record) => <MemoryRow key={record.id} ownerId={ownerId} record={record} refreshed={refreshed} />)}
     </ul> : null}
+    {aboutCharacters.map(([characterId, items]) => <div
+      className="character-memory-group"
+      key={characterId}
+      role="group"
+      aria-label={`About ${nameOf(characterId)}`}
+    >
+      <h5>About {nameOf(characterId)}</h5>
+      <ul className="character-memory-list">
+        {items.map((record) => <MemoryRow key={record.id} ownerId={ownerId} record={record} refreshed={refreshed} />)}
+      </ul>
+    </div>)}
 
     <form
       className="character-memory-add"
@@ -130,6 +152,15 @@ export function CharacterMemoryPanel({ ownerId, ownerName }: { ownerId: string; 
       refreshed={refreshed}
     /> : null}
   </section>;
+}
+
+function groupByCharacter(records: ManagedMemoryRecord[]): [string, ManagedMemoryRecord[]][] {
+  const groups = new Map<string, ManagedMemoryRecord[]>();
+  for (const record of records) {
+    if (!record.about_character_id) continue;
+    groups.set(record.about_character_id, [...(groups.get(record.about_character_id) ?? []), record]);
+  }
+  return [...groups];
 }
 
 function MemoryRow({ ownerId, record, refreshed }: {

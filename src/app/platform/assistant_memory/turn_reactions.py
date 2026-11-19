@@ -30,6 +30,18 @@ class _TurnCompleted(BaseModel):
     memory_writes_allowed: bool
 
 
+class _SceneLineDelivered(BaseModel):
+    """The fields of chat's ``chat.scene_line.delivered`` payload this consumer reads (companion 6.6)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    session_id: str
+    message_id: str
+    user_id: str
+    member_ids: list[str]
+    memory_writes_allowed: bool
+
+
 class _ChatDeleted(BaseModel):
     """The fields of chat's ``chat.session.deleted`` payload this consumer reads."""
 
@@ -70,3 +82,23 @@ def suggest_memories_after_turn(_connection: Any, event: dict[str, Any]) -> dict
     logger.info("Memory suggestion job queued: job_id=%s session_id=%s", job.id, turn.session_id)
     return {"job_id": job.id}
 
+
+def remember_scene_line(_connection: Any, event: dict[str, Any]) -> dict[str, Any]:
+    """Queue the job that reads a delivered scene line's thread once it goes quiet; idempotent per line."""
+    from .scene_memory import enqueue_scene_lines_job
+
+    line = _SceneLineDelivered.model_validate(event["payload"])
+    if not line.memory_writes_allowed:
+        return {"skipped": "memory_writes_off"}
+    workspace_id = str(event["workspace_id"])
+    token = push_tenant(TenantContext(
+        user_id=line.user_id, workspace_id=workspace_id, membership_id=f"system:{workspace_id}",
+        roles=frozenset({SYSTEM_ROLE}),
+    ))
+    try:
+        job = enqueue_scene_lines_job(line.session_id, line.message_id, line.member_ids)
+    finally:
+        pop_tenant(token)
+    if job is None:
+        return {"skipped": "scene_memory_off"}
+    return {"job_id": job.id}

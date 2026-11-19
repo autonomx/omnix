@@ -84,6 +84,35 @@ def test_live_conversation_profile_api_persists_defaults_and_overrides(
     assert cleared.json()["session_override"] is None
 
 
+def test_live_conversation_profile_initiative_limits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Companion 3.3: quiet hours and the hourly cap default off/4 and validate a 24-hour clock."""
+    monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
+    monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
+    monkeypatch.setenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", str(tmp_path / "profiles.json"))
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+
+    defaults = client.get("/api/live-chat/profile/defaults").json()
+    assert defaults["quiet_hours_enabled"] is False
+    assert (defaults["quiet_hours_start"], defaults["quiet_hours_end"]) == ("22:00", "08:00")
+    assert defaults["max_initiatives_per_hour"] == 4
+
+    updated = client.patch(
+        "/api/live-chat/profile/defaults",
+        json={"quiet_hours_enabled": True, "quiet_hours_start": "23:30", "max_initiatives_per_hour": 0},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["quiet_hours_enabled"] is True
+    assert (body["quiet_hours_start"], body["quiet_hours_end"]) == ("23:30", "08:00")
+    assert body["max_initiatives_per_hour"] == 0
+
+    for bad in ({"quiet_hours_start": "25:00"}, {"quiet_hours_end": "8:00"}, {"max_initiatives_per_hour": 21}):
+        assert client.patch("/api/live-chat/profile/defaults", json=bad).status_code == 422
+
+
 def test_live_conversation_profile_api_rejects_missing_session(
     tmp_path: Path,
     monkeypatch,

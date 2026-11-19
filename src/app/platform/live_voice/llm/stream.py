@@ -241,6 +241,8 @@ def stream_low_latency_reply(
         # A reply may be a request to look something up (llm.call_tools): its start is held until that is clear.
         gate = _ability_gate(session) if live_turn else None
         lookups: list[dict[str, Any]] = []
+        tasks: list[dict[str, Any]] = []  # background requests; they start when the reply is committed
+        camera_requests: list[dict[str, Any]] = []  # the call asked to look (companion 4.3)
 
         def provider_text() -> Iterator[str]:
             nonlocal resolved_model, usage
@@ -272,7 +274,8 @@ def stream_low_latency_reply(
             yield from _answer_after_request(
                 self, session, gate.request, spoken_before=gate.spoken, provider=provider, messages=messages,
                 model_name=model_name,
-                completion_kwargs=completion_kwargs, lookups=lookups, routing_deadline_at=routing_deadline_at,
+                completion_kwargs=completion_kwargs, lookups=lookups, tasks=tasks,
+                camera_requests=camera_requests, routing_deadline_at=routing_deadline_at,
             )
 
         for text in texts():
@@ -321,6 +324,11 @@ def stream_low_latency_reply(
                 first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
             yield {"type": "text_chunk", "text": remaining}
 
+        camera_request = camera_requests[-1] if camera_requests else None
+        if camera_request is not None and camera_request["allowed"]:
+            # The web shows Show prominently; only the person's press opens the camera.
+            yield {"type": "camera_request", "what": camera_request["query"]}
+
         completion_log_started = time.perf_counter()
         stream_log(
             "gateway-live-chat-first-token",
@@ -359,6 +367,8 @@ def stream_low_latency_reply(
                 **history_metadata,
                 **({"usage": usage_payload} if usage_payload is not None else {}),
                 **({"call_lookups": lookups} if lookups else {}),
+                **({"call_tasks": tasks} if tasks else {}),
+                **({"call_camera_request": camera_request} if camera_request is not None else {}),
             },
         }
 
@@ -368,9 +378,9 @@ SAY_NOW: Any = object()
 
 
 def _ability_gate(session: Any) -> Any:
-    from app.platform.live_voice.llm.call_tools import RequestGate, abilities_prompt, granted_abilities
+    from app.platform.live_voice.llm.call_tools import RequestGate, abilities_prompt, offered_abilities
 
-    return RequestGate() if abilities_prompt(granted_abilities(session)) else None
+    return RequestGate() if abilities_prompt(offered_abilities(session)) else None
 
 
 def _answer_after_request(
@@ -384,20 +394,80 @@ def _answer_after_request(
     model_name: str,
     completion_kwargs: dict[str, Any],
     lookups: list[dict[str, Any]],
+    tasks: list[dict[str, Any]] | None = None,
+    camera_requests: list[dict[str, Any]] | None = None,
     routing_deadline_at: float | None,
 ) -> Iterator[Any]:
-    """Say the waiting line, check the grant in code, run the search, then stream the model's answer to it."""
-    from app.platform.assistant_tools.contracts import authorize
-    from app.platform.live_voice.llm.call_tools import (
-        answer_instructions, granted_abilities, owner_of, run_web_search,
-    )
-    from app.providers import ChatMessage as ProviderMessage
+    """Say the waiting line, check the grant in code, run the search, then stream the model's answer to it.
 
-    decision = authorize(owner_of(session), request.ability, grants=granted_abilities(session))
-    # A lookup runs when granted; an action would wait for the person's confirmation, which calls do not ask yet.
-    runs = decision.allowed and not decision.confirm
+    A background request (research) is only recorded here: its spoken line ends the turn, and the task starts once
+    the reply is committed. A request to look ends the turn with its spoken ask; nothing is opened here.
+    """
+    from app.platform.assistant_tools.contracts import Decision, authorize
+    from app.platform.live_voice.llm.call_tools import (
+        CAMERA, CAMERA_ASK_LINE, answer_instructions, camera_instructions, granted_abilities, offered_abilities,
+        owner_of, run_web_search, task_instructions,
+    )
+
+    grants = granted_abilities(session)
+    decision = authorize(owner_of(session), request.ability, grants=grants)
+    action = None
+    if request.capability:
+        from app.platform.assistant_tools.contracts import check_voice_action
+
+        # The capability and its input are checked before anything is recorded; the model's line decides nothing.
+        action = check_voice_action(request.capability, request.input, grants)
+        if not action.ok:
+            decision = Decision(False, reason=action.reason)
+    if request.background and decision.allowed and not offered_abilities(session).get(request.ability):
+        decision = Decision(False, reason="unavailable")  # granted, but it cannot start now
+    # A granted task starts; an action's write then waits for the person's confirmation (chat.live_call_actions),
+    # so whether it starts follows the ability's grant, not the confirmation a write will need.
+    runs = decision.allowed
     # Words the reply said before its request line ("Let me check.") are the waiting line; else the request's own.
     lead_in = " ".join(spoken_before.split())
+    if request.ability == CAMERA:
+        if runs and not offered_abilities(session).get(CAMERA):
+            decision = Decision(False, reason="unavailable")  # granted, but no picture could be described now
+            runs = False
+        if camera_requests is not None:
+            camera_requests.append({"query": request.query, "allowed": runs, "reason": decision.reason})
+        stream_log(
+            "gateway-live-chat-first-token", "runtime", "live_chat_call_camera_requested",
+            allowed=runs, reason=decision.reason,
+        )
+        if runs:
+            if not lead_in:
+                yield request.say or CAMERA_ASK_LINE
+            return
+        yield from _follow_up(provider, messages, camera_instructions(lead_in), model_name=model_name,
+                              completion_kwargs=completion_kwargs, routing_deadline_at=routing_deadline_at)
+        return
+    if request.background:
+        if tasks is not None:
+            # ``owner``: the speaker who asked (a guest in a scene); the task re-checks their grant when it starts.
+            record: dict[str, Any] = {"index": len(tasks), "ability": request.ability, "query": request.query,
+                                      "allowed": runs, "reason": decision.reason, "owner": owner_of(session)}
+            if action is not None and action.ok:
+                from app.platform.assistant_tools.contracts import describe_voice_action
+
+                record.update(query=describe_voice_action(action.capability, action.input or {}),
+                              capability=action.capability, input=action.input, effect=action.effect)
+            tasks.append(record)
+        stream_log(
+            "gateway-live-chat-first-token", "runtime", "live_chat_call_task_requested",
+            ability=request.ability, allowed=decision.allowed, reason=decision.reason,
+        )
+        if runs and (lead_in or request.say):
+            if not lead_in:
+                yield request.say
+            return
+        # Nothing was said yet, or it cannot start: the model says so in its own words.
+        write = action is not None and action.effect == "write"
+        yield from _follow_up(provider, messages, task_instructions(request, lead_in, started=runs, write=write),
+                              model_name=model_name, completion_kwargs=completion_kwargs,
+                              routing_deadline_at=routing_deadline_at)
+        return
     said = request.say if runs and not lead_in else ""
     if said:
         yield said + " "
@@ -415,15 +485,29 @@ def _answer_after_request(
         status=lookups[-1]["status"], results=lookups[-1]["results"], elapsed_ms=lookups[-1]["elapsed_ms"],
     )
     note = answer_instructions(request, lead_in or said, lookup)
+    yield from _follow_up(provider, messages, note, model_name=model_name, completion_kwargs=completion_kwargs,
+                          routing_deadline_at=routing_deadline_at)
+
+
+def _follow_up(
+    provider: Any,
+    messages: list[Any],
+    note: str,
+    *,
+    model_name: str,
+    completion_kwargs: dict[str, Any],
+    routing_deadline_at: float | None,
+) -> Iterator[str]:
+    """Ask the model again with a note for this turn only, and stream its answer; a request in it is cut, not run."""
+    from app.platform.live_voice.llm.call_tools import RequestGate
+    from app.providers import ChatMessage as ProviderMessage
+
     follow_up = [*messages, ProviderMessage(role="system", content=note, per_turn=True)]
     kwargs = dict(completion_kwargs)
     remaining = remaining_turn_seconds(routing_deadline_at)
     if remaining is not None and remaining > 0:
         kwargs["request_timeout_seconds"] = remaining
     response = provider.chat_completion(messages=follow_up, model=model_name, stream=True, **kwargs)
-    # A second request is never run: an answer that asks again is cut there.
-    from app.platform.live_voice.llm.call_tools import RequestGate
-
     gate = RequestGate()
     for chunk in response:
         released = gate.push(getattr(chunk, "content", "") or "")

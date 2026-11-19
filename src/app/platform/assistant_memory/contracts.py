@@ -1,9 +1,11 @@
 """Stable memory services consumed by prompt and conversation features."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from importlib import import_module
+
+from app.runtime.ports import Port, optional
 
 from app.platform.assistant_memory.owner_defaults import default_memory_service
 from app.platform.assistant_memory.selection import estimate_memory_tokens, select_memory_records
@@ -34,6 +36,36 @@ from app.platform.assistant_memory.settings import (
 )
 from app.platform.assistant_memory.temporal_retrieval import retrieve_temporal_context
 
+class SceneMemoryCharacters(Protocol):
+    """What memories about characters need from characters (companion 6.6; ADR-0016 port)."""
+
+    def per_character(self, session_id: str) -> int:
+        """The person's ``scene_memory_per_character`` for this chat (0-20): how many memories about each
+        character on the call a prompt may carry."""
+        ...
+
+    def character_named(self, name: str) -> str | None:
+        """The id of the person's character with this display name, or None (none, or more than one)."""
+        ...
+
+
+# Character interactions contribute this; without it the default cap applies and only members can be named.
+SCENE_MEMORY_CHARACTERS: Port[SceneMemoryCharacters] = Port(
+    "assistant_memory.scene_memory_characters", SceneMemoryCharacters, "at_most_one",
+)
+DEFAULT_SCENE_MEMORY_PER_CHARACTER = 5
+
+
+def scene_memory_per_character(session_id: str) -> int:
+    """The chat's cap on memories per character present, or the default when it cannot be read."""
+    try:
+        limit = optional(SCENE_MEMORY_CHARACTERS)
+        value = limit.per_character(session_id) if limit is not None else DEFAULT_SCENE_MEMORY_PER_CHARACTER
+        return max(0, min(20, int(value)))
+    except Exception:  # noqa: BLE001 - the prompt still gets memories, at the default cap
+        return DEFAULT_SCENE_MEMORY_PER_CHARACTER
+
+
 def read_owner_understanding(owner_type: str, owner_id: str, profile_id: str) -> list[Any]:
     """What an owner has understood about this person (``v2/understanding_view``), loaded only when asked for."""
     from .v2.understanding_view import read_owner_understanding as read
@@ -54,6 +86,10 @@ def correct_owner_understanding(owner_type: str, owner_id: str, profile_id: str,
 
 
 __all__ = [
+    "DEFAULT_SCENE_MEMORY_PER_CHARACTER",
+    "SCENE_MEMORY_CHARACTERS",
+    "SceneMemoryCharacters",
+    "scene_memory_per_character",
     "correct_owner_understanding",
     "forget_owner_understanding",
     "read_owner_understanding",

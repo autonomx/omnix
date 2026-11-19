@@ -251,6 +251,11 @@
     border-color: color-mix(in srgb, var(--c-red-640) 65%, transparent);
   }
 
+  .assistant-voice-controls .live-quiet-button.quiet {
+    background: color-mix(in srgb, var(--accent-violet-810) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-810) 65%, transparent);
+  }
+
   .assistant-voice-transcript {
     border-top: 1px solid var(--omnix-border);
     display: grid;
@@ -275,6 +280,18 @@
 
   .assistant-voice-transcript p.assistant {
     border-left-color: var(--omnix-cyan);
+  }
+
+  /* "Only respond to me": words in another voice, shown but not sent. */
+  .assistant-voice-transcript p.held {
+    border-left-color: var(--omnix-border);
+    color: var(--omnix-muted);
+  }
+
+  .assistant-voice-transcript .assistant-voice-send-anyway {
+    font-size: 0.78rem;
+    margin-left: auto;
+    padding: 0.1rem 0.5rem;
   }
 
   .assistant-voice-transcript strong {

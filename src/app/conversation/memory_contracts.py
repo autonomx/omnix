@@ -1,6 +1,7 @@
 """Typed contracts for curated Chat and Character memory."""
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -32,6 +33,9 @@ SYSTEM_MEMORY_OWNER_ID = "system-assistant"
 
 # Trust levels whose records may reach a prompt (anything else needs approval).
 PROMPT_TRUST_LEVELS: frozenset[str] = frozenset({"user_approved", "system_trusted"})
+# A character's memory of what another character said in a call (companion 6.6) is the character's own hearing,
+# never a fact about the person: it is kept at this trust and reaches a prompt only while that character is present.
+HEARD_TRUST_LEVEL = "unverified_agent"
 
 
 class MemoryConflictError(RuntimeError):
@@ -76,6 +80,9 @@ class MemoryRecord(BaseModel):
     trust_level: MemoryTrustLevel = "user_approved"
     sensitivity: MemorySensitivity = "normal"
     provenance_type: MemoryProvenanceType
+    # The character this memory is about (companion 6.6), learned from what characters said in a call; None for
+    # every memory about the person.
+    about_character_id: str | None = Field(default=None, min_length=1, max_length=160)
     provenance_id: str | None = Field(default=None, max_length=240)
     status: MemoryRecordStatus = "active"
     revision: int = Field(default=1, ge=1)
@@ -161,10 +168,13 @@ def record_is_expired(record: MemoryRecord, now: datetime | None = None) -> bool
     return _parse_record_time(record.expires_at) <= current
 
 
-def record_prompt_block_reason(record: MemoryRecord, now: datetime | None = None) -> str | None:
+def record_prompt_block_reason(
+    record: MemoryRecord, now: datetime | None = None, *, present_characters: Collection[str] = (),
+) -> str | None:
     """Why this record may not reach a prompt, whatever the scope; ``None`` if it may.
 
-    One rule for Memory v1 selection and for what Memory v2 makes retrievable.
+    One rule for Memory v1 selection and for what Memory v2 makes retrievable. A memory about a character may
+    reach a prompt only while that character is in ``present_characters`` (companion 6.6).
     """
     if record.status != "active":
         return f"record_{record.status}"
@@ -172,6 +182,12 @@ def record_prompt_block_reason(record: MemoryRecord, now: datetime | None = None
         return "record_expired"
     if record.sensitivity == "secret":
         return "secret_content_blocked"
+    if record.about_character_id is not None:
+        if record.about_character_id not in present_characters:
+            return "character_absent"
+        if record.trust_level not in PROMPT_TRUST_LEVELS and record.trust_level != HEARD_TRUST_LEVEL:
+            return "trust_not_approved"
+        return None
     if record.trust_level not in PROMPT_TRUST_LEVELS:
         return "trust_not_approved"
     return None

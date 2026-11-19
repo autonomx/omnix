@@ -6,7 +6,7 @@ calendar, email) are the assistant's, unless one group is given to a character e
 reads "blow up the lights" as a line, so real-world actions stay out of its reach unless granted.
 
 The model only proposes a use; ``authorize`` decides, from the grant and the ability's kind. A lookup runs when
-granted. An action, once there are actions, also needs the person's confirmation (``confirm``).
+granted. An action's write also needs the person's confirmation (``confirm``); its reads run when granted.
 """
 from __future__ import annotations
 
@@ -33,6 +33,27 @@ class Ability(BaseModel):
 ABILITIES: dict[str, Ability] = {
     "web_search": Ability(
         id="web_search", label="Look things up on the web", kind="lookup", default_system=True,
+        default_character=False,
+    ),
+    # Read-only like a search, but minutes long: a call starts it and talks on while it runs (companion 1.1).
+    "deep_research": Ability(
+        id="deep_research", label="Research a question in depth", kind="lookup", default_system=True,
+        default_character=False,
+    ),
+    # Actions (companion 1.5): a read runs, a write waits for the person's confirmation. Each group is the
+    # assistant's unless given to a character explicitly; a call offers one only when its tool is connected.
+    "smart_home": Ability(
+        id="smart_home", label="Check and switch home devices", kind="action", default_system=True,
+        default_character=False,
+    ),
+    "calendar": Ability(
+        id="calendar", label="Read the calendar and add events", kind="action", default_system=True,
+        default_character=False,
+    ),
+    # The call may ask the person to show it something (companion 4.3): off for everyone until they grant it. The
+    # camera still opens only when they press Show.
+    "camera": Ability(
+        id="camera", label="Ask to see through the camera", kind="lookup", default_system=False,
         default_character=False,
     ),
 }

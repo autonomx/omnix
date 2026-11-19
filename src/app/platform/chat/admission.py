@@ -8,14 +8,18 @@ request's own stream.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
 
+from app.conversation.scene import Scene, speaking_as
 from app.jobs import CancelJobRequest
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
+from app.runtime.ports import optional
 
 from .generation_jobs import (
     _commit_chat_reply,
@@ -32,6 +36,9 @@ from .generation_jobs import (
 from .generative_ui import attach_reply_ui
 from .generative_ui.actions import admitted_request
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
+from .scene import has_scene_guests, is_echo, recent_character_line, stamp_speaker
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -104,10 +111,15 @@ def admit_chat_turn(
             chat_store, job_store, session_id=session_id,
             reason="Interrupted by a newer Chat prompt.",
         )
+        from .contracts import CHAT_FLOOR
+
+        floor = optional(CHAT_FLOOR)
+        _tag_suspected_echo(chat_store, floor, session_id, request)
         appended = begin(session_id, request)
         if appended is None:
             return None
         session, user_message = appended
+        _person_took_floor(floor, session_id, user_message)
         try:
             job = job_store.create_job(
                 CreateJobRequest(
@@ -135,6 +147,41 @@ def admit_chat_turn(
     return ChatAdmission(session, user_message, job, existing=False)
 
 
+def _tag_suspected_echo(chat_store: Any, floor: Any, session_id: str, request: SendChatMessageRequest) -> None:
+    """A voice turn in a scene chat that mostly repeats a character's speech is tagged ``suspected_echo``
+    (companion 6.5): the microphone heard the speakers. Compared with the active scene turn's recorded text (a
+    line heard during playback is not committed yet) and with a character message saved within about 2 s. Read
+    before the person's message is saved, because the floor then ends the scene turn. Best effort."""
+    if not request.speech_segment_id:
+        return
+    try:
+        session = chat_store.get_session(session_id)
+        if session is None or not has_scene_guests(session):
+            return
+        spoken = [recent_character_line(session.messages, datetime.now(timezone.utc))]
+        if floor is not None:
+            spoken.append(floor.active_scene_line_text(session_id))
+        if any(is_echo(request.content, text) for text in spoken if text):
+            request._suspected_echo = True
+    except Exception:  # noqa: BLE001 - an unread echo only means the turn is remembered as usual
+        logger.warning("echo check failed for chat %s", session_id, exc_info=True)
+
+
+def _person_took_floor(floor: Any, session_id: str, user_message: ChatMessage) -> None:
+    """The person's message is saved: a scene turn in progress loses its lease (companion 6.3). Best effort; the
+    lease's TTL and the anchor check at commit hold without it."""
+    if floor is None:
+        return
+    try:
+        floor.person_took_floor(session_id, user_message.id)
+    except Exception:  # noqa: BLE001 - the commit's anchor check is the backstop
+        logger.warning("scene floor was not taken for chat %s", session_id, exc_info=True)
+
+
+def _with_prefix(prefix: str, content: str) -> str:
+    return " ".join(part for part in (prefix.strip(), content.strip()) if part)
+
+
 def stream_chat_turn(
     chat_store: Any,
     job_store: Any,
@@ -143,6 +190,8 @@ def stream_chat_turn(
     *,
     context_items: list[dict[str, Any]] | None = None,
     annotate_reply: Callable[[dict[str, Any]], None] | None = None,
+    spoken_prefix: str = "",
+    scene: Scene | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Generate an admitted turn on the caller's stream and finish its job.
 
@@ -151,7 +200,11 @@ def stream_chat_turn(
     dispatched turn; the reply is committed with the job at the provider's
     completion event, before that event is yielded. ``context_items`` are
     passed to the provider; ``annotate_reply`` adds to the reply's metadata
-    before it is committed.
+    before it is committed. ``spoken_prefix`` is what the caller already
+    streamed before the reply (a camera turn's "Let me look."): the committed
+    reply begins with it, so the transcript is what was said. ``scene`` is the
+    call's scene with its chosen speaker (companion 5.2): that member's
+    read-only view of the session generates the reply, which records who spoke.
     """
     job = admission.job
     session, user_message = admission.session, admission.user_message
@@ -171,7 +224,7 @@ def stream_chat_turn(
         completed = None
         extra = {} if context_items is None else {"context_items": context_items}
         events = chat_store.stream_provider_reply_chunks(
-            session,
+            session if scene is None else speaking_as(session, scene),
             user_message,
             provider_id=request.provider_id or session.provider_id,
             model_id=request.model_id or session.model_id,
@@ -183,11 +236,14 @@ def stream_chat_turn(
                     yield {"type": "interrupted", "job_id": job.id}
                     return
                 if event.get("type") == "complete":
-                    content = str(event.get("content") or "").strip()
+                    content = _with_prefix(spoken_prefix, str(event.get("content") or ""))
+                    if spoken_prefix:
+                        event = {**event, "content": content}
                     if isinstance(event.get("metadata"), dict):
                         metadata = event["metadata"]
                     if annotate_reply is not None:
                         annotate_reply(metadata)
+                    stamp_speaker(metadata, scene)
                     attach_reply_ui(content, metadata, context_items=context_items)
                     # Commit at the provider completion boundary: live voice
                     # playback can outlast generation and a later barge-in may
@@ -206,6 +262,8 @@ def stream_chat_turn(
             if callable(close):
                 close()
         if not committed:
+            content = _with_prefix(spoken_prefix, content)
+            stamp_speaker(metadata, scene)
             attach_reply_ui(content, metadata, context_items=context_items)
             completed = _commit_chat_reply(
                 chat_store, job_store, job, session_id=session.id,

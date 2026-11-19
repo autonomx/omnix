@@ -7,6 +7,7 @@ from typing import Any
 
 
 from .contracts import (
+    CHARACTER_SUBJECT,
     GraphAssertion,
     GraphEntityRef,
     GraphValue,
@@ -58,6 +59,9 @@ def _parse_timestamp(value: str) -> datetime:
 
 
 _PROMPT_TRUST = {"user_approved", "system_trusted"}
+# A memory about a character (companion 6.6) is a character's own hearing of another, kept at this trust; the
+# prompt reads it only while that character is in the call (``RetrievalQuery.present_characters``).
+_HEARD_TRUST = "unverified_agent"
 
 
 def _record_payload(observation: Observation) -> tuple[dict[str, Any], str] | None:
@@ -90,10 +94,12 @@ def curated_projector(observations: tuple[Observation, ...]) -> tuple[GraphAsser
         kind = str(record.get("kind", "semantic_fact"))
         if not record_id or not content:
             continue
+        about = str(record.get("about_character_id") or "").strip()
+        trust = str(record.get("trust_level", "user_approved"))
         if (
             str(record.get("status", "active")) != "active"
             or record.get("sensitivity") == "secret"
-            or str(record.get("trust_level", "user_approved")) not in _PROMPT_TRUST
+            or (trust not in _PROMPT_TRUST and not (about and trust == _HEARD_TRUST))
         ):
             continue
         revision = int(record.get("revision", 1))
@@ -118,9 +124,11 @@ def curated_projector(observations: tuple[Observation, ...]) -> tuple[GraphAsser
                 assertion_id=f"{prefix}:{digest[:48]}",
                 space=observation.space,
                 visibility_scopes=(observation.visibility_scope,),
-                subject=GraphEntityRef(
-                    entity_id=observation.space.principal_id,
-                    entity_type="profile",
+                # Without the character subject, "Bea is afraid of storms" would be a fact about the person.
+                subject=(
+                    GraphEntityRef(entity_id=about, entity_type=CHARACTER_SUBJECT)
+                    if about
+                    else GraphEntityRef(entity_id=observation.space.principal_id, entity_type="profile")
                 ),
                 predicate=f"legacy_{kind}" if prefix == "legacy-seed" else f"memory_{kind}",
                 object=GraphValue(kind="literal", literal=content),

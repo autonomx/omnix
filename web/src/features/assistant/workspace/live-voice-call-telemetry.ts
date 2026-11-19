@@ -6,6 +6,7 @@ import { liveSessionCoordinator } from './live-session-coordinator';
 import { StreamingSttWebSocketClient } from './live-voice-websocket';
 import { LiveVoiceSession, dispatchLiveVoicePerfEvent, readLiveTaskInstruction } from './live-voice-controller-state';
 import { LiveSttSegmentTelemetryGate } from './live-voice-endpointing';
+import { clearHeldFinals, liveSpeakerScores } from './live-voice-speaker-gate';
 
 /** Acknowledges the call's task contract before capture starts, and records it. */
 export async function prepareLiveTaskContract(sessionId: string, reporter: LiveCallDiagnosticsReporter): Promise<void> {
@@ -65,6 +66,9 @@ export function recordSttAuthoritySelection(
 /** The STT client's telemetry callbacks: each event goes to the call's diagnostics and the perf stream. */
 export function createSttTelemetryHandlers(reporter: LiveCallDiagnosticsReporter) {
   const segmentTelemetryGate = new LiveSttSegmentTelemetryGate();
+  // A new call: no scores, and nothing the last call held can be sent from this one.
+  liveSpeakerScores.reset();
+  clearHeldFinals();
   return {
     onConnectionClosed: (event) => {
       reporter.record('stt_connection_closed', {
@@ -141,6 +145,20 @@ export function createSttTelemetryHandlers(reporter: LiveCallDiagnosticsReporter
         modelMs: event.model_ms,
         realtimeFactor: event.realtime_factor,
       });
+    },
+    onSpeakerScoresAvailable: (available) => {
+      liveSpeakerScores.setAvailable(available);
+      reporter.record('stt_speaker_scores_available', { available }, 'live_voice_controller');
+    },
+    onSpeakerScore: (event) => {
+      // Logged for the threshold (companion 2.3); "Only respond to me" acts on it (2.4).
+      liveSpeakerScores.record(event.segmentId, event.sequence, event.similarity);
+      reporter.record('stt_speaker_score', {
+        segment_id: event.segmentId,
+        source_sequence: event.sequence,
+        speaker_similarity: event.similarity,
+        model_ms: event.modelMs,
+      }, 'live_voice_controller');
     },
     onSegmentStateChange: (state) => {
       if (!segmentTelemetryGate.shouldReport(state)) return;

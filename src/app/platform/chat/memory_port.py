@@ -33,6 +33,9 @@ class ChatMemory(Protocol):
     def create_session_snapshot(self, session: Any, *, token_budget: int) -> Any:
         """A frozen snapshot of the memory a session may read (id, revision, items, created_at)."""
 
+    def open_loops(self, session: Any, *, now: Any) -> list[Any]:
+        """The session owner's own active open loops (``assertion_id``, ``text``), newest first; none if it may not read."""
+
 
 CHAT_MEMORY: Port[ChatMemory] = Port("chat.memory", ChatMemory, "at_most_one")
 
@@ -83,6 +86,13 @@ def parse_memory_command(content: str) -> Any | None:
     return memory.parse_command(content) if memory is not None else None
 
 
+def session_open_loops(session: Any, *, now: Any) -> list[Any]:
+    """What a quiet live call may raise from its speaker's own memory; none without memory."""
+    memory = chat_memory()
+    reader = getattr(memory, "open_loops", None)
+    return list(reader(session, now=now)) if callable(reader) else []
+
+
 def execute_memory_command(store: Any, service: Any, session_id: str, user_message_id: str, command: Any) -> Any:
     memory = chat_memory()
     if memory is None:
@@ -101,4 +111,5 @@ __all__ = [
     "memory_runtime_settings",
     "parse_memory_command",
     "resolve_prompt_memory",
+    "session_open_loops",
 ]

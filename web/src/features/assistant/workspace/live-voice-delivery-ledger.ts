@@ -131,6 +131,31 @@ export function advanceDeliveryLedger(
   return changed;
 }
 
+/**
+ * What the person heard of a turn cut off mid-way: the phrases whose audio played to the end, space-joined as the
+ * ledger keeps them, and the index of the first phrase they did not hear in full (companion 6.3).
+ */
+export function deliveredHeard(ledger: LiveVoiceDeliveryLedger): { heardText: string; interruptedAtPhrase: number } {
+  return {
+    heardText: ledger.generatedText.slice(0, ledger.contextDeliveredTextEnd).trim(),
+    interruptedAtPhrase: ledger.audioDeliveredPhraseCount,
+  };
+}
+
+// The last proactive turn's ledger (a remark, report or scene line), kept after its turn stops so an interrupted
+// line can report what the person heard.
+let lastProactiveDelivery: { sessionId: string; ledger: LiveVoiceDeliveryLedger } | null = null;
+
+export function noteProactiveDelivery(sessionId: string, ledger: LiveVoiceDeliveryLedger | null): void {
+  lastProactiveDelivery = ledger ? { sessionId, ledger } : null;
+}
+
+/** What the person heard of the last proactive turn spoken in this chat, or null when none was. */
+export function readLastProactiveTurnHeard(sessionId: string): { heardText: string; interruptedAtPhrase: number } | null {
+  if (!lastProactiveDelivery || lastProactiveDelivery.sessionId !== sessionId) return null;
+  return deliveredHeard(lastProactiveDelivery.ledger);
+}
+
 export function renderDeliveryLedger(
   ledger: LiveVoiceDeliveryLedger,
   partial = false,

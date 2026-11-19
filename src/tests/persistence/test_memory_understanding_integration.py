@@ -590,6 +590,20 @@ def _prompt(scene: Scene, query: str) -> tuple[list, str]:
     return memory, _memory_section(SimpleNamespace(approved_memory=memory))
 
 
+def _open_loops(scene: Scene) -> tuple[list[str], str | None]:
+    """What a quiet call in a new chat may raise from the owner's memory (companion 3.2), read and through the route."""
+    from datetime import datetime, timezone
+
+    from app.platform.assistant_memory.chat_prompt import read_session_open_loops
+
+    chat_id = scene.new_chat()
+    session = scene.run_as_tenant(scene.services.chat.get_session, chat_id)
+    loops = scene.run_as_tenant(read_session_open_loops, session, now=datetime.now(timezone.utc))
+    response = scene.client.get(f"/api/chat/sessions/{chat_id}/live-call/initiative-candidate", params={"social": "true"})
+    assert response.status_code == 200, response.text
+    return [loop.text for loop in loops], response.json()["reason"]
+
+
 def test_what_sets_off_a_mood_comes_back_when_its_subject_does(app_client, monkeypatch) -> None:
     scene = Scene(app_client)
     _write_turns(scene, [
@@ -706,6 +720,9 @@ def test_the_owners_side_carries_its_stance_promises_and_jokes_into_every_chat(a
     assert "A running joke between you: Chocolate as the fee" in said
     assert "Those marked promise are things you told them you would do." in rendered
     assert sum("tracking device" in text for text in said) == 1, "once, as the owner's promise, not again from retrieval"
+    loops, reason = _open_loops(scene)
+    assert loops == ["Build them a tracking device"], "a quiet call may ask about the open promise"
+    assert reason is not None and reason.startswith("open_loop:")
 
     _write_turns(scene, [("user", "Did you finish the tracker?"), ("assistant", "Done. Chocolate first."), ("user", "Ha, fine.")])
     second = StubReader({
@@ -720,6 +737,7 @@ def test_the_owners_side_carries_its_stance_promises_and_jokes_into_every_chat(a
     assert [(item["joke"], item["seen"]) for item in side["jokes"]] == [("Chocolate as the fee", 2)]
     memory, _rendered = _prompt(scene, "Hello again.")
     assert not any("tracking device" in item.content for item in memory), "a kept promise is no longer owed"
+    assert _open_loops(scene) == ([], None), "nor raised by a quiet call"
 
     for kind, key in (("joke", side["jokes"][0]["key"]), ("stance", "current"), ("promise", side["promises"][0]["key"])):
         response = scene.client.delete(f"/api/memory-owners/{scene.character}/understanding/{kind}/{key}")

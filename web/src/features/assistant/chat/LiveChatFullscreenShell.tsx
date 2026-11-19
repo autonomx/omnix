@@ -14,7 +14,11 @@ import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
 import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar } from './liveCharacterAvatarBridge';
+import { LiveCallScene } from './LiveCallScene';
+import { LiveCallTaskChips } from './LiveCallTaskChips';
 import { LiveMuteButton } from './LiveMuteButton';
+import { LiveQuietButton } from './LiveQuietButton';
+import { LiveShowButton } from './LiveShowButton';
 import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
@@ -28,6 +32,8 @@ export type LiveChatMessage = {
   role: 'assistant' | 'user' | 'system';
   text: string;
   timestamp: string | null;
+  /** The call guest who spoke a reply (companion 5.6); a reply without one is the chat's own character's. */
+  speaker?: string | null;
 };
 
 export type LiveChatFullscreenShellProps = {
@@ -160,7 +166,7 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
           <div className="live-chat-fullscreen-transcript" role="log" aria-live="polite" ref={transcriptRef}>
             {messages.length ? messages.slice(-24).map((message) => (
               <article className={message.role} key={message.id}>
-                <header><strong>{message.role === 'user' ? 'You' : message.role === 'assistant' ? displayIdentity : 'System'}</strong>{message.timestamp ? <time dateTime={message.timestamp}>{formatTime(message.timestamp)}</time> : null}</header>
+                <header><strong>{message.role === 'user' ? 'You' : message.role === 'assistant' ? message.speaker || displayIdentity : 'System'}</strong>{message.timestamp ? <time dateTime={message.timestamp}>{formatTime(message.timestamp)}</time> : null}</header>
                 <p>{message.text}</p>
               </article>
             )) : (
@@ -181,11 +187,15 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
             </div>
             <div className="live-chat-fullscreen-call-buttons">
               <LiveMuteButton />
+              <LiveQuietButton />
+              <LiveShowButton />
               <button className={snapshot.connected ? 'danger' : undefined} type="button" onClick={toggleCall}>
                 <span aria-hidden="true">{snapshot.connected ? '■' : '●'}</span>
                 {snapshot.connected ? 'End voice chat' : 'Start voice chat'}
               </button>
             </div>
+            <LiveCallScene sessionId={runtime.sessionId} />
+            <LiveCallTaskChips />
             <small>{snapshot.state}. You can interrupt naturally when echo-aware mode is active.</small>
           </section>
 

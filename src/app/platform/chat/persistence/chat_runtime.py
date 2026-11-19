@@ -33,7 +33,7 @@ from app.platform.chat.models import (
 )
 from app.platform.chat.prompt_assembly import PromptHistoryItem
 from app.platform.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
-from app.platform.chat.prompt_store import turn_completed_event
+from app.platform.chat.prompt_store import scene_line_delivered_event, turn_completed_event
 from app.platform.chat.retention_policy import transcript_retention_allowed
 from app.platform.chat.store import _context_source_summaries
 from app.conversation.contracts import (
@@ -712,6 +712,24 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
             )
             work.commit()
 
+    def publish_scene_line_delivered(self, session: ChatSession, message: Any, *, member_ids: list[str]) -> None:
+        """Append ``chat.scene_line.delivered`` to the outbox, once per stored line (companion 6.6)."""
+        from app.platform.chat.turn_events import CHAT_SCENE_LINE_DELIVERED, scene_line_delivered_event_key
+
+        context = self._repository.context
+        event = scene_line_delivered_event(session, message, user_id=context.user_id, member_ids=member_ids)
+        with unit_of_work(self._repository.database) as work:
+            work.outbox.append(
+                context,
+                aggregate_type="chat_session",
+                aggregate_id=session.id,
+                event_type=CHAT_SCENE_LINE_DELIVERED,
+                payload=event.model_dump(mode="json"),
+                event_key=scene_line_delivered_event_key(message.id),
+                skip_existing=True,
+            )
+            work.commit()
+
     def __init__(
         self,
         path: Any = None,
@@ -842,6 +860,21 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
             metadata=metadata,
         )
 
+    def claim_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        require: dict[str, object],
+        patch: dict[str, object],
+    ) -> bool:
+        return self._repository.claim_message_metadata(
+            session_id=session_id,
+            message_id=message_id,
+            require=require,
+            patch=patch,
+        )
+
     def delete_messages(self, session_id: str, message_ids: list[str]) -> int:
         return self._repository.delete_messages(session_id, message_ids)
 
@@ -937,6 +970,20 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         if session is not None:
             prime_live_speculation_session(session)
         return session
+
+    def append_assistant_message(
+        self,
+        session_id: str,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> tuple[ChatSession, ChatMessage, bool] | None:
+        """Append under the session's row lock, like a reply's commit.
+
+        A background result (call research) or a proactive turn can land while a live turn commits; loading after
+        the lock means the save sees the newest revision instead of failing as changed after it was loaded.
+        """
+        with _durable_session_mutation(self, session_id):
+            return super().append_assistant_message(session_id, content, metadata)
 
 
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)

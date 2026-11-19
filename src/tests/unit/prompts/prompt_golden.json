@@ -139,6 +139,10 @@
     "sha256": "8d4a8a471ad7e6fc79da703d2fd12fbded899aff47af487c0d6470a03c1daae2",
     "version": "1"
   },
+  "assistant_memory.scene_memory.system_prompt": {
+    "sha256": "cce9fb1a0f2963fdb1fa7ffe377c4a78cf8ef5d2e780cd557011f39aef37bb21",
+    "version": "1"
+  },
   "assistant_memory.structured_provider.system_prompt": {
     "sha256": "182b75d7c52b2f5f74935d774816d5e3387fb04e943b0b43cad3843ebe7d2872",
     "version": "3"
@@ -187,8 +191,16 @@
     "sha256": "29fadb90082e080dbd7cf056ff594b99d79df0fd295d4c2945e8c0f4612e8db1",
     "version": "1"
   },
+  "chat.live_call_camera.question": {
+    "sha256": "6b650a9da2e7b2e893ccec5f2e1779247d6c9a45dff301d26bc84f255a475ca8",
+    "version": "1"
+  },
   "chat.live_call_greeting.prompt": {
     "sha256": "936e8acb869e3a2f63d9d0b1103bf13a625d6cee48b0c164a88e5b7d9547d67a",
+    "version": "1"
+  },
+  "chat.live_conversation_proactive.open_loop": {
+    "sha256": "7930bd1ccaae859d2bb8b98b23dc1ab831a3c7b184726051f18b6fbd6a794b41",
     "version": "1"
   },
   "chat.live_conversation_proactive.prompt": {
@@ -211,8 +223,48 @@
     "sha256": "fb153065e725d60a888f62108a177ec5d47ece55a08e0f6306faed6514731c33",
     "version": "1"
   },
+  "chat.live_conversation_proactive.task_report": {
+    "sha256": "5609f6d8810c31027dd8f4f2e2d8e2169313fafc24311459d0947aafbc17163b",
+    "version": "1"
+  },
+  "chat.live_conversation_proactive.task_report_unfinished": {
+    "sha256": "ccf661612d8339779037883022cff0410d043b5e5c69d554185c0ce96f291898",
+    "version": "1"
+  },
   "chat.live_overlap_judge.system_prompt": {
     "sha256": "5cb06d606fd4ae9b1b0b9e306c9a64f4d15556b8caa957de4b96ee7082f88ef7",
+    "version": "1"
+  },
+  "chat.scene.director": {
+    "sha256": "87017029cfc7c90b75c68c92081f2c6a84ee7c2ccf232c17c490c4bbbbda1736",
+    "version": "1"
+  },
+  "chat.scene.line": {
+    "sha256": "b0b6f163951afb323980e1821fe4b7734d539082ffe2ce5717e8e3adb34d59ec",
+    "version": "1"
+  },
+  "chat.scene.note": {
+    "sha256": "33d0a6b92530b0bf214744216268472a9d7b0a8e0f9ccd25d829de880af789eb",
+    "version": "1"
+  },
+  "chat.scene.reaction": {
+    "sha256": "d5100471078e5ece53119c988e869995912a96656a38041620946317f58e60f6",
+    "version": "1"
+  },
+  "chat.scene.talk_director": {
+    "sha256": "067ad911ef632e5ebd9e3f8bce9e0b35d288dc6741eb3f8cca6d344a0cece3a1",
+    "version": "1"
+  },
+  "chat.scene.talk_line": {
+    "sha256": "92a9f7326f52588b1096aa7bfc240af61d11c383c34af46d47ef0363f6aad8fe",
+    "version": "1"
+  },
+  "chat.scene.talk_opener": {
+    "sha256": "375fd0fa1b8b4d2b36e057ba8f62fe335507c43a64f8ad85429bd7865c2ff638",
+    "version": "1"
+  },
+  "chat.scene.thread_director": {
+    "sha256": "b59a321d35a688f4f4bc7a3b7765c13f2196b289fe68d3a784a4c7c06b339ab1",
     "version": "1"
   },
   "chat.session_defaults.legacy_default_prompt": {

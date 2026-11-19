@@ -171,6 +171,12 @@ class DerivedPolicyEnvelope(FrozenContract):
     policy_digest: str = Field(min_length=8, max_length=160)
 
 
+# The subject type of a memory about another character on a call (companion 6.6); every other curated memory is
+# about the profile. Not "character": a conversation reading already files the owner's own side (stance, promises,
+# jokes) under the owner as a "character" subject, and those stay the owner's.
+CHARACTER_SUBJECT = "about_character"
+
+
 class GraphEntityRef(FrozenContract):
     entity_id: str = Field(min_length=1, max_length=240)
     entity_type: str = Field(min_length=1, max_length=100)
@@ -340,6 +346,10 @@ class RetrievalQuery(FrozenContract):
     deadline_ms: float = Field(default=50.0, ge=0.0, le=10_000.0)
     domains: tuple[MemoryDomain, ...] = ()
     grant_ids: tuple[str, ...] = ()
+    # None: memories about any subject. A tuple: memories about a character only for these characters, the newest
+    # ``per_character_limit`` of each, so absent characters' memories never take a slot (companion 6.6).
+    present_characters: tuple[str, ...] | None = None
+    per_character_limit: int = Field(default=5, ge=0, le=20)
 
 
 class RetrievalScore(FrozenContract):
@@ -368,6 +378,7 @@ class RetrievalCandidate(FrozenContract):
     policy: DerivedPolicyEnvelope | None = None
     source_space: MemorySpaceKey | None = None
     learned_at: datetime | None = None  # when what it says became known: a reply can tell old from current
+    about_character_id: str | None = None  # the character a memory is about (companion 6.6); None: the person
 
 
 class RetrievalSourceRevision(FrozenContract):

@@ -8,10 +8,16 @@ import os
 import threading
 from pathlib import Path
 from app.conversation.live_profile import (
+    SCENE_TALK_FIELDS,
     LiveConversationProfile,
     LiveConversationProfileEnvelope,
     LiveConversationProfileUpdate,
 )
+
+
+def _with_global_talk(profile: LiveConversationProfile, defaults: LiveConversationProfile) -> LiveConversationProfile:
+    """A chat's profile with the account's talk settings, which no chat overrides (companion 6.1, Q14)."""
+    return profile.model_copy(update={name: getattr(defaults, name) for name in SCENE_TALK_FIELDS})
 
 
 def default_live_conversation_profile_path() -> Path:
@@ -47,7 +53,7 @@ class LiveConversationProfileStore:
             payload = self._read()
             defaults = LiveConversationProfile.model_validate(payload.get("defaults") or {})
             raw_override = (payload.get("sessions") or {}).get(session_id)
-            override = LiveConversationProfile.model_validate(raw_override) if raw_override else None
+            override = _with_global_talk(LiveConversationProfile.model_validate(raw_override), defaults) if raw_override else None
             return LiveConversationProfileEnvelope(
                 user_defaults=defaults,
                 session_override=override,
@@ -61,7 +67,10 @@ class LiveConversationProfileStore:
             defaults = LiveConversationProfile.model_validate(payload.get("defaults") or {})
             sessions = payload.setdefault("sessions", {})
             current = LiveConversationProfile.model_validate(sessions.get(session_id) or defaults.model_dump(mode="json"))
-            next_profile = self._merge(current, update)
+            # The talk settings are global (Q14): a chat's own update cannot carry them.
+            local = update.model_copy(update={name: None for name in SCENE_TALK_FIELDS})
+            local_fields = update.model_fields_set - set(SCENE_TALK_FIELDS)
+            next_profile = _with_global_talk(self._merge(current, local, fields_set=local_fields), defaults)
             sessions[session_id] = next_profile.model_dump(mode="json")
             self._write(payload)
             return LiveConversationProfileEnvelope(
@@ -86,10 +95,16 @@ class LiveConversationProfileStore:
             )
 
     @staticmethod
-    def _merge(current: LiveConversationProfile, update: LiveConversationProfileUpdate) -> LiveConversationProfile:
+    def _merge(
+        current: LiveConversationProfile, update: LiveConversationProfileUpdate, *, fields_set: set[str] | None = None,
+    ) -> LiveConversationProfile:
         patch = update.model_dump(exclude_none=True)
         data = current.model_dump(mode="json")
         data.update(patch)
+        # The one setting where null means something: back to the level's number.
+        explicit = update.model_fields_set if fields_set is None else fields_set
+        if "scene_talk_attempts_per_hour" in explicit and update.scene_talk_attempts_per_hour is None:
+            data["scene_talk_attempts_per_hour"] = None
         data["profile_version"] = current.profile_version + 1
         return LiveConversationProfile.model_validate(data)
 

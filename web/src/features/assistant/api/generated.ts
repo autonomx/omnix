@@ -1661,6 +1661,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/live-call/camera": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Live Call Camera
+         * @description Whether this call may offer the camera. Nothing is sent to a model.
+         */
+        get: operations["get_live_call_camera_api_chat_sessions__session_id__live_call_camera_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/live-call/greeting/stream": {
         parameters: {
             query?: never;
@@ -1678,6 +1698,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/live-call/initiative-candidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Live Call Initiative Candidate
+         * @description At most one reason; the call runs it through the initiative authority, which checks it again.
+         *
+         *     A task's report comes first. With ``social`` (the call's policy may speak socially), an open loop from the
+         *     speaker's own memory follows (companion 3.2).
+         */
+        get: operations["get_live_call_initiative_candidate_api_chat_sessions__session_id__live_call_initiative_candidate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/live-call/runtime": {
         parameters: {
             query?: never;
@@ -1689,6 +1732,57 @@ export interface paths {
         get: operations["get_live_call_runtime_api_chat_sessions__session_id__live_call_runtime_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/live-call/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Live Call Tasks */
+        get: operations["get_live_call_tasks_api_chat_sessions__session_id__live_call_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/live-call/tasks/{task_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Live Call Task */
+        post: operations["cancel_live_call_task_api_chat_sessions__session_id__live_call_tasks__task_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/live-call/tasks/{task_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Live Call Proposal */
+        post: operations["decide_live_call_proposal_api_chat_sessions__session_id__live_call_tasks__task_id__decision_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1723,6 +1817,26 @@ export interface paths {
         put?: never;
         /** Commit Live Conversation Proactive Delivery */
         post: operations["commit_live_conversation_proactive_delivery_api_chat_sessions__session_id__live_conversation_proactive_delivery_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/live-conversation/proactive/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Live Conversation Scene Turn
+         * @description A scene turn the call dropped before it played gives its lease back now, not at its TTL (companion 6.3).
+         */
+        post: operations["release_live_conversation_scene_turn_api_chat_sessions__session_id__live_conversation_proactive_release_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1916,6 +2030,57 @@ export interface paths {
         /** Set Conversation Rich Replies */
         post: operations["set_conversation_rich_replies_api_chat_sessions__session_id__rich_replies_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Chat Scene */
+        get: operations["get_chat_scene_api_chat_sessions__session_id__scene_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/scene/guests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Chat Scene Guest */
+        post: operations["add_chat_scene_guest_api_chat_sessions__session_id__scene_guests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/scene/guests/{character_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Chat Scene Guest */
+        delete: operations["remove_chat_scene_guest_api_chat_sessions__session_id__scene_guests__character_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3162,6 +3327,11 @@ export interface components {
             /** Value */
             value: unknown;
         };
+        /** AddSceneGuestRequest */
+        AddSceneGuestRequest: {
+            /** Character Id */
+            character_id: string;
+        };
         /** AgentApproval */
         AgentApproval: {
             /** Approval Id */
@@ -4310,6 +4480,77 @@ export interface components {
             /** Workspace Root */
             workspace_root?: string | null;
         };
+        /** CallProposalDecision */
+        CallProposalDecision: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "executed" | "failed" | "rejected";
+            /** Task Id */
+            task_id: string;
+            /** Text */
+            text: string;
+        };
+        /** CallProposalDecisionRequest */
+        CallProposalDecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "cancel";
+        };
+        /**
+         * CallTask
+         * @description One task a call asked for, as the call shows it.
+         */
+        CallTask: {
+            /** Ability */
+            ability: string;
+            /** Asked At */
+            asked_at: string;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /**
+             * Reported
+             * @default false
+             */
+            reported: boolean;
+            /** Result Message Id */
+            result_message_id: string | null;
+            /** Settled At */
+            settled_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open" | "completed" | "failed" | "cancelled" | "not_started";
+            /** Task Id */
+            task_id: string;
+        };
+        /** CallTaskList */
+        CallTaskList: {
+            /** Tasks */
+            tasks: components["schemas"]["CallTask"][];
+        };
+        /**
+         * CameraAvailability
+         * @description Whether the call may offer Show (companion 4.1): vision configured, and local or remote with consent.
+         */
+        CameraAvailability: {
+            /** Available */
+            available: boolean;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "ready" | "vision_not_configured" | "remote_vision_not_allowed" | "vision_unavailable";
+            /** Remote */
+            remote: boolean;
+        };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
@@ -4536,6 +4777,8 @@ export interface components {
              * @default false
              */
             read_memory: boolean;
+            /** Scene Guests */
+            scene_guests: components["schemas"]["LiveCallSceneGuest"][];
             /** Session Id */
             session_id: string;
             /**
@@ -6577,6 +6820,14 @@ export interface components {
             /** Validations */
             validations?: components["schemas"]["PlanValidationIntent"][];
         };
+        /**
+         * InitiativeCandidate
+         * @description The one initiative the server would have the call take now, or none.
+         */
+        InitiativeCandidate: {
+            /** Reason */
+            reason: string | null;
+        };
         /** InstallLive2DModelRequest */
         InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
@@ -6676,6 +6927,22 @@ export interface components {
              * @default false
              */
             warm_overlap_judge?: boolean;
+        };
+        /**
+         * LiveCallSceneGuest
+         * @description A guest on the call (companion 5.5): the voice and face a turn uses when it names them as its speaker.
+         */
+        LiveCallSceneGuest: {
+            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
+            /** Character Id */
+            character_id: string;
+            /** Display Name */
+            display_name: string;
+            speech_style: components["schemas"]["LiveCallSpeechStyle"];
+            /** Voice Asset Id */
+            voice_asset_id: string | null;
+            /** Voice Speaker Id */
+            voice_speaker_id: string | null;
         };
         /**
          * LiveCallSpeechStyle
@@ -7039,6 +7306,11 @@ export interface components {
              */
             max_idle_prompts: number;
             /**
+             * Max Initiatives Per Hour
+             * @default 4
+             */
+            max_initiatives_per_hour: number;
+            /**
              * Presence Preset
              * @default natural
              * @enum {string}
@@ -7056,6 +7328,21 @@ export interface components {
              */
             pronunciation_save_policy: "ask" | "session_only" | "allow";
             /**
+             * Quiet Hours Enabled
+             * @default false
+             */
+            quiet_hours_enabled: boolean;
+            /**
+             * Quiet Hours End
+             * @default 08:00
+             */
+            quiet_hours_end: string;
+            /**
+             * Quiet Hours Start
+             * @default 22:00
+             */
+            quiet_hours_start: string;
+            /**
              * Response Length
              * @default conversational
              * @enum {string}
@@ -7067,6 +7354,29 @@ export interface components {
              * @enum {string}
              */
             response_onset_style: "adaptive" | "immediate" | "natural" | "reflective";
+            /**
+             * Scene Memory Per Character
+             * @default 5
+             */
+            scene_memory_per_character: number;
+            /** Scene Talk Attempts Per Hour */
+            scene_talk_attempts_per_hour: (6 | 12 | 24 | 48) | null;
+            /**
+             * Scene Talk Enabled
+             * @default false
+             */
+            scene_talk_enabled: boolean;
+            /**
+             * Scene Talk Level
+             * @default sometimes
+             * @enum {string}
+             */
+            scene_talk_level: "rarely" | "sometimes" | "often";
+            /**
+             * Scene Talk Max Lines
+             * @default 4
+             */
+            scene_talk_max_lines: number;
             /**
              * Talkativeness
              * @default 50
@@ -7112,14 +7422,32 @@ export interface components {
             long_pause_behavior?: ("wait" | "reassure" | "ask_to_continue") | null;
             /** Max Idle Prompts */
             max_idle_prompts?: number | null;
+            /** Max Initiatives Per Hour */
+            max_initiatives_per_hour?: number | null;
             /** Presence Preset */
             presence_preset?: ("quiet" | "natural" | "engaged" | "listener") | null;
             /** Pronunciation Save Policy */
             pronunciation_save_policy?: ("ask" | "session_only" | "allow") | null;
+            /** Quiet Hours Enabled */
+            quiet_hours_enabled?: boolean | null;
+            /** Quiet Hours End */
+            quiet_hours_end?: string | null;
+            /** Quiet Hours Start */
+            quiet_hours_start?: string | null;
             /** Response Length */
             response_length?: ("brief" | "conversational" | "detailed") | null;
             /** Response Onset Style */
             response_onset_style?: ("adaptive" | "immediate" | "natural" | "reflective") | null;
+            /** Scene Memory Per Character */
+            scene_memory_per_character?: number | null;
+            /** Scene Talk Attempts Per Hour */
+            scene_talk_attempts_per_hour?: (6 | 12 | 24 | 48) | null;
+            /** Scene Talk Enabled */
+            scene_talk_enabled?: boolean | null;
+            /** Scene Talk Level */
+            scene_talk_level?: ("rarely" | "sometimes" | "often") | null;
+            /** Scene Talk Max Lines */
+            scene_talk_max_lines?: number | null;
             /** Talkativeness */
             talkativeness?: number | null;
             /** Topic Continuity */
@@ -7393,7 +7721,7 @@ export interface components {
              * Cue Id
              * @enum {string}
              */
-            cue_id: "mhm" | "hmm" | "inhale" | "amused_exhale";
+            cue_id: "mhm" | "hmm" | "inhale" | "amused_exhale" | "sigh";
             /** Sample Rate */
             sample_rate: number | null;
             /** Sha256 */
@@ -7644,6 +7972,8 @@ export interface components {
          * @description Approved or otherwise active curated memory owned by Omnix.
          */
         MemoryRecord: {
+            /** About Character Id */
+            about_character_id: string | null;
             /**
              * Category
              * @enum {string}
@@ -7959,6 +8289,11 @@ export interface components {
              * @default
              */
             assistant_text?: string;
+            /**
+             * Proposal Answer Only
+             * @default false
+             */
+            proposal_answer_only?: boolean;
             /** Transcript */
             transcript: string;
         };
@@ -7977,7 +8312,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "model" | "fallback";
+            source: "model" | "fallback" | "proposal_answer";
         };
         /**
          * OwnerAbilitiesPayload
@@ -8292,6 +8627,8 @@ export interface components {
             delivery_status?: "completed" | "interrupted";
             /** Grounding Ids */
             grounding_ids?: string[];
+            /** Heard Text */
+            heard_text?: string | null;
             /** Initiative Reason */
             initiative_reason: string;
             /** Interrupted At Phrase */
@@ -8767,6 +9104,50 @@ export interface components {
         RuntimeDiagnostics: core["schemas"]["RuntimeDiagnostics"];
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: core["schemas"]["RuntimeStatusPayload"];
+        /** SceneMemberView */
+        SceneMemberView: {
+            /** Character Id */
+            character_id: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "host" | "guest";
+            /** Seat */
+            seat: number | null;
+        };
+        /** SceneTurnReleaseRequest */
+        SceneTurnReleaseRequest: {
+            /** Turn Id */
+            turn_id: string;
+        };
+        /** SceneTurnReleaseResponse */
+        SceneTurnReleaseResponse: {
+            /** Released */
+            released: boolean;
+        };
+        /**
+         * SceneView
+         * @description The chat's call members: the host, then the guests by seat. ``available`` says whether guests can join.
+         */
+        SceneView: {
+            /** Available */
+            available: boolean;
+            /**
+             * Max Guests
+             * @default 2
+             */
+            max_guests: number;
+            /** Members */
+            members: components["schemas"]["SceneMemberView"][];
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "ready" | "scene_needs_character_chat" | "scene_needs_postgresql";
+        };
         /** SelectionRequest */
         SelectionRequest: core["schemas"]["SelectionRequest"];
         /** SelectionSize */
@@ -14040,12 +14421,44 @@ export interface operations {
             };
         };
     };
+    get_live_call_camera_api_chat_sessions__session_id__live_call_camera_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraAvailability"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_live_call_greeting_api_chat_sessions__session_id__live_call_greeting_stream_post: {
         parameters: {
             query?: {
                 purpose?: string;
                 initiative_reason?: string;
                 state_summary?: string | null;
+                scene_talk_switched_off?: boolean;
             };
             header?: never;
             path: {
@@ -14063,6 +14476,39 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_live_call_initiative_candidate_api_chat_sessions__session_id__live_call_initiative_candidate_get: {
+        parameters: {
+            query?: {
+                social?: boolean;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeCandidate"];
                 };
             };
             /** @description Validation Error */
@@ -14094,6 +14540,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CharacterLiveCallRuntime"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_live_call_tasks_api_chat_sessions__session_id__live_call_tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallTaskList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_live_call_task_api_chat_sessions__session_id__live_call_tasks__task_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_live_call_proposal_api_chat_sessions__session_id__live_call_tasks__task_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallProposalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallProposalDecision"];
                 };
             };
             /** @description Validation Error */
@@ -14164,6 +14709,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProactiveDeliveryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_live_conversation_scene_turn_api_chat_sessions__session_id__live_conversation_proactive_release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneTurnReleaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneTurnReleaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -14699,6 +15279,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatRichRepliesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_chat_scene_api_chat_sessions__session_id__scene_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_chat_scene_guest_api_chat_sessions__session_id__scene_guests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddSceneGuestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_chat_scene_guest_api_chat_sessions__session_id__scene_guests__character_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                character_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneView"];
                 };
             };
             /** @description Validation Error */

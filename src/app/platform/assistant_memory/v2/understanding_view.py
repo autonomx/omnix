@@ -14,7 +14,7 @@ from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase
 
-from .contracts import MemorySpaceKey, VisibilityScope
+from .contracts import CHARACTER_SUBJECT, MemorySpaceKey, VisibilityScope
 from .understanding import (
     DERIVATION,
     FORGET_KINDS,
@@ -147,6 +147,7 @@ def read_understanding(
               FROM omnix_memory_v2_graph_assertions a
               {_join_policy('assertion', 'a.assertion_id')}
              WHERE a.principal_id = %s AND a.owner_type = %s AND a.owner_id = %s
+               AND a.subject_entity_type <> '{CHARACTER_SUBJECT}'
                AND a.domain = 'trait' AND a.status = 'active' AND a.derivation_version = %s
              ORDER BY a.predicate, a.assertion_id
              LIMIT {_TRAIT_ROWS}
@@ -166,6 +167,7 @@ def read_understanding(
               FROM omnix_memory_v2_graph_assertions a
               {_join_policy('assertion', 'a.assertion_id')}
              WHERE a.principal_id = %s AND a.owner_type = %s AND a.owner_id = %s
+               AND a.subject_entity_type <> '{CHARACTER_SUBJECT}'
                AND a.domain = 'trait' AND a.status = 'superseded' AND a.derivation_version = %s
                AND a.predicate LIKE 'person%%'
              ORDER BY a.valid_until DESC
@@ -187,6 +189,7 @@ def read_understanding(
               FROM omnix_memory_v2_graph_assertions a
               {_join_policy('assertion', 'a.assertion_id')}
              WHERE a.principal_id = %s AND a.owner_type = %s AND a.owner_id = %s
+               AND a.subject_entity_type <> '{CHARACTER_SUBJECT}'
                AND a.domain IN ('relationship', 'open_loop') AND a.status IN ('active', 'superseded')
                AND a.predicate IN ('own_stance', 'promised', 'running_joke') AND a.derivation_version = %s
              ORDER BY a.valid_from DESC
@@ -243,6 +246,7 @@ def read_understanding(
               FROM omnix_memory_v2_graph_assertions a
               {_join_policy('assertion', 'a.assertion_id')}
              WHERE a.principal_id = %s AND a.owner_type = %s AND a.owner_id = %s
+               AND a.subject_entity_type <> '{CHARACTER_SUBJECT}'
                AND a.domain = 'fact' AND a.status = 'active' AND a.derivation_version = %s
              ORDER BY a.valid_from DESC, a.assertion_id
              LIMIT {_LINKS_LOADED}
@@ -260,6 +264,54 @@ def read_understanding(
                     label="\x1f".join((subject, relation, object_)),
                 ))
     return items
+
+
+@dataclass(frozen=True)
+class OpenLoop:
+    """Something still open in the owner's own memory: a promise it made, or an open loop it keeps."""
+
+    assertion_id: str
+    text: str
+    at: datetime | None = None
+
+
+_OPEN_LOOP_ROWS = 16
+
+
+# Every read here is about the person: a memory about another character (companion 6.6, subject CHARACTER_SUBJECT)
+# never becomes part of what the owner understands of the person, nor an open loop raised with them.
+def read_open_loops(
+    database: PostgresDatabase,
+    space: MemorySpaceKey,
+    visible: tuple[VisibilityScope, ...],
+    *,
+    now: datetime,
+    limit: int = _OPEN_LOOP_ROWS,
+) -> list[OpenLoop]:
+    """The space's own active open loops that have not run out, newest first (a quiet live call raises one)."""
+    values = (space.principal_id, space.owner_type, space.owner_id)
+    with database.transaction() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT a.assertion_id, a.object_value, a.valid_from, p.effective_visibility
+              FROM omnix_memory_v2_graph_assertions a
+              {_join_policy('assertion', 'a.assertion_id')}
+             WHERE a.principal_id = %s AND a.owner_type = %s AND a.owner_id = %s
+               AND a.subject_entity_type <> '{CHARACTER_SUBJECT}'
+               AND a.domain = 'open_loop' AND a.status = 'active'
+               AND (a.valid_until IS NULL OR a.valid_until > %s)
+               AND (a.predicate <> 'promised' OR a.derivation_version = %s)
+             ORDER BY a.valid_from DESC NULLS LAST, a.assertion_id
+             LIMIT {int(limit)}
+            """,
+            (*values, *values, now, DERIVATION),
+        ).fetchall()
+    loops: list[OpenLoop] = []
+    for row in rows:
+        text = " ".join(str(dict(row[1] or {}).get("literal") or "").split())
+        if text and _visible(row[3], visible):
+            loops.append(OpenLoop(assertion_id=str(row[0]), text=text, at=row[2]))
+    return loops
 
 
 _WORD = re.compile(r"[^\W_]{3,}", re.UNICODE)

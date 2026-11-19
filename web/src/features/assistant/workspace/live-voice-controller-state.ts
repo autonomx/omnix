@@ -68,6 +68,11 @@ export type LiveVoiceSession = {
   floorState: UserFloorState;
   overlapIntent: OverlapIntent | null;
   interruptionDispatched: boolean;
+  /**
+   * "Only respond to me" (companion 2.4): an interruption the partials confirmed, held with the reply ducked until the
+   * final's voice is known. The caller's voice (or no verdict) dispatches it; another voice drops it.
+   */
+  deferredInterrupt: { intent: OverlapIntent; confidence: number; unduckTimer: ReturnType<typeof setTimeout> } | null;
 };
 
 export type PendingStart = { card: HTMLElement; token: number };
@@ -176,6 +181,7 @@ export function createLiveVoiceSessionShell({ card, chatSessionId, stream, audio
     floorState: reduceUserFloor('idle', { type: 'listen' }),
     overlapIntent: null,
     interruptionDispatched: false,
+    deferredInterrupt: null,
   } satisfies Omit<LiveVoiceSession, 'audioPipeline'>;
 }
 

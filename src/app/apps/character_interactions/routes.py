@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.platform.companion_activity.contracts import (
-    CompanionInitiativeAuthorityStore, InitiativeAcquireRequest,
+    CompanionInitiativeAuthorityStore, InitiativeAcquireRequest, SceneTalkAttemptRequest,
     default_companion_initiative_authority,
 )
 from app.conversation.contracts import ChatSession
@@ -27,10 +27,28 @@ from app.platform.chat.contracts import stream_live_call_greeting_chunks
 from app.platform.chat.contracts import (
     ProactiveDeliveryRequest,
     ProactiveDeliveryResponse,
+    SCENE_SPEAKER_HEADER,
+    SceneTalkMaterial,
+    claim_proposal_report,
     commit_proactive_delivery,
+    direct_scene_reaction,
+    direct_scene_talk,
+    is_open_loop_reason,
+    is_scene_reason,
+    is_scene_reaction_reason,
+    is_scene_turn_id,
+    open_loop_material,
+    reported_task_id,
+    load_scene,
+    scene_reaction_opening,
+    scene_talk_kind,
+    scene_talk_opening,
+    seconds_since_last_message,
     stream_proactive_turn_chunks,
+    task_report_material,
 )
-from app.platform.characters.contracts import CharacterLiveCallRuntime, resolve_live_call_runtime
+from app.runtime.tenant_context import LOCAL_USER_ID, current_tenant
+from app.platform.characters.contracts import CharacterLiveCallRuntime, LiveCallSceneGuest, resolve_live_call_runtime
 from app.platform.characters.contracts import (
     LiveConversationProfileEnvelope, LiveConversationProfileStore,
     LiveConversationProfileUpdate, default_live_conversation_profile_store,
@@ -181,6 +199,14 @@ class UpdateOwnerMemoryRequest(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class SceneTurnReleaseRequest(BaseModel):
+    turn_id: str = Field(min_length=1, max_length=512)
+
+
+class SceneTurnReleaseResponse(BaseModel):
+    released: bool
+
+
 def all_pages(list_page: Callable[..., list[Any]], **filters: Any) -> list[Any]:
     items: list[Any] = []
     while True:
@@ -197,11 +223,139 @@ def _proactive_initiative_policy(reason: str) -> tuple[str, str, str, str, float
     normalized = reason.strip().lower()
     if normalized.startswith("desktop_critical:"):
         return "desktop", "text", "critical", "interrupt", 0.0
+    if reported_task_id(reason=reason.strip()) is not None:
+        # The person asked for this work: its report outranks social initiative and waits only briefly.
+        return "task", "voice", "high", "idle_only", 4.0
     if normalized.startswith("desktop_companion:"):
         return "desktop", "text", "normal", "idle_only", 4.0
     if normalized == "ambient_visual_presence":
         return "ambient", "voice", "normal", "idle_only", 25.0
+    if is_scene_reason(normalized):
+        # A reaction or a line follows a reply at once or not at all, and an opener waits out the level's silence
+        # (companion 6.4): code's checks and the talk cap are the limits, not spacing.
+        return "scene", "voice", "normal", "idle_only", 0.0
     return "social", "voice", "normal", "idle_only", 25.0
+
+_AUTHORITY_LOST_EVENT = "data: " + json.dumps(
+    {"type": "error", "message": "Companion initiative authority expired or was preempted."}, sort_keys=True,
+) + "\n\n"
+
+
+def _finish_unused_lease(authority: Any, lease: Any, session_id: str) -> None:
+    """Give back a lease taken for a turn that will not stream, so the next initiative need not wait out its TTL."""
+    if authority is not None and lease is not None:
+        authority.finish(session_id=session_id, lease_id=lease.lease_id, finished_at=_utcnow(), delivered=False)
+
+
+def _checked_initiative_materials(
+    session: ChatSession,
+    initiative_reason: str,
+    purpose: str,
+    job_store_factory: Callable[[], Any] | None,
+) -> tuple[Any, Any]:
+    """What the server checked for a reason that names a task or an open loop; 409 when not due. Scene turns are
+    checked under their lease (``_SceneAsk``)."""
+    task_report = open_loop = None
+    if reported_task_id(reason=initiative_reason) is not None:
+        # A report names a task; the server checks it is this chat's, settled and not yet reported.
+        if purpose != "proactive_reengagement" or job_store_factory is None:
+            raise HTTPException(status_code=409, detail="task_report_unavailable")
+        task_report = task_report_material(session, job_store_factory(), initiative_reason)
+        if task_report is None:
+            raise HTTPException(status_code=409, detail="task_report_not_due")
+    if is_open_loop_reason(initiative_reason):
+        # An open loop names the speaker's own memory; the server checks it is still open and not yet raised.
+        if purpose != "proactive_reengagement":
+            raise HTTPException(status_code=409, detail="open_loop_unavailable")
+        open_loop = open_loop_material(session, initiative_reason)
+        if open_loop is None:
+            raise HTTPException(status_code=409, detail="open_loop_not_due")
+    return task_report, open_loop
+
+
+def _scene_attempt_kind(reason: str) -> str | None:
+    """The attempt a scene reason asks for: ``reaction`` (5.4), ``line`` or ``start`` (6); else None."""
+    if is_scene_reaction_reason(reason):
+        return "reaction"
+    kind = scene_talk_kind(reason)
+    return None if kind is None else "line" if kind == "line" else "start"
+
+
+def _account_id() -> str:
+    """Whose talk cap an attempt counts against: the signed-in account, or the single local one."""
+    try:
+        return current_tenant().user_id
+    except RuntimeError:
+        return LOCAL_USER_ID
+
+
+class _SceneAsk:
+    """A scene turn the client asked for (companion 5.4, 6): the setting's checks, the opening it would follow,
+    and its attempt's outcome, recorded once on the authority."""
+
+    _DETAIL = {"reaction": "scene_reaction", "line": "scene_line", "start": "scene_talk"}
+
+    def __init__(self, kind: str, profile: Any, *, switched_off: bool) -> None:
+        self.kind = kind
+        self.profile = profile
+        self.switched_off = switched_off
+        self.detail = self._DETAIL[kind]
+
+    def refuse(self, reason: str) -> HTTPException:
+        return HTTPException(status_code=409, detail=f"{self.detail}_{reason}")
+
+    def check_setting(self) -> None:
+        """The setting and the per-call switch: with talk on, a reply is followed by a capped line, never the
+        uncapped reaction; the switch's flag can only narrow (6.1, 6.2)."""
+        talk_on = bool(self.profile.scene_talk_enabled) and not self.switched_off
+        if self.kind == "reaction":
+            if talk_on:
+                raise HTTPException(status_code=409, detail="scene_talk_on")
+            return
+        if not talk_on:
+            raise HTTPException(status_code=409, detail="scene_talk_off")
+        if self.kind == "start" and (self.profile.initiative_mode == "off"
+                                     or int(self.profile.max_initiatives_per_hour) <= 0):
+            raise HTTPException(status_code=409, detail="scene_talk_starts_off")
+
+    def opening(self, session: Any, now: datetime) -> tuple[Any, Any] | None:
+        """The scene and the opening this turn would follow now, or None when it is not due."""
+        if self.kind == "reaction":
+            return scene_reaction_opening(session)
+        if self.kind == "line":
+            return scene_talk_opening(session, "line", max_lines=int(self.profile.scene_talk_max_lines))
+        quiet = seconds_since_last_message(session.messages, now)
+        if quiet is None or quiet < self.profile.scene_talk_silence_seconds():
+            return None
+        return scene_talk_opening(session, "talk", max_lines=int(self.profile.scene_talk_max_lines))
+
+    def attempt(self, anchor_id: str) -> SceneTalkAttemptRequest:
+        return SceneTalkAttemptRequest(user_id=_account_id(), anchor_message_id=anchor_id, kind=self.kind,
+                                       attempts_per_hour=self.profile.scene_talk_attempt_cap())
+
+    def direct(self, session: Any, scene: Any, opening: Any) -> Any:
+        """Who speaks: the model proposes, code checks the name (None: nobody)."""
+        if self.kind == "reaction":
+            return direct_scene_reaction(session, scene, opening)
+        return direct_scene_talk(session, scene, opening, "line" if self.kind == "line" else "talk")
+
+    def material(self, opening: Any) -> SceneTalkMaterial | None:
+        if self.kind == "reaction":
+            return None
+        return SceneTalkMaterial(kind="line" if self.kind == "line" else "talk", opening=opening)
+
+    def record(self, authority: Any, lease: Any, outcome: str, *, streamed_text: str | None = None) -> None:
+        """Set the attempt's outcome once; a start that says nothing backs off further starts (6.2)."""
+        if authority is None or lease is None:
+            return
+        backoff = (2.0 * self.profile.scene_talk_silence_seconds()
+                   if self.kind == "start" and outcome in {"declined", "skipped"} else 0.0)
+        try:
+            authority.record_scene_attempt(attempt_id=lease.lease_id, outcome=outcome, finished_at=_utcnow(),
+                                           streamed_text=streamed_text, start_backoff_seconds=backoff)
+        except Exception:  # noqa: BLE001 - the lease's TTL and the commit's checks still hold
+            logger.warning("scene talk attempt outcome was not recorded", exc_info=True)
+
 
 def _proactive_turn_id(event: dict[str, Any]) -> str | None:
     direct = event.get("turn_id")
@@ -240,6 +394,7 @@ def register_character_integration_routes(
     initiative_authority_factory: Callable[[], CompanionInitiativeAuthorityStore] = default_companion_initiative_authority,
     memory_service_factory: Callable[[], Any] | None = None,
     memory_repository_factory: Callable[[], Any] | None = None,
+    job_store_factory: Callable[[], Any] | None = None,
 ) -> None:
     from app.platform.assistant_memory.contracts import (
         CharacterHermesSyncStatus, export_character_memory_to_hermes,
@@ -566,9 +721,40 @@ def register_character_integration_routes(
     def get_live_call_runtime(session_id: str) -> CharacterLiveCallRuntime:
         session = require_session(session_id)
         try:
-            return resolve_live_call_runtime(session, character_service_factory=service_factory)
+            runtime = resolve_live_call_runtime(session, character_service_factory=service_factory)
         except (CharacterNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _with_scene_guests(session, runtime)
+
+    def _with_scene_guests(session: ChatSession, runtime: CharacterLiveCallRuntime) -> CharacterLiveCallRuntime:
+        """Each guest's voice and face, resolved from that guest's own view of the session (companion 5.5)."""
+        from app.conversation.scene import speaking_as
+
+        try:
+            scene = load_scene(session)
+        except Exception:  # noqa: BLE001 - the call still starts, with its host alone
+            logger.warning("scene unavailable for the live-call runtime of chat %s", session.id, exc_info=True)
+            return runtime
+        if scene is None:
+            return runtime
+        guests: list[LiveCallSceneGuest] = []
+        for guest in scene.guests:
+            try:
+                guest_runtime = resolve_live_call_runtime(
+                    speaking_as(session, scene.with_speaker(guest.character_id)),
+                    character_service_factory=service_factory,
+                )
+            except (CharacterNotFoundError, ValueError):
+                continue
+            guests.append(LiveCallSceneGuest(
+                character_id=guest.character_id,
+                display_name=guest_runtime.display_name,
+                voice_asset_id=guest_runtime.voice_asset_id,
+                voice_speaker_id=guest_runtime.voice_speaker_id,
+                avatar_pack=guest_runtime.avatar_pack,
+                speech_style=guest_runtime.speech_style,
+            ))
+        return runtime.model_copy(update={"scene_guests": guests})
 
     @router.post(
         "/api/chat/sessions/{session_id}/live-call/greeting/stream",
@@ -586,11 +772,27 @@ def register_character_integration_routes(
         purpose: str = Query(default="greeting"),
         initiative_reason: str = Query(default="quiet_follow_up", max_length=120),
         state_summary: str | None = Query(default=None, max_length=500),
+        scene_talk_switched_off: bool = Query(default=False),
     ) -> StreamingResponse:
         store = chat_store_factory()
         session = require_session(session_id)
         authority: CompanionInitiativeAuthorityStore | None = None
         lease = None
+        task_report, open_loop = _checked_initiative_materials(session, initiative_reason, purpose, job_store_factory)
+        scene_kind = _scene_attempt_kind(initiative_reason)
+        scene_ask: _SceneAsk | None = None
+        preliminary = None
+        if scene_kind is not None:
+            # Another call member may react to a reply (5.4), add a line to a thread or open talk (6).
+            scene_ask = _SceneAsk(scene_kind, live_conversation_profile_store_factory().get(session_id).effective,
+                                  switched_off=scene_talk_switched_off)
+            if purpose != "proactive_reengagement":
+                raise scene_ask.refuse("unavailable")
+            scene_ask.check_setting()
+            # A first look, for the anchor the attempt names; the turn is decided again under the lease.
+            preliminary = scene_ask.opening(session, _utcnow())
+            if preliminary is None:
+                raise scene_ask.refuse("not_due")
         if purpose == "proactive_reengagement":
             authority = initiative_authority_factory()
             authority.register_generation(session_id, _INITIATIVE_GENERATION)
@@ -609,11 +811,54 @@ def register_character_integration_routes(
                     requested_at=_utcnow(),
                     ttl_seconds=90.0,
                     minimum_spacing_seconds=spacing,
+                    scene_talk=(None if scene_ask is None or preliminary is None
+                                else scene_ask.attempt(preliminary[1].anchor_id)),
                 )
             )
             if not decision.accepted or decision.lease is None:
                 raise HTTPException(status_code=409, detail=decision.reason)
             lease = decision.lease
+        reaction = None
+        speaker_session = session
+        headers: dict[str, str] | None = None
+        scene_refusal: HTTPException | None = None
+        claimed = True
+        try:
+            # The person's next turn may confirm a proposal only after its question began (live_agent_store).
+            claimed = (task_report is None or not task_report.proposal_message_id
+                       or claim_proposal_report(store, session, task_report))
+            if scene_ask is not None and preliminary is not None:
+                # Under the lease, from the session as it is now (6.3): the opening must still follow the anchor
+                # the attempt names, then the model proposes who speaks and code checks the name.
+                session = require_session(session_id)
+                current = scene_ask.opening(session, _utcnow())
+                if current is None or current[1].anchor_id != preliminary[1].anchor_id:
+                    scene_ask.record(authority, lease, "failed")
+                    scene_refusal = scene_ask.refuse("not_due")
+                else:
+                    reaction = scene_ask.direct(session, *current)
+                    if reaction is None:
+                        scene_ask.record(authority, lease, "declined")
+                        scene_refusal = scene_ask.refuse("declined")
+                    else:
+                        preliminary = current
+        except Exception:
+            if scene_ask is not None:
+                scene_ask.record(authority, lease, "failed")
+            _finish_unused_lease(authority, lease, session_id)
+            raise
+        if not claimed:
+            _finish_unused_lease(authority, lease, session_id)
+            raise HTTPException(status_code=409, detail="task_report_not_due")
+        if scene_refusal is not None:
+            _finish_unused_lease(authority, lease, session_id)
+            raise scene_refusal
+        scene_talk = None
+        if reaction is not None and scene_ask is not None and preliminary is not None:
+            initiative_reason = reaction.reason
+            speaker_session = reaction.view
+            headers = {SCENE_SPEAKER_HEADER: reaction.speaker_id}
+            scene_talk = scene_ask.material(reaction.opening)
 
         def generate():
             bound_lease = None
@@ -624,6 +869,9 @@ def register_character_integration_routes(
                 nonlocal released
                 if released or authority is None or lease is None:
                     return
+                if scene_ask is not None:
+                    # A scene turn that ends here undelivered failed, unless its outcome is already set.
+                    scene_ask.record(authority, lease, "failed")
                 authority.finish(
                     session_id=session_id,
                     lease_id=lease.lease_id,
@@ -635,14 +883,25 @@ def register_character_integration_routes(
                 events = (
                     stream_proactive_turn_chunks(
                         store,
-                        session,
+                        speaker_session,
                         initiative_reason=initiative_reason,
                         state_summary=state_summary,
+                        task_report=task_report,
+                        open_loop=open_loop,
+                        scene_reaction=(reaction.opening if reaction is not None and scene_talk is None else None),
+                        scene_talk=scene_talk,
                     )
                     if purpose == "proactive_reengagement"
                     else stream_live_call_greeting_chunks(store, session)
                 )
                 for event in events:
+                    if scene_ask is not None and event.get("type") == "complete":
+                        # Recorded before the client can see it: the commit saves this text, never the client's.
+                        if _proactive_event_is_skip(event):
+                            scene_ask.record(authority, lease, "skipped")
+                        else:
+                            scene_ask.record(authority, lease, "streamed",
+                                             streamed_text=str(event.get("content") or ""))
                     if authority is not None and lease is not None:
                         turn_id = _proactive_turn_id(event)
                         if turn_id and bound_lease is None:
@@ -653,25 +912,13 @@ def register_character_integration_routes(
                                 bound_at=_utcnow(),
                             )
                             if bound_lease is None:
-                                yield "data: " + json.dumps(
-                                    {
-                                        "type": "error",
-                                        "message": "Companion initiative authority expired or was preempted.",
-                                    },
-                                    sort_keys=True,
-                                ) + "\n\n"
+                                yield _AUTHORITY_LOST_EVENT
                                 return
                         if bound_lease is not None and not authority.authorizes(
                             bound_lease,
                             now=_utcnow(),
                         ):
-                            yield "data: " + json.dumps(
-                                {
-                                    "type": "error",
-                                    "message": "Companion initiative authority expired or was preempted.",
-                                },
-                                sort_keys=True,
-                            ) + "\n\n"
+                            yield _AUTHORITY_LOST_EVENT
                             return
                     yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
                     if authority is not None and _proactive_event_is_skip(event):
@@ -680,13 +927,7 @@ def register_character_integration_routes(
                     if bound_lease is None:
                         release_without_delivery()
                     elif not authority.authorizes(bound_lease, now=_utcnow()):
-                        yield "data: " + json.dumps(
-                            {
-                                "type": "error",
-                                "message": "Companion initiative authority expired or was preempted.",
-                            },
-                            sort_keys=True,
-                        ) + "\n\n"
+                        yield _AUTHORITY_LOST_EVENT
                         return
                     else:
                         handed_off = True
@@ -707,7 +948,7 @@ def register_character_integration_routes(
             finally:
                 if authority is not None and not handed_off and not released:
                     release_without_delivery()
-        return StreamingResponse(generate(), media_type="text/event-stream")
+        return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
 
     @router.post(
         "/api/chat/sessions/{session_id}/live-conversation/proactive/delivery",
@@ -724,8 +965,17 @@ def register_character_integration_routes(
             not request.purpose.startswith("desktop_")
             and _delivery_already_committed(session, request.turn_id)
         )
+        scene_anchor_id: str | None = None
         if not already_committed:
             authority = initiative_authority_factory()
+            if is_scene_turn_id(request.turn_id):
+                # A scene turn saves what the server recorded as streamed under its lease, never the client's
+                # words, and remembers the message it followed for the late check (companion 6.3).
+                attempt = authority.active_scene_attempt(session_id, now=_utcnow(), intent_id=request.turn_id)
+                if attempt is None or attempt.outcome != "streamed" or not attempt.streamed_text:
+                    raise HTTPException(status_code=409, detail="initiative_lease_inactive")
+                request = request.model_copy(update={"content": attempt.streamed_text})
+                scene_anchor_id = attempt.anchor_message_id
             finished = authority.finish_intent(
                 session_id=session_id,
                 intent_id=request.turn_id,
@@ -734,8 +984,30 @@ def register_character_integration_routes(
             )
             if not finished:
                 raise HTTPException(status_code=409, detail="initiative_lease_inactive")
-        result = commit_proactive_delivery(store, session_id, request)
+        result = commit_proactive_delivery(store, session_id, request, scene_anchor_id=scene_anchor_id)
         if result is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         return result
+
+    @router.post(
+        "/api/chat/sessions/{session_id}/live-conversation/proactive/release",
+        response_model=SceneTurnReleaseResponse,
+        tags=["live-chat"],
+    )
+    def release_live_conversation_scene_turn(
+        session_id: str,
+        request: SceneTurnReleaseRequest,
+    ) -> SceneTurnReleaseResponse:
+        """A scene turn the call dropped before it played gives its lease back now, not at its TTL (companion 6.3)."""
+        require_session(session_id)
+        if not is_scene_turn_id(request.turn_id):
+            raise HTTPException(status_code=422, detail="not_a_scene_turn")
+        released = initiative_authority_factory().finish_intent(
+            session_id=session_id,
+            intent_id=request.turn_id,
+            finished_at=_utcnow(),
+            delivered=False,
+        )
+        return SceneTurnReleaseResponse(released=released)
+
 __all__ = ["register_character_integration_routes"]

@@ -18,6 +18,7 @@ export function neutralSystemLiveCallRuntime(sessionId: string, voiceAssetId: st
     write_memory: false,
     shared_memory_access: 'none',
     memory_snapshot_id: null,
+    scene_guests: [],
     preload: {
       profile_loaded: false,
       voice_resolved: Boolean(voiceAssetId),

@@ -122,6 +122,9 @@ class CreateJobRequest(BaseModel):
     input_ref: dict[str, Any] | None = None
     input_payload: dict[str, Any] | None = None
     compat: dict[str, Any] = Field(default_factory=dict)
+    # Set by server code only: the job becomes claimable this many seconds after it is created. A store without
+    # a schedule (the in-memory one) runs it at once.
+    _available_after_seconds: int = PrivateAttr(default=0)
 
 
 class ClaimJobRequest(BaseModel):

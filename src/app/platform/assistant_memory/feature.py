@@ -13,6 +13,7 @@ from app.platform.assistant_memory.jobs import (
     process_memory_suggestion_job,
 )
 from app.platform.assistant_memory.owner_defaults import default_memory_service
+from app.platform.assistant_memory.scene_memory import SCENE_LINES_JOB_TYPE, SceneLinesJobInput
 from app.platform.chat.contracts import CHAT_MEMORY
 from app.events.outbox_relay import OutboxConsumer
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
@@ -52,6 +53,25 @@ def _execute_conversation_reading(context: JobExecutionContext, job: JobRecord) 
     return context.job_store.get_job(job.id) or job
 
 
+def _execute_scene_lines(context: JobExecutionContext, job: JobRecord) -> JobRecord:
+    from app.platform.assistant_memory.scene_memory import default_scene_line_reader, process_scene_lines_job
+
+    chat_store = getattr(context.services, "chat", None)
+    if chat_store is None:
+        raise RuntimeError("assistant memory job requires the chat service")
+    process_scene_lines_job(
+        job, chat_store=chat_store, memory_service=default_memory_service(), job_store=context.job_store,
+        reader=default_scene_line_reader(), already_claimed=job.lease is not None,
+    )
+    return context.job_store.get_job(job.id) or job
+
+
+def _remember_scene_line(connection: Any, event: dict[str, Any]) -> dict[str, Any]:
+    from .turn_reactions import remember_scene_line
+
+    return remember_scene_line(connection, event)
+
+
 def _forget_deleted_chat(connection: Any, event: dict[str, Any]) -> dict[str, Any]:
     from .turn_reactions import forget_deleted_chat
 
@@ -70,6 +90,13 @@ _TURN_SUGGESTIONS = OutboxConsumer(
     aggregate_types=frozenset({"chat_session"}),
     handler=_suggest_memories_after_turn,
     event_type_pattern="chat.turn.completed",
+)
+# Characters on a call remember what the others said (companion 6.6).
+_SCENE_LINES = OutboxConsumer(
+    consumer_name="assistant-memory.scene-lines",
+    aggregate_types=frozenset({"chat_session"}),
+    handler=_remember_scene_line,
+    event_type_pattern="chat.scene_line.delivered",
 )
 # A deleted chat's turns leave the owner's log, with what was read from them.
 _DELETED_CHATS = OutboxConsumer(
@@ -127,8 +154,16 @@ FEATURE = FeatureModule(
             timeout_seconds=300,
             max_attempts=2,
         ),
+        JobHandlerSpec(
+            type=SCENE_LINES_JOB_TYPE,
+            handler=_execute_scene_lines,
+            input_model=SceneLinesJobInput,
+            resource_class=ResourceClass.CPU,
+            timeout_seconds=300,
+            max_attempts=2,
+        ),
     ),
-    outbox_consumers=(_TURN_SUGGESTIONS, _DELETED_CHATS),
+    outbox_consumers=(_TURN_SUGGESTIONS, _SCENE_LINES, _DELETED_CHATS),
     # Chat's memory: prompt memory, memory commands, snapshots and settings (PA-3.2).
     contributions=(ContributionSpec(CHAT_MEMORY, _chat_memory),),
     settings=(assistant_memory_setting_spec(),),

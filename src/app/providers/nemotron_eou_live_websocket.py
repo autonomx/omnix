@@ -45,6 +45,9 @@ MAX_SEGMENT_BYTES = int(SAMPLE_RATE * 2 * MAX_SEGMENT_AUDIO_MS / 1_000)
 MAX_REPLAY_RESULTS = 64
 SESSION_TTL_SECONDS = 600.0
 MAX_SESSION_STATES = 64
+# A segment shorter than this says too little about the voice for a speaker score to mean anything.
+MIN_SCORED_SEGMENT_SECONDS = 0.8
+SPEAKER_PROFILE_MESSAGE = "speaker_profile"
 
 HYBRID_NEGOTIATION = LiveSttNegotiation(
     provider=PROVIDER_NAME,
@@ -403,7 +406,63 @@ async def _settle_stream_for_final(
     return discarded_samples
 
 
-def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = model_manager) -> None:
+def _speaker_profile_vector(data: dict[str, Any]) -> Any:
+    """The profile's unit embedding, or None when the message does not carry a usable one."""
+    import numpy as np
+
+    embedding = data.get("embedding")
+    if not isinstance(embedding, list) or not 64 <= len(embedding) <= 1024:
+        return None
+    try:
+        vector = np.asarray([float(value) for value in embedding], dtype=np.float64)
+    except (TypeError, ValueError):
+        return None
+    norm = float(np.linalg.norm(vector))
+    if not np.all(np.isfinite(vector)) or not math.isfinite(norm) or norm <= 0:
+        return None
+    return vector / norm
+
+
+async def _send_speaker_score(
+    websocket: WebSocket,
+    send_lock: asyncio.Lock,
+    scorer: Any,
+    profile: Any,
+    warmed: asyncio.Task[bool],
+    *,
+    connection_id: str,
+    segment_id: str,
+    sequence: int,
+    pcm16: bytes,
+) -> None:
+    """Score one final segment against the caller's print and send it after the final (companion 2.2).
+
+    Every scored-length segment gets one ``speaker_score``; ``similarity`` is null when there is no answer (the model
+    did not load, or the embedding failed), so a call that waits for the score (2.4) never waits for nothing.
+    """
+    started = time.perf_counter()
+    similarity = await asyncio.to_thread(scorer.similarity, pcm16, profile) if await warmed else None
+    model_ms = round((time.perf_counter() - started) * 1000.0, 3)
+    await _safe_send(websocket, send_lock, {
+        "type": "speaker_score",
+        "segmentId": segment_id,
+        "sequence": sequence,
+        "similarity": similarity,
+        "modelMs": model_ms,
+    })
+    if similarity is None:
+        _metric("stt_speaker_score_failed", connection_id=connection_id, segment_sequence=sequence)
+        return
+    _metric("stt_speaker_score", connection_id=connection_id, segment_sequence=sequence,
+            similarity=similarity, model_ms=model_ms, audio_ms=round(len(pcm16) / 2 / SAMPLE_RATE * 1000.0, 1))
+
+
+def install_nemotron_eou_websocket(
+    app: Any, manager: NemotronEouModelManager = model_manager, speaker_scorer: Any = None,
+) -> None:
+    """``speaker_scorer`` (``services.stt.speaker_scoring.SpeakerScorer``) scores each final segment against the
+    caller's voiceprint when the gateway sends one; without it, a profile is ignored."""
+
     @app.websocket("/ws/transcribe")
     async def websocket_transcribe(websocket: WebSocket) -> None:
         await websocket.accept()
@@ -412,6 +471,11 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
         active_session_id = f"connection-{connection_id}"
         owned_segments: dict[str, HybridSessionState] = {}
         close_code: int | None = None
+        first_message = True
+        speaker_profile: Any = None
+        speaker_held = False
+        speaker_warmed: asyncio.Task[bool] | None = None
+        score_tasks: set[asyncio.Task[None]] = set()
         _metric("stt_connection_opened", connection_id=connection_id)
         await _safe_send(
             websocket,
@@ -426,6 +490,18 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
             while True:
                 data = await receive_client_message(websocket)
                 message_type = str(data.get("type", ""))
+                if message_type == SPEAKER_PROFILE_MESSAGE:
+                    # Only the gateway sends this, and only before anything else; a late one is ignored.
+                    vector = _speaker_profile_vector(data) if first_message and speaker_scorer else None
+                    first_message = False
+                    if vector is not None:
+                        speaker_profile = vector
+                        speaker_scorer.hold()
+                        speaker_held = True
+                        speaker_warmed = asyncio.create_task(asyncio.to_thread(speaker_scorer.warm))
+                    _metric("stt_speaker_profile", connection_id=connection_id, accepted=vector is not None)
+                    continue
+                first_message = False
                 if message_type == "hello":
                     active_session_id = str(_field(data, "sessionId", "session_id", active_session_id))[:120]
                     state = _session_state(active_session_id)
@@ -438,6 +514,8 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             "sessionId": state.session_id,
                             "provider": PROVIDER_NAME,
                             "results": [state.results[key] for key in sorted(state.results)],
+                            # Each final of 0.8 s or more is followed by a speaker_score (companion 2.4).
+                            "speakerScores": speaker_profile is not None,
                         },
                     )
                     continue
@@ -700,6 +778,18 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         }
                         state.remember_result(result)
                         await _safe_send(websocket, send_lock, result)
+                        if (
+                            speaker_profile is not None
+                            and speaker_warmed is not None
+                            and len(segment.primary_audio) >= int(MIN_SCORED_SEGMENT_SECONDS * SAMPLE_RATE) * 2
+                        ):
+                            task = asyncio.create_task(_send_speaker_score(
+                                websocket, send_lock, speaker_scorer, speaker_profile, speaker_warmed,
+                                connection_id=connection_id, segment_id=segment.segment_id,
+                                sequence=segment.sequence, pcm16=bytes(segment.primary_audio),
+                            ))
+                            score_tasks.add(task)
+                            task.add_done_callback(score_tasks.discard)
                         _metric(
                             "stt_hybrid_final_completed",
                             session_id=state.session_id,
@@ -760,6 +850,12 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                 "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
             })
         finally:
+            for task in tuple(score_tasks):
+                task.cancel()
+            if speaker_warmed is not None:
+                speaker_warmed.cancel()
+            if speaker_held:
+                speaker_scorer.release()
             released = 0
             for segment_id, state in tuple(owned_segments.items()):
                 segment = state.segments.pop(segment_id, None)

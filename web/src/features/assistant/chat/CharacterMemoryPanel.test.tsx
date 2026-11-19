@@ -26,6 +26,9 @@ function serve(view: { records: unknown[]; suggestions: unknown[] }) {
     const method = request?.method ?? init?.method ?? 'GET';
     const text = request ? await request.clone().text() : String(init?.body ?? '');
     calls.push({ method, path: decodeURIComponent(url.pathname), body: text ? JSON.parse(text) : null, query: url.search });
+    if (method === 'GET' && url.pathname === '/api/characters') {
+      return Response.json({ characters: [{ id: 'bea', display_name: 'Bea' }] });
+    }
     if (method === 'GET') return Response.json({ owner_id: 'jinx', ...view });
     if (method === 'DELETE' || url.pathname.endsWith('/reject')) return new Response(null, { status: 204 });
     return Response.json(record);
@@ -155,6 +158,24 @@ describe('a memory owner\'s memory tab', () => {
     serve({ records: [], suggestions: [] });
     renderPanel('maya', 'Maya');
     expect(await screen.findByText(/Nothing yet/)).toBeTruthy();
+  });
+
+  it('groups what it learned about another character under that character', async () => {
+    serve({
+      records: [
+        record,
+        { ...record, id: 'memory:2', content: 'Is afraid of storms', about_character_id: 'bea' },
+        { ...record, id: 'memory:3', content: 'Hums when nervous', about_character_id: 'gone' },
+      ],
+      suggestions: [],
+    });
+    renderPanel();
+    const bea = await screen.findByRole('group', { name: 'About Bea' });
+    expect(within(bea).getByText('Is afraid of storms')).toBeTruthy();
+    expect(within(bea).queryByText('Lives in Toronto')).toBeNull();
+    // A character the list does not know is still shown, by its id.
+    expect(within(screen.getByRole('group', { name: 'About gone' })).getByText('Hums when nervous')).toBeTruthy();
+    expect(screen.getByText('3 memories')).toBeTruthy();
   });
 
   it('corrects a memory, sending the revision it was read at', async () => {

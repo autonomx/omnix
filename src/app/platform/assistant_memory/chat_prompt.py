@@ -10,6 +10,7 @@ from app.platform.chat.contracts import prompt_budget_from_env, resolve_shared_m
 from app.conversation.contracts import ChatSession, PromptMemoryItem
 
 from .contracts import (
+    scene_memory_per_character,
     MemoryService,
     default_memory_service,
     estimate_memory_tokens,
@@ -183,6 +184,21 @@ def _understanding_items(
     ]
 
 
+def _present_characters(session: ChatSession) -> tuple[str, ...]:
+    """The other characters on this call, whose memories the speaker may bring up (companion 6.6).
+
+    Read from the scene at render time: outside a scene nobody else is present, so no memory about a character
+    reaches the prompt.
+    """
+    from app.conversation.scene import scene_of
+
+    scene = scene_of(session)
+    if scene is None:
+        return ()
+    owner = session.character_id
+    return tuple(member.character_id for member in scene.members if member.character_id != owner)
+
+
 def _resolve_v2_prompt_memory(
     session: ChatSession,
     *,
@@ -205,12 +221,17 @@ def _resolve_v2_prompt_memory(
     space, visible_scopes = _v2_space_and_scopes(session)
     budget = prompt_budget_from_env().memory_tokens
     character_session = session.interaction_mode == "character"
+    present = _present_characters(session)
+    per_character = scene_memory_per_character(session.id) if present else 0
 
     selected: list[PromptMemoryItem] = []
     used_tokens = 0
     if read_allowed:
         context = resolve_session_memory_scope(session)
-        selection = select_memory_records(service.list_active(context), context, token_budget=budget)
+        selection = select_memory_records(
+            service.list_active(context), context, token_budget=budget,
+            present_characters=present, per_character_limit=per_character,
+        )
         for record in selection.records:
             if not record.pinned:
                 continue
@@ -236,6 +257,8 @@ def _resolve_v2_prompt_memory(
         as_of=datetime.now(timezone.utc),
         top_k=12,
         token_budget=max(0, budget - used_tokens),
+        present_characters=present,
+        per_character_limit=per_character,
         deadline_ms=50.0,
         grant_ids=(
             _active_grant_ids(runtime, space)
@@ -468,6 +491,35 @@ def resolve_prompt_memory(
     return selected, diagnostics
 
 
+def read_session_open_loops(
+    session: ChatSession,
+    *,
+    now: datetime,
+    memory_v2_runtime_factory: Callable[[], Any] | None = None,
+) -> list[Any]:
+    """The session owner's own active open loops (companion 3.2), only where its prompt may read memory.
+
+    No shared memory and no grants: a live call raises only what its speaker itself holds. Without PostgreSQL, or
+    when memory v2 is not authoritative, there are none.
+    """
+    character_session = session.interaction_mode == "character"
+    read_allowed = session.read_memory if character_session else session.memory_enabled
+    if not chat_memory_enabled() or not read_allowed:
+        return []
+    runtime = _memory_v2_runtime(memory_v2_runtime_factory)
+    if runtime is None:
+        return []
+    from .v2.understanding_view import read_open_loops
+
+    try:
+        runtime.assert_v2_authoritative()
+        space, visible_scopes = _v2_space_and_scopes(session)
+        return list(read_open_loops(runtime.database, space, visible_scopes, now=now))
+    except Exception:  # noqa: BLE001 - initiative goes ahead without one
+        logger.warning("memory_open_loops_unavailable", exc_info=True)
+        return []
+
+
 class AssistantChatMemory:
     """Assistant memory's implementation of chat's ``CHAT_MEMORY`` port (PA-3.2)."""
 
@@ -494,3 +546,6 @@ class AssistantChatMemory:
         return default_memory_service().create_session_snapshot(
             resolve_session_memory_scope(session), token_budget=token_budget,
         )
+
+    def open_loops(self, session: Any, *, now: datetime) -> list[Any]:
+        return read_session_open_loops(session, now=now)

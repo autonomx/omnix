@@ -7,6 +7,7 @@ import { controller, type LiveVoiceSession } from './live-voice-controller-state
 import { handleAcceptedFinal } from './live-voice-final-routing';
 import { judgeOverlap, type OverlapVerdict } from './live-voice-overlap-judge';
 import { liveSessionCoordinator } from './live-session-coordinator';
+import { markProposalQuestionAudible, openProposalQuestion, proposalQuestionStore } from './live-call-proposal-question';
 
 vi.mock('./live-voice-overlap-judge', () => ({ judgeOverlap: vi.fn() }));
 vi.mock('./live-voice-session-lifecycle', () => ({ resetTurnState: vi.fn(), stopLiveVoice: vi.fn() }));
@@ -63,6 +64,7 @@ afterEach(() => {
   window.removeEventListener(ASSISTANT_AUDIO_DUCK_EVENT, recordGain);
   controller.activeSession = null;
   liveConversationStore.reset();
+  proposalQuestionStore.resetForTests();
 });
 
 describe('a short remark over the assistant', () => {
@@ -137,6 +139,50 @@ describe('a short remark over the assistant', () => {
   });
 });
 
+describe('a remark over the question about a proposed action', () => {
+  function askAboutProposal(): void {
+    openProposalQuestion('chat:one', 'call-task:m1:0', 'task-report:call-task:m1:0');
+    markProposalQuestionAudible('task-report:call-task:m1:0');
+  }
+
+  it('becomes a turn when the server reads it as the answer, though it sounds like a stop', async () => {
+    startSession('hard_stop');
+    assistantSpeaks(true);
+    askAboutProposal();
+    resolved({ decision: 'stop', source: 'proposal_answer', reason: 'proposal_answer' });
+
+    const result = await handleAcceptedFinal(card, final('Cancel.'));
+
+    expect(judge).toHaveBeenCalledWith('chat:one', 'Cancel.', expect.any(String), undefined, { proposalAnswerOnly: true });
+    expect(interrupts).toBe(1);  // the stop itself; the reply is not stopped twice
+    expect(routed).toHaveBeenCalledOnce();
+    expect(result.outcome).toBe('conversation_submitted');
+  });
+
+  it('is dropped as before when it does not answer', async () => {
+    startSession('hard_stop');
+    assistantSpeaks(true);
+    askAboutProposal();
+    resolved({ decision: 'continue', source: 'fallback', reason: 'not_proposal_answer' });
+
+    const result = await handleAcceptedFinal(card, final('Wait.'));
+
+    expect(judge).toHaveBeenCalledOnce();
+    expect(result.outcome).toBe('ignored');
+    expect(routed).not.toHaveBeenCalled();
+  });
+
+  it('is not checked when no question is open', async () => {
+    startSession('hard_stop');
+    assistantSpeaks(true);
+
+    const result = await handleAcceptedFinal(card, final('Cancel.'));
+
+    expect(judge).not.toHaveBeenCalled();
+    expect(result.outcome).toBe('ignored');
+  });
+});
+
 describe('what needs no judging', () => {
   it('does not ask about a remark while the assistant is silent', async () => {
     startSession(null);
@@ -167,5 +213,22 @@ describe('what needs no judging', () => {
 
     expect(judge).not.toHaveBeenCalled();
     expect(result.outcome).toBe('ignored');
+  });
+});
+
+describe('a short answer judged over the question', () => {
+  // The final classifier calls "Yeah." uncertain, so the overlap judge sees it; the server answers before the model.
+  it('becomes a turn when the server reads it as the answer', async () => {
+    startSession('uncertain');
+    assistantSpeaks(true);
+    openProposalQuestion('chat:one', 'call-task:m1:0', 'task-report:call-task:m1:0');
+    markProposalQuestionAudible('task-report:call-task:m1:0');
+    resolved({ decision: 'stop', source: 'proposal_answer', reason: 'proposal_answer' });
+
+    const result = await handleAcceptedFinal(card, final('Yeah.'));
+
+    expect(judge).toHaveBeenCalledOnce();
+    expect(interrupts).toBe(1);
+    expect(result.outcome).toBe('conversation_submitted');
   });
 });

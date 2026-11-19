@@ -149,3 +149,20 @@ def test_a_job_with_no_model_says_so(tmp_path, monkeypatch):
     result = process_memory_suggestion_job(job, chat_store=chat_store, memory_service=memory_service, job_store=job_store)
 
     assert "structured_provider_unavailable" in result.skipped_reasons
+
+
+def test_a_turn_the_microphone_heard_from_a_character_is_not_remembered(tmp_path, monkeypatch):
+    job_store, memory_service, chat_store, session = setup_runtime(tmp_path, monkeypatch)
+    request = SendChatMessageRequest(content="I prefer narrow auditable pull requests")
+    request._suspected_echo = True  # set by the echo check at admission (companion 6.5)
+    appended = chat_store.begin_user_message(session.id, request)
+    assert appended is not None
+    _, message = appended
+    assert message.metadata["suspected_echo"] is True
+    job = enqueue_memory_suggestion_job(session.id, message.id, job_store=job_store)
+    assert job is not None
+
+    result = process_memory_suggestion_job(job, chat_store=chat_store, memory_service=memory_service, job_store=job_store)
+
+    assert result.skipped_reasons == ["suspected_echo"] and result.candidate_ids == []
+    assert memory_service.repository.list_candidates(status="pending") == []

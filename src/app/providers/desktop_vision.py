@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.config.env import env_str, environment
 
 import os
+from urllib.parse import urlparse
 from typing import Any, Callable, Literal
 
 import httpx
@@ -535,6 +536,13 @@ class CodexDesktopVisionClient:
         if not content:
             raise RuntimeError("vision provider returned an empty observation")
         return content
+
+
+def is_remote_vision_endpoint(value: str) -> bool:
+    """Whether a vision endpoint is off this machine (a picture sent there needs the person's consent)."""
+    parsed = urlparse(value)
+    hostname = (parsed.hostname or "").casefold()
+    return hostname not in {"", "localhost", "127.0.0.1", "::1"} and not hostname.startswith("127.")
 
 
 def default_desktop_vision_client() -> DesktopVisionClient | CodexDesktopVisionClient:

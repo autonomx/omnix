@@ -40,7 +40,8 @@ class HelperModel:
 
     ``load`` builds the model (raising ``HelperUnavailable`` when its weights are
     missing); ``vram_gb`` is checked against free VRAM first, unless the helper
-    runs on the CPU (``vram_gb`` 0).
+    runs on the CPU (``vram_gb`` 0). While held (``hold``), it stays loaded however long it goes without work:
+    a live call holds the speaker model so each segment's score is ready without a load.
     """
 
     unavailable: type[HelperUnavailable] = HelperUnavailable
@@ -51,7 +52,10 @@ class HelperModel:
         self.load = load
         self.model: Any = None
         self.last_used = 0.0
+        self.holds = 0
         self._lock = threading.Lock()
+        # Its own lock: ``get`` keeps ``_lock`` through a load, and a hold is taken on an event loop.
+        self._hold_lock = threading.Lock()
 
     def get(self) -> Any:
         with self._lock:
@@ -66,9 +70,18 @@ class HelperModel:
             self.model = self.load()
             return self.model
 
+    def hold(self) -> None:
+        with self._hold_lock:
+            self.holds += 1
+
+    def release(self) -> None:
+        with self._hold_lock:
+            self.holds = max(0, self.holds - 1)
+            self.last_used = time.monotonic()
+
     def unload_if_idle(self, idle_seconds: float) -> bool:
         with self._lock:
-            if self.model is None or time.monotonic() - self.last_used < idle_seconds:
+            if self.model is None or self.holds or time.monotonic() - self.last_used < idle_seconds:
                 return False
             self.model = None
         try:

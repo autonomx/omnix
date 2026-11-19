@@ -4,10 +4,11 @@ import logging
 import re
 import time
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from .contracts import (
+    CHARACTER_SUBJECT,
     DerivedPolicyEnvelope,
     Episode,
     GraphAssertion,
@@ -95,6 +96,26 @@ def _recency_score(timestamp: datetime | None, as_of: datetime) -> float:
     age_seconds = max(0.0, (as_of - timestamp).total_seconds())
     age_days = age_seconds / 86_400.0
     return 1.0 / (1.0 + age_days / 30.0)
+
+
+def _newest_per_character(
+    candidates: list[RetrievalCandidate], query: RetrievalQuery,
+) -> list[RetrievalCandidate]:
+    """With the presence filter on, the newest ``per_character_limit`` memories about each character; the rest
+    never reach the ranking (companion 6.6)."""
+    if query.present_characters is None:
+        return candidates
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    counts: dict[str, int] = {}
+    kept: list[RetrievalCandidate] = []
+    for candidate in sorted(candidates, key=lambda item: (-(item.learned_at or floor).timestamp(), item.ref_id)):
+        about = candidate.about_character_id
+        if about is not None:
+            if counts.get(about, 0) >= query.per_character_limit:
+                continue
+            counts[about] = counts.get(about, 0) + 1
+        kept.append(candidate)
+    return kept
 
 
 def _mean(values: list[float], default: float = 0.0) -> float:
@@ -192,6 +213,9 @@ class UnifiedMemoryV2Retriever:
     ) -> RetrievalCandidate | None:
         if item.status != "active" or not self._domain_allowed(item.domain, query):
             return None
+        about = item.subject.entity_id if item.subject.entity_type == CHARACTER_SUBJECT else None
+        if about is not None and query.present_characters is not None and about not in query.present_characters:
+            return None
         if item.evidence_assertion_ids and policy is None:
             # Recursive assertion provenance cannot be verified safely after governance
             # invalidation if its derived policy envelope has been removed. Fail closed.
@@ -238,6 +262,7 @@ class UnifiedMemoryV2Retriever:
             evidence_observation_ids=evidence_ids,
             policy=policy,
             learned_at=item.valid_from,
+            about_character_id=about,
         )
 
     @staticmethod
@@ -278,6 +303,7 @@ class UnifiedMemoryV2Retriever:
             evidence_observation_ids=hit.evidence_observation_ids,
             policy=hit.policy,
             learned_at=hit.valid_from,
+            about_character_id=hit.about_character_id,
         )
 
     def _embedding_candidates(self, query: RetrievalQuery) -> list[RetrievalCandidate]:
@@ -307,6 +333,7 @@ class UnifiedMemoryV2Retriever:
             limit=len(kept),
             as_of=query.as_of,
             ref_ids=tuple(kept),
+            present_characters=query.present_characters,
         )
         return [self._indexed_assertion_candidate(hit, query, cosine=kept[hit.ref_id]) for hit in hits]
 
@@ -472,6 +499,7 @@ class UnifiedMemoryV2Retriever:
                     domains=query.domains,
                     limit=max(query.top_k * 8, 32),
                     as_of=query.as_of,
+                    present_characters=query.present_characters,
                 )
                 candidates.extend(
                     self._indexed_assertion_candidate(hit, query) for hit in hits
@@ -588,7 +616,7 @@ class UnifiedMemoryV2Retriever:
             if current is None or candidate.scores.composite > current.scores.composite:
                 best[key] = candidate
         ranked = sorted(
-            best.values(),
+            _newest_per_character(list(best.values()), query),
             key=lambda item: (-item.scores.composite, item.item_type, item.ref_id),
         )
         selected: list[RetrievalCandidate] = []

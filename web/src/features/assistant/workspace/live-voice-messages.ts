@@ -53,6 +53,7 @@ export const streamingSttMessageSchema: z.ZodType<StreamingSttMessage> = z.discr
     sessionId: z.string(),
     provider: optional(z.string()),
     results: optional(z.array(segmentedResultAvailable)),
+    speakerScores: optional(z.boolean()),
   }),
   z.looseObject({ type: z.literal('text'), text: z.string(), segmentId: optional(z.string()), sequence: optional(z.number()) }),
   z.looseObject({ type: z.literal('partial'), text: z.string(), segmentId: z.string(), sequence: z.number() }),
@@ -91,6 +92,13 @@ export const streamingSttMessageSchema: z.ZodType<StreamingSttMessage> = z.discr
     snapshotEndSample: z.number(),
     text: z.string(),
     providerMetrics: optional(metrics),
+  }),
+  z.looseObject({
+    type: z.literal('speaker_score'),
+    segmentId: z.string(),
+    sequence: z.number(),
+    similarity: z.number().min(-1).max(1).nullable(),
+    modelMs: optional(z.number()),
   }),
   z.looseObject({
     type: z.enum(['flush_started', 'flush_completed', 'flush_cancelled']),

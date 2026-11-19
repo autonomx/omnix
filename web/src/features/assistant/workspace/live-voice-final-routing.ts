@@ -5,9 +5,12 @@ import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
 import { controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, renderTranscript, setPanelStatus, type LiveVoiceSession } from './live-voice-controller-state';
-import { assessFinalOverlap, dispatchAssistantVoiceInterrupt, interruptOnFinalOverlap } from './live-voice-preview';
+import { assessFinalOverlap, dispatchAssistantVoiceInterrupt, interruptOnFinalOverlap, settleDeferredInterrupt } from './live-voice-preview';
+import { assessCallerVoice, type CallerVoiceAssessment, holdFinalForCaller, PROVISIONAL_CALLER_THRESHOLD } from './live-voice-speaker-gate';
 import { replayFinalizationBuffer } from './live-voice-finalization';
 import { judgeOverlap } from './live-voice-overlap-judge';
+import { proposalQuestionAwaitsVoice } from './live-call-proposal-question';
+import { interruptPendingOutputForCaller } from './live-voice-pending-output-interrupt';
 import { resetTurnState } from './live-voice-session-lifecycle';
 import { ASSISTANT_AUDIO_DUCK_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT } from '../../../events/bus';
 
@@ -20,6 +23,16 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
     return failedRoutingResult(final, 'live_capture_session_inactive');
   }
   const receivedAt = performance.now();
+  // The final has come, so the wait for it is over, even while its voice is still being told.
+  if (session.finalResponseTimer) clearTimeout(session.finalResponseTimer);
+  session.finalResponseTimer = null;
+  const speaker = await assessCallerVoice(final);
+  if (controller.activeSession !== session) return failedRoutingResult(final, 'live_capture_session_inactive');
+  if (speaker.basis !== 'off') recordSpeakerAssessment(session, final, speaker);
+  if (speaker.verdict === 'other') return holdOtherVoiceFinal(session, card, final);
+  // The caller's voice, or no verdict: an interruption held for the verdict goes ahead.
+  settleDeferredInterrupt(session, true, liveVoiceAssistantIsSpeaking());
+  if (speaker.basis !== 'off') interruptPendingOutputForCaller();
   const partialOverlapIntent = session.overlapIntent;
   const assistantSpeaking = liveVoiceAssistantIsSpeaking();
   const finalOverlapAssessment = assessFinalOverlap(partialOverlapIntent, final.text, currentAssistantSpeechText(), assistantSpeaking);
@@ -28,6 +41,9 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
   const interruptionDispatched = session.interruptionDispatched;
   const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
   const needsJudgement = !suppressionReason && overlapIntent === 'uncertain' && assistantSpeaking;
+  // After a proposal's question a "cancel" or "no" is its answer, not only a stop: the server says which.
+  const mayAnswerProposal = (suppressionReason === 'backchannel' || suppressionReason === 'hard_stop')
+    && proposalQuestionAwaitsVoice(final.chatSessionId);
   const continuation = session.finalizationBuffer.drain();
   emitOmnixEvent(LIVE_STT_SPECULATION_FINAL_EVENT, {
     chatSessionId: final.chatSessionId,
@@ -67,7 +83,9 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
   resetTurnState(session);
   try {
     const judgedListening = needsJudgement && await overlapIsOnlyListening(session, card, final);
-    if (suppressionReason || judgedListening) {
+    const answersProposal = mayAnswerProposal
+      && await overlapAnswersProposal(session, card, final, interruptionDispatched);
+    if ((suppressionReason && !answersProposal) || judgedListening) {
       const result = ignoredRoutingResult(final);
       session.reporter.record('coordination_completed', {
         segment_id: final.segmentId,
@@ -146,6 +164,74 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
   }
 }
 
+function recordSpeakerAssessment(session: LiveVoiceSession, final: AcceptedVoiceFinal, speaker: CallerVoiceAssessment): void {
+  session.reporter.record('speaker_assessed', {
+    segment_id: final.segmentId,
+    source_sequence: final.sourceSequence,
+    verdict: speaker.verdict,
+    basis: speaker.basis,
+    similarity: speaker.similarity,
+    threshold: PROVISIONAL_CALLER_THRESHOLD,
+    waited_ms: speaker.waitedMs,
+  }, 'live_voice_controller');
+}
+
+/**
+ * "Only respond to me": a final in another voice is not a turn. Its words are shown greyed with "Send anyway", its
+ * speculation is dropped (no final event, so the settled event cancels it), and an interruption it would have made is
+ * dropped so the reply plays on.
+ */
+function holdOtherVoiceFinal(session: LiveVoiceSession, card: HTMLElement, final: AcceptedVoiceFinal): LiveFinalRoutingResult {
+  settleDeferredInterrupt(session, false, false);
+  const continuation = session.finalizationBuffer.drain();
+  resetTurnState(session);
+  const result = ignoredRoutingResult(final);
+  session.reporter.record('coordination_completed', {
+    segment_id: final.segmentId,
+    result_id: final.resultId,
+    source_sequence: final.sourceSequence,
+    outcome: result.outcome,
+    suppression_reason: 'other_voice',
+  }, 'live_voice_controller');
+  holdFinalForCaller(final.text, async () => {
+    if (controller.activeSession !== session) return;
+    session.reporter.record('held_final_sent_anyway', {
+      segment_id: final.segmentId,
+      source_sequence: final.sourceSequence,
+    }, 'live_voice_controller');
+    try {
+      const sent = await liveSessionCoordinator.routeAcceptedFinal(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: sent.outcome,
+        error_code: sent.errorCode,
+        sent_anyway: true,
+      }, 'live_voice_controller');
+      if (sent.outcome === 'failed') setPanelStatus(card, 'error');
+    } catch (error) {
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        source_sequence: final.sourceSequence,
+        outcome: 'failed',
+        error_code: 'live_coordination_failed',
+        error: error instanceof Error ? error.message : String(error),
+        sent_anyway: true,
+      }, 'live_voice_controller');
+      setPanelStatus(card, 'error');
+    }
+  });
+  emitOmnixEvent(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, {
+    chatSessionId: final.chatSessionId,
+    segmentId: final.segmentId,
+    sourceSequence: final.sourceSequence,
+    text: final.text,
+  });
+  replayFinalizationBuffer(session, continuation);
+  return result;
+}
+
 /**
  * True when the reply should play on and the remark goes no further. A reply that ended while the model was deciding
  * is not cut off by anything, so the remark goes on as an ordinary turn, whatever the verdict: it may be an answer.
@@ -184,6 +270,27 @@ async function overlapIsOnlyListening(
   } finally {
     emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { ducked: false, gain: 1, reason: 'overlap-judged', timestamp: performance.now() });
   }
+}
+
+/** Whether a remark that would be dropped answers the proposal's question; if so the reply gives way to it. */
+async function overlapAnswersProposal(
+  session: LiveVoiceSession,
+  card: HTMLElement,
+  final: AcceptedVoiceFinal,
+  interruptionDispatched: boolean,
+): Promise<boolean> {
+  const verdict = await judgeOverlap(final.chatSessionId, final.text, currentAssistantSpeechText(), undefined,
+    { proposalAnswerOnly: true });
+  if (controller.activeSession !== session || verdict.source !== 'proposal_answer') return false;
+  session.reporter.record('overlap_judged', {
+    decision: verdict.decision,
+    decided_by: verdict.source,
+    reason: verdict.reason,
+    transcript_chars: final.text.trim().length,
+    still_speaking: liveVoiceAssistantIsSpeaking(),
+  }, 'live_voice_controller');
+  if (!interruptionDispatched && liveVoiceAssistantIsSpeaking()) dispatchAssistantVoiceInterrupt(card, 'interrupt', 1);
+  return true;
 }
 
 export function ignoredRoutingResult(final: AcceptedVoiceFinal): LiveFinalRoutingResult {

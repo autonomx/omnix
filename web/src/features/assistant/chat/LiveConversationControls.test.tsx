@@ -19,6 +19,15 @@ const profile: LiveConversationProfile = {
   emotional_attunement: 'subtle',
   topic_continuity: 'natural',
   max_idle_prompts: 1,
+  quiet_hours_enabled: false,
+  quiet_hours_start: '22:00',
+  quiet_hours_end: '08:00',
+  max_initiatives_per_hour: 4,
+  scene_talk_enabled: false,
+  scene_talk_level: 'sometimes',
+  scene_talk_attempts_per_hour: null,
+  scene_talk_max_lines: 4,
+  scene_memory_per_character: 5,
   duplex_mode: 'automatic',
   pronunciation_save_policy: 'ask',
   profile_version: 1,
@@ -85,7 +94,36 @@ describe('LiveConversationControls', () => {
       conversationPace: 'balanced',
       interruptionPreference: 'balanced',
       backchannelMode: 'off',
+      onlyRespondToMe: false,
     });
+  });
+
+  it('sets quiet hours and the hourly cap on unprompted remarks', async () => {
+    const requests = stubProfileServer(null);
+
+    render(<LiveConversationControls sessionId="chat:one" />);
+    await screen.findByLabelText('Presence');
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced controls' }));
+    expect(screen.getByLabelText('Unprompted remarks per hour')).toHaveValue(4);
+    expect(screen.getByLabelText('Quiet hours')).not.toBeChecked();
+    // The times wait until quiet hours are on.
+    expect(screen.getByLabelText('Quiet hours start')).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText('Quiet hours'));
+    await waitFor(() => expect(screen.getByLabelText('Quiet hours')).toBeChecked());
+    fireEvent.change(screen.getByLabelText('Quiet hours start'), { target: { value: '23:15' } });
+    await waitFor(() => expect(screen.getByLabelText('Quiet hours start')).toHaveValue('23:15'));
+    fireEvent.change(screen.getByLabelText('Unprompted remarks per hour'), { target: { value: '2' } });
+    await waitFor(() => expect(screen.getByLabelText('Unprompted remarks per hour')).toHaveValue(2));
+
+    const patches = requests
+      .filter((request) => request.init?.method === 'PATCH')
+      .map((request) => JSON.parse(String(request.init?.body)));
+    expect(patches).toEqual([
+      { quiet_hours_enabled: true },
+      { quiet_hours_start: '23:15' },
+      { max_initiatives_per_hour: 2 },
+    ]);
   });
 
   it('applies the full-duplex profile as one patch, and a chat with its own override follows it', async () => {

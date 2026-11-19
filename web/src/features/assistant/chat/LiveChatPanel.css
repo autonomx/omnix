@@ -193,6 +193,14 @@
     color: var(--omnix-text-muted, var(--fg-indigo-780));
   }
 
+  .live-chat-voiceprint-passage {
+    border-inline-start: 3px solid var(--omnix-accent, currentColor);
+    font-size: 1.05rem;
+    line-height: 1.5;
+    margin: 0.5rem 0 0;
+    padding-inline-start: 0.85rem;
+  }
+
   .live-chat-metrics {
     display: grid;
     gap: 0.75rem;

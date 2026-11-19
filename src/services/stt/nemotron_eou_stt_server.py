@@ -37,7 +37,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(ModelServiceMiddleware)
-install_nemotron_eou_websocket(app, manager=model_manager)
+def _speaker_scorer():
+    from services.stt.speaker_scoring import SpeakerScorer
+
+    return SpeakerScorer()
+
+
+install_nemotron_eou_websocket(app, manager=model_manager, speaker_scorer=_speaker_scorer())
 
 
 @app.on_event("startup")

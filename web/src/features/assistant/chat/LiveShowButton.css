@@ -1,0 +1,76 @@
+@layer features {
+  /* The call asked to see something (companion 4.3): Show stands out until the person answers. Nothing opens. */
+  button.live-show-button.requested {
+    border-color: var(--accent-violet-810);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-violet-810) 55%, transparent);
+    animation: live-show-requested 1.6s ease-in-out infinite;
+  }
+
+  button.live-show-button.on {
+    background: color-mix(in srgb, var(--accent-violet-810) 45%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-810) 70%, transparent);
+  }
+
+  @keyframes live-show-requested {
+    50% {
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-violet-810) 25%, transparent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button.live-show-button.requested {
+      animation: none;
+    }
+  }
+
+  /* The preview floats above the call controls so the button row keeps its layout. */
+  .live-show-panel {
+    position: fixed;
+    right: 1rem;
+    bottom: 6rem;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(16rem, calc(100vw - 2rem));
+    padding: 0.75rem;
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.75rem;
+    background: var(--wash-neutral-1000);
+    color: var(--omnix-text);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--c-neutral-0) 30%, transparent);
+  }
+
+  .live-show-panel video {
+    width: 100%;
+    border-radius: 0.5rem;
+    background: var(--bg-neutral-0);
+    /* A front camera reads like a mirror; the picture itself is not flipped. */
+    transform: scaleX(-1);
+  }
+
+  .live-show-panel p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .live-show-panel button {
+    align-self: flex-end;
+  }
+
+  .live-show-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .live-show-indicator::before {
+    content: '';
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--c-red-640);
+  }
+}

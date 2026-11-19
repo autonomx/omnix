@@ -61,6 +61,16 @@ export type StreamingSttPreviewResult = {
   providerMetrics?: Record<string, number>;
 };
 
+/** How like the caller's voiceprint a final segment sounded (companion 2.2); it arrives after that final. */
+export type StreamingSttSpeakerScore = {
+  type: 'speaker_score';
+  segmentId: string;
+  sequence: number;
+  /** Cosine similarity, -1 to 1; null when the service could not say (its model did not load, say). */
+  similarity: number | null;
+  modelMs?: number;
+};
+
 export type StreamingSttProviderEvent = {
   type: 'flush_started' | 'flush_completed' | 'flush_cancelled';
   provider?: string;
@@ -72,13 +82,15 @@ export type StreamingSttProviderEvent = {
 
 export type StreamingSttMessage =
   | StreamingSttReady
-  | { type: 'session_ready'; sessionId: string; provider?: string; results?: SegmentedSttResult[] }
+  /** `speakerScores`: each final of 0.8 s or more will be followed by its `speaker_score` (companion 2.4). */
+  | { type: 'session_ready'; sessionId: string; provider?: string; results?: SegmentedSttResult[]; speakerScores?: boolean }
   | { type: 'text'; text: string; segmentId?: string; sequence?: number }
   | { type: 'partial'; text: string; segmentId: string; sequence: number }
   | StreamingSttWord
   | StreamingSttEndpointScore
   | StreamingSttEndpointCandidate
   | StreamingSttPreviewResult
+  | StreamingSttSpeakerScore
   | StreamingSttProviderEvent
   | LegacySttResult
   | { type: 'audio_buffered'; segmentId: string; sequence: number; acceptedThroughSample: number }
@@ -169,6 +181,9 @@ export type StreamingSttWebSocketClientOptions = {
   onEndpointCandidate?: (event: StreamingSttEndpointCandidate) => void;
   onPreviewTranscript?: (event: StreamingSttPreviewResult) => void;
   onProviderEvent?: (event: StreamingSttProviderEvent) => void;
+  onSpeakerScore?: (event: StreamingSttSpeakerScore) => void;
+  /** Whether this connection scores finals against the caller's voiceprint; told on each session_ready. */
+  onSpeakerScoresAvailable?: (available: boolean) => void;
 };
 
 export type StreamingSttConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -884,6 +899,7 @@ export class StreamingSttWebSocketClient {
         for (const result of message.results ?? []) this.acceptResult(result, false);
         await this.commitOrderedResults();
         this.awaitingSessionReady = false;
+        this.options.onSpeakerScoresAvailable?.(message.speakerScores === true);
         dispatchSttDiagnostic('stt_session_restored', {
           provider: message.provider ?? this.negotiation?.provider,
           replayedResults: message.results?.length ?? 0,
@@ -945,6 +961,16 @@ export class StreamingSttWebSocketClient {
           providerMetrics: message.providerMetrics,
         });
         this.options.onPreviewTranscript?.(message);
+        return;
+      case 'speaker_score':
+        dispatchSttDiagnostic('stt_speaker_score', {
+          provider: this.negotiation?.provider,
+          segmentId: message.segmentId,
+          sourceSequence: message.sequence,
+          speakerSimilarity: message.similarity,
+          modelMs: message.modelMs,
+        });
+        this.options.onSpeakerScore?.(message);
         return;
       case 'flush_started':
       case 'flush_completed':

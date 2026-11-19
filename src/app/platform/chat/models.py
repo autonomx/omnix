@@ -7,7 +7,7 @@ import re
 from enum import Enum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from app.conversation.contracts import (
     DEFAULT_PROFILE_ID,  # noqa: F401 - compatibility re-export
@@ -27,6 +27,8 @@ from app.jobs import JobRecord
 _LIVE_VOICE_TURN_ID_PATTERN = re.compile(r"voice-turn:[A-Za-z0-9_.:-]+")
 _MAX_CHAT_IMAGE_DATA_URL_CHARS = 8_000_000
 _MAX_CHAT_IMAGE_ATTACHMENTS = 8
+# One front-camera picture for a live call's turn (companion 4.2); see chat.live_call_camera.
+_MAX_CAMERA_IMAGE_DATA_URL_CHARS = 3_000_000
 _MAX_CHAT_TEXT_ATTACHMENT_CHARS = 100_000
 _SUPPORTED_CHAT_IMAGE_PREFIXES = (
     "data:image/png;base64,",
@@ -286,7 +288,21 @@ class SendChatMessageRequest(BaseModel):
     research_mode: ResearchMode | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+    # A voice turn the person began after a call's report started playing: that report's turn id. It lets the turn
+    # answer the report's question (``live_call_tasks.proposal_confirmable``); it grants nothing by itself.
+    heard_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     ui_action: ChatUiAction | None = None
+    # A picture shown through the front camera in a live call (companion 4.2). Only its description is kept: the
+    # field is never serialised (``exclude``), so it is not in the job's payload, the message or a later prompt.
+    camera_image: str | None = Field(default=None, max_length=_MAX_CAMERA_IMAGE_DATA_URL_CHARS, exclude=True)
+    # Set by admission, never by the client (companion 6.5): the person's words mostly repeat a character's line
+    # the microphone heard. The turn is still answered; memory and conversation readings skip it.
+    _suspected_echo: bool = PrivateAttr(default=False)
+
+    @field_validator("camera_image")
+    @classmethod
+    def validate_camera_image(cls, value: str | None) -> str | None:
+        return _normalize_chat_image_data_url(value)
 
     @field_validator("image_data_url")
     @classmethod

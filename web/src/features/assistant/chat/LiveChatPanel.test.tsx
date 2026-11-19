@@ -13,7 +13,7 @@ const defaultProfile = {
   conversation_pace: 'balanced', interruption_preference: 'balanced', assistant_backchannel_mode: 'off',
   initiative_mode: 'gentle', idle_threshold_ms: 15000, long_pause_behavior: 'wait',
   response_length: 'conversational', response_onset_style: 'adaptive', emotional_attunement: 'subtle',
-  topic_continuity: 'natural', max_idle_prompts: 1, duplex_mode: 'automatic',
+  topic_continuity: 'natural', max_idle_prompts: 1, quiet_hours_enabled: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', max_initiatives_per_hour: 4, duplex_mode: 'automatic',
   pronunciation_save_policy: 'ask', profile_version: 1,
 };
 

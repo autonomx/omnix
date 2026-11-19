@@ -1,6 +1,7 @@
 """Pure safety and scope policy for Chat memory."""
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime
 
 from app.conversation.memory_contracts import (
@@ -42,12 +43,13 @@ def prompt_eligibility(
     context: MemoryScopeContext,
     *,
     now: datetime | None = None,
+    present_characters: Collection[str] = (),
 ) -> MemoryPolicyDecision:
     if record.status != "active":
         return MemoryPolicyDecision(allowed=False, reason=f"record_{record.status}")
     if not is_visible_in_scope(record, context):
         return MemoryPolicyDecision(allowed=False, reason="scope_mismatch")
-    reason = record_prompt_block_reason(record, now)
+    reason = record_prompt_block_reason(record, now, present_characters=present_characters)
     if reason is not None:
         return MemoryPolicyDecision(allowed=False, reason=reason)
     return MemoryPolicyDecision(allowed=True, reason="approved_memory")

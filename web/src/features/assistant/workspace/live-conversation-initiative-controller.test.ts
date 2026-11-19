@@ -21,7 +21,19 @@ describe('live conversation initiative controller', () => {
       turnId: 'proactive:one',
       content: 'Want to keep working through that?',
       initiativeReason: 'unresolved_question',
+      proposalTaskId: null,
     });
+  });
+
+  it('reads which proposal a task report asks about', () => {
+    const parsed = parseProactiveSse([
+      'data: {"type":"initiative","turn_id":"task-report:call-task:m1:0","initiative_reason":"task_report:call-task:m1:0"}',
+      '',
+      'data: {"type":"complete","content":"Turn off Desk lamp? Say confirm or cancel.","metadata":{"task_report_for":"call-task:m1:0","task_report_proposal":true}}',
+      '',
+    ].join('\n'));
+
+    expect(parsed?.proposalTaskId).toBe('call-task:m1:0');
   });
 
   it('surfaces server errors instead of silently discarding them', () => {

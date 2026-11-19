@@ -691,6 +691,22 @@
         "title": "ActivityTransitionCandidate",
         "type": "object"
       },
+      "AddSceneGuestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "character_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Character Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "character_id"
+        ],
+        "title": "AddSceneGuestRequest",
+        "type": "object"
+      },
       "AdjustmentMode": {
         "enum": [
           "raw",
@@ -5473,6 +5489,23 @@
         "title": "Body_dictate_api_voice_dictate_post",
         "type": "object"
       },
+      "Body_post_voiceprint_api_stt_voiceprint_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "contentMediaType": "application/octet-stream",
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "Body_post_voiceprint_api_stt_voiceprint_post",
+        "type": "object"
+      },
       "BookPerformance": {
         "description": "Stability and Style Exaggeration for every render (Voice Studio's sliders).",
         "properties": {
@@ -7022,6 +7055,170 @@
           "code_version"
         ],
         "title": "CalibratorArtifact",
+        "type": "object"
+      },
+      "CallProposalDecision": {
+        "properties": {
+          "status": {
+            "enum": [
+              "executed",
+              "failed",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "status",
+          "text"
+        ],
+        "title": "CallProposalDecision",
+        "type": "object"
+      },
+      "CallProposalDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "confirm",
+              "cancel"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "CallProposalDecisionRequest",
+        "type": "object"
+      },
+      "CallTask": {
+        "description": "One task a call asked for, as the call shows it.",
+        "properties": {
+          "ability": {
+            "title": "Ability",
+            "type": "string"
+          },
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "reported": {
+            "default": false,
+            "title": "Reported",
+            "type": "boolean"
+          },
+          "result_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Message Id"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled At"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "completed",
+              "failed",
+              "cancelled",
+              "not_started"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "ability",
+          "state",
+          "asked_at",
+          "query",
+          "settled_at",
+          "result_message_id",
+          "reported"
+        ],
+        "title": "CallTask",
+        "type": "object"
+      },
+      "CallTaskList": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/CallTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks"
+        ],
+        "title": "CallTaskList",
+        "type": "object"
+      },
+      "CameraAvailability": {
+        "description": "Whether the call may offer Show (companion 4.1): vision configured, and local or remote with consent.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "enum": [
+              "ready",
+              "vision_not_configured",
+              "remote_vision_not_allowed",
+              "vision_unavailable"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "remote": {
+            "title": "Remote",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "remote",
+          "reason"
+        ],
+        "title": "CameraAvailability",
         "type": "object"
       },
       "CampaignEnded": {
@@ -8688,6 +8885,13 @@
             "title": "Read Memory",
             "type": "boolean"
           },
+          "scene_guests": {
+            "items": {
+              "$ref": "#/components/schemas/LiveCallSceneGuest"
+            },
+            "title": "Scene Guests",
+            "type": "array"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
@@ -8748,7 +8952,8 @@
           "read_memory",
           "write_memory",
           "shared_memory_access",
-          "memory_snapshot_id"
+          "memory_snapshot_id",
+          "scene_guests"
         ],
         "title": "CharacterLiveCallRuntime",
         "type": "object"
@@ -26403,6 +26608,27 @@
         "title": "IndicatorValuesResponse",
         "type": "object"
       },
+      "InitiativeCandidate": {
+        "description": "The one initiative the server would have the call take now, or none.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "InitiativeCandidate",
+        "type": "object"
+      },
       "InstallLive2DModelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -28566,6 +28792,65 @@
         "title": "LiveCallPrewarmRequest",
         "type": "object"
       },
+      "LiveCallSceneGuest": {
+        "additionalProperties": false,
+        "description": "A guest on the call (companion 5.5): the voice and face a turn uses when it names them as its speaker.",
+        "properties": {
+          "avatar_pack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CharacterAvatarPack"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "character_id": {
+            "title": "Character Id",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "speech_style": {
+            "$ref": "#/components/schemas/LiveCallSpeechStyle"
+          },
+          "voice_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Asset Id"
+          },
+          "voice_speaker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Speaker Id"
+          }
+        },
+        "required": [
+          "character_id",
+          "display_name",
+          "speech_style",
+          "voice_asset_id",
+          "voice_speaker_id",
+          "avatar_pack"
+        ],
+        "title": "LiveCallSceneGuest",
+        "type": "object"
+      },
       "LiveCallSpeechStyle": {
         "additionalProperties": false,
         "description": "Validated delivery controls kept separate from language identity.",
@@ -29304,6 +29589,13 @@
             "title": "Max Idle Prompts",
             "type": "integer"
           },
+          "max_initiatives_per_hour": {
+            "default": 4,
+            "maximum": 20,
+            "minimum": 0,
+            "title": "Max Initiatives Per Hour",
+            "type": "integer"
+          },
           "presence_preset": {
             "default": "natural",
             "enum": [
@@ -29331,6 +29623,23 @@
             "title": "Pronunciation Save Policy",
             "type": "string"
           },
+          "quiet_hours_enabled": {
+            "default": false,
+            "title": "Quiet Hours Enabled",
+            "type": "boolean"
+          },
+          "quiet_hours_end": {
+            "default": "08:00",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Quiet Hours End",
+            "type": "string"
+          },
+          "quiet_hours_start": {
+            "default": "22:00",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Quiet Hours Start",
+            "type": "string"
+          },
           "response_length": {
             "default": "conversational",
             "enum": [
@@ -29351,6 +29660,52 @@
             ],
             "title": "Response Onset Style",
             "type": "string"
+          },
+          "scene_memory_per_character": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 0,
+            "title": "Scene Memory Per Character",
+            "type": "integer"
+          },
+          "scene_talk_attempts_per_hour": {
+            "anyOf": [
+              {
+                "enum": [
+                  6,
+                  12,
+                  24,
+                  48
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Talk Attempts Per Hour"
+          },
+          "scene_talk_enabled": {
+            "default": false,
+            "title": "Scene Talk Enabled",
+            "type": "boolean"
+          },
+          "scene_talk_level": {
+            "default": "sometimes",
+            "enum": [
+              "rarely",
+              "sometimes",
+              "often"
+            ],
+            "title": "Scene Talk Level",
+            "type": "string"
+          },
+          "scene_talk_max_lines": {
+            "default": 4,
+            "maximum": 8,
+            "minimum": 2,
+            "title": "Scene Talk Max Lines",
+            "type": "integer"
           },
           "talkativeness": {
             "default": 50,
@@ -29385,8 +29740,17 @@
           "emotional_attunement",
           "topic_continuity",
           "max_idle_prompts",
+          "quiet_hours_enabled",
+          "quiet_hours_start",
+          "quiet_hours_end",
+          "max_initiatives_per_hour",
           "duplex_mode",
           "pronunciation_save_policy",
+          "scene_talk_enabled",
+          "scene_talk_level",
+          "scene_talk_attempts_per_hour",
+          "scene_talk_max_lines",
+          "scene_memory_per_character",
           "profile_version"
         ],
         "title": "LiveConversationProfile",
@@ -29588,6 +29952,19 @@
             ],
             "title": "Max Idle Prompts"
           },
+          "max_initiatives_per_hour": {
+            "anyOf": [
+              {
+                "maximum": 20,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Initiatives Per Hour"
+          },
           "presence_preset": {
             "anyOf": [
               {
@@ -29621,6 +29998,41 @@
             ],
             "title": "Pronunciation Save Policy"
           },
+          "quiet_hours_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Enabled"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
           "response_length": {
             "anyOf": [
               {
@@ -29653,6 +30065,76 @@
               }
             ],
             "title": "Response Onset Style"
+          },
+          "scene_memory_per_character": {
+            "anyOf": [
+              {
+                "maximum": 20,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Memory Per Character"
+          },
+          "scene_talk_attempts_per_hour": {
+            "anyOf": [
+              {
+                "enum": [
+                  6,
+                  12,
+                  24,
+                  48
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Talk Attempts Per Hour"
+          },
+          "scene_talk_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Talk Enabled"
+          },
+          "scene_talk_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rarely",
+                  "sometimes",
+                  "often"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Talk Level"
+          },
+          "scene_talk_max_lines": {
+            "anyOf": [
+              {
+                "maximum": 8,
+                "minimum": 2,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Talk Max Lines"
           },
           "talkativeness": {
             "anyOf": [
@@ -32135,6 +32617,19 @@
         "additionalProperties": false,
         "description": "Approved or otherwise active curated memory owned by Omnix.",
         "properties": {
+          "about_character_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About Character Id"
+          },
           "category": {
             "enum": [
               "preference",
@@ -32366,6 +32861,7 @@
           "pinned",
           "trust_level",
           "sensitivity",
+          "about_character_id",
           "provenance_id",
           "status",
           "revision",
@@ -34299,6 +34795,11 @@
             "title": "Assistant Text",
             "type": "string"
           },
+          "proposal_answer_only": {
+            "default": false,
+            "title": "Proposal Answer Only",
+            "type": "boolean"
+          },
           "transcript": {
             "maxLength": 400,
             "minLength": 1,
@@ -34340,7 +34841,8 @@
           "source": {
             "enum": [
               "model",
-              "fallback"
+              "fallback",
+              "proposal_answer"
             ],
             "title": "Source",
             "type": "string"
@@ -42877,7 +43379,7 @@
       "ProactiveDeliveryRequest": {
         "properties": {
           "content": {
-            "maxLength": 500,
+            "maxLength": 600,
             "minLength": 1,
             "title": "Content",
             "type": "string"
@@ -42898,6 +43400,18 @@
             "maxItems": 16,
             "title": "Grounding Ids",
             "type": "array"
+          },
+          "heard_text": {
+            "anyOf": [
+              {
+                "maxLength": 480,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heard Text"
           },
           "initiative_reason": {
             "maxLength": 120,
@@ -42952,7 +43466,7 @@
             "title": "Topic Id"
           },
           "turn_id": {
-            "maxLength": 120,
+            "maxLength": 240,
             "minLength": 1,
             "title": "Turn Id",
             "type": "string"
@@ -59896,6 +60410,111 @@
         "title": "ScannerRunListResponse",
         "type": "object"
       },
+      "SceneMemberView": {
+        "properties": {
+          "character_id": {
+            "title": "Character Id",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "host",
+              "guest"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "seat": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat"
+          }
+        },
+        "required": [
+          "character_id",
+          "display_name",
+          "role",
+          "seat"
+        ],
+        "title": "SceneMemberView",
+        "type": "object"
+      },
+      "SceneTurnReleaseRequest": {
+        "properties": {
+          "turn_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id"
+        ],
+        "title": "SceneTurnReleaseRequest",
+        "type": "object"
+      },
+      "SceneTurnReleaseResponse": {
+        "properties": {
+          "released": {
+            "title": "Released",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "released"
+        ],
+        "title": "SceneTurnReleaseResponse",
+        "type": "object"
+      },
+      "SceneView": {
+        "description": "The chat's call members: the host, then the guests by seat. ``available`` says whether guests can join.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "max_guests": {
+            "default": 2,
+            "title": "Max Guests",
+            "type": "integer"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SceneMemberView"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "reason": {
+            "enum": [
+              "ready",
+              "scene_needs_character_chat",
+              "scene_needs_postgresql"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "reason",
+          "max_guests",
+          "members"
+        ],
+        "title": "SceneView",
+        "type": "object"
+      },
       "ScreenFromWordsRequest": {
         "properties": {
           "text": {
@@ -60825,6 +61444,18 @@
             "title": "Agent Mode",
             "type": "boolean"
           },
+          "camera_image": {
+            "anyOf": [
+              {
+                "maxLength": 3000000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Image"
+          },
           "coding_approval_policy": {
             "default": "ask_sensitive",
             "enum": [
@@ -60844,6 +61475,19 @@
             "default": false,
             "title": "Dry Run",
             "type": "boolean"
+          },
+          "heard_turn_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heard Turn Id"
           },
           "image_data_url": {
             "anyOf": [
@@ -75438,6 +76082,54 @@
         "title": "VoiceTranscriptPreparation",
         "type": "object"
       },
+      "VoiceprintStatus": {
+        "properties": {
+          "can_enrol": {
+            "title": "Can Enrol",
+            "type": "boolean"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enrolled": {
+            "title": "Enrolled",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "samples": {
+            "default": 0,
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrolled",
+          "can_enrol",
+          "created_at",
+          "samples",
+          "model"
+        ],
+        "title": "VoiceprintStatus",
+        "type": "object"
+      },
       "WaiveEffect": {
         "additionalProperties": false,
         "properties": {
@@ -86231,6 +86923,46 @@
         ]
       }
     },
+    "/api/chat/sessions/{session_id}/live-call/camera": {
+      "get": {
+        "description": "Whether this call may offer the camera. Nothing is sent to a model.",
+        "operationId": "get_live_call_camera_api_chat_sessions__session_id__live_call_camera_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraAvailability"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Live Call Camera"
+      }
+    },
     "/api/chat/sessions/{session_id}/live-call/greeting/stream": {
       "post": {
         "operationId": "stream_live_call_greeting_api_chat_sessions__session_id__live_call_greeting_stream_post",
@@ -86281,6 +87013,16 @@
               ],
               "title": "State Summary"
             }
+          },
+          {
+            "in": "query",
+            "name": "scene_talk_switched_off",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Scene Talk Switched Off",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -86312,6 +87054,56 @@
         "tags": [
           "characters"
         ]
+      }
+    },
+    "/api/chat/sessions/{session_id}/live-call/initiative-candidate": {
+      "get": {
+        "description": "At most one reason; the call runs it through the initiative authority, which checks it again.\n\nA task's report comes first. With ``social`` (the call's policy may speak socially), an open loop from the\nspeaker's own memory follows (companion 3.2).",
+        "operationId": "get_live_call_initiative_candidate_api_chat_sessions__session_id__live_call_initiative_candidate_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "social",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Social",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeCandidate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Live Call Initiative Candidate"
       }
     },
     "/api/chat/sessions/{session_id}/live-call/runtime": {
@@ -86354,6 +87146,151 @@
         "tags": [
           "characters"
         ]
+      }
+    },
+    "/api/chat/sessions/{session_id}/live-call/tasks": {
+      "get": {
+        "operationId": "get_live_call_tasks_api_chat_sessions__session_id__live_call_tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallTaskList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Live Call Tasks"
+      }
+    },
+    "/api/chat/sessions/{session_id}/live-call/tasks/{task_id}/cancel": {
+      "post": {
+        "operationId": "cancel_live_call_task_api_chat_sessions__session_id__live_call_tasks__task_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallTask"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Live Call Task"
+      }
+    },
+    "/api/chat/sessions/{session_id}/live-call/tasks/{task_id}/decision": {
+      "post": {
+        "operationId": "decide_live_call_proposal_api_chat_sessions__session_id__live_call_tasks__task_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallProposalDecision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Live Call Proposal"
       }
     },
     "/api/chat/sessions/{session_id}/live-conversation/delivery-plan": {
@@ -86455,6 +87392,59 @@
           }
         },
         "summary": "Commit Live Conversation Proactive Delivery",
+        "tags": [
+          "live-chat"
+        ]
+      }
+    },
+    "/api/chat/sessions/{session_id}/live-conversation/proactive/release": {
+      "post": {
+        "description": "A scene turn the call dropped before it played gives its lease back now, not at its TTL (companion 6.3).",
+        "operationId": "release_live_conversation_scene_turn_api_chat_sessions__session_id__live_conversation_proactive_release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneTurnReleaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneTurnReleaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Live Conversation Scene Turn",
         "tags": [
           "live-chat"
         ]
@@ -87301,6 +88291,142 @@
           }
         },
         "summary": "Set Conversation Rich Replies"
+      }
+    },
+    "/api/chat/sessions/{session_id}/scene": {
+      "get": {
+        "operationId": "get_chat_scene_api_chat_sessions__session_id__scene_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chat Scene"
+      }
+    },
+    "/api/chat/sessions/{session_id}/scene/guests": {
+      "post": {
+        "operationId": "add_chat_scene_guest_api_chat_sessions__session_id__scene_guests_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSceneGuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Chat Scene Guest"
+      }
+    },
+    "/api/chat/sessions/{session_id}/scene/guests/{character_id}": {
+      "delete": {
+        "operationId": "remove_chat_scene_guest_api_chat_sessions__session_id__scene_guests__character_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "character_id",
+            "required": true,
+            "schema": {
+              "title": "Character Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Chat Scene Guest"
       }
     },
     "/api/client-errors": {
@@ -100903,6 +102029,85 @@
           }
         },
         "summary": "Transcribe",
+        "tags": [
+          "speech"
+        ]
+      }
+    },
+    "/api/stt/voiceprint": {
+      "delete": {
+        "operationId": "remove_voiceprint_api_stt_voiceprint_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceprintStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Remove Voiceprint",
+        "tags": [
+          "speech"
+        ]
+      },
+      "get": {
+        "operationId": "get_voiceprint_api_stt_voiceprint_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceprintStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Voiceprint",
+        "tags": [
+          "speech"
+        ]
+      },
+      "post": {
+        "operationId": "post_voiceprint_api_stt_voiceprint_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_voiceprint_api_stt_voiceprint_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceprintStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Voiceprint",
         "tags": [
           "speech"
         ]

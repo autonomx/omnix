@@ -31,6 +31,18 @@ export type LiveCallPresentationState = {
   streamStatus: string | null;
   /** The person muted their microphone: the call hears silence until they unmute. A new call starts unmuted. */
   micMuted: boolean;
+  /**
+   * The person asked the companion to keep quiet for this call: no social initiative, while replies and the reports
+   * of tasks they asked for still come. A new call starts with it off (companion 3.3).
+   */
+  companionQuiet: boolean;
+  /**
+   * "Let them talk" for this call: off, the characters on the call stop talking to each other, and a guest only
+   * reacts to a reply. It only narrows the account's setting and starts on with each call (companion 6.1).
+   */
+  sceneTalkOn: boolean;
+  /** The guest the current reply speaks as (companion 5.5); null while the call's own character speaks. */
+  sceneSpeakerId: string | null;
 };
 
 export const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
@@ -61,6 +73,9 @@ function initialState(): LiveCallPresentationState {
     taskInstruction: typeof window === 'undefined' ? '' : storedTaskInstruction(),
     streamStatus: null,
     micMuted: false,
+    companionQuiet: false,
+    sceneTalkOn: true,
+    sceneSpeakerId: null,
   };
 }
 

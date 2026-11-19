@@ -22,6 +22,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config.env import environment
+from app.conversation.scene import SUSPECTED_ECHO_KEY
 from app.jobs import CompleteJobRequest, CreateJobRequest
 from app.jobs.models import JobRecord, ResourceClass
 from app.persistence.device_permits import device_permit_slot
@@ -419,6 +420,9 @@ def _turn_request(
 
 
 def _reply_to(session: Any, message: Any) -> Any | None:
+    """The answer to the person's message: the first saved assistant message after it that is a turn's reply.
+    Transient messages and initiative turns (a reaction, a character line or opener, a report) are skipped, so
+    a character line is never read as the reply (companion 6.3)."""
     seen = False
     for item in session.messages:
         if item.id == message.id:
@@ -426,6 +430,9 @@ def _reply_to(session: Any, message: Any) -> Any | None:
         elif seen and item.role == "user":
             return None
         elif seen and item.role == "assistant" and str(item.content or "").strip():
+            metadata = item.metadata or {}
+            if metadata.get("transient") or metadata.get("initiative_reason"):
+                continue
             return item
     return None
 
@@ -434,10 +441,13 @@ def record_turn(session: Any, message: Any, *, runtime: Any | None = None) -> No
     """The user's words and the reply, in the owner's log. Idempotent: a retried job writes nothing new.
 
     The log is one per owner, so the turn is visible to the person across their
-    chats with it; private chats and memory-off chats never reach here.
+    chats with it; private chats and memory-off chats never reach here. A turn tagged ``suspected_echo`` (the
+    microphone heard a character's line, companion 6.5) is not the person's words and is not logged.
     """
     from app.persistence.runtime import uses_postgresql_runtime
 
+    if (getattr(message, "metadata", None) or {}).get(SUSPECTED_ECHO_KEY):
+        return
     if runtime is None:
         if not uses_postgresql_runtime():
             return

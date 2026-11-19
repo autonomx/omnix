@@ -16,6 +16,7 @@ from app.jobs import (
 )
 
 from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord
+from app.conversation.scene import SUSPECTED_ECHO_KEY
 from .owner_defaults import default_memory_service
 from .rollout import companion_rollout_policy
 from .scope import resolve_session_memory_scope
@@ -246,7 +247,14 @@ def _process_claimed_memory_job(
             result.skipped_reasons.append("user_message_missing")
         elif message.metadata.get("memory_command"):
             result.skipped_reasons.append("explicit_memory_command")
+        elif message.metadata.get(SUSPECTED_ECHO_KEY):
+            # The microphone heard a character's line (companion 6.5): these are not the person's words.
+            result.skipped_reasons.append("suspected_echo")
         else:
+            # In a call with guests (companion 5.2) what the person says feeds the memory of whoever answered.
+            from app.conversation.scene import answered_by_view
+
+            session = answered_by_view(session, message.id)
             _record_turn_for_reading(session, message)
             service = memory_service or default_memory_service()
             context = resolve_session_memory_scope(session)

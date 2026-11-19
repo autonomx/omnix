@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import type { components } from '../api/generated';
 import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
-import { chatImageDataUrls, chatTextAttachment, formatMessageTime } from './chatMessageModel';
+import { chatImageDataUrls, chatTextAttachment, formatMessageTime, sceneSpeakerName } from './chatMessageModel';
 import { chatMessageSpeech } from './generative-ui/chatMessageProjection';
 import { ChatUiRenderer } from './generative-ui/ChatUiRenderer';
 import { parseChatUi } from './generative-ui/schema';
@@ -67,12 +67,14 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionI
   const images = chatImageDataUrls(message.metadata);
   const attachment = chatTextAttachment(message.metadata);
   const assistant = message.role === 'assistant';
+  // A call guest's reply names the guest (companion 5.6); every other reply is the chat's own speaker's.
+  const author = assistant ? sceneSpeakerName(message.metadata) ?? speakerName : message.role === 'user' ? 'You' : message.role;
   const streamLabel = streaming ? 'Stop streaming response audio' : 'Stream response audio';
   return (
     <article className={`assistant-chat-message ${message.role}`}>
       {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
       <div className="assistant-chat-bubble">
-        <header><strong>{assistant ? speakerName : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
+        <header><strong>{author}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
         {images.length ? (
           <div className="assistant-chat-message-images">
             {images.map((dataUrl, index) => <img className="assistant-chat-message-image" src={dataUrl} alt={index === 0 ? 'User-provided attachment' : `User-provided attachment ${index + 1}`} key={`${message.id}:image:${index}`} />)}

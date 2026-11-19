@@ -45,6 +45,13 @@ export function selectFreshChatSession<T extends { id?: string; message_count?: 
   return queryMessageLength >= mutationMessageLength ? queriedSession : mutationSession;
 }
 
+/** Who spoke a reply on a call with guests, as the server recorded it; null for a reply without a scene. */
+export function sceneSpeakerName(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const name = (metadata as { speaker_name?: unknown }).speaker_name;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
 /** Immersive Live Chat shows the chat when it has messages, the live transcript otherwise. */
 export function liveChatMessagesFor(messages: ChatMessage[], transcript: LiveVoiceTranscriptState): LiveChatMessage[] {
   if (messages.length) {
@@ -54,6 +61,7 @@ export function liveChatMessagesFor(messages: ChatMessage[], transcript: LiveVoi
       // Replies with generative UI show their text projection, never block JSON (GUI-6.3).
       text: chatMessageText(message),
       timestamp: message.created_at,
+      speaker: message.role === 'assistant' ? sceneSpeakerName(message.metadata) : null,
     }));
   }
   const rows: LiveChatMessage[] = transcript.rows.map((row) => ({

@@ -24,6 +24,15 @@ describe('live voice message schemas', () => {
       .toMatchObject({ type: 'session_ready', results: [resultAvailable] });
     expect(parseJson(streamingSttMessageSchema, '{"type":"finalize_queued","segmentId":"segment-1","sequence":3}'))
       .toEqual({ type: 'finalize_queued', segmentId: 'segment-1', sequence: 3 });
+    // Shaped as nemotron_eou_live_websocket.py sends it, after the segment's final.
+    expect(parseJson(streamingSttMessageSchema, '{"type":"speaker_score","segmentId":"segment-1","sequence":3,"similarity":0.83,"modelMs":21.5}'))
+      .toEqual({ type: 'speaker_score', segmentId: 'segment-1', sequence: 3, similarity: 0.83, modelMs: 21.5 });
+    expect(parseJson(streamingSttMessageSchema, '{"type":"speaker_score","segmentId":"segment-1","sequence":3,"similarity":1.7}')).toBeNull();
+    // No answer (the model did not load) is a null score, so a final waiting for it stops waiting (companion 2.4).
+    expect(parseJson(streamingSttMessageSchema, '{"type":"speaker_score","segmentId":"segment-1","sequence":3,"similarity":null,"modelMs":null}'))
+      .toMatchObject({ type: 'speaker_score', similarity: null });
+    expect(parseJson(streamingSttMessageSchema, '{"type":"session_ready","sessionId":"session-1","speakerScores":true}'))
+      .toMatchObject({ type: 'session_ready', speakerScores: true });
   });
 
   it('reads None from a Python producer as an absent value', () => {

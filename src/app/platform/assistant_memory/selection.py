@@ -1,6 +1,7 @@
 """Deterministic scoped selection for approved Chat memory."""
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -58,20 +59,44 @@ def _selection_key(record: MemoryRecord) -> tuple[object, ...]:
     )
 
 
+def newest_per_character(records: list[MemoryRecord], limit: int) -> tuple[list[MemoryRecord], int]:
+    """Memories about the person, and the newest ``limit`` about each character; and how many were left out."""
+    kept: list[MemoryRecord] = []
+    counts: dict[str, int] = {}
+    dropped = 0
+    for record in sorted(records, key=lambda item: (-_updated_timestamp(item), item.id)):
+        character = record.about_character_id
+        if character is not None:
+            if counts.get(character, 0) >= limit:
+                dropped += 1
+                continue
+            counts[character] = counts.get(character, 0) + 1
+        kept.append(record)
+    order = {id(record): index for index, record in enumerate(records)}
+    return sorted(kept, key=lambda item: order[id(item)]), dropped
+
+
 def select_memory_records(
     records: list[MemoryRecord],
     context: MemoryScopeContext,
     *,
     token_budget: int,
+    present_characters: Collection[str] = (),
+    per_character_limit: int = 0,
 ) -> MemorySelection:
+    """The records that may reach a prompt, within the token budget. Memories about a character are eligible
+    only while it is in ``present_characters``, the newest ``per_character_limit`` of each (companion 6.6)."""
     excluded: dict[str, int] = {}
     eligible: list[MemoryRecord] = []
     for record in records:
-        decision = prompt_eligibility(record, context)
+        decision = prompt_eligibility(record, context, present_characters=present_characters)
         if decision.allowed:
             eligible.append(record)
         else:
             excluded[decision.reason] = excluded.get(decision.reason, 0) + 1
+    eligible, over_cap = newest_per_character(eligible, per_character_limit)
+    if over_cap:
+        excluded["character_memory_cap"] = excluded.get("character_memory_cap", 0) + over_cap
 
     selected: list[MemoryRecord] = []
     tokens = 0

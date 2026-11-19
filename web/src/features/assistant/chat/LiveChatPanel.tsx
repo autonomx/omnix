@@ -15,9 +15,12 @@ import {
 } from './live-chat-fullscreen-controller';
 import { LiveConversationControls } from './LiveConversationControls';
 import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPanel';
+import { LiveCallScene } from './LiveCallScene';
+import { LiveCallTaskChips } from './LiveCallTaskChips';
 import { LiveMuteButton } from './LiveMuteButton';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
 import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
+import { LiveVoiceprintPanel } from './LiveVoiceprintPanel';
 import './LiveChatPanel.css';
 import './LiveChatFullscreenEntry.css';
 
@@ -91,6 +94,7 @@ export function LiveChatPanel({ sessionId, onSessionResolved, onToggleCall }: Li
 
       <LiveConversationControls sessionId={sessionId} />
       <LiveVoiceCalibrationPanel />
+      <LiveVoiceprintPanel />
       <LivePronunciationPanel sessionId={sessionId} />
 
       <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
@@ -119,6 +123,8 @@ export function LiveChatPanel({ sessionId, onSessionResolved, onToggleCall }: Li
           <div><dt>Floor</dt><dd>{snapshot.floorOwner}</dd></div>
           <div><dt>Duplex</dt><dd>{duplexLabel}</dd></div>
         </dl>
+        <LiveCallScene sessionId={sessionId} />
+        <LiveCallTaskChips />
         {callStatus ? <p className="live-chat-note" role="status">{callStatus}</p> : null}
       </section>
 

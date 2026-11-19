@@ -7,7 +7,7 @@ import { liveChatSubmissionGateway } from '../workspace';
 import { LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, createPersonalityPrompt, mergeTranscript, parseChatStreamEvent, shouldFlushStreamedSpeechBuffer, unifiedLiveVoiceAudioInstalled, type AssistantSettings, type ChatMessage, type ChatbotFormValues } from './chatbotWorkspaceModel';
 import type { useResponseAudio } from './useResponseAudio';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
-import { sendChatWithAssistantContext } from '../workspace';
+import { noteLiveCallCameraRequest, sendChatWithAssistantContext, takeLiveCallCameraFrame } from '../workspace';
 import { LIVE_CALL_DIAGNOSTIC_EVENT } from '../../../events/bus';
 import { chatMessageSpeech } from './generative-ui/chatMessageProjection';
 
@@ -155,12 +155,15 @@ export function useStreamedVoiceTurns({
     let speechBuffer = '';
     try {
       const streamSessionId = encodeURIComponent(sessionId);
+      // The picture the person took with Show goes with this spoken turn only (companion 4.1).
+      const cameraImage = liveVoiceActiveRef.current ? takeLiveCallCameraFrame() : null;
       const response = await sendChatWithAssistantContext(sessionId, {
         content,
         provider_id: providerId,
         model_id: modelId,
         coding_approval_policy: assistantSettings.codingApprovalPolicy,
         live_voice_turn_id: voiceTurnPerformanceRef.current?.turnId,
+        ...(cameraImage ? { camera_image: cameraImage } : {}),
       }, (route, body) => openStream(
         route === 'context'
           ? `/api/assistant/context/chat/sessions/${streamSessionId}/messages/stream`
@@ -183,6 +186,7 @@ export function useStreamedVoiceTurns({
           const event = parseChatStreamEvent(eventText);
           if (!event) continue;
           if (event.type === 'error') throw new Error(typeof event.message === 'string' ? event.message : 'Chat stream failed.');
+          if (event.type === 'camera_request') noteLiveCallCameraRequest(typeof event.what === 'string' ? event.what : '');
           if (event.type === 'text_chunk' && typeof event.text === 'string') {
             const firstChunk = voiceTurnPerformanceRef.current?.llmFirstChunkReceivedAt === undefined;
             markVoiceTurnPerformance('llmFirstChunkReceivedAt');

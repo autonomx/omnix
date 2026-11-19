@@ -1,0 +1,86 @@
+@layer features {
+  .live-call-scene {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .live-call-scene-talk {
+    align-items: center;
+    color: var(--omnix-text);
+    display: inline-flex;
+    font-size: 0.82rem;
+    gap: 0.35rem;
+  }
+
+  .live-call-scene-members {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .live-call-scene-member {
+    align-items: center;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: var(--omnix-text);
+    display: inline-flex;
+    font-size: 0.82rem;
+    gap: 0.45rem;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.2rem 0.6rem;
+  }
+
+  .live-call-scene-member[data-role='guest'] {
+    padding-inline-end: 0.25rem;
+  }
+
+  .live-call-scene-member span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .live-call-scene-member[data-speaking='true'] {
+    background: color-mix(in srgb, var(--omnix-accent, var(--omnix-text)) 14%, transparent);
+    border-color: var(--omnix-accent, var(--omnix-text));
+  }
+
+  .live-call-scene-member button,
+  .live-call-scene-add button,
+  .live-call-scene-add select {
+    background: transparent;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: inherit;
+    font-size: 0.78rem;
+    min-height: 1.6rem;
+    padding: 0 0.6rem;
+  }
+
+  .live-call-scene-add {
+    display: inline-flex;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .live-call-scene-add select {
+    max-width: 12rem;
+    min-width: 0;
+  }
+
+  .live-call-scene-error {
+    color: var(--omnix-danger, inherit);
+    flex-basis: 100%;
+    font-size: 0.82rem;
+    margin: 0;
+  }
+}

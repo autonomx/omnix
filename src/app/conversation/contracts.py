@@ -203,6 +203,10 @@ class ChatSession(ChatSessionSummary):
     # stored position of the first loaded message. None: ``messages`` is the
     # whole transcript.
     _window_first_position: int | None = PrivateAttr(default=None)
+    # Companion 5: the call's scene for this turn (``app.conversation.scene``), and whether this object is a
+    # speaker's read-only view of the session. Neither is stored.
+    _scene: Any = PrivateAttr(default=None)
+    _scene_view: bool = PrivateAttr(default=False)
     messages: list[ChatMessage] = Field(default_factory=list)
 
     @property

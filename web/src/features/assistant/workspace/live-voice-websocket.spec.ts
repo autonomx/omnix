@@ -464,11 +464,16 @@ describe('live voice websocket helpers', () => {
       }
     }
     try {
+      const speakerScores: unknown[] = [];
+      const errors: string[] = [];
       const client = new StreamingSttWebSocketClient({
         url: 'ws://127.0.0.1:5202/ws/transcribe?language=fr',
         webSocketCtor: TestWebSocket,
+        onSpeakerScore: (event) => speakerScores.push(event),
+        onError: (message) => errors.push(message),
       });
       await openSegmentedClient(client, sockets, { ...segmentedReady(), language: 'fr' });
+      sockets[0].receive({ type: 'speaker_score', segmentId: 'segment-1', sequence: 1, similarity: 0.83, modelMs: 21 });
       sockets[0].receive({ type: 'endpoint_score', provider: SEGMENTED_TEST_PROVIDER, segmentId: 'segment-1', sequence: 1, probability: 0.72, modelTimeMs: 400, signal: 'semantic_pause' });
       sockets[0].receive({ type: 'endpoint_candidate', provider: SEGMENTED_TEST_PROVIDER, segmentId: 'segment-1', sequence: 1, probability: 0.8, modelTimeMs: 480 });
       sockets[0].receive({ type: 'flush_completed', provider: SEGMENTED_TEST_PROVIDER, attemptId: 'attempt-1', wall_ms: 75, model_ms: 500, realtime_factor: 0.15 });
@@ -478,7 +483,10 @@ describe('live voice websocket helpers', () => {
         expect.objectContaining({ stage: 'stt_endpoint_score', probability: 0.72, modelTimeMs: 400 }),
         expect.objectContaining({ stage: 'stt_endpoint_candidate', probability: 0.8, modelTimeMs: 480 }),
         expect.objectContaining({ stage: 'stt_flush_completed', attemptId: 'attempt-1', wallMs: 75, modelMs: 500, realtimeFactor: 0.15 }),
+        expect.objectContaining({ stage: 'stt_speaker_score', segmentId: 'segment-1', sourceSequence: 1, speakerSimilarity: 0.83 }),
       ]));
+      expect(speakerScores).toEqual([{ type: 'speaker_score', segmentId: 'segment-1', sequence: 1, similarity: 0.83, modelMs: 21 }]);
+      expect(errors).toEqual([]);
     } finally {
       globalThis.removeEventListener('omnix:assistant-voice-perf', listener);
     }

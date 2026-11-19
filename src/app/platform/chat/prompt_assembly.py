@@ -13,6 +13,7 @@ from app.conversation.contracts import PromptMemoryItem
 from .context_budget import PromptBudget, prompt_budget_for_model, prompt_budget_from_env
 from .generative_ui.prompting import RichReplyDecision, catalog_instruction, catalog_instruction_tokens
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
+from .scene import prompt_scene, scene_line, scene_note
 from .session_identity import neutralize_legacy_system_prompt, resolve_system_session_identity
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ def build_prompt_assembly(
     """
 
     interaction = (identity_resolver or resolve_system_session_identity)(session)
+    scene = prompt_scene(session) if interaction.interaction_mode == "character" else None
     session_system_messages = [
         neutralize_legacy_system_prompt(message.content)
         for message in session.messages
@@ -119,6 +121,10 @@ def build_prompt_assembly(
         # system prompts, or a caller-supplied assistant identity override.
         system_instructions: list[str] = []
         resolved_identity = interaction.assistant_identity
+        # In a scene (companion 5.3) the speaker is told who else is on the call.
+        note = scene_note(scene)
+        if note:
+            resolved_identity = [*resolved_identity, note]
     else:
         system_instructions = session_system_messages or [
             neutralize_legacy_system_prompt(global_system_prompt)
@@ -141,7 +147,9 @@ def build_prompt_assembly(
     for message in eligible_recent_messages:
         content = project_message_content(message, history_purpose)
         if content:
-            recent_messages.append(PromptTurn(role=message.role, content=content, message_id=message.id))
+            # Another scene member's reply is their quoted line, not the speaker's own turn (companion 5.3).
+            role, content = scene_line(scene, message, content)
+            recent_messages.append(PromptTurn(role=role, content=content, message_id=message.id))
     external_context = [_external_item(payload, index) for index, payload in enumerate(context_items or [], start=1)]
     resolved_summary = session_summary if session_summary is not None else _active_segment_summary(session)
     character_personality_only = interaction.interaction_mode == "character"

@@ -7,6 +7,8 @@ export type LiveConversationSettings = {
   conversationPace: ConversationPaceSetting;
   interruptionPreference: InterruptionPreference;
   backchannelMode: BackchannelMode;
+  /** Hold what another voice says instead of answering it (companion 2.4); needs a voiceprint. Off by default. */
+  onlyRespondToMe: boolean;
 };
 
 const STORAGE_KEY = 'omnix.liveConversation.settings';
@@ -16,6 +18,7 @@ export const DEFAULT_LIVE_CONVERSATION_SETTINGS: LiveConversationSettings = {
   conversationPace: 'balanced',
   interruptionPreference: 'balanced',
   backchannelMode: 'off',
+  onlyRespondToMe: false,
 };
 
 export function readLiveConversationSettings(): LiveConversationSettings {
@@ -34,6 +37,7 @@ export function readLiveConversationSettings(): LiveConversationSettings {
       backchannelMode: isBackchannelMode(parsed.backchannelMode)
         ? parsed.backchannelMode
         : DEFAULT_LIVE_CONVERSATION_SETTINGS.backchannelMode,
+      onlyRespondToMe: parsed.onlyRespondToMe === true,
     };
   } catch {
     return DEFAULT_LIVE_CONVERSATION_SETTINGS;
@@ -54,6 +58,7 @@ export function updateLiveConversationSettings(
     backchannelMode: isBackchannelMode(patch.backchannelMode)
       ? patch.backchannelMode
       : current.backchannelMode,
+    onlyRespondToMe: typeof patch.onlyRespondToMe === 'boolean' ? patch.onlyRespondToMe : current.onlyRespondToMe,
   };
   try {
     if (typeof window !== 'undefined') {

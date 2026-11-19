@@ -70,8 +70,10 @@ import {
 import { pipelineFetch } from '../../../api/fetchPipeline';
 import { resetLiveSpeechCueState } from './live-speech-synthesis-options';
 import { liveCallPresentationStore, liveCallVoiceMode } from './live-call-presentation-store';
+import { markProposalQuestionAudible, noteUserSpeechOnset, openProposalQuestion, proposalQuestionStore } from './live-call-proposal-question';
 import { liveConversationStore } from './live-conversation-store';
 import { livePortrait } from '../chat/portrait/livePortrait';
+import { characterClient } from '../chat/characterClient';
 
 let cleanup: (() => void) | null = null;
 let streamEvents: Array<Record<string, unknown>> | null = null;
@@ -311,6 +313,25 @@ describe('live voice unified audio controller', () => {
     expect(liveCallVoiceMode(liveCallPresentationStore.getState())).toBe('listening');
   });
 
+  it('marks the first voice turn heard after a proposal question as its possible answer', async () => {
+    openProposalQuestion('s1', 'call-task:m1:0', 'task-report:call-task:m1:0');
+    markProposalQuestionAudible('task-report:call-task:m1:0');
+    noteUserSpeechOnset();
+    const send = () => pipelineFetch('/api/chat/sessions/s1/messages/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'confirm' }),
+    }).then((response) => response.text());
+
+    await send();
+    await send();
+
+    const bodies = fetchMock.mock.calls.slice(0, 2).map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
+    expect(bodies[0].heard_turn_id).toBe('task-report:call-task:m1:0');
+    expect(bodies[1]).not.toHaveProperty('heard_turn_id');  // only the first may answer aloud
+    proposalQuestionStore.resetForTests();
+  });
+
   it('uses one performance plan for onset, pause policy, cue decision, and TTS dispatch', async () => {
     window.localStorage.setItem('omnix.liveConversation.effectiveProfile', JSON.stringify({
       presence_preset: 'listener',
@@ -327,6 +348,10 @@ describe('live voice unified audio controller', () => {
       emotional_attunement: 'expressive',
       topic_continuity: 'natural',
       max_idle_prompts: 1,
+      quiet_hours_enabled: false,
+      quiet_hours_start: '22:00',
+      quiet_hours_end: '08:00',
+      max_initiatives_per_hour: 4,
       duplex_mode: 'echo_aware',
       pronunciation_save_policy: 'ask',
       profile_version: 1,
@@ -382,6 +407,10 @@ describe('live voice unified audio controller', () => {
       emotional_attunement: 'expressive',
       topic_continuity: 'natural',
       max_idle_prompts: 1,
+      quiet_hours_enabled: false,
+      quiet_hours_start: '22:00',
+      quiet_hours_end: '08:00',
+      max_initiatives_per_hour: 4,
       duplex_mode: 'echo_aware',
       pronunciation_save_policy: 'ask',
       profile_version: 1,
@@ -612,5 +641,43 @@ describe('live voice unified audio controller', () => {
     ));
     expect(liveCallVoiceMode(liveCallPresentationStore.getState())).toBe('listening');
     resolveOutput();
+  });
+});
+
+// Last in the file: it leaves a runtime with a guest cached for s1.
+describe('a call with guests', () => {
+  it("speaks a guest's turn in the guest's voice and names the speaker for the call panel", async () => {
+    const card = document.querySelector<HTMLElement>('.assistant-live-card');
+    if (card) card.dataset.liveVoiceId = 'Maya';
+    const base = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path.endsWith('/live-call/runtime')) {
+        return new Response(JSON.stringify({
+          session_id: 's1',
+          greeting: '',
+          scene_guests: [{ character_id: 'bea', display_name: 'Bea Hart', voice_asset_id: 'voice:bea', voice_speaker_id: null }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (path.endsWith('/messages/stream')) {
+        const response = chatStreamResponse();
+        response.headers.set('X-Omnix-Scene-Speaker', 'bea');
+        return response;
+      }
+      return base(input, init);
+    });
+    await characterClient.refreshLiveCallRuntime('s1');
+
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    await response.text();
+
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    expect(mocks.createSession).toHaveBeenCalledWith(
+      'live-call:s1:test-trace',
+      'voice:bea',
+      mocks.reporter,
+      expect.objectContaining({ sessionScoped: true }),
+    );
+    expect(liveCallPresentationStore.getState().sceneSpeakerId).toBe('bea');
   });
 });

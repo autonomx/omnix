@@ -81,6 +81,10 @@ class ChatResearch(Protocol):
         self, session_id: str, request: Any, *, chat_store: Any, job_store: Any, turn: ResearchTurn, send_request: Any,
     ) -> SendChatMessageResponse: ...
 
+    def begin_call_research(
+        self, session: Any, question: str, *, task_id: str, user_message_id: str, job_store: Any,
+    ) -> Any: ...
+
     def quick_context(
         self, request: Any, *, web_search_factory: Any = None, quick_search_factory: Any = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]: ...
@@ -92,6 +96,48 @@ class ChatResearch(Protocol):
 
 # The research feature contributes this; without it, turns run with research disabled.
 CHAT_RESEARCH: Port[ChatResearch] = Port("chat.research", ChatResearch, "at_most_one")
+
+
+class ChatCallActions(Protocol):
+    """Assistant-tool behaviour a live call's action task uses (``live_call_actions``; ADR-0016 port)."""
+
+    def check(self, capability: str, data: Any) -> Any:
+        """The action's input parsed again under its own ability: ``ok``, ``capability``, ``input``, ``effect``."""
+        ...
+
+    def describe(self, capability: str, data: dict[str, Any]) -> str: ...
+
+    def tool_request(self, *, session_id: str, task_id: str, capability: str, data: dict[str, Any]) -> Any: ...
+
+    def review(self, request: Any, *, approved: bool, policy_floor: str) -> Any: ...
+
+    def call_owner(self, session: Any) -> str:
+        """Whose grants a chat's own turns use: the System Assistant or the chat's character."""
+        ...
+
+    def granted(self, owner_id: str, *, ability: str = "", capability: str = "") -> bool:
+        """Whether the owner holds the ability (or the capability's ability) now; False when it cannot be read."""
+        ...
+
+
+# Assistant tools contribute this; without it a call's action task does not start.
+CHAT_CALL_ACTIONS: Port[ChatCallActions] = Port("chat.call_actions", ChatCallActions, "at_most_one")
+
+
+class ChatFloor(Protocol):
+    """The call's floor between the person and its characters' talk (companion 6.3, 6.5; ADR-0016 port)."""
+
+    def person_took_floor(self, session_id: str, user_message_id: str) -> None:
+        """The person's message is saved: a character line in progress loses its lease."""
+        ...
+
+    def active_scene_line_text(self, session_id: str) -> str | None:
+        """What the chat's active scene turn streamed so far, as the server recorded it; None without one."""
+        ...
+
+
+# Character interactions contribute this; without it the lease's TTL and the anchor check at commit still hold.
+CHAT_FLOOR: Port[ChatFloor] = Port("chat.floor", ChatFloor, "at_most_one")
 
 
 class ChatMarketSymbols(Protocol):
@@ -153,6 +199,10 @@ __all__ = [
     "CHAT_STORE_FACTORY",
     "CHAT_RESEARCH",
     "ChatResearch",
+    "CHAT_CALL_ACTIONS",
+    "ChatCallActions",
+    "CHAT_FLOOR",
+    "ChatFloor",
     "CHAT_MARKET_SYMBOLS",
     "ChatMarketSymbols",
     "ResearchTurn",
@@ -205,8 +255,41 @@ _LAZY_EXPORTS = {
     "ProactiveDeliveryResponse": "live_conversation_proactive",
     "commit_proactive_delivery": "live_conversation_proactive",
     "stream_proactive_turn_chunks": "live_conversation_proactive",
+    # A live call's tasks: the report a reason names, and how later live prompts see a task's result.
+    "live_history_session": "live_call_tasks",
+    "call_tasks_prompt": "live_call_tasks",
+    "reported_task_id": "live_call_tasks",
+    "task_report_material": "live_call_tasks",
+    # A write a call proposed: its report claims the start once, so the next turn can confirm it.
+    "claim_proposal_report": "live_call_tasks",
+    # An open loop from the speaker's own memory, checked again before a quiet call raises it (companion 3.2).
+    "is_open_loop_reason": "live_call_open_loops",
+    "open_loop_material": "live_call_open_loops",
+    # A call's scene (companion 5.4): whether a reason is a reaction, the reaction code allows, and the header
+    # that names a turn's speaker.
+    "SCENE_SPEAKER_HEADER": "scene",
+    "load_scene": "scene",
+    "is_scene_reaction_reason": "scene",
+    "direct_scene_reaction": "scene_director",
+    "scene_reaction_opening": "scene_director",
+    # Characters talking to each other (companion 6): the reasons, the opening a line or an opener follows,
+    # who says it, and what the call's floor and the commit read.
+    "SCENE_LINE_REASON": "scene",
+    "SCENE_TALK_REASON": "scene",
+    "SceneTalkMaterial": "scene",
+    "is_scene_reason": "scene",
+    "is_scene_turn_id": "scene",
+    "scene_talk_kind": "scene",
+    # Who a member is, and the thread a line belongs to: what a heard memory reads (companion 6.6).
+    "resolve_member": "scene",
+    "thread_of": "scene",
+    "seconds_since_last_message": "scene",
+    "direct_scene_talk": "scene_director",
+    "scene_talk_opening": "scene_director",
     "ChatSessionStore": "character_store",
     "default_chat_store": "character_store",
+    # Whether a call may offer the camera (companion 4.3).
+    "camera_vision": "live_call_camera",
     # The request a Quick Search through CHAT_RESEARCH reads (a call looking something up).
     "AssistantContextChatRequest": "assistant_context.models",
 }

@@ -132,6 +132,8 @@ export type ChatStreamEvent = {
   text?: string;
   message?: unknown;
   session?: ApiChatSession;
+  /** A `camera_request` event: what the call asked to see (companion 4.3). */
+  what?: unknown;
 };
 
 export type VoiceTurnPerformance = {

@@ -163,12 +163,22 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
     ) -> OmnixStreamingResponse:
         chat_store = get_chat_store()
         job_store = get_job_store()
+        # A camera picture (companion 4.2) is taken out of the request at once: only its description is kept.
+        camera_image = request.camera_image
+        if camera_image is not None:
+            request = request.model_copy(update={"camera_image": None})
         begin_streaming = getattr(chat_store, "begin_streaming_user_message", None)
         admission = await asyncio.to_thread(
             _admit, chat_store, job_store, session_id, request,
             begin_user_message=begin_streaming if callable(begin_streaming) else None,
         )
         user_message = admission.user_message
+        # In a call with guests (companion 5.2) code picks who answers; the header names them for the call's voice.
+        from app.platform.chat.scene import SCENE_SPEAKER_HEADER, turn_scene
+
+        scene = None
+        if not admission.existing:
+            scene = await asyncio.to_thread(turn_scene, admission.session, user_message.content)
 
         def event_line(event: dict[str, Any]) -> str:
             return f"data: {json.dumps(event, sort_keys=True)}\n\n"
@@ -176,15 +186,29 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
         from app.platform.chat.admission import stream_chat_turn
 
         def generate():
+            nonlocal camera_image
             yield event_line({"type": "user_message", "message": user_message.model_dump(mode="json")})
             yield event_line({"type": "job", "job": admission.job.model_dump(mode="json")})
             if admission.existing:
                 # A repeated submission reports the turn it already started.
+                camera_image = None
                 yield event_line({"type": "session", "session": admission.session.model_dump(mode="json")})
                 yield event_line({"type": "done"})
                 return
             try:
-                for event in stream_chat_turn(chat_store, job_store, admission, request):
+                turn_options: dict[str, Any] = {}
+                if camera_image is not None:
+                    from app.platform.chat.live_call_camera import CameraTurn
+
+                    image, camera_image = camera_image, None
+                    looking = CameraTurn(chat_store, admission.session.id, user_message, image)
+                    del image
+                    for event in looking:
+                        yield event_line(event)
+                    turn_options = looking.options
+                if scene is not None:
+                    turn_options = {**turn_options, "scene": scene}
+                for event in stream_chat_turn(chat_store, job_store, admission, request, **turn_options):
                     yield event_line(event)
                     if event.get("type") == "interrupted":
                         return
@@ -202,6 +226,7 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
         return OmnixStreamingResponse(
             generate(),
             media_type="text/event-stream",
+            headers=None if scene is None else {SCENE_SPEAKER_HEADER: scene.speaker_id},
             eager_sync=True,
             diagnostic_context={
                 "route_path": "/api/chat/sessions/{session_id}/messages/stream",

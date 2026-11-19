@@ -250,6 +250,26 @@ def turn_completed_event(session: ChatSession, user_message_id: str, *, user_id:
     )
 
 
+def scene_line_delivered_event(
+    session: ChatSession, message: ChatMessage, *, user_id: str, member_ids: list[str],
+) -> Any:
+    """The ``ChatSceneLineDelivered`` event a stored scene line publishes (companion 6.6)."""
+    from app.conversation.scene import HEARD_TEXT_KEY, SPEAKER_ID_KEY
+
+    from .turn_events import ChatSceneLineDelivered
+
+    metadata = message.metadata or {}
+    return ChatSceneLineDelivered(
+        session_id=session.id,
+        message_id=message.id,
+        user_id=user_id,
+        speaker_id=str(metadata.get(SPEAKER_ID_KEY) or session.character_id or ""),
+        member_ids=member_ids,
+        memory_writes_allowed=_memory_suggestions_allowed(session),
+        heard_text=metadata.get(HEARD_TEXT_KEY),
+    )
+
+
 class ChatSessionStore(JsonChatSessionStore):
     """Compatibility store with one provider prompt path for every generation mode."""
 
@@ -465,13 +485,14 @@ class ChatSessionStore(JsonChatSessionStore):
     ):
         source_messages = {message.id: message for message in session.messages}
         source_messages[user_message.id] = user_message
-        return [
-            _provider_message(
-                source_messages.get(message.message_id or "", message),
-                content=message.content,
-            )
-            for message in rendered.messages
-        ]
+        provider_messages = []
+        for message in rendered.messages:
+            source = source_messages.get(message.message_id or "", message)
+            if source.role != message.role:
+                # Another scene member's reply is rendered as their quoted line (companion 5.3): it keeps that role.
+                source = message
+            provider_messages.append(_provider_message(source, content=message.content))
+        return provider_messages
 
     @staticmethod
     def _active_history_metadata(assembly: PromptAssembly) -> dict[str, Any]:
@@ -512,6 +533,11 @@ class ChatSessionStore(JsonChatSessionStore):
         it to its consumers (assistant memory suggests memories from it); a
         store without the outbox has no consumers to reach.
         """
+
+    def publish_scene_line_delivered(self, session: ChatSession, message: ChatMessage, *,
+                                     member_ids: list[str]) -> None:
+        """Tell other modules a scene line was stored (companion 6.6). The PostgreSQL store appends the event
+        to the outbox; a store without the outbox has no consumers to reach."""
 
     def _run_post_turn_maintenance(self, session: ChatSession, user_message_id: str) -> None:
         """Publish the completed turn and run chat's own maintenance, without changing delivery success."""

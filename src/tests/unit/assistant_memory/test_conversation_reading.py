@@ -253,3 +253,30 @@ def test_reading_does_not_use_the_fast_live_model(monkeypatch, configured: str, 
     reader = module.default_conversation_reader()
     assert reader is not None and reader.model_id == expected
     assert live.config.model == "claude-haiku-4-5-20251001", "live replies keep their model"
+
+
+def test_a_character_line_is_never_read_as_the_reply_to_the_person() -> None:
+    from types import SimpleNamespace
+
+    def said(message_id: str, role: str, **metadata: object) -> SimpleNamespace:
+        return SimpleNamespace(id=message_id, role=role, content=f"{message_id} text", metadata=metadata)
+
+    person = said("p", "user")
+    aside = said("a", "assistant", transient=True)
+    line = said("l", "assistant", initiative_reason="scene_line:bea")
+    reply = said("r", "assistant")
+    session = SimpleNamespace(messages=[person, aside, line, reply])
+
+    assert module._reply_to(session, person) is reply
+    assert module._reply_to(SimpleNamespace(messages=[person, line, said("q", "user")]), person) is None
+
+
+def test_a_turn_the_microphone_heard_from_a_character_is_not_logged() -> None:
+    from types import SimpleNamespace
+
+    class Runtime:
+        def append_authoritative_next(self, _request: object) -> None:
+            raise AssertionError("an echo is not the person's words")
+
+    echo = SimpleNamespace(id="p", role="user", content="Go on.", metadata={"suspected_echo": True})
+    module.record_turn(SimpleNamespace(messages=[echo]), echo, runtime=Runtime())

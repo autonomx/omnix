@@ -1844,6 +1844,42 @@
       "symbol": "_TTS_SWITCH_LOCK",
       "category": "coordination",
       "reason": "One engine switch at a time in this service, which loads one engine at a time."
+    },
+    {
+      "path": "src/app/platform/assistant_tools/voice_actions.py",
+      "symbol": "_availability",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_AVAILABILITY_ENTRIES",
+      "ttl_symbol": "_AVAILABILITY_SECONDS",
+      "invalidation": "reset_voice_action_availability"
+    },
+    {
+      "path": "src/app/platform/chat/live_call_actions.py",
+      "symbol": "_THREADS_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex guards only the inline (provider-free) call-action threads; PostgreSQL job leases remain the production authority."
+    },
+    {
+      "path": "src/app/platform/chat/live_call_actions.py",
+      "symbol": "_THREAD_JOB_IDS",
+      "category": "coordination",
+      "reason": "This set deduplicates inline call-action threads only when PostgreSQL is not the runtime; durable job status stays in the job store, and each thread removes its ID in finally."
+    },
+    {
+      "path": "src/app/platform/chat/live_call_camera.py",
+      "symbol": "_executor",
+      "category": "coordination",
+      "reason": "Two worker threads run a camera picture's vision call off the turn so the turn can stop waiting at its timeout; capping the pool keeps timed-out calls from piling up threads. It holds no records: the description is committed with the turn."
+    },
+    {
+      "path": "src/app/platform/live_voice/llm/call_tools.py",
+      "symbol": "_research_availability",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_AVAILABILITY_ENTRIES",
+      "ttl_symbol": "_AVAILABILITY_SECONDS",
+      "invalidation": "reset_research_availability"
     }
-  ]
+]
 }

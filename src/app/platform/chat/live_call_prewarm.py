@@ -52,11 +52,14 @@ class LiveCallPrewarmRequest(BaseModel):
 class OverlapJudgementRequest(BaseModel):
     transcript: str = Field(min_length=1, max_length=400)
     assistant_text: str = Field(default="", max_length=1000)
+    # Asked of a remark the call would otherwise drop, while a proposal's question plays: only whether it answers.
+    proposal_answer_only: bool = False
 
 
 class OverlapJudgementResponse(BaseModel):
     decision: Literal["stop", "continue"]
-    source: Literal["model", "fallback"]
+    # "proposal_answer": a confirm or cancel said over the call's question about a proposal, decided by code.
+    source: Literal["model", "fallback", "proposal_answer"]
     reason: str | None = None
     elapsed_ms: float
 
@@ -162,6 +165,14 @@ def register_live_call_prewarm_routes(router: APIRouter,
         session = await asyncio.to_thread(chat_store_factory().get_session, session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="session_not_found")
+        from .live_agent_store import is_proposal_answer
+        from .live_call_tasks import proposal_question_open
+
+        # A barge-in "yes" over the question is the answer: it becomes a turn, which decides by its own checks.
+        if is_proposal_answer(request.transcript) and proposal_question_open(session):
+            return {"decision": "stop", "source": "proposal_answer", "reason": "proposal_answer", "elapsed_ms": 0.0}
+        if request.proposal_answer_only:
+            return {"decision": "continue", "source": "fallback", "reason": "not_proposal_answer", "elapsed_ms": 0.0}
         provider_id, model_id, _execution_lane = _configured_live_route()
         return await judge_overlap(
             session_id=session_id,

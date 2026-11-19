@@ -285,3 +285,115 @@ def test_the_retirement_migration_refuses_while_v1_holds_records(switched) -> No
         with pytest.raises(psycopg.errors.RaiseException, match="still holds curated records"):
             connection.execute(sql)
         connection.rollback()
+
+
+def _heard(service, owner_id: str, about: str, content: str) -> MemoryRecord:
+    return service.create_heard_memory(
+        _context(owner_id), about_character_id=about, kind="semantic_fact", category="fact", content=content,
+        confidence=0.8, provenance_id="scene:chat:line",
+    )
+
+
+def _retrieve_present(database, tenant, owner_id: str, text: str, present, limit: int = 5) -> list[tuple]:
+    result = PostgresMemoryV2Runtime(database).retrieve(RetrievalQuery(
+        query_id=f"scene:{uuid4().hex}",
+        space=MemorySpaceKey(principal_id=tenant.workspace_id, owner_type="character", owner_id=owner_id),
+        visible_scopes=(VisibilityScope(kind="global", scope_id=PROFILE),),
+        text=text, authority="final", as_of=datetime.now(timezone.utc), top_k=12, token_budget=4000,
+        deadline_ms=5000, present_characters=present, per_character_limit=limit,
+    ))
+    return [(candidate.content, candidate.about_character_id) for candidate in result.candidates
+            if candidate.prompt_eligible]
+
+
+def test_a_heard_memory_is_about_the_character_and_retrieved_only_while_they_are_present(switched) -> None:
+    database, tenant, service, _legacy = switched
+    owner = f"character:mara-{uuid4().hex[:8]}"
+    record = _heard(service, owner, "bea", "Bea is afraid of storms")
+    _save(service, owner, "The user is afraid of storms")
+
+    with database.transaction() as connection:
+        subjects = connection.execute(
+            "SELECT subject_entity_type, subject_entity_id FROM omnix_memory_v2_graph_assertions "
+            "WHERE owner_id = %s AND status = 'active' ORDER BY subject_entity_type",
+            (owner,),
+        ).fetchall()
+    assert [tuple(row) for row in subjects] == [("about_character", "bea"), ("profile", subjects[1][1])]
+
+    assert ("Bea is afraid of storms", "bea") in _retrieve_present(database, tenant, owner, "storms", ("bea",))
+    absent = _retrieve_present(database, tenant, owner, "storms", ("theo",))
+    assert [content for content, _about in absent] == ["The user is afraid of storms"]
+    unfiltered = _retrieve_present(database, tenant, owner, "storms", None)
+    assert ("Bea is afraid of storms", "bea") in unfiltered
+    assert record.about_character_id == "bea"
+
+
+def test_the_owners_own_side_is_not_mistaken_for_a_memory_about_a_character(switched) -> None:
+    # A conversation reading files the owner's stance, promises and jokes under the owner as a "character" subject.
+    # Those stay the owner's, whoever is on the call; only an about-character memory waits for its character.
+    database, tenant, service, _legacy = switched
+    owner = f"character:mara-{uuid4().hex[:8]}"
+    _save(service, owner, "Promised to show them the storm painting")
+    with database.transaction() as connection:
+        connection.execute(
+            "UPDATE omnix_memory_v2_graph_assertions SET subject_entity_type = 'character' WHERE owner_id = %s",
+            (owner,),
+        )
+
+    kept = _retrieve_present(database, tenant, owner, "storm painting", ("theo",))
+
+    assert [content for content, about in kept] == ["Promised to show them the storm painting"]
+    assert [about for _content, about in kept] == [None]
+
+
+def test_the_newest_memories_per_present_character_are_retrieved(switched) -> None:
+    database, tenant, service, _legacy = switched
+    owner = f"character:mara-{uuid4().hex[:8]}"
+    for content in ("Bea likes storms", "Bea likes thunder storms", "Bea likes summer storms"):
+        _heard(service, owner, "bea", content)
+
+    kept = _retrieve_present(database, tenant, owner, "storms", ("bea",), limit=2)
+
+    assert sorted(content for content, _about in kept) == ["Bea likes summer storms", "Bea likes thunder storms"]
+
+
+def test_an_open_loop_about_a_character_is_not_raised_as_the_persons(switched) -> None:
+    from app.platform.assistant_memory.v2.understanding_view import read_open_loops
+
+    database, tenant, service, _legacy = switched
+    owner = f"character:mara-{uuid4().hex[:8]}"
+    _save(service, owner, "Finish the storm painting", category="project")
+    _heard(service, owner, "bea", "Bea wants to finish her boat")
+    space = MemorySpaceKey(principal_id=tenant.workspace_id, owner_type="character", owner_id=owner)
+    scopes = (VisibilityScope(kind="global", scope_id=PROFILE),)
+    with database.transaction() as connection:
+        connection.execute(
+            "UPDATE omnix_memory_v2_graph_assertions SET domain = 'open_loop' WHERE owner_id = %s", (owner,),
+        )
+
+    loops = read_open_loops(database, space, scopes, now=datetime.now(timezone.utc))
+
+    assert [loop.text for loop in loops] == ["Finish the storm painting"]
+
+
+def test_a_memory_about_a_character_never_reads_as_understanding_of_the_person(switched) -> None:
+    # Defence in depth (6.6): even shaped as a reading's trait, an about-character row stays out of the person's.
+    from app.platform.assistant_memory.v2.understanding import DERIVATION
+    from app.platform.assistant_memory.v2.understanding_view import read_understanding
+
+    database, tenant, service, _legacy = switched
+    owner = f"character:mara-{uuid4().hex[:8]}"
+    _save(service, owner, "Laughs at puns")
+    _heard(service, owner, "bea", "Bea laughs at nothing")
+    space = MemorySpaceKey(principal_id=tenant.workspace_id, owner_type="character", owner_id=owner)
+    scopes = (VisibilityScope(kind="global", scope_id=PROFILE),)
+    with database.transaction() as connection:
+        connection.execute(
+            "UPDATE omnix_memory_v2_graph_assertions SET domain = 'trait', predicate = 'person_humor',"
+            " derivation_version = %s WHERE owner_id = %s",
+            (DERIVATION, owner),
+        )
+
+    items = read_understanding(database, space, scopes)
+
+    assert [item.text for item in items if item.kind == "person"] == ["Laughs at puns"]

@@ -205,6 +205,9 @@ __all__ = [
 _LAZY_EXPORTS = {
     "CompanionInitiativeAuthorityStore": "initiative",
     "InitiativeAcquireRequest": "initiative",
+    # Scene talk attempts (companion 6.2): one per lease, recorded and capped by the authority.
+    "SceneTalkAttempt": "initiative",
+    "SceneTalkAttemptRequest": "initiative",
     "default_companion_initiative_authority": "initiative",
     "CognitionResult": "cognition",
     "CompanionCognition": "cognition",

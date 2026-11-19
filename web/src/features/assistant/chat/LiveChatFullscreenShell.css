@@ -413,9 +413,14 @@
   }
 
   .live-chat-fullscreen-call-buttons {
-    display: grid;
+    display: flex;
     gap: 0.5rem;
-    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  /* Mute and quiet keep their width; the call button takes the rest. */
+  .live-chat-fullscreen-call-buttons > button:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .live-chat-fullscreen-call-buttons > button.live-mute-button {
@@ -429,6 +434,11 @@
     background: linear-gradient(100deg, var(--c-red-640), var(--c-red-640));
     border-color: transparent;
     color: var(--c-neutral-1000);
+  }
+
+  .live-chat-fullscreen-call-buttons > button.live-quiet-button.quiet {
+    background: color-mix(in srgb, var(--accent-violet-810) 45%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-810) 70%, transparent);
   }
 
   .live-chat-fullscreen-call-buttons > button:disabled {

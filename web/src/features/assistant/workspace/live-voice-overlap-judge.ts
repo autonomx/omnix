@@ -4,7 +4,8 @@ import { createApi } from '../api/gateway';
 
 export type OverlapVerdict = {
   decision: 'stop' | 'continue';
-  source: 'model' | 'fallback';
+  /** `proposal_answer`: a confirm or cancel said over the call's question about a proposal, decided by code. */
+  source: 'model' | 'fallback' | 'proposal_answer';
   reason: string | null;
 };
 
@@ -20,6 +21,7 @@ export async function judgeOverlap(
   transcript: string,
   assistantText: string,
   fetchImpl: typeof fetch = pipelineFetch,
+  { proposalAnswerOnly = false }: { proposalAnswerOnly?: boolean } = {},
 ): Promise<OverlapVerdict> {
   const abort = new AbortController();
   const deadline = setTimeout(() => abort.abort(), REQUEST_DEADLINE_MS);
@@ -29,6 +31,7 @@ export async function judgeOverlap(
       body: {
         transcript: transcript.trim().slice(0, MAX_TRANSCRIPT_CHARS),
         assistant_text: assistantText.trim().slice(-MAX_ASSISTANT_CHARS),
+        ...(proposalAnswerOnly ? { proposal_answer_only: true } : {}),
       },
       // The model's waiting process is on the call's replica.
       headers: { [CALL_ID_HEADER]: encodeURIComponent(sessionId) },

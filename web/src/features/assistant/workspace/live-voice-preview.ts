@@ -3,7 +3,13 @@ import { liveConversationStore } from './live-conversation-store';
 import { type OverlapAssessment, type OverlapIntent, classifyOverlap, shouldConfirmInterruption } from './live-voice-overlap-classifier';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { AUTHORITATIVE_PREVIEW_PAUSE_MS, LiveVoiceSession, controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent } from './live-voice-controller-state';
-import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../../events/bus';
+import { onlyRespondToMeActive } from './live-voice-speaker-gate';
+import { ASSISTANT_AUDIO_DUCK_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../../events/bus';
+
+/** The reply's level while a deferred interruption waits for its voice, as while the overlap judge decides. */
+export const SPEAKER_PENDING_GAIN = 0.18;
+/** A deferral whose final never comes stops ducking the reply after this long; it still waits for the final. */
+export const SPEAKER_PENDING_UNDUCK_MS = 8_000;
 
 export function scheduleAuthoritativePreview(session: LiveVoiceSession): void {
   if (session.previewTimer || session.previewRequestId || session.finalRequested) return;
@@ -117,8 +123,48 @@ export function assessOverlapCandidate(session: LiveVoiceSession): void {
   });
   if (!session.interruptionDispatched && shouldConfirmInterruption(assessment)) {
     session.interruptionDispatched = true;
-    dispatchAssistantVoiceInterrupt(session.card, assessment.intent, assessment.confidence);
+    if (onlyRespondToMeActive()) deferInterruptForSpeaker(session, assessment.intent, assessment.confidence);
+    else dispatchAssistantVoiceInterrupt(session.card, assessment.intent, assessment.confidence);
   }
+}
+
+/**
+ * "Only respond to me": speech over the reply may be another voice, whose words must not stop it. The interruption waits
+ * for the final's voice with the reply ducked, so the caller still hears it give way at once.
+ */
+export function deferInterruptForSpeaker(
+  session: Pick<LiveVoiceSession, 'deferredInterrupt' | 'reporter'>,
+  intent: OverlapIntent,
+  confidence: number,
+): void {
+  if (session.deferredInterrupt) return;
+  emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { ducked: true, gain: SPEAKER_PENDING_GAIN, reason: 'speaker-pending', timestamp: performance.now() });
+  const unduckTimer = setTimeout(unduckSpeakerPending, SPEAKER_PENDING_UNDUCK_MS);
+  session.deferredInterrupt = { intent, confidence, unduckTimer };
+  session.reporter.record('interruption_deferred_for_speaker', { intent, confidence }, 'live_voice_controller');
+}
+
+/**
+ * Ends a deferral: `dispatch` stops the reply (the caller's voice, or no verdict) if it is still playing, otherwise it
+ * plays on. The reply is unducked either way. True when an interruption was dispatched.
+ */
+export function settleDeferredInterrupt(
+  session: Pick<LiveVoiceSession, 'card' | 'deferredInterrupt'>,
+  dispatch: boolean,
+  assistantSpeaking: boolean,
+): boolean {
+  const deferred = session.deferredInterrupt;
+  if (!deferred) return false;
+  session.deferredInterrupt = null;
+  clearTimeout(deferred.unduckTimer);
+  unduckSpeakerPending();
+  if (!dispatch || !assistantSpeaking) return false;
+  dispatchAssistantVoiceInterrupt(session.card, deferred.intent, deferred.confidence);
+  return true;
+}
+
+function unduckSpeakerPending(): void {
+  emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { ducked: false, gain: 1, reason: 'speaker-settled', timestamp: performance.now() });
 }
 
 /**

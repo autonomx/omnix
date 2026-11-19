@@ -9,6 +9,7 @@ import type { CharacterLiveCallRuntime } from './characterClient';
 import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
 import { livePortrait } from './portrait/livePortrait';
 import { fixture } from '../../../test/fixture';
+import { createTestQueryClient, TestProviders } from '../../../test/renderWithProviders';
 
 const sockets: unknown[] = [];
 vi.stubGlobal('WebSocket', class {
@@ -59,7 +60,11 @@ const messages: LiveChatMessage[] = [
 ];
 
 function renderShell() {
-  return render(<LiveChatFullscreenShell messages={messages} onSendMessage={sourceSubmit} onToggleCall={sourceCallClick} />);
+  return render(
+    <TestProviders queryClient={createTestQueryClient()}>
+      <LiveChatFullscreenShell messages={messages} onSendMessage={sourceSubmit} onToggleCall={sourceCallClick} />
+    </TestProviders>,
+  );
 }
 
 describe('LiveChatFullscreenShell', () => {

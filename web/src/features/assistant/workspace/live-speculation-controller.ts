@@ -77,6 +77,7 @@ type ChatStreamRequestBody = Record<string, unknown> & {
   user_turn_id?: string;
   speech_segment_id?: string;
   live_voice_turn_id?: string;
+  camera_image?: string;
 };
 
 type ActiveSpeculation = {
@@ -176,7 +177,8 @@ export function speculationRequestCanReuse(
   speculativeModelId: string | null,
 ): boolean {
   if (!body) return false;
-  if (body.agent_mode === true || body.dry_run === true || body.research_mode) {
+  // A turn with a camera picture (companion 4.1) is answered about the picture, never by a speculative reply.
+  if (body.agent_mode === true || body.dry_run === true || body.research_mode || typeof body.camera_image === 'string') {
     return false;
   }
   const providerId = typeof body.provider_id === 'string' ? body.provider_id : null;

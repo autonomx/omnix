@@ -24,6 +24,9 @@ import {
   matchLiveConversationModeProfile,
 } from './liveConversationModeProfiles';
 
+type SceneTalkLevel = LiveConversationProfile['scene_talk_level'];
+type SceneTalkAttempts = NonNullable<LiveConversationProfile['scene_talk_attempts_per_hour']>;
+
 export type LiveConversationControlsProps = { sessionId: string | null };
 
 export function LiveConversationControls({ sessionId }: LiveConversationControlsProps) {
@@ -182,6 +185,19 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
           ]} />
           <label><span>First idle prompt</span><input aria-label="First idle prompt seconds" type="number" min="1" max="120" step="1" value={Math.round(profile.idle_threshold_ms / 1000)} disabled={saving} onChange={(event) => void update({ idle_threshold_ms: Number(event.currentTarget.value) * 1000 })} /><strong>seconds</strong></label>
           <label><span>Maximum prompts per quiet period</span><input aria-label="Maximum prompts per quiet period" type="number" min="0" max="3" step="1" value={profile.max_idle_prompts} disabled={saving} onChange={(event) => void update({ max_idle_prompts: Number(event.currentTarget.value) })} /></label>
+          <label><span>Unprompted remarks per hour</span><input aria-label="Unprompted remarks per hour" type="number" min="0" max="20" step="1" value={profile.max_initiatives_per_hour} disabled={saving} onChange={(event) => void update({ max_initiatives_per_hour: Number(event.currentTarget.value) })} /></label>
+          <label><span>Quiet hours</span><input aria-label="Quiet hours" type="checkbox" checked={profile.quiet_hours_enabled} disabled={saving} onChange={(event) => void update({ quiet_hours_enabled: event.currentTarget.checked })} /><strong>{profile.quiet_hours_enabled ? 'No unprompted remarks' : 'Off'}</strong></label>
+          <label><span>Quiet from</span><input aria-label="Quiet hours start" type="time" value={profile.quiet_hours_start} disabled={saving || !profile.quiet_hours_enabled} onChange={(event) => { if (event.currentTarget.value) void update({ quiet_hours_start: event.currentTarget.value }); }} /></label>
+          <label><span>Quiet until</span><input aria-label="Quiet hours end" type="time" value={profile.quiet_hours_end} disabled={saving || !profile.quiet_hours_enabled} onChange={(event) => { if (event.currentTarget.value) void update({ quiet_hours_end: event.currentTarget.value }); }} /></label>
+          <label><span>Characters talk to each other</span><input aria-label="Characters talk to each other" type="checkbox" checked={profile.scene_talk_enabled} disabled={saving} onChange={(event) => void update({ scene_talk_enabled: event.currentTarget.checked })} /><strong>{profile.scene_talk_enabled ? 'On a call with guests' : 'Off'}</strong></label>
+          <SelectControl label="How often they talk" value={profile.scene_talk_level} disabled={saving || !profile.scene_talk_enabled} onChange={(value) => void update({ scene_talk_level: value as SceneTalkLevel })} options={[
+            ['rarely', 'Rarely'], ['sometimes', 'Sometimes'], ['often', 'Often'],
+          ]} />
+          <SelectControl label="Talk attempts per hour" value={String(profile.scene_talk_attempts_per_hour ?? '')} disabled={saving || !profile.scene_talk_enabled} onChange={(value) => void update({ scene_talk_attempts_per_hour: value ? Number(value) as SceneTalkAttempts : null })} options={[
+            ['', 'As the level sets'], ['6', '6'], ['12', '12'], ['24', '24'], ['48', '48'],
+          ]} />
+          <label><span>Lines in one exchange</span><input aria-label="Lines in one exchange" type="number" min="2" max="8" step="1" value={profile.scene_talk_max_lines} disabled={saving || !profile.scene_talk_enabled} onChange={(event) => void update({ scene_talk_max_lines: Number(event.currentTarget.value) })} /></label>
+          <label><span>Memories about each character on the call</span><input aria-label="Memories about each character on the call" type="number" min="0" max="20" step="1" value={profile.scene_memory_per_character} disabled={saving} onChange={(event) => void update({ scene_memory_per_character: Number(event.currentTarget.value) })} /></label>
         </div> : null}
 
         <div className="live-chat-profile-actions">{sessionId && source === 'session_override' ? <button type="button" disabled={saving} onClick={() => void clearOverride()}>Use my defaults</button> : null}<small>Profile version {profile.profile_version}</small></div>

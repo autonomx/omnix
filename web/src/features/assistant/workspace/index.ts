@@ -349,7 +349,28 @@ export type {
 export { useAvatarPresence } from './live-avatar-presence';
 export type { AvatarPresence, AvatarPresenceCue } from './live-avatar-presence';
 export { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCaptureLabels, useLiveCallPresentation } from './live-call-presentation-store';
-export { isLiveVoiceControllerInstalled, setLiveVoiceMuted, startLiveVoiceCall, toggleLiveVoiceCall } from './live-voice-controller';
+export { isLiveVoiceControllerInstalled, setLiveCallQuiet, setLiveCallSceneTalk, setLiveVoiceMuted, startLiveVoiceCall, toggleLiveVoiceCall } from './live-voice-controller';
+export { cancelLiveCallTask, openCallTasks, useLiveCallTasks } from './live-call-tasks-controller';
+export { decideProposalQuestion, proposalButtonsVisible, useProposalQuestion } from './live-call-proposal-question';
+export type { LiveCallTask, LiveCallTasksState } from './live-call-tasks-controller';
+export { addCallGuest, callSceneGuests, loadCallScene, removeCallGuest, useCallScene } from './live-call-scene';
+export type { CallSceneMember, CallSceneState } from './live-call-scene';
+export {
+  closeLiveCallCamera,
+  LIVE_CALL_CAMERA_JPEG_QUALITY,
+  LIVE_CALL_CAMERA_LONGEST_SIDE,
+  liveCallCameraState,
+  noteLiveCallCameraRequest,
+  openLiveCallCamera,
+  refreshLiveCallCameraAvailability,
+  resetLiveCallCamera,
+  resetLiveCallCameraForTests,
+  takeLiveCallCameraFrame,
+  takeLiveCallCameraPicture,
+  useLiveCallCamera,
+} from './live-call-camera';
+export type { LiveCallCameraPhase, LiveCallCameraState } from './live-call-camera';
+export { useLiveConversationSelector } from './live-conversation-store';
 export { isLiveVoiceUnifiedAudioInstalled } from './live-voice-unified-audio-controller';
 export { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 export { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
@@ -358,6 +379,7 @@ export { createChatbotActivityEvents, createChatbotFailureEvent } from './chatbo
 export { assistantContextStore } from './assistant-context-store';
 export { liveChatSubmissionGateway } from './live-chat-submission-gateway';
 export { liveVoiceTranscriptStore, useLiveVoiceTranscript } from './live-voice-transcript-store';
+export { sendHeldFinal } from './live-voice-speaker-gate';
 export { AssistantContextControls, DesktopShareButton, DesktopShareStatusRow } from './assistant-context-controls';
 export { DesktopCompanionControls } from './desktop-companion-controls';
 export { DesktopCompanionTextSurface } from './desktop-companion-text-surface';

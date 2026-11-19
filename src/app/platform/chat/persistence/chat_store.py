@@ -4,6 +4,7 @@ import json
 import base64
 from typing import Any
 
+from app.conversation.scene import refuse_scene_view
 from app.platform.chat.models import ChatMessage, ChatSession, ChatSessionSummary
 from app.runtime.pagination import MAX_PAGE_SIZE
 from app.platform.chat.retention_policy import transcript_retention_allowed
@@ -488,6 +489,59 @@ class PostgresChatRepositoryAdapter:
             work.commit()
         return changed
 
+    def claim_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        require: dict[str, Any],
+        patch: dict[str, object],
+    ) -> bool:
+        """Merge ``patch`` only while every ``require`` condition holds (``message_claims``); whether it did.
+
+        The conditions are in the UPDATE's WHERE, so of two concurrent claims on the same state only one changes a row.
+        """
+        from app.platform.chat.message_claims import ABSENT
+
+        if not patch:
+            return False
+        conditions: list[str] = []
+        condition_params: list[Any] = []
+        for key, expected in require.items():
+            if expected is ABSENT:
+                conditions.append(" AND NOT (metadata ? %s)")
+                condition_params.append(key)
+            else:
+                conditions.append(" AND metadata -> %s = %s::jsonb")
+                condition_params.extend((key, _json(expected)))
+        with unit_of_work(self.database) as work:
+            session = work.connection.execute(
+                """SELECT id FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s AND status = 'active'
+                     FOR UPDATE""",
+                (self.context.workspace_id, session_id),
+            ).fetchone()
+            if session is None:
+                work.rollback()
+                return False
+            cursor = work.connection.execute(
+                """UPDATE omnix_chat_messages
+                      SET metadata = metadata || %s::jsonb
+                    WHERE workspace_id = %s AND session_id = %s AND id = %s"""
+                + "".join(conditions),
+                (_json(patch), self.context.workspace_id, session_id, message_id, *condition_params),
+            )
+            changed = cursor.rowcount > 0
+            if changed:
+                work.connection.execute(
+                    """UPDATE omnix_chat_sessions
+                          SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s AND status = 'active'""",
+                    (self.context.workspace_id, session_id),
+                )
+            work.commit()
+        return changed
+
     def delete_messages(self, session_id: str, message_ids: list[str]) -> int:
         """Delete selected transcript rows from one locked session."""
         ids = list(dict.fromkeys(message_ids))
@@ -551,6 +605,7 @@ class PostgresChatRepositoryAdapter:
         return deleted
 
     def _session_payload(self, session: ChatSession) -> dict[str, Any]:
+        refuse_scene_view(session)
         return {
             "id": session.id,
             "title": session.title,

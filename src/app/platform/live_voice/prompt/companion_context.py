@@ -26,6 +26,7 @@ from app.platform.characters.contracts import (
 from app.platform.chat.contracts import (
     build_prompt_assembly,
     compaction_enabled,
+    live_history_session,
     render_prompt_assembly,
     resolve_prompt_memory,
 )
@@ -215,7 +216,8 @@ def build_companion_prompt(
     assembly = _timed(
         "assembly_ms",
         build_prompt_assembly,
-        session,
+        # A call task's result is a stub here: the report and the task state carry what the call needs.
+        live_history_session(session),
         user_message,
         global_system_prompt=get_global_system_prompt(),
         context_items=context_items or [],

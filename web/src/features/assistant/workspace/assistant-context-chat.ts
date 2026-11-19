@@ -26,7 +26,10 @@ type DesktopFrames = Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>>
  *
  * A live call's turn is not sent to the context route for research alone:
  * the call's own model looks things up when the speaker may, and the
- * context route's planning would hold the reply for many seconds.
+ * context route's planning would hold the reply for many seconds. A turn
+ * with a camera picture (companion 4.1) always goes to the chat route, the
+ * only one that describes it; agent mode and the other tools sit out that
+ * one turn.
  */
 export async function sendChatWithAssistantContext<T>(
   sessionId: string,
@@ -39,7 +42,8 @@ export async function sendChatWithAssistantContext<T>(
   const { agentMode, researchMode, desktopShare, localWorkspace } = context;
   if (localWorkspace) storeLocalWorkspace(sessionId, localWorkspace);
   const researching = researchMode !== 'disabled' && !liveCallTurn;
-  const enhanced = agentMode || researching || desktopShare !== null || localWorkspace !== null;
+  const camera = typeof body.camera_image === 'string';
+  const enhanced = !camera && (agentMode || researching || desktopShare !== null || localWorkspace !== null);
   const request = enhanced ? sendThroughContext(sessionId, body, context, send) : send('chat', body);
   if (!enhanced) {
     dispatchPerformance('assistant_context_chat_request_dispatched', { sessionId, agentMode, researchMode, enhanced, persistenceDeferred: true });

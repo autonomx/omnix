@@ -17,6 +17,30 @@ describe('live voice transcript store', () => {
     expect(liveVoiceTranscriptStore.draftText()).toBe('');
   });
 
+  it('settles the speaker draft as a held row for words in another voice, which a sent message leaves in place', () => {
+    liveVoiceTranscriptStore.write('You', 'and the score', 'draft');
+    const heldId = liveVoiceTranscriptStore.writeHeld('And the score is two nil.');
+    liveVoiceTranscriptStore.write('You', 'What did I miss?', 'final');
+
+    expect(liveVoiceTranscriptStore.removeFinalUserRows()).toBe(1);
+    expect(liveVoiceTranscriptStore.getState().rows).toEqual([
+      expect.objectContaining({ id: heldId, text: 'And the score is two nil.', draft: false, held: 'pending' }),
+    ]);
+
+    liveVoiceTranscriptStore.expireHeld();
+    expect(liveVoiceTranscriptStore.getState().rows[0]?.held).toBe('expired');
+    expect(liveVoiceTranscriptStore.writeHeld('   ')).toBeNull();
+  });
+
+  it('turns a held row sent anyway into an ordinary one, which the sent message replaces', () => {
+    const heldId = liveVoiceTranscriptStore.writeHeld('Remind me to call Sam.')!;
+
+    liveVoiceTranscriptStore.releaseHeld(heldId);
+
+    expect(liveVoiceTranscriptStore.getState().rows[0]).not.toHaveProperty('held');
+    expect(liveVoiceTranscriptStore.removeFinalUserRows()).toBe(1);
+  });
+
   it('gives another speaker its own row instead of writing into the draft', () => {
     liveVoiceTranscriptStore.write('You', 'hold on', 'draft');
     liveVoiceTranscriptStore.write('Omnix', 'Live voice paused.', 'final');

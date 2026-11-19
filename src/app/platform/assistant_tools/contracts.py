@@ -49,8 +49,17 @@ _LAZY_EXPORTS = {
     "build_assistant_capability_dashboard": "capability_dashboard",
     # What a speaker may use in calls, and the check before it runs.
     "SYSTEM_OWNER_ID": "owner_grants",
+    "Decision": "owner_grants",
     "authorize": "owner_grants",
     "owner_grants": "owner_grants",
+    # What a call may ask to do, and the typed check before it is recorded (companion 1.5).
+    "ACTION_ABILITIES": "voice_actions",
+    "action_ability": "voice_actions",
+    "check_voice_action": "voice_actions",
+    "describe_voice_action": "voice_actions",
+    "voice_action_ability_available": "voice_actions",
+    "voice_action_catalog": "voice_actions",
+    "VOICE_ACTIONS": "voice_actions",
 }
 
 

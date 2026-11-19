@@ -28,7 +28,18 @@ InitiativeDecisionReason = Literal[
     "initiative_spacing",
     "stale_generation",
     "preempted_by_critical_interrupt",
+    # Characters talking to each other (companion 6.2).
+    "scene_talk_closed",
+    "scene_talk_backoff",
+    "scene_talk_cap",
 ]
+SceneTalkAttemptKind = Literal["reaction", "line", "start"]
+SceneTalkOutcome = Literal["streamed", "declined", "skipped", "failed"]
+# A declined or skipped line or reaction closes its anchor; a declined or skipped start backs off.
+_CLOSING_OUTCOMES = frozenset({"declined", "skipped"})
+SCENE_TALK_TEXT_CHARS = 240
+_SCENE_TALK_RETENTION = timedelta(hours=24)
+_SCENE_TALK_WINDOW = timedelta(hours=1)
 
 _URGENCY_RANK: dict[InitiativeUrgency, int] = {
     "low": 0,
@@ -36,6 +47,29 @@ _URGENCY_RANK: dict[InitiativeUrgency, int] = {
     "high": 2,
     "critical": 3,
 }
+
+
+class SceneTalkAttemptRequest(FrozenContract):
+    user_id: str = Field(min_length=1, max_length=200)
+    anchor_message_id: str = Field(min_length=1, max_length=240)
+    kind: SceneTalkAttemptKind
+    # Line and start attempts an account may make an hour; a reaction does not count and is not capped.
+    attempts_per_hour: int = Field(default=12, ge=0, le=100)
+
+
+class SceneTalkAttempt(FrozenContract):
+    """One scene talk attempt, keyed by the lease it ran under; ``outcome`` is None while it runs."""
+
+    attempt_id: str
+    user_id: str
+    session_id: str
+    anchor_message_id: str
+    kind: SceneTalkAttemptKind
+    outcome: SceneTalkOutcome | None = None
+    streamed_text: str | None = None
+    next_start_after: datetime | None = None
+    created_at: datetime
+    finished_at: datetime | None = None
 
 
 class InitiativeLease(FrozenContract):
@@ -62,6 +96,9 @@ class InitiativeAcquireRequest(FrozenContract):
     requested_at: datetime
     ttl_seconds: float = Field(default=15.0, gt=0.0, le=120.0)
     minimum_spacing_seconds: float = Field(default=25.0, ge=0.0, le=600.0)
+    # A scene talk attempt (companion 6.2): recorded with the lease, under the same lock, and refused when its
+    # anchor is closed, a start is backing off, or the account's hourly cap is spent.
+    scene_talk: SceneTalkAttemptRequest | None = None
 
 
 class InitiativeDecision(FrozenContract):
@@ -118,6 +155,24 @@ class CompanionInitiativeAuthorityStore(Protocol):
 
     def reset(self, session_id: str) -> None: ...
 
+    # Scene talk (companion 6.2-6.3).
+    def finish_owner(self, *, session_id: str, owner: str, finished_at: datetime, delivered: bool = False) -> bool:
+        """Finish the active lease if ``owner`` holds it, under the same lock (the person took the floor)."""
+        ...
+
+    def record_scene_attempt(
+        self, *, attempt_id: str, outcome: SceneTalkOutcome, finished_at: datetime,
+        streamed_text: str | None = None, start_backoff_seconds: float = 0.0,
+    ) -> SceneTalkAttempt | None:
+        """Set a running attempt's outcome once; a closing start backs off further starts in its chat."""
+        ...
+
+    def active_scene_attempt(
+        self, session_id: str, *, now: datetime, intent_id: str | None = None,
+    ) -> SceneTalkAttempt | None:
+        """The attempt the active lease runs, if any (and if it is bound to ``intent_id``, when given)."""
+        ...
+
 
 @dataclass(slots=True)
 class _SessionInitiativeState:
@@ -132,8 +187,10 @@ class CompanionInitiativeAuthority:
     """Deterministic in-memory authority used by isolated tests and no-DB development."""
 
     def __init__(self) -> None:
+        # One lock for every session and account: the cap's count and insert cannot interleave.
         self._lock = threading.RLock()
         self._sessions: dict[str, _SessionInitiativeState] = {}
+        self._attempts: dict[str, SceneTalkAttempt] = {}
 
     def register_generation(self, session_id: str, generation: str) -> InitiativeSnapshot:
         with self._lock:
@@ -146,7 +203,37 @@ class CompanionInitiativeAuthority:
     def acquire(self, request: InitiativeAcquireRequest) -> InitiativeDecision:
         with self._lock:
             state = self._sessions.setdefault(request.session_id, _SessionInitiativeState())
-            return _acquire_from_state(state, request)
+            return _acquire_with_attempt(state, _MemoryAttemptLog(self._attempts), request)
+
+    def finish_owner(self, *, session_id: str, owner: str, finished_at: datetime, delivered: bool = False) -> bool:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            return state is not None and _finish_owner_state(state, owner=owner, finished_at=finished_at,
+                                                             delivered=delivered)
+
+    def record_scene_attempt(
+        self, *, attempt_id: str, outcome: SceneTalkOutcome, finished_at: datetime,
+        streamed_text: str | None = None, start_backoff_seconds: float = 0.0,
+    ) -> SceneTalkAttempt | None:
+        with self._lock:
+            current = self._attempts.get(attempt_id)
+            finished = _finished_attempt(current, outcome, finished_at, streamed_text, start_backoff_seconds)
+            if finished is not None:
+                self._attempts[attempt_id] = finished
+            return finished
+
+    def active_scene_attempt(
+        self, session_id: str, *, now: datetime, intent_id: str | None = None,
+    ) -> SceneTalkAttempt | None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return None
+            _expire_active(state, now)
+            lease = state.active
+            if lease is None or (intent_id is not None and lease.intent_id != intent_id):
+                return None
+            return self._attempts.get(lease.lease_id)
 
     def authorizes(self, lease: InitiativeLease, *, now: datetime) -> bool:
         """Return true only while this exact lease is the active session authority."""
@@ -244,10 +331,49 @@ class PostgresCompanionInitiativeAuthority:
     def acquire(self, request: InitiativeAcquireRequest) -> InitiativeDecision:
         with self.database.transaction() as connection:
             state = _locked_postgres_state(connection, request.session_id)
-            decision = _acquire_from_state(state, request)
-            if decision.reason != "stale_generation":
+            if request.scene_talk is not None:
+                # After the session row, so two chats of one account cannot both pass the cap.
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext('omnix_companion_scene_talk'), hashtext(%s))",
+                    (request.scene_talk.user_id,),
+                )
+            decision = _acquire_with_attempt(state, _PostgresAttemptLog(connection), request)
+            if decision.reason not in {"stale_generation", "scene_talk_closed", "scene_talk_backoff",
+                                       "scene_talk_cap"}:
                 _persist_postgres_state(connection, request.session_id, state)
             return decision
+
+    def finish_owner(self, *, session_id: str, owner: str, finished_at: datetime, delivered: bool = False) -> bool:
+        with self.database.transaction() as connection:
+            state = _locked_postgres_state(connection, session_id)
+            finished = _finish_owner_state(state, owner=owner, finished_at=finished_at, delivered=delivered)
+            if finished:
+                _persist_postgres_state(connection, session_id, state)
+            return finished
+
+    def record_scene_attempt(
+        self, *, attempt_id: str, outcome: SceneTalkOutcome, finished_at: datetime,
+        streamed_text: str | None = None, start_backoff_seconds: float = 0.0,
+    ) -> SceneTalkAttempt | None:
+        with self.database.transaction() as connection:
+            log = _PostgresAttemptLog(connection)
+            finished = _finished_attempt(log.get(attempt_id, lock=True), outcome, finished_at, streamed_text,
+                                         start_backoff_seconds)
+            if finished is not None:
+                log.finish(finished)
+            return finished
+
+    def active_scene_attempt(
+        self, session_id: str, *, now: datetime, intent_id: str | None = None,
+    ) -> SceneTalkAttempt | None:
+        with self.database.transaction() as connection:
+            state = _locked_postgres_state(connection, session_id)
+            if _expire_active(state, now):
+                _persist_postgres_state(connection, session_id, state)
+            lease = state.active
+            if lease is None or (intent_id is not None and lease.intent_id != intent_id):
+                return None
+            return _PostgresAttemptLog(connection).get(lease.lease_id)
 
     def authorizes(self, lease: InitiativeLease, *, now: datetime) -> bool:
         with self.database.transaction() as connection:
@@ -436,6 +562,196 @@ def _finish_intent_state(
         finished_at=finished_at,
         delivered=delivered,
     )
+
+
+def _finish_owner_state(
+    state: _SessionInitiativeState, *, owner: str, finished_at: datetime, delivered: bool,
+) -> bool:
+    _expire_active(state, finished_at)
+    active = state.active
+    if active is None or active.owner != owner:
+        return False
+    return _finish_state(state, lease_id=active.lease_id, finished_at=finished_at, delivered=delivered)
+
+
+# --- scene talk attempts (companion 6.2) --------------------------------------------------------------------------
+
+
+class _AttemptLog(Protocol):
+    def closed(self, session_id: str, anchor_message_id: str) -> bool: ...
+
+    def start_backoff_until(self, session_id: str) -> datetime | None: ...
+
+    def counted_since(self, user_id: str, since: datetime) -> list[datetime]: ...
+
+    def insert(self, attempt: SceneTalkAttempt, *, prune_before: datetime) -> None: ...
+
+
+def _acquire_with_attempt(
+    state: _SessionInitiativeState, log: _AttemptLog, request: InitiativeAcquireRequest,
+) -> InitiativeDecision:
+    """The lease decision, with a scene talk attempt checked first and recorded with the lease it gets."""
+    talk = request.scene_talk
+    if talk is not None:
+        refusal = _scene_talk_refusal(log, request.session_id, talk, request.requested_at)
+        if refusal is not None:
+            return refusal
+    decision = _acquire_from_state(state, request)
+    if talk is not None and decision.accepted and decision.lease is not None:
+        log.insert(
+            SceneTalkAttempt(
+                attempt_id=decision.lease.lease_id, user_id=talk.user_id, session_id=request.session_id,
+                anchor_message_id=talk.anchor_message_id, kind=talk.kind, created_at=request.requested_at,
+            ),
+            prune_before=request.requested_at - _SCENE_TALK_RETENTION,
+        )
+    return decision
+
+
+def _scene_talk_refusal(
+    log: _AttemptLog, session_id: str, talk: SceneTalkAttemptRequest, now: datetime,
+) -> InitiativeDecision | None:
+    if talk.kind in {"reaction", "line"} and log.closed(session_id, talk.anchor_message_id):
+        return InitiativeDecision(accepted=False, reason="scene_talk_closed")
+    if talk.kind == "start":
+        until = log.start_backoff_until(session_id)
+        if until is not None and until > now:
+            return InitiativeDecision(accepted=False, reason="scene_talk_backoff",
+                                      eligible_in_ms=int((until - now).total_seconds() * 1000))
+    if talk.kind in {"line", "start"}:
+        recent = sorted(log.counted_since(talk.user_id, now - _SCENE_TALK_WINDOW))
+        if len(recent) >= talk.attempts_per_hour:
+            frees_at = recent[-talk.attempts_per_hour] + _SCENE_TALK_WINDOW if talk.attempts_per_hour else now + _SCENE_TALK_WINDOW
+            return InitiativeDecision(accepted=False, reason="scene_talk_cap",
+                                      eligible_in_ms=max(0, int((frees_at - now).total_seconds() * 1000)))
+    return None
+
+
+def _finished_attempt(
+    current: SceneTalkAttempt | None, outcome: SceneTalkOutcome, finished_at: datetime,
+    streamed_text: str | None, start_backoff_seconds: float,
+) -> SceneTalkAttempt | None:
+    if current is None or current.outcome is not None:
+        return None
+    text = (streamed_text or "")[:SCENE_TALK_TEXT_CHARS] or None
+    backoff = (
+        finished_at + timedelta(seconds=start_backoff_seconds)
+        if current.kind == "start" and outcome in _CLOSING_OUTCOMES and start_backoff_seconds > 0
+        else None
+    )
+    return current.model_copy(update={
+        "outcome": outcome, "streamed_text": text if outcome == "streamed" else None,
+        "next_start_after": backoff, "finished_at": finished_at,
+    })
+
+
+class _MemoryAttemptLog:
+    def __init__(self, attempts: dict[str, SceneTalkAttempt]) -> None:
+        self.attempts = attempts
+
+    def closed(self, session_id: str, anchor_message_id: str) -> bool:
+        return any(
+            item.session_id == session_id and item.anchor_message_id == anchor_message_id
+            and item.kind in {"reaction", "line"} and item.outcome in _CLOSING_OUTCOMES
+            for item in self.attempts.values()
+        )
+
+    def start_backoff_until(self, session_id: str) -> datetime | None:
+        times = [item.next_start_after for item in self.attempts.values()
+                 if item.session_id == session_id and item.kind == "start" and item.next_start_after is not None]
+        return max(times) if times else None
+
+    def counted_since(self, user_id: str, since: datetime) -> list[datetime]:
+        return [item.created_at for item in self.attempts.values()
+                if item.user_id == user_id and item.kind in {"line", "start"} and item.created_at > since]
+
+    def insert(self, attempt: SceneTalkAttempt, *, prune_before: datetime) -> None:
+        for attempt_id in [key for key, item in self.attempts.items() if item.created_at < prune_before]:
+            del self.attempts[attempt_id]
+        self.attempts.setdefault(attempt.attempt_id, attempt)
+
+
+_ATTEMPT_COLUMNS = (
+    "attempt_id, user_id, session_id, anchor_message_id, kind, outcome, streamed_text, next_start_after, "
+    "created_at, finished_at"
+)
+
+
+class _PostgresAttemptLog:
+    def __init__(self, connection) -> None:
+        self.connection = connection
+
+    def closed(self, session_id: str, anchor_message_id: str) -> bool:
+        row = self.connection.execute(
+            """
+            SELECT 1 FROM omnix_companion_scene_talk_attempts
+             WHERE session_id = %s AND anchor_message_id = %s
+               AND kind IN ('reaction', 'line') AND outcome IN ('declined', 'skipped')
+             LIMIT 1
+            """,
+            (session_id, anchor_message_id),
+        ).fetchone()
+        return row is not None
+
+    def start_backoff_until(self, session_id: str) -> datetime | None:
+        row = self.connection.execute(
+            """
+            SELECT max(next_start_after) FROM omnix_companion_scene_talk_attempts
+             WHERE session_id = %s AND kind = 'start' AND next_start_after IS NOT NULL
+            """,
+            (session_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def counted_since(self, user_id: str, since: datetime) -> list[datetime]:
+        rows = self.connection.execute(
+            """
+            SELECT created_at FROM omnix_companion_scene_talk_attempts
+             WHERE user_id = %s AND kind IN ('line', 'start') AND created_at > %s
+            """,
+            (user_id, since),
+        ).fetchall()
+        return [row[0] for row in rows]
+
+    def insert(self, attempt: SceneTalkAttempt, *, prune_before: datetime) -> None:
+        self.connection.execute(
+            "DELETE FROM omnix_companion_scene_talk_attempts WHERE created_at < %s", (prune_before,),
+        )
+        self.connection.execute(
+            f"""
+            INSERT INTO omnix_companion_scene_talk_attempts ({_ATTEMPT_COLUMNS})
+            VALUES (%s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL)
+            ON CONFLICT (attempt_id) DO NOTHING
+            """,
+            (attempt.attempt_id, attempt.user_id, attempt.session_id, attempt.anchor_message_id, attempt.kind,
+             attempt.created_at),
+        )
+
+    def get(self, attempt_id: str, *, lock: bool = False) -> SceneTalkAttempt | None:
+        row = self.connection.execute(
+            f"SELECT {_ATTEMPT_COLUMNS} FROM omnix_companion_scene_talk_attempts WHERE attempt_id = %s"
+            + (" FOR UPDATE" if lock else ""),
+            (attempt_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return SceneTalkAttempt(
+            attempt_id=str(row[0]), user_id=str(row[1]), session_id=str(row[2]), anchor_message_id=str(row[3]),
+            kind=cast(SceneTalkAttemptKind, str(row[4])),
+            outcome=cast(SceneTalkOutcome, str(row[5])) if row[5] is not None else None,
+            streamed_text=row[6], next_start_after=row[7], created_at=row[8], finished_at=row[9],
+        )
+
+    def finish(self, attempt: SceneTalkAttempt) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_companion_scene_talk_attempts
+               SET outcome = %s, streamed_text = %s, next_start_after = %s, finished_at = %s
+             WHERE attempt_id = %s AND outcome IS NULL
+            """,
+            (attempt.outcome, attempt.streamed_text, attempt.next_start_after, attempt.finished_at,
+             attempt.attempt_id),
+        )
 
 
 def _new_lease(request: InitiativeAcquireRequest) -> InitiativeLease:
@@ -627,5 +943,10 @@ __all__ = [
     "InitiativeSnapshot",
     "InitiativeUrgency",
     "PostgresCompanionInitiativeAuthority",
+    "SCENE_TALK_TEXT_CHARS",
+    "SceneTalkAttempt",
+    "SceneTalkAttemptKind",
+    "SceneTalkAttemptRequest",
+    "SceneTalkOutcome",
     "default_companion_initiative_authority",
 ]

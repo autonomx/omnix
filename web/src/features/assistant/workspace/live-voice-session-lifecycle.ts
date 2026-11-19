@@ -1,10 +1,12 @@
 /** Ending a capture call and resetting its turn state. */
+import { resetLiveCallCamera } from './live-call-camera';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { liveConversationStore } from './live-conversation-store';
 import { reduceUserFloor } from './live-voice-floor-manager';
 import { type StreamingSttConnectionStatus } from './live-voice-websocket';
 import { LiveVoiceAudioPipeline, LiveVoiceSession, controller, resetVoiceVisualizer, setPanelStatus } from './live-voice-controller-state';
-import { clearAuthoritativePreview } from './live-voice-preview';
+import { clearAuthoritativePreview, settleDeferredInterrupt } from './live-voice-preview';
+import { clearHeldFinals, liveSpeakerScores } from './live-voice-speaker-gate';
 
 export function handleExternalStop(): void {
   if (controller.activeSession) stopLiveVoice(controller.activeSession.card, 'idle');
@@ -35,6 +37,8 @@ export function resetTurnState(session: LiveVoiceSession): void {
   session.speculationSourceSequence = null;
   session.overlapIntent = null;
   session.interruptionDispatched = false;
+  // A turn that ends with no final heard leaves the reply playing, unducked.
+  settleDeferredInterrupt(session, false, false);
   session.floorState = reduceUserFloor(session.floorState, { type: 'reset' });
   session.floorState = reduceUserFloor(session.floorState, { type: 'listen' });
 }
@@ -49,12 +53,15 @@ export function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnect
   }
   setPanelStatus(card, nextStatus);
   resetVoiceVisualizer(card);
-  liveCallPresentationStore.update({ micMuted: false });
+  liveCallPresentationStore.update({ micMuted: false, companionQuiet: false, sceneTalkOn: true });
+  resetLiveCallCamera();
 }
 
 export function cleanupSession(session: LiveVoiceSession): void {
   session.finalizationBuffer.clear();
   resetTurnState(session);
+  liveSpeakerScores.reset();
+  clearHeldFinals();
   session.audioPipeline.cleanup();
   session.source.disconnect();
   session.stream.getTracks().forEach((track) => track.stop());

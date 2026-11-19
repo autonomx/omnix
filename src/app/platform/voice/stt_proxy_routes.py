@@ -1,8 +1,14 @@
-"""Browser speech transport through the gateway; sidecar credentials stay server-side."""
+"""Browser speech transport through the gateway; sidecar credentials stay server-side.
+
+The live socket also carries the caller's voiceprint (companion 2.2): before relaying anything from the browser, the
+gateway sends the account's ``speaker_profile`` to the speech service, which scores each final segment against it.
+A ``speaker_profile`` from the browser is dropped, so only this account's stored print is ever compared.
+"""
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import secrets
 from typing import Any
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -17,7 +23,10 @@ from app.runtime.config import get_runtime_config
 from app.security.model_service import max_upload_bytes
 from app.security.service_token import service_headers
 
+logger = logging.getLogger(__name__)
+
 _MAX_RESPONSE_BYTES = 512 * 1024
+SPEAKER_PROFILE = "speaker_profile"
 
 
 class STTProxyResponse(BaseModel):
@@ -138,6 +147,29 @@ async def _proxy_http(request: Request, path: str, *, authority: bool = False) -
         return _error(503, "stt_unavailable")
 
 
+def _speaker_profile() -> str | None:
+    """This account's ``speaker_profile`` message, or None (no print, a guest, or the print could not be read)."""
+    try:
+        from .voiceprint import read_voiceprint
+
+        stored = read_voiceprint()
+    except Exception:  # noqa: BLE001 - no print means today's behaviour, never a failed call
+        logger.warning("live speech: the voiceprint could not be read; the call goes on without it")
+        return None
+    if stored is None:
+        return None
+    return json.dumps({"type": SPEAKER_PROFILE, "model": stored.model, "embedding": stored.embedding})
+
+
+def _from_browser_allowed(text: str) -> bool:
+    """False for a ``speaker_profile`` the browser sent: only the gateway names whose voice to listen for."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return True
+    return not (isinstance(data, dict) and data.get("type") == SPEAKER_PROFILE)
+
+
 async def _proxy_websocket(socket: WebSocket) -> None:
     from websockets.exceptions import ConnectionClosed
     try:
@@ -152,6 +184,7 @@ async def _proxy_websocket(socket: WebSocket) -> None:
     tasks: list[asyncio.Task] = []
     accepted = False
     limit = max_upload_bytes()
+    profile = await asyncio.to_thread(_speaker_profile)
     try:
         # legacy Connect is supported by the repository's websockets>=12 floor,
         # does not use system proxies, and has an explicit redirect rejection.
@@ -160,6 +193,8 @@ async def _proxy_websocket(socket: WebSocket) -> None:
                                    close_timeout=2) as upstream:
             await socket.accept()
             accepted = True
+            if profile is not None:
+                await upstream.send(profile)
 
             async def to_service():
                 while True:
@@ -173,6 +208,8 @@ async def _proxy_websocket(socket: WebSocket) -> None:
                     if size > limit:
                         await socket.close(code=1009, reason="upload_too_large")
                         return
+                    if isinstance(value, str) and not _from_browser_allowed(value):
+                        continue
                     await upstream.send(value)
 
             async def to_browser():

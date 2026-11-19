@@ -179,3 +179,43 @@ def test_websocket_proxy_uses_private_headers_and_cleans_up_on_disconnect(setup,
     assert captured["extra_headers"]["X-Omnix-Service-Token"] == token
     assert captured["max_queue"] == 8
     assert stopped == ["receiver_cancelled", "upstream_closed"]
+
+
+def test_websocket_proxy_sends_the_accounts_print_first_and_never_the_browsers(setup, monkeypatch):
+    client, _, _ = setup
+    sent: list = []
+
+    class Upstream:
+        def __init__(self):
+            self.queue = asyncio.Queue()
+
+        async def send(self, message):
+            sent.append(message)
+            if message != profile:
+                await self.queue.put(message)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            return await self.queue.get()
+
+    class Connection:
+        def __init__(self, uri, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return Upstream()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    profile = json.dumps({"type": "speaker_profile", "model": "titanet-large", "embedding": [0.1] * 192})
+    monkeypatch.setattr(proxy, "_ServiceConnect", Connection)
+    monkeypatch.setattr(proxy, "_speaker_profile", lambda: profile)
+    with client.websocket_connect("ws://127.0.0.1/api/stt/ws/transcribe?language=en",
+                                  headers={"Origin": "http://localhost:5173"}) as socket:
+        socket.send_text(json.dumps({"type": "speaker_profile", "embedding": [0.9] * 192}))
+        socket.send_text(json.dumps({"type": "hello"}))
+        assert socket.receive_json() == {"type": "hello"}
+    assert sent == [profile, json.dumps({"type": "hello"})]

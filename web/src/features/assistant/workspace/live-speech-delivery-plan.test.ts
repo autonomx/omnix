@@ -9,7 +9,7 @@ const profile: LiveConversationProfile = {
   interruption_preference: 'balanced', assistant_backchannel_mode: 'natural', initiative_mode: 'gentle',
   idle_threshold_ms: 15000, long_pause_behavior: 'wait', response_length: 'conversational',
   response_onset_style: 'adaptive', emotional_attunement: 'expressive', topic_continuity: 'natural',
-  max_idle_prompts: 1, duplex_mode: 'echo_aware', pronunciation_save_policy: 'ask', profile_version: 1,
+  max_idle_prompts: 1, quiet_hours_enabled: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', max_initiatives_per_hour: 4, scene_talk_enabled: false, scene_talk_level: 'sometimes', scene_talk_attempts_per_hour: null, scene_talk_max_lines: 4, scene_memory_per_character: 5, duplex_mode: 'echo_aware', pronunciation_save_policy: 'ask', profile_version: 1,
 };
 
 describe('live speech delivery plan', () => {

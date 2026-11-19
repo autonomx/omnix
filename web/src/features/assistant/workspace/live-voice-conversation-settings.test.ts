@@ -17,6 +17,7 @@ describe('live conversation settings', () => {
       conversationPace: 'balanced',
       interruptionPreference: 'balanced',
       backchannelMode: 'off',
+      onlyRespondToMe: false,
     });
   });
 
@@ -39,6 +40,17 @@ describe('live conversation settings', () => {
       conversationPace: 'reflective',
       interruptionPreference: 'finish_more',
       backchannelMode: 'minimal',
+      onlyRespondToMe: false,
     });
+  });
+
+  it('keeps "Only respond to me" on once turned on, and leaves it alone when another setting changes', () => {
+    updateLiveConversationSettings({ onlyRespondToMe: true });
+    updateLiveConversationSettings({ conversationPace: 'quick' });
+
+    expect(readLiveConversationSettings()).toMatchObject({ conversationPace: 'quick', onlyRespondToMe: true });
+
+    window.localStorage.setItem('omnix.liveConversation.settings', JSON.stringify({ onlyRespondToMe: 'yes' }));
+    expect(readLiveConversationSettings().onlyRespondToMe).toBe(false);
   });
 });

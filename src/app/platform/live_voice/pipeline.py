@@ -11,11 +11,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+import logging
 import time
 from typing import Any
 from contextvars import Token
 
 from app.platform.chat.contracts import ChatMessage, ChatSession, PromptAssembly, RenderedPrompt
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -146,25 +149,52 @@ def _add_call_abilities(context: LiveVoicePromptContext) -> None:
     """How to ask for the abilities the speaker was granted (``llm.call_tools``), after the spoken style.
 
     Stable across a call's turns, so the system prompt still chooses the waiting process. None granted: nothing added.
+    The actions on offer, the current time and the call's tasks change between turns, so they go in the per-turn part.
     """
     from app.conversation.contracts import estimate_tokens
     from app.platform.chat.contracts import RenderedPromptMessage
-    from app.platform.live_voice.llm.call_tools import abilities_prompt, granted_abilities
+    from app.platform.live_voice.llm.call_tools import abilities_prompt, actions_catalog, offered_abilities
 
-    instructions = abilities_prompt(granted_abilities(context.session))
+    offered = offered_abilities(context.session)
+    instructions = abilities_prompt(offered)
     rendered = context.rendered
-    if not instructions or rendered is None:
+    if rendered is None:
+        return
+    added = []
+    if instructions:
+        added.append(RenderedPromptMessage(role="system", content=instructions))
+        catalog = actions_catalog(offered)
+        if catalog:
+            added.append(RenderedPromptMessage(role="system", content=catalog, per_turn=True))
+    # Tasks still running are told even when the ability was withdrawn mid-call.
+    tasks = _call_tasks_state(context.session)
+    if tasks:
+        added.append(RenderedPromptMessage(role="system", content=tasks, per_turn=True))
+    if not added:
         return
     first_turn = next(
         (index for index, message in enumerate(rendered.messages) if message.role in {"user", "assistant"}),
         len(rendered.messages),
     )
-    rendered.messages.insert(first_turn, RenderedPromptMessage(role="system", content=instructions))
-    tokens = estimate_tokens(instructions)
+    rendered.messages[first_turn:first_turn] = added
+    tokens = sum(estimate_tokens(message.content) for message in added)
     rendered.diagnostics.estimated_tokens += tokens
     rendered.diagnostics.section_tokens["live_voice_abilities"] = tokens
     if context.assembly is not None:
-        context.assembly.diagnostics["live_voice_abilities"] = {"web_search": True, "tokens": tokens}
+        context.assembly.diagnostics["live_voice_abilities"] = {
+            **{ability: True for ability, on in offered.items() if on}, "tasks": bool(tasks), "tokens": tokens,
+        }
+
+
+def _call_tasks_state(session: Any) -> str | None:
+    """The call's tasks as their records say (``chat.live_call_tasks``); a failed read leaves them out of this turn."""
+    from app.platform.chat.contracts import call_tasks_prompt
+
+    try:
+        return call_tasks_prompt(session)
+    except Exception:  # noqa: BLE001 - the turn goes on without the task list
+        logger.warning("live voice: the call's tasks could not be read", exc_info=True)
+        return None
 
 
 def _finish_prompt_stages(context: LiveVoicePromptContext) -> None:

@@ -180,6 +180,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stt/voiceprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Voiceprint */
+        get: operations["get_voiceprint_api_stt_voiceprint_get"];
+        put?: never;
+        /** Post Voiceprint */
+        post: operations["post_voiceprint_api_stt_voiceprint_post"];
+        /** Remove Voiceprint */
+        delete: operations["remove_voiceprint_api_stt_voiceprint_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tts/engines": {
         parameters: {
             query?: never;
@@ -1031,6 +1050,11 @@ export interface components {
              * @default
              */
             language?: string;
+        };
+        /** Body_post_voiceprint_api_stt_voiceprint_post */
+        Body_post_voiceprint_api_stt_voiceprint_post: {
+            /** Files */
+            files: string[];
         };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
@@ -1959,6 +1983,22 @@ export interface components {
             /** Prepared */
             prepared: string[];
         };
+        /** VoiceprintStatus */
+        VoiceprintStatus: {
+            /** Can Enrol */
+            can_enrol: boolean;
+            /** Created At */
+            created_at: string | null;
+            /** Enrolled */
+            enrolled: boolean;
+            /** Model */
+            model: string | null;
+            /**
+             * Samples
+             * @default 0
+             */
+            samples: number;
+        };
         /** WatermarkSetting */
         WatermarkSetting: {
             /** Enabled */
@@ -2253,6 +2293,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["STTProxyResponse"];
+                };
+            };
+        };
+    };
+    get_voiceprint_api_stt_voiceprint_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceprintStatus"];
+                };
+            };
+        };
+    };
+    post_voiceprint_api_stt_voiceprint_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_voiceprint_api_stt_voiceprint_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceprintStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_voiceprint_api_stt_voiceprint_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceprintStatus"];
                 };
             };
         };

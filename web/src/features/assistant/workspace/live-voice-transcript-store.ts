@@ -15,6 +15,11 @@ export type LiveVoiceTranscriptRow = {
   at: string;
   /** The row still being spoken; at most one row is a draft. */
   draft: boolean;
+  /**
+   * "Only respond to me" (companion 2.4): words in another voice, shown but not sent. `pending` offers "Send anyway";
+   * `expired` belongs to a call that has ended.
+   */
+  held?: 'pending' | 'expired';
 };
 
 /** The assistant text delivered so far by the unified audio path. */
@@ -71,14 +76,53 @@ export const liveVoiceTranscriptStore = {
     publish({ ...state, rows });
   },
 
+  /** A final in another voice: the speaker's draft settles as a held row, or one is added. Returns its id. */
+  writeHeld(text: string): string | null {
+    const content = text.trim();
+    if (!content) return null;
+    const rows = [...state.rows];
+    const draftIndex = rows.findIndex((row) => row.draft);
+    const draft = draftIndex >= 0 ? rows[draftIndex] : null;
+    let id: string;
+    if (draft && draft.speaker === 'You') {
+      id = draft.id;
+      rows[draftIndex] = { ...draft, text: content, draft: false, held: 'pending' };
+    } else {
+      if (draft) rows[draftIndex] = { ...draft, draft: false };
+      id = nextId();
+      rows.push({ id, speaker: 'You', text: content, at: new Date().toISOString(), draft: false, held: 'pending' });
+    }
+    publish({ ...state, rows });
+    return id;
+  },
+
+  /** "Send anyway": the held row becomes an ordinary row of the speaker's, which the sent message replaces. */
+  releaseHeld(id: string): void {
+    const index = state.rows.findIndex((row) => row.id === id && row.held);
+    if (index < 0) return;
+    const rows = [...state.rows];
+    const { held: _held, ...row } = rows[index];
+    rows[index] = row;
+    publish({ ...state, rows });
+  },
+
+  /** Held rows that can no longer be sent keep their words and lose "Send anyway". */
+  expireHeld(): void {
+    if (!state.rows.some((row) => row.held === 'pending')) return;
+    publish({ ...state, rows: state.rows.map((row) => (row.held === 'pending' ? { ...row, held: 'expired' } : row)) });
+  },
+
   /** The words of the row being spoken. */
   draftText(): string {
     return state.rows.find((row) => row.draft)?.text ?? '';
   },
 
-  /** Drops the settled rows of the speaker; the persisted chat message replaces them. Returns how many. */
+  /**
+   * Drops the settled rows of the speaker; the persisted chat message replaces them. Held rows were never sent, so they
+   * stay. Returns how many.
+   */
   removeFinalUserRows(): number {
-    const kept = state.rows.filter((row) => row.draft || row.speaker !== 'You');
+    const kept = state.rows.filter((row) => row.draft || row.held || row.speaker !== 'You');
     const removed = state.rows.length - kept.length;
     if (removed) publish({ ...state, rows: kept });
     return removed;

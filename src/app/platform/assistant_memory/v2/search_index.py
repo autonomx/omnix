@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
-from .contracts import DerivedPolicyEnvelope, MemorySpaceKey, VisibilityScope
+from .contracts import CHARACTER_SUBJECT, DerivedPolicyEnvelope, MemorySpaceKey, VisibilityScope
 
 
 # Words that carry no meaning for memory lookup ("What is my favorite game?"
@@ -82,6 +82,7 @@ class SearchIndexHit:
     valid_from: datetime | None
     valid_until: datetime | None
     policy: DerivedPolicyEnvelope | None
+    about_character_id: str | None = None  # the assertion's subject when it is a character (companion 6.6)
 
 
 def _space_values(space: MemorySpaceKey) -> tuple[str, str, str]:
@@ -410,8 +411,12 @@ class PostgresMemoryV2SearchIndex:
         limit: int = 20,
         as_of: datetime | None = None,
         ref_ids: tuple[str, ...] | None = None,
+        present_characters: tuple[str, ...] | None = None,
     ) -> list[SearchIndexHit]:
-        """Entries matching ``text``, or exactly ``ref_ids`` (semantic matches), under the same visibility."""
+        """Entries matching ``text``, or exactly ``ref_ids`` (semantic matches), under the same visibility.
+
+        With ``present_characters``, an entry about a character is found only when that character is one of them.
+        """
         if not visible_scopes:
             return []
         match_value: str | list[str]
@@ -456,6 +461,9 @@ class PostgresMemoryV2SearchIndex:
         if domains:
             conditions.append("i.domain = ANY(%s)")
             where_params.append(list(domains))
+        if present_characters is not None:
+            conditions.append(f"(a.subject_entity_type <> '{CHARACTER_SUBJECT}' OR a.subject_entity_id = ANY(%s))")
+            where_params.append(list(present_characters))
         params = [*rank_params, *where_params, max(1, min(int(limit), 1000))]
         with self.database.transaction() as connection:
             rows = connection.execute(
@@ -466,7 +474,8 @@ class PostgresMemoryV2SearchIndex:
                        a.confidence, a.valid_from, a.valid_until,
                        p.sensitivity, p.effective_visibility, p.trust_class,
                        p.source_observation_ids, p.source_assertion_ids,
-                       p.source_governance_revision, p.policy_version, p.policy_digest
+                       p.source_governance_revision, p.policy_version, p.policy_digest,
+                       a.subject_entity_type, a.subject_entity_id
                   FROM omnix_memory_v2_search_index_entries i
                   JOIN omnix_memory_v2_graph_assertions a
                     ON a.principal_id = i.principal_id
@@ -498,6 +507,7 @@ class PostgresMemoryV2SearchIndex:
                 valid_from=row[8],
                 valid_until=row[9],
                 policy=_policy_from_columns(row, 10),
+                about_character_id=str(row[19]) if row[18] == CHARACTER_SUBJECT else None,
             )
             for row in rows
         ]

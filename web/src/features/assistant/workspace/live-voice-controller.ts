@@ -8,6 +8,7 @@ import LIVE_VOICE_CAPTURE_WORKLET_URL from './worklets/live-voice-capture.workle
 import { LIVE_VOICE_CAPTURE_WORKLET_NAME } from './worklets/names';
 import type { SpeechLocation } from './stt-url';
 import { pipelineFetch } from '../../../api/fetchPipeline';
+import { resetLiveCallCamera } from './live-call-camera';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { createSttTelemetryHandlers, prepareLiveTaskContract, recordSttAuthoritySelection } from './live-voice-call-telemetry';
 import { LIVE_SESSION_SELECTION_TIMEOUT_MS, LiveVoiceAudioPipeline, LiveVoiceSession, LiveVoiceWindow, controller, createLiveVoiceSessionShell, dispatchLiveVoicePerfEvent, isCardStartingOrActive, setPanelStatus, showLiveVoiceError } from './live-voice-controller-state';
@@ -84,6 +85,23 @@ export function setLiveVoiceMuted(muted: boolean): void {
   controller.activeSession?.reporter.record('live_call_microphone', { muted }, 'live_voice_controller');
 }
 
+/**
+ * Asks the companion to keep quiet for this call, or lets it speak up again. Quiet, it starts nothing social of its
+ * own; it still answers and still reports the tasks the person asked for. A new call starts with it off.
+ */
+export function setLiveCallQuiet(quiet: boolean): void {
+  if (liveCallPresentationStore.getState().companionQuiet === quiet) return;
+  liveCallPresentationStore.update({ companionQuiet: quiet });
+  controller.activeSession?.reporter.record('live_call_companion_quiet', { quiet }, 'live_voice_controller');
+}
+
+/** "Let them talk": lets the characters on this call talk to each other, or stops them. A new call starts with it on. */
+export function setLiveCallSceneTalk(on: boolean): void {
+  if (liveCallPresentationStore.getState().sceneTalkOn === on) return;
+  liveCallPresentationStore.update({ sceneTalkOn: on });
+  controller.activeSession?.reporter.record('live_call_scene_talk', { on }, 'live_voice_controller');
+}
+
 /** Hands a microphone frame to the card's running call; muted, the call is handed silence of the same length. */
 export function deliverCaptureFrame(card: HTMLElement, audio: Float32Array): void {
   const session = controller.activeSession;
@@ -106,7 +124,8 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
   if (controller.activeSession) stopLiveVoice(controller.activeSession.card, 'idle');
   const token = ++controller.startToken;
   controller.pendingStart = { card, token };
-  liveCallPresentationStore.update({ micMuted: false });
+  liveCallPresentationStore.update({ micMuted: false, companionQuiet: false, sceneTalkOn: true });
+  resetLiveCallCamera();
   setPanelStatus(card, 'connecting');
   emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, {
     token,

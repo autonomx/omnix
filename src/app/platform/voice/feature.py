@@ -105,11 +105,13 @@ def _voice_router(context):
     from .voice_job_summary_routes import register_voice_job_summary_routes
     from .voice_library_routes import register_voice_library_route
     from .voice_studio_routes import register_voice_studio_routes
+    from .voiceprint import register_voiceprint_routes
 
     router = APIRouter()
     state = context.runtime_state
     register_tts_runtime_routes(router, state)
     register_stt_proxy_routes(router, state)
+    register_voiceprint_routes(router)
     register_tts_pcm_websocket(router, state)
     register_voice_job_summary_routes(router, state)
     register_voice_library_route(router, state)

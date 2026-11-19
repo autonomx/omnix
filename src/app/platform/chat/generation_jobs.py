@@ -834,6 +834,9 @@ def _commit_chat_reply(
 
     Returns the updated session, or ``None`` when a cancellation won the race.
     """
+    # Every committed reply names its turn, whichever path generated it: a call's tasks, a retry and the reply's
+    # removal find it by this link (the durable store does not add it itself).
+    metadata["reply_to_message_id"] = message_id
     atomic_completion = getattr(job_store, 'chat_completion', None)
     transaction = atomic_completion(chat_store, job.id) if callable(atomic_completion) else nullcontext()
     with transaction, chat_job_commit_lock(job.id):
@@ -845,12 +848,7 @@ def _commit_chat_reply(
             require_owner(job.id)
         if before_commit is not None:
             before_commit()
-        completed = chat_store.complete_streamed_reply(
-            session_id,
-            message_id,
-            content,
-            metadata,
-        )
+        completed = chat_store.complete_streamed_reply(session_id, message_id, content, metadata)
         if completed is None:
             raise RuntimeError("Chat response could not be persisted.")
         if completion_hook is not None:
@@ -884,6 +882,10 @@ def _commit_chat_reply(
         )
         if completed_job is None:
             raise RuntimeError("Chat generation completed but its job disappeared.")
+    if metadata.get("call_tasks"):  # work a call asked for starts only from a committed reply
+        from app.platform.chat.live_call_tasks import start_and_record_call_tasks
+
+        start_and_record_call_tasks(chat_store, job_store, completed, message_id, metadata["call_tasks"])
     return completed
 
 

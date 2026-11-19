@@ -11,6 +11,7 @@ from app.providers.desktop_vision import (
     CodexDesktopVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,
+    is_remote_vision_endpoint,
 )
 
 _TINY_PNG = (
@@ -91,12 +92,6 @@ class DesktopCompanionPreflightService:
                 latency_ms=round(max(0.0, self._clock() - started) * 1000, 3),
                 reason=f"{type(exc).__name__}: {exc}"[:300],
             )
-
-
-def is_remote_vision_endpoint(value: str) -> bool:
-    parsed = urlparse(value)
-    hostname = (parsed.hostname or "").casefold()
-    return hostname not in {"", "localhost", "127.0.0.1", "::1"} and not hostname.startswith("127.")
 
 
 def _safe_endpoint(value: str) -> str | None:

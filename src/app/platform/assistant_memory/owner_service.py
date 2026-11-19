@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from app.conversation.memory_contracts import (
+    HEARD_TRUST_LEVEL,
+    MemoryKind,
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
@@ -130,6 +132,56 @@ class OwnerAwareMemoryService(MemoryService):
                 trust_level="user_approved",
                 sensitivity=sensitivity,
                 provenance_type="user_message",
+                provenance_id=provenance_id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    def create_heard_memory(
+        self,
+        context: MemoryScopeContext,
+        *,
+        about_character_id: str,
+        kind: MemoryKind,
+        category: MemoryCategory,
+        content: str,
+        confidence: float,
+        provenance_id: str | None,
+        supersedes_memory_id: str | None = None,
+        contradiction_group: str | None = None,
+    ) -> MemoryRecord:
+        """What the owner heard another character say on a call (companion 6.6).
+
+        It is about that character, never the person, and kept at the heard trust: a prompt carries it only
+        while that character is on the call. The owner's Memory tab edits or deletes it like any memory.
+        """
+        self._assert_write_allowed()
+        scope_id = scope_id_for("global", context)
+        if scope_id is None:
+            raise MemoryPolicyError("target_scope_unavailable")
+        normalized = normalize_memory_content(content)
+        if not normalized:
+            raise MemoryPolicyError("memory_content_empty")
+        now = _utcnow()
+        return self.owner_repository.create_record(
+            MemoryRecord(
+                id=f"memory:{uuid.uuid4().hex}",
+                owner_type=context.owner_type,
+                owner_id=context.owner_id,
+                scope="global",
+                scope_id=scope_id,
+                category=category,
+                kind=kind,
+                supersedes_memory_id=supersedes_memory_id,
+                contradiction_group=contradiction_group,
+                source="assistant_suggested",
+                content=content.strip(),
+                normalized_content=normalized,
+                confidence=confidence,
+                trust_level=HEARD_TRUST_LEVEL,
+                provenance_type="assistant_inference",
+                about_character_id=about_character_id,
                 provenance_id=provenance_id,
                 created_at=now,
                 updated_at=now,

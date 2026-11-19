@@ -9,6 +9,8 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.conversation.scene import refuse_scene_view
+
 from .models import ChatSession
 
 
@@ -58,6 +60,7 @@ class InMemoryChatRepository:
             return deepcopy(self._state.sessions)
 
     def save_session(self, session: ChatSession) -> None:
+        refuse_scene_view(session)
         with self._state.lock:
             sessions = {value.id: value for value in self._state.sessions}
             sessions[session.id] = deepcopy(session)

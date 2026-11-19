@@ -4220,6 +4220,8 @@ export interface components {
              * @default false
              */
             agent_mode?: boolean;
+            /** Camera Image */
+            camera_image?: string | null;
             /**
              * Coding Approval Policy
              * @default ask_sensitive
@@ -4233,6 +4235,8 @@ export interface components {
              * @default false
              */
             dry_run?: boolean;
+            /** Heard Turn Id */
+            heard_turn_id?: string | null;
             /** Image Data Url */
             image_data_url?: string | null;
             /** Image Data Urls */

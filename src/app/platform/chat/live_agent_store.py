@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 
@@ -122,36 +123,21 @@ def stream_live_agent_turn(
         _original: Callable[..., Iterable[dict[str, Any]]] = original,
         _planner: LiveAgentPlanner = planner,
     ):
-        governed_pending = _pending_governed_proposal(session, user_message.id)
+        governed_pending = _pending_governed_proposal(session, user_message)
         governed_choice = _confirmation_choice(user_message.content) if governed_pending else None
-        if governed_pending and governed_choice == "approve":
+        if governed_pending and governed_choice in {"approve", "reject"}:
             proposal_message, request = governed_pending
-            payload = execute_capability(
-                _confirmation_grant(session.id),
-                request.model_copy(update={"session_id": session.id}),
-                user_request=user_message.content,
+            decided = decide_governed_proposal(
+                self, session.id, proposal_message, request,
+                choice=governed_choice, user_request=user_message.content,
             )
-            status = "executed" if payload.execution_result.error is None else "failed"
-            _mark_governed_proposal(
-                self,
-                session.id,
-                proposal_message.id,
-                status=status,
-                result=payload.model_dump(mode="json"),
-            )
-            yield from _governed_execution_events(user_message, payload)
-            return
-        if governed_pending and governed_choice == "reject":
-            proposal_message, request = governed_pending
-            _mark_governed_proposal(
-                self,
-                session.id,
-                proposal_message.id,
-                status="rejected",
-                result={"tool_id": request.tool_id, "action_id": request.action_id},
-            )
-            yield from _governed_rejection_events(user_message, request)
-            return
+            # A proposal decided meanwhile (its button, another turn) leaves this turn to the conversation.
+            if decided is not None and governed_choice == "approve":
+                yield from _governed_execution_events(user_message, decided)
+                return
+            if decided is not None:
+                yield from _governed_rejection_events(user_message, request)
+                return
 
         from app.platform.chat.contracts import route_typed_turn as route_typed_chat_turn
 
@@ -565,23 +551,135 @@ def _patch_message_metadata(
     return True
 
 
+def _is_live_call_proposal(message: ChatMessage) -> bool:
+    from app.platform.chat.live_call_tasks import is_call_proposal
+
+    return is_call_proposal(message)
+
+
 def _pending_governed_proposal(
     session: ChatSession,
-    current_user_message_id: str,
+    user_message: ChatMessage,
 ) -> tuple[ChatMessage, Any] | None:
+    """The proposal this turn may confirm or cancel: the latest pending one.
+
+    A live call's proposal counts only for the turn that answers its question (``proposal_confirmable``); once that
+    has passed it has expired, and it still hides older proposals, which the person was not asked about just now.
+    """
+    from app.platform.chat.live_call_tasks import proposal_confirmable
+
     for message in reversed(session.messages):
-        if message.id == current_user_message_id or message.role != "assistant":
+        if message.id == user_message.id or message.role != "assistant":
             continue
         if message.metadata.get("governed_tool_execution_status") != "pending":
             continue
         raw = message.metadata.get("pending_governed_tool_request")
         if not isinstance(raw, dict):
             continue
+        if _is_live_call_proposal(message) and not proposal_confirmable(session, message, user_message):
+            return None
         try:
             return message, live_agent_tools().parse_request(raw)
         except ValueError:
             continue
     return None
+
+
+def is_proposal_answer(text: str) -> bool:
+    """Whether ``text`` is a confirm or cancel, as a turn would read it."""
+    return _confirmation_choice(text) is not None
+
+
+def has_pending_proposal(session: ChatSession) -> bool:
+    """Whether the session holds a pending proposal (governed or legacy Kasa) a confirm could decide.
+
+    Speculation checks this for a confirm or cancel (``is_proposal_answer``): a speculated reply to one must neither
+    start nor be accepted, because only the turn itself decides, and a speculated "confirm" would otherwise commit
+    a model reply and run nothing. Other remarks speculate as usual.
+    """
+    if _pending_kasa_proposal(session, "") is not None:
+        return True
+    return any(message.role == "assistant"
+               and message.metadata.get("governed_tool_execution_status") == "pending"
+               and isinstance(message.metadata.get("pending_governed_tool_request"), dict)
+               for message in session.messages)
+
+
+@dataclass(frozen=True)
+class _NotRunResult:
+    result_summary: str
+    error: str
+    output: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _NotRun:
+    """A confirmed call proposal that did not run: its proposer no longer holds the ability."""
+
+    execution_result: _NotRunResult
+
+    def model_dump(self, mode: str = "python") -> dict[str, Any]:
+        return {"execution_result": asdict(self.execution_result)}
+
+
+def _proposer_granted(proposal_message: ChatMessage) -> bool:
+    """A call's proposal runs only while the speaker who proposed it still holds its ability (companion 5.2)."""
+    from app.platform.chat.contracts import CHAT_CALL_ACTIONS
+    from app.runtime.ports import optional
+
+    action = proposal_message.metadata.get("live_call_action")
+    actions = optional(CHAT_CALL_ACTIONS)
+    if not isinstance(action, dict) or actions is None:
+        return False
+    return bool(actions.granted(str(action.get("owner") or ""), capability=str(action.get("capability") or "")))
+
+
+def decide_governed_proposal(
+    store: Any,
+    session_id: str,
+    proposal_message: ChatMessage,
+    request: Any,
+    *,
+    choice: str,
+    user_request: str,
+) -> Any:
+    """Approve (run) or reject a pending proposal, once. Returns the execution payload on approval, ``True`` on
+    rejection, or None when the proposal was no longer pending.
+
+    A live call's proposal is claimed first (``claim_message_metadata``: pending → executing or rejected), so a
+    spoken confirm and its button never both run it. A crash after the claim leaves ``executing``, shown as unknown
+    and never re-run, since the action may have happened.
+    """
+    rejected = {"tool_id": request.tool_id, "action_id": request.action_id}
+    if _is_live_call_proposal(proposal_message):
+        claim = getattr(store, "claim_message_metadata", None)
+        status = "executing" if choice == "approve" else "rejected"
+        patch: dict[str, Any] = {"governed_tool_execution_status": status,
+                                 "governed_tool_execution_updated_at": datetime.now(timezone.utc).isoformat()}
+        if choice != "approve":
+            patch["governed_tool_execution_result"] = rejected
+        if not callable(claim) or not claim(session_id=session_id, message_id=proposal_message.id,
+                                            require={"governed_tool_execution_status": "pending"}, patch=patch):
+            return None
+        if choice != "approve":
+            return True
+    elif choice != "approve":
+        _mark_governed_proposal(store, session_id, proposal_message.id, status="rejected", result=rejected)
+        return True
+    if _is_live_call_proposal(proposal_message) and not _proposer_granted(proposal_message):
+        # Claimed above, so it is never run later either; the person hears why nothing happened.
+        payload: Any = _NotRun(_NotRunResult(result_summary="Nothing was changed.",
+                                             error="That is no longer allowed for whoever proposed it."))
+    else:
+        payload = execute_capability(
+            _confirmation_grant(session_id),
+            request.model_copy(update={"session_id": session_id}),
+            user_request=user_request,
+        )
+    status = "executed" if payload.execution_result.error is None else "failed"
+    _mark_governed_proposal(store, session_id, proposal_message.id, status=status,
+                            result=payload.model_dump(mode="json"))
+    return payload
 
 
 def _mark_governed_proposal(
@@ -638,15 +736,24 @@ def _generalized_result_events(
     }
 
 
+def execution_text(payload: Any) -> str:
+    """What a confirmed proposal's run says, built from its result."""
+    result = payload.execution_result
+    content = result.result_summary or ("Governed action failed." if result.error else "Governed action completed.")
+    return f"{content} {result.error}".strip() if result.error else content
+
+
+def rejection_text(request: Any) -> str:
+    return f"Cancelled. I did not execute {request.action_id}."
+
+
 def _governed_execution_events(user_message: ChatMessage, payload):
     coordinator = default_assistant_turn_coordinator()
     assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
     result = payload.execution_result
-    content = result.result_summary or ("Governed action failed." if result.error else "Governed action completed.")
-    if result.error:
-        content = f"{content} {result.error}".strip()
+    content = execution_text(payload)
     try:
         if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
             yield _interrupted(assistant_turn_id, "")
@@ -677,7 +784,7 @@ def _governed_rejection_events(user_message: ChatMessage, request: Any):
     assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
-    content = f"Cancelled. I did not execute {request.action_id}."
+    content = rejection_text(request)
     if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
         yield _interrupted(assistant_turn_id, "")
         return

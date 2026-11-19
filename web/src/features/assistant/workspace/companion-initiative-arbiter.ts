@@ -1,4 +1,4 @@
-export type CompanionInitiativeSource = 'desktop' | 'social' | 'ambient' | 'memory';
+export type CompanionInitiativeSource = 'desktop' | 'social' | 'ambient' | 'memory' | 'task' | 'scene';
 export type CompanionInitiativePriority = 'normal' | 'critical';
 
 export type CompanionInitiativeRequest = {

@@ -45,6 +45,7 @@ export async function activateAssistantRuntime({ queryClient }: ModuleRuntimeCon
   add((await import('./workspace/live-tts-adaptive-buffer-controller')).initializeLiveTtsAdaptiveBufferController());
   add((await import('./workspace/live-voice-unified-audio-controller')).initializeLiveVoiceUnifiedAudioController());
   add((await import('./workspace/live-voice-pending-output-interrupt')).initializeLiveVoicePendingOutputInterrupt());
+  add((await import('./workspace/live-call-tasks-controller')).initializeLiveCallTasksController());
   add((await import('./workspace/live-conversation-initiative-controller')).initializeLiveConversationInitiativeController());
   add((await import('./workspace/live-conversation-repair-controller')).initializeLiveConversationRepairController());
   add((await import('./workspace/live-conversation-evaluation-controller')).initializeLiveConversationEvaluationController());
