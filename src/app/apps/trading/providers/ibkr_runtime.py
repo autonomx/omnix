@@ -233,6 +233,7 @@ class OfficialIbapiTransport:
         self._market_data_types: dict[int, str] = {}
         self._request_errors: dict[int, dict[str, Any]] = {}
         self._farm_status: dict[str, str] = {}
+        self._quote_line_break_count = 0
         self._sequence = 0
         self._last_error: str | None = None
         self._error_count = 0
@@ -427,6 +428,13 @@ class OfficialIbapiTransport:
         farm = farm_names.get(code)
         if farm is not None:
             self._farm_status[farm[0]] = farm[1]
+        # A quote line may have missed updates: the market-data farm dropped, or a
+        # quote request failed, or the Gateway lost IBKR (1100; 1101 is back with data
+        # lost). Callers that vouch for a line's continuity watch this.
+        if code in {1100, 1101, 2103} or (
+            request_id in self._quote_listeners and (code < 2000 or code >= 10_000)
+        ):
+            self._quote_line_break_count += 1
 
     def _emit_quote(self, req_id: int) -> None:
         contract = self._quote_contracts.get(req_id)
@@ -712,6 +720,7 @@ class OfficialIbapiTransport:
             "error_count": self._error_count,
             "entitlement_error_count": self._entitlement_error_count,
             "farm_status": dict(self._farm_status),
+            "quote_line_break_count": self._quote_line_break_count,
             "recent_request_errors": recent_errors,
         }
 

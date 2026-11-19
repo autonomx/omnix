@@ -349,6 +349,7 @@ def _official_transport(script) -> OfficialIbapiTransport:
     transport._quote_contracts, transport._quote_listeners, transport._quote_values = {}, {}, {}
     transport._market_data_types, transport._request_errors, transport._farm_status = {}, {}, {}
     transport._error_count, transport._entitlement_error_count, transport._last_error = 0, 0, None
+    transport._quote_line_break_count = 0
     transport._qualified_contract = lambda identity: identity
     transport._client = _ScriptedClient(transport, script)
     return transport
@@ -390,6 +391,23 @@ def test_official_transport_historical_errors_end_the_request_instead_of_waiting
         transport._historical_events[req_id].set()
     assert len(_request(_official_transport(notice_then_data))) == 1
     assert datetime.now(timezone.utc) - started < timedelta(seconds=3)
+
+
+def test_official_transport_counts_what_breaks_a_quote_line():
+    transport = _official_transport(lambda *_: None)
+    transport._quote_listeners[42] = lambda _quote: None
+
+    transport._on_request_error(42, 2176, "Warning: a notice on the line")
+    transport._on_request_error(7, 200, "No security definition (not a quote line)")
+    transport._on_request_error(-1, 2104, "Market data farm connection is OK")
+    assert transport._quote_line_break_count == 0
+
+    transport._on_request_error(-1, 2103, "Market data farm connection is broken")
+    transport._on_request_error(-1, 1100, "Connectivity between IBKR and TWS has been lost")
+    transport._on_request_error(42, 10197, "No market data during competing live session")
+    transport._on_request_error(42, 354, "Requested market data is not subscribed")
+    assert transport._quote_line_break_count == 4
+    assert transport._farm_status["market_data"] == "DISCONNECTED"
 
 
 def test_concurrent_requests_for_one_finished_range_reach_the_gateway_once(monkeypatch):

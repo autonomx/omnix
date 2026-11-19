@@ -75,6 +75,22 @@ def _market_data_line_budget() -> int:
     return max(1, value)
 
 
+def _quote_line_epoch(diagnostics: dict[str, Any]) -> tuple[object, ...] | None:
+    """What must stay the same for a quote line to have run unbroken; None when it is down."""
+    if not diagnostics.get("connected"):
+        return None
+    transport = diagnostics.get("transport")
+    transport = transport if isinstance(transport, dict) else {}
+    farms = transport.get("farm_status")
+    if isinstance(farms, dict) and farms.get("market_data") == "DISCONNECTED":
+        return None
+    return (
+        diagnostics.get("connect_count"),
+        diagnostics.get("reconnect_count"),
+        transport.get("quote_line_break_count"),
+    )
+
+
 class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
     error_event = "ibkr_market_data_monitor_error"
 
@@ -105,6 +121,11 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         self.held_without_line_count = 0
         self._keys: dict[str, str] = {}
         self._callbacks: dict[str, Callable] = {}
+        # Since when each line has run unbroken (see _quote_line_epoch); a fill may take a
+        # line's standing quote only inside such a span.
+        self._line_up_since: dict[str, datetime] = {}
+        self._line_epoch: tuple[object, ...] | None = None
+        self.line_confirmation_count = 0
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.demanded_instrument_count = 0
@@ -319,7 +340,8 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         market_service: TradingMarketDataService,
         provider: IbkrEquityProvider,
         instrument_id: str,
-    ) -> None:
+    ) -> str | None:
+        """Hold the line; its binding id when the subscription was renewed without error."""
         binding = provider.get_binding(instrument_id)
         listener_id = f"ibkr-plane:{instrument_id}"
         if instrument_id not in self._callbacks:
@@ -343,6 +365,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             provider.subscribe_quote(instrument_id, callback)
             if created:
                 self.subscription_create_count += 1
+            return binding.binding_id
         except Exception as exc:
             self.subscription_error_count += 1
             self.last_error = f"{instrument_id}: {type(exc).__name__}: {exc}"
@@ -351,6 +374,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
                 self.now_factory().astimezone(_ET).date(),
                 f"{type(exc).__name__}:{exc}",
             )
+            return None
 
     def _remove_subscription(
         self,
@@ -360,6 +384,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
     ) -> None:
         key = self._keys.pop(instrument_id, None)
         callback = self._callbacks.pop(instrument_id, None)
+        self._line_up_since.pop(instrument_id, None)
         if key is None:
             return
         listener_id = f"ibkr-plane:{instrument_id}"
@@ -414,13 +439,28 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             historical_cache_hit_count=int(runtime_diagnostics.get("historical_cache_hit_count", 0) or 0),
         )
 
+        epoch = _quote_line_epoch(runtime_diagnostics)
+        if epoch is None or epoch != self._line_epoch:
+            self._line_up_since.clear()
+        self._line_epoch = epoch
+
         before = self.recorded_observation_count
         for instrument_id in sorted(admitted):
-            self._ensure_subscription(
+            binding_id = self._ensure_subscription(
                 market_service,
                 provider,
                 instrument_id,
             )
+            if binding_id is None or epoch is None:
+                self._line_up_since.pop(instrument_id, None)
+                continue
+            self.plane.confirm_line(
+                instrument_id,
+                binding_id=binding_id,
+                up_since=self._line_up_since.setdefault(instrument_id, now),
+                confirmed_at=now,
+            )
+            self.line_confirmation_count += 1
 
         self.last_run_at = now
         # Write the quote evidence queued by the network thread since the last cycle.
@@ -453,6 +493,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             "live_event_count": self.live_event_count,
             "nonlive_event_count": self.nonlive_event_count,
             "recorded_observation_count": self.recorded_observation_count,
+            "line_confirmation_count": self.line_confirmation_count,
             "authority_mode": "LIVE_DATA" if settings.live_authority_enabled else "ZERO_AUTHORITY_OBSERVATION",
             "order_execution_authority": False,
         }

@@ -1120,3 +1120,85 @@ async def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote(
         event.event_type == "ai_shadow_fill" and event.state == "filled"
         for event in repository.events
     )
+
+
+@pytest.mark.anyio
+async def test_arms_c_and_d_fill_from_the_live_line_quote_standing_at_the_decision(monkeypatch) -> None:
+    """Owner decision 2026-11-12: a quiet book on a confirmed live IBKR line fills at once."""
+    from app.apps.trading import strategy_ai_shadow_monitor as monitor_module
+    from app.apps.trading.execution import assess_execution_observation
+
+    monkeypatch.setattr(monitor_module, "ibkr_live_quotes_authorized", lambda: True)
+    repository = MemoryRepository()
+    plane = ExecutionObservationPlane()
+    quoted_at = START - timedelta(seconds=20)  # the book has not changed since
+    plane.record(
+        assess_execution_observation(
+            ExecutionObservation(
+                instrument_id=INSTRUMENT,
+                binding_id="ibkr:TEST",
+                provider="ibkr",
+                binding_purpose="LIVE_DATA",
+                bid=Decimal("9.99"),
+                ask=Decimal("10.01"),
+                last=Decimal("10.00"),
+                bid_size=Decimal("1000"),
+                ask_size=Decimal("1000"),
+                source_time=quoted_at,
+                received_at=quoted_at,
+                session="regular",
+                freshness_mode="live",
+                market_data_type="LIVE",
+                live_entitled=True,
+            ),
+            binding_purpose="LIVE_DATA",
+        ),
+        recorded_at=quoted_at,
+    )
+    plane.confirm_line(
+        INSTRUMENT,
+        binding_id="ibkr:TEST",
+        up_since=START - timedelta(minutes=5),
+        confirmed_at=START + timedelta(seconds=5),
+    )
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=RecordingAnalyzer,
+        execution_plane=plane,
+        now_factory=lambda: START + timedelta(seconds=6),
+        interval_seconds=5,
+    )
+    row = _row(START, _feature())
+    decision = AIShadowDecision(
+        instrument_id=INSTRUMENT,
+        action="enter",
+        confidence=90,
+        market_regime="trend_continuation",
+        expected_horizon_minutes=30,
+        thesis="Constructive continuation.",
+        reason="Enter on the standing quote.",
+        invalidation_price=Decimal("9.50"),
+    )
+
+    await monitor._apply_decision(
+        policy="minute",
+        decision=decision,
+        row=row,
+        candidate=row["candidate"],
+        bars=[],
+        config=managed_finviz_shadow_document("shadow-account"),
+        repository=repository,
+        market_service=object(),
+        events=[],
+        result=SimpleNamespace(current_price=Decimal("10")),
+        batch_result=None,
+        trigger_reasons=("completed_1m_bar",),
+        decision_completed_at=START + timedelta(seconds=2),
+    )
+
+    [fill] = [event for event in repository.events if event.event_type == "ai_shadow_fill"]
+    assert fill.state == "filled", fill.reason_code
+    assert fill.payload["causal_execution_selection"]["selection_basis"] == "standing"
+    # Priced as the book standing when the order became active: the decision plus 0.25 s.
+    assert fill.observed_at == START + timedelta(seconds=2.25)
+    assert Decimal(fill.payload["simulation"]["fill_price"]) >= Decimal("10.01")
+    assert not any(event.event_type == "ai_shadow_entry_intent" for event in repository.events)

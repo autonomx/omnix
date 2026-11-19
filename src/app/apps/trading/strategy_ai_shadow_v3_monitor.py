@@ -22,6 +22,7 @@ from app.runtime.features import FeatureContext
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution import ExecutionObservation
 from .execution_observation_plane import (
+    STANDING_QUOTE_MAX_AGE_SECONDS,
     ExecutionObservationPlane,
     default_execution_observation_plane,
     first_causal_execution,
@@ -34,6 +35,7 @@ from .llm_reliability_metrics import (
 from .market_data_recovery import RecoveredBarSeries, RecoveryAttempt
 from .held_quote_demand import default_held_quote_demand
 from .model_route import local_batch_rows
+from .paper import PaperExecutionPolicy
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
 from .strategy_ai_shadow_v3 import (
@@ -497,6 +499,9 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             market_snapshot_as_of=market.observed_at,
             binding_id=candidate.binding_id,
             ibkr_live=await asyncio.to_thread(ibkr_live_quotes_authorized),
+            standing_max_age_seconds=STANDING_QUOTE_MAX_AGE_SECONDS,
+            standing_latency_seconds=Decimal(PaperExecutionPolicy().latency_ms) / 1000,
+            now=self.now_factory(),
         )
         if selection is None:
             if self.now_factory().astimezone(timezone.utc) >= current.expires_at:
@@ -555,6 +560,10 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
 
         execution = observation.model_dump(mode="python")
         execution["spread_bps"] = observation.spread_bps
+        if selection.selection_basis == "standing":
+            # The line check proved this book still stood when the order became active,
+            # so the order is priced on it at that moment.
+            execution["source_time"] = selection.priced_at
         if iex_book_only:
             # IEX's own book is not the NBBO; price the research fill from the
             # last trade with the simulator's assumed spread instead.

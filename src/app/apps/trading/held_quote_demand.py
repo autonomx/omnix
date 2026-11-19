@@ -1,8 +1,8 @@
-"""Stocks the AI arms hold or have an order on: their live quote lines come first.
+"""Stocks the research arms hold or have an order on: their live quote lines come first.
 
 A held position or a pending order fills only from a quote that arrives after the decision. When a stock had no live
 line, nothing arrived: exits waited for many minutes and a reduce never filled (TTEC, 2026-11-10). The AI monitors
-name these stocks on every pass; the IBKR monitor admits them before any other demand. A name lapses after a while
+and the Stoch arm (while armed or holding) name these stocks on every pass; the IBKR monitor admits them before any other demand. A name lapses after a while
 unless a monitor names it again, so a closed position frees its line. Research only: nothing here places an order.
 """
 from __future__ import annotations

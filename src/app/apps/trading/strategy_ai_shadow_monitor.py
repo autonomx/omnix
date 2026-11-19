@@ -29,6 +29,7 @@ from app.runtime.features import FeatureContext
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution_observation_plane import (
+    STANDING_QUOTE_MAX_AGE_SECONDS,
     ExecutionObservationPlane,
     default_execution_observation_plane,
     first_causal_execution,
@@ -38,6 +39,7 @@ from .gapper_dataset import GapperCandidate
 from .indicator_signals import multi_timeframe_indicator_context
 from .held_quote_demand import default_held_quote_demand
 from .model_route import local_batch_rows
+from .paper import PaperExecutionPolicy
 from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
     ExecutionInputGap,
@@ -956,6 +958,9 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 market_snapshot_as_of=observed_at,
                 binding_id=candidate.binding_id,
                 ibkr_live=await asyncio.to_thread(ibkr_live_quotes_authorized),
+                standing_max_age_seconds=STANDING_QUOTE_MAX_AGE_SECONDS,
+                standing_latency_seconds=Decimal(PaperExecutionPolicy().latency_ms) / 1000,
+                now=self.now_factory(),
             )
             if selection is None:
                 if side == "buy" and pending_entry is None:
@@ -1041,6 +1046,10 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 )
                 return
             execution = _execution_payload(selection.observation)
+            if selection.selection_basis == "standing":
+                # The line check proved this book still stood when the order became active,
+                # so the order is priced on it at that moment.
+                execution["source_time"] = selection.priced_at
             execution["causal_execution_selection"] = selection.model_dump(mode="json")
 
         if side == "buy":
@@ -1152,6 +1161,8 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             "side": side,
             "requested_units": str(units),
             "simulation": simulation.model_dump(mode="json"),
+            # Which quote priced the fill: the one standing on a live line, or the first after.
+            "causal_execution_selection": execution.get("causal_execution_selection"),
             "position_before": position.model_dump(mode="json"),
             "position_after": persisted_after.model_dump(mode="json"),
             "closed_position": after.model_dump(mode="json") if closed_trade else None,
