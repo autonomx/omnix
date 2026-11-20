@@ -474,6 +474,11 @@ class FloatRuntime:
             portrait.blink_jpegs[level] = self.encode_pixels(twins, level)
         return portrait.blink_jpegs[level]
 
+    @staticmethod
+    def rendered_idle_level(portrait: Portrait) -> int | None:
+        """The best quality level whose idle loop and blink twins are both rendered already, if any."""
+        return next((level for level in sorted(portrait.idle_jpegs) if level in portrait.blink_jpegs), None)
+
     @torch.no_grad()
     def render_pixels(self, portrait: Portrait, latents: torch.Tensor) -> torch.Tensor:
         """RGB frames (frames x 3 x 512 x 512, uint8) for motion latents, decoded ``decode_batch`` at a time.

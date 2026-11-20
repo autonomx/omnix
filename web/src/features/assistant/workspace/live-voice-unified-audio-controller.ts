@@ -1,7 +1,7 @@
  
 import { activeFetchMiddlewares, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
-import { livePortrait } from '../chat/portrait/livePortrait';
+import { livePortrait, type LivePortraitSpeaker } from '../chat/portrait/livePortrait';
 import { liveConversationStore } from './live-conversation-store';
 import {
   createLiveCallDiagnosticsReporter,
@@ -101,6 +101,8 @@ type LiveTurnIds = {
 type SharedLiveAudioSession = {
   sessionId: string;
   voiceId: string | null;
+  /** The guest the session speaks as (its portrait is that guest's face); null for the chat's own character. */
+  speakerId: string | null;
   traceId: string;
   reporter: LiveCallDiagnosticsReporter;
   sessionPromise: Promise<LiveVoicePcmSession>;
@@ -215,10 +217,12 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestIn
   });
   // A guest's turn speaks in the guest's voice; a new voice opens a new audio session (companion 5.5).
   const sceneSpeakerId = sceneSpeakerFrom(response);
-  const voiceId = sceneSpeakerVoiceId(sceneSpeakerId, readLatestTrustedCharacterRuntime()?.scene_guests, selectedVoiceId());
+  const sceneGuests = readLatestTrustedCharacterRuntime()?.scene_guests;
+  const voiceId = sceneSpeakerVoiceId(sceneSpeakerId, sceneGuests, selectedVoiceId());
   liveCallPresentationStore.update({ sceneSpeakerId });
   const startedAtMs = performance.now();
-  const sharedAudio = await ensureSharedAudioSession(sessionId, voiceId);
+  // ...and with the guest's own face: the portrait follows the speaker.
+  const sharedAudio = await ensureSharedAudioSession(sessionId, voiceId, sceneSpeaker(sceneSpeakerId, sceneGuests));
   const sessionPromise = sharedAudio.sessionPromise;
   const turn: ActiveLiveTurn = {
     generation,
@@ -726,14 +730,26 @@ async function stopActiveTurn(reason: string): Promise<void> {
   });
 }
 
+/** The guest a turn speaks as, with its avatar pack; null for the chat's own character (or a guest the runtime does not list). */
+function sceneSpeaker(
+  speakerId: string | null,
+  guests: readonly { character_id: string; avatar_pack?: LivePortraitSpeaker['pack'] }[] | null | undefined,
+): LivePortraitSpeaker | null {
+  const guest = speakerId ? guests?.find((candidate) => candidate.character_id === speakerId) : undefined;
+  return guest ? { id: guest.character_id, pack: guest.avatar_pack ?? null } : null;
+}
+
 async function ensureSharedAudioSession(
   sessionId: string,
   voiceId: string | null,
+  speaker: LivePortraitSpeaker | null = null,
 ): Promise<SharedLiveAudioSession> {
   const current = sharedAudioSession;
-  if (current && current.sessionId === sessionId && current.voiceId === voiceId) {
+  const speakerId = speaker?.id ?? null;
+  if (current && current.sessionId === sessionId && current.voiceId === voiceId && current.speakerId === speakerId) {
     const session = current.session ?? await current.sessionPromise;
-    if (!session.isClosed()) return current;
+    // A failed session (its websocket refused or lost) is replaced: reused, every later turn would be silent.
+    if (!session.isClosed() && !session.hasFailed()) return current;
   }
   if (current) await stopSharedAudioSession('live_audio_session_replaced');
   const traceId = createLiveCallTraceId(`${sessionId}:audio-session`);
@@ -741,10 +757,11 @@ async function ensureSharedAudioSession(
   reporter.record('live_audio_session_created', {
     session_id: sessionId,
     voice_id: voiceId,
+    speaker_id: speakerId,
     websocket_scope: 'live_session',
   }, 'controller');
   // A portrait avatar asks the TTS websocket for a hello and follows the call's playback.
-  const portraitHooks = livePortrait.wanted() ? livePortrait.begin(sessionId) : undefined;
+  const portraitHooks = livePortrait.wanted(speaker) ? livePortrait.begin(sessionId, speaker) : undefined;
   const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
     sessionScoped: true,
     affinityKey: sessionId,
@@ -753,6 +770,7 @@ async function ensureSharedAudioSession(
   const state: SharedLiveAudioSession = {
     sessionId,
     voiceId,
+    speakerId,
     traceId,
     reporter,
     sessionPromise,

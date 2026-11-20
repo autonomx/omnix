@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LiveConversationProfile } from '../chat/liveConversationProfileClient';
 import {
+  ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT,
   ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT,
   ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT,
   ASSISTANT_VOICE_INTERRUPT_EVENT,
@@ -14,7 +15,9 @@ import {
   addCallGuest,
   callSceneGuests,
   callSceneHasGuests,
+  callSceneKnownEmpty,
   callSceneStore,
+  clearCallScene,
   loadCallScene,
   removeCallGuest,
   SCENE_LINE_REASON,
@@ -113,7 +116,7 @@ beforeEach(() => {
       scene = view([HOST, BEA, THEO]);
       return json(scene);
     }
-    if (url.pathname.startsWith(`${SCENE_PATH}/guests/`) && method === 'DELETE') {
+    if (url.pathname.startsWith(`${SCENE_PATH}/guests`) && method === 'DELETE') {
       scene = view([HOST]);
       return json(scene);
     }
@@ -203,6 +206,20 @@ describe('the call members', () => {
     expect(callsTo(`${SCENE_PATH}/guests/bea`, 'DELETE')).toHaveLength(1);
     expect(callSceneHasGuests('s1')).toBe(false);
     expect(callSceneStore.getState().changing).toBeNull();
+  });
+
+  it('clears every guest when a call ends, so the next call starts with the host alone', async () => {
+    expect(callSceneKnownEmpty('s1')).toBe(false);
+    await loadCallScene('s1');
+    expect(callSceneKnownEmpty('s1')).toBe(false);
+
+    await clearCallScene('s1');
+    expect(callsTo(`${SCENE_PATH}/guests`, 'DELETE')).toHaveLength(1);
+    expect(callSceneGuests()).toEqual([]);
+    expect(callSceneStore.getState().guests).toEqual([]);
+    expect(callSceneKnownEmpty('s1')).toBe(true);
+    // A chat the panel has not read is not known to be empty: its call's end still clears it.
+    expect(callSceneKnownEmpty('other')).toBe(false);
   });
 
   it('shows no members when the response is not a scene', async () => {
@@ -414,6 +431,65 @@ describe('the members talking to each other', () => {
     speakingEnds();
     await new Promise((resolve) => setTimeout(resolve, 1_600));
     expect(callsTo(STREAM_PATH)).toHaveLength(1);
+  });
+
+  // The 2026-11-20 call: the person spoke as each line began, the audio controller stopped it, and the line was
+  // committed "completed" only when the next reply's audio ended, a whole exchange later.
+  function linePlays(heard: string | null): void {
+    const ledger = createLiveVoiceDeliveryLedger(1_000);
+    appendDeliveryPhrase(ledger, 0, ' Line 1. ');
+    if (heard !== null) {
+      handleDeliveryDiagnostic(ledger, 'phrase_buffered', { phrase_index: 0, playback_samples: 500 });
+      advanceDeliveryLedger(ledger, 600);
+    }
+    noteProactiveDelivery('s1', ledger);
+    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: true, source: 'unified-live-voice', kind: 'greeting' });
+    speakingStarts();
+  }
+
+  it('settles a line the person speaks over at once, as interrupted, not when the next reply ends', async () => {
+    linesLeft = 2;
+    await startCall(talkProfile());
+    replyPlays();
+    await vi.waitFor(() => expect(perf).toContain('initiative_generation_completed'), { timeout: 4_000 });
+
+    linePlays('Line 1.');
+    userSpeaks();
+    await vi.waitFor(() => expect(callsTo(DELIVERY_PATH)).toHaveLength(1));
+    expect(callsTo(DELIVERY_PATH)[0].body).toMatchObject({
+      turn_id: 'scene-line:bea:msg:r1:1', delivery_status: 'interrupted', heard_text: 'Line 1.',
+    });
+    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: false, source: 'unified-live-voice', kind: null });
+    replyPlays();  // the answer to the person
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(callsTo(DELIVERY_PATH)).toHaveLength(1);
+  });
+
+  it('drops a line stopped before a word of it was heard and gives its lease back', async () => {
+    linesLeft = 1;
+    await startCall(talkProfile());
+    replyPlays();
+    await vi.waitFor(() => expect(perf).toContain('initiative_generation_completed'), { timeout: 4_000 });
+
+    linePlays(null);
+    userSpeaks();
+    await vi.waitFor(() => expect(callsTo(RELEASE_PATH, 'POST')).toHaveLength(1));
+    expect(callsTo(RELEASE_PATH)[0].body).toEqual({ turn_id: 'scene-line:bea:msg:r1:1' });
+    replyPlays();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(callsTo(DELIVERY_PATH)).toHaveLength(0);
+  });
+
+  it("commits a line when its own audio ends, though the call's speaking state stays set", async () => {
+    linesLeft = 1;
+    await startCall(talkProfile());
+    replyPlays();
+    await vi.waitFor(() => expect(perf).toContain('initiative_generation_completed'), { timeout: 4_000 });
+
+    linePlays('Line 1.');
+    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: false, source: 'unified-live-voice', kind: null });
+    await vi.waitFor(() => expect(callsTo(DELIVERY_PATH)).toHaveLength(1));
+    expect(callsTo(DELIVERY_PATH)[0].body).toMatchObject({ turn_id: 'scene-line:bea:msg:r1:1', delivery_status: 'completed' });
   });
 
   it('gives the lease back for a line dropped before it played', async () => {

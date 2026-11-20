@@ -100,6 +100,7 @@ def register_live_chat_speculation_inline_stream_routes(router: APIRouter,
         )
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
+        scene_possible = await speculation_runtime.refuse_speculation_in_scene(session)
 
         provider_id, model_id, execution_lane = _effective_speculation_route(
             session_id,
@@ -135,6 +136,7 @@ def register_live_chat_speculation_inline_stream_routes(router: APIRouter,
             source_sequence=request.source_sequence,
             created_at=time.time(),
             execution_lane=execution_lane,
+            scene_possible=scene_possible,
         )
         generation = handshake_runtime._HandshakeGeneration(
             store=store,

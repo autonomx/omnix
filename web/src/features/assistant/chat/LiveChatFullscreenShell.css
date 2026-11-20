@@ -371,6 +371,14 @@
     object-position: center bottom;
   }
 
+  /* A portrait guest's face, live while it speaks: square frames, sized as its picture. */
+  .live-chat-stage-tile-picture[data-renderer='portrait'] canvas {
+    aspect-ratio: 1;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+  }
+
   .live-chat-stage-tile .live-chat-stage-fallback {
     min-height: 0;
   }

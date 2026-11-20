@@ -8,7 +8,8 @@ import {
   useLiveAvatar,
 } from './liveCharacterAvatarBridge';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
-import { AvatarLoadingNotice, LivePortraitCanvas } from './portrait/LivePortraitCanvas';
+import { AvatarLoadingNotice } from './portrait/LivePortraitCanvas';
+import { MemberPortrait } from './portrait/MemberPortrait';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/bus';
 
@@ -26,7 +27,7 @@ export function LiveCallVisual({ voiceMode, thinking, runtimeLoading = false }: 
 }) {
   const avatar = useLiveAvatar();
   const runtime = avatar.runtime;
-  const { pack, portraitState, notice } = useDrawnAvatarPack(runtime?.avatar_pack);
+  const { pack, portraitState, notice, mine } = useDrawnAvatarPack(runtime?.avatar_pack);
   const portrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
   const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
   const state = avatarPresentationState(avatar.mouthFrame, voiceMode, thinking);
@@ -55,8 +56,11 @@ export function LiveCallVisual({ voiceMode, thinking, runtimeLoading = false }: 
       {showAvatar && runtime && pack ? (
         portrait ? (
           <figure className="assistant-live-character-avatar" data-renderer="portrait" data-portrait-status={portraitState.status} data-voice-mode={state} style={{ backgroundImage: avatarBackgroundImage(pack) || undefined }}>
-            <LivePortraitCanvas
-              key={portraitState.status === 'off' ? 'idle' : 'call'}
+            {/* While a guest speaks on a group call, the live portrait is the guest's: this character idles. */}
+            <MemberPortrait
+              characterId={pack.character_id}
+              live={mine}
+              streaming={portraitState.status !== 'off'}
               imageUrl={characterAvatarAssetUrl(pack.base_asset_id ?? '')}
               label={`${runtime.display_name} live portrait`}
             />

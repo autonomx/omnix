@@ -98,5 +98,17 @@ def register_scene_routes(router: APIRouter, *, chat_store_factory: Callable[[],
 
         return await asyncio.to_thread(remove)
 
+    @router.delete(SCENE_PATH + "/guests", response_model=SceneView)
+    async def clear_chat_scene_guests(session_id: str) -> SceneView:
+        """The call ended: its guests leave, and the next call starts with the chat's own character alone."""
+        from .scene import clear_guests
+
+        def clear() -> SceneView:
+            session = _session(session_id)
+            clear_guests(session)
+            return scene_view(session)
+
+        return await asyncio.to_thread(clear)
+
 
 __all__ = ["AddSceneGuestRequest", "SCENE_PATH", "SceneMemberView", "SceneView", "register_scene_routes", "scene_view"]

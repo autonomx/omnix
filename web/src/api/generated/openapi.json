@@ -41651,6 +41651,53 @@
         "title": "PortfolioScore",
         "type": "object"
       },
+      "PortraitIdleResponse": {
+        "properties": {
+          "blink": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blink",
+            "type": "array"
+          },
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
+          "frame_ms": {
+            "default": 0,
+            "title": "Frame Ms",
+            "type": "integer"
+          },
+          "idle": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Idle",
+            "type": "array"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "code",
+          "message",
+          "frame_ms",
+          "idle",
+          "blink"
+        ],
+        "title": "PortraitIdleResponse",
+        "type": "object"
+      },
       "PortraitLoadRequest": {
         "properties": {
           "asset_id": {
@@ -88333,6 +88380,44 @@
       }
     },
     "/api/chat/sessions/{session_id}/scene/guests": {
+      "delete": {
+        "description": "The call ended: its guests leave, and the next call starts with the chat's own character alone.",
+        "operationId": "clear_chat_scene_guests_api_chat_sessions__session_id__scene_guests_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Chat Scene Guests"
+      },
       "post": {
         "operationId": "add_chat_scene_guest_api_chat_sessions__session_id__scene_guests_post",
         "parameters": [
@@ -111834,6 +111919,61 @@
           }
         },
         "summary": "Get Voice Session Evaluation"
+      }
+    },
+    "/api/tts/live-call/portrait-idle": {
+      "get": {
+        "operationId": "portrait_idle_api_tts_live_call_portrait_idle_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "speaker_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Speaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortraitIdleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portrait Idle",
+        "tags": [
+          "live-voice"
+        ]
       }
     },
     "/api/tts/live-call/portrait-load": {

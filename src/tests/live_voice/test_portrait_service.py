@@ -52,6 +52,7 @@ class FakeRuntime:
     def __init__(self) -> None:
         self.portraits: dict[str, object] = {}
         self.sessions: list[FakeSession] = []
+        self.idle_levels: dict[int, set[int]] = {}
 
     def prepare(self, key: str, payload: bytes) -> object:
         if payload == b"no face here":
@@ -70,10 +71,14 @@ class FakeRuntime:
         return self.sessions[-1]
 
     def idle_frames(self, portrait: object, level: int = 0) -> list[bytes]:
+        self.idle_levels.setdefault(id(portrait), set()).add(level)
         return [f"idle-{index}-l{level}".encode() for index in range(3)]
 
     def blink_frames(self, portrait: object, level: int = 0) -> list[bytes]:
         return [f"blink-{index}-l{level}".encode() for index in range(3)]
+
+    def rendered_idle_level(self, portrait: object) -> int | None:
+        return min(self.idle_levels.get(id(portrait), ()), default=None)
 
 
 @pytest.fixture
@@ -478,3 +483,27 @@ def test_a_preview_renders_a_short_clip_and_is_refused_while_a_call_streams(toke
     with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
         assert _open(websocket, latent_key)["type"] == "ready"
         assert preview()["code"] == "portrait_busy"
+
+
+def test_a_members_idle_loop_comes_back_as_rendered_and_is_never_rendered_during_a_call(token: str) -> None:
+    import base64
+
+    from services.portrait.idle_loop import idle_frame_step
+
+    client = _client(_ready_app(FakeRuntime()), token)
+    host_key = _prepare(client)["latent_key"]
+
+    def idle(latent_key: str) -> dict:
+        return client.post("/portrait/idle", data={"latent_key": latent_key}).json()
+
+    body = idle(host_key)
+    assert body["ok"] and body["frame_ms"] == 40 * idle_frame_step(0)
+    assert [base64.b64decode(frame) for frame in body["idle"]] == [f"idle-{index}-l0".encode() for index in range(3)]
+    assert [base64.b64decode(frame) for frame in body["blink"]] == [f"blink-{index}-l0".encode() for index in range(3)]
+    assert idle("missing")["code"] == "portrait_not_prepared"
+    with client.websocket_connect("/portrait/stream", headers={"Host": "127.0.0.1"}) as websocket:
+        assert _open(websocket, host_key)["type"] == "ready"
+        # A guest prepared during the call has no loop yet: rendering it would hold the call's frames back.
+        guest_key = _prepare(client, image=b"another portrait")["latent_key"]
+        assert idle(guest_key)["code"] == "portrait_busy"
+        assert idle(host_key)["ok"] is True

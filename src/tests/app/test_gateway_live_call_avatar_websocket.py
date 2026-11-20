@@ -294,3 +294,130 @@ def test_a_backlog_of_speech_frames_steps_the_quality_down(monkeypatch, portrait
             assert avatar.receive_json() == {"type": "quality", "level": 2}
             link = portrait.opened[0]["link"]
     assert {"type": "quality", "level": 2} in link.sent
+
+
+def test_a_guest_speaking_on_a_group_call_shows_its_own_face(monkeypatch, portrait) -> None:
+    # The browser names the speaker; code finds the seat and resolves the guest's own pack, never the host's.
+    asked: list[tuple[str, str]] = []
+    guest_pack = PORTRAIT.model_copy(update={"character_id": "bea", "portrait_emotion": "surprise"})
+
+    def speaker_session(session: Any, speaker_id: str) -> Any:
+        asked.append((session.id, speaker_id))
+        return SimpleNamespace(id=session.id, speaker=speaker_id) if speaker_id == "bea" else None
+
+    def runtime(session: Any) -> Any:
+        pack = guest_pack if getattr(session, "speaker", None) == "bea" else PORTRAIT
+        return SimpleNamespace(avatar_pack=pack, speech_style=SimpleNamespace(emotion="neutral"))
+
+    monkeypatch.setattr(avatar_websocket, "_speaker_session", speaker_session)
+    monkeypatch.setattr(avatar_websocket, "resolve_live_call_runtime", runtime)
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with client.websocket_connect(_avatar_url(token) + "&speaker_id=bea") as avatar:
+            assert avatar.receive_json()["type"] == "ready"
+            assert avatar.receive_bytes() == b"frame-0"
+    assert asked == [("chat-1", "bea")]
+    assert portrait.opened[0]["emotion"] == "surprise"
+
+
+def test_a_speaker_who_is_not_on_the_call_gets_no_face(monkeypatch, portrait) -> None:
+    monkeypatch.setattr(avatar_websocket, "_speaker_session", lambda session, speaker_id: None)
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with client.websocket_connect(_avatar_url(token) + "&speaker_id=stranger") as avatar:
+            reply = avatar.receive_json()
+    assert reply["type"] == "unavailable" and reply["code"] == "speaker_not_on_call"
+    assert portrait.opened == []
+
+
+@pytest.fixture
+def idle_route(monkeypatch):
+    """The idle-loop route's portrait service and members, replaced."""
+    from app.platform.live_voice.portrait.link import PortraitIdleLoop
+    from app.platform.live_voice.transport import portrait_idle
+
+    state: dict[str, Any] = {"idle_error": None, "images": [], "seats": {"bea"}}
+    guest_pack = PORTRAIT.model_copy(update={"character_id": "bea", "base_asset_id": "image:bea"})
+
+    async def prepare(base_url: str, tenant: str, image: bytes) -> str:
+        return f"latent:{image.decode()}"
+
+    async def idle(base_url: str, latent_key: str) -> PortraitIdleLoop:
+        if state["idle_error"]:
+            raise state["idle_error"]
+        return PortraitIdleLoop(80, [f"{latent_key}:idle"], [f"{latent_key}:blink"])
+
+    def portrait_image(pack: Any, max_bytes: int) -> bytes:
+        state["images"].append(pack.base_asset_id)
+        return pack.base_asset_id.encode()
+
+    def speaker_session(session: Any, speaker_id: str) -> Any:
+        return SimpleNamespace(id=session.id, speaker=speaker_id) if speaker_id in state["seats"] else None
+
+    def runtime(session: Any) -> Any:
+        return SimpleNamespace(avatar_pack=guest_pack if getattr(session, "speaker", None) == "bea" else state.get(
+            "host_pack", PORTRAIT))
+
+    monkeypatch.setattr(portrait_idle, "portrait_url", lambda: "http://portrait.test")
+    monkeypatch.setattr(portrait_idle, "_load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
+    monkeypatch.setattr(portrait_idle, "_speaker_session", speaker_session)
+    monkeypatch.setattr(portrait_idle, "resolve_live_call_runtime", runtime)
+    monkeypatch.setattr(portrait_idle, "default_character_avatar_service",
+                        lambda: SimpleNamespace(portrait_image=portrait_image))
+    monkeypatch.setattr(portrait_idle, "prepare_portrait", prepare)
+    monkeypatch.setattr(portrait_idle, "idle_portrait", idle)
+    return state
+
+
+def test_every_member_of_a_group_call_gets_its_own_idle_loop(monkeypatch, idle_route) -> None:
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+
+    host = client.get("/api/tts/live-call/portrait-idle", params={"session_id": "chat-1"}).json()
+    guest = client.get("/api/tts/live-call/portrait-idle", params={"session_id": "chat-1", "speaker_id": "bea"}).json()
+
+    assert host == {"ok": True, "code": "", "message": "", "frame_ms": 80,
+                    "idle": ["latent:image:maya:idle"], "blink": ["latent:image:maya:blink"]}
+    assert guest["ok"] and guest["idle"] == ["latent:image:bea:idle"]
+    assert idle_route["images"] == ["image:maya", "image:bea"]
+
+
+def test_an_idle_loop_is_refused_for_a_stranger_a_picture_or_a_busy_service(monkeypatch, idle_route) -> None:
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+
+    def code(**params: str) -> str:
+        return client.get("/api/tts/live-call/portrait-idle", params={"session_id": "chat-1", **params}).json()["code"]
+
+    assert code(speaker_id="stranger") == "speaker_not_on_call"
+    idle_route["idle_error"] = PortraitUnavailable("portrait_busy", "A call is using the portrait")
+    assert code(speaker_id="bea") == "portrait_busy"
+    idle_route["host_pack"] = PORTRAIT.model_copy(update={"renderer": "sprite"})
+    assert code() == "not_a_portrait"
+    assert idle_route["images"] == ["image:bea"]
+
+
+def test_a_calls_slot_is_free_before_its_portrait_closes(monkeypatch, portrait) -> None:
+    # Seen on a live call (2026-11-20): on a speaker swap the browser opens the next speaker's socket at once. The
+    # slot was freed only after the portrait's close, so the new socket was refused (429) and the avatar stayed off.
+    from app.platform.live_voice.capacity import LiveCallCapacity
+    from app.platform.live_voice.transport import websocket as tts_websocket
+
+    capacity = LiveCallCapacity(1)
+    monkeypatch.setattr(tts_websocket, "live_call_capacity", lambda: capacity)
+    held_at_close: list[int] = []
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        with client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])) as avatar:
+            assert avatar.receive_json()["type"] == "ready"
+            link = portrait.opened[0]["link"]
+
+            async def close() -> None:
+                held_at_close.append(int(capacity.snapshot()["active"]))
+                link.closed = True
+
+            link.close = close
+            tts.close()
+            wait_until(lambda: link.closed, bool, timeout=5.0, interval=0.02)
+    assert held_at_close and set(held_at_close) == {0}  # the call's end and the avatar route both close it
+    assert capacity.snapshot()["active"] == 0

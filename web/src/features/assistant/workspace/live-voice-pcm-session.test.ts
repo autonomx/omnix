@@ -94,6 +94,8 @@ type SentMessage = {
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
+  /** How many of the next sockets the gateway refuses before they open (a 429, seen by a browser as 1006). */
+  static refuseNext = 0;
   readonly url: string;
   binaryType: BinaryType = 'blob';
   readyState = 0;
@@ -108,7 +110,15 @@ class FakeWebSocket {
   constructor(url: string | URL) {
     this.url = String(url);
     FakeWebSocket.instances.push(this);
+    const refused = FakeWebSocket.refuseNext > 0;
+    if (refused) FakeWebSocket.refuseNext -= 1;
     queueMicrotask(() => {
+      if (refused) {
+        this.readyState = 3;
+        this.emit('error', new Event('error'));
+        this.emit('close', { code: 1006, reason: '', wasClean: false } as CloseEvent);
+        return;
+      }
       this.readyState = 1;
       this.emit('open', new Event('open'));
     });
@@ -168,6 +178,7 @@ beforeEach(() => {
   FakeAudioContext.nextSampleRate = 24_000;
   FakeAudioWorkletNode.instances = [];
   FakeWebSocket.instances = [];
+  FakeWebSocket.refuseNext = 0;
   clearVoiceCueAssets();
   window.localStorage.clear();
   reporter.record.mockClear();
@@ -407,6 +418,56 @@ describe('live voice PCM session', () => {
     expect(portrait.onWorkletEvent).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'portrait_clock', sample_rate: 24_000 }));
     expect(reporter.record).not.toHaveBeenCalled();
     await session.finish();
+  });
+
+  it('asks again for a socket the gateway refused before it opened (a speaker swap), and plays the phrase', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    FakeWebSocket.refuseNext = 2;
+    const portrait = { onHello: vi.fn(), onWorkletEvent: vi.fn(), onSegmentRate: vi.fn() };
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter, { portrait });
+    const phrase = session.enqueuePhrase('After the swap.', 0);
+    await vi.advanceTimersByTimeAsync(250 + 500);
+    const third = FakeWebSocket.instances[2] as unknown as { emit(type: string, event: unknown): void };
+    third.emit('message', { data: JSON.stringify({ type: 'hello', call_key: 'call-3', avatar_token: 'token-3' }) });
+    await phrase;
+
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    expect(FakeWebSocket.instances.every((socket) => socket.url.includes('portrait=1'))).toBe(true);
+    expect(FakeWebSocket.instances[2].sent.some((text) => text.includes('"synthesize"'))).toBe(true);
+    expect(portrait.onHello).toHaveBeenCalledWith({ callKey: 'call-3', avatarToken: 'token-3' });
+    expect(reporter.record).toHaveBeenCalledWith('session_websocket_retry', { attempt: 2, delay_ms: 500 }, 'pcm_session');
+    expect(session.hasFailed()).toBe(false);
+    await session.stop('test-cleanup');
+    expect(FakeWebSocket.instances[2].close).toHaveBeenCalledWith(1000, 'test-cleanup');
+    vi.useRealTimers();
+  });
+
+  it('fails for good once the retries are spent, and says so (the session is then replaced, not reused)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    FakeWebSocket.refuseNext = 4;
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    const phrase = session.enqueuePhrase('Never heard.', 0);
+    const settled = phrase.then(() => 'played', () => 'failed');
+    await vi.advanceTimersByTimeAsync(250 + 500 + 1000);
+
+    expect(await settled).toBe('failed');
+    expect(FakeWebSocket.instances).toHaveLength(4);
+    expect(session.isClosed()).toBe(false);
+    expect(session.hasFailed()).toBe(true);
+    await session.stop('test-cleanup');
+    vi.useRealTimers();
+  });
+
+  it('stops asking again once the session is stopped', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    FakeWebSocket.refuseNext = 1;
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    await Promise.resolve();
+    await session.stop('hung-up');
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    vi.useRealTimers();
   });
 
   it('opens a plain websocket and ignores a hello when no portrait is asked for', async () => {

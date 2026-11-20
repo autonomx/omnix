@@ -156,6 +156,62 @@ def _disable_cuda_graph_decoding(model: Any) -> None:
     change(decoding, verbose=False)
 
 
+# Names a call's members go by (companion 2.x): Nemotron misheard "Abhishek" and the like as common words.
+MAX_CONTEXT_PHRASES = 16
+MAX_CONTEXT_PHRASE_CHARS = 40
+# How strongly a listed name is preferred (NeMo's greedy boosting-tree weight); 0 turns boosting off.
+DEFAULT_CONTEXT_BOOST_ALPHA = 0.5
+
+
+def clean_context_phrases(value: Any) -> tuple[str, ...]:
+    """The distinct phrases worth boosting, sorted: letters, digits, spaces, apostrophes and hyphens only."""
+    if not isinstance(value, (list, tuple)):
+        return ()
+    phrases: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        kept = "".join(ch if ch.isalnum() or ch in "'- " else " " for ch in item)
+        phrase = " ".join(kept.split())[:MAX_CONTEXT_PHRASE_CHARS].strip()
+        if len(phrase) >= 2:
+            phrases.add(phrase)
+        if len(phrases) >= MAX_CONTEXT_PHRASES:
+            break
+    return tuple(sorted(phrases))
+
+
+def _context_boost_alpha() -> float:
+    try:
+        return max(0.0, float(environment().get("OMNIX_STT_CONTEXT_BOOST_ALPHA", DEFAULT_CONTEXT_BOOST_ALPHA)))
+    except ValueError:
+        return DEFAULT_CONTEXT_BOOST_ALPHA
+
+
+def _set_boosted_phrases(model: Any, phrases: tuple[str, ...]) -> None:
+    """Rebuild the greedy decoder with a boosting tree over ``phrases`` (none: no tree)."""
+    decoding = getattr(getattr(model, "cfg", None), "decoding", None)
+    greedy = getattr(decoding, "greedy", None)
+    change = getattr(model, "change_decoding_strategy", None)
+    if greedy is None or not callable(change):
+        return
+    try:
+        from omegaconf import open_dict
+    except ImportError:  # a test double, not a NeMo config
+        open_dict = contextlib.nullcontext
+    alpha = _context_boost_alpha() if phrases else 0.0
+    with open_dict(decoding):
+        # Triton kernels are not available on Windows; the PyTorch path handles a few names easily.
+        greedy.boosting_tree = {
+            "key_phrases_list": list(phrases) if phrases and alpha > 0 else None,
+            "context_score": 1.0,
+            "depth_scaling": 2.0,
+            "use_triton": False,
+        }
+        greedy.boosting_tree_alpha = alpha
+        greedy.use_cuda_graph_decoder = False
+    change(decoding, verbose=False)
+
+
 @dataclass(frozen=True)
 class StreamingUpdate:
     transcript: str
@@ -285,6 +341,10 @@ class NemotronEouModelManager:
         self.eou_right_context = env_int("OMNIX_EOU_RIGHT_CONTEXT", 1)
         self.feed_chunk_ms = max(80, env_int("OMNIX_STT_STREAM_CHUNK_MS", 160))
         self._streams: dict[str, HybridStream] = {}
+        # The names the decoder boosts, and a newer set waiting for no utterance to be in progress.
+        self.context_phrases: tuple[str, ...] = ()
+        self.context_owner: str | None = None
+        self._pending_phrases: tuple[str, ...] | None = None
         self._load_lock = threading.RLock()
         self._nemotron_lock = threading.RLock()
         self._eou_lock = threading.RLock()
@@ -338,7 +398,52 @@ class NemotronEouModelManager:
             "nemotron_right_context": self.nemotron_right_context,
             "eou_right_context": self.eou_right_context,
             "active_streams": len(self._streams),
+            "context_phrase_count": len(self.context_phrases),
         }
+
+    def set_context_phrases(self, phrases: tuple[str, ...], *, owner: str) -> bool:
+        """Boost ``phrases`` (already cleaned) from the next utterance on; True once the decoder has them.
+
+        The decoder is shared by every stream, and a stream's partial hypothesis belongs to the decoder that made
+        it, so a change waits until no utterance is in progress (``ensure_stream`` applies it then).
+        """
+        with self._nemotron_lock:
+            self.context_owner = owner
+            self._pending_phrases = None if phrases == self.context_phrases else phrases
+        return self._apply_pending_phrases()
+
+    def release_context_phrases(self, owner: str) -> None:
+        """A closed connection's names stop being boosted, unless another has set its own since."""
+        with self._nemotron_lock:
+            if self.context_owner != owner:
+                return
+            self.context_owner = None
+            self._pending_phrases = () if self.context_phrases else None
+
+    def _apply_pending_phrases(self) -> bool:
+        with self._nemotron_lock:
+            pending = self._pending_phrases
+            if pending is None:
+                return True
+            if self.nemotron_model is None or self._streams:
+                return False
+            started = time.perf_counter()
+            self._pending_phrases = None
+            try:
+                _set_boosted_phrases(self.nemotron_model, pending)
+            except Exception as exc:  # noqa: BLE001 - a name list must never cost the call its transcripts
+                logger.warning("[STT] Boosting the call's names failed; decoding without them: %s", exc)
+                _metric("stt_context_phrases_failed", error_type=type(exc).__name__, error=str(exc)[:200])
+                self.context_phrases = ()
+                _set_boosted_phrases(self.nemotron_model, ())  # the plain decoder, as at load
+                return False
+            self.context_phrases = pending
+        _metric(
+            "stt_context_phrases_applied",
+            phrase_count=len(pending),
+            elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+        )
+        return True
 
     def warm_streaming_runtime(self, duration_ms: int = 2_000) -> float:
         """Exercise both cache-aware streaming models before readiness is exposed."""
@@ -374,6 +479,8 @@ class NemotronEouModelManager:
         existing = self._streams.get(segment_id)
         if existing is not None:
             return existing
+        if self._pending_phrases is not None:
+            self._apply_pending_phrases()
         stream = HybridStream(
             nemotron=CacheAwareRnntStream(
                 self.nemotron_model,

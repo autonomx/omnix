@@ -31,6 +31,7 @@ from app.providers.live_stt_contracts import (
 from app.providers.nemotron_eou_streaming import (
     SAMPLE_RATE,
     NemotronEouModelManager,
+    clean_context_phrases,
     model_manager,
 )
 from app.providers.smart_turn import turn_complete_probability
@@ -48,6 +49,8 @@ MAX_SESSION_STATES = 64
 # A segment shorter than this says too little about the voice for a speaker score to mean anything.
 MIN_SCORED_SEGMENT_SECONDS = 0.8
 SPEAKER_PROFILE_MESSAGE = "speaker_profile"
+# The names said on this call (its members'), sent with ``hello`` or on their own when the call changes.
+CONTEXT_PHRASES_MESSAGE = "context_phrases"
 
 HYBRID_NEGOTIATION = LiveSttNegotiation(
     provider=PROVIDER_NAME,
@@ -99,6 +102,16 @@ def _metric(event: str, **fields: Any) -> None:
 
 def _field(data: dict[str, Any], camel: str, snake: str, default: Any = None) -> Any:
     return data.get(camel, data.get(snake, default))
+
+
+async def _set_context_phrases(manager: Any, data: dict[str, Any], connection_id: str) -> None:
+    setter = getattr(manager, "set_context_phrases", None)
+    if not callable(setter):
+        return
+    phrases = clean_context_phrases(_field(data, "contextPhrases", "context_phrases"))
+    # Rebuilding the decoder takes the model lock: off the loop, so audio from other messages keeps flowing.
+    applied = await asyncio.to_thread(setter, phrases, owner=connection_id)
+    _metric("stt_context_phrases", connection_id=connection_id, phrase_count=len(phrases), applied=applied)
 
 
 def primary_pcm_slice(sample_start: int, primary_start_sample: int, payload: bytes) -> bytes:
@@ -502,6 +515,12 @@ def install_nemotron_eou_websocket(
                     _metric("stt_speaker_profile", connection_id=connection_id, accepted=vector is not None)
                     continue
                 first_message = False
+                if message_type == CONTEXT_PHRASES_MESSAGE or (
+                    message_type == "hello" and _field(data, "contextPhrases", "context_phrases") is not None
+                ):
+                    await _set_context_phrases(manager, data, connection_id)
+                    if message_type == CONTEXT_PHRASES_MESSAGE:
+                        continue
                 if message_type == "hello":
                     active_session_id = str(_field(data, "sessionId", "session_id", active_session_id))[:120]
                     state = _session_state(active_session_id)
@@ -856,6 +875,9 @@ def install_nemotron_eou_websocket(
                 speaker_warmed.cancel()
             if speaker_held:
                 speaker_scorer.release()
+            release_phrases = getattr(manager, "release_context_phrases", None)
+            if callable(release_phrases):
+                release_phrases(connection_id)
             released = 0
             for segment_id, state in tuple(owned_segments.items()):
                 segment = state.segments.pop(segment_id, None)

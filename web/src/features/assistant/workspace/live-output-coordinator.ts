@@ -235,7 +235,8 @@ export class LiveOutputCoordinator {
 
   private async ensureSession(sessionId: string): Promise<LiveVoicePcmSession> {
     if (this.sessionId !== sessionId) await this.stop('live_session_changed');
-    if (this.session && !this.session.isClosed()) return this.session;
+    if (this.session && !this.session.isClosed() && !this.session.hasFailed()) return this.session;
+    if (this.session) await this.stop('live_output_session_failed'); // its websocket is gone: open a new one
     if (this.sessionPromise) return this.sessionPromise;
     this.sessionId = sessionId;
     const reporter = this.dependencies.createReporter(this.dependencies.createTraceId(sessionId));

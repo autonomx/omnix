@@ -611,6 +611,47 @@ describe('what the live recognizer client reports about its connection', () => {
   });
 });
 
+describe('the call members the recognizer listens for', () => {
+  it('sends their names with hello, again when they change, and stops listening at disconnect', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    let names = ['Jinx'];
+    const listeners = new Set<() => void>();
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5202/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      overlapMs: 0,
+      contextPhrases: {
+        current: () => names,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+    });
+    await openSegmentedClient(client, sockets, segmentedReady());
+    const sent = () => sockets[0].sentJson().filter((message) => message.type === 'hello' || message.type === 'context_phrases');
+
+    expect(sent()).toMatchObject([{ type: 'hello', contextPhrases: ['Jinx'] }]);
+    names = ['Jinx', 'Abhishek'];
+    listeners.forEach((listener) => listener());
+    listeners.forEach((listener) => listener()); // the scene store notifies on any change; the same names go once
+    expect(sent()).toEqual([
+      expect.objectContaining({ type: 'hello' }),
+      { type: 'context_phrases', sessionId: client.segmentState.sessionId, contextPhrases: ['Jinx', 'Abhishek'] },
+    ]);
+
+    client.disconnect();
+    expect(listeners.size).toBe(0);
+  });
+});
+
 class TestStreamingSocket implements StreamingSttSocketLike {
   readyState = 0;
   onopen: (() => void) | null = null;

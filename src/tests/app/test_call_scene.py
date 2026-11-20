@@ -97,6 +97,10 @@ class _Seats:
         self.seats = [seat for seat in self.seats if seat.character_id != character_id]
         return len(self.seats) != before
 
+    def clear(self, session_id: str) -> int:
+        count, self.seats = len(self.seats), []
+        return count
+
 
 _MEMBERS = {member.character_id: member for member in (MARA, BEA, THEO)}
 
@@ -117,6 +121,24 @@ def test_the_person_names_who_answers() -> None:
     twins = Scene(host=MARA, guests=(SceneMember("bea2", "Bea Stone"), BEA), speaker_id="mara")
     assert named_member(twins, "Bea, are you there?") is None  # two members answer to it
     assert named_member(twins, "Bea Hart, are you there?") == "bea"
+
+
+def test_a_name_recognition_misspells_still_names_the_member() -> None:
+    afra, jinx, abhishek = SceneMember("afra", "Afra"), SceneMember("jinx", "Jinx"), SceneMember("abhi", "Abhishek")
+    call = Scene(host=afra, guests=(jinx, abhishek), speaker_id="afra")
+    for heard in ("Aphra, what do you think?", "afro, are you there", "what about you Afrah", "Aphra's turn"):
+        assert named_member(call, heard) == "afra", heard
+    assert named_member(call, "Jinks, your turn") == "jinx"
+    assert named_member(call, "Abishek, say something") == "abhi"
+    assert named_member(call, "Abhisek?") == "abhi"
+    assert named_member(call, "Aphra and Jinx, both of you") == "jinx"  # an exact name wins over a sound-alike
+    assert named_member(call, "I went to Africa") is None  # more than a vowel apart
+    assert named_member(call, "how was your day?") is None
+    # A short name sounds like too many everyday words: "be", "bay" and "the" name no one.
+    assert named_member(_SCENE, "it would be nice to see the bay") is None
+    # A heard word that sounds like two members names neither.
+    twins = Scene(host=afra, guests=(SceneMember("afro", "Afro"),), speaker_id="afra")
+    assert named_member(twins, "Aphra, hi") is None
 
 
 def test_otherwise_the_last_member_to_speak_answers() -> None:
@@ -593,6 +615,29 @@ def test_guests_join_and_leave_through_the_chats_scene(gateway) -> None:
     assert client.delete(f"{base}/scene/guests/theo").status_code == 404
     left = client.delete(f"{base}/scene/guests/bea")
     assert left.status_code == 200 and len(left.json()["members"]) == 1
+
+
+def test_a_call_that_ends_takes_its_guests_with_it(gateway) -> None:
+    # The next call starts with the chat's own character alone (the browser clears the scene as a call ends).
+    client, base = gateway.client, gateway.base
+    client.post(f"{base}/scene/guests", json={"character_id": "bea"})
+    client.post(f"{base}/scene/guests", json={"character_id": "theo"})
+    cleared = client.delete(f"{base}/scene/guests")
+    assert cleared.status_code == 200
+    assert [(m["character_id"], m["role"]) for m in cleared.json()["members"]] == [("mara", "host")]
+    assert client.delete(f"{base}/scene/guests").status_code == 200  # nothing left to clear is not an error
+    assert client.delete("/api/chat/sessions/missing/scene/guests").status_code == 404
+
+
+def test_a_speakers_view_is_given_only_for_a_member_of_the_call() -> None:
+    session = _session()
+    assert scene.speaker_view(session, "mara", repository=_Seats("bea"), member=_member) is session
+    assert scene.speaker_view(session, "", repository=_Seats("bea"), member=_member) is session
+    guest = scene.speaker_view(session, "bea", repository=_Seats("bea"), member=_member)
+    assert guest.character_id == "bea" and guest.voice_asset_id is None
+    # Not seated, or no scene at all: the browser cannot borrow another character's face.
+    assert scene.speaker_view(session, "theo", repository=_Seats("bea"), member=_member) is None
+    assert scene.speaker_view(session, "bea", repository=_Seats(), member=_member) is None
 
 
 def test_a_named_guest_answers_with_their_own_voice(gateway) -> None:

@@ -13,7 +13,7 @@ import { unwrap } from '../../../api/http';
 import { openStream } from '../../../api/transport';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { readLastProactiveTurnHeard } from './live-voice-delivery-ledger';
-import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../../events/bus';
+import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../../events/bus';
 import { startTicker } from '../../../shared/timers';
 import { api } from '../api/gateway';
 
@@ -145,12 +145,15 @@ export function initializeLiveConversationInitiativeController(): () => void {
   };
   const handleUserSpeech = () => {
     noteUserSpeechOnset();
-    const hadPlayingPrompt = Boolean(pending?.audioStarted);
+    const playing = pending?.audioStarted ? pending : null;
     noteAnswered();
     requestController?.abort('user-speech');
     requestController = null;
     releaseRequestInitiative(false);
-    if (!hadPlayingPrompt) clearPending('user-spoke-before-playback');
+    // The audio controller stops a proactive turn the moment the person speaks: it is settled now as interrupted,
+    // never later as completed when some other turn's audio ends (the 2026-11-20 call's late lines).
+    if (playing) void commitPending('interrupted');
+    else clearPending('user-spoke-before-playback');
     sceneTurnDue = null;
     lastActivityAtMs = performance.now();
     promptCount = 0;
@@ -171,6 +174,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
   const handleProfile = () => resetQuietPeriod('profile-changed');
 
   window.addEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
+  window.addEventListener(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handleProactivePlayback);
   window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);
   window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleCallConnected);
   window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
@@ -186,6 +190,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
     stopScheduler();
     unsubscribe();
     window.removeEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
+    window.removeEventListener(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handleProactivePlayback);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleCallConnected);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
@@ -625,9 +630,40 @@ function handleAuthoritativeStateChange(): void {
   }
 }
 
+/**
+ * The audio controller plays every proactive turn as a greeting-kind turn and reports its playback. Its own audio
+ * marks the turn audible (a reply's audio does not), and the end of that audio settles it: the call's speaking state
+ * can stay set past the line's end, which once left a finished line waiting a whole exchange to be committed.
+ */
+function handleProactivePlayback(event: Event): void {
+  const detail = (event as CustomEvent<{ speaking?: unknown; kind?: unknown }>).detail ?? {};
+  const turn = pending;
+  if (!turn || turn.committing) return;
+  if (detail.speaking) {
+    if (detail.kind === 'greeting' && !turn.audioStarted) {
+      turn.audioStarted = true;
+      markProposalQuestionAudible(turn.turnId);
+      clearAudioStartTimer();
+    }
+    return;
+  }
+  if (!turn.audioStarted) return;
+  // After this event's dispatch: when the person's speech stopped the line, its handler settles it as interrupted.
+  setTimeout(() => {
+    if (pending === turn && !turn.committing) void commitPending('completed');
+  }, 0);
+}
+
 async function commitPending(status: 'completed' | 'interrupted'): Promise<void> {
   const turn = pending;
   if (!turn || turn.committing) return;
+  // A scene turn cut off mid-way tells the server what the person heard; the server checks it against its own text.
+  const heard = status === 'interrupted' && isSceneTurnId(turn.turnId) ? readLastProactiveTurnHeard(turn.sessionId) : null;
+  if (status === 'interrupted' && isSceneTurnId(turn.turnId) && !heard?.heardText) {
+    // Stopped before a word of it was heard: the line was never said. It is dropped and its lease given back.
+    clearPending('interrupted-before-heard');
+    return;
+  }
   turn.committing = true;
   clearAudioStartTimer();
   // The person heard it whether or not the commit lands. A report answers their own request, so it does not use up
@@ -641,8 +677,6 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
       awaitingAnswer = { turnId: turn.turnId, reason: turn.reason, untilMs: nowMs + INITIATIVE_ANSWER_WINDOW_MS };
     }
   }
-  // A scene turn cut off mid-way tells the server what the person heard; the server checks it against its own text.
-  const heard = status === 'interrupted' && isSceneTurnId(turn.turnId) ? readLastProactiveTurnHeard(turn.sessionId) : null;
   try {
     await unwrap(api.POST('/api/chat/sessions/{session_id}/live-conversation/proactive/delivery', {
       params: { path: { session_id: turn.sessionId } },

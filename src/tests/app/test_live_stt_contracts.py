@@ -431,3 +431,108 @@ def test_live_stt_servers_advertise_binary_audio_frames() -> None:
 
     assert CAP_BINARY_AUDIO_FRAMES in PARAKEET_NEGOTIATION.capabilities
     assert CAP_BINARY_AUDIO_FRAMES in HYBRID_NEGOTIATION.capabilities
+
+
+def test_call_member_names_are_cleaned_before_they_reach_the_decoder() -> None:
+    from app.providers.nemotron_eou_streaming import MAX_CONTEXT_PHRASES, clean_context_phrases
+
+    assert clean_context_phrases(["Abhishek", " Jinx ", "Jinx", "O'Neil-Smith", "<b>Ma{ya}</b>", "x", 7]) == (
+        "Abhishek", "Jinx", "O'Neil-Smith", "b Ma ya b",
+    )
+    assert clean_context_phrases("Jinx") == ()
+    assert len(clean_context_phrases([f"Name{i}" for i in range(40)])) == MAX_CONTEXT_PHRASES
+    assert len(clean_context_phrases(["A" * 200])[0]) == 40
+
+
+def test_the_decoder_boosts_the_call_members_names_once_no_utterance_is_in_progress(monkeypatch) -> None:
+    from app.providers import nemotron_eou_streaming as streaming
+
+    applied = []
+    greedy = SimpleNamespace(use_cuda_graph_decoder=False)
+    model = SimpleNamespace(
+        cfg=SimpleNamespace(decoding=SimpleNamespace(strategy="greedy_batch", greedy=greedy)),
+        change_decoding_strategy=lambda decoding, verbose=True: applied.append(
+            (decoding.greedy.boosting_tree["key_phrases_list"], decoding.greedy.boosting_tree_alpha)
+        ),
+    )
+    manager = NemotronEouModelManager()
+    manager.nemotron_model = model
+    manager.eou_model = object()
+    monkeypatch.setattr(streaming, "CacheAwareRnntStream", lambda *args, **kwargs: SimpleNamespace())
+
+    assert manager.set_context_phrases(("Abhishek", "Jinx"), owner="call-1") is True
+    assert applied == [(["Abhishek", "Jinx"], 0.5)]
+    assert greedy.boosting_tree["use_triton"] is False  # no Triton on Windows
+    assert manager.set_context_phrases(("Abhishek", "Jinx"), owner="call-1") is True  # unchanged: no rebuild
+    assert len(applied) == 1
+
+    # A partial hypothesis belongs to the decoder that made it: a change waits for the utterance to end.
+    manager.ensure_stream("segment-1")
+    assert manager.set_context_phrases(("Jinx", "Maya"), owner="call-1") is False
+    assert len(applied) == 1
+    manager.release("segment-1")
+    manager.ensure_stream("segment-2")
+    assert applied[-1] == (["Jinx", "Maya"], 0.5)
+    manager.release("segment-2")
+
+    # Another connection's close leaves the names alone; this one's close clears them before the next utterance.
+    manager.release_context_phrases("call-0")
+    manager.ensure_stream("segment-3")
+    manager.release("segment-3")
+    assert len(applied) == 2
+    manager.release_context_phrases("call-1")
+    manager.ensure_stream("segment-4")
+    assert applied[-1] == (None, 0.0)
+    assert manager.context_phrases == ()
+
+
+def test_the_stt_websocket_takes_the_call_members_names_with_hello_and_later() -> None:
+    from app.providers.nemotron_eou_live_websocket import install_nemotron_eou_websocket
+
+    calls = []
+    owners = set()
+
+    class Manager:
+        feed_chunk_samples = 2560
+
+        def set_context_phrases(self, phrases, *, owner):
+            owners.add(owner)
+            calls.append(("set", phrases))
+            return True
+
+        def release_context_phrases(self, owner):
+            calls.append(("release", owner in owners))
+
+    app = FastAPI()
+    install_nemotron_eou_websocket(app, manager=Manager())
+    with TestClient(app).websocket_connect("/ws/transcribe") as socket:
+        socket.receive_json()  # ready
+        socket.send_json({"type": "hello", "sessionId": "s-1", "contextPhrases": ["Jinx", "Abhishek"]})
+        assert socket.receive_json()["type"] == "session_ready"
+        socket.send_json({"type": "context_phrases", "sessionId": "s-1", "contextPhrases": ["Jinx", "Maya", "<x>"]})
+        socket.send_json({"type": "hello", "sessionId": "s-1"})  # a hello without names keeps them
+        assert socket.receive_json()["type"] == "session_ready"
+    assert calls == [("set", ("Abhishek", "Jinx")), ("set", ("Jinx", "Maya")), ("release", True)]
+    assert len(owners) == 1
+
+
+def test_a_name_list_the_decoder_rejects_falls_back_to_the_plain_decoder() -> None:
+    applied = []
+
+    def change(decoding, verbose=True):
+        phrases = decoding.greedy.boosting_tree["key_phrases_list"]
+        if phrases:
+            raise RuntimeError("boosting tree unsupported")
+        applied.append(phrases)
+
+    model = SimpleNamespace(
+        cfg=SimpleNamespace(decoding=SimpleNamespace(greedy=SimpleNamespace())),
+        change_decoding_strategy=change,
+    )
+    manager = NemotronEouModelManager()
+    manager.nemotron_model = model
+
+    assert manager.set_context_phrases(("Jinx",), owner="call-1") is False
+    assert applied == [None]  # rebuilt without a tree
+    assert manager.context_phrases == ()
+    assert model.cfg.decoding.greedy.boosting_tree_alpha == 0.0

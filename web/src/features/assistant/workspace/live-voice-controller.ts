@@ -1,5 +1,6 @@
 /** The live voice capture controller: starts and stops a call's microphone stream to the STT service (WP-9.5 split it into the live-voice-* modules it imports). */
 import { createLiveCallDiagnosticsReporter, createLiveCallTraceId, type LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import { callScenePhrases, callSceneStore } from './live-call-scene';
 import { liveConversationStore } from './live-conversation-store';
 import { type AuthoritySelection, resolveAuthoritySelection } from './live-stt-authority-controller';
 import { StreamingSttWebSocketClient, getDefaultStreamingSttWebSocketUrl, type StreamingSttWebSocketCtor } from './live-voice-websocket';
@@ -170,6 +171,8 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       url: sttAuthority.websocketUrl,
       webSocketCtor: WebSocketCtor,
       chatSessionId: sessionId,
+      // The call's member names, so "Abhishek" is not heard as a common word; refreshed as guests come and go.
+      contextPhrases: { current: () => callScenePhrases(sessionId), subscribe: callSceneStore.subscribe },
       ...createSttTelemetryHandlers(reporter),
       onEndpointCandidate: (event) => handleProviderEndpointCandidate(card, event),
       onPreviewTranscript: (event) => handleAuthoritativePreview(card, event),

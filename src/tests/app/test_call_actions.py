@@ -538,9 +538,12 @@ def test_a_call_with_guests_is_not_speculated(stores, monkeypatch) -> None:
 
     # With guests the server chooses who answers (companion 5.2); a speculated reply is always the host's.
     monkeypatch.setattr(live_chat_speculation, "has_scene_guests", lambda session: True)
-    started = stores.client.post(f"/api/live/speculation/sessions/{stores.session_id}/stream",
-                                 json={"content": "hello", "segment_id": "seg-1", "source_sequence": 0})
-    assert started.status_code == 409 and started.json()["detail"] == "speculation_in_scene"
+    # Every route that starts one refuses: the call's browser uses the handshake and the inline stream.
+    for route in ("stream", "start", "start-stream"):
+        started = stores.client.post(f"/api/live/speculation/sessions/{stores.session_id}/{route}",
+                                     json={"content": "hello", "segment_id": "seg-1", "source_sequence": 0})
+        assert started.status_code == 409 and started.json()["detail"] == "speculation_in_scene", route
+    assert not live_chat_speculation._SPECULATIONS
 
     # A guest who joined after the speculation started blocks its accept; a chat that cannot have guests is not read.
     seat_reads: list[str] = []

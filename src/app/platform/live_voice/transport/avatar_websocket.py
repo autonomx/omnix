@@ -1,8 +1,10 @@
 """The live call's portrait websocket (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 2).
 
-``/api/tts/live-call/avatar-websocket?token=...&session_id=...``: the browser opens it with the avatar token
-from the TTS websocket's ``hello``. The token is accepted only from the principal it was issued to, while its
-TTS connection is open on this gateway. The gateway then resolves the session's character and avatar pack,
+``/api/tts/live-call/avatar-websocket?token=...&session_id=...[&speaker_id=...]``: the browser opens it with the
+avatar token from the TTS websocket's ``hello``. The token is accepted only from the principal it was issued to, while
+its TTS connection is open on this gateway. The gateway then resolves the session's character and avatar pack (on a
+group call, ``speaker_id`` names the member whose turns the audio session speaks: the host, or a guest code finds
+seated on the call; anyone else is ``speaker_not_on_call``),
 reads the portrait image itself (never from the browser), prepares it on the portrait service, opens the
 call's portrait link and attaches it to the TTS connection, which starts copying the call's audio.
 
@@ -63,6 +65,13 @@ MAX_ACK_COUNT = 2**31
 def _load_session(chat_store_factory: Callable[[], Any], session_id: str) -> Any:
     """The session, as the caller's tenant sees it (None when it is not theirs)."""
     return chat_store_factory().get_session(session_id)
+
+
+def _speaker_session(session: Any, speaker_id: str) -> Any:
+    """The session as the speaking member sees it (the host's, or a seated guest's); None for anyone else."""
+    from app.platform.chat.contracts import speaker_view
+
+    return speaker_view(session, speaker_id)
 
 
 async def _unavailable(websocket: WebSocket, code: str, message: str) -> None:
@@ -148,6 +157,8 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
         await websocket.accept()
         token = websocket.query_params.get("token", "")
         session_id = websocket.query_params.get("session_id", "")
+        # A guest speaking on a group call shows its own face (companion 5.5); none named is the chat's character.
+        speaker_id = websocket.query_params.get("speaker_id", "")[:200]
         principal = principal_id(websocket.scope)
         call = calls.claim(token, principal) if token else None
         if call is None or not session_id:
@@ -159,6 +170,11 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
             return
         try:
             session = await asyncio.to_thread(_load_session, chat_store_factory, session_id)
+            if session is not None and speaker_id:
+                session = await asyncio.to_thread(_speaker_session, session, speaker_id)
+                if session is None:
+                    await _unavailable(websocket, "speaker_not_on_call", "That character is not on this call")
+                    return
             runtime = await asyncio.to_thread(resolve_live_call_runtime, session) if session is not None else None
         except Exception:  # noqa: BLE001 - the call goes on without a portrait
             logger.warning("Live portrait could not resolve session %s", session_id, exc_info=True)

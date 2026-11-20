@@ -9,6 +9,7 @@ import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { startTicker } from '../../../../shared/timers';
 import { PortraitFrameBuffer } from './frameBuffer';
+import { rememberMemberLoop, resetMemberLoops } from './memberIdleLoops';
 import {
   BLINK_OUTPUT_ID,
   IDLE_OUTPUT_ID,
@@ -45,9 +46,13 @@ export type LivePortraitSnapshot = {
   status: LivePortraitStatus;
   fallbackRenderer: PortraitFallbackRenderer;
   reason: string | null;
+  /** The group call's member whose face this is (companion 5.5); absent for the chat's own character. */
+  speakerId?: string;
 };
 
-type RuntimePack = { renderer?: string; fallback_renderer?: PortraitFallbackRenderer } | null | undefined;
+type RuntimePack = { character_id?: string; renderer?: string; fallback_renderer?: PortraitFallbackRenderer } | null | undefined;
+/** The group call's member a session speaks as, and that member's avatar pack. */
+export type LivePortraitSpeaker = { id: string; pack: RuntimePack };
 type ImageDecoder = (jpeg: Uint8Array<ArrayBuffer>) => Promise<ImageBitmap>;
 
 const AVATAR_WEBSOCKET_PATH = '/api/tts/live-call/avatar-websocket';
@@ -59,6 +64,7 @@ const PORTRAIT_ENABLED_KEY = 'omnix.livePortrait.enabled';
 const AV_OFFSET_FLUSH_ACKS = 8;
 const LATE_FRAMES_TO_DEGRADE = 3;
 const OFF: LivePortraitSnapshot = { status: 'off', fallbackRenderer: 'orb', reason: null };
+const EMPTY_LOOP_BYTES = () => ({ idle: [] as Uint8Array<ArrayBuffer>[], blink: [] as Uint8Array<ArrayBuffer>[], idleCount: 0, blinkCount: 0, frameMs: 0 });
 
 const decodeJpeg: ImageDecoder = (jpeg) => createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
 
@@ -66,7 +72,10 @@ export class LivePortrait {
   private snapshot: LivePortraitSnapshot = OFF;
   private readonly listeners = new Set<() => void>();
   private pack: RuntimePack = null;
+  private speaker: LivePortraitSpeaker | null = null;
   private sessionId = '';
+  // The idle loop's and blink twins' JPEGs as they arrive: the member's tile plays them once another member speaks.
+  private loopBytes: { idle: Uint8Array<ArrayBuffer>[]; blink: Uint8Array<ArrayBuffer>[]; idleCount: number; blinkCount: number; frameMs: number } = EMPTY_LOOP_BYTES();
   private liveCallKey: string | null = null;
   private session: LiveVoicePcmSession | null = null;
   private socket: WebSocket | null = null;
@@ -110,19 +119,27 @@ export class LivePortrait {
     this.pack = pack;
   }
 
-  /** Whether the call's avatar is a portrait (the audio session then asks for a hello), unless switched off. */
-  wanted(): boolean {
-    return this.pack?.renderer === 'portrait' && portraitEnabled();
+  /**
+   * Whether the speaking member's avatar is a portrait (the audio session then asks for a hello), unless switched off:
+   * a guest's own pack when a guest speaks, else the call's.
+   */
+  wanted(speaker: LivePortraitSpeaker | null = null): boolean {
+    return (speaker ? speaker.pack : this.pack)?.renderer === 'portrait' && portraitEnabled();
   }
 
-  /** Start for a call: the hooks go to the live audio session it opens. */
-  begin(sessionId: string): LiveVoicePortraitHooks {
+  /**
+   * Start for a call's audio session: the hooks go to the session it opens. A group call's guest speaking opens its
+   * own session, and the face shown is that guest's.
+   */
+  begin(sessionId: string, speaker: LivePortraitSpeaker | null = null): LiveVoicePortraitHooks {
     this.end();
     const generation = ++this.generation;
     this.sessionId = sessionId;
+    this.speaker = speaker;
     setLiveVoiceReleasePortrait(true);
     this.buffer = new PortraitFrameBuffer<ImageBitmap>((image) => image.close());
-    this.publish({ status: 'connecting', fallbackRenderer: this.pack?.fallback_renderer ?? 'orb', reason: null });
+    const pack = speaker ? speaker.pack : this.pack;
+    this.publish({ status: 'connecting', fallbackRenderer: pack?.fallback_renderer ?? 'orb', reason: null });
     return {
       onHello: ({ callKey, avatarToken }) => {
         if (generation !== this.generation) return;
@@ -215,6 +232,8 @@ export class LivePortrait {
     this.idleReceived = 0;
     this.blinkFrames = [];
     this.blinkReceived = 0;
+    this.loopBytes = EMPTY_LOOP_BYTES();
+    this.speaker = null;
     this.closeTransitions();
     this.readySegments.clear();
     this.liveCallKey = null;
@@ -239,7 +258,8 @@ export class LivePortrait {
 
   private connect(token: string, generation: number): void {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const query = `token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(this.sessionId)}`;
+    const speaker = this.speaker ? `&speaker_id=${encodeURIComponent(this.speaker.id)}` : '';
+    const query = `token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(this.sessionId)}${speaker}`;
     const socket = this.openSocket(`${protocol}//${window.location.host}${AVATAR_WEBSOCKET_PATH}?${query}`);
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
@@ -251,6 +271,7 @@ export class LivePortrait {
       }
       const frame = parsePortraitFrame(event.data);
       if (!frame) return;
+      this.keepLoopBytes(frame.header, frame.jpeg);
       const began = performance.now();
       void this.decode(frame.jpeg).then((image) => {
         if (generation !== this.generation) image.close();
@@ -332,6 +353,27 @@ export class LivePortrait {
     this.readySegments.add(segmentId);
     if (this.readySegments.size > 64) this.readySegments.delete(this.readySegments.values().next().value as string);
     this.session?.portraitFramesReady(segmentId);
+  }
+
+  /** The member's idle loop, kept as JPEGs once whole, for its tile while another member speaks. */
+  private keepLoopBytes(header: PortraitFrameHeader, jpeg: Uint8Array<ArrayBuffer>): void {
+    const blink = header.output_id === BLINK_OUTPUT_ID;
+    if (!blink && header.output_id !== IDLE_OUTPUT_ID) return;
+    const count = header.count ?? 0;
+    const frames = blink ? this.loopBytes.blink : this.loopBytes.idle;
+    if (count <= 0 || header.offset >= count || frames[header.offset]) return;
+    frames[header.offset] = jpeg.slice();
+    if (blink) this.loopBytes.blinkCount = count;
+    else {
+      this.loopBytes.idleCount = count;
+      this.loopBytes.frameMs = header.frame_ms ?? this.loopBytes.frameMs; // the loop's pace; a blink's own is shorter
+    }
+    const { idle, idleCount, blinkCount, frameMs } = this.loopBytes;
+    const whole = (list: readonly Uint8Array[], total: number) => total > 0 && list.filter(Boolean).length === total;
+    const memberId = this.speaker?.id ?? this.pack?.character_id;
+    if (memberId && whole(idle, idleCount) && whole(this.loopBytes.blink, blinkCount) && frameMs > 0) {
+      rememberMemberLoop(this.sessionId, memberId, { frameMs, idle: idle.slice(0, idleCount), blink: this.loopBytes.blink.slice(0, blinkCount) });
+    }
   }
 
   private addIdleFrame(header: PortraitFrameHeader, image: ImageBitmap): void {
@@ -441,7 +483,7 @@ export class LivePortrait {
   }
 
   private publish(snapshot: LivePortraitSnapshot): void {
-    this.snapshot = snapshot;
+    this.snapshot = { ...snapshot, speakerId: snapshot.status === 'off' ? undefined : this.speaker?.id };
     for (const listener of this.listeners) listener();
   }
 }
@@ -503,5 +545,6 @@ export function installLivePortrait(): () => void {
     window.removeEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, settle);
     livePortrait.end();
     livePortrait.setPack(null);
+    resetMemberLoops();
   };
 }

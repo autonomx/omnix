@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
     finish: vi.fn(async () => undefined),
     stop: vi.fn(async (_reason?: string) => undefined),
     isClosed: vi.fn(() => false),
+    hasFailed: vi.fn(() => false),
     setPortraitClock: vi.fn((_enabled: boolean) => undefined),
     portraitFramesReady: vi.fn((_segmentId: string) => undefined),
     sendOutputEnd: vi.fn((_outputId: string, _generationEpoch: number) => undefined),
@@ -149,6 +150,7 @@ beforeEach(() => {
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
   mocks.session.isClosed.mockReset().mockReturnValue(false);
+  mocks.session.hasFailed.mockReset().mockReturnValue(false);
   mocks.recordSpy.mockReset();
   mocks.reporter.record = mocks.recordSpy;
   mocks.reporter.flush.mockReset().mockResolvedValue(undefined);
@@ -200,6 +202,29 @@ describe('a portrait at the start of a call', () => {
 
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalled());
     expect(mocks.createSession).toHaveBeenCalledOnce();
+  });
+
+  it('replaces a session whose websocket failed, so the next reply is heard and drawn', async () => {
+    livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite' });
+    connected();
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    await waitFor(() => expect(livePortrait.attachSession).toHaveBeenCalledOnce());
+    // The gateway refused its socket (a speaker swap while the old one's slot was still held): it never opened.
+    mocks.session.hasFailed.mockReturnValue(true);
+    mocks.createSession.mockImplementationOnce(async () => {
+      mocks.session.hasFailed.mockReturnValue(false);
+      return mocks.session;
+    });
+
+    streamEvents = null;
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST', body: JSON.stringify({ content: 'hi' }) });
+    await response.text();
+
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalled());
+    expect(mocks.session.stop).toHaveBeenCalledWith('live_audio_session_replaced');
+    expect(mocks.createSession).toHaveBeenCalledTimes(2);
+    expect(mocks.createSession.mock.calls[1]).toEqual(expect.arrayContaining([expect.objectContaining({ portrait: expect.anything() })]));
+    await waitFor(() => expect(livePortrait.attachSession).toHaveBeenCalledTimes(2));
   });
 
   it('opens nothing early for a call without a portrait', async () => {
@@ -679,5 +704,40 @@ describe('a call with guests', () => {
       expect.objectContaining({ sessionScoped: true }),
     );
     expect(liveCallPresentationStore.getState().sceneSpeakerId).toBe('bea');
+  });
+
+  it("draws a guest's turn with the guest's own portrait, never the host's", async () => {
+    const guestPack = { renderer: 'portrait', fallback_renderer: 'orb', character_id: 'bea' } as const;
+    livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite', character_id: 'maya' });
+    const begin = vi.spyOn(livePortrait, 'begin');
+    vi.spyOn(livePortrait, 'attachSession').mockImplementation(() => undefined);
+    const base = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path.endsWith('/live-call/runtime')) {
+        return new Response(JSON.stringify({
+          session_id: 's1',
+          greeting: '',
+          scene_guests: [{ character_id: 'bea', display_name: 'Bea Hart', voice_asset_id: 'voice:bea', voice_speaker_id: null,
+            avatar_pack: guestPack }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (path.endsWith('/messages/stream')) {
+        const response = chatStreamResponse();
+        response.headers.set('X-Omnix-Scene-Speaker', 'bea');
+        return response;
+      }
+      return base(input, init);
+    });
+    await characterClient.refreshLiveCallRuntime('s1');
+
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    await response.text();
+
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    expect(mocks.createSession).toHaveBeenCalledWith('live-call:s1:test-trace', 'voice:bea', mocks.reporter,
+      expect.objectContaining({ portrait: expect.anything() }));
+    expect(begin).toHaveBeenLastCalledWith('s1', { id: 'bea', pack: expect.objectContaining({ character_id: 'bea' }) });
+    livePortrait.setPack(null);
   });
 });

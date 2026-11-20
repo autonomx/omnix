@@ -10,6 +10,7 @@ import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscr
 import type { CharacterLiveCallRuntime } from './characterClient';
 import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
 import { livePortrait } from './portrait/livePortrait';
+import { resetMemberLoops } from './portrait/memberIdleLoops';
 import { fixture } from '../../../test/fixture';
 import { createTestQueryClient, TestProviders } from '../../../test/renderWithProviders';
 
@@ -205,6 +206,69 @@ describe('LiveChatFullscreenShell', () => {
     });
     // Without guests the stage is the single character again.
     expect(screen.queryByRole('list', { name: 'Call members' })).toBeNull();
+  });
+
+  it("keeps every portrait member live: the speaker's face streams, and the others play their idle loops", async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:leo-idle');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const portraitPack = (id: string) => ({ ...mayaRuntime.avatar_pack, character_id: id, renderer: 'portrait',
+      fallback_renderer: 'sprite', base_asset_id: `image:${id}-portrait` }) as CharacterLiveCallRuntime['avatar_pack'];
+    const leoPack = portraitPack('leo');
+    const withGuest = fixture<CharacterLiveCallRuntime>({
+      ...mayaRuntime,
+      avatar_pack: portraitPack('maya'),
+      scene_guests: [{ character_id: 'leo', display_name: 'Leo', voice_asset_id: null, voice_speaker_id: null, speech_style: null, avatar_pack: leoPack }],
+    });
+    const members = [
+      { character_id: 'maya', display_name: 'Maya', role: 'host', seat: 0 },
+      { character_id: 'leo', display_name: 'Leo', role: 'guest', seat: 1 },
+    ];
+    const idleAsked: (string | null)[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+      const url = new URL(raw, window.location.origin);
+      let body: Record<string, unknown> = { detail: 'not_found' };
+      if (url.pathname.endsWith('/scene')) body = { available: true, reason: 'ready', max_guests: 2, members };
+      if (url.pathname === '/api/tts/live-call/portrait-idle') {
+        const speaker = url.searchParams.get('speaker_id');
+        idleAsked.push(speaker);
+        body = speaker === 'leo' ? { ok: true, frame_ms: 80, idle: [btoa('x')], blink: [] } : { ok: false, code: 'portrait_busy' };
+      }
+      return new Response(JSON.stringify(body), { status: 'detail' in body ? 404 : 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:maya' });
+    enterLiveChatFullscreen('header');
+    renderShell();
+    act(() => {
+      publishCharacterAvatarRuntime(withGuest);
+      livePortrait.setPack(withGuest.avatar_pack);
+    });
+    await act(async () => { await loadCallScene('chat:maya'); });
+
+    const room = await screen.findByRole('list', { name: 'Call members' });
+    const tiles = within(room).getAllByRole('listitem');
+    await screen.findByAltText('Leo avatar');
+    expect(idleAsked).toEqual(expect.arrayContaining([null, 'leo'])); // the host names no speaker
+    await act(async () => { await Promise.resolve(); });
+    // The host's own portrait is the live one; Leo idles on his own loop, never on Maya's stream.
+    expect(tiles[0].querySelector('canvas')).not.toBeNull();
+    expect(tiles[1].querySelector('canvas')).toBeNull();
+    expect(within(tiles[1]).getByAltText('Leo avatar').getAttribute('src')).toBe('blob:leo-idle');
+
+    // Leo's turn: his face streams in his tile (his loop until the first frame), and Maya's leaves the stream.
+    act(() => { livePortrait.begin('chat:maya', { id: 'leo', pack: leoPack }); });
+    expect(tiles[1].querySelector('canvas')).not.toBeNull();
+    expect(within(tiles[1]).getByAltText('Leo avatar').getAttribute('data-portrait-idle')).toBe('true');
+    expect(tiles[0].querySelector('canvas')).toBeNull();
+    expect(within(tiles[0]).getByAltText('Maya live portrait').getAttribute('src')).toBe('/api/assets/image%3Amaya-portrait/file');
+
+    act(() => {
+      livePortrait.end();
+      livePortrait.setPack(null);
+      liveCallPresentationStore.resetForTests();
+      callSceneStore.resetForTests();
+      resetMemberLoops();
+    });
   });
 
   it('seats a full call of five: the host and four guests each get a tile', async () => {

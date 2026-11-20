@@ -156,10 +156,18 @@ export type StreamingSttWebSocketCtor = {
   new (url: string): StreamingSttSocketLike;
 };
 
+/** Words the recognizer should listen for (a call's member names), and a way to hear when they change. */
+export type StreamingSttContextPhrases = {
+  current(): readonly string[];
+  subscribe(listener: () => void): () => void;
+};
+
 export type StreamingSttWebSocketClientOptions = {
   url: string;
   webSocketCtor: StreamingSttWebSocketCtor;
   chatSessionId?: string;
+  /** Sent with each hello and again whenever they change (segmented protocol only). */
+  contextPhrases?: StreamingSttContextPhrases;
   connectTimeoutMs?: number;
   reconnectDelayMs?: number;
   maxPendingChunks?: number;
@@ -464,8 +472,26 @@ export class StreamingSttWebSocketClient {
   private legacySequence = 0;
   private legacyStartSample = 0;
   private legacyFinalize: LegacyFinalizeIdentity | null = null;
+  /** The context phrases this socket's server has, as a key; null until a hello carries them. */
+  private sentContextPhrases: string | null = null;
+  private stopContextPhrases: (() => void) | null = null;
 
   constructor(private readonly options: StreamingSttWebSocketClientOptions) {}
+
+  private currentContextPhrases(): string[] {
+    return [...(this.options.contextPhrases?.current() ?? [])];
+  }
+
+  private sendContextPhrases(): void {
+    if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN) return;
+    // Only after hello: the server reads messages in order, so this one lands after the hello's own list.
+    if (this.protocol !== 'segmented-v1' || !this.serverReady || this.sentContextPhrases === null) return;
+    const contextPhrases = this.currentContextPhrases();
+    const key = JSON.stringify(contextPhrases);
+    if (key === this.sentContextPhrases) return;
+    this.sentContextPhrases = key;
+    this.socket.send(JSON.stringify({ type: 'context_phrases', sessionId: this.sessionId, contextPhrases }));
+  }
 
   get segmentedProtocolActive(): boolean {
     return this.protocol === 'segmented-v1' && this.serverReady && !this.awaitingSessionReady;
@@ -494,6 +520,9 @@ export class StreamingSttWebSocketClient {
     this.connecting = true;
     this.setStatus('connecting');
     this.clearReconnectTimer();
+    if (this.options.contextPhrases && !this.stopContextPhrases) {
+      this.stopContextPhrases = this.options.contextPhrases.subscribe(() => this.sendContextPhrases());
+    }
     await new Promise<void>((resolve, reject) => {
       const socket = new this.options.webSocketCtor(this.options.url);
       this.socket = socket;
@@ -535,6 +564,7 @@ export class StreamingSttWebSocketClient {
         this.connecting = false;
         this.serverReady = false;
         this.awaitingSessionReady = false;
+        this.sentContextPhrases = null;
         this.socket = null;
         if (!opened) {
           failInitialConnection('Live voice WebSocket closed before connecting.');
@@ -629,6 +659,8 @@ export class StreamingSttWebSocketClient {
   disconnect(): void {
     this.captureClosed = true;
     this.autoReconnect = false;
+    this.stopContextPhrases?.();
+    this.stopContextPhrases = null;
     this.clearReconnectTimer();
     this.pendingAudio = [];
     this.pendingFinal = false;
@@ -876,6 +908,7 @@ export class StreamingSttWebSocketClient {
         this.serverReady = true;
         if (this.protocol === 'segmented-v1') {
           this.awaitingSessionReady = true;
+          const contextPhrases = this.options.contextPhrases ? this.currentContextPhrases() : undefined;
           this.socket?.send(JSON.stringify({
             type: 'hello',
             protocol: SEGMENTED_PROTOCOL,
@@ -884,7 +917,9 @@ export class StreamingSttWebSocketClient {
             sampleRate: this.targetSampleRate,
             configVersion: this.negotiation.configVersion,
             language: this.negotiation.language,
+            ...(contextPhrases ? { contextPhrases } : {}),
           }));
+          if (contextPhrases) this.sentContextPhrases = JSON.stringify(contextPhrases);
         } else {
           this.flushPendingAudio();
           if (this.pendingFinal) {

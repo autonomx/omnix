@@ -1203,3 +1203,68 @@ with how often they talk.
   - The harness builds its own prompts, so the `per_turn` fix is covered by unit tests, not by this check.
   - Not part of this change: the config registry is stale. `OMNIX_TRADING_STOCH_SWEEP`, from 9fb04035fc, is
     missing, so `test_configuration_doc_is_generated_from_registry` fails.
+- 2026-11-20: three fixes after the owner's call with Jinx (uncommitted on main):
+  - **A new call starts with the chat's character alone.** Guests used to stay seated after a call, so Abhishek
+    joined the next call with Jinx. Ending a call now clears its seats (`clear_guests`,
+    `DELETE /api/chat/sessions/{id}/scene/guests`, from `stopLiveVoice`). A browser that closes mid-call skips
+    that, and its guests are still seated next time.
+  - **A guest's turn draws the guest's own face.** The portrait used to stream the host for every turn, so Jinx
+    spoke with Abhishek's voice and lines. The audio session is now keyed by its speaker too. A guest's turn
+    opens the avatar websocket with `speaker_id`, which the gateway checks against the seats (`speaker_view`;
+    `speaker_not_on_call` for anyone else) before it reads that guest's portrait image.
+  - **Every member is live.** The service streams one face at a time, the speaker's. The others play their own
+    idle loops with blinks (`MemberPortrait`, `PortraitIdleLoop`). A loop is kept from the member's own stream,
+    or comes from `GET /api/tts/live-call/portrait-idle` (portrait service `POST /portrait/idle`). That route
+    hands out only a loop the service has already rendered, because a call's stream holds the GPU. A guest
+    invited mid-call has no loop until its first turn, so its tile shows its picture until then.
+  - The portrait service change goes live when the service restarts. Focused Python suites, ruff, lint (3
+    violations, as at HEAD), web typecheck, the related web tests (113) and the build pass.
+- 2026-11-20, the owner's next call: Jinx's avatar went unavailable near the end and stayed that way (uncommitted
+  on main).
+  - **Cause.** A turn first opened an audio session for Abhishek, then swapped to Jinx when the speaker was known.
+    The gateway admits one live-call socket per process (`OMNIX_LIVE_MAX_CALLS`, default 1), and it freed the old
+    socket's slot only after awaiting the portrait link's close. So Jinx's new socket was refused (429; a browser
+    sees only close 1006 before open). The PCM session then counted as failed but not closed, and the controller
+    reused it for every later turn: no audio session, no hello, no portrait, until the call ended.
+  - **Fixes.**
+    - The gateway frees the slot as soon as the call's transport is done, before the portrait's close.
+    - The PCM session asks again for a socket refused before it opened (after 250, 500 and 1000 ms), and logs
+      `session_websocket_retry`. Events from a replaced socket are ignored.
+    - `hasFailed()` on the session: the controller and the output coordinator replace a failed session instead of
+      reusing it.
+  - Tests: the retry (refused twice, then plays and gets its hello), the retries spent, no retry after stop, the
+    controller and coordinator replacing a failed session, and the gateway's slot being free before the portrait
+    closes (it fails without the fix). Python websocket suites, ruff, lint (= HEAD), the related web suites (812)
+    and the build pass.
+- 2026-11-20, review of that call (uncommitted): 12 of its 18 replies were the host's speculated reply, though guests
+  were seated. "Hey Afro, how's it going?" and "Aphra, tell him about your family." got Jinx ("I'm not Aphra").
+  - Cause: only the `/stream` speculation route refused a call with guests. The browser starts speculation through
+    `/start` (handshake) and `/start-stream` (inline). Those set no `scene_possible`, so the accept's seat check was
+    skipped too.
+  - Fix: `refuse_speculation_in_scene` in `live_chat_speculation`, called by all three start routes, which also
+    record `scene_possible` from it. The guest test now covers the three routes (it fails without the fix).
+  - Also seen, not fixed: gateway event-loop stalls from trading background jobs (296 in the call's 7 min, 58 s
+    in all, max 1.4 s). The worst, at 19:10:25, was `strategy_interday_learning_monitor` filtering up to 10,000
+    events per strategy on the loop. It delayed a final transcript by 5.6 s, so "Sure that I control you" was
+    answered late and then cut off. Others: synchronous DB reads (`require_background_owner`, `load_settings`) and
+    HTTP connects on the loop. STT misheard "tinkering" and the name Afra.
+- 2026-11-20, the three follow-ups from that review (uncommitted on main):
+  - Gateway stalls: async trading monitors (cycles, startup and shutdown) and the strategy runner now run on a
+    dedicated trading loop thread (`monitor_task.on_trading_loop`), never on the gateway loop. The interday
+    monitor's event filtering runs in a worker thread. Trading suite passes.
+  - Names: the call members' names go to speech recognition as phrases to boost (`context_phrases` on the STT
+    websocket, NeMo greedy boosting tree, `OMNIX_STT_CONTEXT_BOOST_ALPHA`, default 0.5). The shared decoder changes
+    only between utterances; a rejected tree falls back to plain decoding (`stt_context_phrases_failed`). A
+    real-model check is still owed: it needs an STT service restart.
+  - Late lines: all three lines between characters in that call (76, 79, 82) were saved one exchange late. For two,
+    the person's speech stopped the line's audio 50-120 ms in, but the call kept it pending and committed it
+    "completed" when the next reply ended. The third played to the end, but the call's speaking state stayed set,
+    so it waited 65 s. The initiative controller now settles a line the person speaks over at once (interrupted
+    with what was heard, or dropped with its lease given back if nothing was heard), and commits a line when its own
+    audio ends (`ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT`). Three tests in `live-call-scene.test.ts` fail without the fix.
+  - Sound-alike names (owner asked, same day): recognition spells names as it hears them ("Aphra", "Afro" for
+    Afra), and `named_member` matched only exact spellings, so the wrong member could answer. When no member is
+    named exactly, a word now names a member when it sounds like their one-word name: same consonant key (vowels
+    and s/sh folded) and at most about one letter in four apart. Names shorter than four key sounds ("Bea",
+    "Theo") are never matched by sound; a word that sounds like two members names neither. Your words are not
+    rewritten. `test_a_name_recognition_misspells_still_names_the_member`.

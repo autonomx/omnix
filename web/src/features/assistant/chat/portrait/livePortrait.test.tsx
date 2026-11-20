@@ -6,6 +6,7 @@ import { drawnAvatarPack, publishCharacterAvatarRuntime } from '../liveCharacter
 import { LiveCallVisual } from '../LiveCallVisual';
 import { fixture } from '../../../../test/fixture';
 import { LivePortrait, livePortrait, portraitNotice } from './livePortrait';
+import { memberLoop, resetMemberLoops } from './memberIdleLoops';
 
 const release = vi.hoisted(() => ({ samples: vi.fn(), counter: vi.fn(), portrait: vi.fn() }));
 vi.mock('../../workspace/live-voice-release-observer', () => ({
@@ -206,6 +207,35 @@ describe('the live portrait client', () => {
     hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-a', audio_context_time_seconds: 5.1 });
     context.currentTime = 5.2;
     expect(portrait.currentFrame()).toBeNull();
+  });
+
+  it("streams a guest's own face for its turn and keeps its idle loop for its tile", () => {
+    const urls = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:${urls.mock.calls.length}`);
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const { portrait, sockets } = setup();
+    const speaker = { id: 'char:abhishek', pack: { renderer: 'portrait', fallback_renderer: 'orb' } } as const;
+    portrait.begin('chat:maya', speaker).onHello({ callKey: 'call-1', avatarToken: 'token' });
+    expect(sockets[0].url).toContain('session_id=chat%3Amaya&speaker_id=char%3Aabhishek');
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    expect(portrait.getSnapshot().speakerId).toBe('char:abhishek');
+
+    const loopFrame = (output: 'idle' | 'blink', offset: number, frameMs: number) => frameMessage(
+      { output_id: output, epoch: 0, segment_id: output, offset, count: 2, frame_ms: frameMs }, offset);
+    sockets[0].message(loopFrame('idle', 0, 80));
+    sockets[0].message(loopFrame('idle', 1, 80));
+    sockets[0].message(loopFrame('blink', 0, 40));
+    expect(memberLoop('char:abhishek')).toBeNull(); // not whole yet
+    sockets[0].message(loopFrame('blink', 1, 40));
+    expect(memberLoop('char:abhishek')).toEqual({ frameMs: 80, idle: [expect.any(String), expect.any(String)],
+      blink: [expect.any(String), expect.any(String)] });
+    expect(memberLoop('char:maya')).toBeNull(); // never the host's
+
+    portrait.end();
+    expect(portrait.getSnapshot().speakerId).toBeUndefined();
+    resetMemberLoops();
+    expect(revoke).toHaveBeenCalledTimes(4); // the loop's object URLs go with it
+    urls.mockRestore();
+    revoke.mockRestore();
   });
 
   it('shows the idle loop once all of it has arrived, and cuts back to it when a turn is interrupted', async () => {

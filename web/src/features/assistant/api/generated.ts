@@ -2063,7 +2063,11 @@ export interface paths {
         put?: never;
         /** Add Chat Scene Guest */
         post: operations["add_chat_scene_guest_api_chat_sessions__session_id__scene_guests_post"];
-        delete?: never;
+        /**
+         * Clear Chat Scene Guests
+         * @description The call ended: its guests leave, and the next call starts with the chat's own character alone.
+         */
+        delete: operations["clear_chat_scene_guests_api_chat_sessions__session_id__scene_guests_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2871,6 +2875,23 @@ export interface paths {
         };
         /** Get Voice Session Evaluation */
         get: operations["get_voice_session_evaluation_api_tts_live_call_evaluations__evaluation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tts/live-call/portrait-idle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portrait Idle */
+        get: operations["portrait_idle_api_tts_live_call_portrait_idle_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8486,6 +8507,30 @@ export interface components {
         /** PlanningSubmitRequest */
         PlanningSubmitRequest: {
             plan: components["schemas"]["ImplementationPlanSubmission"];
+        };
+        /** PortraitIdleResponse */
+        PortraitIdleResponse: {
+            /** Blink */
+            blink: string[];
+            /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
+             * Frame Ms
+             * @default 0
+             */
+            frame_ms: number;
+            /** Idle */
+            idle: string[];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Ok */
+            ok: boolean;
         };
         /** PortraitLoadRequest */
         PortraitLoadRequest: {
@@ -15358,6 +15403,37 @@ export interface operations {
             };
         };
     };
+    clear_chat_scene_guests_api_chat_sessions__session_id__scene_guests_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_chat_scene_guest_api_chat_sessions__session_id__scene_guests__character_id__delete: {
         parameters: {
             query?: never;
@@ -16990,6 +17066,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VoiceSessionEvaluationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portrait_idle_api_tts_live_call_portrait_idle_get: {
+        parameters: {
+            query: {
+                session_id: string;
+                speaker_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortraitIdleResponse"];
                 };
             };
             /** @description Validation Error */

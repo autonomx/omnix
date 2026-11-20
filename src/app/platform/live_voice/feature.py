@@ -36,6 +36,7 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
     from .portrait.calls import portrait_call_registry
     from .transport.diagnostics_routes import register_live_voice_diagnostics_routes
     from .transport.portrait_load import register_portrait_load_routes
+    from .transport.portrait_idle import register_portrait_idle_route
     from .transport.portrait_preview import register_portrait_preview_route
     from .transport.websocket import register_tts_live_call_websocket
 
@@ -55,6 +56,8 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
     # The call's portrait (live portrait roadmap, Phase 2): it attaches to the TTS websocket's call.
     register_live_call_avatar_websocket(router, portrait_call_registry(state),
                                         chat_store_factory=lambda: context.services.chat)
+    # A group call's members who are not speaking play their portraits' idle loops (companion 5.5).
+    register_portrait_idle_route(router, chat_store_factory=lambda: context.services.chat)
     # Previewing a portrait in the character's avatar setup (Phase 4).
     register_portrait_preview_route(router, provider_factory=_live_preview_tts_provider)
     # Loading the portrait model ahead of a call, from the call panel's button.

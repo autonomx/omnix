@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => {
     finish: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     isClosed: vi.fn(() => false),
+    hasFailed: vi.fn(() => false),
   };
   const recordSpy = vi.fn();
   const reporter = {

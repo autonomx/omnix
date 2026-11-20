@@ -188,9 +188,7 @@ def register_live_chat_speculation_routes(router: APIRouter,
             raise HTTPException(status_code=404, detail="chat session not found")
         if is_proposal_answer(request.content) and has_pending_proposal(session):
             raise HTTPException(status_code=409, detail="speculation_answers_proposal")
-        if await asyncio.to_thread(has_scene_guests, session):
-            # A speculated reply is the host's; with guests the server chooses who answers (companion 5.2).
-            raise HTTPException(status_code=409, detail="speculation_in_scene")
+        scene_possible = await refuse_speculation_in_scene(session)
         provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
             request.provider_id or session.provider_id,
             request.model_id or session.model_id,
@@ -216,7 +214,7 @@ def register_live_chat_speculation_routes(router: APIRouter,
             source_sequence=request.source_sequence,
             created_at=time.time(),
             execution_lane=execution_lane,
-            scene_possible=scenes_available(session),
+            scene_possible=scene_possible,
         )
         with _SPECULATION_LOCK:
             _prune_speculations()
@@ -353,6 +351,15 @@ def register_live_chat_speculation_routes(router: APIRouter,
             execution_lane=speculation.execution_lane,
         )
         return payload
+
+
+async def refuse_speculation_in_scene(session: Any) -> bool:
+    """Refuse (409) a speculation while the chat's call has guests: a speculated reply is the host's, and with guests
+    the server chooses who answers (companion 5.2). Every route that starts one calls this. The result is the
+    speculation's ``scene_possible``: whether guests could still join before the accept, which then checks again."""
+    if await asyncio.to_thread(has_scene_guests, session):
+        raise HTTPException(status_code=409, detail="speculation_in_scene")
+    return scenes_available(session)
 
 
 async def _resolve_speculation_session(

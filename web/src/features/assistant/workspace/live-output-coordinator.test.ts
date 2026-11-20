@@ -71,6 +71,7 @@ function createHarness() {
     finish: vi.fn(async () => undefined),
     stop,
     isClosed: () => false,
+    hasFailed: vi.fn(() => false),
   };
   let workletOptions: LiveVoicePcmSessionOptions | undefined;
   const createPcmSession = vi.fn(async (
@@ -120,6 +121,7 @@ function createHarness() {
     enqueueOutputPhrase,
     cancelOutputItem,
     createPcmSession,
+    stop,
     fetcher,
     reporter,
     workletOptions: () => workletOptions,
@@ -127,6 +129,21 @@ function createHarness() {
 }
 
 describe('LiveOutputCoordinator', () => {
+  it('opens a new PCM transport when the one it holds has failed, instead of queueing into it', async () => {
+    const harness = createHarness();
+    await harness.coordinator.handleObservationCandidate({ observation: observation('one', 2) });
+    vi.mocked(harness.pcm.hasFailed).mockReturnValue(true); // its websocket was refused or lost
+    harness.createPcmSession.mockImplementationOnce(async () => {
+      vi.mocked(harness.pcm.hasFailed).mockReturnValue(false);
+      return harness.pcm;
+    });
+    await harness.coordinator.handleObservationCandidate({ observation: observation('two', 2) });
+
+    expect(harness.stop).toHaveBeenCalledWith('live_output_session_failed');
+    expect(harness.createPcmSession).toHaveBeenCalledTimes(2);
+    expect(harness.enqueueOutputPhrase).toHaveBeenCalledTimes(2);
+  });
+
   it('reuses one session-scoped PCM transport for ordered observation items', async () => {
     const harness = createHarness();
     await harness.coordinator.handleObservationCandidate({ observation: observation('one', 2) });

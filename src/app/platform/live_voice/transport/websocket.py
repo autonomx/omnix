@@ -993,6 +993,14 @@ def register_tts_live_call_websocket(
         from app.persistence.tts_swap import LiveSpeechLease
 
         call_key = new_call_key()
+        released = False
+
+        def release_slot() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                capacity.release()
+
         live_lease = await asyncio.to_thread(LiveSpeechLease("live_call", f"live-call:{call_key}").start)
         try:
             await websocket.accept()
@@ -1043,6 +1051,9 @@ def register_tts_live_call_websocket(
                 receiver.cancel()
                 with suppress(asyncio.CancelledError):
                     await receiver
+                # The call's transport is done: its slot is free now, not after the portrait's close below. A
+                # speaker swap opens the next speaker's socket at once, and it was refused (429) while this one closed.
+                release_slot()
                 if state.portrait is not None:
                     portrait_calls.remove(state.portrait)
                     if state.portrait.link is not None:  # the call is over: so is its portrait
@@ -1050,5 +1061,5 @@ def register_tts_live_call_websocket(
                 with suppress(Exception):
                     await websocket.close()
         finally:
-            capacity.release()
+            release_slot()
             await asyncio.to_thread(live_lease.close)

@@ -1,5 +1,6 @@
 /** Ending a capture call and resetting its turn state. */
 import { resetLiveCallCamera } from './live-call-camera';
+import { callSceneKnownEmpty, clearCallScene } from './live-call-scene';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { liveConversationStore } from './live-conversation-store';
 import { reduceUserFloor } from './live-voice-floor-manager';
@@ -50,6 +51,9 @@ export function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnect
   if (session?.card === card) {
     controller.activeSession = null;
     cleanupSession(session);
+    // A call's guests are for that call: the next one starts with the chat's own character alone.
+    // Skipped only when the panel knows this chat has none (it may already show another chat).
+    if (!callSceneKnownEmpty(session.chatSessionId)) void clearCallScene(session.chatSessionId);
   }
   setPanelStatus(card, nextStatus);
   resetVoiceVisualizer(card);

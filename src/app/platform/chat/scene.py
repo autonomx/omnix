@@ -28,6 +28,7 @@ from app.conversation.scene import (
     SceneMember,
     scene_of,
     speaker_of,
+    speaking_as,
 )
 from app.prompts import prompt_template
 from app.runtime.ports import optional
@@ -277,6 +278,29 @@ def remove_guest(session: Any, character_id: str, *, repository: Any = None) -> 
     return bool(repository.remove_guest(session.id, character_id.strip()))
 
 
+def clear_guests(session: Any, *, repository: Any = None) -> int:
+    """Every guest leaves: a call ends, and the next one starts with the chat's own character alone."""
+    repository = repository if repository is not None else scene_repository()
+    if repository is None or not scenes_available(session):
+        return 0
+    return int(repository.clear(session.id))
+
+
+def speaker_view(session: Any, speaker_id: str, *, repository: Any = None,
+                 member: Callable[[str], SceneMember | None] | None = None) -> Any | None:
+    """The session as one member of its call sees it: itself for the host, a seated guest's view for a guest.
+
+    ``None`` when ``speaker_id`` is not on the call: the browser names the speaker, code checks the seat.
+    """
+    speaker_id = speaker_id.strip()
+    if not speaker_id or speaker_id == getattr(session, "character_id", None):
+        return session
+    scene = load_scene(session, repository=repository, member=member)
+    if scene is None or speaker_id not in {guest.character_id for guest in scene.guests}:
+        return None
+    return speaking_as(session, scene.with_speaker(speaker_id))
+
+
 # --- the floor (5.4) ---------------------------------------------------------------------------------------------
 
 def _name_patterns(member: SceneMember) -> list[str]:
@@ -289,7 +313,11 @@ def _name_patterns(member: SceneMember) -> list[str]:
 
 
 def named_member(scene: Scene, text: str) -> str | None:
-    """The member the person's words name first, by full name or first name; a shared first name names no one."""
+    """The member the person's words name first, by full name or first name; a shared first name names no one.
+
+    Only when no member is named exactly does a word that sounds like a member's name count (speech recognition
+    spells names as it hears them: "Aphra" or "Afro" for Afra).
+    """
     found: list[tuple[int, int, str]] = []
     for member in scene.members:
         for rank, name in enumerate(_name_patterns(member)):
@@ -298,13 +326,68 @@ def named_member(scene: Scene, text: str) -> str | None:
                 found.append((match.start(), rank, member.character_id))
                 break
     if not found:
-        return None
+        return _sound_alike_member(scene, text)
     found.sort()
     start, rank, character_id = found[0]
     rivals = [entry for entry in found[1:] if entry[0] == start]
     if rivals and all(entry[1] == rank for entry in rivals):
         return None  # two members answer to the same name at the same place
     return character_id
+
+
+# Spelling to sound, in order: a heard word and a name that differ only in how a sound is written match.
+_SOUND_SPELLINGS: tuple[tuple[str, str], ...] = (
+    (r"^kn", "n"), (r"^wr", "r"), (r"ph", "f"), (r"ck", "k"), (r"qu", "kw"), (r"x", "ks"), (r"sch", "sk"),
+    (r"[sc]h", "1"), (r"th", "t"), (r"gh", "g"), (r"wh", "w"), (r"c(?=[eiy])", "s"), (r"c", "k"), (r"q", "k"),
+    (r"z", "s"), (r"h", ""), (r"y(?![aeiou])", "i"), (r"(.)\1+", r"\1"),
+)
+# A name heard this short ("Bea", "Theo") sounds like too many everyday words to be matched by sound.
+_MIN_SOUND_KEY = 4
+
+
+def _sound_spelling(word: str) -> str:
+    spelled = re.sub(r"[^a-z]", "", word.lower())
+    for pattern, replacement in _SOUND_SPELLINGS:
+        spelled = re.sub(pattern, replacement, spelled)
+    return spelled
+
+
+def _sound_key(spelled: str) -> str:
+    # Vowels are what recognition gets wrong most, then "s" for "sh" ("Abhisek").
+    return re.sub(r"[aeiou]+", "a", spelled).replace("1", "s")
+
+
+def _edit_distance(left: str, right: str) -> int:
+    previous = list(range(len(right) + 1))
+    for row, left_char in enumerate(left, start=1):
+        current = [row]
+        for column, right_char in enumerate(right, start=1):
+            current.append(min(previous[column] + 1, current[column - 1] + 1,
+                               previous[column - 1] + (left_char != right_char)))
+        previous = current
+    return previous[-1]
+
+
+def _sounds_like(heard: str, name: str) -> bool:
+    """``heard`` is ``name`` as recognition might spell it: the same consonants, at most a vowel or so apart."""
+    heard_spelled, name_spelled = _sound_spelling(heard), _sound_spelling(name)
+    key = _sound_key(name_spelled)
+    if len(key) < _MIN_SOUND_KEY or _sound_key(heard_spelled) != key:
+        return False
+    return _edit_distance(heard_spelled, name_spelled) <= max(1, len(name_spelled) // 4)
+
+
+def _sound_alike_member(scene: Scene, text: str) -> str | None:
+    """The member whose one-word name the first such word in ``text`` sounds like; two such members: no one."""
+    names = [(member.character_id, name) for member in scene.members
+             for name in _name_patterns(member) if len(name.split()) == 1]
+    for word in re.findall(r"[^\W\d_]+", text):  # "Aphra's" is heard as "Aphra"
+        matches = {character_id for character_id, name in names if _sounds_like(word, name)}
+        if len(matches) == 1:
+            return matches.pop()
+        if matches:
+            return None
+    return None
 
 
 def _replies(messages: Sequence[Any]) -> list[Any]:
@@ -825,6 +908,7 @@ __all__ = [
     "SceneError",
     "add_guest",
     "choose_speaker",
+    "clear_guests",
     "director_prompt",
     "has_scene_guests",
     "is_scene_reaction_reason",
@@ -847,6 +931,7 @@ __all__ = [
     "scene_repository",
     "scenes_available",
     "seats_taken",
+    "speaker_view",
     "stamp_speaker",
     "turn_scene",
     # companion 6: characters talk to each other

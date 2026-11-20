@@ -19,7 +19,8 @@ import { LiveCallTaskChips } from './LiveCallTaskChips';
 import { LiveMuteButton } from './LiveMuteButton';
 import { LiveQuietButton } from './LiveQuietButton';
 import { LiveShowButton } from './LiveShowButton';
-import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
+import { MemberPortrait } from './portrait/MemberPortrait';
+import { loadMemberLoop } from './portrait/memberIdleLoops';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
 import { callSceneGuests, useCallScene } from '../workspace/live-call-scene';
@@ -254,7 +255,7 @@ function LiveCharacterStage({
   // The reply's audio moves the speaker's mouth, not the host's.
   const live = guestSpeaking ? { ...liveAvatar, mouthFrame: 'closed' as const } : liveAvatar;
   const hostSpeaking = speaking && !guestSpeaking;
-  const { pack, portraitState, notice } = useDrawnAvatarPack(shownRuntime?.avatar_pack);
+  const { pack, portraitState, notice, mine } = useDrawnAvatarPack(shownRuntime?.avatar_pack);
   const isPortrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
   const voiceMode = hostSpeaking ? 'speaking' : stageMode === 'listening' ? 'listening' : 'idle';
   const presentationState = avatarPresentationState(live.mouthFrame, voiceMode, stageMode === 'thinking');
@@ -276,6 +277,18 @@ function LiveCharacterStage({
     [shownRuntime, pack],
   );
 
+  // Every portrait member idles live while another speaks: each one's loop is asked for once it is on the call.
+  const hostId = shownRuntime?.avatar_pack?.renderer === 'portrait' ? shownRuntime.avatar_pack.character_id : null;
+  const portraitGuestIds = guests
+    .filter((guest) => guestRuntime.find((entry) => entry.character_id === guest.character_id)?.avatar_pack?.renderer === 'portrait')
+    .map((guest) => guest.character_id)
+    .join(',');
+  useEffect(() => {
+    if (!sessionId || !portraitGuestIds) return;
+    if (hostId) void loadMemberLoop(sessionId, hostId, null);
+    for (const guestId of portraitGuestIds.split(',')) void loadMemberLoop(sessionId, guestId, guestId);
+  }, [sessionId, hostId, portraitGuestIds, speakerId]);
+
   useEffect(() => {
     if (!isLive2D || !live2dRuntime || !live2dHostRef.current) return;
     emitOmnixEvent(CHARACTER_LIVE2D_RENDER_EVENT, { runtime: live2dRuntime, host: live2dHostRef.current });
@@ -285,8 +298,10 @@ function LiveCharacterStage({
     <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
       {isPortrait ? (
         <figure className="assistant-live-character-avatar" data-renderer="portrait" data-portrait-status={portraitState.status}>
-          <LivePortraitCanvas
-            key={portraitState.status === 'off' ? 'idle' : 'call'}
+          <MemberPortrait
+            characterId={pack?.character_id}
+            live={mine}
+            streaming={portraitState.status !== 'off'}
             imageUrl={characterAvatarAssetUrl(pack?.base_asset_id ?? '')}
             label={`${identity} live portrait`}
           />
@@ -309,6 +324,7 @@ function LiveCharacterStage({
           {guests.map((guest) => (
             <LiveCallGuestTile
               key={guest.character_id}
+              characterId={guest.character_id}
               name={guest.display_name}
               pack={guestRuntime.find((candidate) => candidate.character_id === guest.character_id)?.avatar_pack ?? null}
               speaking={speaking && guest.character_id === speakerId}
@@ -326,26 +342,39 @@ function LiveCharacterStage({
 }
 
 /**
- * A guest's tile: its pack's still picture, or its initial. A sprite guest's mouth follows the reply it is speaking;
- * a portrait or Live2D guest shows its base picture, since only the host's avatar is driven live.
+ * A guest's tile. A portrait guest is live: the live portrait while its turn plays, its idle loop otherwise (its
+ * picture until the loop is known), and its pack's fallback when its portrait cannot show. A sprite guest's mouth
+ * follows the reply it is speaking; a Live2D guest shows its base picture, since one Live2D rig is driven at a time.
  */
 function LiveCallGuestTile({
+  characterId,
   name,
   pack,
   speaking,
   avatar,
 }: {
+  characterId: string;
   name: string;
   pack: CharacterAvatarPack | null;
   speaking: boolean;
   avatar: Pick<LiveAvatarState, 'mouthFrame' | 'blinkClosed'>;
 }) {
-  const assetId = guestPictureAsset(pack, speaking ? avatar : { mouthFrame: 'closed', blinkClosed: false }, speaking);
+  const drawn = useDrawnAvatarPack(pack, characterId);
+  const portrait = drawn.pack?.renderer === 'portrait' && Boolean(drawn.pack.base_asset_id);
+  const assetId = guestPictureAsset(drawn.pack, speaking ? avatar : { mouthFrame: 'closed', blinkClosed: false }, speaking);
   const initial = name.trim().charAt(0).toLocaleUpperCase() || '?';
   return (
     <div className="live-chat-stage-tile" role="listitem" data-role="guest" data-speaking={speaking ? 'true' : undefined}>
-      <div className="live-chat-stage-tile-picture">
-        {assetId
+      <div className="live-chat-stage-tile-picture" data-renderer={portrait ? 'portrait' : undefined}>
+        {portrait ? (
+          <MemberPortrait
+            characterId={characterId}
+            live={drawn.mine}
+            streaming={drawn.portraitState.status !== 'off'}
+            imageUrl={characterAvatarAssetUrl(drawn.pack?.base_asset_id ?? '')}
+            label={`${name} avatar`}
+          />
+        ) : assetId
           ? <img src={characterAvatarAssetUrl(assetId)} alt={`${name} avatar`} />
           : <div role="img" className="live-chat-stage-tile-initial" aria-label={`${name} visual placeholder`}><span>{initial}</span></div>}
       </div>

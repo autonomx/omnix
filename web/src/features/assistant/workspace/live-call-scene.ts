@@ -84,6 +84,17 @@ export function callSceneHasGuests(sessionId: string, current: CallSceneState = 
   return current.sessionId === sessionId && callSceneGuests(current).length > 0;
 }
 
+/** Whether the panel has read this chat's scene and it has no guest: then a call's end has nothing to clear. */
+export function callSceneKnownEmpty(sessionId: string, current: CallSceneState = state): boolean {
+  return current.sessionId === sessionId && current.scene !== null && callSceneGuests(current).length === 0;
+}
+
+/** The names said on a chat's call, for speech recognition to listen for: its members', host included. */
+export function callScenePhrases(sessionId: string, current: CallSceneState = state): string[] {
+  if (current.sessionId !== sessionId || !current.scene) return [];
+  return current.scene.members.map((member) => member.display_name.trim()).filter(Boolean);
+}
+
 export async function loadCallScene(sessionId: string): Promise<void> {
   const token = ++loadToken;
   if (state.sessionId !== sessionId) setState({ ...EMPTY, sessionId, loading: true });
@@ -110,6 +121,24 @@ export async function removeCallGuest(sessionId: string, characterId: string): P
   await changeScene(sessionId, characterId, () => unwrap(api.DELETE('/api/chat/sessions/{session_id}/scene/guests/{character_id}', {
     params: { path: { session_id: sessionId, character_id: characterId } },
   })));
+}
+
+/**
+ * The call ended: its guests leave, so the next call on this chat starts with the chat's own character alone. The
+ * guests stay seated when the server could not be reached; the panel still shows them and they can be removed.
+ */
+export async function clearCallScene(sessionId: string): Promise<void> {
+  const token = ++loadToken;
+  try {
+    const scene = await unwrap(api.DELETE('/api/chat/sessions/{session_id}/scene/guests', {
+      params: { path: { session_id: sessionId } },
+    }));
+    if (token !== loadToken || state.sessionId !== sessionId) return;
+    setState({ scene: sceneOrNull(scene), guests: [], error: null });
+    await characterClient.refreshLiveCallRuntime(sessionId).catch(() => null);
+  } catch (error) {
+    if (token === loadToken && state.sessionId === sessionId) setState({ error: errorText(error) });
+  }
 }
 
 async function changeScene(sessionId: string, characterId: string, request: () => Promise<CallSceneView>): Promise<void> {

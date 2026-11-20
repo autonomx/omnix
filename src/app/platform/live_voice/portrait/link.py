@@ -14,7 +14,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 from app.config.env import env_str
 from app.conversation.portrait_stream_contract import PortraitMessageError, pack
@@ -107,6 +107,39 @@ async def preview_portrait(base_url: str, latent_key: str, emotion: str, pcm: by
     if not body.get("ok"):
         raise PortraitUnavailable(str(body.get("code") or "service_error"), str(body.get("message") or ""))
     return [str(frame) for frame in body.get("frames") or []]
+
+
+class PortraitIdleLoop(NamedTuple):
+    """A portrait's idle loop and blink twins: base64 JPEGs, ``frame_ms`` apart."""
+
+    frame_ms: int
+    idle: list[str]
+    blink: list[str]
+
+
+async def idle_portrait(base_url: str, latent_key: str, *, client: Any = None) -> PortraitIdleLoop:
+    """A prepared portrait's idle loop, for a group call's member who is not speaking."""
+    import httpx
+
+    from app.security.service_token import service_headers
+
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=30.0, follow_redirects=False)
+    try:
+        response = await client.post(f"{base_url}/portrait/idle", headers=service_headers(),
+                                     data={"latent_key": latent_key})
+    except httpx.HTTPError as exc:
+        raise PortraitUnavailable("service_unreachable", "The portrait service did not answer") from exc
+    finally:
+        if owned:
+            await client.aclose()
+    if response.status_code != 200:
+        raise PortraitUnavailable("service_error", f"The portrait service refused the idle loop ({response.status_code})")
+    body = response.json()
+    if not body.get("ok"):
+        raise PortraitUnavailable(str(body.get("code") or "service_error"), str(body.get("message") or ""))
+    return PortraitIdleLoop(int(body.get("frame_ms") or 40), [str(frame) for frame in body.get("idle") or []],
+                            [str(frame) for frame in body.get("blink") or []])
 
 
 class PortraitLink:
@@ -222,5 +255,5 @@ class PortraitLink:
             await self._websocket.close()
 
 
-__all__ = ["PortraitLink", "PortraitUnavailable", "portrait_health", "portrait_url", "prepare_portrait",
-           "preview_portrait"]
+__all__ = ["PortraitIdleLoop", "PortraitLink", "PortraitUnavailable", "idle_portrait", "portrait_health", "portrait_url",
+           "prepare_portrait", "preview_portrait"]

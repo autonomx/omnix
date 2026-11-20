@@ -11,6 +11,9 @@ this service only; the browser never does. Routes:
 - ``POST /portrait/preview``: form fields ``latent_key``, ``emotion``, ``sample_rate`` and up to 8 s of 16-bit PCM:
   the frames for that audio, rendered as a call's would be (base64 JPEGs, 25 a second), for the setup preview.
   Refused with ``portrait_busy`` while a call streams.
+- ``POST /portrait/idle``: form field ``latent_key``: the prepared portrait's idle loop and blink twins (base64
+  JPEGs, ``frame_ms`` apart), for a group call's members who are not speaking. A loop not yet rendered is refused
+  with ``portrait_busy`` while a call streams.
 - ``WS /portrait/stream``: one call's stream. The first message is ``open`` (``call_key``, ``principal``,
   ``session``, ``latent_key``, ``emotion``, ``level``); then ``phrase_start``, PCM (binary, see
   ``app.conversation.portrait_stream_contract``), ``phrase_done``, ``output_end``, ``cancel``,
@@ -557,6 +560,33 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         except PreviewAborted:  # a call started meanwhile: it gets the GPU, the preview gives way
             return busy
         return {"ok": True, "fps": 25, "frames": [base64.b64encode(frame).decode("ascii") for frame in frames]}
+
+    @app.post("/portrait/idle")
+    async def idle(latent_key: str = Form(..., min_length=1, max_length=200)) -> dict[str, Any]:  # noqa: B008
+        """A prepared portrait's idle loop and its blink twins, for a group call's members who are not speaking.
+        A loop already rendered (at any level) comes back as it is; rendering one would hold the GPU thread for
+        seconds, so while a call streams that is refused with ``portrait_busy``."""
+        import base64
+
+        from services.portrait.idle_loop import idle_frame_step
+
+        try:
+            runtime = host.get()
+        except Unavailable as exc:
+            return {"ok": False, "code": exc.code, "message": str(exc)}
+        portrait = runtime.portrait(latent_key)
+        if portrait is None:
+            return {"ok": False, "code": "portrait_not_prepared", "message": "Prepare the portrait first"}
+        level = runtime.rendered_idle_level(portrait)
+        if level is None:
+            if admission.active:
+                return {"ok": False, "code": "portrait_busy", "message": "A call is using the portrait"}
+            level = 0
+        frames = await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, level))
+        blink = await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, level))
+        return {"ok": True, "frame_ms": 40 * idle_frame_step(level),
+                "idle": [base64.b64encode(jpeg).decode("ascii") for jpeg in frames],
+                "blink": [base64.b64encode(jpeg).decode("ascii") for jpeg in blink]}
 
     @app.delete("/portrait/cache/{tenant}/{image_sha256}")
     def forget(tenant: str, image_sha256: str) -> dict[str, Any]:

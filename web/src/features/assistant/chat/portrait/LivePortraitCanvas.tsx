@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { PortraitPicture } from './compositor';
 import { livePortrait } from './livePortrait';
 
 const FRAME_SIZE = 512;
 
 /**
- * The live portrait: the pack's image until there is a frame to show (the idle loop or speech), then on each
- * animation frame what the compositor picks, crossfades included.
+ * The live portrait: the pack's image (or `placeholder`, such as the member's idle loop) until there is a frame to
+ * show (the idle loop or speech), then on each animation frame what the compositor picks, crossfades included.
  */
-export function LivePortraitCanvas({ imageUrl, label }: { imageUrl: string; label: string }) {
+export function LivePortraitCanvas({ imageUrl, label, placeholder }: { imageUrl: string; label: string; placeholder?: ReactNode }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [drawn, setDrawn] = useState(false);
   const [settledUrl, setSettledUrl] = useState<string | null>(null);
@@ -33,9 +33,9 @@ export function LivePortraitCanvas({ imageUrl, label }: { imageUrl: string; labe
 
   return (
     <>
-      {drawn ? null : <img src={imageUrl} alt={label} onLoad={() => setSettledUrl(imageUrl)} onError={() => setSettledUrl(imageUrl)} />}
+      {drawn ? null : placeholder ?? <img src={imageUrl} alt={label} onLoad={() => setSettledUrl(imageUrl)} onError={() => setSettledUrl(imageUrl)} />}
       <canvas ref={canvasRef} width={FRAME_SIZE} height={FRAME_SIZE} aria-label={label} hidden={!drawn} />
-      {drawn || settledUrl === imageUrl ? null : <AvatarLoadingNotice />}
+      {drawn || placeholder || settledUrl === imageUrl ? null : <AvatarLoadingNotice />}
     </>
   );
 }

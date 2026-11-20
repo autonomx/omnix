@@ -269,6 +269,8 @@ _LAZY_EXPORTS = {
     # that names a turn's speaker.
     "SCENE_SPEAKER_HEADER": "scene",
     "load_scene": "scene",
+    # The session as a seated member sees it: the face a speaking guest's portrait shows.
+    "speaker_view": "scene",
     "is_scene_reaction_reason": "scene",
     "direct_scene_reaction": "scene_director",
     "scene_reaction_opening": "scene_director",
