@@ -7363,7 +7363,7 @@ export interface components {
             scene_talk_attempts_per_hour: (6 | 12 | 24 | 48) | null;
             /**
              * Scene Talk Enabled
-             * @default false
+             * @default true
              */
             scene_talk_enabled: boolean;
             /**
@@ -7374,7 +7374,7 @@ export interface components {
             scene_talk_level: "rarely" | "sometimes" | "often";
             /**
              * Scene Talk Max Lines
-             * @default 4
+             * @default 6
              */
             scene_talk_max_lines: number;
             /**
@@ -9137,7 +9137,7 @@ export interface components {
             available: boolean;
             /**
              * Max Guests
-             * @default 2
+             * @default 4
              */
             max_guests: number;
             /** Members */

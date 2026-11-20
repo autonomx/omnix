@@ -22,13 +22,15 @@ from app.providers.lmstudio_provider import LMStudioProvider
 from app.conversation.scene import speaking_as
 
 from .scene import (
-    ReactionOpening, Scene, SceneTalkKind, director_prompt, line_opening, load_scene, parse_director,
-    reaction_opening, reaction_reason, talk_opening, talk_reason, thread_director_prompt,
+    ReactionOpening, Scene, SceneTalkKind, director_prompt, first_speaker_prompt, line_opening, load_scene,
+    parse_director, reaction_opening, reaction_reason, talk_opening, talk_reason, thread_director_prompt, turn_scene,
 )
 
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_SECONDS = 4.0
+# Who answers the person first is asked before their reply starts, so a slow answer falls back sooner.
+_FIRST_SPEAKER_TIMEOUT_SECONDS = 2.5
 # A name is a few words: an answer longer than this is not one.
 _ANSWER_CHARS = 80
 
@@ -56,7 +58,20 @@ def choose_talker(session: Any, scene: Scene, opening: ReactionOpening) -> str |
     return _ask_director(session, opening, thread_director_prompt(scene, opening), "scene_talk_directed")
 
 
-def _ask_director(session: Any, opening: ReactionOpening, prompt: str, event: str) -> str | None:
+def choose_first_speaker(session: Any, scene: Scene, opening: ReactionOpening) -> str | None:
+    """Who answers the person first when they name no one (group calls, 2026-11-19), or None for the usual
+    choice. The model proposes a name; code accepts only one of the members."""
+    return _ask_director(session, opening, first_speaker_prompt(opening), "scene_first_speaker_directed",
+                         timeout_seconds=_FIRST_SPEAKER_TIMEOUT_SECONDS)
+
+
+def directed_turn_scene(session: Any, text: str) -> Scene | None:
+    """``turn_scene`` with the call's model proposing who answers first."""
+    return turn_scene(session, text, director=lambda scene, opening: choose_first_speaker(session, scene, opening))
+
+
+def _ask_director(session: Any, opening: ReactionOpening, prompt: str, event: str, *,
+                  timeout_seconds: float = _REQUEST_TIMEOUT_SECONDS) -> str | None:
     started = time.perf_counter()
     answer = ""
     reactor: str | None = None
@@ -75,7 +90,7 @@ def _ask_director(session: Any, opening: ReactionOpening, prompt: str, event: st
                 messages=[ProviderMessage(role="user", content=prompt)],
                 model=None if isinstance(provider, LMStudioProvider) else _model_key(getattr(session, "model_id", None)),
                 stream=True,
-                request_timeout_seconds=_REQUEST_TIMEOUT_SECONDS,
+                request_timeout_seconds=timeout_seconds,
                 **kwargs,
             )
             try:
@@ -150,10 +165,12 @@ def direct_scene_talk(session: Any, scene: Scene, opening: ReactionOpening, kind
 
 __all__ = [
     "SceneReaction",
+    "choose_first_speaker",
     "choose_reactor",
     "choose_talker",
     "direct_scene_reaction",
     "direct_scene_talk",
+    "directed_turn_scene",
     "scene_reaction_opening",
     "scene_talk_opening",
 ]

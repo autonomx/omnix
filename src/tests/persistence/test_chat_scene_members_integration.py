@@ -33,7 +33,7 @@ def seats():
     install_process_tenant(tenant)
     tag = uuid.uuid4().hex[:10]
     session_id = f"chat:scene:{tag}"
-    characters = {name: f"scene-{name}-{tag}" for name in ("host", "bea", "theo", "zed")}
+    characters = {name: f"scene-{name}-{tag}" for name in ("host", "bea", "theo", "ana", "kai", "zed")}
     with psycopg.connect(admin_database_url(), autocommit=True) as admin:
         for character_id in characters.values():
             admin.execute("INSERT INTO omnix_characters (id, workspace_id, profile) VALUES (%s, %s, '{}'::jsonb)",
@@ -53,7 +53,7 @@ def _guests(repository, session_id) -> list[tuple[str, int]]:
     return [(seat.character_id, seat.seat) for seat in repository.guests(session_id)]
 
 
-def test_a_call_seats_two_guests_in_the_first_free_seat(seats) -> None:
+def test_a_call_seats_four_guests_in_the_first_free_seat(seats) -> None:
     from app.platform.chat.persistence.scene_repository import SceneFullError
 
     repository, session_id, ids = seats
@@ -61,21 +61,24 @@ def test_a_call_seats_two_guests_in_the_first_free_seat(seats) -> None:
     assert repository.add_guest(session_id, ids["bea"]).seat == 1
     assert repository.add_guest(session_id, ids["bea"]).seat == 1  # already seated: same seat, no new row
     assert repository.add_guest(session_id, ids["theo"]).seat == 2
+    assert repository.add_guest(session_id, ids["ana"]).seat == 3
+    assert repository.add_guest(session_id, ids["kai"]).seat == 4
     with pytest.raises(SceneFullError):
         repository.add_guest(session_id, ids["zed"])
     assert repository.remove_guest(session_id, ids["bea"]) is True
     assert repository.remove_guest(session_id, ids["bea"]) is False
     assert repository.add_guest(session_id, ids["zed"]).seat == 1
-    assert _guests(repository, session_id) == [(ids["zed"], 1), (ids["theo"], 2)]
+    assert _guests(repository, session_id) == [(ids["zed"], 1), (ids["theo"], 2), (ids["ana"], 3), (ids["kai"], 4)]
     with pytest.raises(LookupError):
         repository.add_guest("chat:scene:missing", ids["bea"])
 
 
-def test_two_adds_racing_for_the_last_seat_seat_one(seats) -> None:
+def test_two_adds_racing_for_the_last_seat_seat_one_of_them(seats) -> None:
     from app.platform.chat.persistence.scene_repository import SceneFullError
 
     repository, session_id, ids = seats
-    repository.add_guest(session_id, ids["bea"])
+    for name in ("bea", "ana", "kai"):
+        repository.add_guest(session_id, ids[name])
     barrier = threading.Barrier(2)
     outcomes: list[object] = []
 
@@ -92,9 +95,9 @@ def test_two_adds_racing_for_the_last_seat_seat_one(seats) -> None:
     for thread in threads:
         thread.join(timeout=30)
 
-    assert sorted(outcome for outcome in outcomes if isinstance(outcome, int)) == [2]
+    assert sorted(outcome for outcome in outcomes if isinstance(outcome, int)) == [4]
     assert sum(isinstance(outcome, SceneFullError) for outcome in outcomes) == 1
-    assert len(_guests(repository, session_id)) == 2
+    assert len(_guests(repository, session_id)) == 4
 
 
 def test_a_guest_leaves_with_its_character_and_the_scene_with_its_chat(seats) -> None:

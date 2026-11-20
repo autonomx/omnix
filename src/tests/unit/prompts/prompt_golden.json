@@ -239,6 +239,10 @@
     "sha256": "87017029cfc7c90b75c68c92081f2c6a84ee7c2ccf232c17c490c4bbbbda1736",
     "version": "1"
   },
+  "chat.scene.first_speaker": {
+    "sha256": "59319379a41f009559fb6a5d71abd0571260611fbfb529d2e0af576355b578a4",
+    "version": "2"
+  },
   "chat.scene.line": {
     "sha256": "b0b6f163951afb323980e1821fe4b7734d539082ffe2ce5717e8e3adb34d59ec",
     "version": "1"
@@ -256,16 +260,16 @@
     "version": "1"
   },
   "chat.scene.talk_line": {
-    "sha256": "92a9f7326f52588b1096aa7bfc240af61d11c383c34af46d47ef0363f6aad8fe",
-    "version": "1"
+    "sha256": "d275c79e58c4642911b50ff39acbe82044fef765bfd146063d9b3c8e5062450a",
+    "version": "2"
   },
   "chat.scene.talk_opener": {
     "sha256": "375fd0fa1b8b4d2b36e057ba8f62fe335507c43a64f8ad85429bd7865c2ff638",
     "version": "1"
   },
   "chat.scene.thread_director": {
-    "sha256": "b59a321d35a688f4f4bc7a3b7765c13f2196b289fe68d3a784a4c7c06b339ab1",
-    "version": "1"
+    "sha256": "fb814190f95ef8f9a9229764d3e27e5878f09d25d15008c2261c82fb5f99b472",
+    "version": "3"
   },
   "chat.session_defaults.legacy_default_prompt": {
     "sha256": "2b989968611695b3eddbd4dbb13e3a0bb882b1da749e66e823dedc9a64f3e1f5",

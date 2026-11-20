@@ -196,6 +196,8 @@ describe('the call members', () => {
     expect(callSceneGuests().map((member) => member.character_id)).toEqual(['bea', 'theo']);
     // The runtime is read again so the new guest's voice is known for its first turn.
     expect(callsTo(RUNTIME_PATH).length).toBeGreaterThanOrEqual(1);
+    // ...and the full-screen call is told, so the guest's tile shows its face.
+    expect(callSceneStore.getState().guests?.map((entry) => entry.character_id)).toEqual(['bea']);
 
     await removeCallGuest('s1', 'bea');
     expect(callsTo(`${SCENE_PATH}/guests/bea`, 'DELETE')).toHaveLength(1);
@@ -216,7 +218,7 @@ describe('the call members', () => {
     await loadCallScene('s1');
     await addCallGuest('s1', 'zed');
 
-    expect(callSceneStore.getState().error).toBe('The call already has two guests.');
+    expect(callSceneStore.getState().error).toBe('The call already has four guests.');
     expect(callSceneStore.getState().changing).toBeNull();
     expect(callSceneGuests().map((member) => member.character_id)).toEqual(['bea']);
   });

@@ -55,6 +55,8 @@ class SceneTalkAttemptRequest(FrozenContract):
     kind: SceneTalkAttemptKind
     # Line and start attempts an account may make an hour; a reaction does not count and is not capped.
     attempts_per_hour: int = Field(default=12, ge=0, le=100)
+    # False for a line answering the person (a thread they started): it is neither capped nor counted.
+    counted: bool = True
 
 
 class SceneTalkAttempt(FrozenContract):
@@ -70,6 +72,7 @@ class SceneTalkAttempt(FrozenContract):
     next_start_after: datetime | None = None
     created_at: datetime
     finished_at: datetime | None = None
+    counted: bool = True
 
 
 class InitiativeLease(FrozenContract):
@@ -602,6 +605,7 @@ def _acquire_with_attempt(
             SceneTalkAttempt(
                 attempt_id=decision.lease.lease_id, user_id=talk.user_id, session_id=request.session_id,
                 anchor_message_id=talk.anchor_message_id, kind=talk.kind, created_at=request.requested_at,
+                counted=talk.counted and talk.kind in {"line", "start"},
             ),
             prune_before=request.requested_at - _SCENE_TALK_RETENTION,
         )
@@ -618,7 +622,7 @@ def _scene_talk_refusal(
         if until is not None and until > now:
             return InitiativeDecision(accepted=False, reason="scene_talk_backoff",
                                       eligible_in_ms=int((until - now).total_seconds() * 1000))
-    if talk.kind in {"line", "start"}:
+    if talk.kind in {"line", "start"} and talk.counted:
         recent = sorted(log.counted_since(talk.user_id, now - _SCENE_TALK_WINDOW))
         if len(recent) >= talk.attempts_per_hour:
             frees_at = recent[-talk.attempts_per_hour] + _SCENE_TALK_WINDOW if talk.attempts_per_hour else now + _SCENE_TALK_WINDOW
@@ -663,7 +667,8 @@ class _MemoryAttemptLog:
 
     def counted_since(self, user_id: str, since: datetime) -> list[datetime]:
         return [item.created_at for item in self.attempts.values()
-                if item.user_id == user_id and item.kind in {"line", "start"} and item.created_at > since]
+                if item.user_id == user_id and item.kind in {"line", "start"} and item.counted
+                and item.created_at > since]
 
     def insert(self, attempt: SceneTalkAttempt, *, prune_before: datetime) -> None:
         for attempt_id in [key for key, item in self.attempts.items() if item.created_at < prune_before]:
@@ -673,7 +678,7 @@ class _MemoryAttemptLog:
 
 _ATTEMPT_COLUMNS = (
     "attempt_id, user_id, session_id, anchor_message_id, kind, outcome, streamed_text, next_start_after, "
-    "created_at, finished_at"
+    "created_at, finished_at, counted"
 )
 
 
@@ -707,7 +712,7 @@ class _PostgresAttemptLog:
         rows = self.connection.execute(
             """
             SELECT created_at FROM omnix_companion_scene_talk_attempts
-             WHERE user_id = %s AND kind IN ('line', 'start') AND created_at > %s
+             WHERE user_id = %s AND kind IN ('line', 'start') AND counted AND created_at > %s
             """,
             (user_id, since),
         ).fetchall()
@@ -720,11 +725,11 @@ class _PostgresAttemptLog:
         self.connection.execute(
             f"""
             INSERT INTO omnix_companion_scene_talk_attempts ({_ATTEMPT_COLUMNS})
-            VALUES (%s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL)
+            VALUES (%s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL, %s)
             ON CONFLICT (attempt_id) DO NOTHING
             """,
             (attempt.attempt_id, attempt.user_id, attempt.session_id, attempt.anchor_message_id, attempt.kind,
-             attempt.created_at),
+             attempt.created_at, attempt.counted),
         )
 
     def get(self, attempt_id: str, *, lock: bool = False) -> SceneTalkAttempt | None:
@@ -740,6 +745,7 @@ class _PostgresAttemptLog:
             kind=cast(SceneTalkAttemptKind, str(row[4])),
             outcome=cast(SceneTalkOutcome, str(row[5])) if row[5] is not None else None,
             streamed_text=row[6], next_start_after=row[7], created_at=row[8], finished_at=row[9],
+            counted=bool(row[10]),
         )
 
     def finish(self, attempt: SceneTalkAttempt) -> None:

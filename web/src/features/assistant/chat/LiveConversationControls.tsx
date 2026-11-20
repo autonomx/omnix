@@ -196,7 +196,7 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
           <SelectControl label="Talk attempts per hour" value={String(profile.scene_talk_attempts_per_hour ?? '')} disabled={saving || !profile.scene_talk_enabled} onChange={(value) => void update({ scene_talk_attempts_per_hour: value ? Number(value) as SceneTalkAttempts : null })} options={[
             ['', 'As the level sets'], ['6', '6'], ['12', '12'], ['24', '24'], ['48', '48'],
           ]} />
-          <label><span>Lines in one exchange</span><input aria-label="Lines in one exchange" type="number" min="2" max="8" step="1" value={profile.scene_talk_max_lines} disabled={saving || !profile.scene_talk_enabled} onChange={(event) => void update({ scene_talk_max_lines: Number(event.currentTarget.value) })} /></label>
+          <label><span>Lines in one exchange</span><input aria-label="Lines in one exchange" type="number" min="2" max="10" step="1" value={profile.scene_talk_max_lines} disabled={saving || !profile.scene_talk_enabled} onChange={(event) => void update({ scene_talk_max_lines: Number(event.currentTarget.value) })} /></label>
           <label><span>Memories about each character on the call</span><input aria-label="Memories about each character on the call" type="number" min="0" max="20" step="1" value={profile.scene_memory_per_character} disabled={saving} onChange={(event) => void update({ scene_memory_per_character: Number(event.currentTarget.value) })} /></label>
         </div> : null}
 

@@ -329,9 +329,13 @@ class _SceneAsk:
             return None
         return scene_talk_opening(session, "talk", max_lines=int(self.profile.scene_talk_max_lines))
 
-    def attempt(self, anchor_id: str) -> SceneTalkAttemptRequest:
-        return SceneTalkAttemptRequest(user_id=_account_id(), anchor_message_id=anchor_id, kind=self.kind,
-                                       attempts_per_hour=self.profile.scene_talk_attempt_cap())
+    def attempt(self, opening: Any) -> SceneTalkAttemptRequest:
+        """The attempt the lease records. A line answering the person (a thread they started) is not counted
+        against the hourly cap (group calls, 2026-11-19): the thread's line limit and a SKIP bound it."""
+        answering_person = self.kind == "line" and getattr(opening, "start_kind", "") == "person"
+        return SceneTalkAttemptRequest(user_id=_account_id(), anchor_message_id=opening.anchor_id, kind=self.kind,
+                                       attempts_per_hour=self.profile.scene_talk_attempt_cap(),
+                                       counted=not answering_person)
 
     def direct(self, session: Any, scene: Any, opening: Any) -> Any:
         """Who speaks: the model proposes, code checks the name (None: nobody)."""
@@ -812,7 +816,7 @@ def register_character_integration_routes(
                     ttl_seconds=90.0,
                     minimum_spacing_seconds=spacing,
                     scene_talk=(None if scene_ask is None or preliminary is None
-                                else scene_ask.attempt(preliminary[1].anchor_id)),
+                                else scene_ask.attempt(preliminary[1])),
                 )
             )
             if not decision.accepted or decision.lease is None:

@@ -41,13 +41,13 @@ def authority(request):
 
 
 def _ask(session_id: str, *, user_id: str, anchor: str, kind: str = "line", cap: int = 12,
-         at: datetime = NOW) -> InitiativeAcquireRequest:
+         at: datetime = NOW, counted: bool = True) -> InitiativeAcquireRequest:
     return InitiativeAcquireRequest(
         session_id=session_id, generation="session", owner="scene", intent_id=f"proactive:pending:{uuid4().hex}",
         channel="voice", urgency="normal", interruptibility="idle_only", requested_at=at, ttl_seconds=90.0,
         minimum_spacing_seconds=0.0,
         scene_talk=SceneTalkAttemptRequest(user_id=user_id, anchor_message_id=anchor, kind=kind,
-                                           attempts_per_hour=cap),
+                                           attempts_per_hour=cap, counted=counted),
     )
 
 
@@ -113,6 +113,26 @@ def test_the_cap_counts_an_accounts_attempts_across_chats(authority) -> None:
     assert other_account.accepted
     assert authority.acquire(_ask(first, user_id=user_id, anchor="msg:9", cap=2,
                                   at=NOW + timedelta(minutes=61))).accepted
+
+
+def test_lines_answering_the_person_are_neither_capped_nor_counted(authority) -> None:
+    # Group calls (owner 2026-11-19): the thread's line limit and a SKIP bound them, not the hourly cap.
+    (chat, user_id) = _ids()
+    for index in range(3):
+        lease = authority.acquire(_ask(chat, user_id=user_id, anchor=f"msg:{index}", cap=1, counted=False)).lease
+        assert lease is not None
+        authority.finish(session_id=chat, lease_id=lease.lease_id, finished_at=NOW, delivered=True)
+    counted = authority.acquire(_ask(chat, user_id=user_id, anchor="msg:c", cap=1))
+    assert counted.accepted
+    authority.finish(session_id=chat, lease_id=counted.lease.lease_id, finished_at=NOW, delivered=True)
+    capped = authority.acquire(_ask(chat, user_id=user_id, anchor="msg:s", kind="start", cap=1))
+    assert (capped.accepted, capped.reason) == (False, "scene_talk_cap")
+    # A declined line still closes its anchor, counted or not.
+    lease = authority.acquire(_ask(chat, user_id=user_id, anchor="msg:d", counted=False)).lease
+    authority.record_scene_attempt(attempt_id=lease.lease_id, outcome="declined", finished_at=NOW)
+    authority.finish(session_id=chat, lease_id=lease.lease_id, finished_at=NOW, delivered=False)
+    again = authority.acquire(_ask(chat, user_id=user_id, anchor="msg:d", counted=False))
+    assert (again.accepted, again.reason) == (False, "scene_talk_closed")
 
 
 def test_two_chats_of_one_account_cannot_both_pass_the_cap_at_once(authority) -> None:

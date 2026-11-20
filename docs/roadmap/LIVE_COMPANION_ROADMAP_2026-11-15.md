@@ -992,6 +992,15 @@ with how often they talk.
 - Q12: memories per present character in a prompt: default 5, configurable.
 - Q13: an echo turn is still answered but never remembered.
 - Q14: the talk settings are **global** for now, not per chat.
+- Q15 (group calls, 2026-11-19): when the person names no one, the call's model **picks who answers first**
+  (up to 2.5 s; any failure falls back to the last member to speak, else the host). A member the person names
+  still answers deterministically.
+- Q16: a call seats up to **four guests** besides its host, five characters in all (migration 0199).
+- Q17: characters talk to each other **on by default** (was off).
+- Q18: lines in one exchange: default **6**, configurable **up to 10** (replaces Q11's default of 4).
+- Q19 (follows from Q15-Q18): the lines that answer the person's message do **not** use up the hourly talk
+  attempts. They are still bounded by the line limit and by a declined or skipped line. Quiet-call starts and
+  the lines of a talk the characters started still count (migration 0200, `counted`).
 
 ## Status log
 
@@ -1123,3 +1132,74 @@ with how often they talk.
   - ruff on the changed files passes;
   - architecture lint shows AL011 and AL015 ×2, as at HEAD.
   **Still to do:** the real-model check on Haiku low, and the owner's two-character call (with 5.7).
+- 2026-11-19: group calls (Q15-Q19, uncommitted on main):
+  - Fullscreen gives every call member a tile: host and guests, with the speaker outlined. Layouts go up to five.
+  - A first-speaker director (`chat.scene.first_speaker` v1) picks who answers first.
+  - The thread director and line prompts (v2) now see what the person said. A character may give its own
+    answer to a question put to everyone, or respond to another character. Not everyone has to speak.
+  - Migrations 0199 (seat 1..4) and 0200 (`counted` on talk attempts).
+  - The characterization golden `chat-live-sse-turn` was refreshed. It gains `heard_turn_id` and
+    `reply_to_message_id`, both added by f453664542 (item 6); this change does not touch them.
+  Results:
+  - focused Python suites pass (PG on the scratch DB), as do the web tests, typecheck, build and ruff;
+  - architecture lint shows AL011 and AL015 ×2, as at HEAD.
+  **Still to do:** run the 0199/0200 migrations on the live DB, and the owner's four-guest call.
+- 2026-11-19: group calls real-model check on Claude Haiku 4.5 (CLI), with a host and four guests over six turns:
+  - The harness used the production scene code: first speaker, line opening (6-line limit), thread director,
+    and the line prompt. Each character's system prompt was a short persona plus the real scene note.
+  - Run 1: the thread director (old v2 wording) answered NONE after every reply, even after a question put to
+    everyone, so nobody ever joined in.
+  - Run 2: reworded. The talk happened, but nearly everyone piled on: "rough day" got five replies, and two
+    exchanges hit the line limit.
+  - Runs 3-4: restrained wording, now thread_director v2 and talk_line v2 (SKIP when one would only agree or
+    echo). Results:
+    - a question to everyone: all five answer, then some banter;
+    - an opinion, a personal remark, or a line to one character: one or two lines;
+    - goodbye: one reply.
+  - Both directors now say "Reply with only one name ... and nothing else". Before that, Haiku sometimes began
+    with prose, and the first line parsed as no one.
+  - Latency: the first-speaker pick took 1.2 s on average (1.5 s at most, within the 2.5 s timeout); the
+    thread director 1.1 s.
+  - A scene line took 13-40 s to its first word: proactive turns never passed `live_turn`, so Haiku thought
+    first. Every proactive turn (lines, reactions, initiatives, task reports) is spoken on a call, so it now
+    passes `live_turn` when the provider declares LIVE_TURNS (only `claude_cli`). Lines now take 1.6 s on
+    average.
+  - Known limits:
+    - The director sees only names, not who the characters are. It sometimes picks a character with nothing
+      to add, whose SKIP then ends the exchange (Maya chosen on working from home instead of Daniel, who
+      likes the office).
+    - All five answering a question to everyone is more than the owner's example, which had three.
+- Q20 (owner, 2026-11-19): the directors get a **one-line description of each character**, to pick who has
+  something to add:
+  - The line is the character's `description`, else its persona's first sentence, cut at a word near 160
+    characters. `CharacterProfileSnapshot` now carries `description`, and `SceneMember.summary` holds the line.
+  - Prompts quote it as data ("Who they are:"), as they do the lines: `chat.scene.thread_director` v3 and
+    `chat.scene.first_speaker` v2. The thread director also now says that on an opinion, the one or two with
+    the strongest view respond.
+  - Real-model check on Haiku 4.5, runs 5-8 (harness personas as descriptions):
+    - With Daniel described as liking the office, a work-from-home opinion got Maya, Daniel, Alex, then
+      Daniel again, a back-and-forth; Leo and Sophie stayed quiet. Run 6, before the opinion sentence, had all
+      five give a view.
+    - Picks now fit who the characters are: Leo the chef took the knife-skills thread, and Alex the engineer
+      took the side of hallway conversations.
+    - Unchanged: a question put to everyone still gets all five answers. When the pick SKIPs, the exchange
+      still ends, though less often. In run 8 the first-speaker pick chose quiet Leo four times out of six.
+    - Latency is unchanged: first speaker 1.2-1.5 s on average (1.8 s at most), thread director 1.1-1.2 s.
+  - Focused suites, ruff and lint as before (3 violations, as at HEAD).
+- Q21 (owner, 2026-11-19): a group call keeps a **Claude CLI process waiting for each of its characters**:
+  - The warm pool (`claude_cli_provider._WarmPool`) keeps a place for every live kind used in the last six
+    minutes, plus one, up to 8 (it was 3 for everything). When it is full, a process for anything but a live
+    call makes room first. A one-on-one call (replies and the overlap judge) still holds 3. A full group call
+    can hold 8 idle processes at about 200 MB each, about 1 GB more than before.
+  - Character lines and reactions dropped `per_turn`, so the system prompt changed every turn and no line ever
+    matched a waiting process. So did a live turn through the chat store's own streaming path
+    (`prompt_store`). Both now keep it on a live turn, as the prewarm and speculation paths already did.
+    Typed chats are unchanged.
+  - Real-model check (Haiku 4.5, the two-turn harness, runs 9 and 10):
+    - The characters' turns took a waiting process 1 time in 9 before, and 6 in 11 after: every turn after
+      each character's first one.
+    - A line went from 2.1 s to 1.6 s on average, and a reply from 2.3 s to 1.9 s.
+    - The directors already took a waiting process (all but the first).
+  - The harness builds its own prompts, so the `per_turn` fix is covered by unit tests, not by this check.
+  - Not part of this change: the config registry is stale. `OMNIX_TRADING_STOCH_SWEEP`, from 9fb04035fc, is
+    missing, so `test_configuration_doc_is_generated_from_registry` fails.

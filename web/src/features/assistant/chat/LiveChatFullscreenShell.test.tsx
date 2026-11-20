@@ -3,6 +3,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { liveCallPresentationStore } from '../workspace/live-call-presentation-store';
+import { callSceneStore, loadCallScene } from '../workspace/live-call-scene';
 import { liveConversationStore } from '../workspace/live-conversation-store';
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import type { CharacterLiveCallRuntime } from './characterClient';
@@ -155,6 +157,81 @@ describe('LiveChatFullscreenShell', () => {
     expect(fullscreen.getByText('Can you tell me a story?')).toBeInTheDocument();
     expect(fullscreen.getByText('Maya is speaking')).toBeInTheDocument();
     expect(fullscreen.getByText(/Microphone listening · Echo-aware/)).toBeInTheDocument();
+  });
+
+  it('gives everyone on the call a tile, and outlines the one speaking', async () => {
+    const leoPack = { ...mayaRuntime.avatar_pack, character_id: 'leo', base_asset_id: 'image:leo-base', mouth_frames: { closed: 'image:leo-closed' } };
+    const withGuest = fixture<CharacterLiveCallRuntime>({
+      ...mayaRuntime,
+      scene_guests: [{ character_id: 'leo', display_name: 'Leo', voice_asset_id: null, voice_speaker_id: null, speech_style: null, avatar_pack: leoPack }],
+    });
+    const members = [
+      { character_id: 'maya', display_name: 'Maya', role: 'host', seat: 0 },
+      { character_id: 'leo', display_name: 'Leo', role: 'guest', seat: 1 },
+      // A guest the runtime has not been read for yet shows its initial.
+      { character_id: 'ivy', display_name: 'Ivy', role: 'guest', seat: 2 },
+    ];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+      const body = new URL(raw, window.location.origin).pathname.endsWith('/scene')
+        ? { available: true, reason: 'ready', max_guests: 2, members }
+        : { detail: 'not_found' };
+      return new Response(JSON.stringify(body), { status: 'members' in body ? 200 : 404, headers: { 'Content-Type': 'application/json' } });
+    });
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:maya' });
+    liveCallPresentationStore.update({ speaking: true, sceneSpeakerId: null });
+    enterLiveChatFullscreen('header');
+    renderShell();
+    act(() => publishCharacterAvatarRuntime(withGuest));
+    await act(async () => { await loadCallScene('chat:maya'); });
+
+    const room = await screen.findByRole('list', { name: 'Call members' });
+    const tiles = within(room).getAllByRole('listitem');
+    expect(tiles.map((tile) => tile.dataset.role)).toEqual(['host', 'guest', 'guest']);
+    expect(within(tiles[0]).getByAltText('Maya live avatar')).toBeTruthy();
+    expect(within(tiles[1]).getByAltText('Leo avatar').getAttribute('src')).toBe('/api/assets/image%3Aleo-closed/file');
+    expect(within(tiles[2]).getByLabelText('Ivy visual placeholder')).toBeTruthy();
+    expect(tiles.map((tile) => tile.dataset.speaking ?? '')).toEqual(['true', '', '']);
+
+    // A guest's line: its tile is outlined, and the host's mouth stays shut.
+    act(() => liveCallPresentationStore.update({ sceneSpeakerId: 'leo' }));
+    expect(tiles.map((tile) => tile.dataset.speaking ?? '')).toEqual(['', 'true', '']);
+    expect(within(tiles[1]).getByText('· speaking')).toBeTruthy();
+    expect(tiles[0].querySelector('.live-chat-stage-avatar')?.getAttribute('data-mouth-frame')).toBe('closed');
+
+    act(() => {
+      liveCallPresentationStore.resetForTests();
+      callSceneStore.resetForTests();
+    });
+    // Without guests the stage is the single character again.
+    expect(screen.queryByRole('list', { name: 'Call members' })).toBeNull();
+  });
+
+  it('seats a full call of five: the host and four guests each get a tile', async () => {
+    const guests = ['leo', 'ivy', 'ana', 'kai'];
+    const members = [
+      { character_id: 'maya', display_name: 'Maya', role: 'host', seat: 0 },
+      ...guests.map((id, index) => ({ character_id: id, display_name: id[0].toUpperCase() + id.slice(1), role: 'guest', seat: index + 1 })),
+    ];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+      const body = new URL(raw, window.location.origin).pathname.endsWith('/scene')
+        ? { available: true, reason: 'ready', max_guests: 4, members }
+        : { detail: 'not_found' };
+      return new Response(JSON.stringify(body), { status: 'members' in body ? 200 : 404, headers: { 'Content-Type': 'application/json' } });
+    });
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:maya' });
+    enterLiveChatFullscreen('header');
+    renderShell();
+    act(() => publishCharacterAvatarRuntime(mayaRuntime));
+    await act(async () => { await loadCallScene('chat:maya'); });
+
+    const room = await screen.findByRole('list', { name: 'Call members' });
+    expect(room.dataset.members).toBe('5');
+    expect(within(room).getAllByRole('listitem').map((tile) => tile.dataset.role)).toEqual(['host', 'guest', 'guest', 'guest', 'guest']);
+    expect(within(room).getByLabelText('Kai visual placeholder')).toBeTruthy();
+
+    act(() => callSceneStore.resetForTests());
   });
 
   it('hands call and composer actions to Chat', () => {

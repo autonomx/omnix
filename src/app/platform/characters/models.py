@@ -35,6 +35,7 @@ class CharacterProfileSnapshot(BaseModel):
     id: str = Field(min_length=1, max_length=160)
     display_name: str = Field(min_length=1, max_length=160)
     personality_prompt: str = Field(min_length=1)
+    description: str = Field(default="", max_length=4_000)
     default_greeting: str = Field(default="", max_length=2_000)
     default_voice_asset_id: str | None = Field(default=None, max_length=240)
     speech_style: dict[str, Any] = Field(default_factory=dict)
@@ -69,6 +70,7 @@ class CharacterProfile(BaseModel):
             id=self.id,
             display_name=self.display_name,
             personality_prompt=self.personality_prompt,
+            description=self.description,
             default_greeting=self.default_greeting,
             default_voice_asset_id=self.default_voice_asset_id,
             speech_style=dict(self.speech_style),

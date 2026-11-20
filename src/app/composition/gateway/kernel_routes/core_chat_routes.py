@@ -173,12 +173,14 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
             begin_user_message=begin_streaming if callable(begin_streaming) else None,
         )
         user_message = admission.user_message
-        # In a call with guests (companion 5.2) code picks who answers; the header names them for the call's voice.
-        from app.platform.chat.scene import SCENE_SPEAKER_HEADER, turn_scene
+        # In a call with guests (companion 5.2) a member the person names answers; otherwise the call's model
+        # proposes who answers first and code checks it. The header names the speaker for the call's voice.
+        from app.platform.chat.scene import SCENE_SPEAKER_HEADER
+        from app.platform.chat.scene_director import directed_turn_scene
 
         scene = None
         if not admission.existing:
-            scene = await asyncio.to_thread(turn_scene, admission.session, user_message.content)
+            scene = await asyncio.to_thread(directed_turn_scene, admission.session, user_message.content)
 
         def event_line(event: dict[str, Any]) -> str:
             return f"data: {json.dumps(event, sort_keys=True)}\n\n"

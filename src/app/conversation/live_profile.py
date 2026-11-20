@@ -66,13 +66,13 @@ class LiveConversationProfile(BaseModel):
     max_initiatives_per_hour: int = Field(default=4, ge=0, le=20)
     duplex_mode: DuplexMode = "automatic"
     pronunciation_save_policy: PronunciationSavePolicy = "ask"
-    # Characters on one call talk to each other (companion 6), off by default. A thread is at most
+    # Characters on one call talk to each other (companion 6), on by default (owner 2026-11-19). A thread is at most
     # scene_talk_max_lines character lines, the reply to the person included; attempts_per_hour None means the
     # level's number.
-    scene_talk_enabled: bool = False
+    scene_talk_enabled: bool = True
     scene_talk_level: SceneTalkLevel = "sometimes"
     scene_talk_attempts_per_hour: SceneTalkAttemptsPerHour | None = None
-    scene_talk_max_lines: int = Field(default=4, ge=2, le=8)
+    scene_talk_max_lines: int = Field(default=6, ge=2, le=10)
     # The most memories about one present character in a prompt.
     scene_memory_per_character: int = Field(default=5, ge=0, le=20)
     profile_version: int = Field(default=1, ge=1)
@@ -114,7 +114,7 @@ class LiveConversationProfileUpdate(BaseModel):
     scene_talk_enabled: bool | None = None
     scene_talk_level: SceneTalkLevel | None = None
     scene_talk_attempts_per_hour: SceneTalkAttemptsPerHour | None = None
-    scene_talk_max_lines: int | None = Field(default=None, ge=2, le=8)
+    scene_talk_max_lines: int | None = Field(default=None, ge=2, le=10)
     scene_memory_per_character: int | None = Field(default=None, ge=0, le=20)
 
 

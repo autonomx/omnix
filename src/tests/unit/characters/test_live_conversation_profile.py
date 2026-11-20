@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from app.platform.characters.live_conversation_profile import (
     LiveConversationProfileStore,
     LiveConversationProfileUpdate,
@@ -81,6 +84,16 @@ def test_scene_talk_settings_are_global_and_read_from_the_defaults(tmp_path: Pat
     after = store.update("chat:one", LiveConversationProfileUpdate(scene_talk_enabled=False, talkativeness=10))
     assert after.effective.scene_talk_enabled is True
     assert after.effective.talkativeness == 10
+
+
+def test_characters_talk_by_default_and_an_exchange_runs_to_ten_lines(tmp_path: Path) -> None:
+    # Owner 2026-11-19: group calls are lively by default; up to ten lines in one exchange, six unless set.
+    store = LiveConversationProfileStore(tmp_path / "live-conversation.json")
+    defaults = store.get_defaults()
+    assert (defaults.scene_talk_enabled, defaults.scene_talk_max_lines) == (True, 6)
+    assert store.update_defaults(LiveConversationProfileUpdate(scene_talk_max_lines=10)).scene_talk_max_lines == 10
+    with pytest.raises(ValidationError):
+        LiveConversationProfileUpdate(scene_talk_max_lines=11)
 
 
 def test_scene_talk_attempts_per_hour_null_means_the_level(tmp_path: Path) -> None:

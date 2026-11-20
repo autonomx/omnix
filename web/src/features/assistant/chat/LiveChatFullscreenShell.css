@@ -303,6 +303,119 @@
     font-weight: 700;
   }
 
+  /* Everyone on a call with guests gets a tile, as in a video call; the one speaking is outlined. */
+  .live-chat-stage-room {
+    display: grid;
+    gap: 0.75rem;
+    grid-auto-rows: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    padding: 0.75rem 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .live-chat-stage-room[data-members='3'] {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Four on a call share a 2 by 2 grid; with five the host keeps the tall tile and the four guests sit beside it. */
+  .live-chat-stage-room[data-members='4'] {
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .live-chat-stage-room[data-members='5'] {
+    grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .live-chat-stage-room[data-members='3'] > [data-role='host'],
+  .live-chat-stage-room[data-members='5'] > [data-role='host'] {
+    grid-row: span 2;
+  }
+
+  .live-chat-stage-tile {
+    background: var(--immersive-panel-soft);
+    border: 1px solid var(--immersive-border);
+    border-radius: 1rem;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .live-chat-stage-tile[data-speaking='true'] {
+    border-color: var(--immersive-accent);
+    box-shadow: 0 0 0 2px var(--immersive-accent), 0 0 1.6rem color-mix(in srgb, var(--immersive-accent) 30%, transparent);
+  }
+
+  .live-chat-stage-tile > .live-chat-stage-avatar,
+  .live-chat-stage-tile-picture {
+    min-height: 0;
+  }
+
+  .live-chat-stage-tile-picture {
+    align-items: end;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .live-chat-stage-tile-picture img {
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: center bottom;
+  }
+
+  .live-chat-stage-tile .live-chat-stage-fallback {
+    min-height: 0;
+  }
+
+  .live-chat-stage-tile .live-chat-stage-fallback span,
+  .live-chat-stage-tile-initial span {
+    align-items: center;
+    background: radial-gradient(circle at 35% 30%, var(--accent-violet-650), var(--bg-indigo-340-2) 68%);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-830) 34%, transparent);
+    border-radius: 50%;
+    display: flex;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    height: min(24vh, 12rem);
+    justify-content: center;
+    width: min(24vh, 12rem);
+  }
+
+  .live-chat-stage-tile .live-chat-stage-fallback i {
+    display: none;
+  }
+
+  .live-chat-stage-tile-initial {
+    align-items: center;
+    align-self: stretch;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .live-chat-stage-tile-name {
+    background: color-mix(in srgb, var(--bg-indigo-170) 72%, transparent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    overflow: hidden;
+    padding: 0.4rem 0.7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .live-chat-stage-tile-name small {
+    color: var(--immersive-accent);
+    font-size: inherit;
+  }
+
   .live-chat-character-stage > footer {
     border-top: 1px solid color-mix(in srgb, var(--accent-violet-810) 12%, transparent);
     color: var(--immersive-muted);
@@ -559,6 +672,29 @@
 
     .live-chat-stage-avatar img {
       max-height: 34dvh;
+    }
+
+    .live-chat-stage-room .live-chat-stage-avatar img,
+    .live-chat-stage-tile-picture img {
+      max-height: 26dvh;
+    }
+
+    /* A phone keeps two columns: five members take three rows, so every tile is shorter. */
+    .live-chat-stage-room[data-members='5'] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: none;
+    }
+
+    .live-chat-stage-room[data-members='5'] > [data-role='host'] {
+      grid-column: span 2;
+      grid-row: auto;
+    }
+
+    .live-chat-stage-room[data-members='4'] .live-chat-stage-avatar img,
+    .live-chat-stage-room[data-members='4'] .live-chat-stage-tile-picture img,
+    .live-chat-stage-room[data-members='5'] .live-chat-stage-avatar img,
+    .live-chat-stage-room[data-members='5'] .live-chat-stage-tile-picture img {
+      max-height: 17dvh;
     }
   }
 

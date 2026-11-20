@@ -1,6 +1,6 @@
 """Several characters in one call (companion 5): who speaks, and the session as the speaker sees it.
 
-A character chat's own character is the scene's host. The person may add up to two guests (chat's
+A character chat's own character is the scene's host. The person may add up to four guests (chat's
 ``omnix_chat_scene_members``). Each reply is spoken by one of them, and its metadata names the speaker;
 a reply without a speaker is the host's, so every older reply stays the host's.
 
@@ -11,12 +11,12 @@ chat to the guest.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 SPEAKER_ID_KEY = "speaker_character_id"
 SPEAKER_NAME_KEY = "speaker_name"
-MAX_SCENE_GUESTS = 2
+MAX_SCENE_GUESTS = 4
 # Message metadata memory reads (companion 6.3, 6.5): the part of an interrupted scene line the person heard, as
 # words (None when unknown), and a person's turn that mostly repeats a character's line the microphone heard.
 HEARD_TEXT_KEY = "heard_text"
@@ -29,8 +29,11 @@ class SceneViewSaveError(RuntimeError):
 
 @dataclass(frozen=True)
 class SceneMember:
+    """A character on the call. ``summary`` is a one-line, untrusted description of who they are (Q20)."""
+
     character_id: str
     display_name: str
+    summary: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True)

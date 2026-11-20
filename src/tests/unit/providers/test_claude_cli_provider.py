@@ -221,6 +221,28 @@ def test_a_repeated_kind_of_call_takes_a_process_started_ahead_of_it(pooled) -> 
     assert all(not process.alive for process in _WaitingPopen.killed)
 
 
+def test_a_group_call_keeps_a_process_waiting_for_each_of_its_characters(pooled) -> None:
+    provider, pool = pooled
+    characters = ("Mara", "Bea", "Theo", "Ada", "Lev")
+    provider.chat_completion([ChatMessage("system", "Summarize."), ChatMessage("user", "x")])
+    provider.chat_completion([ChatMessage("system", "Summarize."), ChatMessage("user", "x")])  # not a live kind
+    for _ in range(2):
+        for name in characters:
+            provider.chat_completion([ChatMessage("system", f"You are {name}."), ChatMessage("user", "hi")],
+                                     live_turn=True)
+    # Every character's next line finds its process: one place per live kind, and one more.
+    assert len(pool._warm) == len(characters) + 1
+    calls = len(_FakePopen.calls)
+    for name in characters:
+        provider.chat_completion([ChatMessage("system", f"You are {name}."), ChatMessage("user", "again")],
+                                 live_turn=True)
+    assert len(_FakePopen.calls) == calls + len(characters)  # each took a waiting process and left the next one
+    for index in range(10):  # more live kinds than the cap: the pool stays at its most
+        provider.chat_completion([ChatMessage("system", f"Kind {index}."), ChatMessage("user", "hi")], live_turn=True)
+    assert len(pool._warm) == pool.MAX_LIVE_WARM
+    pool.close()
+
+
 def test_the_pool_keeps_few_processes_and_retires_idle_ones(pooled) -> None:
     provider, pool = pooled
     pool.IDLE_SECONDS = 2.0  # long enough for the calls below on a busy machine

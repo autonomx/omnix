@@ -473,16 +473,22 @@ class ChatSessionStore(JsonChatSessionStore):
         session: ChatSession,
         user_message: ChatMessage,
         context_items: list[dict[str, Any]],
+        *,
+        live_turn: bool = False,
     ):
         _, rendered = self.build_provider_prompt(session, user_message, context_items)
-        return self._provider_messages_from_rendered(session, user_message, rendered)
+        return self._provider_messages_from_rendered(session, user_message, rendered, live_turn=live_turn)
 
     @staticmethod
     def _provider_messages_from_rendered(
         session: ChatSession,
         user_message: ChatMessage,
         rendered: RenderedPrompt,
+        *,
+        live_turn: bool = False,
     ):
+        """The provider's messages. On a spoken turn (``live_turn``) a system message that changes between turns stays
+        marked ``per_turn``, so the call's system prompt, and the process waiting for it, stay the same."""
         source_messages = {message.id: message for message in session.messages}
         source_messages[user_message.id] = user_message
         provider_messages = []
@@ -491,7 +497,8 @@ class ChatSessionStore(JsonChatSessionStore):
             if source.role != message.role:
                 # Another scene member's reply is rendered as their quoted line (companion 5.3): it keeps that role.
                 source = message
-            provider_messages.append(_provider_message(source, content=message.content))
+            provider_messages.append(
+                _provider_message(source, content=message.content, per_turn=live_turn and message.per_turn))
         return provider_messages
 
     @staticmethod
@@ -779,7 +786,6 @@ class ChatSessionStore(JsonChatSessionStore):
                 routing_deadline_at=routing_deadline_at,
             )
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
-        messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
         completion_kwargs: dict[str, Any] = (
             {"conversation_id": session.id}
@@ -788,6 +794,8 @@ class ChatSessionStore(JsonChatSessionStore):
         )
         if provider_supports(provider_id, LIVE_TURNS) and live_voice.is_live_voice_message(user_message):
             completion_kwargs["live_turn"] = True
+        messages = self._provider_messages_from_rendered(
+            session, user_message, rendered, live_turn=bool(completion_kwargs.get("live_turn")))
         from app.providers.structured.errors import ProviderTimeout
 
         remaining = remaining_turn_seconds(

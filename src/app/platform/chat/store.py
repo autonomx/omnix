@@ -766,6 +766,8 @@ class ChatSessionStore:
         session: ChatSession,
         user_message: ChatMessage,
         context_items: list[dict[str, Any]],
+        *,
+        live_turn: bool = False,  # unused: these messages have no part that changes between turns
     ):
         from app.providers import ChatMessage as ProviderMessage
         from app.providers.service import get_global_system_prompt
@@ -871,7 +873,7 @@ class ChatSessionStore:
         )
 
 
-def _provider_message(message, *, content: str | None = None):
+def _provider_message(message, *, content: str | None = None, per_turn: bool = False):
     """Convert a stored chat message while preserving user attachments."""
 
     from app.providers import ChatMessage as ProviderMessage
@@ -885,6 +887,7 @@ def _provider_message(message, *, content: str | None = None):
         role=message.role,
         content=f"{message.content if content is None else content}{attachment_text}",
         vision_images=vision_images,
+        per_turn=per_turn,
     )
 
 

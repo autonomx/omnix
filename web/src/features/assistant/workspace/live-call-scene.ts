@@ -7,7 +7,7 @@ import type { components } from '../api/generated';
 import { characterClient } from '../chat/characterClient';
 
 /**
- * Who is on a character call (live companion roadmap 5.5/5.6): the host and up to two guests. The server owns the
+ * Who is on a character call (live companion roadmap 5.5/5.6): the host and up to four guests. The server owns the
  * seats and decides who speaks each turn; this module mirrors the members for the call panel, and maps a turn's
  * speaker (the `X-Omnix-Scene-Speaker` header) to that member's voice.
  */
@@ -42,9 +42,11 @@ export type CallSceneState = {
   /** The character being added or removed. */
   changing: string | null;
   error: string | null;
+  /** The guests' voices and avatars as the call runtime last read them after a change; null until one is read. */
+  guests: CallSceneGuest[] | null;
 };
 
-const EMPTY: CallSceneState = { sessionId: null, scene: null, loading: false, changing: null, error: null };
+const EMPTY: CallSceneState = { sessionId: null, scene: null, loading: false, changing: null, error: null, guests: null };
 let state: CallSceneState = EMPTY;
 const listeners = new Set<() => void>();
 let loadToken = 0;
@@ -118,8 +120,10 @@ async function changeScene(sessionId: string, characterId: string, request: () =
     const scene = await request();
     if (token !== loadToken) return;
     setState({ scene: sceneOrNull(scene), changing: null });
-    // The runtime carries each guest's voice: the next turn a guest speaks must find it.
-    await characterClient.refreshLiveCallRuntime(sessionId).catch(() => undefined);
+    // The runtime carries each guest's voice and avatar: the next turn a guest speaks must find it, and the
+    // full-screen call shows the new guest's face.
+    const runtime = await characterClient.refreshLiveCallRuntime(sessionId).catch(() => null);
+    if (runtime && token === loadToken) setState({ guests: runtime.scene_guests ?? [] });
   } catch (error) {
     if (token === loadToken) setState({ changing: null, error: errorText(error) });
   }
@@ -152,7 +156,7 @@ export function sceneSpeakerFrom(response: Response): string | null {
 }
 
 const SCENE_ERRORS: Record<string, string> = {
-  scene_full: 'The call already has two guests.',
+  scene_full: 'The call already has four guests.',
   host_is_already_in_the_call: 'That character is already hosting this call.',
   character_not_available: 'That character cannot join the call.',
   guest_not_found: 'That character is no longer on the call.',

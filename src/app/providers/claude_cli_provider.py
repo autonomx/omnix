@@ -123,9 +123,14 @@ class _WarmPool:
     of a call, ``LIVE_IDLE_SECONDS``; the call's warm-up, which repeats on speech
     after five quiet minutes, starts another when that one has gone. A call holds two
     kinds, its replies and its overlap judge, and the third place is for a switch of identity.
+
+    A group call holds more live kinds: each character's turns, its directors and its judge. The pool then keeps a
+    place for every live kind used within ``LIVE_IDLE_SECONDS``, plus one, up to ``MAX_LIVE_WARM`` (Q21). When the
+    pool is full, a process for anything but a live call makes room first, then the oldest.
     """
 
     MAX_WARM = 3
+    MAX_LIVE_WARM = 8
     IDLE_SECONDS = 120.0
     LIVE_IDLE_SECONDS = 360.0
     MIN_USES = 2
@@ -133,15 +138,16 @@ class _WarmPool:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._warm: dict[str, tuple[subprocess.Popen[str], str, float]] = {}
+        self._warm: dict[str, tuple[subprocess.Popen[str], str, float, bool]] = {}
         self._uses: dict[str, int] = {}
+        self._live_used: dict[str, float] = {}
 
     def take(self, kind: str) -> tuple[subprocess.Popen[str], str] | None:
         with self._lock:
             entry = self._warm.pop(kind, None)
         if entry is None:
             return None
-        process, workdir, _ = entry
+        process, workdir = entry[0], entry[1]
         if process.poll() is not None:
             _discard(process, workdir)
             return None
@@ -152,13 +158,18 @@ class _WarmPool:
             if kind not in self._uses and len(self._uses) >= self._MAX_KINDS:
                 self._uses.clear()
             self._uses[kind] = self._uses.get(kind, 0) + 1
+            now = time.monotonic()
+            if live:
+                self._live_used[kind] = now
             if (self._uses[kind] < self.MIN_USES and not live) or kind in self._warm:
                 return
             evicted = []
-            while len(self._warm) >= self.MAX_WARM:
-                oldest = min(self._warm, key=lambda key: self._warm[key][2])
+            room = self._room(now)
+            while len(self._warm) >= room:
+                # A process for something other than a live call goes first, then the oldest.
+                oldest = min(self._warm, key=lambda key: (self._warm[key][3], self._warm[key][2]))
                 evicted.append(self._warm.pop(oldest))
-        for process, workdir, _ in evicted:
+        for process, workdir, *_ in evicted:
             _discard(process, workdir)
         try:
             process, workdir = spawn()
@@ -167,12 +178,17 @@ class _WarmPool:
             return
         with self._lock:
             stale = self._warm.get(kind)
-            self._warm[kind] = (process, workdir, time.monotonic())
+            self._warm[kind] = (process, workdir, time.monotonic(), live)
         if stale is not None:
             _discard(stale[0], stale[1])
         timer = threading.Timer(self.LIVE_IDLE_SECONDS if live else self.IDLE_SECONDS, self._expire, args=(kind, process))
         timer.daemon = True
         timer.start()
+
+    def _room(self, now: float) -> int:
+        """How many processes may wait: three, or one per live kind used lately and one more, up to eight."""
+        self._live_used = {kind: used for kind, used in self._live_used.items() if now - used < self.LIVE_IDLE_SECONDS}
+        return min(self.MAX_LIVE_WARM, max(self.MAX_WARM, len(self._live_used) + 1))
 
     def _expire(self, kind: str, process: subprocess.Popen[str]) -> None:
         with self._lock:
@@ -186,7 +202,7 @@ class _WarmPool:
         with self._lock:
             entries = list(self._warm.values())
             self._warm.clear()
-        for process, workdir, _ in entries:
+        for process, workdir, *_ in entries:
             _discard(process, workdir)
 
 

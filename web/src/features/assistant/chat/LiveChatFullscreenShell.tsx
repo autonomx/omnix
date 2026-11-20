@@ -12,8 +12,8 @@ import {
 } from './live-chat-fullscreen-controller';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
-import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
-import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar } from './liveCharacterAvatarBridge';
+import { readLatestTrustedCharacterRuntime, type CharacterAvatarPack, type CharacterLiveCallRuntime } from './characterClient';
+import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar, type LiveAvatarState } from './liveCharacterAvatarBridge';
 import { LiveCallScene } from './LiveCallScene';
 import { LiveCallTaskChips } from './LiveCallTaskChips';
 import { LiveMuteButton } from './LiveMuteButton';
@@ -22,6 +22,7 @@ import { LiveShowButton } from './LiveShowButton';
 import { LivePortraitCanvas } from './portrait/LivePortraitCanvas';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
+import { callSceneGuests, useCallScene } from '../workspace/live-call-scene';
 import './LiveChatFullscreenShell.css';
 import { CHARACTER_AVATAR_RUNTIME_EVENT, CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/bus';
 
@@ -150,10 +151,10 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
 
       <main className="live-chat-fullscreen-layout">
         <LiveCharacterStage
-          speaking={presentation.speaking}
+          speaking={presentation.speaking} speakerId={presentation.sceneSpeakerId}
+          sessionId={runtime.sessionId}
           identity={displayIdentity}
-          status={snapshot.state}
-          stageMode={stageMode}
+          status={snapshot.state} stageMode={stageMode}
           characterRuntime={characterRuntime}
         />
 
@@ -226,23 +227,36 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
 
 function LiveCharacterStage({
   speaking,
+  speakerId,
+  sessionId,
   identity,
   status,
   stageMode,
   characterRuntime,
 }: {
   speaking: boolean;
+  /** The call member speaking the current reply; none is the chat's own character. */
+  speakerId: string | null;
+  sessionId: string | null;
   identity: string;
   status: string;
   stageMode: string;
   characterRuntime: CharacterLiveCallRuntime | null;
 }) {
-  const live = useLiveAvatar();
+  const liveAvatar = useLiveAvatar();
+  const scene = useCallScene();
   // The runtime may be on its way when fullscreen opens; the avatar on screen is drawn from what the panel has.
-  const shownRuntime = characterRuntime ?? live.runtime;
+  const shownRuntime = characterRuntime ?? liveAvatar.runtime;
+  // Everyone on the call gets a tile, as in a video call; a guest's face comes from the runtime read after it joined.
+  const guests = sessionId && scene.sessionId === sessionId ? callSceneGuests(scene) : [];
+  const guestRuntime = scene.guests ?? shownRuntime?.scene_guests ?? [];
+  const guestSpeaking = speaking && guests.some((guest) => guest.character_id === speakerId);
+  // The reply's audio moves the speaker's mouth, not the host's.
+  const live = guestSpeaking ? { ...liveAvatar, mouthFrame: 'closed' as const } : liveAvatar;
+  const hostSpeaking = speaking && !guestSpeaking;
   const { pack, portraitState, notice } = useDrawnAvatarPack(shownRuntime?.avatar_pack);
   const isPortrait = pack?.renderer === 'portrait' && Boolean(pack.base_asset_id);
-  const voiceMode = speaking ? 'speaking' : stageMode === 'listening' ? 'listening' : 'idle';
+  const voiceMode = hostSpeaking ? 'speaking' : stageMode === 'listening' ? 'listening' : 'idle';
   const presentationState = avatarPresentationState(live.mouthFrame, voiceMode, stageMode === 'thinking');
   const assetId = avatarFrameAsset(pack, live, presentationState);
   const avatar = {
@@ -267,28 +281,87 @@ function LiveCharacterStage({
     emitOmnixEvent(CHARACTER_LIVE2D_RENDER_EVENT, { runtime: live2dRuntime, host: live2dHostRef.current });
   }, [live2dRuntime, isLive2D]);
 
+  const hostAvatar = (
+    <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
+      {isPortrait ? (
+        <figure className="assistant-live-character-avatar" data-renderer="portrait" data-portrait-status={portraitState.status}>
+          <LivePortraitCanvas
+            key={portraitState.status === 'off' ? 'idle' : 'call'}
+            imageUrl={characterAvatarAssetUrl(pack?.base_asset_id ?? '')}
+            label={`${identity} live portrait`}
+          />
+        </figure>
+      ) : isLive2D ? <figure ref={live2dHostRef} className="assistant-live-character-avatar" data-renderer="live2d" aria-label={`${identity} Live2D avatar`} /> : avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div role="img" className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
+      {notice ? <p className="assistant-live-portrait-notice" role="status">{notice}</p> : null}
+    </div>
+  );
+
   return (
     <section className="live-chat-character-stage" style={stageStyle} aria-label={`${identity} character stage`}>
       <div className="live-chat-stage-stars" aria-hidden="true" />
       <header><div><p className="eyebrow">Live room</p><h2>{identity}</h2></div><span>{title(stageMode)}</span></header>
-      <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
-        {isPortrait ? (
-          <figure className="assistant-live-character-avatar" data-renderer="portrait" data-portrait-status={portraitState.status}>
-            <LivePortraitCanvas
-              key={portraitState.status === 'off' ? 'idle' : 'call'}
-              imageUrl={characterAvatarAssetUrl(pack?.base_asset_id ?? '')}
-              label={`${identity} live portrait`}
+      {guests.length ? (
+        <div className="live-chat-stage-room" data-members={guests.length + 1} aria-label="Call members" role="list">
+          <div className="live-chat-stage-tile" role="listitem" data-role="host" data-speaking={hostSpeaking ? 'true' : undefined}>
+            {hostAvatar}
+            <span className="live-chat-stage-tile-name">{identity}</span>
+          </div>
+          {guests.map((guest) => (
+            <LiveCallGuestTile
+              key={guest.character_id}
+              name={guest.display_name}
+              pack={guestRuntime.find((candidate) => candidate.character_id === guest.character_id)?.avatar_pack ?? null}
+              speaking={speaking && guest.character_id === speakerId}
+              avatar={liveAvatar}
             />
-          </figure>
-        ) : isLive2D ? <figure ref={live2dHostRef} className="assistant-live-character-avatar" data-renderer="live2d" aria-label={`${identity} Live2D avatar`} /> : avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div role="img" className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
-        {notice ? <p className="assistant-live-portrait-notice" role="status">{notice}</p> : null}
-      </div>
+          ))}
+        </div>
+      ) : hostAvatar}
       {isLive2D ? <Live2DMotionControl rigAssetId={pack?.rig_asset_id} /> : null}
       {isLive2D ? <Live2DZoomControl /> : null}
       <div className="live-chat-stage-caption" aria-live="polite"><i aria-hidden="true" /><span>{status}</span></div>
       <footer><span>Character-first mode</span><span>{isPortrait ? 'Live portrait linked' : avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>
     </section>
   );
+}
+
+/**
+ * A guest's tile: its pack's still picture, or its initial. A sprite guest's mouth follows the reply it is speaking;
+ * a portrait or Live2D guest shows its base picture, since only the host's avatar is driven live.
+ */
+function LiveCallGuestTile({
+  name,
+  pack,
+  speaking,
+  avatar,
+}: {
+  name: string;
+  pack: CharacterAvatarPack | null;
+  speaking: boolean;
+  avatar: Pick<LiveAvatarState, 'mouthFrame' | 'blinkClosed'>;
+}) {
+  const assetId = guestPictureAsset(pack, speaking ? avatar : { mouthFrame: 'closed', blinkClosed: false }, speaking);
+  const initial = name.trim().charAt(0).toLocaleUpperCase() || '?';
+  return (
+    <div className="live-chat-stage-tile" role="listitem" data-role="guest" data-speaking={speaking ? 'true' : undefined}>
+      <div className="live-chat-stage-tile-picture">
+        {assetId
+          ? <img src={characterAvatarAssetUrl(assetId)} alt={`${name} avatar`} />
+          : <div role="img" className="live-chat-stage-tile-initial" aria-label={`${name} visual placeholder`}><span>{initial}</span></div>}
+      </div>
+      <span className="live-chat-stage-tile-name">{name}{speaking ? <small> · speaking</small> : null}</span>
+    </div>
+  );
+}
+
+function guestPictureAsset(
+  pack: CharacterAvatarPack | null,
+  avatar: Pick<LiveAvatarState, 'mouthFrame' | 'blinkClosed'>,
+  speaking: boolean,
+): string {
+  if (!pack) return '';
+  if (pack.renderer === 'sprite') return avatarFrameAsset(pack, avatar, speaking ? 'speaking' : 'idle') || pack.base_asset_id || '';
+  return pack.base_asset_id || '';
 }
 
 function formatTime(value: string): string {

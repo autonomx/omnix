@@ -9,7 +9,7 @@ from app.security.tenant_context import RequestTenant
 
 
 class SceneFullError(ValueError):
-    """The chat already has its two guests."""
+    """The chat already has its four guests."""
 
 
 @dataclass(frozen=True)

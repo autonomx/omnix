@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.providers.catalog import LIVE_TURNS, provider_supports
 from app.providers.service import get_provider
 from app.providers import ChatMessage as ProviderMessage
 
@@ -411,10 +412,17 @@ def stream_proactive_turn_chunks(
         created_at=_utcnow(),
         metadata={"source": purpose, "purpose": purpose, "transient": True},
     )
-    provider_messages = store._provider_messages(_provider_session(session), synthetic_message, [])
-    messages = [ProviderMessage(role=message.role, content=message.content) for message in provider_messages]
+    # Every proactive turn is spoken on a call (Q3): it answers as a spoken turn does, without thinking first.
+    # On Haiku 4.5 through the CLI a scene line took 13-40 s to its first word without this, 0.6-1.1 s with it.
+    # Its parts that change between turns go with the turn, so each character's next line takes a waiting process.
+    completion_kwargs: dict[str, Any] = {"live_turn": True} if provider_supports(provider, LIVE_TURNS) else {}
+    provider_messages = store._provider_messages(_provider_session(session), synthetic_message, [], **completion_kwargs)
+    messages = [
+        ProviderMessage(role=message.role, content=message.content, per_turn=bool(getattr(message, "per_turn", False)))
+        for message in provider_messages
+    ]
     model_name = _model_key(resolved_model_id)
-    response = provider.chat_completion(messages=messages, model=model_name, stream=True)
+    response = provider.chat_completion(messages=messages, model=model_name, stream=True, **completion_kwargs)
     pending = ""
     full_text = ""
     resolved_model = model_name

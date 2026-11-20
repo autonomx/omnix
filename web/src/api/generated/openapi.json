@@ -29686,7 +29686,7 @@
             "title": "Scene Talk Attempts Per Hour"
           },
           "scene_talk_enabled": {
-            "default": false,
+            "default": true,
             "title": "Scene Talk Enabled",
             "type": "boolean"
           },
@@ -29701,8 +29701,8 @@
             "type": "string"
           },
           "scene_talk_max_lines": {
-            "default": 4,
-            "maximum": 8,
+            "default": 6,
+            "maximum": 10,
             "minimum": 2,
             "title": "Scene Talk Max Lines",
             "type": "integer"
@@ -30126,7 +30126,7 @@
           "scene_talk_max_lines": {
             "anyOf": [
               {
-                "maximum": 8,
+                "maximum": 10,
                 "minimum": 2,
                 "type": "integer"
               },
@@ -60485,7 +60485,7 @@
             "type": "boolean"
           },
           "max_guests": {
-            "default": 2,
+            "default": 4,
             "title": "Max Guests",
             "type": "integer"
           },
