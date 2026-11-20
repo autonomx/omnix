@@ -63,7 +63,7 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
 
 
 def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
-    """The stream task needs the scheduler's event loop, so the cycle must not run on a thread."""
+    """The stream task needs an event loop that outlives the cycle: the trading loop, never a worker thread."""
     from app.apps.trading.providers import alpaca_iex_status
 
     sessions = []
@@ -102,10 +102,15 @@ def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
                 scheduled_at=datetime.now(timezone.utc),
             )
         )
-        await asyncio.sleep(0)
-        await monitor.stop()
+        await asyncio.sleep(0.05)
+        # The scheduler stops it through the task's shutdown, on the loop the stream runs on.
+        for callback in task.on_shutdown:
+            result = callback()
+            if asyncio.iscoroutine(result):
+                await result
 
     asyncio.run(scheduled_cycle())
+    assert monitor._task is None
 
     assert sessions == [monitor]
 
@@ -175,6 +180,82 @@ def test_a_failed_cycle_is_logged_with_the_monitor_event_and_reaches_the_schedul
     for callback in spec.on_shutdown:
         callback()
     assert monitor.scheduled is False
+
+
+def test_a_cycle_runs_on_the_trading_loop_and_a_blocking_one_never_stalls_the_gateways():
+    import contextvars
+    import threading
+    import time
+
+    from app.apps.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask, scheduled_task_spec
+
+    tenant = contextvars.ContextVar("tests_tenant", default=None)
+    seen = {}
+
+    class Blocking(ScheduledTradingMonitor):
+        async def run_once(self):
+            seen["thread"] = threading.current_thread().name
+            seen["tenant"] = tenant.get()
+            time.sleep(0.3)  # a synchronous read or provider call inside the cycle
+
+        async def prepare_for_scheduled_execution(self):
+            seen["startup"] = threading.current_thread().name
+
+    spec = scheduled_task_spec(TradingMonitorTask(name="tests.blocking", monitor=Blocking(), enabled=lambda: True))
+    context = TaskContext(task_id=spec.task_id, workspace_id="w", scheduled_at=datetime.now(timezone.utc))
+
+    async def gateway():
+        for callback in spec.on_startup:
+            result = callback()
+            if asyncio.iscoroutine(result):
+                await result
+        ticks = 0
+        tenant.set("workspace-a")
+        cycle = asyncio.create_task(spec.run(context))
+        while not cycle.done():
+            await asyncio.sleep(0.02)
+            ticks += 1
+        await cycle
+        return ticks
+
+    ticks = asyncio.run(gateway())
+    # The gateway's loop kept ticking through the 0.3 s block, and the cycle saw the scheduler's context.
+    assert ticks >= 8
+    assert seen == {"startup": "omnix-trading-loop", "thread": "omnix-trading-loop", "tenant": "workspace-a"}
+
+
+def test_a_timed_out_cycle_is_cancelled_on_the_trading_loop_and_waited_out():
+    from app.apps.trading.monitor_task import on_trading_loop
+
+    events = []
+
+    async def cycle():
+        try:
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.05)  # it cleans up before it stops
+            events.append("cleaned up")
+            raise
+
+    async def scheduler():
+        try:
+            await asyncio.wait_for(on_trading_loop(cycle), timeout=0.1)
+        except asyncio.TimeoutError:
+            events.append("timed out")
+
+    asyncio.run(scheduler())
+    assert events == ["cleaned up", "timed out"]
+
+    async def failing():
+        raise ValueError("provider down")
+
+    async def caller():
+        try:
+            await on_trading_loop(failing)
+        except ValueError as error:
+            return str(error)
+
+    assert asyncio.run(caller()) == "provider down"
 
 
 def test_monitor_cycles_get_a_trading_timeout_and_retry_after_one():

@@ -233,8 +233,14 @@ def strategy_runner_task(context) -> Any:
     if state is not None:
         setattr(state, RUNTIME_STATE_KEY, runner)
 
+    from ..monitor_task import on_trading_loop
+
+    # On the trading loop with the monitors, so a slow cycle never stalls the gateway's.
     async def run(_task_context) -> int:
-        return await runner.run_cycle()
+        return await on_trading_loop(runner.run_cycle)
+
+    async def close() -> None:
+        await on_trading_loop(runner.close)
 
     return ScheduledTaskSpec(
         task_id=TASK_ID,
@@ -243,5 +249,5 @@ def strategy_runner_task(context) -> Any:
         jitter_seconds=min(1.0, interval_seconds * 0.05),
         timeout_seconds=max(120.0, interval_seconds),
         executor="async",
-        on_shutdown=(runner.close,),
+        on_shutdown=(close,),
     )

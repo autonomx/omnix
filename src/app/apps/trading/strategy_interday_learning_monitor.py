@@ -59,6 +59,11 @@ def _same_session(event_time: datetime, session_date) -> bool:
     return event_time.astimezone(_ET).date() == session_date
 
 
+def _session_events(repo: TradingStrategyRepository, strategy_id: str, session_date) -> list[StrategyEvent]:
+    rows = repo.recent_events(strategy_id, 10_000)
+    return [row for row in rows if _same_session(row.observed_at, session_date)]
+
+
 async def _run_interday_learning_once_core(
     *,
     now: datetime | None = None,
@@ -94,10 +99,10 @@ async def _run_interday_learning_once_core(
     }
     events_by_strategy: dict[str, list[StrategyEvent]] = {}
     for strategy_id in sorted(strategy_ids):
-        rows = await asyncio.to_thread(repo.recent_events, strategy_id, 10_000)
-        events_by_strategy[strategy_id] = [
-            row for row in rows if _same_session(row.observed_at, session_date)
-        ]
+        # Up to 10,000 rows: the filter runs on the worker thread with the read, not on the loop.
+        events_by_strategy[strategy_id] = await asyncio.to_thread(
+            _session_events, repo, strategy_id, session_date
+        )
     bridged = await asyncio.to_thread(
         bridge_strategy_events,
         repo,

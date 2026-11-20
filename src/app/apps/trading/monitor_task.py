@@ -5,13 +5,18 @@ and exposes ``run_once`` and its cadence; it has no start, stop or loop of
 its own. Each monitor module returns a ``TradingMonitorTask`` from its
 ``create_*_task`` factory, and ``scheduled_task_spec`` turns that into the
 ``ScheduledTaskSpec`` the trading feature registers.
+
+An async monitor's cycle runs on the trading loop (``on_trading_loop``), not
+on the gateway's: a cycle that blocks (a synchronous read, a provider call)
+then delays only other trading work, never a live call or a chat stream.
 """
 from __future__ import annotations
 
 import asyncio
 import inspect
+import threading
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -22,6 +27,88 @@ from .trade_logging import trade_log
 # A trading cycle fetches bars and may call a model for dozens of candidates;
 # at the open that legitimately takes longer than a minute.
 TRADING_MONITOR_TIMEOUT_SECONDS = 300.0
+
+
+class _TradingLoop:
+    """The trading monitors' own event loop, on its own thread, started on first use."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+
+    def loop(self) -> asyncio.AbstractEventLoop:
+        with self._lock:
+            if self._loop is None or self._thread is None or not self._thread.is_alive():
+                loop = asyncio.new_event_loop()
+                thread = threading.Thread(target=loop.run_forever, name="omnix-trading-loop", daemon=True)
+                thread.start()
+                self._loop, self._thread = loop, thread
+            return self._loop
+
+
+_TRADING_LOOP = _TradingLoop()
+
+
+async def _call(work: Callable[[], Any]) -> Any:
+    result = work()
+    if inspect.isawaitable(result):
+        result = await result
+    return result
+
+
+def _post(loop: asyncio.AbstractEventLoop, callback: Callable[..., Any], *args: Any) -> None:
+    try:
+        loop.call_soon_threadsafe(callback, *args)
+    except RuntimeError:  # the caller's loop has closed: nobody waits for the result
+        pass
+
+
+async def on_trading_loop(work: Callable[[], Any]) -> Any:
+    """Run ``work`` (a function, or one returning an awaitable) on the trading loop and return its result.
+
+    The caller's context variables go with it (tenant, background owner, statement class). Cancelling the caller
+    cancels the work and waits it out, as the scheduler does for its own tasks, so a timed-out cycle never overlaps
+    the next one.
+    """
+    caller = asyncio.get_running_loop()
+    loop = _TRADING_LOOP.loop()
+    if loop is caller:
+        return await _call(work)
+    outcome: asyncio.Future[Any] = caller.create_future()
+    started: list[asyncio.Task[Any]] = []
+
+    def relay(task: asyncio.Task[Any]) -> None:
+        if outcome.done():
+            return
+        if task.cancelled():
+            outcome.cancel()
+        elif (error := task.exception()) is not None:
+            outcome.set_exception(error)
+        else:
+            outcome.set_result(task.result())
+
+    def start() -> None:
+        # Runs in a copy of the caller's context (call_soon_threadsafe copies it); the task copies it again.
+        task = loop.create_task(_call(work))
+        started.append(task)
+        task.add_done_callback(lambda done: _post(caller, relay, done))
+
+    def cancel() -> None:
+        for task in started:
+            task.cancel()
+
+    loop.call_soon_threadsafe(start)
+    try:
+        return await asyncio.shield(outcome)
+    except asyncio.CancelledError:
+        loop.call_soon_threadsafe(cancel)
+        await asyncio.gather(outcome, return_exceptions=True)
+        raise
+
+
+def _on_trading_loop_callback(callback: Callable[[], Any]) -> Callable[[], Awaitable[Any]]:
+    return lambda: on_trading_loop(callback)
 
 
 class ScheduledTradingMonitor:
@@ -142,7 +229,7 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
             if not due():
                 return
             try:
-                await run_once()
+                await on_trading_loop(run_once)
             except Exception as exc:
                 monitor.record_cycle_error(exc)
                 raise
@@ -168,6 +255,11 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
     prepare = getattr(monitor, "prepare_for_scheduled_execution", None)
     if not startup and callable(prepare):
         startup = (prepare,)
+    shutdown = task.shutdown
+    if executor == "async":
+        # Its startup and shutdown run where its cycles do: a task or client a cycle made belongs to that loop.
+        startup = tuple(_on_trading_loop_callback(callback) for callback in startup)
+        shutdown = tuple(_on_trading_loop_callback(callback) for callback in shutdown)
 
     # The scheduler runs these only in the process that owns the task.
     def started() -> None:
@@ -188,7 +280,7 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
         executor=executor,
         enabled=task.enabled,
         on_startup=(*startup, started),
-        on_shutdown=(stopped, *task.shutdown),
+        on_shutdown=(stopped, *shutdown),
     )
 
 
@@ -197,5 +289,6 @@ __all__ = [
     "ScheduledTradingMonitor",
     "SingleFlightTasks",
     "TradingMonitorTask",
+    "on_trading_loop",
     "scheduled_task_spec",
 ]
