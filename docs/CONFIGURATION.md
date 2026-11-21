@@ -285,6 +285,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
 | `OMNIX_START_HERMES` | boolean | — | launcher | Controls start hermes for launcher. |
 | `OMNIX_START_IMAGE_SERVICE` | string | — | launcher | Controls start image service for launcher. |
+| `OMNIX_STT_CONTEXT_BOOST_ALPHA` | string | `0.5` | providers | Controls stt context boost alpha for providers. |
 | `OMNIX_STT_DEVICE` | string | `auto` | providers | Controls stt device for providers. |
 | `OMNIX_STT_PORT` | integer | `5201` | tooling | Controls stt port for tooling. |
 | `OMNIX_STT_STREAM_CHUNK_MS` | integer | `160` | providers | Controls stt stream chunk ms for providers. |
@@ -349,6 +350,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_RESEARCH_UNRESOLVED_RETRY_SECONDS` | integer | `300` | trading | Controls trading research unresolved retry seconds for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR` | boolean | `1` | trading | Controls trading session reconciliation monitor for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading session reconciliation monitor in tests for trading. |
+| `OMNIX_TRADING_STOCH_SWEEP` | boolean | `1` | trading | Controls trading stoch sweep for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR` | boolean | `1` | trading | Controls trading strategy monitor for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading strategy monitor in tests for trading. |
 | `OMNIX_TRADING_UNIVERSE_ARCHIVER` | boolean | `1` | trading | Controls trading universe archiver for trading. |

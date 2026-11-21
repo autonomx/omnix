@@ -6,7 +6,7 @@ import { drawnAvatarPack, publishCharacterAvatarRuntime } from '../liveCharacter
 import { LiveCallVisual } from '../LiveCallVisual';
 import { fixture } from '../../../../test/fixture';
 import { LivePortrait, livePortrait, portraitNotice } from './livePortrait';
-import { memberLoop, resetMemberLoops } from './memberIdleLoops';
+import { memberLoop, packRevision, resetMemberLoops } from './memberIdleLoops';
 
 const release = vi.hoisted(() => ({ samples: vi.fn(), counter: vi.fn(), portrait: vi.fn() }));
 vi.mock('../../workspace/live-voice-release-observer', () => ({
@@ -213,7 +213,10 @@ describe('the live portrait client', () => {
     const urls = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:${urls.mock.calls.length}`);
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const { portrait, sockets } = setup();
-    const speaker = { id: 'char:abhishek', pack: { renderer: 'portrait', fallback_renderer: 'orb' } } as const;
+    const speaker = {
+      id: 'char:abhishek',
+      pack: { renderer: 'portrait', fallback_renderer: 'orb', version: 1, base_asset_id: 'image:abhishek' },
+    } as const;
     portrait.begin('chat:maya', speaker).onHello({ callKey: 'call-1', avatarToken: 'token' });
     expect(sockets[0].url).toContain('session_id=chat%3Amaya&speaker_id=char%3Aabhishek');
     sockets[0].message(JSON.stringify({ type: 'ready' }));
@@ -224,9 +227,11 @@ describe('the live portrait client', () => {
     sockets[0].message(loopFrame('idle', 0, 80));
     sockets[0].message(loopFrame('idle', 1, 80));
     sockets[0].message(loopFrame('blink', 0, 40));
-    expect(memberLoop('char:abhishek')).toBeNull(); // not whole yet
+    const revision = packRevision(speaker.pack);
+    expect(memberLoop('char:abhishek', revision)).toBeNull(); // not whole yet
     sockets[0].message(loopFrame('blink', 1, 40));
-    expect(memberLoop('char:abhishek')).toEqual({ frameMs: 80, idle: [expect.any(String), expect.any(String)],
+    expect(memberLoop('char:abhishek', 'other-pack')).toBeNull(); // a loop is its pack's
+    expect(memberLoop('char:abhishek', revision)).toEqual({ frameMs: 80, idle: [expect.any(String), expect.any(String)],
       blink: [expect.any(String), expect.any(String)] });
     expect(memberLoop('char:maya')).toBeNull(); // never the host's
 

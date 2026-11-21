@@ -5,6 +5,8 @@ import hashlib
 import io
 import secrets
 import time
+from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -52,12 +54,11 @@ class FakeRuntime:
     def __init__(self) -> None:
         self.portraits: dict[str, object] = {}
         self.sessions: list[FakeSession] = []
-        self.idle_levels: dict[int, set[int]] = {}
 
     def prepare(self, key: str, payload: bytes) -> object:
         if payload == b"no face here":
             raise PortraitImageError("no_face", "No face was found in the portrait image")
-        self.portraits[key] = object()
+        self.portraits[key] = SimpleNamespace(idle_jpegs={}, blink_jpegs={})
         return self.portraits[key]
 
     def portrait(self, key: str) -> object | None:
@@ -70,15 +71,17 @@ class FakeRuntime:
         self.sessions.append(FakeSession())
         return self.sessions[-1]
 
-    def idle_frames(self, portrait: object, level: int = 0) -> list[bytes]:
-        self.idle_levels.setdefault(id(portrait), set()).add(level)
-        return [f"idle-{index}-l{level}".encode() for index in range(3)]
+    # As float_runtime.FloatRuntime: each level's loop and blink twins are cached on the portrait, and a level counts
+    # as rendered only with both.
+    def idle_frames(self, portrait: Any, level: int = 0) -> list[bytes]:
+        return portrait.idle_jpegs.setdefault(level, [f"idle-{index}-l{level}".encode() for index in range(3)])
 
-    def blink_frames(self, portrait: object, level: int = 0) -> list[bytes]:
-        return [f"blink-{index}-l{level}".encode() for index in range(3)]
+    def blink_frames(self, portrait: Any, level: int = 0) -> list[bytes]:
+        return portrait.blink_jpegs.setdefault(level, [f"blink-{index}-l{level}".encode() for index in range(3)])
 
-    def rendered_idle_level(self, portrait: object) -> int | None:
-        return min(self.idle_levels.get(id(portrait), ()), default=None)
+    @staticmethod
+    def rendered_idle_level(portrait: Any) -> int | None:
+        return next((level for level in sorted(portrait.idle_jpegs) if level in portrait.blink_jpegs), None)
 
 
 @pytest.fixture
@@ -132,6 +135,20 @@ def test_preparing_a_portrait_renders_its_idle_loop_so_a_call_finds_it_ready(tok
         assert _prepare(client)["ok"] is True
 
     assert runtime.rendered == ["idle-l0", "blink-l0"]
+
+
+def test_between_speakers_neither_prepare_nor_idle_renders_a_loop_when_asked_not_to(token: str) -> None:
+    # The review of 2026-11-20: a speaker swap leaves no stream open for a moment, and a member's idle loop asked
+    # for then was rendered on the GPU thread ahead of the next speaker's frames.
+    runtime = CountingRuntime()
+    with _client(_ready_app(runtime), token) as client:
+        prepared = client.post("/portrait/prepare", data={"tenant": "tenant-a", "image_sha256": IMAGE_SHA,
+                                                          "render_idle": "false"},
+                               files={"file": ("portrait.png", io.BytesIO(IMAGE))}).json()
+        assert prepared["ok"] is True
+        body = client.post("/portrait/idle", data={"latent_key": prepared["latent_key"], "rendered_only": "true"})
+        assert body.json()["code"] == "portrait_busy"
+    assert runtime.rendered == []
 
 
 def test_a_portrait_is_still_prepared_when_its_idle_loop_cannot_be_rendered(token: str) -> None:
@@ -507,3 +524,33 @@ def test_a_members_idle_loop_comes_back_as_rendered_and_is_never_rendered_during
         guest_key = _prepare(client, image=b"another portrait")["latent_key"]
         assert idle(guest_key)["code"] == "portrait_busy"
         assert idle(host_key)["ok"] is True
+
+
+def test_a_loop_whose_blink_was_never_rendered_is_not_ready_and_a_rendered_one_skips_the_gpu_thread(token) -> None:
+    # The review of 2026-11-20: a loop counts as rendered only with its blink twins, and a rendered loop is read from
+    # the portrait's cache, never queued on the GPU thread behind a call's steps.
+    runtime = CountingRuntime()
+    client = _client(_ready_app(runtime), token)
+    prepared = client.post("/portrait/prepare", data={"tenant": "tenant-a", "image_sha256": IMAGE_SHA,
+                                                      "render_idle": "false"},
+                           files={"file": ("portrait.png", io.BytesIO(IMAGE))}).json()
+    portrait = runtime.portrait(prepared["latent_key"])
+    runtime.idle_frames(portrait, 0)  # the loop without its blink twins
+
+    def idle(**fields) -> dict:
+        return client.post("/portrait/idle", data={"latent_key": prepared["latent_key"], **fields}).json()
+
+    assert idle(rendered_only="true")["code"] == "portrait_busy"
+    runtime.rendered.clear()
+    assert idle()["ok"] is True
+    assert runtime.rendered == ["idle-l0", "blink-l0"]  # rendered on the GPU thread, once
+
+    runtime.rendered.clear()
+
+    def no_gpu(*_args, **_kwargs):
+        raise AssertionError("a rendered loop went to the GPU thread")
+
+    client.app.state.host.submit = no_gpu
+    body = idle(rendered_only="true")
+    assert body["ok"] is True and len(body["blink"]) == 3
+    assert runtime.rendered == []

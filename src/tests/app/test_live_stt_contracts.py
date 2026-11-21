@@ -437,7 +437,12 @@ def test_call_member_names_are_cleaned_before_they_reach_the_decoder() -> None:
     from app.providers.nemotron_eou_streaming import MAX_CONTEXT_PHRASES, clean_context_phrases
 
     assert clean_context_phrases(["Abhishek", " Jinx ", "Jinx", "O'Neil-Smith", "<b>Ma{ya}</b>", "x", 7]) == (
-        "Abhishek", "Jinx", "O'Neil-Smith", "b Ma ya b",
+        "Abhishek", "B Ma Ya B", "Jinx", "O'Neil-Smith",
+    )
+    # The review of 2026-11-20: case as the decoder writes names, only characters its tokenizer has, and a first
+    # name on its own (people say "Abhishek", not "Dr Abhishek Kumar").
+    assert clean_context_phrases(["AFRA", "o'NEIL", "McKenzie", "Zoë", "Théo 李", "Dr Abhishek Kumar"]) == (
+        "Abhishek", "Afra", "Dr Abhishek Kumar", "McKenzie", "O'Neil", "Theo", "Zoe",
     )
     assert clean_context_phrases("Jinx") == ()
     assert len(clean_context_phrases([f"Name{i}" for i in range(40)])) == MAX_CONTEXT_PHRASES
@@ -458,7 +463,8 @@ def test_the_decoder_boosts_the_call_members_names_once_no_utterance_is_in_progr
     manager = NemotronEouModelManager()
     manager.nemotron_model = model
     manager.eou_model = object()
-    monkeypatch.setattr(streaming, "CacheAwareRnntStream", lambda *args, **kwargs: SimpleNamespace())
+    manager.min_rebuild_interval_s = 0.0
+    monkeypatch.setattr(streaming, "CacheAwareRnntStream", lambda *args, **kwargs: SimpleNamespace(raw_text=""))
 
     assert manager.set_context_phrases(("Abhishek", "Jinx"), owner="call-1") is True
     assert applied == [(["Abhishek", "Jinx"], 0.5)]
@@ -467,7 +473,7 @@ def test_the_decoder_boosts_the_call_members_names_once_no_utterance_is_in_progr
     assert len(applied) == 1
 
     # A partial hypothesis belongs to the decoder that made it: a change waits for the utterance to end.
-    manager.ensure_stream("segment-1")
+    manager.ensure_stream("segment-1").nemotron.raw_text = "hello"
     assert manager.set_context_phrases(("Jinx", "Maya"), owner="call-1") is False
     assert len(applied) == 1
     manager.release("segment-1")
@@ -495,9 +501,9 @@ def test_the_stt_websocket_takes_the_call_members_names_with_hello_and_later() -
     class Manager:
         feed_chunk_samples = 2560
 
-        def set_context_phrases(self, phrases, *, owner):
+        def set_context_phrases(self, phrases, *, owner, scope):
             owners.add(owner)
-            calls.append(("set", phrases))
+            calls.append(("set", phrases, scope))
             return True
 
         def release_context_phrases(self, owner):
@@ -507,12 +513,14 @@ def test_the_stt_websocket_takes_the_call_members_names_with_hello_and_later() -
     install_nemotron_eou_websocket(app, manager=Manager())
     with TestClient(app).websocket_connect("/ws/transcribe") as socket:
         socket.receive_json()  # ready
-        socket.send_json({"type": "hello", "sessionId": "s-1", "contextPhrases": ["Jinx", "Abhishek"]})
+        socket.send_json({"type": "hello", "sessionId": "s-1", "contextPhrases": ["Jinx", "Abhishek"],
+                          "scope": "acct-a"})
         assert socket.receive_json()["type"] == "session_ready"
-        socket.send_json({"type": "context_phrases", "sessionId": "s-1", "contextPhrases": ["Jinx", "Maya", "<x>"]})
+        socket.send_json({"type": "context_phrases", "sessionId": "s-1", "contextPhrases": ["Jinx", "Maya", "<x>"],
+                          "scope": "acct-a"})
         socket.send_json({"type": "hello", "sessionId": "s-1"})  # a hello without names keeps them
         assert socket.receive_json()["type"] == "session_ready"
-    assert calls == [("set", ("Abhishek", "Jinx")), ("set", ("Jinx", "Maya")), ("release", True)]
+    assert calls == [("set", ("Abhishek", "Jinx"), "acct-a"), ("set", ("Jinx", "Maya"), "acct-a"), ("release", True)]
     assert len(owners) == 1
 
 
@@ -536,3 +544,87 @@ def test_a_name_list_the_decoder_rejects_falls_back_to_the_plain_decoder() -> No
     assert applied == [None]  # rebuilt without a tree
     assert manager.context_phrases == ()
     assert model.cfg.decoding.greedy.boosting_tree_alpha == 0.0
+    # This model takes no names: a later set changes nothing, and never raises into the connection.
+    assert manager.set_context_phrases(("Jinx", "Maya"), owner="call-1") is False
+    assert applied == [None]
+
+
+def test_a_plain_decoder_that_cannot_be_restored_still_leaves_the_connection_open() -> None:
+    def change(decoding, verbose=True):
+        raise RuntimeError("decoder rebuild failed")
+
+    model = SimpleNamespace(cfg=SimpleNamespace(decoding=SimpleNamespace(greedy=SimpleNamespace())),
+                            change_decoding_strategy=change)
+    manager = NemotronEouModelManager()
+    manager.nemotron_model = model
+
+    assert manager.set_context_phrases(("Jinx",), owner="call-1") is False  # no exception reaches the socket
+
+
+def _boosting_manager(monkeypatch):
+    from app.providers import nemotron_eou_streaming as streaming
+
+    applied = []
+    greedy = SimpleNamespace()
+    model = SimpleNamespace(
+        cfg=SimpleNamespace(decoding=SimpleNamespace(greedy=greedy)),
+        change_decoding_strategy=lambda decoding, verbose=True: applied.append(
+            decoding.greedy.boosting_tree["key_phrases_list"]),
+    )
+    manager = NemotronEouModelManager()
+    manager.nemotron_model = model
+    manager.eou_model = object()
+    manager.min_rebuild_interval_s = 0.0
+    monkeypatch.setattr(streaming, "CacheAwareRnntStream", lambda *args, **kwargs: SimpleNamespace(raw_text=""))
+    return manager, applied
+
+
+def test_two_calls_at_once_each_keep_their_names(monkeypatch) -> None:
+    # The review of 2026-11-20: one call's hang-up cleared the other call's names for the rest of it.
+    manager, applied = _boosting_manager(monkeypatch)
+    assert manager.set_context_phrases(("Afra", "Jinx"), owner="call-x") is True
+    assert manager.set_context_phrases(("Maya",), owner="call-y") is True
+    assert applied[-1] == ["Afra", "Jinx", "Maya"]
+    manager.release_context_phrases("call-y")
+    manager.ensure_stream("segment-1")
+    assert applied[-1] == ["Afra", "Jinx"]
+    assert manager.context_phrases == ("Afra", "Jinx")
+
+
+def test_calls_from_two_accounts_at_once_boost_no_ones_names(monkeypatch) -> None:
+    # The review of 2026-11-20: one account's names turned up in another account's call.
+    manager, applied = _boosting_manager(monkeypatch)
+    assert manager.set_context_phrases(("Afra",), owner="call-x", scope="acct-a") is True
+    assert manager.set_context_phrases(("Theo",), owner="call-z", scope="acct-a") is True
+    assert manager.context_phrases == ("Afra", "Theo")  # one account's two calls share
+    assert manager.set_context_phrases(("Maya",), owner="call-y", scope="acct-b") is True
+    assert manager.context_phrases == () and not applied[-1]  # the plain decoder
+    manager.release_context_phrases("call-y")
+    manager.ensure_stream("segment-1")
+    assert manager.context_phrases == ("Afra", "Theo")
+
+
+def test_a_stream_that_has_heard_nothing_takes_new_names_at_once(monkeypatch) -> None:
+    # Audio keeps flowing between turns, so a segment is nearly always open: a quiet one restarts on the new decoder.
+    manager, applied = _boosting_manager(monkeypatch)
+    quiet = manager.ensure_stream("segment-quiet")
+    first = quiet.nemotron
+    assert manager.set_context_phrases(("Abhishek",), owner="call-1") is True
+    assert applied == [["Abhishek"]]
+    assert quiet.nemotron is not first
+
+
+def test_rebuilds_are_spaced_and_a_let_go_stream_does_not_block_them(monkeypatch) -> None:
+    manager, applied = _boosting_manager(monkeypatch)
+    manager.min_rebuild_interval_s = 60.0
+    assert manager.set_context_phrases(("Jinx",), owner="call-1") is True
+    assert manager.set_context_phrases(("Maya",), owner="call-1") is False  # too soon: waits
+    assert applied == [["Jinx"]]
+    leaked = manager.ensure_stream("segment-late")  # still too soon: nothing applied
+    assert applied == [["Jinx"]]
+    leaked.nemotron.raw_text = "half a sentence"
+    leaked.last_fed_at -= 3_600  # a feed that landed after its segment's release, never fed again
+    manager.min_rebuild_interval_s = 0.0
+    assert manager.set_context_phrases(("Maya",), owner="call-1") is True
+    assert applied[-1] == ["Maya"]
+    assert "segment-late" not in manager._streams

@@ -18,7 +18,7 @@ import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from app.config.env import environment
 from app.prompts import prompt_template
@@ -46,13 +46,16 @@ CAMERA_QUESTION_TEMPLATE = prompt_template(
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="live-call-camera")
 
 
+CameraReason = Literal["ready", "vision_not_configured", "remote_vision_not_allowed", "vision_unavailable"]
+
+
 @dataclass(frozen=True)
 class CameraVision:
     """Whether a call may offer the camera: vision configured, and local or remote with consent."""
 
     available: bool
     remote: bool
-    reason: str
+    reason: CameraReason
 
 
 @dataclass(frozen=True)

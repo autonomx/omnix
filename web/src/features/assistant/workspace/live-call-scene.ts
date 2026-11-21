@@ -50,6 +50,8 @@ const EMPTY: CallSceneState = { sessionId: null, scene: null, loading: false, ch
 let state: CallSceneState = EMPTY;
 const listeners = new Set<() => void>();
 let loadToken = 0;
+// The add or remove the server has not answered yet: a call that ends waits for it before the guests leave.
+let changeInFlight: Promise<void> | null = null;
 
 function setState(change: Partial<CallSceneState>): void {
   state = { ...state, ...change };
@@ -95,6 +97,21 @@ export function callScenePhrases(sessionId: string, current: CallSceneState = st
   return current.scene.members.map((member) => member.display_name.trim()).filter(Boolean);
 }
 
+/**
+ * A call's names as they change. The store holds the chat the panel shows: while it shows another chat, the call's
+ * names stay as last read, so selecting another chat mid-call does not drop the call's boosting.
+ */
+export function callScenePhraseSource(sessionId: string): { current: () => string[]; subscribe: (listener: () => void) => () => void } {
+  let known: string[] = [];
+  return {
+    current: () => {
+      if (state.sessionId === sessionId && state.scene) known = callScenePhrases(sessionId);
+      return known;
+    },
+    subscribe: callSceneStore.subscribe,
+  };
+}
+
 export async function loadCallScene(sessionId: string): Promise<void> {
   const token = ++loadToken;
   if (state.sessionId !== sessionId) setState({ ...EMPTY, sessionId, loading: true });
@@ -128,7 +145,10 @@ export async function removeCallGuest(sessionId: string, characterId: string): P
  * guests stay seated when the server could not be reached; the panel still shows them and they can be removed.
  */
 export async function clearCallScene(sessionId: string): Promise<void> {
+  // A guest the server seats after this clear would be in the next call: let the change land first.
+  if (changeInFlight) await changeInFlight;
   const token = ++loadToken;
+  if (state.sessionId === sessionId && state.loading) setState({ loading: false });  // this clear supersedes it
   try {
     const scene = await unwrap(api.DELETE('/api/chat/sessions/{session_id}/scene/guests', {
       params: { path: { session_id: sessionId } },
@@ -145,16 +165,23 @@ async function changeScene(sessionId: string, characterId: string, request: () =
   if (state.changing) return;
   const token = ++loadToken;
   setState({ sessionId, changing: characterId, error: null });
+  let settle = (): void => undefined;
+  changeInFlight = new Promise<void>((resolve) => { settle = resolve; });
   try {
-    const scene = await request();
+    const scene = await request().finally(() => {
+      // The change is answered, superseded or not: the panel takes adds and removes again.
+      if (state.changing === characterId) setState({ changing: null });
+      changeInFlight = null;
+      settle();
+    });
     if (token !== loadToken) return;
-    setState({ scene: sceneOrNull(scene), changing: null });
+    setState({ scene: sceneOrNull(scene) });
     // The runtime carries each guest's voice and avatar: the next turn a guest speaks must find it, and the
     // full-screen call shows the new guest's face.
     const runtime = await characterClient.refreshLiveCallRuntime(sessionId).catch(() => null);
     if (runtime && token === loadToken) setState({ guests: runtime.scene_guests ?? [] });
   } catch (error) {
-    if (token === loadToken) setState({ changing: null, error: errorText(error) });
+    if (token === loadToken) setState({ error: errorText(error) });
   }
 }
 

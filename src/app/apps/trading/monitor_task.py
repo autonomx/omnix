@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import threading
 import time
 from collections.abc import Awaitable, Callable, Coroutine
@@ -27,6 +28,21 @@ from .trade_logging import trade_log
 # A trading cycle fetches bars and may call a model for dozens of candidates;
 # at the open that legitimately takes longer than a minute.
 TRADING_MONITOR_TIMEOUT_SECONDS = 300.0
+# The trading loop watches its own lag: the gateway's watchdog no longer sees a cycle that blocks it.
+_LAG_PROBE_SECONDS = 1.0
+_LAG_WARN_SECONDS = 5.0
+
+logger = logging.getLogger(__name__)
+
+
+async def _watch_lag() -> None:
+    while True:
+        started = time.monotonic()
+        await asyncio.sleep(_LAG_PROBE_SECONDS)
+        late = time.monotonic() - started - _LAG_PROBE_SECONDS
+        if late >= _LAG_WARN_SECONDS:
+            # Every trading job queued behind it waited this long, and it counts against their timeouts.
+            logger.warning("[trading] the trading loop stalled %.1f s: a cycle blocked it", late)
 
 
 class _TradingLoop:
@@ -43,11 +59,43 @@ class _TradingLoop:
                 loop = asyncio.new_event_loop()
                 thread = threading.Thread(target=loop.run_forever, name="omnix-trading-loop", daemon=True)
                 thread.start()
+                loop.call_soon_threadsafe(lambda: loop.create_task(_watch_lag(), name="omnix-trading-loop-lag"))
                 self._loop, self._thread = loop, thread
             return self._loop
 
+    def close(self, timeout: float = 5.0) -> None:
+        """Cancel what is left on the trading loop, shut its executor down and stop its thread; the next use starts a
+        fresh one. Tests close it so work one leaves behind never runs into the next."""
+        with self._lock:
+            loop, thread = self._loop, self._thread
+            self._loop = self._thread = None
+        if loop is None or thread is None:
+            return
+
+        async def wind_down() -> None:
+            current = asyncio.current_task()
+            pending = [task for task in asyncio.all_tasks() if task is not current]
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            await loop.shutdown_default_executor()
+
+        if thread.is_alive():
+            try:
+                asyncio.run_coroutine_threadsafe(wind_down(), loop).result(timeout)
+            except Exception:  # noqa: BLE001 - a task that will not stop is left to the daemon thread
+                logger.warning("[trading] the trading loop did not wind down in %.0f s", timeout)
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout)
+        if not thread.is_alive():
+            loop.close()
+
 
 _TRADING_LOOP = _TradingLoop()
+
+
+def close_trading_loop() -> None:
+    _TRADING_LOOP.close()
 
 
 async def _call(work: Callable[[], Any]) -> Any:
@@ -103,7 +151,15 @@ async def on_trading_loop(work: Callable[[], Any]) -> Any:
         return await asyncio.shield(outcome)
     except asyncio.CancelledError:
         loop.call_soon_threadsafe(cancel)
-        await asyncio.gather(outcome, return_exceptions=True)
+        # A second cancel (a shutdown while a timed-out cycle stops) must not abandon the work: the caller's
+        # shutdown would then close the runner beside a cycle still running. ``wait`` never cancels ``outcome``.
+        while not outcome.done():
+            try:
+                await asyncio.wait({outcome})
+            except asyncio.CancelledError:
+                continue
+        if not outcome.cancelled():
+            outcome.exception()  # retrieved: the cycle's own error is not the caller's to raise now
         raise
 
 
@@ -289,6 +345,7 @@ __all__ = [
     "ScheduledTradingMonitor",
     "SingleFlightTasks",
     "TradingMonitorTask",
+    "close_trading_loop",
     "on_trading_loop",
     "scheduled_task_spec",
 ]

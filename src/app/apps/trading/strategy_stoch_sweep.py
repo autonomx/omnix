@@ -33,12 +33,14 @@ from .strategy_monitor import (
     trading_strategy_monitor_enabled,
 )
 from .strategy_monitor_candidates import (
-    capture_stoch_action,
-    capture_stoch_entry,
-    hold_stoch_quote_line,
     load_candidate_session_bars,
     session_market_service,
     stoch_execution_action_for_snapshot,
+)
+from .strategy_monitor_stoch_capture import (
+    capture_stoch_action,
+    capture_stoch_entry,
+    hold_stoch_quote_line,
     stoch_session_events,
 )
 from .strategy_repository import (
@@ -221,7 +223,10 @@ class TradingStochSweepMonitor(ScheduledTradingMonitor, StrategyRunHost):
         # Stocks the arm holds or is armed on first: their bar decides an action now.
         targets.sort(key=lambda candidate: self._last_state.get((sid, candidate.instrument_id)) in _QUIET_STATES)
         self.target_count = len(targets)
-        service = session_market_service(config, market_service, universe, now=now) if targets else None
+        if not targets:
+            self._config_slot[sid] = slot
+            return 0
+        service = session_market_service(config, market_service, universe, now=now)
         captured = 0
         for candidate in targets:
             key = (sid, candidate.instrument_id)

@@ -550,24 +550,24 @@ def _project_one(space: MemorySpaceKey, scope: VisibilityScope, understood: Unde
                 derivation_version=DERIVATION,
                 status="superseded",
             ))
-    for key, seen in understood.triggers.items():
-        first, first_reading = seen[0]
+    for key, triggers in understood.triggers.items():
+        earliest, first_reading = triggers[0]
         assertions.append(GraphAssertion(
             assertion_id=f"{TRIGGER_ID_PREFIX}{_space_id(space, scope.scope_id)}:{key}",
             space=space,
             visibility_scopes=(scope,),
             # What it concerns, so that a turn naming one finds it.
-            subject=GraphEntityRef(entity_id=TOPIC_SEPARATOR.join(topics_of(seen)), entity_type="topics"),
-            predicate=f"trigger_{first.emotion}",
-            object=GraphValue(kind="literal", literal=first.pattern),
+            subject=GraphEntityRef(entity_id=TOPIC_SEPARATOR.join(topics_of(triggers)), entity_type="topics"),
+            predicate=f"trigger_{earliest.emotion}",
+            object=GraphValue(kind="literal", literal=earliest.pattern),
             domain="trait",
-            confidence=max(trigger.confidence for trigger, _ in seen),
+            confidence=max(trigger.confidence for trigger, _ in triggers),
             valid_from=first_reading.occurred_at,
             evidence_observation_ids=tuple(dict.fromkeys(
-                item for trigger, reading in seen for item in (reading.observation_id, *trigger.evidence)
+                item for trigger, reading in triggers for item in (reading.observation_id, *trigger.evidence)
             )),
             derivation_version=DERIVATION,
-            revision=len(seen),
+            revision=len(triggers),
         ))
     assertions.extend(_own_side_assertions(space, scope, understood))
     for key, (link, observation, ended_at) in understood.links.items():
@@ -597,7 +597,7 @@ def _project_one(space: MemorySpaceKey, scope: VisibilityScope, understood: Unde
             counterpart=person,
             metrics=tuple(
                 RelationshipMetric(
-                    name=name, value=cast(float, value), confidence=reading.confidence, evidence_observation_ids=evidence,
+                    name=name, value=value, confidence=reading.confidence, evidence_observation_ids=evidence,
                 )
                 for name, value in (("closeness", reading.closeness), ("trust", reading.trust), ("ease", reading.ease))
                 if value is not None

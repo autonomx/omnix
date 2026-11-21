@@ -18,6 +18,7 @@ from app.apps.trading.strategy_ai_shadow_provider import AIShadowLaneUnavailable
 from app.apps.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
 from app.apps.trading.strategy_repository import StrategyEvent
 
+pytestmark = pytest.mark.anyio
 
 INSTRUMENT = "equity:NASDAQ:TEST"
 START = datetime(2026, 9, 3, 14, 0, tzinfo=timezone.utc)
@@ -137,7 +138,6 @@ def _row(
     }
 
 
-@pytest.mark.anyio
 async def test_minute_policy_runs_each_new_slot_but_event_policy_requires_change() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -209,7 +209,6 @@ async def test_minute_policy_runs_each_new_slot_but_event_policy_requires_change
     assert not any(event.event_type == "entry_order_submitted" for event in repository.events)
 
 
-@pytest.mark.anyio
 async def test_flat_ai_arm_stops_calling_after_entry_window_closes() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -234,7 +233,6 @@ async def test_flat_ai_arm_stops_calling_after_entry_window_closes() -> None:
     assert repository.events == []
 
 
-@pytest.mark.anyio
 async def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -274,7 +272,6 @@ async def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
     assert repository.events == []
 
 
-@pytest.mark.anyio
 async def test_one_trade_cap_survives_missing_trade_summary_if_closing_fill_persisted() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -353,7 +350,6 @@ def _open_position_fill(config, instrument_id: str, trade_id: str) -> StrategyEv
     )
 
 
-@pytest.mark.anyio
 async def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
@@ -396,7 +392,6 @@ async def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() 
     assert "AI_SHADOW_MAX_POSITIONS" in persisted[0].payload["action_normalization_reasons"]
 
 
-@pytest.mark.anyio
 async def test_max_trades_per_day_blocks_new_ai_shadow_entry() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
@@ -436,7 +431,6 @@ async def test_max_trades_per_day_blocks_new_ai_shadow_entry() -> None:
     assert "AI_SHADOW_MAX_TRADES_PER_DAY" in repository.events[0].payload["action_normalization_reasons"]
 
 
-@pytest.mark.anyio
 async def test_event_policy_reacts_to_material_state_change() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -487,7 +481,6 @@ async def test_event_policy_reacts_to_material_state_change() -> None:
     assert "vwap_side_changed" in decisions[-1].payload["trigger_reasons"]
 
 
-@pytest.mark.anyio
 async def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
@@ -699,7 +692,6 @@ async def test_postclose_comparison_preserves_spread_cost_and_data_quality_bound
     assert comparison["ranking_deferred_until_risk_normalized"] is True
 
 
-@pytest.mark.anyio
 async def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() -> None:
     repository = MemoryRepository()
     analyzer = FailingAnalyzer()
@@ -749,7 +741,6 @@ async def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_min
     assert analyzer.calls == 2
 
 
-@pytest.mark.anyio
 async def test_lane_unavailable_batch_is_a_skip_checkpoint_not_an_error() -> None:
     repository = MemoryRepository()
     analyzer = LaneUnavailableAnalyzer()
@@ -779,7 +770,6 @@ async def test_lane_unavailable_batch_is_a_skip_checkpoint_not_an_error() -> Non
     assert analyzer.calls == 1
 
 
-@pytest.mark.anyio
 async def test_same_max_minute_allows_late_symbol_request_signature() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -857,7 +847,6 @@ def _pending_exit_event(config, *, trade_id: str, observed_at: datetime) -> Stra
     )
 
 
-@pytest.mark.anyio
 async def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -928,7 +917,6 @@ async def test_pending_exit_skips_llm_and_retries_execution_deterministically() 
     )
 
 
-@pytest.mark.anyio
 async def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
@@ -963,7 +951,6 @@ async def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> Non
 
 
 
-@pytest.mark.anyio
 async def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -1055,7 +1042,6 @@ async def test_pending_entry_waits_for_first_causal_quote_without_second_llm_cal
 
 
 
-@pytest.mark.anyio
 async def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
@@ -1122,7 +1108,6 @@ async def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote(
     )
 
 
-@pytest.mark.anyio
 async def test_arms_c_and_d_fill_from_the_live_line_quote_standing_at_the_decision(monkeypatch) -> None:
     """Owner decision 2026-11-12: a quiet book on a confirmed live IBKR line fills at once."""
     from app.apps.trading import strategy_ai_shadow_monitor as monitor_module

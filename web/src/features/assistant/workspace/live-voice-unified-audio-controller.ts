@@ -48,7 +48,8 @@ import { chatStreamEventSchema, parseJson } from '../../../api/schemas/streams';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { takeHeardProposalTurnId } from './live-call-proposal-question';
 import { sceneSpeakerFrom, sceneSpeakerVoiceId } from './live-call-scene';
-import { readLatestTrustedCharacterRuntime } from '../chat/characterClient';
+import { characterClient, readLatestTrustedCharacterRuntime } from '../chat/characterClient';
+import { resetMemberLoops } from '../chat/portrait/memberIdleLoops';
 import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
@@ -132,6 +133,7 @@ let sharedAudioSession: SharedLiveAudioSession | null = null;
 let greetingStartup: GreetingStartup | null = null;
 let greetingStartupToken = 0;
 let reportedSpeaking = false;
+let reportedKind: LiveTurnKind | null = null;
 
 /** Whether unified live audio plays assistant speech (Chat must not play it too). */
 export function isLiveVoiceUnifiedAudioInstalled(): boolean {
@@ -217,7 +219,13 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestIn
   });
   // A guest's turn speaks in the guest's voice; a new voice opens a new audio session (companion 5.5).
   const sceneSpeakerId = sceneSpeakerFrom(response);
-  const sceneGuests = readLatestTrustedCharacterRuntime()?.scene_guests;
+  let sceneGuests = readLatestTrustedCharacterRuntime()?.scene_guests;
+  // A guest seated after the runtime was read speaks before the panel's refresh lands: read it once more, or the
+  // guest's line plays in the host's voice and face.
+  if (sceneSpeakerId && !sceneGuests?.some((guest) => guest.character_id === sceneSpeakerId)) {
+    const runtime = await characterClient.refreshLiveCallRuntime(sessionId).catch(() => null);
+    if (runtime?.scene_guests) sceneGuests = runtime.scene_guests;
+  }
   const voiceId = sceneSpeakerVoiceId(sceneSpeakerId, sceneGuests, selectedVoiceId());
   liveCallPresentationStore.update({ sceneSpeakerId });
   const startedAtMs = performance.now();
@@ -700,6 +708,8 @@ function stopLiveVoiceUnifiedAudio(event?: Event): void {
   void stopActiveTurn(reason).finally(() => {
     if (reason !== 'voice-interrupt') void stopSharedAudioSession(reason);
   });
+  // The members' idle loops are the call's (JPEG URLs for each member, and a pack may change before the next call).
+  if (reason !== 'voice-interrupt') resetMemberLoops();
   stopAssistantPcmStream();
   setVoiceSpeaking(false);
 }
@@ -779,12 +789,15 @@ async function ensureSharedAudioSession(
     nextOutputOrder: 0,
   };
   sharedAudioSession = state;
+  // The portrait belongs to the current session: one replaced before it opened neither attaches to nor ends the next.
   void sessionPromise.then((session) => {
     state.session = session;
-    if (portraitHooks) livePortrait.attachSession(session);
+    if (portraitHooks && sharedAudioSession === state) livePortrait.attachSession(session);
   }).catch(async (error: unknown) => {
-    if (portraitHooks) livePortrait.end();
-    if (sharedAudioSession === state) sharedAudioSession = null;
+    if (sharedAudioSession === state) {
+      if (portraitHooks) livePortrait.end();
+      sharedAudioSession = null;
+    }
     await reporter.close('live_audio_session_failed', {
       error: error instanceof Error ? error.message : String(error),
     });
@@ -900,10 +913,16 @@ function isAutoSpeakEnabled(): boolean {
 
 function setVoiceSpeaking(speaking: boolean, kind?: LiveTurnKind): void {
   liveCallPresentationStore.update({ speaking, outputKind: speaking && kind ? kind : null });
-  if (reportedSpeaking !== speaking) {
-    reportedSpeaking = speaking;
-    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking, source: 'unified-live-voice', kind: kind ?? null });
-  }
+  // Each edge names the kind of turn it belongs to: an end carries the kind that was playing, and another kind
+  // taking over playback is an edge of its own. The initiative controller settles a proactive line by its own end.
+  const nextKind = speaking ? kind ?? null : null;
+  if (reportedSpeaking === speaking && (!speaking || nextKind === null || nextKind === reportedKind)) return;
+  const endedKind = reportedKind;
+  reportedSpeaking = speaking;
+  reportedKind = nextKind;
+  emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, {
+    speaking, source: 'unified-live-voice', kind: speaking ? nextKind : endedKind,
+  });
 }
 
 // Chat shows it in its status line.

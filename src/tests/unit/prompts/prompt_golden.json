@@ -295,6 +295,10 @@
     "sha256": "d4dff7c18aea142e36f60d07e1ab2a699368a672a65b812d0e3f9bbf25840691",
     "version": "1"
   },
+  "live_voice.sound_tags.prompt": {
+    "sha256": "e797998fde2743285a01d11a2ce4b7d9604aa13e7409d4754c5b76185d8d9446",
+    "version": "1"
+  },
   "providers.chatgpt_codex_provider.turn_prompt": {
     "sha256": "9178ee54e34133d0f752009e53d7969a3f5e3c916a5f6c8d856571891b8a5998",
     "version": "1"

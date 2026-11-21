@@ -482,6 +482,10 @@ export class StreamingSttWebSocketClient {
     return [...(this.options.contextPhrases?.current() ?? [])];
   }
 
+  private chatSessionField(): { chatSessionId?: string } {
+    return this.options.chatSessionId ? { chatSessionId: this.options.chatSessionId } : {};
+  }
+
   private sendContextPhrases(): void {
     if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN) return;
     // Only after hello: the server reads messages in order, so this one lands after the hello's own list.
@@ -490,7 +494,11 @@ export class StreamingSttWebSocketClient {
     const key = JSON.stringify(contextPhrases);
     if (key === this.sentContextPhrases) return;
     this.sentContextPhrases = key;
-    this.socket.send(JSON.stringify({ type: 'context_phrases', sessionId: this.sessionId, contextPhrases }));
+    // The chat names the call; the gateway replaces the names with that chat's seats (the browser's list is only
+    // the cue that the call's members changed).
+    this.socket.send(JSON.stringify({
+      type: 'context_phrases', sessionId: this.sessionId, ...this.chatSessionField(), contextPhrases,
+    }));
   }
 
   get segmentedProtocolActive(): boolean {
@@ -917,7 +925,7 @@ export class StreamingSttWebSocketClient {
             sampleRate: this.targetSampleRate,
             configVersion: this.negotiation.configVersion,
             language: this.negotiation.language,
-            ...(contextPhrases ? { contextPhrases } : {}),
+            ...(contextPhrases ? { ...this.chatSessionField(), contextPhrases } : {}),
           }));
           if (contextPhrases) this.sentContextPhrases = JSON.stringify(contextPhrases);
         } else {

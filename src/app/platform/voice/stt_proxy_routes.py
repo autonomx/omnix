@@ -2,11 +2,13 @@
 
 The live socket also carries the caller's voiceprint (companion 2.2): before relaying anything from the browser, the
 gateway sends the account's ``speaker_profile`` to the speech service, which scores each final segment against it.
-A ``speaker_profile`` from the browser is dropped, so only this account's stored print is ever compared.
+A ``speaker_profile`` from the browser is dropped, so only this account's stored print is ever compared. Likewise
+the names recognition boosts: the gateway replaces the browser's list with the named chat's call (``_CallNames``).
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import secrets
@@ -27,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 _MAX_RESPONSE_BYTES = 512 * 1024
 SPEAKER_PROFILE = "speaker_profile"
+CONTEXT_PHRASES = "context_phrases"
+# A call stamps its chat's seats this often; they expire after ``SEAT_EXPIRES_AFTER_CALL_SECONDS`` (600) unstamped.
+SEAT_STAMP_SECONDS = 60.0
 
 
 class STTProxyResponse(BaseModel):
@@ -161,13 +166,102 @@ def _speaker_profile() -> str | None:
     return json.dumps({"type": SPEAKER_PROFILE, "model": stored.model, "embedding": stored.embedding})
 
 
-def _from_browser_allowed(text: str) -> bool:
-    """False for a ``speaker_profile`` the browser sent: only the gateway names whose voice to listen for."""
+def _phrase_scope() -> str:
+    """Which account's call a name list belongs to: the speech service boosts names only while every open call's
+    list comes from one account, so one account's call never hears another's names. A hash, not the id."""
+    from app.runtime.tenant_context import current_tenant
+
+    try:
+        workspace = current_tenant().workspace_id
+    except Exception:  # noqa: BLE001 - no tenant: a scope of its own, shared with no other call
+        return "none:" + secrets.token_hex(8)
+    return hashlib.sha256(f"omnix-stt-scope:{workspace}".encode()).hexdigest()[:16]
+
+
+def _call_roster() -> Any:
+    from app.platform.voice.call_roster import CALL_ROSTER
+    from app.runtime.ports import optional
+
+    return optional(CALL_ROSTER)
+
+
+class _CallNames:
+    """The call's names, as the gateway reads them (companion review, 2026-11-20).
+
+    The browser's ``context_phrases`` message, and a ``hello`` carrying ``contextPhrases``, name the chat
+    (``chatSessionId``); the proxy replaces the list with that chat's seats, read as the caller's tenant sees it, and
+    adds the account's ``scope``. A chat that is not the caller's, or none, boosts nothing. The same list twice goes
+    once. While a chat is named its call stamps the chat's seats (``note_call``), so a call that ends without the
+    browser clearing them leaves no guests once the seats expire.
+    """
+
+    def __init__(self, roster: Any, scope: str) -> None:
+        self.roster = roster
+        self.scope = scope
+        self.chat = ""
+        self._sent: list[str] | None = None
+
+    def _read(self, chat: str) -> list[str]:
+        if self.roster is None or not chat:
+            return []
+        try:
+            names = [str(name) for name in self.roster.names(chat)]
+        except Exception:  # noqa: BLE001 - no names is plain recognition, never a failed call
+            logger.warning("live speech: the call's names could not be read; recognition goes on without them")
+            return []
+        try:
+            self.roster.note_call(chat)
+        except Exception:  # noqa: BLE001 - a missed stamp only shortens the seats' life
+            logger.warning("live speech: the call's seats could not be stamped")
+        return names
+
+    def keep_seats(self) -> None:
+        if self.roster is not None and self.chat:
+            try:
+                self.roster.note_call(self.chat)
+            except Exception:  # noqa: BLE001 - the next stamp tries again
+                logger.warning("live speech: the call's seats could not be stamped")
+
+    async def rewrite(self, data: dict[str, Any]) -> str | None:
+        """The message to send on for a phrase-carrying message (None: nothing new to send)."""
+        chat = data.get("chatSessionId", data.get("chat_session_id"))
+        self.chat = chat[:200] if isinstance(chat, str) else ""
+        names = await asyncio.to_thread(self._read, self.chat)
+        if data.get("type") == CONTEXT_PHRASES:
+            if names == self._sent:
+                return None
+            self._sent = names
+            return json.dumps({"type": CONTEXT_PHRASES, "sessionId": data.get("sessionId"),
+                               "contextPhrases": names, "scope": self.scope})
+        self._sent = names
+        rewritten = {key: value for key, value in data.items()
+                     if key not in ("contextPhrases", "context_phrases", "scope")}
+        return json.dumps({**rewritten, "contextPhrases": names, "scope": self.scope})
+
+
+def _carries_phrases(data: Any) -> bool:
+    return isinstance(data, dict) and (data.get("type") == CONTEXT_PHRASES or (
+        data.get("type") == "hello" and ("contextPhrases" in data or "context_phrases" in data)))
+
+
+async def _keep_seats(names: _CallNames) -> None:
+    while True:
+        await asyncio.sleep(SEAT_STAMP_SECONDS)
+        await asyncio.to_thread(names.keep_seats)
+
+
+async def _from_browser(text: str, names: _CallNames) -> str | None:
+    """The text to send on to the speech service, or None to drop it. A ``speaker_profile`` from the browser is
+    dropped (only the gateway names whose voice to listen for); a name list is replaced by the call's own."""
     try:
         data = json.loads(text)
     except ValueError:
-        return True
-    return not (isinstance(data, dict) and data.get("type") == SPEAKER_PROFILE)
+        return text
+    if isinstance(data, dict) and data.get("type") == SPEAKER_PROFILE:
+        return None
+    if _carries_phrases(data):
+        return await names.rewrite(data)
+    return text
 
 
 async def _proxy_websocket(socket: WebSocket) -> None:
@@ -185,6 +279,7 @@ async def _proxy_websocket(socket: WebSocket) -> None:
     accepted = False
     limit = max_upload_bytes()
     profile = await asyncio.to_thread(_speaker_profile)
+    names = _CallNames(_call_roster(), await asyncio.to_thread(_phrase_scope))
     try:
         # legacy Connect is supported by the repository's websockets>=12 floor,
         # does not use system proxies, and has an explicit redirect rejection.
@@ -208,8 +303,10 @@ async def _proxy_websocket(socket: WebSocket) -> None:
                     if size > limit:
                         await socket.close(code=1009, reason="upload_too_large")
                         return
-                    if isinstance(value, str) and not _from_browser_allowed(value):
-                        continue
+                    if isinstance(value, str):
+                        value = await _from_browser(value, names)
+                        if value is None:
+                            continue
                     await upstream.send(value)
 
             async def to_browser():
@@ -219,7 +316,8 @@ async def _proxy_websocket(socket: WebSocket) -> None:
                     else:
                         await socket.send_text(value)
 
-            tasks = [asyncio.create_task(to_service()), asyncio.create_task(to_browser())]
+            tasks = [asyncio.create_task(to_service()), asyncio.create_task(to_browser()),
+                     asyncio.create_task(_keep_seats(names))]
             try:
                 done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 for task in done:

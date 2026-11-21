@@ -97,7 +97,8 @@
     ],
     "companion-activity": [
       "omnix_companion_activity_checkpoints",
-      "omnix_companion_initiative_sessions"
+      "omnix_companion_initiative_sessions",
+      "omnix_companion_scene_talk_attempts"
     ],
     "kernel": [
       "omnix_database_events",

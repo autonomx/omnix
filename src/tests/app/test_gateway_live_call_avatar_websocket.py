@@ -67,7 +67,7 @@ def portrait(monkeypatch):
         return link
 
     monkeypatch.setattr(avatar_websocket, "portrait_url", lambda: "http://portrait.test")
-    monkeypatch.setattr(avatar_websocket, "_load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
+    monkeypatch.setattr(avatar_websocket, "load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
     monkeypatch.setattr(avatar_websocket, "resolve_live_call_runtime",
                         lambda session: SimpleNamespace(avatar_pack=state["pack"],
                                                         speech_style=SimpleNamespace(emotion="sad")))
@@ -309,7 +309,7 @@ def test_a_guest_speaking_on_a_group_call_shows_its_own_face(monkeypatch, portra
         pack = guest_pack if getattr(session, "speaker", None) == "bea" else PORTRAIT
         return SimpleNamespace(avatar_pack=pack, speech_style=SimpleNamespace(emotion="neutral"))
 
-    monkeypatch.setattr(avatar_websocket, "_speaker_session", speaker_session)
+    monkeypatch.setattr(avatar_websocket, "speaker_session", speaker_session)
     monkeypatch.setattr(avatar_websocket, "resolve_live_call_runtime", runtime)
     client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
@@ -322,7 +322,7 @@ def test_a_guest_speaking_on_a_group_call_shows_its_own_face(monkeypatch, portra
 
 
 def test_a_speaker_who_is_not_on_the_call_gets_no_face(monkeypatch, portrait) -> None:
-    monkeypatch.setattr(avatar_websocket, "_speaker_session", lambda session, speaker_id: None)
+    monkeypatch.setattr(avatar_websocket, "speaker_session", lambda session, speaker_id: None)
     client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
         token = tts.receive_json()["avatar_token"]
@@ -341,10 +341,12 @@ def idle_route(monkeypatch):
     state: dict[str, Any] = {"idle_error": None, "images": [], "seats": {"bea"}}
     guest_pack = PORTRAIT.model_copy(update={"character_id": "bea", "base_asset_id": "image:bea"})
 
-    async def prepare(base_url: str, tenant: str, image: bytes) -> str:
+    async def prepare(base_url: str, tenant: str, image: bytes, *, render_idle: bool = True) -> str:
+        state.setdefault("render_idle", []).append(render_idle)
         return f"latent:{image.decode()}"
 
-    async def idle(base_url: str, latent_key: str) -> PortraitIdleLoop:
+    async def idle(base_url: str, latent_key: str, *, rendered_only: bool = False) -> PortraitIdleLoop:
+        state.setdefault("rendered_only", []).append(rendered_only)
         if state["idle_error"]:
             raise state["idle_error"]
         return PortraitIdleLoop(80, [f"{latent_key}:idle"], [f"{latent_key}:blink"])
@@ -361,8 +363,8 @@ def idle_route(monkeypatch):
             "host_pack", PORTRAIT))
 
     monkeypatch.setattr(portrait_idle, "portrait_url", lambda: "http://portrait.test")
-    monkeypatch.setattr(portrait_idle, "_load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
-    monkeypatch.setattr(portrait_idle, "_speaker_session", speaker_session)
+    monkeypatch.setattr(portrait_idle, "load_session", lambda factory, session_id: SimpleNamespace(id=session_id))
+    monkeypatch.setattr(portrait_idle, "speaker_session", speaker_session)
     monkeypatch.setattr(portrait_idle, "resolve_live_call_runtime", runtime)
     monkeypatch.setattr(portrait_idle, "default_character_avatar_service",
                         lambda: SimpleNamespace(portrait_image=portrait_image))
@@ -381,6 +383,21 @@ def test_every_member_of_a_group_call_gets_its_own_idle_loop(monkeypatch, idle_r
                     "idle": ["latent:image:maya:idle"], "blink": ["latent:image:maya:blink"]}
     assert guest["ok"] and guest["idle"] == ["latent:image:bea:idle"]
     assert idle_route["images"] == ["image:maya", "image:bea"]
+    # Asked during a call: the service never renders a loop for it (a speaker swap leaves it briefly idle).
+    assert idle_route["render_idle"] == [False, False] and idle_route["rendered_only"] == [True, True]
+
+
+def test_an_idle_loop_whose_member_cannot_be_read_is_refused_not_a_server_error(monkeypatch, idle_route) -> None:
+    from app.platform.live_voice.transport import portrait_idle
+
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+
+    def away(factory: Any, session_id: str) -> Any:
+        raise RuntimeError("database away")
+
+    monkeypatch.setattr(portrait_idle, "load_session", away)
+    response = client.get("/api/tts/live-call/portrait-idle", params={"session_id": "chat-1"})
+    assert response.status_code == 200 and response.json()["code"] == "portrait_failed"
 
 
 def test_an_idle_loop_is_refused_for_a_stranger_a_picture_or_a_busy_service(monkeypatch, idle_route) -> None:

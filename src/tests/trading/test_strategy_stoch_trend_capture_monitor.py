@@ -20,6 +20,7 @@ from app.apps.trading import (
     strategy_monitor,
     strategy_monitor_candidates,
     strategy_monitor_config_run,
+    strategy_monitor_stoch_capture,
     strategy_stoch_sweep,
 )
 from app.apps.trading.held_quote_demand import HeldQuoteDemand
@@ -33,7 +34,13 @@ from app.apps.trading.strategy_stoch_sweep import (
 class _MonitorModules:
     """The strategy monitor spans several modules; a patch reaches each one that uses the name."""
 
-    _modules = (strategy_monitor, strategy_monitor_candidates, strategy_monitor_config_run, strategy_stoch_sweep)
+    _modules = (
+        strategy_monitor,
+        strategy_monitor_candidates,
+        strategy_monitor_config_run,
+        strategy_monitor_stoch_capture,
+        strategy_stoch_sweep,
+    )
 
     def __getattr__(self, name: str):
         for module in self._modules:

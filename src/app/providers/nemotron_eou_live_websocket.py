@@ -109,8 +109,11 @@ async def _set_context_phrases(manager: Any, data: dict[str, Any], connection_id
     if not callable(setter):
         return
     phrases = clean_context_phrases(_field(data, "contextPhrases", "context_phrases"))
+    # The account the call belongs to, from the gateway (it hashes the workspace): names never cross accounts.
+    scope = data.get("scope")
+    scope = scope[:64] if isinstance(scope, str) else ""
     # Rebuilding the decoder takes the model lock: off the loop, so audio from other messages keeps flowing.
-    applied = await asyncio.to_thread(setter, phrases, owner=connection_id)
+    applied = await asyncio.to_thread(setter, phrases, owner=connection_id, scope=scope)
     _metric("stt_context_phrases", connection_id=connection_id, phrase_count=len(phrases), applied=applied)
 
 

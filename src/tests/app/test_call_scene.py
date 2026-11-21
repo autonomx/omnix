@@ -141,6 +141,25 @@ def test_a_name_recognition_misspells_still_names_the_member() -> None:
     assert named_member(twins, "Aphra, hi") is None
 
 
+def test_an_everyday_word_that_sounds_like_a_name_names_no_one() -> None:
+    # The review of 2026-11-20: "like" handed the turn to Luke, "make" to Mike, ahead of the director.
+    names = ("Luke", "Mike", "Mina", "Vera Lynn", "Tina", "Jake", "Rosa")
+    guests = tuple(SceneMember(name.split()[0].lower(), name) for name in names)
+    call = Scene(host=SceneMember("jinx", "Jinx"), guests=guests, speaker_id="jinx")
+    for heard in ("I like that idea, what do you think?", "Can you make it shorter?", "That one is mine.",
+                  "That's very funny.", "It was a tiny bit scary.", "Is that a joke?", "Like, I don't know.",
+                  "Make it quick, please.", "I picked a rose"):
+        assert named_member(call, heard) is None, heard
+    # Said as a name, the same sounds still name the member.
+    assert named_member(call, "I like that, Luka?") == "luke"
+    assert named_member(call, "what do you think, mika?") == "mike"
+    assert named_member(call, "hey teena, you there") == "tina"
+    assert named_member(call, "and what does Jaike think") == "jake"
+    afra = Scene(host=SceneMember("jinx", "Jinx"), guests=(SceneMember("luke", "Luke"), SceneMember("afra", "Afra")),
+                 speaker_id="jinx")
+    assert named_member(afra, "I like that, Afro") == "afra"  # the word said as a name, not the first sound-alike
+
+
 def test_otherwise_the_last_member_to_speak_answers() -> None:
     history = [_message("user", "hi"), _message("assistant", "Hey.", speaker="bea"),
                _message("assistant", "Aside.", speaker="theo", transient=True)]
@@ -172,6 +191,30 @@ def test_the_scene_is_read_from_the_seats_and_the_roster() -> None:
     assert scene.load_scene(_session(interaction_mode="system"), repository=_Seats("bea"), member=_member) is None
     view = scene_view(_session(), repository=_Seats("bea", "gone"), member=_member)
     assert [(m.character_id, m.role, m.seat) for m in view.members] == [("mara", "host", None), ("bea", "guest", 1)]
+
+
+def test_a_calls_names_are_its_host_and_seated_guests_and_its_stamp_keeps_their_seats(monkeypatch) -> None:
+    from app.platform.live_voice.transport.call_roster import ChatCallRoster
+
+    seats = _Seats("bea", "gone")
+    stamped: list[str] = []
+    seats.note_call = lambda session_id: stamped.append(session_id) or len(seats.seats)  # type: ignore[attr-defined]
+    assert scene.call_names(_session(), repository=seats, member=_member) == ["Mara Quinn", "Bea Hart"]
+    assert scene.call_names(_session(), repository=_Seats(), member=_member) == ["Mara Quinn"]  # host alone
+    assert scene.call_names(_session(interaction_mode="system"), repository=seats, member=_member) == []
+    assert scene.note_call(_session(), repository=seats) == 2 and stamped == ["chat:1"]
+    assert scene.note_call(_session(interaction_mode="system"), repository=seats) == 0
+
+    # The roster reads the chat through the tenant-scoped store: a chat that is not the caller's has no names.
+    monkeypatch.setattr(scene, "scene_repository", lambda: seats)
+    monkeypatch.setattr(scene, "resolve_member", _member)
+    store = SimpleNamespace(get_session=lambda session_id: _session() if session_id == "chat:1" else None)
+    roster = ChatCallRoster(lambda: store)
+    assert roster.names("chat:1") == ["Mara Quinn", "Bea Hart"]
+    assert roster.names("chat:someone-elses") == [] and roster.names("") == []
+    roster.note_call("chat:someone-elses")
+    roster.note_call("chat:1")
+    assert stamped == ["chat:1", "chat:1"]
 
 
 def test_a_seat_read_that_fails_counts_as_guests() -> None:

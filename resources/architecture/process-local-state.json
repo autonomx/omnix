@@ -808,6 +808,15 @@
       "invalidation": "clear_live_prompt_caches"
     },
     {
+      "path": "src/app/platform/live_voice/prompt/cache.py",
+      "symbol": "_VOICE_SPEAKERS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "clear_live_prompt_caches"
+    },
+    {
       "path": "src/app/platform/live_voice/prompt/dependency_stages.py",
       "symbol": "_CACHE_LOCK",
       "category": "cache",

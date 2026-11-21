@@ -657,6 +657,266 @@ async def _session_events(
     ]
 
 
+def _comparison_payload(
+    events: list[StrategyEvent],
+    *,
+    session_date,
+    cohort_candidate_count: int,
+    now: datetime,
+) -> tuple[dict[str, Any], str]:
+    """The after-close comparison of the four arms, and the signature that names this snapshot of it."""
+    deterministic_replays = sorted(
+        [
+            event for event in events if event.event_type == "v2_shadow_replay_trade"
+        ],
+        key=lambda event: str(event.payload.get("entry_time") or event.observed_at.isoformat()),
+    )
+    deterministic_r = [
+        value
+        for event in deterministic_replays
+        if (value := _decimal(event.payload.get("r_result"))) is not None
+    ]
+    deterministic_r_drawdown = _max_drawdown(deterministic_r)
+    entry_ready_events = [
+        event
+        for event in events
+        if event.event_type == "state" and event.state == "entry_ready"
+    ]
+    deterministic_shadow_execution = [
+        event
+        for event in events
+        if event.event_type == "shadow_execution"
+        and event.payload.get("strategy_version") == "2.0.0"
+    ]
+    deterministic_live_spreads: list[Decimal] = []
+    deterministic_live_eligible = 0
+    for event in deterministic_shadow_execution:
+        execution = event.payload.get("execution")
+        if not isinstance(execution, dict):
+            continue
+        if execution.get("execution_eligible") is True:
+            deterministic_live_eligible += 1
+        spread = _decimal(execution.get("spread_bps"))
+        if spread is not None:
+            deterministic_live_spreads.append(spread)
+
+    stoch_events = sorted(
+        [
+            event for event in events if event.event_type == "stoch_trend_execution_summary"
+        ],
+        key=lambda event: event.observed_at,
+    )
+    stoch_net: list[Decimal] = []
+    stoch_drag: list[Decimal] = []
+    for event in stoch_events:
+        policy_payload = event.payload.get("policy")
+        if not isinstance(policy_payload, dict) or policy_payload.get("complete") is not True:
+            continue
+        value = _decimal(policy_payload.get("net_execution_return_pct"))
+        if value is not None:
+            stoch_net.append(value)
+        drag = _decimal(policy_payload.get("execution_drag_pct"))
+        if drag is not None:
+            stoch_drag.append(drag)
+
+    def ai_arm(policy: AIShadowPolicy) -> dict[str, Any]:
+        all_trades = sorted(
+            [
+                event
+                for event in events
+                if event.event_type == "ai_shadow_trade"
+                and event.payload.get("policy") == policy
+            ],
+            key=lambda event: event.observed_at,
+        )
+        closed_trades = [event for event in all_trades if event.state == "closed"]
+        trades = [
+            event for event in closed_trades
+            if event.payload.get("degraded_execution") is not True
+        ]
+        hypothetical_trades = [
+            event for event in closed_trades
+            if event.payload.get("degraded_execution") is True
+        ]
+        incomplete_trades = [
+            event for event in all_trades if event.state == "incomplete"
+        ]
+        returns = [
+            value
+            for event in trades
+            if (value := _decimal(event.payload.get("net_execution_return_pct"))) is not None
+        ]
+        maes = [
+            value
+            for event in trades
+            if (value := _decimal(event.payload.get("mae_pct"))) is not None
+        ]
+        stabilities = [
+            value
+            for event in trades
+            if (value := _decimal(event.payload.get("decision_stability"))) is not None
+        ]
+        drags = [
+            value
+            for event in trades
+            if (value := _decimal(event.payload.get("execution_drag_pct"))) is not None
+        ]
+        policy_batches = [
+            event
+            for event in events
+            if event.event_type == "ai_shadow_batch"
+            and event.payload.get("policy") == policy
+        ]
+        batches = [event for event in policy_batches if event.state == "complete"]
+        error_batches = [event for event in policy_batches if event.state == "error"]
+        skipped_batches = [event for event in policy_batches if event.state == "skipped"]
+        total_decisions, total_action_changes, overall_stability = _policy_action_stats(
+            events,
+            policy=policy,
+        )
+        trade_decision_count = sum(
+            int(event.payload.get("decision_count") or 0) for event in trades
+        )
+        trade_action_changes = sum(
+            int(event.payload.get("action_change_count") or 0) for event in trades
+        )
+        return {
+            "trade_count": len(trades),
+            "hypothetical_trade_count": len(hypothetical_trades),
+            "total_closed_trade_count": len(closed_trades),
+            "incomplete_trade_count": len(incomplete_trades),
+            "win_count": sum(1 for value in returns if value > 0),
+            "mean_net_execution_return_pct": (
+                str(sum(returns, Decimal("0")) / Decimal(len(returns)))
+                if returns
+                else None
+            ),
+            "trade_sequence_max_drawdown_pct": (
+                str(_max_drawdown(returns)) if returns else None
+            ),
+            "worst_mae_pct": str(min(maes)) if maes else None,
+            "mean_execution_drag_pct": (
+                str(sum(drags, Decimal("0")) / Decimal(len(drags)))
+                if drags
+                else None
+            ),
+            "total_decisions": total_decisions,
+            "total_action_changes": total_action_changes,
+            "overall_decision_stability": (
+                str(overall_stability) if overall_stability is not None else None
+            ),
+            "trade_decision_count": trade_decision_count,
+            "trade_action_change_count": trade_action_changes,
+            "mean_trade_decision_stability": (
+                str(sum(stabilities, Decimal("0")) / Decimal(len(stabilities)))
+                if stabilities
+                else None
+            ),
+            "llm_call_count": len(batches),
+            "llm_error_count": len(error_batches),
+            "llm_skipped_count": len(skipped_batches),
+            "llm_total_tokens": sum(
+                int(event.payload.get("total_tokens") or 0) for event in batches
+            ),
+        }
+
+    data_gaps = [
+        event for event in events if event.event_type == "ai_shadow_data_gap"
+    ]
+    payload = {
+        "policy_version": AI_SHADOW_POLICY_VERSION,
+        "session_date": session_date.isoformat(),
+        "comparison_basis": "same frozen Finviz Top-5 cohort; causal SHADOW evidence",
+        "shared_data_quality": {
+            "cohort_candidate_count": cohort_candidate_count,
+            "market_data_gap_event_count": len(data_gaps),
+            "symbols_with_market_data_gaps": sorted(
+                {
+                    event.instrument_id
+                    for event in data_gaps
+                    if event.instrument_id != "__universe__"
+                }
+            ),
+        },
+        "arm_a_deterministic_v2": {
+            "entry_ready_event_count": len(entry_ready_events),
+            "live_shadow_execution_observation_count": len(deterministic_shadow_execution),
+            "live_execution_eligible_signal_count": deterministic_live_eligible,
+            "mean_live_entry_spread_bps": (
+                str(
+                    sum(deterministic_live_spreads, Decimal("0"))
+                    / Decimal(len(deterministic_live_spreads))
+                )
+                if deterministic_live_spreads
+                else None
+            ),
+            "replay_trade_count": len(deterministic_replays),
+            "mean_r_result": (
+                str(sum(deterministic_r, Decimal("0")) / Decimal(len(deterministic_r)))
+                if deterministic_r
+                else None
+            ),
+            "trade_sequence_max_drawdown_r": (
+                str(deterministic_r_drawdown)
+                if deterministic_r_drawdown is not None
+                else None
+            ),
+            "return_unit": "R",
+            "execution_model": "canonical_v2_postclose_replay_with_assumed_spread",
+            "assumed_spread_bps_values": sorted(
+                {
+                    str(value)
+                    for event in deterministic_replays
+                    if (
+                        value := _decimal(event.payload.get("assumed_spread_bps"))
+                    )
+                    is not None
+                }
+            ),
+        },
+        "arm_b_stoch_trend": {
+            "completed_trade_count": len(stoch_net),
+            "mean_net_execution_return_pct": (
+                str(sum(stoch_net, Decimal("0")) / Decimal(len(stoch_net)))
+                if stoch_net
+                else None
+            ),
+            "trade_sequence_max_drawdown_pct": (
+                str(_max_drawdown(stoch_net)) if stoch_net else None
+            ),
+            "mean_execution_drag_pct": (
+                str(sum(stoch_drag, Decimal("0")) / Decimal(len(stoch_drag)))
+                if stoch_drag
+                else None
+            ),
+            "return_unit": "percent",
+            "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
+        },
+        "arm_c_ai_every_minute": {
+            **ai_arm("minute"),
+            "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
+        },
+        "arm_d_ai_event_driven": {
+            **ai_arm("event"),
+            "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
+        },
+        "cross_arm_return_units_harmonized": False,
+        "cross_arm_execution_models_harmonized": False,
+        "ranking_deferred_until_risk_normalized": True,
+        "research_only": True,
+        "execution_authority": False,
+    }
+    identity_signature = _key(
+        len(deterministic_replays),
+        len(deterministic_shadow_execution),
+        len(stoch_net),
+        payload["shared_data_quality"],
+        payload["arm_c_ai_every_minute"],
+        payload["arm_d_ai_event_driven"],
+    )
+    return payload, identity_signature
+
+
 class TradingAIShadowMonitor(ScheduledTradingMonitor):
     error_event = "ai_shadow_monitor_error"
 
@@ -2349,254 +2609,11 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if not after_regular_close(now):
             return
 
-        deterministic_replays = sorted(
-            [
-                event for event in events if event.event_type == "v2_shadow_replay_trade"
-            ],
-            key=lambda event: str(event.payload.get("entry_time") or event.observed_at.isoformat()),
-        )
-        deterministic_r = [
-            value
-            for event in deterministic_replays
-            if (value := _decimal(event.payload.get("r_result"))) is not None
-        ]
-        deterministic_r_drawdown = _max_drawdown(deterministic_r)
-        entry_ready_events = [
-            event
-            for event in events
-            if event.event_type == "state" and event.state == "entry_ready"
-        ]
-        deterministic_shadow_execution = [
-            event
-            for event in events
-            if event.event_type == "shadow_execution"
-            and event.payload.get("strategy_version") == "2.0.0"
-        ]
-        deterministic_live_spreads: list[Decimal] = []
-        deterministic_live_eligible = 0
-        for event in deterministic_shadow_execution:
-            execution = event.payload.get("execution")
-            if not isinstance(execution, dict):
-                continue
-            if execution.get("execution_eligible") is True:
-                deterministic_live_eligible += 1
-            spread = _decimal(execution.get("spread_bps"))
-            if spread is not None:
-                deterministic_live_spreads.append(spread)
-
-        stoch_events = sorted(
-            [
-                event for event in events if event.event_type == "stoch_trend_execution_summary"
-            ],
-            key=lambda event: event.observed_at,
-        )
-        stoch_net: list[Decimal] = []
-        stoch_drag: list[Decimal] = []
-        for event in stoch_events:
-            policy_payload = event.payload.get("policy")
-            if not isinstance(policy_payload, dict) or policy_payload.get("complete") is not True:
-                continue
-            value = _decimal(policy_payload.get("net_execution_return_pct"))
-            if value is not None:
-                stoch_net.append(value)
-            drag = _decimal(policy_payload.get("execution_drag_pct"))
-            if drag is not None:
-                stoch_drag.append(drag)
-
-        def ai_arm(policy: AIShadowPolicy) -> dict[str, Any]:
-            all_trades = sorted(
-                [
-                    event
-                    for event in events
-                    if event.event_type == "ai_shadow_trade"
-                    and event.payload.get("policy") == policy
-                ],
-                key=lambda event: event.observed_at,
-            )
-            closed_trades = [event for event in all_trades if event.state == "closed"]
-            trades = [
-                event for event in closed_trades
-                if event.payload.get("degraded_execution") is not True
-            ]
-            hypothetical_trades = [
-                event for event in closed_trades
-                if event.payload.get("degraded_execution") is True
-            ]
-            incomplete_trades = [
-                event for event in all_trades if event.state == "incomplete"
-            ]
-            returns = [
-                value
-                for event in trades
-                if (value := _decimal(event.payload.get("net_execution_return_pct"))) is not None
-            ]
-            maes = [
-                value
-                for event in trades
-                if (value := _decimal(event.payload.get("mae_pct"))) is not None
-            ]
-            stabilities = [
-                value
-                for event in trades
-                if (value := _decimal(event.payload.get("decision_stability"))) is not None
-            ]
-            drags = [
-                value
-                for event in trades
-                if (value := _decimal(event.payload.get("execution_drag_pct"))) is not None
-            ]
-            policy_batches = [
-                event
-                for event in events
-                if event.event_type == "ai_shadow_batch"
-                and event.payload.get("policy") == policy
-            ]
-            batches = [event for event in policy_batches if event.state == "complete"]
-            error_batches = [event for event in policy_batches if event.state == "error"]
-            skipped_batches = [event for event in policy_batches if event.state == "skipped"]
-            total_decisions, total_action_changes, overall_stability = _policy_action_stats(
-                events,
-                policy=policy,
-            )
-            trade_decision_count = sum(
-                int(event.payload.get("decision_count") or 0) for event in trades
-            )
-            trade_action_changes = sum(
-                int(event.payload.get("action_change_count") or 0) for event in trades
-            )
-            return {
-                "trade_count": len(trades),
-                "hypothetical_trade_count": len(hypothetical_trades),
-                "total_closed_trade_count": len(closed_trades),
-                "incomplete_trade_count": len(incomplete_trades),
-                "win_count": sum(1 for value in returns if value > 0),
-                "mean_net_execution_return_pct": (
-                    str(sum(returns, Decimal("0")) / Decimal(len(returns)))
-                    if returns
-                    else None
-                ),
-                "trade_sequence_max_drawdown_pct": (
-                    str(_max_drawdown(returns)) if returns else None
-                ),
-                "worst_mae_pct": str(min(maes)) if maes else None,
-                "mean_execution_drag_pct": (
-                    str(sum(drags, Decimal("0")) / Decimal(len(drags)))
-                    if drags
-                    else None
-                ),
-                "total_decisions": total_decisions,
-                "total_action_changes": total_action_changes,
-                "overall_decision_stability": (
-                    str(overall_stability) if overall_stability is not None else None
-                ),
-                "trade_decision_count": trade_decision_count,
-                "trade_action_change_count": trade_action_changes,
-                "mean_trade_decision_stability": (
-                    str(sum(stabilities, Decimal("0")) / Decimal(len(stabilities)))
-                    if stabilities
-                    else None
-                ),
-                "llm_call_count": len(batches),
-                "llm_error_count": len(error_batches),
-                "llm_skipped_count": len(skipped_batches),
-                "llm_total_tokens": sum(
-                    int(event.payload.get("total_tokens") or 0) for event in batches
-                ),
-            }
-
-        data_gaps = [
-            event for event in events if event.event_type == "ai_shadow_data_gap"
-        ]
-        payload = {
-            "policy_version": AI_SHADOW_POLICY_VERSION,
-            "session_date": session_date.isoformat(),
-            "comparison_basis": "same frozen Finviz Top-5 cohort; causal SHADOW evidence",
-            "shared_data_quality": {
-                "cohort_candidate_count": cohort_candidate_count,
-                "market_data_gap_event_count": len(data_gaps),
-                "symbols_with_market_data_gaps": sorted(
-                    {
-                        event.instrument_id
-                        for event in data_gaps
-                        if event.instrument_id != "__universe__"
-                    }
-                ),
-            },
-            "arm_a_deterministic_v2": {
-                "entry_ready_event_count": len(entry_ready_events),
-                "live_shadow_execution_observation_count": len(deterministic_shadow_execution),
-                "live_execution_eligible_signal_count": deterministic_live_eligible,
-                "mean_live_entry_spread_bps": (
-                    str(
-                        sum(deterministic_live_spreads, Decimal("0"))
-                        / Decimal(len(deterministic_live_spreads))
-                    )
-                    if deterministic_live_spreads
-                    else None
-                ),
-                "replay_trade_count": len(deterministic_replays),
-                "mean_r_result": (
-                    str(sum(deterministic_r, Decimal("0")) / Decimal(len(deterministic_r)))
-                    if deterministic_r
-                    else None
-                ),
-                "trade_sequence_max_drawdown_r": (
-                    str(deterministic_r_drawdown)
-                    if deterministic_r_drawdown is not None
-                    else None
-                ),
-                "return_unit": "R",
-                "execution_model": "canonical_v2_postclose_replay_with_assumed_spread",
-                "assumed_spread_bps_values": sorted(
-                    {
-                        str(value)
-                        for event in deterministic_replays
-                        if (
-                            value := _decimal(event.payload.get("assumed_spread_bps"))
-                        )
-                        is not None
-                    }
-                ),
-            },
-            "arm_b_stoch_trend": {
-                "completed_trade_count": len(stoch_net),
-                "mean_net_execution_return_pct": (
-                    str(sum(stoch_net, Decimal("0")) / Decimal(len(stoch_net)))
-                    if stoch_net
-                    else None
-                ),
-                "trade_sequence_max_drawdown_pct": (
-                    str(_max_drawdown(stoch_net)) if stoch_net else None
-                ),
-                "mean_execution_drag_pct": (
-                    str(sum(stoch_drag, Decimal("0")) / Decimal(len(stoch_drag)))
-                    if stoch_drag
-                    else None
-                ),
-                "return_unit": "percent",
-                "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
-            },
-            "arm_c_ai_every_minute": {
-                **ai_arm("minute"),
-                "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
-            },
-            "arm_d_ai_event_driven": {
-                **ai_arm("event"),
-                "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
-            },
-            "cross_arm_return_units_harmonized": False,
-            "cross_arm_execution_models_harmonized": False,
-            "ranking_deferred_until_risk_normalized": True,
-            "research_only": True,
-            "execution_authority": False,
-        }
-        identity_signature = _key(
-            len(deterministic_replays),
-            len(deterministic_shadow_execution),
-            len(stoch_net),
-            payload["shared_data_quality"],
-            payload["arm_c_ai_every_minute"],
-            payload["arm_d_ai_event_driven"],
+        payload, identity_signature = _comparison_payload(
+            events,
+            session_date=session_date,
+            cohort_candidate_count=cohort_candidate_count,
+            now=now,
         )
         await self._append(
             repository,

@@ -57,8 +57,10 @@ async def portrait_health(base_url: str, *, client: Any = None) -> str:
             await client.aclose()
 
 
-async def prepare_portrait(base_url: str, tenant: str, image: bytes, *, client: Any = None) -> str:
-    """Encode a portrait on the service; returns its latent key."""
+async def prepare_portrait(base_url: str, tenant: str, image: bytes, *, client: Any = None,
+                           render_idle: bool = True) -> str:
+    """Encode a portrait on the service; returns its latent key. ``render_idle`` False skips the idle loop the
+    service otherwise renders when no call streams."""
     import httpx
 
     from app.security.service_token import service_headers
@@ -68,7 +70,8 @@ async def prepare_portrait(base_url: str, tenant: str, image: bytes, *, client: 
     client = client or httpx.AsyncClient(timeout=30.0, follow_redirects=False)
     try:
         response = await client.post(f"{base_url}/portrait/prepare", headers=service_headers(),
-                                     data={"tenant": tenant, "image_sha256": digest},
+                                     data={"tenant": tenant, "image_sha256": digest,
+                                           **({} if render_idle else {"render_idle": "false"})},
                                      files={"file": ("portrait", image)})
     except httpx.HTTPError as exc:
         raise PortraitUnavailable("service_unreachable", "The portrait service did not answer") from exc
@@ -117,8 +120,10 @@ class PortraitIdleLoop(NamedTuple):
     blink: list[str]
 
 
-async def idle_portrait(base_url: str, latent_key: str, *, client: Any = None) -> PortraitIdleLoop:
-    """A prepared portrait's idle loop, for a group call's member who is not speaking."""
+async def idle_portrait(base_url: str, latent_key: str, *, client: Any = None,
+                        rendered_only: bool = False) -> PortraitIdleLoop:
+    """A prepared portrait's idle loop, for a group call's member who is not speaking; ``rendered_only`` refuses
+    (``portrait_busy``) rather than render one."""
     import httpx
 
     from app.security.service_token import service_headers
@@ -127,7 +132,8 @@ async def idle_portrait(base_url: str, latent_key: str, *, client: Any = None) -
     client = client or httpx.AsyncClient(timeout=30.0, follow_redirects=False)
     try:
         response = await client.post(f"{base_url}/portrait/idle", headers=service_headers(),
-                                     data={"latent_key": latent_key})
+                                     data={"latent_key": latent_key,
+                                           **({"rendered_only": "true"} if rendered_only else {})})
     except httpx.HTTPError as exc:
         raise PortraitUnavailable("service_unreachable", "The portrait service did not answer") from exc
     finally:

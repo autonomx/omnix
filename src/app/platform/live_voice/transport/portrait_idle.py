@@ -18,7 +18,8 @@ from pydantic import BaseModel, Field
 
 from app.platform.characters.contracts import default_character_avatar_service, resolve_live_call_runtime
 from app.platform.live_voice.portrait.link import PortraitUnavailable, idle_portrait, portrait_url, prepare_portrait
-from app.platform.live_voice.transport.avatar_websocket import MAX_PORTRAIT_BYTES, _load_session, _speaker_session
+from app.platform.live_voice.transport.avatar_websocket import MAX_PORTRAIT_BYTES
+from app.platform.live_voice.transport.call_session import load_session, speaker_session
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,9 @@ def _refused(code: str, message: str) -> PortraitIdleResponse:
 def _member_runtime(chat_store_factory: Callable[[], Any], session_id: str, speaker_id: str) -> Any:
     """The live-call runtime as the named member sees it; None when the chat is not the caller's or the member is
     not on its call."""
-    session = _load_session(chat_store_factory, session_id)
+    session = load_session(chat_store_factory, session_id)
     if session is not None and speaker_id:
-        session = _speaker_session(session, speaker_id)
+        session = speaker_session(session, speaker_id)
     return resolve_live_call_runtime(session) if session is not None else None
 
 
@@ -54,7 +55,11 @@ def register_portrait_idle_route(router: APIRouter, *, chat_store_factory: Calla
         base_url = portrait_url()
         if not base_url:
             return _refused("portrait_not_configured", "The portrait service is not set up")
-        runtime = await asyncio.to_thread(_member_runtime, chat_store_factory, session_id, speaker_id.strip())
+        try:
+            runtime = await asyncio.to_thread(_member_runtime, chat_store_factory, session_id, speaker_id.strip())
+        except Exception:  # noqa: BLE001 - the chat store is away: the member keeps its picture
+            logger.warning("Portrait idle member could not be read for session %s", session_id, exc_info=True)
+            return _refused("portrait_failed", "The portrait could not be read")
         if runtime is None:
             return _refused("speaker_not_on_call", "That character is not on this call")
         pack = runtime.avatar_pack
@@ -65,8 +70,11 @@ def register_portrait_idle_route(router: APIRouter, *, chat_store_factory: Calla
         try:
             image = await asyncio.to_thread(default_character_avatar_service().portrait_image, pack,
                                             max_bytes=MAX_PORTRAIT_BYTES)
-            latent_key = await prepare_portrait(base_url, current_tenant().workspace_id, image)
-            loop = await idle_portrait(base_url, latent_key)
+            # Asked while a call is on (a speaker swap leaves the service briefly idle): never render here, a loop
+            # rendered now would hold the GPU thread ahead of the next speaker's frames. A loop not rendered yet
+            # comes back busy; the member's own turn sends it.
+            latent_key = await prepare_portrait(base_url, current_tenant().workspace_id, image, render_idle=False)
+            loop = await idle_portrait(base_url, latent_key, rendered_only=True)
         except PortraitUnavailable as exc:
             return _refused(exc.code, str(exc) or "The portrait is not available")
         except Exception:  # noqa: BLE001 - the member keeps its picture

@@ -117,6 +117,30 @@ def test_a_guest_leaves_with_its_character_and_the_scene_with_its_chat(seats) ->
     assert repository.clear(session_id) == 0
 
 
+def test_a_seat_expires_once_its_call_has_been_quiet_and_a_seat_chosen_before_a_call_stays(seats) -> None:
+    from app.platform.chat.persistence.scene_repository import SEAT_EXPIRES_AFTER_CALL_SECONDS
+
+    repository, session_id, ids = seats
+    repository.add_guest(session_id, ids["bea"])
+    repository.add_guest(session_id, ids["theo"])
+    assert repository.note_call(session_id) == 2
+    repository.add_guest(session_id, ids["ana"])  # chosen after the call's last stamp: no stamp yet
+
+    # The call ended without the browser clearing its seats (a crashed tab): its last stamp is past the expiry.
+    with psycopg.connect(admin_database_url(), autocommit=True) as admin:
+        admin.execute(
+            "UPDATE omnix_chat_scene_members SET last_call_at = now() - make_interval(secs => %s) "
+            "WHERE session_id = %s AND last_call_at IS NOT NULL",
+            (SEAT_EXPIRES_AFTER_CALL_SECONDS + 5, session_id),
+        )
+    assert _guests(repository, session_id) == [(ids["ana"], 3)]
+    assert repository.note_call(session_id) == 1  # an expired seat is not brought back by the next call
+
+    # The expired seats free their numbers and their characters for the next add.
+    assert repository.add_guest(session_id, ids["bea"]).seat == 1
+    assert _guests(repository, session_id) == [(ids["bea"], 1), (ids["ana"], 3)]
+
+
 def test_the_guest_check_does_not_see_another_workspaces_character(seats) -> None:
     from app.platform.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
 

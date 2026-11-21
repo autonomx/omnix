@@ -44,6 +44,7 @@ from app.platform.characters.contracts import (
 from app.platform.live_voice.portrait.calls import PortraitCalls, principal_id
 from app.platform.live_voice.portrait.link import PortraitLink, PortraitUnavailable, portrait_url, prepare_portrait
 from app.platform.live_voice.portrait.quality import QualityController, starting_level
+from app.platform.live_voice.transport.call_session import load_session, speaker_session
 
 logger = logging.getLogger(__name__)
 
@@ -60,18 +61,6 @@ RESTART_WAIT_SECONDS = 20.0
 MEMORY_SHORT = "model_busy"
 # Above any offset or frame count a call reaches (about 12 hours of 48 kHz samples).
 MAX_ACK_COUNT = 2**31
-
-
-def _load_session(chat_store_factory: Callable[[], Any], session_id: str) -> Any:
-    """The session, as the caller's tenant sees it (None when it is not theirs)."""
-    return chat_store_factory().get_session(session_id)
-
-
-def _speaker_session(session: Any, speaker_id: str) -> Any:
-    """The session as the speaking member sees it (the host's, or a seated guest's); None for anyone else."""
-    from app.platform.chat.contracts import speaker_view
-
-    return speaker_view(session, speaker_id)
 
 
 async def _unavailable(websocket: WebSocket, code: str, message: str) -> None:
@@ -169,9 +158,9 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
             await _unavailable(websocket, "portrait_not_configured", "The portrait service is not set up")
             return
         try:
-            session = await asyncio.to_thread(_load_session, chat_store_factory, session_id)
+            session = await asyncio.to_thread(load_session, chat_store_factory, session_id)
             if session is not None and speaker_id:
-                session = await asyncio.to_thread(_speaker_session, session, speaker_id)
+                session = await asyncio.to_thread(speaker_session, session, speaker_id)
                 if session is None:
                     await _unavailable(websocket, "speaker_not_on_call", "That character is not on this call")
                     return

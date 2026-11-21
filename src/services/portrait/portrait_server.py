@@ -504,7 +504,8 @@ def create_app(*, load: Callable[[], Any] = _default_load,
     @app.post("/portrait/prepare")
     async def prepare(tenant: str = Form(..., min_length=1, max_length=200),  # noqa: B008
                       image_sha256: str = Form(..., min_length=64, max_length=64),  # noqa: B008
-                      file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+                      file: UploadFile = File(...),  # noqa: B008
+                      render_idle: bool = Form(True)) -> dict[str, Any]:  # noqa: B008
         payload = await file.read(MAX_IMAGE_UPLOAD_BYTES + 1)
         if not payload or len(payload) > MAX_IMAGE_UPLOAD_BYTES:
             raise HTTPException(status_code=413 if payload else 400, detail="invalid_image")
@@ -521,7 +522,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             return {"ok": False, "code": exc.code, "message": str(exc)}
         # A prepared portrait is ready for a call. Rendered at the call's start instead, its idle loop would hold the
         # GPU thread, and with it the first reply's frames, for seconds. Never in the way of a call in progress.
-        if not admission.active:
+        if render_idle and not admission.active:
             started = time.monotonic()
             try:
                 await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, 0))
@@ -562,10 +563,12 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         return {"ok": True, "fps": 25, "frames": [base64.b64encode(frame).decode("ascii") for frame in frames]}
 
     @app.post("/portrait/idle")
-    async def idle(latent_key: str = Form(..., min_length=1, max_length=200)) -> dict[str, Any]:  # noqa: B008
+    async def idle(latent_key: str = Form(..., min_length=1, max_length=200),  # noqa: B008
+                   rendered_only: bool = Form(False)) -> dict[str, Any]:  # noqa: B008
         """A prepared portrait's idle loop and its blink twins, for a group call's members who are not speaking.
         A loop already rendered (at any level) comes back as it is; rendering one would hold the GPU thread for
-        seconds, so while a call streams that is refused with ``portrait_busy``."""
+        seconds, so while a call streams, or when the caller asks for ``rendered_only`` (a call between speakers),
+        that is refused with ``portrait_busy``."""
         import base64
 
         from services.portrait.idle_loop import idle_frame_step
@@ -578,12 +581,15 @@ def create_app(*, load: Callable[[], Any] = _default_load,
         if portrait is None:
             return {"ok": False, "code": "portrait_not_prepared", "message": "Prepare the portrait first"}
         level = runtime.rendered_idle_level(portrait)
-        if level is None:
-            if admission.active:
-                return {"ok": False, "code": "portrait_busy", "message": "A call is using the portrait"}
+        if level is not None:
+            # Rendered already: the cached JPEGs as they are, never queued on the GPU thread behind a call's steps.
+            frames, blink = portrait.idle_jpegs[level], portrait.blink_jpegs[level]
+        elif admission.active or rendered_only:
+            return {"ok": False, "code": "portrait_busy", "message": "A call is using the portrait"}
+        else:
             level = 0
-        frames = await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, level))
-        blink = await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, level))
+            frames = await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, level))
+            blink = await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, level))
         return {"ok": True, "frame_ms": 40 * idle_frame_step(level),
                 "idle": [base64.b64encode(jpeg).decode("ascii") for jpeg in frames],
                 "blink": [base64.b64encode(jpeg).decode("ascii") for jpeg in blink]}

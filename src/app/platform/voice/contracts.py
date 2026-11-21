@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         normalization_gains,
     )
     from .audio_service import AudioServiceClient, AudioServiceUnavailable, AudioToolRequestError
+    from .call_roster import CALL_ROSTER, CallRoster
     from .client_tools import VOICE_CLIENT_TOOLS, VoiceClientTool
     from .jobs import clone_voice, wait_for_engine
     from .loudness import integrated_loudness, normalize_loudness
@@ -128,6 +129,9 @@ _TOOLS = {
     # The tool port API clients and MCP call (Phase 7); apps register their tools through it.
     "VOICE_CLIENT_TOOLS": ("client_tools", "VOICE_CLIENT_TOOLS"),
     "VoiceClientTool": ("client_tools", "VoiceClientTool"),
+    # Who is on a call, for the speech proxy's name boosting; live voice contributes it.
+    "CALL_ROSTER": ("call_roster", "CALL_ROSTER"),
+    "CallRoster": ("call_roster", "CallRoster"),
 }
 # Speech assembly (pauses and per-speaker loudness) shared by Voice Studio and apps.
 _ASSEMBLY = frozenset({
@@ -189,6 +193,8 @@ __all__ = [
     "TranscriptDocument",
     "VOICE_CLIENT_TOOLS",
     "VoiceClientTool",
+    "CALL_ROSTER",
+    "CallRoster",
     "clone_voice",
     "export_transcript",
     "integrated_loudness",

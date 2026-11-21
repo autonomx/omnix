@@ -916,29 +916,29 @@ def _kept_own_side(
         if 1 <= number <= len(known_promises) and known_promises[number - 1] in open_promises
     ))
     jokes: dict[str, JokeReading] = {}
-    for item in answer.jokes:
-        turns = numbered.numbered(item.turns)
+    for read_joke in answer.jokes:
+        turns = numbered.numbered(read_joke.turns)
         same = (
-            known_jokes[item.same_as - 1]
-            if item.same_as is not None and 1 <= item.same_as <= len(known_jokes)
+            known_jokes[read_joke.same_as - 1]
+            if read_joke.same_as is not None and 1 <= read_joke.same_as <= len(known_jokes)
             else None
         )
         if same is not None and same in known.jokes:
             key, joke = same, known.jokes[same][0][0].joke
         else:
-            text = _lesson_text(item.joke)
+            text = _lesson_text(read_joke.joke)
             # A running joke came back: one mention is a joke, not a running one.
             if text is None or len(turns) < 2:
                 continue
             key, joke = joke_key(text), text
             if key in known.jokes:
                 joke = known.jokes[key][0][0].joke
-        if not turns or item.confidence < _MIN_OWN_SIDE_CONFIDENCE or key in jokes:
+        if not turns or read_joke.confidence < _MIN_OWN_SIDE_CONFIDENCE or key in jokes:
             continue
         jokes[key] = JokeReading(
             joke_key=key,
             joke=joke,
-            confidence=min(item.confidence, _MOST_MODEL_CONFIDENCE),
+            confidence=min(read_joke.confidence, _MOST_MODEL_CONFIDENCE),
             evidence=tuple(turn.observation_id for turn in turns),
             observed_at=turns[0].occurred_at,
         )

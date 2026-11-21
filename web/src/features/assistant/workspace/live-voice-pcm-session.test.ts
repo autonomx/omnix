@@ -470,6 +470,20 @@ describe('live voice PCM session', () => {
     vi.useRealTimers();
   });
 
+  it('ends a phrase waiting for the socket when the session is stopped between retries', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    FakeWebSocket.refuseNext = 1;
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    const phrase = session.enqueuePhrase('Cut off.', 0);
+    const settled = phrase.then(() => 'played', () => 'failed');
+    await Promise.resolve();
+    await session.stop('hung-up');
+
+    expect(await settled).toBe('failed');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
   it('opens a plain websocket and ignores a hello when no portrait is asked for', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const socket = FakeWebSocket.instances[0] as unknown as { url: string; emit(type: string, event: unknown): void };

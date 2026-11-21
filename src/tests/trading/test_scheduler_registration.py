@@ -5,11 +5,22 @@ from datetime import datetime, timezone
 from logging import getLogger
 from types import SimpleNamespace
 
+import pytest
+
 from app.config.runtime import RuntimeConfig
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from app.runtime.features import FeatureContext
 from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
 from app.apps.trading.feature import FEATURE
+
+
+@pytest.fixture(autouse=True)
+def _fresh_trading_loop():
+    # Work a test leaves on the trading loop (a blocked cycle, a cancelled one) never runs into the next test.
+    from app.apps.trading.monitor_task import close_trading_loop
+
+    yield
+    close_trading_loop()
 
 
 def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch):
@@ -185,18 +196,19 @@ def test_a_failed_cycle_is_logged_with_the_monitor_event_and_reaches_the_schedul
 def test_a_cycle_runs_on_the_trading_loop_and_a_blocking_one_never_stalls_the_gateways():
     import contextvars
     import threading
-    import time
 
     from app.apps.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask, scheduled_task_spec
 
     tenant = contextvars.ContextVar("tests_tenant", default=None)
     seen = {}
+    release = threading.Event()
 
     class Blocking(ScheduledTradingMonitor):
         async def run_once(self):
             seen["thread"] = threading.current_thread().name
             seen["tenant"] = tenant.get()
-            time.sleep(0.3)  # a synchronous read or provider call inside the cycle
+            # A synchronous read or provider call inside the cycle: only the gateway's ticking ends it.
+            seen["released"] = release.wait(5)
 
         async def prepare_for_scheduled_execution(self):
             seen["startup"] = threading.current_thread().name
@@ -215,13 +227,18 @@ def test_a_cycle_runs_on_the_trading_loop_and_a_blocking_one_never_stalls_the_ga
         while not cycle.done():
             await asyncio.sleep(0.02)
             ticks += 1
+            if ticks == 5:
+                release.set()
         await cycle
         return ticks
 
     ticks = asyncio.run(gateway())
-    # The gateway's loop kept ticking through the 0.3 s block, and the cycle saw the scheduler's context.
-    assert ticks >= 8
-    assert seen == {"startup": "omnix-trading-loop", "thread": "omnix-trading-loop", "tenant": "workspace-a"}
+    # The gateway's loop kept ticking through the block (on its loop the wait would time out), and the cycle saw the
+    # scheduler's context.
+    assert ticks >= 5
+    assert seen == {
+        "startup": "omnix-trading-loop", "thread": "omnix-trading-loop", "tenant": "workspace-a", "released": True,
+    }
 
 
 def test_a_timed_out_cycle_is_cancelled_on_the_trading_loop_and_waited_out():
@@ -256,6 +273,36 @@ def test_a_timed_out_cycle_is_cancelled_on_the_trading_loop_and_waited_out():
             return str(error)
 
     assert asyncio.run(caller()) == "provider down"
+
+
+def test_a_second_cancel_still_waits_the_cycle_out_before_shutdown():
+    # The review of 2026-11-20: a shutdown cancelling the scheduler while a timed-out cycle stopped returned at once,
+    # and the runner closed beside a cycle still running on the trading loop.
+    from app.apps.trading.monitor_task import on_trading_loop
+
+    events = []
+
+    async def cycle():
+        try:
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.2)
+            events.append("cycle stopped")
+            raise
+
+    async def scheduler():
+        task = asyncio.create_task(on_trading_loop(cycle))
+        await asyncio.sleep(0.05)
+        task.cancel()  # the cycle timed out
+        await asyncio.sleep(0.05)
+        task.cancel()  # and the process shuts down
+        try:
+            await task
+        except asyncio.CancelledError:
+            events.append("caller returned")
+
+    asyncio.run(scheduler())
+    assert events == ["cycle stopped", "caller returned"]
 
 
 def test_monitor_cycles_get_a_trading_timeout_and_retry_after_one():
@@ -326,3 +373,17 @@ def test_proposals_never_wait_on_the_intraday_llm():
     evaluation = source_inspect.getsource(evaluate_candidates)
     assert "await monitor._run_intraday_llm" not in evaluation
     assert "intraday_llm_annotations.start" in evaluation
+
+
+def test_closing_the_trading_loop_cancels_its_work_and_the_next_use_starts_a_fresh_one():
+    from app.apps.trading import monitor_task
+
+    first = monitor_task._TRADING_LOOP.loop()
+    thread = monitor_task._TRADING_LOOP._thread
+    left = asyncio.run_coroutine_threadsafe(asyncio.sleep(60), first)  # work a test left behind
+    monitor_task.close_trading_loop()
+
+    assert left.cancelled() and not thread.is_alive() and first.is_closed()
+    assert monitor_task._TRADING_LOOP.loop() is not first
+    monitor_task.close_trading_loop()
+    monitor_task.close_trading_loop()  # closing twice is nothing

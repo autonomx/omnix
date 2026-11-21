@@ -35,7 +35,7 @@ SYSTEM_MEMORY_OWNER_ID = "system-assistant"
 PROMPT_TRUST_LEVELS: frozenset[str] = frozenset({"user_approved", "system_trusted"})
 # A character's memory of what another character said in a call (companion 6.6) is the character's own hearing,
 # never a fact about the person: it is kept at this trust and reaches a prompt only while that character is present.
-HEARD_TRUST_LEVEL = "unverified_agent"
+HEARD_TRUST_LEVEL: MemoryTrustLevel = "unverified_agent"
 
 
 class MemoryConflictError(RuntimeError):

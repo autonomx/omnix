@@ -101,7 +101,8 @@ export const liveVoiceTranscriptStore = {
     const index = state.rows.findIndex((row) => row.id === id && row.held);
     if (index < 0) return;
     const rows = [...state.rows];
-    const { held: _held, ...row } = rows[index];
+    const row = { ...rows[index] };
+    delete row.held;
     rows[index] = row;
     publish({ ...state, rows });
   },

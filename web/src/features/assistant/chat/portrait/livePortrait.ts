@@ -9,7 +9,7 @@ import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { startTicker } from '../../../../shared/timers';
 import { PortraitFrameBuffer } from './frameBuffer';
-import { rememberMemberLoop, resetMemberLoops } from './memberIdleLoops';
+import { packRevision, rememberMemberLoop, resetMemberLoops } from './memberIdleLoops';
 import {
   BLINK_OUTPUT_ID,
   IDLE_OUTPUT_ID,
@@ -50,7 +50,10 @@ export type LivePortraitSnapshot = {
   speakerId?: string;
 };
 
-type RuntimePack = { character_id?: string; renderer?: string; fallback_renderer?: PortraitFallbackRenderer } | null | undefined;
+type RuntimePack = {
+  character_id?: string; renderer?: string; fallback_renderer?: PortraitFallbackRenderer;
+  version?: number | null; base_asset_id?: string | null;
+} | null | undefined;
 /** The group call's member a session speaks as, and that member's avatar pack. */
 export type LivePortraitSpeaker = { id: string; pack: RuntimePack };
 type ImageDecoder = (jpeg: Uint8Array<ArrayBuffer>) => Promise<ImageBitmap>;
@@ -372,7 +375,9 @@ export class LivePortrait {
     const whole = (list: readonly Uint8Array[], total: number) => total > 0 && list.filter(Boolean).length === total;
     const memberId = this.speaker?.id ?? this.pack?.character_id;
     if (memberId && whole(idle, idleCount) && whole(this.loopBytes.blink, blinkCount) && frameMs > 0) {
-      rememberMemberLoop(this.sessionId, memberId, { frameMs, idle: idle.slice(0, idleCount), blink: this.loopBytes.blink.slice(0, blinkCount) });
+      const revision = packRevision(this.speaker ? this.speaker.pack : this.pack);
+      rememberMemberLoop(this.sessionId, memberId,
+        { frameMs, idle: idle.slice(0, idleCount), blink: this.loopBytes.blink.slice(0, blinkCount) }, revision);
     }
   }
 

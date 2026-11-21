@@ -20,7 +20,7 @@ import { LiveMuteButton } from './LiveMuteButton';
 import { LiveQuietButton } from './LiveQuietButton';
 import { LiveShowButton } from './LiveShowButton';
 import { MemberPortrait } from './portrait/MemberPortrait';
-import { loadMemberLoop } from './portrait/memberIdleLoops';
+import { loadMemberLoop, packRevision } from './portrait/memberIdleLoops';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
 import { callSceneGuests, useCallScene } from '../workspace/live-call-scene';
@@ -278,16 +278,23 @@ function LiveCharacterStage({
   );
 
   // Every portrait member idles live while another speaks: each one's loop is asked for once it is on the call.
-  const hostId = shownRuntime?.avatar_pack?.renderer === 'portrait' ? shownRuntime.avatar_pack.character_id : null;
-  const portraitGuestIds = guests
-    .filter((guest) => guestRuntime.find((entry) => entry.character_id === guest.character_id)?.avatar_pack?.renderer === 'portrait')
-    .map((guest) => guest.character_id)
-    .join(',');
+  // Keyed by each pack's revision too: a pack changed mid-chat is asked for again.
+  const hostPack = shownRuntime?.avatar_pack;
+  const hostId = hostPack?.renderer === 'portrait' ? hostPack.character_id : null;
+  const hostRevision = packRevision(hostPack);
+  const portraitGuests = guests
+    .map((guest) => guestRuntime.find((entry) => entry.character_id === guest.character_id)?.avatar_pack)
+    .filter((guestPack) => guestPack?.renderer === 'portrait')
+    .map((guestPack) => `${guestPack?.character_id}\n${packRevision(guestPack)}`)
+    .join('\t');
   useEffect(() => {
-    if (!sessionId || !portraitGuestIds) return;
-    if (hostId) void loadMemberLoop(sessionId, hostId, null);
-    for (const guestId of portraitGuestIds.split(',')) void loadMemberLoop(sessionId, guestId, guestId);
-  }, [sessionId, hostId, portraitGuestIds, speakerId]);
+    if (!sessionId || !portraitGuests) return;
+    if (hostId) void loadMemberLoop(sessionId, hostId, null, hostRevision);
+    for (const guest of portraitGuests.split('\t')) {
+      const [guestId, revision] = guest.split('\n');
+      void loadMemberLoop(sessionId, guestId, guestId, revision);
+    }
+  }, [sessionId, hostId, hostRevision, portraitGuests, speakerId]);
 
   useEffect(() => {
     if (!isLive2D || !live2dRuntime || !live2dHostRef.current) return;
@@ -300,6 +307,7 @@ function LiveCharacterStage({
         <figure className="assistant-live-character-avatar" data-renderer="portrait" data-portrait-status={portraitState.status}>
           <MemberPortrait
             characterId={pack?.character_id}
+            revision={packRevision(pack)}
             live={mine}
             streaming={portraitState.status !== 'off'}
             imageUrl={characterAvatarAssetUrl(pack?.base_asset_id ?? '')}
@@ -369,6 +377,7 @@ function LiveCallGuestTile({
         {portrait ? (
           <MemberPortrait
             characterId={characterId}
+            revision={packRevision(drawn.pack)}
             live={drawn.mine}
             streaming={drawn.portraitState.status !== 'off'}
             imageUrl={characterAvatarAssetUrl(drawn.pack?.base_asset_id ?? '')}

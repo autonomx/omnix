@@ -12,6 +12,7 @@ import {
 } from './live-voice-playback-contract';
 import { LIVE_VOICE_PCM_WORKLET_NAME, LIVE_VOICE_PCM_WORKLET_URL } from './live-voice-pcm-worklet';
 import { pcmControlEventSchema } from './live-voice-messages';
+import { connectRefusableSocket, WEBSOCKET_OPEN } from './live-voice-session-socket';
 import { parseJson } from '../../../api/schemas/streams';
 import { CHARACTER_AVATAR_PCM_EVENT, emitOmnixEvent } from '../../../events/bus';
 
@@ -23,10 +24,6 @@ const TRANSITION_FADE_SECONDS = 0.008;
 const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
-const WEBSOCKET_OPEN = 1;
-// A socket refused before it opened is asked again, this long apart: on a speaker swap the gateway can still hold
-// the previous speaker's call slot for a moment (it answers 429, which a browser sees only as a close).
-const SOCKET_REFUSED_RETRY_DELAYS_MS = [250, 500, 1000] as const;
 // The longest a turn's start waits for its first portrait frames (D-5).
 const PORTRAIT_START_HOLD_SECONDS = 0.25;
 
@@ -373,10 +370,47 @@ export async function createLiveVoicePcmSession(
     socketReadyResolve = resolve;
     socketReadyReject = reject;
   });
-  let socket = new WebSocketCtor(ttsWebSocketUrl(Boolean(options.portrait)));
-  socket.binaryType = 'arraybuffer';
-  let socketAttempt = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  // A phrase awaiting it sees the rejection; a session nobody spoke on must not report it as unhandled.
+  socketReady.catch(() => undefined);
+  const failSocket = (error: Error): void => {
+    socketFailure = error;
+    if (!socketOpened) socketReadyReject?.(error);
+    failActivePhrase(error);
+  };
+  const connection = connectRefusableSocket(() => {
+    const created = new WebSocketCtor(ttsWebSocketUrl(Boolean(options.portrait)));
+    created.binaryType = 'arraybuffer';
+    return created;
+  }, {
+    isClosed: () => closed,
+    opened: (attempt) => {
+      socketOpened = true;
+      reporter.record('session_websocket_opened', {
+        websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
+        turn_elapsed_ms: performance.now() - startedAtMs,
+        attempt,
+      }, 'pcm_session');
+      socketReadyResolve?.();
+    },
+    message: (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        handleBinaryFrame(event.data);
+        return;
+      }
+      const message = parseControlEvent(event.data);
+      if (message && !forwardPortraitHello(options.portrait, message)) handleControlMessage(message);
+    },
+    closed: (event, attempt) => reporter.record('session_websocket_closed', {
+      close_code: event.code,
+      close_reason: event.reason,
+      clean: event.wasClean,
+      opened: socketOpened,
+      session_closed: closed,
+      attempt,
+    }, 'pcm_session'),
+    retrying: (attempt, delayMs) => reporter.record('session_websocket_retry', { attempt, delay_ms: delayMs }, 'pcm_session'),
+    failed: failSocket,
+  });
   reporter.record('session_websocket_created', {
     websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
     websocket_scope: options.sessionScoped ? 'live_session' : 'turn',
@@ -569,7 +603,7 @@ export async function createLiveVoicePcmSession(
         : phrase.stats.firstFrameAtMs - phrase.startedAtMs,
     }, 'pcm_session');
     try {
-      socket.send(JSON.stringify({
+      connection.socket().send(JSON.stringify({
         type: 'diagnostic',
         stream_id: phrase.phraseStreamId,
         event: 'playback_finished',
@@ -594,81 +628,6 @@ export async function createLiveVoicePcmSession(
     phrase.resolve();
   };
 
-  // Every handler is for the current socket only: a refused one's late events go nowhere.
-  const listen = (target: WebSocket): void => {
-    target.addEventListener('open', () => {
-      if (target !== socket) return;
-      if (closed) {
-        target.close(1000, 'session-closed');
-        return;
-      }
-      socketOpened = true;
-      reporter.record('session_websocket_opened', {
-        websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
-        turn_elapsed_ms: performance.now() - startedAtMs,
-        attempt: socketAttempt,
-      }, 'pcm_session');
-      socketReadyResolve?.();
-    }, { once: true });
-
-    target.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
-      if (closed || target !== socket) return;
-      if (event.data instanceof ArrayBuffer) {
-        handleBinaryFrame(event.data);
-        return;
-      }
-      const message = parseControlEvent(event.data);
-      if (message && !forwardPortraitHello(options.portrait, message)) handleControlMessage(message);
-    });
-
-    target.addEventListener('error', () => {
-      // A refusal before opening is followed by its close, which asks again while it may.
-      if (target !== socket || (!socketOpened && retryRemains())) return;
-      fail(new Error('Live voice session WebSocket failed.'));
-    });
-
-    target.addEventListener('close', (event: CloseEvent) => {
-      if (target !== socket) return;
-      reporter.record('session_websocket_closed', {
-        close_code: event.code,
-        close_reason: event.reason,
-        clean: event.wasClean,
-        opened: socketOpened,
-        session_closed: closed,
-        attempt: socketAttempt,
-      }, 'pcm_session');
-      if (closed) return;
-      if (!socketOpened && retryRemains()) {
-        retrySocket();
-        return;
-      }
-      fail(new Error('Live voice session WebSocket closed before completion.'));
-    });
-  };
-
-  const retryRemains = (): boolean => !closed && socketAttempt < SOCKET_REFUSED_RETRY_DELAYS_MS.length;
-
-  const retrySocket = (): void => {
-    const delayMs = SOCKET_REFUSED_RETRY_DELAYS_MS[socketAttempt];
-    socketAttempt += 1;
-    reporter.record('session_websocket_retry', { attempt: socketAttempt, delay_ms: delayMs }, 'pcm_session');
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
-      if (closed) return;
-      socket = new WebSocketCtor(ttsWebSocketUrl(Boolean(options.portrait)));
-      socket.binaryType = 'arraybuffer';
-      listen(socket);
-    }, delayMs);
-  };
-
-  const fail = (error: Error): void => {
-    socketFailure = error;
-    if (!socketOpened) socketReadyReject?.(error);
-    failActivePhrase(error);
-  };
-
-  listen(socket);
-
   const streamPhrase = async (
     text: string,
     phraseIndex: number,
@@ -679,7 +638,7 @@ export async function createLiveVoicePcmSession(
     await socketReady;
     if (closed) throw new Error('Live voice PCM session is closed.');
     if (socketFailure) throw socketFailure;
-    if (socket.readyState !== WEBSOCKET_OPEN) throw new Error('Live voice session WebSocket is not open.');
+    if (connection.socket().readyState !== WEBSOCKET_OPEN) throw new Error('Live voice session WebSocket is not open.');
     if (activePhrase) throw new Error('Live voice phrase generation is already active.');
     if (ownership && cancelledOutputKeys.has(outputKey(ownership.outputId, ownership.generationEpoch))) return;
 
@@ -722,7 +681,7 @@ export async function createLiveVoicePcmSession(
         websocket_reused: true,
       }, 'pcm_session');
       try {
-        socket.send(JSON.stringify({
+        connection.socket().send(JSON.stringify({
           type: 'synthesize',
           request_id: phraseStreamId,
           phrase_index: phraseIndex,
@@ -919,8 +878,8 @@ export async function createLiveVoicePcmSession(
     const queued = queuedOutputs.get(key);
     if (queued) queued.cancelled = true;
     node.port.postMessage({ type: 'cancel_output', outputId, generationEpoch, reason });
-    if (socket.readyState === WEBSOCKET_OPEN) {
-      socket.send(JSON.stringify({
+    if (connection.socket().readyState === WEBSOCKET_OPEN) {
+      connection.socket().send(JSON.stringify({
         type: 'cancel',
         output_id: outputId,
         generation_epoch: generationEpoch,
@@ -943,8 +902,8 @@ export async function createLiveVoicePcmSession(
       if (queued.ownership.outputOrder <= outputOrder) continue;
       queued.cancelled = true;
       cancelledOutputKeys.add(key);
-      if (socket.readyState === WEBSOCKET_OPEN) {
-        socket.send(JSON.stringify({
+      if (connection.socket().readyState === WEBSOCKET_OPEN) {
+        connection.socket().send(JSON.stringify({
           type: 'cancel',
           output_id: queued.ownership.outputId,
           generation_epoch: queued.ownership.generationEpoch,
@@ -993,6 +952,8 @@ export async function createLiveVoicePcmSession(
   const terminateSession = async (reason: string, workletAlreadyDrained = false): Promise<void> => {
     if (closed) return;
     closed = true;
+    // Stopped while connecting or between retries: phrases waiting for the socket end now instead of never.
+    if (!socketOpened) socketReadyReject?.(new Error('Live voice PCM session is closed.'));
     [...outputWaiters.keys()].forEach(settleOutput);
     document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
     window.removeEventListener('focus', handlePlaybackResumeSignal);
@@ -1000,14 +961,7 @@ export async function createLiveVoicePcmSession(
     if (!workletAlreadyDrained) node.port.postMessage({ type: 'stop', reason });
     node.port.onmessage = null;
     node.disconnect();
-    if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = null;
-    if (socket.readyState === WEBSOCKET_OPEN) {
-      try { socket.send(JSON.stringify({ type: 'close', reason })); } catch { /* ignore close send */ }
-      socket.close(1000, reason);
-    } else {
-      try { socket.close(); } catch { /* ignore close failures */ }
-    }
+    connection.close(reason);
     clearCallAffinityCookie(options.affinityKey, affinityCookieValue);
     await audioContext.close().catch((error: unknown) => {
       reporter.record('audio_context_close_failed', {
@@ -1053,7 +1007,7 @@ export async function createLiveVoicePcmSession(
 
   return {
     sampleRate: audioContext.sampleRate,
-    ...portraitControls(audioContext, node, () => socket, () => closed),
+    ...portraitControls(audioContext, node, connection.socket, () => closed),
     enqueuePhrase,
     enqueueOutputPhrase,
     enqueueSilence,

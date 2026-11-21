@@ -1967,6 +1967,13 @@
     "type": "string"
   },
   {
+    "default": "0.5",
+    "description": "Controls stt context boost alpha for providers.",
+    "feature": "providers",
+    "name": "OMNIX_STT_CONTEXT_BOOST_ALPHA",
+    "type": "string"
+  },
+  {
     "default": "auto",
     "description": "Controls stt device for providers.",
     "feature": "providers",
@@ -2412,6 +2419,13 @@
     "description": "Controls trading session reconciliation monitor in tests for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading stoch sweep for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_STOCH_SWEEP",
     "type": "boolean"
   },
   {

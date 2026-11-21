@@ -15,7 +15,7 @@ from app.jobs import (
     default_job_store,
 )
 
-from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord
+from app.conversation.memory_contracts import MemoryCandidate, MemoryOwnerType, MemoryRecord
 from app.conversation.scene import SUSPECTED_ECHO_KEY
 from .owner_defaults import default_memory_service
 from .rollout import companion_rollout_policy
@@ -61,7 +61,7 @@ class ConversationReadingJobInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     principal_id: str
-    owner_type: str
+    owner_type: MemoryOwnerType
     owner_id: str
     through_sequence: int
     idempotency_key: str

@@ -101,6 +101,8 @@ let requestController: AbortController | null = null;
 let requestInitiativeToken: string | null = null;
 let pending: PendingProactive | null = null;
 let assistantSpeaking = false;
+// The unified audio controller has reported playback: its events settle proactive lines from then on.
+let playbackReported = false;
 let audioStartTimer: ReturnType<typeof setTimeout> | null = null;
 let desktopContext: DesktopContext | null = null;
 let desktopContextSessionId: string | null = null;
@@ -206,6 +208,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
     cooledReasons.clear();
     awaitingAnswer = null;
     sceneTurnDue = null;
+    playbackReported = false;
     deliveredSocialAtMs.length = 0;
     loggedDecisions.clear();
     liveConversationInitiativeInstalled = false;
@@ -618,14 +621,18 @@ function handleAuthoritativeStateChange(): void {
   const wasSpeaking = assistantSpeaking;
   assistantSpeaking = speaking;
   lastActivityAtMs = performance.now();
-  if (pending && speaking) {
+  // The audio controller's playback events, once seen, alone say when a line is heard and when it ends: the call's
+  // speaking state also follows replies, and it can lag or stay set past a line's end.
+  if (pending && speaking && !playbackReported) {
     pending.audioStarted = true;
     markProposalQuestionAudible(pending.turnId);
     clearAudioStartTimer();
   }
-  if (pending?.audioStarted && wasSpeaking && !speaking) void commitPending('completed');
-  else if (wasSpeaking && !speaking && !pending && !requestController && runtime.sessionId
-    && callSceneHasGuests(runtime.sessionId)) {
+  if (pending?.audioStarted && wasSpeaking && !speaking) {
+    if (!playbackReported) void commitPending('completed');
+  } else if (wasSpeaking && !speaking && !pending && !requestController && runtime.sessionId
+    && callSceneHasGuests(runtime.sessionId) && !sceneTurnDue?.afterLine) {
+    // A reply ended: a member may react. A line just committed has already asked for the next line.
     sceneTurnDue = { sessionId: runtime.sessionId, sinceMs: performance.now(), afterLine: false };
   }
 }
@@ -636,18 +643,24 @@ function handleAuthoritativeStateChange(): void {
  * can stay set past the line's end, which once left a finished line waiting a whole exchange to be committed.
  */
 function handleProactivePlayback(event: Event): void {
-  const detail = (event as CustomEvent<{ speaking?: unknown; kind?: unknown }>).detail ?? {};
+  const detail = (event as CustomEvent<{ speaking?: unknown; kind?: unknown; source?: unknown }>).detail ?? {};
+  if (detail.source === 'unified-live-voice') playbackReported = true;
   const turn = pending;
   if (!turn || turn.committing) return;
+  const ownKind = detail.kind === 'greeting';
   if (detail.speaking) {
-    if (detail.kind === 'greeting' && !turn.audioStarted) {
+    if (ownKind && !turn.audioStarted) {
       turn.audioStarted = true;
       markProposalQuestionAudible(turn.turnId);
       clearAudioStartTimer();
+    } else if (!ownKind && turn.audioStarted) {
+      // Another turn (a reply to something typed) took over the line's playback: it was cut off there.
+      void commitPending('interrupted');
     }
     return;
   }
-  if (!turn.audioStarted) return;
+  // Only the end of the line's own audio settles it; a reply's end says nothing about the line.
+  if (!turn.audioStarted || !ownKind) return;
   // After this event's dispatch: when the person's speech stopped the line, its handler settles it as interrupted.
   setTimeout(() => {
     if (pending === turn && !turn.committing) void commitPending('completed');

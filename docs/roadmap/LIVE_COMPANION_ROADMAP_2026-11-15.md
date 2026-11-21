@@ -1268,3 +1268,47 @@ with how often they talk.
     and s/sh folded) and at most about one letter in four apart. Names shorter than four key sounds ("Bea",
     "Theo") are never matched by sound; a word that sounds like two members names neither. Your words are not
     rewritten. `test_a_name_recognition_misspells_still_names_the_member`.
+- 2026-11-20, review of 94ba6faee6 and 216765c15f (three review agents; fixes uncommitted on main):
+  - Sound-alike: a match now counts only when the word is said as a name. That means capitalised mid-sentence,
+    possessive, or set off by commas or a greeting. Everyday words ("like", "make", "mine") never count.
+    `test_an_everyday_word_that_sounds_like_a_name_names_no_one`.
+  - STT boosting:
+    - Each call's names are kept per owner, and the decoder boosts their union, so a second call no longer erases
+      the first one's names.
+    - A rebuild waits out any stream that is mid-utterance, rebuilds at most every 2 s, and restarts quiet streams
+      on the new decoder.
+    - A stream not fed for 30 s no longer blocks rebuilds.
+    - A failed fallback no longer raises.
+    - The phrase map has its own lock, so `release` never waits on the GPU lock.
+  - Trading loop:
+    - A lag probe warns when the trading loop stalls 5 s or more.
+    - A second cancel still waits for the cycle to finish before shutdown.
+  - Portraits:
+    - Between speakers, prepare and idle no longer render a loop on the GPU. The idle route asks for a loop that
+      is already rendered only.
+    - An unreadable member gets `portrait_failed`, not a 500.
+  - Web:
+    - A clear waits for an add still in flight.
+    - The playback-off edge carries its kind.
+    - The call's names stay while the panel shows another chat (`callScenePhraseSource`).
+    - A turn whose speaker the runtime doesn't list yet reads the runtime again.
+    - Member idle loops reset when a call stops.
+    - A portrait that attaches after its session was replaced is dropped.
+  - The open items, closed the same day (owner: "go with recommended"; uncommitted on main):
+    - Seats expire on the server. While a call is open, the speech proxy stamps the chat's seats every 60 s
+      (migration 0201, `last_call_at`). A seat whose call has been quiet for 10 minutes is gone. A seat chosen
+      before any call has no stamp and stays. `test_a_seat_expires_once_its_call_has_been_quiet...` (PG).
+    - The gateway owns the call's names. The browser names its chat only. The proxy replaces any phrases it
+      sends with the chat's host and seated guests, read through the tenant-scoped store (port
+      `voice.call_roster`, contributed by live voice). A chat that isn't the caller's boosts nothing.
+    - Concurrent calls: each owner's names carry its account's scope (a workspace hash). The decoder boosts the
+      union only when every open call shares one scope; with calls from two accounts open, no names are boosted.
+    - Name cleaning: accents fold to ASCII (Zoë → Zoe), all-caps or all-lower names are capitalised, and a full
+      name also boosts its first name, skipping titles.
+    - Smaller items:
+      - The trading loop can be closed and restarted cleanly.
+      - The portrait idle route reads rendered loops without the GPU thread.
+      - The avatar websocket and idle loops share `call_session`.
+      - Member idle loops are keyed by the pack revision, so a changed face is asked for again.
+      - A PCM session stopped before its socket opened ends the phrases waiting for it.
+    - Before a call uses this: migrate 0201 on live, then restart the gateway and the STT service.

@@ -11,7 +11,7 @@ import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
 from app.providers.catalog import LOADED_MODEL, LOCAL_DEVICE, THINKING_OFF, provider_supports
 
@@ -26,6 +26,14 @@ LOCAL_BATCH_STOCKS = 5
 LOCAL_LANE_WAIT_SECONDS = 60.0
 LOCAL_MODEL_LANE = threading.RLock()
 T = TypeVar("T")
+
+
+class _LoadedModelProvider(Protocol):
+    """A provider that supports ``LOADED_MODEL`` (LM Studio): it says what it has loaded."""
+
+    def loaded_model_key(self) -> str | None: ...
+
+    def loaded_model(self) -> tuple[str, int | None] | None: ...
 
 
 class TradingLocalLaneBusy(RuntimeError):
@@ -79,7 +87,7 @@ def trading_provider(default_lookup: Callable[[], Any] | None = None) -> Any:
     provider = provider_service.get_routed_provider(chosen.provider_id, chosen.model_id)
     if provider is None or not provider_supports(provider, LOADED_MODEL):
         return provider
-    loaded = provider.loaded_model_key()
+    loaded = cast(_LoadedModelProvider, provider).loaded_model_key()
     if chosen.model_id is None:
         return provider_service.get_routed_provider(chosen.provider_id, loaded) if loaded else provider
     if loaded != chosen.model_id:
@@ -100,7 +108,7 @@ def local_model_readiness() -> LocalModelReadiness:
     )
     if provider is None or not provider_supports(provider, LOADED_MODEL):
         return LocalModelReadiness(applicable=False, ready=True)
-    loaded = provider.loaded_model()
+    loaded = cast(_LoadedModelProvider, provider).loaded_model()
     if loaded is None:
         return LocalModelReadiness(applicable=True, ready=False, problems=("NO_MODEL_LOADED",))
     model, context = loaded

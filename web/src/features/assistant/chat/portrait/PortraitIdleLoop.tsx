@@ -13,8 +13,15 @@ export function PortraitIdleLoop({ loop, label }: { loop: MemberIdleLoop; label:
 
   useEffect(() => {
     setIndex(0);
-    const timer = window.setInterval(() => setIndex((current) => (current + 1) % loop.idle.length), loop.frameMs);
-    return () => window.clearInterval(timer);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const advance = () => {
+      timer = setTimeout(() => {
+        setIndex((current) => (current + 1) % loop.idle.length);
+        advance();
+      }, loop.frameMs);
+    };
+    advance();
+    return () => clearTimeout(timer);
   }, [loop]);
 
   useEffect(() => {

@@ -41,6 +41,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.platform.chat.scene",
     "app.platform.chat.session_defaults",
     "app.platform.chat.session_identity",
+    "app.platform.live_voice.prompt.sound_tags",
     "app.apps.desktop_companion.commentary",
     "app.apps.desktop_companion.observation",
     "app.providers.chatgpt_codex_provider",

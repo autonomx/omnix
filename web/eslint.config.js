@@ -323,7 +323,7 @@ const appImports = {
 // arrived (WP-9.5). Each file's limit is that function's length: shrink a
 // function, then lower or delete its entry; never raise one.
 const functionLengthBaseline = {
-  'src/features/assistant/workspace/live-voice-pcm-session.ts': 773,
+  'src/features/assistant/workspace/live-voice-pcm-session.ts': 762,
   'src/features/assistant/chat/CharacterAvatarPanel.tsx': 349,
   'src/features/assistant/chat/CharacterManagementPanel.tsx': 309,
   'src/features/assistant/chat/OmnixRunCardCore.tsx': 464,
@@ -343,7 +343,7 @@ const functionLengthBaseline = {
   'src/features/trading/TradingChartAlertOverlay.tsx': 332,
   'src/features/trading/TradingPaperPanel.tsx': 498,
   'src/features/trading/TradingPositionOverlay.tsx': 333,
-  'src/features/trading/TradingStrategiesPanel.tsx': 925,
+  'src/features/trading/TradingStrategiesPanel.tsx': 913,
   'src/features/trading/TradingTerminalDock.tsx': 296,
   'src/features/trading/TradingWorkspace.tsx': 607,
   'src/features/trading/indicators/tradingViewBuiltIns.ts': 254,

@@ -10,6 +10,7 @@ import {
 import { LiveVoiceOrb } from './LiveVoiceOrb';
 import { AvatarLoadingNotice } from './portrait/LivePortraitCanvas';
 import { MemberPortrait } from './portrait/MemberPortrait';
+import { packRevision } from './portrait/memberIdleLoops';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../../events/bus';
 
@@ -59,6 +60,7 @@ export function LiveCallVisual({ voiceMode, thinking, runtimeLoading = false }: 
             {/* While a guest speaks on a group call, the live portrait is the guest's: this character idles. */}
             <MemberPortrait
               characterId={pack.character_id}
+              revision={packRevision(pack)}
               live={mine}
               streaming={portraitState.status !== 'off'}
               imageUrl={characterAvatarAssetUrl(pack.base_asset_id ?? '')}

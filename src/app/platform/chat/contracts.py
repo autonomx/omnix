@@ -271,6 +271,10 @@ _LAZY_EXPORTS = {
     "load_scene": "scene",
     # The session as a seated member sees it: the face a speaking guest's portrait shows.
     "speaker_view": "scene",
+    # The names a call's speech recognition listens for, read from the seats, and the stamp that keeps an open
+    # call's seats from expiring.
+    "call_names": "scene",
+    "note_call": "scene",
     "is_scene_reaction_reason": "scene",
     "direct_scene_reaction": "scene_director",
     "scene_reaction_opening": "scene_director",

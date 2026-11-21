@@ -17,6 +17,7 @@ import glob
 import os
 import socket
 import subprocess
+import sys
 import time
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
@@ -122,7 +123,7 @@ def claim_launcher(root: Path) -> BinaryIO | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = path.open("a+b")
     try:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             handle.seek(0)

@@ -2,7 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MemberPortrait } from './MemberPortrait';
-import { loadMemberLoop, memberLoop, rememberMemberLoop, resetMemberLoops } from './memberIdleLoops';
+import { loadMemberLoop, memberLoop, packRevision, rememberMemberLoop, resetMemberLoops } from './memberIdleLoops';
 
 const IDLE_PATH = '/api/tts/live-call/portrait-idle';
 
@@ -62,6 +62,24 @@ describe("a group call's member idle loops", () => {
     expect(memberLoop('char:bea')).not.toBeNull();
     rememberMemberLoop('chat:other', 'char:theo', { frameMs: 40, idle: [new Uint8Array([1])], blink: [] });
     expect(memberLoop('char:bea')).toBeNull();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:1');
+  });
+
+  it("asks again for a member whose pack changed mid-chat and lets the old face go once the new one is known", async () => {
+    // The review of 2026-11-20: the first loop kept stood for the whole chat, so an edited pack kept the old face.
+    const before = packRevision({ version: 3, base_asset_id: 'asset-old' });
+    const after = packRevision({ version: 4, base_asset_id: 'asset-new' });
+    expect(before).not.toBe(after);
+    rememberMemberLoop('chat:maya', 'char:abhishek', { frameMs: 40, idle: [new Uint8Array([1])], blink: [] }, before);
+    await loadMemberLoop('chat:maya', 'char:abhishek', 'char:abhishek', before);
+    expect(asked).toHaveLength(0); // known for this pack: never asked
+
+    expect(memberLoop('char:abhishek', after)).toBeNull(); // an older pack's loop is not this face
+    replies.push({ ok: true, frame_ms: 80, idle: [base64(9)], blink: [] });
+    await loadMemberLoop('chat:maya', 'char:abhishek', 'char:abhishek', after);
+    expect(asked).toHaveLength(1);
+    expect(memberLoop('char:abhishek', after)).toEqual({ frameMs: 80, idle: ['blob:2'], blink: [] });
+    expect(memberLoop('char:abhishek', before)).toBeNull();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:1');
   });
 

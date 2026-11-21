@@ -30,6 +30,7 @@ def app_client(monkeypatch):
     from app.persistence.migrations import apply_migrations
     from app.persistence.runtime import reset_persistence_mode_cache
     from app.runtime.config import GatewayRole, RuntimeConfig
+    from tests.support.database import admin_database_url
 
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
     monkeypatch.setenv("OMNIX_DATABASE_URL", url)
@@ -37,10 +38,13 @@ def app_client(monkeypatch):
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE", "deterministic")
     reset_persistence_mode_cache()
-    database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
-    apply_migrations(database)
-    ensure_local_identity(database)
-    database.close()
+    # Setup needs DDL: CI runs these tests as a restricted runtime role (tests.support.database).
+    database = PostgresDatabase(DatabaseSettings(url=admin_database_url(), pool_min=1, pool_max=4))
+    try:
+        apply_migrations(database)
+        ensure_local_identity(database)
+    finally:
+        database.close()  # a failed setup must not keep holding the migration lock for the next test
     app = create_production_app(RuntimeConfig(gateway_role=GatewayRole.API))
     try:
         with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}) as client:

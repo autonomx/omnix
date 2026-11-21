@@ -16,6 +16,7 @@ import {
   callSceneGuests,
   callSceneHasGuests,
   callSceneKnownEmpty,
+  callScenePhraseSource,
   callSceneStore,
   clearCallScene,
   loadCallScene,
@@ -79,6 +80,8 @@ let linesLeft = 0;
 let lineCount = 0;
 // A delivery waits on this when set, so a test can see what the call does before the commit resolves.
 let deliveryGate: Promise<void> | null = null;
+// An add waits on this when set, so a test can end the call while the add is still in flight.
+let addGate: Promise<void> | null = null;
 let calls: Call[] = [];
 let perf: string[] = [];
 let disposers: Array<() => void> = [];
@@ -98,6 +101,7 @@ beforeEach(() => {
   linesLeft = 0;
   lineCount = 0;
   deliveryGate = null;
+  addGate = null;
   noteProactiveDelivery('s1', null);
   calls = [];
   perf = [];
@@ -113,6 +117,7 @@ beforeEach(() => {
     if (url.pathname === `${SCENE_PATH}/guests` && method === 'POST') {
       const body = JSON.parse(text) as { character_id: string };
       if (body.character_id === 'zed') return json({ detail: 'scene_full' }, 409);
+      if (addGate) await addGate;
       scene = view([HOST, BEA, THEO]);
       return json(scene);
     }
@@ -220,6 +225,36 @@ describe('the call members', () => {
     expect(callSceneKnownEmpty('s1')).toBe(true);
     // A chat the panel has not read is not known to be empty: its call's end still clears it.
     expect(callSceneKnownEmpty('other')).toBe(false);
+  });
+
+  it('lets an add still in flight land before a call that ends clears the guests', async () => {
+    await loadCallScene('s1');
+    let release = (): void => undefined;
+    addGate = new Promise<void>((resolve) => { release = resolve; });
+    const adding = addCallGuest('s1', 'theo');
+    const clearing = clearCallScene('s1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callsTo(`${SCENE_PATH}/guests`, 'DELETE')).toHaveLength(0);
+
+    release();
+    await Promise.all([adding, clearing]);
+    // The clear went out after the add was answered, so the guest the add seated does not stay for the next call.
+    expect(callsTo(`${SCENE_PATH}/guests`).map((call) => call.method)).toEqual(['POST', 'DELETE']);
+    expect(callSceneGuests()).toEqual([]);
+    expect(callSceneStore.getState().guests).toEqual([]);
+  });
+
+  it("keeps a call's names for speech recognition while the panel shows another chat", async () => {
+    await loadCallScene('s1');
+    const source = callScenePhraseSource('s1');
+    expect(source.current()).toEqual(['Mara Quinn', 'Bea Hart']);
+
+    await loadCallScene('s2');
+    expect(source.current()).toEqual(['Mara Quinn', 'Bea Hart']);
+
+    scene = view([HOST]);
+    await loadCallScene('s1');
+    expect(source.current()).toEqual(['Mara Quinn']);
   });
 
   it('shows no members when the response is not a scene', async () => {
@@ -459,7 +494,7 @@ describe('the members talking to each other', () => {
     expect(callsTo(DELIVERY_PATH)[0].body).toMatchObject({
       turn_id: 'scene-line:bea:msg:r1:1', delivery_status: 'interrupted', heard_text: 'Line 1.',
     });
-    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: false, source: 'unified-live-voice', kind: null });
+    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: false, source: 'unified-live-voice', kind: 'greeting' });
     replyPlays();  // the answer to the person
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(callsTo(DELIVERY_PATH)).toHaveLength(1);
@@ -487,7 +522,7 @@ describe('the members talking to each other', () => {
     await vi.waitFor(() => expect(perf).toContain('initiative_generation_completed'), { timeout: 4_000 });
 
     linePlays('Line 1.');
-    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: false, source: 'unified-live-voice', kind: null });
+    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking: false, source: 'unified-live-voice', kind: 'greeting' });
     await vi.waitFor(() => expect(callsTo(DELIVERY_PATH)).toHaveLength(1));
     expect(callsTo(DELIVERY_PATH)[0].body).toMatchObject({ turn_id: 'scene-line:bea:msg:r1:1', delivery_status: 'completed' });
   });

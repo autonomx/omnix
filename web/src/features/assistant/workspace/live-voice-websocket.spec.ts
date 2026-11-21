@@ -627,6 +627,7 @@ describe('the call members the recognizer listens for', () => {
       url: 'ws://127.0.0.1:5202/ws/transcribe',
       webSocketCtor: TestWebSocket,
       overlapMs: 0,
+      chatSessionId: 'chat-1',
       contextPhrases: {
         current: () => names,
         subscribe: (listener) => {
@@ -638,13 +639,17 @@ describe('the call members the recognizer listens for', () => {
     await openSegmentedClient(client, sockets, segmentedReady());
     const sent = () => sockets[0].sentJson().filter((message) => message.type === 'hello' || message.type === 'context_phrases');
 
-    expect(sent()).toMatchObject([{ type: 'hello', contextPhrases: ['Jinx'] }]);
+    // The chat goes along: the gateway swaps the names for that chat's seats.
+    expect(sent()).toMatchObject([{ type: 'hello', chatSessionId: 'chat-1', contextPhrases: ['Jinx'] }]);
     names = ['Jinx', 'Abhishek'];
     listeners.forEach((listener) => listener());
     listeners.forEach((listener) => listener()); // the scene store notifies on any change; the same names go once
     expect(sent()).toEqual([
       expect.objectContaining({ type: 'hello' }),
-      { type: 'context_phrases', sessionId: client.segmentState.sessionId, contextPhrases: ['Jinx', 'Abhishek'] },
+      {
+        type: 'context_phrases', sessionId: client.segmentState.sessionId, chatSessionId: 'chat-1',
+        contextPhrases: ['Jinx', 'Abhishek'],
+      },
     ]);
 
     client.disconnect();

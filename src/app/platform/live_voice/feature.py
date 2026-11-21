@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.platform.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS, PORTRAIT_IMAGE_OBSERVERS
+from app.platform.voice.contracts import CALL_ROSTER
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
 
@@ -18,6 +19,12 @@ def _portrait_cache_cleaner(_context: FeatureContext) -> object:
     from .portrait.cleanup import PortraitCacheCleaner
 
     return PortraitCacheCleaner()
+
+
+def _call_roster(context: FeatureContext) -> object:
+    from .transport.call_roster import ChatCallRoster
+
+    return ChatCallRoster(lambda: context.services.chat)
 
 
 def _live_preview_tts_provider() -> object:
@@ -79,6 +86,8 @@ FEATURE = FeatureModule(
     uses=("voice",),
     contributions=(ContributionSpec(CHARACTER_SNAPSHOT_OBSERVERS, _snapshot_cache_observer),
                    # A portrait no pack shows any more is forgotten by the portrait service (Phase 4).
-                   ContributionSpec(PORTRAIT_IMAGE_OBSERVERS, _portrait_cache_cleaner)),
+                   ContributionSpec(PORTRAIT_IMAGE_OBSERVERS, _portrait_cache_cleaner),
+                   # The speech proxy's call names come from the chat's seats, never from the browser.
+                   ContributionSpec(CALL_ROSTER, _call_roster)),
     routers=(_live_voice_router,),
 )

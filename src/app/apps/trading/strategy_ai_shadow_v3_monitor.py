@@ -18,7 +18,6 @@ from typing import Any, Callable, cast
 
 from app.runtime.features import FeatureContext
 
-
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution import ExecutionObservation
 from .execution_observation_plane import (
@@ -28,10 +27,7 @@ from .execution_observation_plane import (
     first_causal_execution,
 )
 from .ibkr_settings import ibkr_live_quotes_authorized
-from .llm_reliability_metrics import (
-    LLMReliabilityLedger,
-    classify_llm_failure,
-)
+from .llm_reliability_metrics import LLMReliabilityLedger, classify_llm_failure
 from .market_data_recovery import RecoveredBarSeries, RecoveryAttempt
 from .held_quote_demand import default_held_quote_demand
 from .model_route import local_batch_rows
@@ -76,7 +72,6 @@ from .trigger_plan import (
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
-
 
 _STATE_KEY = "_omnix_trading_ai_shadow_v3_monitor"
 _EVENT_TYPES = (
@@ -126,9 +121,7 @@ def _interval_seconds() -> float:
 
 
 def _key(*parts: object) -> str:
-    return hashlib.sha256(
-        "|".join(str(part) for part in parts).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
 def _alpha_decision_due(last_decision_at: datetime | None, observed_at: datetime) -> bool:

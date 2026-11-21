@@ -308,6 +308,22 @@ function aiShadowTrade(event: StrategyEvent | undefined): Record<string, unknown
   return event?.payload && typeof event.payload === 'object' ? event.payload as Record<string, unknown> : null;
 }
 
+/** The latest four-arm shadow comparison, with each arm's summary. */
+function fourArmComparison(events: StrategyEvent[]) {
+  const event = events.find((item) => item.event_type === 'shadow_strategy_comparison');
+  const payload = recordObject(event?.payload);
+  if (!payload) return null;
+  return {
+    observedAt: event?.observed_at ?? null,
+    payload,
+    dataQuality: recordObject(payload.shared_data_quality),
+    armA: recordObject(payload.arm_a_deterministic_v2),
+    armB: recordObject(payload.arm_b_stoch_trend),
+    armC: recordObject(payload.arm_c_ai_every_minute),
+    armD: recordObject(payload.arm_d_ai_event_driven),
+  };
+}
+
 function recordObject(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -554,20 +570,7 @@ export function TradingStrategiesPanel() {
   const latestAiEventDecision = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_decision', 'event'), [events]);
   const latestAiMinuteTrade = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_trade', 'minute'), [events]);
   const latestAiEventTrade = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_trade', 'event'), [events]);
-  const latestFourArmComparison = useMemo(() => {
-    const event = events.find((item) => item.event_type === 'shadow_strategy_comparison');
-    const payload = recordObject(event?.payload);
-    if (!payload) return null;
-    return {
-      observedAt: event?.observed_at ?? null,
-      payload,
-      dataQuality: recordObject(payload.shared_data_quality),
-      armA: recordObject(payload.arm_a_deterministic_v2),
-      armB: recordObject(payload.arm_b_stoch_trend),
-      armC: recordObject(payload.arm_c_ai_every_minute),
-      armD: recordObject(payload.arm_d_ai_event_driven),
-    };
-  }, [events]);
+  const latestFourArmComparison = useMemo(() => fourArmComparison(events), [events]);
 
   const loadUniverse = async (universeId: string | null) => {
     if (!universeId) {

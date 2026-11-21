@@ -286,6 +286,31 @@ def clear_guests(session: Any, *, repository: Any = None) -> int:
     return int(repository.clear(session.id))
 
 
+def note_call(session: Any, *, repository: Any = None) -> int:
+    """A call on this chat is open: its seats stay seated. A seat expires once its call has been quiet for
+    ``SEAT_EXPIRES_AFTER_CALL_SECONDS``, so a call that ended without the browser clearing it leaves no guests."""
+    repository = repository if repository is not None else scene_repository()
+    if repository is None or not scenes_available(session):
+        return 0
+    return int(repository.note_call(session.id))
+
+
+def call_names(session: Any, *, repository: Any = None,
+               member: Callable[[str], SceneMember | None] | None = None) -> list[str]:
+    """The names said on a chat's call, for speech recognition to listen for: the host's and each seated guest's.
+
+    The server reads them from the seats, so a browser cannot make recognition listen for names of its choosing.
+    """
+    if not scenes_available(session):
+        return []
+    member = member or resolve_member
+    scene = load_scene(session, repository=repository, member=member)
+    if scene is not None:
+        return [entry.display_name for entry in scene.members]
+    host = member(session.character_id)
+    return [host.display_name] if host is not None else []
+
+
 def speaker_view(session: Any, speaker_id: str, *, repository: Any = None,
                  member: Callable[[str], SceneMember | None] | None = None) -> Any | None:
     """The session as one member of its call sees it: itself for the host, a seated guest's view for a guest.
@@ -377,12 +402,45 @@ def _sounds_like(heard: str, name: str) -> bool:
     return _edit_distance(heard_spelled, name_spelled) <= max(1, len(name_spelled) // 4)
 
 
+# Words said set off by commas that sound like names ("Like, I don't know" and Luke): never taken as one.
+_SOUND_FILLERS = frozenset({"like", "well", "right", "sure", "maybe", "please", "okay", "anyway", "really", "nice",
+                            "fine", "mine", "though", "mate", "dude", "yeah", "yes", "nope"})
+_GREETINGS = frozenset({"hey", "hi", "hello", "thanks", "ok", "okay", "oh", "and"})
+
+
+def _said_as_name(text: str, start: int, end: int) -> bool:
+    """Whether the word at ``text[start:end]`` is used as a name, not as the everyday word it may also be.
+
+    Recognition writes a name it hears as a name ("what do you think, Aphra?"), so a capitalised word inside a
+    sentence counts; so does a word set off as an address ("afro, what's yours?", "and you, afro?"). "I like
+    that" never names Luke, nor "make it shorter" Mike.
+    """
+    word = text[start:end]
+    if word.lower() in _SOUND_FILLERS:
+        return False
+    if re.match(r"['’]s\b", text[end:]):
+        return True  # "Aphra's turn": a word is owned only as a name
+    before = text[:start].rstrip()
+    sentence_start = not before or before[-1] in ".!?"
+    if word[0].isupper() and not sentence_start:
+        return True
+    previous = re.search(r"([^\W\d_]+)$", before)
+    set_off_before = sentence_start or before[-1] == "," or (
+        previous is not None and previous.group(1).lower() in _GREETINGS)
+    after = text[end:].lstrip()
+    set_off_after = not after or after[0] in ",?!"
+    return set_off_before and set_off_after
+
+
 def _sound_alike_member(scene: Scene, text: str) -> str | None:
     """The member whose one-word name the first such word in ``text`` sounds like; two such members: no one."""
     names = [(member.character_id, name) for member in scene.members
              for name in _name_patterns(member) if len(name.split()) == 1]
-    for word in re.findall(r"[^\W\d_]+", text):  # "Aphra's" is heard as "Aphra"
+    for found in re.finditer(r"[^\W\d_]+", text):  # "Aphra's" is heard as "Aphra"
+        word = found.group(0)
         matches = {character_id for character_id, name in names if _sounds_like(word, name)}
+        if matches and not _said_as_name(text, found.start(), found.end()):
+            continue
         if len(matches) == 1:
             return matches.pop()
         if matches:
@@ -878,7 +936,8 @@ def scene_note(scene: Scene | None) -> str | None:
     return SCENE_NOTE_TEMPLATE.format(speaker=scene.speaker.display_name, others=listed)
 
 
-def scene_line(scene: Scene | None, message: Any, content: str) -> tuple[str, str]:
+def scene_line(scene: Scene | None, message: Any,
+               content: str) -> tuple[Literal["system", "user", "assistant"], str]:
     """A history line as the speaker sees it: their own replies stay theirs, another member's is a quoted line."""
     if scene is None or getattr(message, "role", "") != "assistant":
         return getattr(message, "role", "user"), content
@@ -907,6 +966,7 @@ __all__ = [
     "SCENE_SPEAKER_HEADER",
     "SceneError",
     "add_guest",
+    "call_names",
     "choose_speaker",
     "clear_guests",
     "director_prompt",
@@ -915,6 +975,7 @@ __all__ = [
     "last_speaker",
     "load_scene",
     "named_member",
+    "note_call",
     "parse_director",
     "prompt_scene",
     "reaction_opening",

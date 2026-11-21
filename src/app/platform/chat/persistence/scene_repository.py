@@ -8,6 +8,12 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 
 
+# A seat whose call has been quiet this long has expired: the call ended without the browser clearing it (a tab
+# that crashed or closed). An open call stamps its seats about once a minute (``note_call``).
+SEAT_EXPIRES_AFTER_CALL_SECONDS = 600
+_LIVE_SEAT = "(last_call_at IS NULL OR last_call_at > now() - make_interval(secs => %s))"
+
+
 class SceneFullError(ValueError):
     """The chat already has its four guests."""
 
@@ -29,9 +35,9 @@ class PostgresSceneMemberRepository:
     def guests(self, session_id: str) -> list[SceneSeat]:
         with self.database.connection() as connection:
             rows = connection.execute(
-                """SELECT character_id, seat, joined_at FROM omnix_chat_scene_members
-                    WHERE workspace_id = %s AND session_id = %s ORDER BY seat LIMIT %s""",
-                (self.context.workspace_id, session_id, MAX_SCENE_GUESTS),
+                f"""SELECT character_id, seat, joined_at FROM omnix_chat_scene_members
+                    WHERE workspace_id = %s AND session_id = %s AND {_LIVE_SEAT} ORDER BY seat LIMIT %s""",
+                (self.context.workspace_id, session_id, SEAT_EXPIRES_AFTER_CALL_SECONDS, MAX_SCENE_GUESTS),
             ).fetchall()
         return [_seat(row) for row in rows]
 
@@ -45,10 +51,16 @@ class PostgresSceneMemberRepository:
             ).fetchone()
             if locked is None:
                 raise LookupError("chat session not found")
+            # An expired seat frees its number and its character before the free seats are counted.
+            connection.execute(
+                f"""DELETE FROM omnix_chat_scene_members
+                    WHERE workspace_id = %s AND session_id = %s AND NOT {_LIVE_SEAT}""",
+                (self.context.workspace_id, session_id, SEAT_EXPIRES_AFTER_CALL_SECONDS),
+            )
             rows = connection.execute(
-                """SELECT character_id, seat, joined_at FROM omnix_chat_scene_members
-                    WHERE workspace_id = %s AND session_id = %s ORDER BY seat LIMIT %s""",
-                (self.context.workspace_id, session_id, MAX_SCENE_GUESTS),
+                f"""SELECT character_id, seat, joined_at FROM omnix_chat_scene_members
+                    WHERE workspace_id = %s AND session_id = %s AND {_LIVE_SEAT} ORDER BY seat LIMIT %s""",
+                (self.context.workspace_id, session_id, SEAT_EXPIRES_AFTER_CALL_SECONDS, MAX_SCENE_GUESTS),
             ).fetchall()
             seats = [_seat(row) for row in rows]
             existing = next((seat for seat in seats if seat.character_id == character_id), None)
@@ -73,6 +85,16 @@ class PostgresSceneMemberRepository:
             ).fetchone()
         return row is not None
 
+    def note_call(self, session_id: str) -> int:
+        """A call on this chat is open: its seats count from now. A seat that already expired stays expired."""
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                f"""UPDATE omnix_chat_scene_members SET last_call_at = now()
+                    WHERE workspace_id = %s AND session_id = %s AND {_LIVE_SEAT}""",
+                (self.context.workspace_id, session_id, SEAT_EXPIRES_AFTER_CALL_SECONDS),
+            )
+            return int(cursor.rowcount or 0)
+
     def clear(self, session_id: str) -> int:
         with self.database.transaction() as connection:
             cursor = connection.execute(
@@ -93,4 +115,10 @@ def scene_members() -> PostgresSceneMemberRepository | None:
     return PostgresSceneMemberRepository() if uses_postgresql_runtime() else None
 
 
-__all__ = ["PostgresSceneMemberRepository", "SceneFullError", "SceneSeat", "scene_members"]
+__all__ = [
+    "SEAT_EXPIRES_AFTER_CALL_SECONDS",
+    "PostgresSceneMemberRepository",
+    "SceneFullError",
+    "SceneSeat",
+    "scene_members",
+]

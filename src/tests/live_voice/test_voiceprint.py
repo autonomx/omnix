@@ -1,6 +1,7 @@
 """The person's voiceprint and the live speaker score (companion 2.1, 2.2)."""
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import math
@@ -178,9 +179,11 @@ def test_the_gateway_sends_this_accounts_print_and_drops_one_from_the_browser(st
 
     message = json.loads(proxy._speaker_profile())
     assert message["type"] == "speaker_profile" and len(message["embedding"]) == DIM
-    assert not proxy._from_browser_allowed(json.dumps({"type": "speaker_profile", "embedding": _unit(1)}))
-    assert proxy._from_browser_allowed(json.dumps({"type": "hello"}))
-    assert proxy._from_browser_allowed("not json")
+    names = proxy._CallNames(None, "scope")
+    sent = json.dumps({"type": "speaker_profile", "embedding": _unit(1)})
+    assert asyncio.run(proxy._from_browser(sent, names)) is None
+    assert asyncio.run(proxy._from_browser(json.dumps({"type": "hello"}), names)) == json.dumps({"type": "hello"})
+    assert asyncio.run(proxy._from_browser("not json", names)) == "not json"
 
 
 def test_a_print_that_cannot_be_read_means_a_call_without_one(monkeypatch) -> None:

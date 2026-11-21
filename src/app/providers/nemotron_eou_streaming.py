@@ -13,11 +13,13 @@ from app.config.env import environment
 import contextlib
 import json
 import os
+import re
 import tempfile
 import threading
 import time
+import unicodedata
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -161,22 +163,52 @@ MAX_CONTEXT_PHRASES = 16
 MAX_CONTEXT_PHRASE_CHARS = 40
 # How strongly a listed name is preferred (NeMo's greedy boosting-tree weight); 0 turns boosting off.
 DEFAULT_CONTEXT_BOOST_ALPHA = 0.5
+# Rebuilds hold the model lock every stream decodes under: at most one per interval, the newest set waiting.
+MIN_CONTEXT_REBUILD_INTERVAL_S = 2.0
+# A stream not fed this long belongs to a segment that was let go (a feed that landed after its release).
+STALE_STREAM_S = 30.0
+
+
+# Titles a display name may start with: part of the whole name, never boosted on their own.
+_NAME_TITLES = frozenset({"dr", "mr", "mrs", "ms", "mx", "miss", "sir", "dame", "lady", "lord", "prof", "professor",
+                          "captain", "capt"})
+_NAME_PART = re.compile(r"[A-Za-z0-9]+")
+
+
+def _name_case(part: re.Match[str]) -> str:
+    # The decoder writes names capitalised: "AFRA" or "afra" is boosted as "Afra"; "McKenzie" stays as written.
+    word = part.group()
+    return word[:1].upper() + word[1:].lower() if word.isupper() or word.islower() else word
+
+
+def _tokenizer_text(item: str) -> str:
+    # The tokenizer covers ASCII: an accent is dropped ("Zoë" -> "Zoe"); any other character is a word break, never
+    # an unknown token in the boosting tree.
+    plain = "".join(ch for ch in unicodedata.normalize("NFKD", item) if not unicodedata.combining(ch))
+    kept = "".join(ch if (ch.isascii() and ch.isalnum()) or ch in "'- " else " " for ch in plain)
+    return _NAME_PART.sub(_name_case, " ".join(kept.split()))[:MAX_CONTEXT_PHRASE_CHARS].strip()
 
 
 def clean_context_phrases(value: Any) -> tuple[str, ...]:
-    """The distinct phrases worth boosting, sorted: letters, digits, spaces, apostrophes and hyphens only."""
+    """The distinct phrases worth boosting, sorted: ASCII letters, digits, spaces, apostrophes and hyphens only, each
+    name capitalised. A name of several words is boosted whole and, when room is left, by its first name too ("Dr
+    Abhishek Kumar" and "Abhishek"): people say a first name far more often than a whole name."""
     if not isinstance(value, (list, tuple)):
         return ()
-    phrases: set[str] = set()
+    whole: list[str] = []
     for item in value:
         if not isinstance(item, str):
             continue
-        kept = "".join(ch if ch.isalnum() or ch in "'- " else " " for ch in item)
-        phrase = " ".join(kept.split())[:MAX_CONTEXT_PHRASE_CHARS].strip()
-        if len(phrase) >= 2:
-            phrases.add(phrase)
-        if len(phrases) >= MAX_CONTEXT_PHRASES:
+        phrase = _tokenizer_text(item)
+        if len(phrase) >= 2 and phrase not in whole:
+            whole.append(phrase)
+        if len(whole) >= MAX_CONTEXT_PHRASES:
             break
+    phrases = set(whole)
+    for phrase in whole:
+        words = [word for word in phrase.split() if word.lower().strip("'-") not in _NAME_TITLES]
+        if len(phrase.split()) > 1 and words and len(words[0]) >= 2 and len(phrases) < MAX_CONTEXT_PHRASES:
+            phrases.add(words[0])
     return tuple(sorted(phrases))
 
 
@@ -318,6 +350,7 @@ class HybridStream:
     last_partial: str = ""
     eou_rearm_count: int = 0
     ignored_pre_speech_eou_count: int = 0
+    last_fed_at: float = field(default_factory=time.monotonic)
 
 
 @dataclass(frozen=True)
@@ -341,10 +374,17 @@ class NemotronEouModelManager:
         self.eou_right_context = env_int("OMNIX_EOU_RIGHT_CONTEXT", 1)
         self.feed_chunk_ms = max(80, env_int("OMNIX_STT_STREAM_CHUNK_MS", 160))
         self._streams: dict[str, HybridStream] = {}
-        # The names the decoder boosts, and a newer set waiting for no utterance to be in progress.
+        # The names the decoder boosts: every open connection's, as one set (the decoder is shared); a newer set
+        # waits for no utterance to be in progress. Bookkeeping has its own lock, never held across model work,
+        # so a closing connection never waits for a decode or a rebuild.
         self.context_phrases: tuple[str, ...] = ()
-        self.context_owner: str | None = None
+        # Each connection's names with the account they come from (``scope``, from the gateway).
+        self._phrases_by_owner: dict[str, tuple[str, tuple[str, ...]]] = {}
         self._pending_phrases: tuple[str, ...] | None = None
+        self._phrase_lock = threading.Lock()
+        self._boosting_failed = False
+        self._last_rebuild_at: float | None = None
+        self.min_rebuild_interval_s = MIN_CONTEXT_REBUILD_INTERVAL_S
         self._load_lock = threading.RLock()
         self._nemotron_lock = threading.RLock()
         self._eou_lock = threading.RLock()
@@ -401,43 +441,81 @@ class NemotronEouModelManager:
             "context_phrase_count": len(self.context_phrases),
         }
 
-    def set_context_phrases(self, phrases: tuple[str, ...], *, owner: str) -> bool:
+    def set_context_phrases(self, phrases: tuple[str, ...], *, owner: str, scope: str = "") -> bool:
         """Boost ``phrases`` (already cleaned) from the next utterance on; True once the decoder has them.
 
         The decoder is shared by every stream, and a stream's partial hypothesis belongs to the decoder that made
-        it, so a change waits until no utterance is in progress (``ensure_stream`` applies it then).
+        it, so a change waits until no utterance is in progress (``ensure_stream`` applies it then). ``scope`` names
+        the account the call belongs to: while calls from two accounts are open, neither's names are boosted.
         """
-        with self._nemotron_lock:
-            self.context_owner = owner
-            self._pending_phrases = None if phrases == self.context_phrases else phrases
+        with self._phrase_lock:
+            if self._boosting_failed:
+                return False
+            if phrases:
+                self._phrases_by_owner[owner] = (scope, phrases)
+            else:
+                self._phrases_by_owner.pop(owner, None)
+            self._queue_boosted_set()
         return self._apply_pending_phrases()
 
     def release_context_phrases(self, owner: str) -> None:
-        """A closed connection's names stop being boosted, unless another has set its own since."""
-        with self._nemotron_lock:
-            if self.context_owner != owner:
-                return
-            self.context_owner = None
-            self._pending_phrases = () if self.context_phrases else None
+        """A closed connection's names stop being boosted; other open connections keep theirs."""
+        with self._phrase_lock:
+            if self._phrases_by_owner.pop(owner, None) is not None:
+                self._queue_boosted_set()
+
+    def _queue_boosted_set(self) -> None:
+        # Under ``_phrase_lock``: every open connection's names, one bounded set in a stable order. Calls from two
+        # accounts at once boost nothing: one account's names would otherwise turn up in the other's transcripts.
+        entries = tuple(self._phrases_by_owner.values())
+        if len({scope for scope, _ in entries}) > 1:
+            boosted: tuple[str, ...] = ()
+        else:
+            boosted = tuple(sorted({phrase for _, phrases in entries for phrase in phrases}))[:MAX_CONTEXT_PHRASES]
+        self._pending_phrases = None if boosted == self.context_phrases else boosted
+
+    def _utterance_in_progress(self) -> bool:
+        # Under the model lock. A stream that has heard nothing yet holds no hypothesis: it is restarted on the new
+        # decoder, so a guest's name applies from the very next utterance. A stream left unfed is a leak, not a call.
+        now = time.monotonic()
+        for segment_id, stream in tuple(self._streams.items()):
+            if now - stream.last_fed_at > STALE_STREAM_S:
+                self._streams.pop(segment_id, None)
+        return any(getattr(stream.nemotron, "raw_text", "") or getattr(stream.nemotron, "transcript", "")
+                   for stream in tuple(self._streams.values()))
 
     def _apply_pending_phrases(self) -> bool:
+        if self._pending_phrases is None:
+            return True
         with self._nemotron_lock:
-            pending = self._pending_phrases
+            if self.nemotron_model is None or self._utterance_in_progress():
+                return False
+            if (self._last_rebuild_at is not None
+                    and time.monotonic() - self._last_rebuild_at < self.min_rebuild_interval_s):
+                return False  # the newest set waits for the next stream after the interval
+            with self._phrase_lock:
+                pending, self._pending_phrases = self._pending_phrases, None
             if pending is None:
                 return True
-            if self.nemotron_model is None or self._streams:
-                return False
             started = time.perf_counter()
-            self._pending_phrases = None
+            self._last_rebuild_at = time.monotonic()
             try:
                 _set_boosted_phrases(self.nemotron_model, pending)
             except Exception as exc:  # noqa: BLE001 - a name list must never cost the call its transcripts
                 logger.warning("[STT] Boosting the call's names failed; decoding without them: %s", exc)
                 _metric("stt_context_phrases_failed", error_type=type(exc).__name__, error=str(exc)[:200])
+                with self._phrase_lock:
+                    self._boosting_failed = True  # this model takes no names: later sets do nothing
+                    self._pending_phrases = None
                 self.context_phrases = ()
-                _set_boosted_phrases(self.nemotron_model, ())  # the plain decoder, as at load
+                try:
+                    _set_boosted_phrases(self.nemotron_model, ())  # the plain decoder, as at load
+                except Exception:  # noqa: BLE001 - the decoder as it stands still transcribes
+                    logger.warning("[STT] Restoring the plain decoder failed", exc_info=True)
                 return False
             self.context_phrases = pending
+            for stream in tuple(self._streams.values()):
+                stream.nemotron = self._new_nemotron_stream()
         _metric(
             "stt_context_phrases_applied",
             phrase_count=len(pending),
@@ -474,6 +552,13 @@ class NemotronEouModelManager:
             detect_eou=True,
         )
 
+    def _new_nemotron_stream(self) -> CacheAwareRnntStream:
+        return CacheAwareRnntStream(
+            self.nemotron_model,
+            right_context=self.nemotron_right_context,
+            detect_eou=False,
+        )
+
     def ensure_stream(self, segment_id: str) -> HybridStream:
         self.load()
         existing = self._streams.get(segment_id)
@@ -481,15 +566,13 @@ class NemotronEouModelManager:
             return existing
         if self._pending_phrases is not None:
             self._apply_pending_phrases()
-        stream = HybridStream(
-            nemotron=CacheAwareRnntStream(
-                self.nemotron_model,
-                right_context=self.nemotron_right_context,
-                detect_eou=False,
-            ),
-            eou=self._new_eou_stream(),
-        )
-        self._streams[segment_id] = stream
+        # Built under the model lock: a rebuild swaps the decoder this stream is set up on.
+        with self._nemotron_lock:
+            existing = self._streams.get(segment_id)
+            if existing is not None:
+                return existing
+            stream = HybridStream(nemotron=self._new_nemotron_stream(), eou=self._new_eou_stream())
+            self._streams[segment_id] = stream
         return stream
 
     def rearm_eou(self, segment_id: str) -> bool:
@@ -504,6 +587,7 @@ class NemotronEouModelManager:
 
     def feed(self, segment_id: str, pcm16le: bytes) -> HybridUpdate:
         stream = self.ensure_stream(segment_id)
+        stream.last_fed_at = time.monotonic()
         # Run Nemotron first so the authoritative partial is current by the time
         # an EOU event is surfaced to the browser.
         with self._nemotron_lock:
@@ -564,6 +648,7 @@ class NemotronEouModelManager:
         }
 
     def release(self, segment_id: str) -> None:
+        # No model lock: the websocket releases on its event loop, and a dict pop is atomic.
         self._streams.pop(segment_id, None)
 
     def transcribe_pcm16(self, pcm16le: bytes) -> str:
