@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omnix system map</title>
+<style>
+:root{
+  --bg:#f5f7fb;--panel:#ffffff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--edge:#94a3b8;
+  --accent:#2563eb;--flow:#ea580c;--node:#ffffff;--node-border:#d8dee9;--band:#eef2f8;--band-alt:#f8fafc;
+  --chip:#f1f5f9;--shadow:0 1px 2px rgba(15,23,42,.06),0 4px 14px rgba(15,23,42,.06);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+[data-theme=dark]{
+  --bg:#0a0f1c;--panel:#101827;--ink:#e5e9f0;--muted:#94a3b8;--line:#243047;--edge:#5b6b85;
+  --accent:#60a5fa;--flow:#fb923c;--node:#121a2b;--node-border:#2a3650;--band:#0e1626;--band-alt:#0c1322;
+  --chip:#1a2438;--shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;color:inherit}
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font-weight:650;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.brand small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+#search{flex:1 1 220px;min-width:160px;max-width:360px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);outline:none}
+#search:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
+.kinds{display:flex;flex-wrap:wrap;gap:5px}
+.kchip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:var(--chip);cursor:pointer;font-size:11.5px;user-select:none}
+.kchip svg{width:20px;height:6px}
+.kchip.off{opacity:.42;text-decoration:line-through}
+.kchip b{font-weight:500;color:var(--muted)}
+.tools{display:flex;gap:6px;margin-left:auto}
+.btn{border:1px solid var(--line);background:var(--chip);border-radius:8px;padding:5px 9px;cursor:pointer;line-height:1.1;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,.kchip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 390px;min-height:0}
+.stage{position:relative;min-height:0;overflow:hidden}
+#map{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#map.panning{cursor:grabbing}
+.band{fill:var(--band)}
+.band.alt{fill:var(--band-alt)}
+.band-label{font-size:11.5px;font-weight:600;fill:var(--muted);letter-spacing:.02em}
+.edge{fill:none;stroke:var(--edge);stroke-width:1.25;opacity:.4;transition:opacity .2s,stroke .2s}
+.edge.k-depends_on{stroke-dasharray:5 3}
+.edge.k-uses{stroke-dasharray:2 3}
+.edge.k-mounts{stroke-dasharray:1 4}
+.edge.k-sse{stroke-dasharray:7 3}
+.edge.k-websocket{stroke-width:2}
+.edge.k-spawns,.edge.k-loads,.edge.k-hosts{stroke-dasharray:3 2}
+.edge-hit{fill:none;stroke:transparent;stroke-width:11;cursor:help}
+.dimmed .edge{opacity:.06}
+.edge.hover{opacity:.95;stroke:var(--accent)}
+.edge.hi{opacity:.95;stroke:var(--accent);stroke-width:2}
+.edge.flow{opacity:.95;stroke:var(--flow);stroke-width:2.4;stroke-dasharray:8 6;animation:march 1s linear infinite}
+.edge.flow.rev{animation-direction:reverse}
+.edge.flow.current{stroke-width:4.2}
+.edge.flow.faded{opacity:.35}
+@keyframes march{to{stroke-dashoffset:-28}}
+.mk path{fill:var(--edge)}.mk-hi path{fill:var(--accent)}.mk-flow path{fill:var(--flow)}
+.node{cursor:pointer;transition:opacity .2s}
+.node rect.box{fill:var(--node);stroke:var(--node-border);stroke-width:1.2;filter:drop-shadow(0 1px 1.5px rgba(15,23,42,.08))}
+.node:hover rect.box{stroke:var(--accent)}
+.node:focus{outline:none}.node:focus-visible rect.box{stroke:var(--accent);stroke-width:2.5}
+.node .nl{font-size:12px;font-weight:600;fill:var(--ink)}
+.node .ns{font-size:10.5px;fill:var(--muted);font-family:var(--mono)}
+.dimmed .node{opacity:.22}
+.dimmed .node.on,.dimmed .node.sel,.dimmed .node.match,.dimmed .node.current{opacity:1}
+.node.sel rect.box{stroke:var(--accent);stroke-width:2.6}
+.node.match rect.box{stroke:var(--accent);stroke-width:2}
+.node.on rect.box{stroke:color-mix(in srgb,var(--accent) 55%,var(--node-border))}
+.flowing .node.on rect.box{stroke:color-mix(in srgb,var(--flow) 60%,var(--node-border))}
+.node.current rect.box{stroke:var(--flow);stroke-width:3}
+.node .ring{fill:none;stroke:var(--flow);stroke-width:2;opacity:0}
+.node.current .ring{animation:pulse 1.4s ease-out infinite}
+@keyframes pulse{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.12)}}
+.badge rect{fill:var(--flow)}.badge text{fill:#fff;font-size:10px;font-weight:700}
+.legend{position:absolute;left:12px;bottom:12px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:calc(100% - 24px);padding:7px 10px;background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;font-size:11px;color:var(--muted);box-shadow:var(--shadow)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:4px}
+.zoom .btn{width:32px;height:32px;padding:0;background:var(--panel);box-shadow:var(--shadow)}
+.tip{position:fixed;z-index:20;max-width:340px;padding:9px 11px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);pointer-events:none;opacity:0;transition:opacity .12s;font-size:12px}
+.tip.show{opacity:1}
+.tip h4{margin:0 0 3px;font-size:13px}
+.tip .m{color:var(--muted);font-size:11px}
+.tip code{font-family:var(--mono);font-size:11px}
+aside{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-left:1px solid var(--line)}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:0 8px}
+.tab{border:0;background:none;padding:10px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-weight:600}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{flex:1;overflow:auto;padding:12px 14px 20px;display:none}
+.pane.active{display:block}
+.hint{color:var(--muted);font-size:12px;margin:0 0 10px}
+.fcard{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;background:var(--panel)}
+.fcard.active{border-color:var(--flow);box-shadow:0 0 0 3px color-mix(in srgb,var(--flow) 14%,transparent)}
+.fhead{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 11px;cursor:pointer}
+.fhead:hover{background:var(--chip)}
+.fname{font-weight:600}
+.fcount{float:right;color:var(--muted);font-size:11px}
+.ftrig{color:var(--muted);font-size:11.5px}
+.fbody{padding:0 11px 10px}
+.fsum{margin:0 0 8px;font-size:12px}
+.fctl{display:flex;align-items:center;gap:5px;margin-bottom:8px}
+.fctl .pos{margin-left:auto;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+ol.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+ol.steps li{display:grid;grid-template-columns:22px 1fr;gap:7px;padding:6px 6px;border-radius:8px;cursor:pointer}
+ol.steps li:hover{background:var(--chip)}
+ol.steps li.cur{background:color-mix(in srgb,var(--flow) 13%,transparent)}
+.sn{width:20px;height:20px;border-radius:50%;background:var(--chip);display:grid;place-items:center;font-size:10.5px;font-weight:700;color:var(--muted)}
+li.cur .sn{background:var(--flow);color:#fff}
+.chipn{display:inline-block;padding:0 6px;border-radius:6px;font-size:11px;font-weight:600;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}
+.act{font-size:12px}
+.files{margin-top:2px}
+.files code,.plist code{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);word-break:break-all}
+.d-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.d-h h2{margin:0;font-size:16px}
+.d-sec{margin-top:12px}
+.d-sec h3{margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.d-sec ul{margin:0;padding-left:16px}
+.d-sec li{margin:2px 0}
+.plist code{cursor:copy;padding:1px 0;color:var(--ink)}
+.plist code:hover{color:var(--accent)}
+.conn{display:flex;flex-wrap:wrap;gap:4px}
+.conn button{border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:2px 7px;font-size:11.5px;cursor:pointer}
+.conn button:hover{border-color:var(--accent)}
+.conn button span{color:var(--muted);font-size:10.5px}
+.keys{margin-top:14px;color:var(--muted);font-size:11px}
+kbd{font-family:var(--mono);font-size:10.5px;padding:0 4px;border:1px solid var(--line);border-radius:4px;background:var(--chip)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:6px 12px;border-radius:8px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
+.toast.show{opacity:.92}
+@media (max-width:960px){
+  .app{height:auto;min-height:100vh}
+  main{grid-template-columns:1fr;grid-template-rows:62vh auto}
+  aside{border-left:0;border-top:1px solid var(--line);max-height:none}
+  .pane{max-height:none;overflow:visible}
+  .tools{margin-left:0}
+}
+@media (max-width:760px){.legend{display:none}}
+@media (prefers-reduced-motion:reduce){.edge.flow,.node.current .ring{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">Omnix system map<small id="meta"></small></div>
+    <input id="search" type="search" placeholder="Search nodes, files, paths…  ( / )" aria-label="Search nodes">
+    <div class="kinds" id="kinds" aria-label="Edge kinds"></div>
+    <div class="tools">
+      <button class="btn" id="clear" title="Clear selection (Esc)">Clear</button>
+      <button class="btn" id="theme" title="Toggle theme">◐</button>
+      <button class="btn" id="dl" title="Download the map as JSON">JSON</button>
+    </div>
+  </header>
+  <main>
+    <section class="stage" id="stage">
+      <svg id="map" role="img" aria-label="Omnix architecture diagram"></svg>
+      <div class="legend" id="legend"></div>
+      <div class="zoom">
+        <button class="btn" id="zin" title="Zoom in">+</button>
+        <button class="btn" id="zout" title="Zoom out">−</button>
+        <button class="btn" id="fit" title="Fit (F)">⤢</button>
+      </div>
+    </section>
+    <aside>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="flows" role="tab">Flows</button>
+        <button class="tab" data-tab="details" role="tab">Details</button>
+      </nav>
+      <div class="pane active" id="pane-flows"></div>
+      <div class="pane" id="pane-details"></div>
+    </aside>
+  </main>
+</div>
+<div class="tip" id="tip"></div>
+<div class="toast" id="toast"></div>
+<script type="application/json" id="omnix-map-data">{"meta":{"name":"Omnix system map","schema":"omnix-system-map-v1","generated":"2026-11-22","repo_commit":"057bb8e8d1","purpose":"Orientation for an AI agent before changing Omnix: which node owns a behavior, what it talks to, which invariants and tests apply, and how the main request paths flow.","how_to_use":["Find the owner of a file: longest matching prefix in path_index, else search nodes[].paths and key_files.","Before editing a node: read its docs, honor its invariants, run its tests; check edges into it for callers.","Flows are ordered steps; each step names the node, what happens there, the edge used to arrive (from/edge) and the files to read.","depends_on/uses edges are the declared feature contracts (feature.py); calls/http/websocket/sse/sql edges are runtime traffic.","This map is a snapshot at repo_commit; verify a cited file still exists before relying on it."],"layers":[{"id":"client","label":"Browser & desktop","color":"#3b82f6"},{"id":"edge","label":"Composition & edge","color":"#8b5cf6"},{"id":"platform","label":"Platform capabilities","color":"#0ea5e9"},{"id":"apps","label":"Apps","color":"#10b981"},{"id":"kernel","label":"Shared kernel","color":"#f59e0b"},{"id":"data","label":"Data","color":"#ef4444"},{"id":"gpu","label":"Local model services","color":"#ec4899"},{"id":"external","label":"External providers","color":"#64748b"}],"edge_kinds":{"http":"HTTP request (service or provider call)","websocket":"Bidirectional realtime socket","sse":"Server-sent events (one-way push)","sql":"PostgreSQL access through persistence","calls":"In-process call","depends_on":"Declared required feature dependency (feature.py depends_on)","uses":"Declared optional feature dependency (feature.py uses)","mounts":"Gateway mounts the feature's routers/lifecycle","spawns":"Process start/supervision","loads":"Web route lazy-loads the workspace","hosts":"Desktop shell hosts the web app","reads":"Reads data files","writes":"Writes files/blobs"},"global_invariants":["PostgreSQL is the only structured-data authority; browser state is presentation only.","Long-running work goes through the shared job system; outputs through the shared asset model; push through the shared event stream.","Use the shared provider/model facade and settings registry; register agent/tool authority in the canonical capability system.","Modules import each other only through declared contracts in the depends_on direction; an app never imports another app (ADR-0016).","Model output is evidence or a proposal; deterministic Omnix code owns authority, state changes and completion.","Schema changes need a forward migration + persistence tests; backend contract changes need regenerated web API types."],"validation":{"python":"python -m pytest <focused-test> -q --tb=short (use the .venv/dev-clean interpreter)","lint":"ruff check <changed-python-paths>; python scripts/architecture_lint.py (reads git-tracked files: stage new files first)","web":"npm --prefix web run test -- <focused-test>; npm --prefix web run build","api_contracts":"npm --workspace @omnix/web run api:generate; npm --workspace @omnix/web run api:check","postgres_tests":"Set OMNIX_TEST_DATABASE_URL literally to a scratch DB on the 16432 container; never the live 5432 DB."},"key_docs":["AGENTS.md","SPEC.md","docs/ARCHITECTURE.md","docs/architecture/ADR-0016-platform-tiers.md","docs/architecture/OMNIX_RUNTIME_INVARIANTS.md","docs/testing/ARCHITECTURE_GATES.md","docs/rpg/current-state.md"],"counts":{"nodes":59,"edges":147,"flows":11}},"nodes":[{"id":"desktop","label":"Desktop app","layer":"client","summary":"Electron shell that hosts the web app and boots/supervises the Python services. Installers publish as GitHub releases (unsigned).","paths":["desktop/","src/app/desktop/"],"key_files":["src/app/desktop/service_boot.py","src/app/desktop/supervise.py"],"docs":["docs/DESKTOP_APP_ROADMAP_2026-10-21.md"]},{"id":"web_shell","label":"Web app shell","layer":"client","summary":"React 19 + Vite 7 SPA. modulesManifest.ts registers 19 workspace modules; routes, nav, view-API scope and runtimes derive from it. ModuleWorkspace lazy-loads; viewRuntime starts only the active module's controllers.","paths":["web/src/app/","web/src/main.tsx","web/src/design/"],"port":"5173 (dev)","key_files":["web/src/app/modulesManifest.ts","web/src/features/ModuleWorkspace.tsx","web/src/app/viewRuntime.ts","web/src/app/router.tsx"],"invariants":["One browser app; never add a second frontend framework.","Browser state is presentation only; backend owns domain truth."]},{"id":"web_chat","label":"Chat workspace","layer":"client","summary":"/chatbot: chats, characters, Live Chat calls (voice, portrait video, group calls with up to four guests), memory tab, generative UI, agent runs.","paths":["web/src/features/assistant/"],"key_files":["web/src/features/assistant/module.ts"],"tests":["web/src/features/assistant/"]},{"id":"web_rpg","label":"RPG workspace","layer":"client","summary":"/rpg: campaign play, World Forge, maps, game-master panel. Backend modules: rpg, hermes.","paths":["web/src/features/rpg/"],"key_files":["web/src/features/rpg/module.ts"]},{"id":"web_trading","label":"Trading workspace","layer":"client","summary":"/trading: charting terminal (Lightweight Charts, TradingView-parity), scanners, alerts, catalysts, research.","paths":["web/src/features/trading/"],"key_files":["web/src/features/trading/module.ts"]},{"id":"web_media","label":"Media studios","layer":"client","summary":"Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces.","paths":["web/src/features/storyteller/","web/src/features/audiobook/","web/src/features/podcast/","web/src/features/voice/","web/src/features/voice-cloning/","web/src/features/stt/","web/src/features/image-generation/","web/src/features/dubbing/"]},{"id":"web_platform","label":"Platform views","layer":"client","summary":"Providers, Models, Jobs, Assets, Reports, Settings, Setup, Diagnostics.","paths":["web/src/features/platform/","web/src/features/settings/","web/src/features/setup/"]},{"id":"web_api","label":"Typed API client","layer":"client","summary":"Transport + kernel client. Each feature calls the gateway through features/<name>/api/gateway.ts with schemas from its generated.ts (from the gateway OpenAPI + route-owners.json).","paths":["web/src/api/","web/src/api/generated/"],"key_files":["web/src/api/client.ts","web/src/api/generated/openapi.json","web/src/api/generated/route-owners.json","web/scripts/generate-api-types.mjs","scripts/export_gateway_openapi.py"],"invariants":["Refresh generated API artifacts in the same change as a backend contract change (npm --workspace @omnix/web run api:generate, then api:check)."]},{"id":"web_events","label":"Event client (SSE)","layer":"client","summary":"Consumes the gateway /events stream (IDs + heartbeats) and invalidates TanStack Query caches; useJobEvents for job progress.","paths":["web/src/events/"],"key_files":["web/src/events/eventClient.ts","web/src/events/useJobEvents.ts"]},{"id":"launcher","label":"Launcher","layer":"edge","summary":"Operator launcher/dashboard: starts and supervises the gateway, worker and GPU services from resources/config/launcher.toml.","paths":["src/app/composition/launcher/"],"port":"5055","key_files":["src/app/composition/launcher/service_manager.py","start_all.bat"]},{"id":"gateway","label":"FastAPI gateway","layer":"edge","summary":"Browser-facing API (app.composition.gateway.main:app). Mounts every feature's routers, kernel routes (chat, jobs, assets, events, replay), websockets. Serving roles own request-driven chat dispatch.","paths":["src/app/composition/gateway/"],"port":"8000","key_files":["src/app/composition/gateway/app_factory.py","src/app/composition/gateway/feature_registry.py","src/app/composition/gateway/kernel_routes/","src/app/composition/gateway/event_loop_lag_monitor.py"],"invariants":["Never block the gateway event loop (trading jobs run on their own loop thread).","Ingress allowlist is shared with the Vite proxy."],"tests":["src/tests/gateway/"],"docs":["docs/architecture/OMNIX_PRODUCTION_INGRESS.md","docs/architecture/ADR-0011-worker-api-gateway-split.md"]},{"id":"worker","label":"Job worker pools","layer":"edge","summary":"Standalone durable job workers (python -m app.composition.worker). Claim registered job types with SKIP LOCKED + per-attempt lease tokens; bounded resource pools; singleton worker owns schedulers and recovery.","paths":["src/app/composition/worker/","src/app/composition/worker_runtime/"],"invariants":["Durable leases fence stale completion; recovery finalizes abandoned work once."],"docs":["docs/architecture/ADR-0013-durable-job-fencing.md"]},{"id":"runtime","label":"Runtime kernel","layer":"edge","summary":"Immutable RuntimeConfig -> RuntimeCapabilities (serve_api, run_chat_dispatch, own_background_runtime, run_recovery, run_schedulers, run_job_workers, run_local_tts, use_remote_tts). Feature catalog resolves enabled features and their depends_on.","paths":["src/app/runtime/","src/app/composition/runtime_composition.py"],"key_files":["src/app/runtime/config.py","src/app/runtime/capabilities.py","src/app/runtime/feature_catalog.py","src/app/runtime/scheduler.py","src/app/runtime/ownership_fencing.py"],"invariants":["Process capabilities never expand agent or trading authority.","Explicit composition; no runtime patching (ADR-0014/0015).","Modules import each other only through declared contracts in the depends_on direction (ADR-0016)."],"tests":["src/tests/kernel/"],"docs":["docs/architecture/ADR-0014-explicit-runtime-composition.md","docs/architecture/ADR-0016-platform-tiers.md","docs/architecture/OMNIX_RUNTIME_INVARIANTS.md"]},{"id":"security","label":"Security & auth","layer":"edge","summary":"Sign-in (accounts, guests, invites, Google) on by default; request guard, rate limits, run tokens, URL policy, keychain/secret stores, service credentials.","paths":["src/app/security/"],"key_files":["src/app/security/auth/","src/app/security/request_guard.py","src/app/security/run_tokens.py","src/app/security/secrets.py"],"invariants":["Secrets live in credential/env stores, never browser state or committed defaults."],"tests":["src/tests/security/"]},{"id":"chat","label":"Chat","layer":"platform","summary":"Sessions/messages, admission, durable generation jobs, compaction, context budget, generative UI, assist modes, live-call actions/greeting/tasks/proactive lines, overlap judge.","paths":["src/app/platform/chat/"],"feature_id":"chat","key_files":["src/app/platform/chat/admission.py","src/app/platform/chat/generation_jobs.py","src/app/platform/chat/live_overlap_judge.py","src/app/platform/chat/generative_ui/","src/app/composition/gateway/kernel_routes/core_chat_routes.py"],"invariants":["Recovery finalizes an abandoned chat generation once."],"tests":["src/tests/chat/"],"docs":["docs/architecture/OMNIX_CHAT_GENERATIVE_UI_ROADMAP.md"]},{"id":"live_voice","label":"Live voice (calls)","layer":"platform","summary":"Live Chat calls. Prompt pipeline (profile -> spoken style -> companion context -> cache -> dependency timings), LLM routing/stream, TTS lane with speculative phrases and silent-take retry, PCM/avatar websockets, call roster, portrait link, release gates.","paths":["src/app/platform/live_voice/"],"feature_id":"live-voice","key_files":["src/app/platform/live_voice/pipeline.py","src/app/platform/live_voice/llm/routing.py","src/app/platform/live_voice/speech/tts_lane.py","src/app/platform/live_voice/speech/phrase_speech_check.py","src/app/platform/live_voice/transport/websocket.py","src/app/platform/live_voice/transport/avatar_websocket.py","src/app/platform/live_voice/portrait/link.py"],"invariants":["The voice is never held up by the portrait (bounded queue; drop and mark degraded).","Do not restart services during a live call."],"tests":["src/tests/live_voice/"],"docs":["docs/roadmap/LIVE_COMPANION_ROADMAP_2026-11-15.md","docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md"]},{"id":"voice","label":"Voice","layer":"platform","summary":"TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names).","paths":["src/app/platform/voice/"],"feature_id":"voice","key_files":["src/app/platform/voice/stt_proxy_routes.py","src/app/platform/voice/tts_engines.py","src/app/platform/voice/swap_controller.py","src/app/platform/voice/tts_pcm_websocket.py"],"invariants":["Sidecar credentials stay server-side; a browser-sent speaker_profile is dropped."],"tests":["src/tests/voice/"],"docs":["docs/architecture/OMNIX_VOICE_STUDIO_PARITY_ROADMAP.md"]},{"id":"live_speech","label":"Live speech (opt-in)","layer":"platform","summary":"Standalone realtime speech protocol, VAD and benchmarks. Opt-in feature: enabled only when named (OPT_IN_FEATURES).","paths":["src/app/platform/live_speech/"],"feature_id":"live-speech","tests":["src/tests/live_speech/"]},{"id":"characters","label":"Characters","layer":"platform","summary":"Character profiles, avatars (Live2D, visemes, avatar generation), voice consent, live-call profile and rendering.","paths":["src/app/platform/characters/"],"feature_id":"characters","key_files":["src/app/platform/characters/service.py","src/app/platform/characters/live_call.py","src/app/platform/characters/avatar_service.py"],"tests":["src/tests/characters/"]},{"id":"assistant_memory","label":"Assistant memory","layer":"platform","summary":"Memory v2 (authoritative): structured extraction, consolidation, conversation readings, scene memory, recall into prompts, Memory tab management. On for every character and the System Assistant.","paths":["src/app/platform/assistant_memory/"],"feature_id":"assistant-memory","key_files":["src/app/platform/assistant_memory/structured_extraction.py","src/app/platform/assistant_memory/consolidation.py","src/app/platform/assistant_memory/conversation_reading.py","src/app/platform/assistant_memory/chat_prompt.py"],"invariants":["Rebuilds delete what the plan omits; verify after real turns."],"tests":["src/tests/assistant_memory/"],"docs":["docs/MEMORY_V2_ARCHITECTURE.md","docs/MEMORY_V2_CONTRACTS.md"]},{"id":"companion_activity","label":"Companion activity","layer":"platform","summary":"Presence, initiative, cognition, embodiment and delivery quality for companions; reducer-owned state.","paths":["src/app/platform/companion_activity/"],"feature_id":"companion-activity","key_files":["src/app/platform/companion_activity/reducer.py"],"tests":["src/tests/companion_activity/"]},{"id":"assistant_tools","label":"Assistant tools","layer":"platform","summary":"Governed tool adapters: browser, Gmail, Calendar, Contacts, GitHub repo, Kasa/home, MCP, Hermes bridge. Gate, owner grants, proposals, ledger.","paths":["src/app/platform/assistant_tools/"],"feature_id":"assistant-tools","key_files":["src/app/platform/assistant_tools/gate.py","src/app/platform/assistant_tools/registry.py","src/app/platform/assistant_tools/ledger.py","src/app/platform/assistant_tools/owner_grants.py"],"invariants":["Integrations enter through this policy layer; never raw credentials or host access to the model."],"tests":["src/tests/assistant_tools/"]},{"id":"agent_runtime","label":"Agent runtime","layer":"platform","summary":"Semantic routing (CHAT/WORKFLOW/AGENT), planning, TaskGraph, capability/resource grants, workspace isolation, Pi runtime with broker/guard extensions, evidence, acceptance, coding quality, independent review.","paths":["src/app/platform/agent_runtime/"],"feature_id":"agent-runtime","key_files":["src/app/platform/agent_runtime/chat_bridge.py","src/app/platform/agent_runtime/planning.py","src/app/platform/agent_runtime/pi_runtime.py","src/app/platform/agent_runtime/evidence.py","src/app/platform/agent_runtime/acceptance.py","src/app/platform/agent_runtime/AGENTS.md"],"invariants":["Profiles are ceilings, not grants.","Approval policy never expands issued capabilities.","Coordinator/reviewer/subagent authority is explicitly narrowed.","Durable PostgreSQL state decides recovery-sensitive lifecycle.","Evidence binds to subject/task revision/workspace state.","LLM output is evidence or a proposal; Omnix code owns authority and completion."],"tests":["src/tests/agent_runtime/"],"docs":["docs/architecture/AGENT_EXTENSION_GUIDE.md"]},{"id":"research","label":"Research","layer":"platform","summary":"Quick search and deep research (planner, extraction, synthesis, adversarial gate), outbound web policy, source store, retention.","paths":["src/app/platform/research/"],"feature_id":"research","key_files":["src/app/platform/research/planner.py","src/app/platform/research/synthesis.py","src/app/platform/research/outbound_web.py"],"tests":["src/tests/research/"]},{"id":"image","label":"Image","layer":"platform","summary":"Image jobs and providers, Flux pipeline loading, explicit download/load/unload (service availability separate from GPU residency), reference assets.","paths":["src/app/platform/image/"],"feature_id":"image","key_files":["src/app/platform/image/service.py","src/app/platform/image/jobs.py","src/app/platform/image/lifecycle.py"],"tests":["src/tests/image/"]},{"id":"character_interactions","label":"Character interactions","layer":"apps","summary":"Group calls: up to four guests; the floor decides which character answers and lets characters join in.","paths":["src/app/apps/character_interactions/"],"feature_id":"character-interactions","key_files":["src/app/apps/character_interactions/floor.py"],"tests":["src/tests/character_interactions/"]},{"id":"desktop_companion","label":"Desktop companion","layer":"apps","summary":"Screen observation, attention, commentary and shadow watch for the desktop companion.","paths":["src/app/apps/desktop_companion/"],"feature_id":"desktop-companion","tests":["src/tests/desktop_companion/"]},{"id":"rpg","label":"RPG engine","layer":"apps","summary":"Deterministic RPG. Every state change is a turn through session/turn/run.py: rules are pure and return StateChange; only the reducer mutates; only the turn commit saves. Narrator phrases the committed outcome.","paths":["src/app/apps/rpg/"],"feature_id":"rpg","key_files":["src/app/apps/rpg/session/turn/run.py","src/app/apps/rpg/session/turn/planning.py","src/app/apps/rpg/foundation/state/changes.py","src/app/apps/rpg/foundation/state/reducer.py","src/app/apps/rpg/foundation/state/sections.py","src/app/apps/rpg/foundation/persistence/document_parts.py","src/app/apps/rpg/session/campaign_state.py","scripts/architecture_lint.py"],"invariants":["Only the reducer changes the document (AL019); only the turn commit saves (AL018).","One owning rule per mechanic (PipelineMechanic + MECHANIC_OWNERS/CHANGE_WRITES).","No string-key reads of simulation_state/runtime_state (AL020).","No world names/content in rules/world/session/narration (AL021).","No unseeded randomness, uuid4 or wall clock on the turn path (AL013).","Keep JSONB key order when caching/assembling documents.","Stored-shape change = new CURRENT_SCHEMA_VERSION + upgrade in session/upgrades/.","World text is untrusted; speaker secrets never reach the model."],"tests":["src/tests/rpg/","src/tests/unit/rpg/","src/tests/rpg/playthrough/","src/tests/characterization/"],"docs":["docs/rpg/current-state.md","docs/rpg/design/","docs/RPG_PRODUCTION_ROADMAP_2026-10-23.md"]},{"id":"hermes_rpg","label":"Hermes (RPG edge)","layer":"apps","summary":"RPG edge to the Hermes sidecar: suggestions, sequence review, narrative research. Assistance only, never a game-state store.","paths":["src/app/apps/rpg/edge/hermes/"],"feature_id":"hermes","tests":["src/tests/hermes/"],"docs":["docs/HERMES_SIDECAR_SETUP.md"]},{"id":"trading","label":"Trading","layer":"apps","summary":"Market data (IBKR monitor), scanners/gapper discovery, catalysts, alerts and delivery, backtests, bounce model, prospective-gap handoff/climatology import, paper execution.","paths":["src/app/apps/trading/"],"feature_id":"trading","key_files":["src/app/apps/trading/api.py","src/app/apps/trading/market_data_api.py","src/app/apps/trading/execution.py","src/app/apps/trading/prospective_gap_inputs.py"],"invariants":["AI/shadow analysis is research; only deterministic strategy/runtime owns execution authority.","Never widen order authority as a side effect of research or agent changes.","Trading jobs run on their own loop thread, never the gateway's."],"tests":["src/tests/trading/"],"docs":["docs/architecture/OMNIX_TRADING_OPERATIONS.md","docs/architecture/ADR-0004-omnix-trading-terminal.md"]},{"id":"audiobook","label":"Audiobook","layer":"apps","summary":"Document structure and classification, speech plan, performance direction, render planner/cache, render, assembly and export.","paths":["src/app/apps/audiobook/"],"feature_id":"audiobook","key_files":["src/app/apps/audiobook/render_planner.py","src/app/apps/audiobook/render_service.py","src/app/apps/audiobook/assembly_service.py"],"tests":["src/tests/audiobook/"],"docs":["docs/architecture/OMNIX_AUDIOBOOK_V1_OPERATIONS.md"]},{"id":"story","label":"Storyteller","layer":"apps","summary":"Story jobs (outline -> draft -> store story asset).","paths":["src/app/apps/story/"],"feature_id":"story","tests":["src/tests/story/"]},{"id":"dubbing","label":"Dubbing","layer":"apps","summary":"Translate, fit and mix dubbing steps as jobs.","paths":["src/app/apps/dubbing/"],"feature_id":"dubbing","tests":["src/tests/dubbing/"]},{"id":"providers","label":"Providers & models","layer":"kernel","summary":"One provider/model facade for every feature: LM Studio, llama.cpp, Claude CLI, OpenRouter, Cerebras, ChatGPT Codex, OpenAI-compatible; TTS/STT providers, Smart Turn, Nemotron EOU streaming.","paths":["src/app/providers/"],"key_files":["src/app/providers/facade.py","src/app/providers/registry.py","src/app/providers/lmstudio_provider.py","src/app/providers/claude_cli_provider.py","src/app/providers/tts_service.py"],"invariants":["Features never own provider discovery; use the shared facade."],"tests":["src/tests/providers/"]},{"id":"prompts","label":"Prompts","layer":"kernel","summary":"Prompt registry, renderer and repository; golden file guards prompt text.","paths":["src/app/prompts/"],"key_files":["src/app/prompts/registry.py","src/tests/unit/prompts/prompt_golden.json"]},{"id":"capabilities","label":"Capabilities","layer":"kernel","summary":"Capability registry, approvals, executor, MCP policy, tool-call contract. Agent runs reach it through agent_runtime/capability_requests.py; profiles.py and resource_grants.py narrow what a run may use.","paths":["src/app/capabilities/"],"key_files":["src/app/capabilities/registry.py","src/app/capabilities/approvals.py","src/app/capabilities/executor.py","src/app/capabilities/tool_call.py","src/app/platform/agent_runtime/capability_requests.py"],"invariants":["A model cannot obtain a capability by deciding it needs one."]},{"id":"jobs","label":"Jobs & runs","layer":"kernel","summary":"Shared job/run model: type, priority, resource class (CPU, GPU-LLM/TTS/STT/image), stages, progress, logs, outputs, cancel/retry.","paths":["src/app/jobs/"],"key_files":["src/app/jobs/executor.py","src/app/jobs/handlers.py","src/app/persistence/job_repository.py","src/app/composition/gateway/kernel_routes/core_jobs_routes.py"],"invariants":["Long-running work enters the job system, never a request handler or feature-local queue."]},{"id":"events","label":"Events & outbox","layer":"kernel","summary":"Writers append to omnix_outbox_events in the same transaction; the relay delivers per-aggregate in order. Run streams and the /events SSE stream.","paths":["src/app/events/"],"key_files":["src/app/events/outbox_relay.py","src/app/events/run_streams.py","src/app/composition/gateway/kernel_routes/live_event_stream.py","src/app/persistence/outbox_repository.py"],"invariants":["Use the shared event transport; websockets only for truly interactive flows."]},{"id":"assets","label":"Assets","layer":"kernel","summary":"Shared asset/artifact model (identity, type, owning module, MIME, storage, metadata). Guarded bounded UTF-8 reads for text assets.","paths":["src/app/persistence/asset_service.py","src/app/persistence/asset_repository.py","src/app/persistence/blob_store.py"],"key_files":["src/app/composition/gateway/kernel_routes/core_assets_routes.py","src/app/persistence/s3_blob_store.py"]},{"id":"persistence","label":"Persistence","layer":"kernel","summary":"Unit of work, transaction policy, repositories, document store, retention, tenant scope, forward migrations.","paths":["src/app/persistence/"],"key_files":["src/app/persistence/unit_of_work.py","src/app/persistence/transaction_policy.py","src/app/persistence/migrations/","src/app/persistence/repository_registry.py"],"invariants":["Schema change = forward migration under persistence/migrations (or the module's migrations/) + persistence tests.","Preserve idempotency and recovery semantics."],"tests":["src/tests/persistence/"],"docs":["docs/architecture/MIGRATION_POLICY.md","docs/architecture/ADR-0010-postgresql-production-authority.md"]},{"id":"settings","label":"Settings & config","layer":"kernel","summary":"Settings registry (scope, persistence owner, writability, restart needs) and env variable registry.","paths":["src/app/settings/","src/app/config/"],"key_files":["src/app/settings/registry.py","src/app/config/variables.json","src/app/settings/profile_experience.py"],"invariants":["Register settings with an explicit persistence owner; env/status settings are read-only."],"docs":["docs/CONFIGURATION.md"]},{"id":"model_catalog","label":"Model catalog","layer":"kernel","summary":"Local model catalog, packs, downloads, hardware checks, locks.","paths":["src/app/models/"],"key_files":["src/app/models/catalog.json","src/app/models/packs.py","src/app/models/downloads.py"]},{"id":"observability","label":"Observability","layer":"kernel","summary":"Logging, metrics (Prometheus), tracing, content-free diagnostics, reports.","paths":["src/app/observability/"]},{"id":"postgres","label":"PostgreSQL 17","layer":"data","summary":"Sole structured-data authority: records, jobs/runs, sessions, campaigns, agent records, outbox. Live on 5432; tests use a scratch DB on the 16432 container.","paths":["docker-compose.postgres.yml"],"port":"5432 (live) / 16432 (tests)","invariants":["Tests set OMNIX_TEST_DATABASE_URL literally to a scratch database, never the live one."]},{"id":"blobs","label":"Blob & file storage","layer":"data","summary":"Generated media, large artifacts, model weights, logs/exports (local files or S3).","paths":["resources/"],"key_files":["src/app/persistence/blob_store.py","src/app/persistence/s3_blob_store.py"]},{"id":"world_bundles","label":"World bundles","layer":"data","summary":"RPG worlds as data bundles (the starter town included); community catalog in a separate repo.","paths":["resources/examples/rpg/world-bundles/"]},{"id":"tts_svc","label":"TTS service","layer":"gpu","summary":"Fish S2 Pro / Qwen3 TTS server with engine warm-up and trial takes.","paths":["src/services/tts/"],"port":"5101","key_files":["src/services/tts/tts_server.py","src/services/tts/fish_api_server.py"]},{"id":"stt_svc","label":"STT service","layer":"gpu","summary":"Parakeet and Nemotron EOU streaming STT, energy endpointing, speaker scoring against the account voiceprint.","paths":["src/services/stt/"],"port":"5201","key_files":["src/services/stt/nemotron_eou_stt_server.py","src/services/stt/parakeet_stt_server.py","src/services/stt/speaker_scoring.py"]},{"id":"image_svc","label":"Image service","layer":"gpu","summary":"Optional image generation service; starts without weights, loads/unloads on demand.","paths":["src/services/image/"],"port":"5301","key_files":["src/services/image/image_service_app.py"]},{"id":"audio_svc","label":"Audio service","layer":"gpu","summary":"Audio processing server (uploads, effects).","paths":["src/services/audio/"],"port":"5401","key_files":["src/services/audio/audio_server.py"]},{"id":"portrait_svc","label":"Portrait service","layer":"gpu","summary":"Talking-head video: FLOAT and FlashHead Lite engines, LivePortrait idle loops, VRAM cap, stream leases.","paths":["src/services/portrait/"],"port":"5501","key_files":["src/services/portrait/portrait_server.py","src/services/portrait/float_runtime.py","src/services/portrait/flashhead_runtime.py","src/services/portrait/liveportrait_idle.py"],"invariants":["Cap VRAM and stream large arrays; heavy loads have frozen the PC."],"docs":["docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md"]},{"id":"omnivoice_svc","label":"OmniVoice service","layer":"gpu","summary":"OmniVoice TTS server.","paths":["src/services/omnivoice/"],"key_files":["src/services/omnivoice/omnivoice_server.py","src/app/providers/omnivoice_provider.py"]},{"id":"llm_local","label":"Local LLM","layer":"external","summary":"LM Studio (OpenAI-compatible) or llama.cpp server.","paths":["src/app/providers/lmstudio_provider.py","src/app/providers/llamacpp_provider.py"],"port":"1234"},{"id":"llm_cloud","label":"Cloud / CLI LLMs","layer":"external","summary":"Claude CLI, OpenRouter, Cerebras, ChatGPT Codex, OpenAI-compatible endpoints.","paths":["src/app/providers/claude_cli_provider.py","src/app/providers/openrouter_provider.py","src/app/providers/cerebras_provider.py","src/app/providers/chatgpt_codex_provider.py"]},{"id":"hermes_sidecar","label":"Hermes sidecar","layer":"external","summary":"Hermes agent sidecar (when enabled).","paths":["src/app/providers/hermes_client.py"],"port":"8642","docs":["docs/HERMES_SIDECAR_SETUP.md"]},{"id":"integrations","label":"Account integrations","layer":"external","summary":"Google (Gmail, Calendar, Contacts), GitHub, Kasa home devices, browser automation, MCP servers.","paths":["src/app/platform/assistant_tools/"]},{"id":"public_web","label":"Public web","layer":"external","summary":"Web search and page fetches under the outbound web policy.","paths":["src/app/platform/research/outbound_web.py"]},{"id":"market_data","label":"Market data","layer":"external","summary":"IBKR market data, Finviz gapper discovery, news/economic calendar sources.","paths":["src/app/apps/trading/ibkr_market_data_monitor.py","src/app/apps/trading/finviz_gapper_discovery.py"]},{"id":"github_research","label":"GitHub main (research)","layer":"external","summary":"Scheduled research runs publish the premarket handoff (resources/trading/prospective_gap_inbox/YYYY-MM-DD.json, by 09:20 ET) and climatology state on main. Omnix imports from GitHub, never from a checkout.","paths":["src/app/apps/trading/prospective_gap_inputs.py"],"invariants":["A handoff is immutable once imported; never publish an older climatology state."]}],"edges":[{"id":"desktop->web_shell:hosts","from":"desktop","to":"web_shell","kind":"hosts","label":"hosts the web app"},{"id":"desktop->gateway:spawns","from":"desktop","to":"gateway","kind":"spawns","label":"boots & supervises services"},{"id":"web_shell->web_chat:loads","from":"web_shell","to":"web_chat","kind":"loads","label":"lazy route"},{"id":"web_shell->web_rpg:loads","from":"web_shell","to":"web_rpg","kind":"loads","label":"lazy route"},{"id":"web_shell->web_trading:loads","from":"web_shell","to":"web_trading","kind":"loads","label":"lazy route"},{"id":"web_shell->web_media:loads","from":"web_shell","to":"web_media","kind":"loads","label":"lazy route"},{"id":"web_shell->web_platform:loads","from":"web_shell","to":"web_platform","kind":"loads","label":"lazy route"},{"id":"web_shell->web_events:calls","from":"web_shell","to":"web_events","kind":"calls","label":"opens /events"},{"id":"web_chat->web_api:calls","from":"web_chat","to":"web_api","kind":"calls","label":"feature gateway.ts"},{"id":"web_rpg->web_api:calls","from":"web_rpg","to":"web_api","kind":"calls","label":"feature gateway.ts"},{"id":"web_trading->web_api:calls","from":"web_trading","to":"web_api","kind":"calls","label":"feature gateway.ts"},{"id":"web_media->web_api:calls","from":"web_media","to":"web_api","kind":"calls","label":"feature gateway.ts"},{"id":"web_platform->web_api:calls","from":"web_platform","to":"web_api","kind":"calls","label":"kernel client"},{"id":"web_events->web_chat:calls","from":"web_events","to":"web_chat","kind":"calls","label":"invalidates queries"},{"id":"web_events->web_media:calls","from":"web_events","to":"web_media","kind":"calls","label":"job progress"},{"id":"web_events->web_platform:calls","from":"web_events","to":"web_platform","kind":"calls","label":"jobs view"},{"id":"web_api->gateway:http","from":"web_api","to":"gateway","kind":"http","label":"/api (typed)"},{"id":"web_chat->gateway:websocket","from":"web_chat","to":"gateway","kind":"websocket","label":"call audio, STT, avatar frames"},{"id":"gateway->web_chat:websocket","from":"gateway","to":"web_chat","kind":"websocket","label":"PCM + portrait frames"},{"id":"gateway->web_rpg:sse","from":"gateway","to":"web_rpg","kind":"sse","label":"turn stream"},{"id":"events->web_events:sse","from":"events","to":"web_events","kind":"sse","label":"/events stream"},{"id":"launcher->gateway:spawns","from":"launcher","to":"gateway","kind":"spawns","label":"start/supervise"},{"id":"launcher->worker:spawns","from":"launcher","to":"worker","kind":"spawns","label":"start/supervise"},{"id":"launcher->tts_svc:spawns","from":"launcher","to":"tts_svc","kind":"spawns","label":"start/supervise"},{"id":"launcher->stt_svc:spawns","from":"launcher","to":"stt_svc","kind":"spawns","label":"start/supervise"},{"id":"launcher->image_svc:spawns","from":"launcher","to":"image_svc","kind":"spawns","label":"start/supervise"},{"id":"launcher->audio_svc:spawns","from":"launcher","to":"audio_svc","kind":"spawns","label":"start/supervise"},{"id":"launcher->portrait_svc:spawns","from":"launcher","to":"portrait_svc","kind":"spawns","label":"start/supervise"},{"id":"gateway->runtime:calls","from":"gateway","to":"runtime","kind":"calls","label":"RuntimeConfig + feature catalog"},{"id":"worker->runtime:calls","from":"worker","to":"runtime","kind":"calls","label":"composes handler registry"},{"id":"gateway->security:calls","from":"gateway","to":"security","kind":"calls","label":"auth + request guard"},{"id":"gateway->observability:calls","from":"gateway","to":"observability","kind":"calls","label":"logs, metrics, lag monitor"},{"id":"gateway->jobs:calls","from":"gateway","to":"jobs","kind":"calls","label":"kernel jobs routes"},{"id":"gateway->assets:calls","from":"gateway","to":"assets","kind":"calls","label":"kernel assets routes"},{"id":"gateway->events:calls","from":"gateway","to":"events","kind":"calls","label":"kernel event stream"},{"id":"gateway->settings:calls","from":"gateway","to":"settings","kind":"calls","label":"settings + diagnostics"},{"id":"runtime->persistence:calls","from":"runtime","to":"persistence","kind":"calls","label":"selects repositories"},{"id":"worker->jobs:calls","from":"worker","to":"jobs","kind":"calls","label":"claim SKIP LOCKED + lease"},{"id":"worker->audiobook:calls","from":"worker","to":"audiobook","kind":"calls","label":"runs job handlers"},{"id":"worker->trading:calls","from":"worker","to":"trading","kind":"calls","label":"scheduled jobs"},{"id":"worker->image:calls","from":"worker","to":"image","kind":"calls","label":"runs job handlers"},{"id":"worker->chat:calls","from":"worker","to":"chat","kind":"calls","label":"recovery of abandoned turns"},{"id":"gateway->chat:mounts","from":"gateway","to":"chat","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->live_voice:mounts","from":"gateway","to":"live_voice","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->voice:mounts","from":"gateway","to":"voice","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->characters:mounts","from":"gateway","to":"characters","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->assistant_memory:mounts","from":"gateway","to":"assistant_memory","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->assistant_tools:mounts","from":"gateway","to":"assistant_tools","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->agent_runtime:mounts","from":"gateway","to":"agent_runtime","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->research:mounts","from":"gateway","to":"research","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->image:mounts","from":"gateway","to":"image","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->character_interactions:mounts","from":"gateway","to":"character_interactions","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->desktop_companion:mounts","from":"gateway","to":"desktop_companion","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->rpg:mounts","from":"gateway","to":"rpg","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->hermes_rpg:mounts","from":"gateway","to":"hermes_rpg","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->trading:mounts","from":"gateway","to":"trading","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->audiobook:mounts","from":"gateway","to":"audiobook","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->story:mounts","from":"gateway","to":"story","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->dubbing:mounts","from":"gateway","to":"dubbing","kind":"mounts","label":"mounts feature routers"},{"id":"gateway->companion_activity:mounts","from":"gateway","to":"companion_activity","kind":"mounts","label":"mounts feature routers"},{"id":"agent_runtime->chat:uses","from":"agent_runtime","to":"chat","kind":"uses","label":"uses (optional)"},{"id":"agent_runtime->assistant_tools:uses","from":"agent_runtime","to":"assistant_tools","kind":"uses","label":"uses (optional)"},{"id":"assistant_memory->chat:depends_on","from":"assistant_memory","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"assistant_memory->assistant_tools:uses","from":"assistant_memory","to":"assistant_tools","kind":"uses","label":"uses (optional)"},{"id":"assistant_tools->chat:depends_on","from":"assistant_tools","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"characters->chat:depends_on","from":"characters","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"characters->assistant_memory:depends_on","from":"characters","to":"assistant_memory","kind":"depends_on","label":"depends_on (required)"},{"id":"characters->companion_activity:depends_on","from":"characters","to":"companion_activity","kind":"depends_on","label":"depends_on (required)"},{"id":"characters->image:depends_on","from":"characters","to":"image","kind":"depends_on","label":"depends_on (required)"},{"id":"live_speech->voice:uses","from":"live_speech","to":"voice","kind":"uses","label":"uses (optional)"},{"id":"live_voice->chat:depends_on","from":"live_voice","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"live_voice->characters:depends_on","from":"live_voice","to":"characters","kind":"depends_on","label":"depends_on (required)"},{"id":"live_voice->assistant_memory:depends_on","from":"live_voice","to":"assistant_memory","kind":"depends_on","label":"depends_on (required)"},{"id":"live_voice->assistant_tools:depends_on","from":"live_voice","to":"assistant_tools","kind":"depends_on","label":"depends_on (required)"},{"id":"live_voice->voice:uses","from":"live_voice","to":"voice","kind":"uses","label":"uses (optional)"},{"id":"research->chat:depends_on","from":"research","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"research->assistant_tools:uses","from":"research","to":"assistant_tools","kind":"uses","label":"uses (optional)"},{"id":"audiobook->voice:uses","from":"audiobook","to":"voice","kind":"uses","label":"uses (optional)"},{"id":"character_interactions->characters:depends_on","from":"character_interactions","to":"characters","kind":"depends_on","label":"depends_on (required)"},{"id":"character_interactions->chat:depends_on","from":"character_interactions","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"character_interactions->assistant_memory:depends_on","from":"character_interactions","to":"assistant_memory","kind":"depends_on","label":"depends_on (required)"},{"id":"character_interactions->companion_activity:depends_on","from":"character_interactions","to":"companion_activity","kind":"depends_on","label":"depends_on (required)"},{"id":"desktop_companion->chat:depends_on","from":"desktop_companion","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"desktop_companion->companion_activity:depends_on","from":"desktop_companion","to":"companion_activity","kind":"depends_on","label":"depends_on (required)"},{"id":"desktop_companion->assistant_memory:uses","from":"desktop_companion","to":"assistant_memory","kind":"uses","label":"uses (optional)"},{"id":"dubbing->voice:uses","from":"dubbing","to":"voice","kind":"uses","label":"uses (optional)"},{"id":"rpg->chat:depends_on","from":"rpg","to":"chat","kind":"depends_on","label":"depends_on (required)"},{"id":"rpg->image:uses","from":"rpg","to":"image","kind":"uses","label":"uses (optional)"},{"id":"rpg->voice:uses","from":"rpg","to":"voice","kind":"uses","label":"uses (optional)"},{"id":"trading->research:uses","from":"trading","to":"research","kind":"uses","label":"uses (optional)"},{"id":"trading->assistant_tools:uses","from":"trading","to":"assistant_tools","kind":"uses","label":"uses (optional)"},{"id":"trading->agent_runtime:uses","from":"trading","to":"agent_runtime","kind":"uses","label":"uses (optional)"},{"id":"trading->chat:uses","from":"trading","to":"chat","kind":"uses","label":"uses (optional)"},{"id":"hermes_rpg->rpg:depends_on","from":"hermes_rpg","to":"rpg","kind":"depends_on","label":"depends_on (required)"},{"id":"chat->providers:calls","from":"chat","to":"providers","kind":"calls","label":"LLM generation"},{"id":"chat->prompts:calls","from":"chat","to":"prompts","kind":"calls","label":"render prompt"},{"id":"chat->jobs:calls","from":"chat","to":"jobs","kind":"calls","label":"durable generation job"},{"id":"chat->persistence:sql","from":"chat","to":"persistence","kind":"sql","label":"sessions, messages"},{"id":"chat->events:calls","from":"chat","to":"events","kind":"calls","label":"progress/completion"},{"id":"live_voice->providers:calls","from":"live_voice","to":"providers","kind":"calls","label":"LLM stream (routing.py)"},{"id":"live_voice->prompts:calls","from":"live_voice","to":"prompts","kind":"calls","label":"live prompt pipeline"},{"id":"live_voice->tts_svc:http","from":"live_voice","to":"tts_svc","kind":"http","label":"phrase TTS (PCM)"},{"id":"live_voice->portrait_svc:websocket","from":"live_voice","to":"portrait_svc","kind":"websocket","label":"PCM in, frames out"},{"id":"voice->tts_svc:http","from":"voice","to":"tts_svc","kind":"http","label":"synthesis, engine swap"},{"id":"voice->stt_svc:websocket","from":"voice","to":"stt_svc","kind":"websocket","label":"STT relay + voiceprint"},{"id":"voice->audio_svc:http","from":"voice","to":"audio_svc","kind":"http","label":"audio processing"},{"id":"voice->omnivoice_svc:http","from":"voice","to":"omnivoice_svc","kind":"http","label":"OmniVoice TTS"},{"id":"voice->jobs:calls","from":"voice","to":"jobs","kind":"calls","label":"clone/design jobs"},{"id":"image->image_svc:http","from":"image","to":"image_svc","kind":"http","label":"generate, load/unload"},{"id":"image->jobs:calls","from":"image","to":"jobs","kind":"calls","label":"image jobs"},{"id":"image->assets:calls","from":"image","to":"assets","kind":"calls","label":"store image"},{"id":"assistant_memory->providers:calls","from":"assistant_memory","to":"providers","kind":"calls","label":"extraction model"},{"id":"assistant_memory->persistence:sql","from":"assistant_memory","to":"persistence","kind":"sql","label":"memory v2 store"},{"id":"assistant_tools->capabilities:calls","from":"assistant_tools","to":"capabilities","kind":"calls","label":"policy + approvals"},{"id":"assistant_tools->integrations:http","from":"assistant_tools","to":"integrations","kind":"http","label":"governed adapters"},{"id":"assistant_tools->hermes_sidecar:http","from":"assistant_tools","to":"hermes_sidecar","kind":"http","label":"Hermes bridge"},{"id":"assistant_tools->persistence:sql","from":"assistant_tools","to":"persistence","kind":"sql","label":"ledger, grants"},{"id":"agent_runtime->capabilities:calls","from":"agent_runtime","to":"capabilities","kind":"calls","label":"grants (ceilings)"},{"id":"agent_runtime->providers:calls","from":"agent_runtime","to":"providers","kind":"calls","label":"model gateway"},{"id":"agent_runtime->persistence:sql","from":"agent_runtime","to":"persistence","kind":"sql","label":"runs, evidence"},{"id":"research->providers:calls","from":"research","to":"providers","kind":"calls","label":"planner/synthesis"},{"id":"research->public_web:http","from":"research","to":"public_web","kind":"http","label":"search + fetch"},{"id":"desktop_companion->providers:calls","from":"desktop_companion","to":"providers","kind":"calls","label":"desktop vision"},{"id":"rpg->providers:calls","from":"rpg","to":"providers","kind":"calls","label":"intent + narration"},{"id":"rpg->persistence:sql","from":"rpg","to":"persistence","kind":"sql","label":"turn commit"},{"id":"rpg->world_bundles:reads","from":"rpg","to":"world_bundles","kind":"reads","label":"load world"},{"id":"hermes_rpg->hermes_sidecar:http","from":"hermes_rpg","to":"hermes_sidecar","kind":"http","label":"suggestions"},{"id":"trading->market_data:http","from":"trading","to":"market_data","kind":"http","label":"quotes, scans"},{"id":"trading->github_research:http","from":"trading","to":"github_research","kind":"http","label":"import handoff/climatology"},{"id":"trading->persistence:sql","from":"trading","to":"persistence","kind":"sql","label":"research + alerts"},{"id":"audiobook->jobs:calls","from":"audiobook","to":"jobs","kind":"calls","label":"render jobs"},{"id":"audiobook->assets:calls","from":"audiobook","to":"assets","kind":"calls","label":"rendered audio"},{"id":"story->jobs:calls","from":"story","to":"jobs","kind":"calls","label":"story jobs"},{"id":"story->assets:calls","from":"story","to":"assets","kind":"calls","label":"story asset"},{"id":"dubbing->jobs:calls","from":"dubbing","to":"jobs","kind":"calls","label":"dubbing jobs"},{"id":"jobs->persistence:sql","from":"jobs","to":"persistence","kind":"sql","label":"job rows"},{"id":"jobs->events:calls","from":"jobs","to":"events","kind":"calls","label":"job events"},{"id":"events->persistence:sql","from":"events","to":"persistence","kind":"sql","label":"outbox rows"},{"id":"assets->persistence:sql","from":"assets","to":"persistence","kind":"sql","label":"asset metadata"},{"id":"assets->blobs:writes","from":"assets","to":"blobs","kind":"writes","label":"media bytes"},{"id":"settings->persistence:sql","from":"settings","to":"persistence","kind":"sql","label":"server-owned settings"},{"id":"security->persistence:sql","from":"security","to":"persistence","kind":"sql","label":"identity, audit"},{"id":"model_catalog->blobs:writes","from":"model_catalog","to":"blobs","kind":"writes","label":"model downloads"},{"id":"providers->llm_local:http","from":"providers","to":"llm_local","kind":"http","label":"OpenAI-compatible"},{"id":"providers->llm_cloud:http","from":"providers","to":"llm_cloud","kind":"http","label":"API / CLI"},{"id":"providers->model_catalog:calls","from":"providers","to":"model_catalog","kind":"calls","label":"model metadata"},{"id":"persistence->postgres:sql","from":"persistence","to":"postgres","kind":"sql","label":"psycopg pool"}],"flows":[{"id":"chat_turn","name":"Text chat turn","trigger":"User sends a message in Chat","summary":"Admit the turn, create a durable generation job, recall memory, render the prompt, stream the model, push events back.","steps":[{"node":"web_chat","action":"User submits a message from the composer","n":1},{"node":"web_api","action":"POST through features/assistant/api/gateway.ts","n":2,"from":"web_chat","edge":"web_chat->web_api:calls"},{"node":"gateway","action":"Auth + request guard; core_chat_routes hands off to Chat","files":["src/app/composition/gateway/kernel_routes/core_chat_routes.py"],"n":3,"from":"web_api","edge":"web_api->gateway:http"},{"node":"chat","action":"admission.py admits the turn; generation job is durably owned by this serving process (run_chat_dispatch)","files":["src/app/platform/chat/admission.py","src/app/platform/chat/generation_jobs.py"],"n":4,"from":"gateway","edge":"gateway->chat:mounts"},{"node":"persistence","action":"Unit of work stores the user message + job","n":5,"from":"chat","edge":"chat->persistence:sql"},{"node":"postgres","action":"Rows committed","n":6,"from":"persistence","edge":"persistence->postgres:sql"},{"node":"assistant_memory","action":"Recall memories into the prompt context","files":["src/app/platform/assistant_memory/chat_prompt.py"],"n":7,"from":"chat","edge":"assistant_memory->chat:depends_on"},{"node":"prompts","action":"Render the prompt from the registry","n":8,"from":"chat","edge":"chat->prompts:calls"},{"node":"providers","action":"Facade routes to the chosen provider/model","n":9,"from":"chat","edge":"chat->providers:calls"},{"node":"llm_local","action":"Model streams tokens (or a cloud/CLI LLM)","n":10,"from":"providers","edge":"providers->llm_local:http"},{"node":"events","action":"Progress/completion events appended to the outbox in the same transaction","n":11,"from":"chat","edge":"chat->events:calls"},{"node":"web_events","action":"SSE /events delivers the event","n":12,"from":"events","edge":"events->web_events:sse"},{"node":"web_chat","action":"Query caches invalidate; the reply renders","n":13,"from":"web_events","edge":"web_events->web_chat:calls"},{"node":"assistant_memory","action":"After the turn: structured extraction/consolidation updates memory","n":14,"from":"chat","edge":"assistant_memory->chat:depends_on"}]},{"id":"live_call_turn","name":"Live voice call turn","trigger":"User speaks during a Live Chat call","summary":"Mic audio -> gateway STT relay -> streaming STT -> live prompt pipeline -> LLM stream -> phrase TTS -> PCM and portrait frames back to the browser.","steps":[{"node":"web_chat","action":"Call open; mic PCM streams over the call websocket","n":1},{"node":"gateway","action":"Websocket transport accepts the call stream","files":["src/app/platform/live_voice/transport/websocket.py"],"n":2,"from":"web_chat","edge":"web_chat->gateway:websocket"},{"node":"voice","action":"stt_proxy_routes relays audio; injects the account voiceprint and call names (browser speaker_profile dropped)","files":["src/app/platform/voice/stt_proxy_routes.py"],"n":3,"from":"gateway","edge":"gateway->voice:mounts"},{"node":"stt_svc","action":"Streaming STT (Nemotron EOU / Parakeet), endpointing, speaker scoring","n":4,"from":"voice","edge":"voice->stt_svc:websocket"},{"node":"voice","action":"Final segment returned","n":5,"from":"stt_svc","edge":"voice->stt_svc:websocket"},{"node":"live_voice","action":"Final transcript becomes a live turn; short remarks judged by the call's model (overlap judge)","files":["src/app/platform/chat/live_overlap_judge.py"],"n":6,"from":"voice","edge":"live_voice->voice:uses"},{"node":"chat","action":"Durable chat message for the turn","n":7,"from":"live_voice","edge":"live_voice->chat:depends_on"},{"node":"assistant_memory","action":"Companion context + memory for the prompt","n":8,"from":"live_voice","edge":"live_voice->assistant_memory:depends_on"},{"node":"prompts","action":"Prompt pipeline: profile -> spoken style -> companion context -> cache -> dependency timings","files":["src/app/platform/live_voice/pipeline.py"],"n":9,"from":"live_voice","edge":"live_voice->prompts:calls"},{"node":"providers","action":"llm/routing.py picks the provider; tokens stream","files":["src/app/platform/live_voice/llm/routing.py"],"n":10,"from":"live_voice","edge":"live_voice->providers:calls"},{"node":"llm_local","action":"Model streams the reply","n":11,"from":"providers","edge":"providers->llm_local:http"},{"node":"tts_svc","action":"TTS lane synthesizes phrases speculatively; phrase_speech_check retries near-silent takes","files":["src/app/platform/live_voice/speech/tts_lane.py","src/app/platform/live_voice/speech/phrase_speech_check.py"],"n":12,"from":"live_voice","edge":"live_voice->tts_svc:http"},{"node":"portrait_svc","action":"portrait/link.py copies phrase PCM in (bounded, never holds the voice); frames come back","files":["src/app/platform/live_voice/portrait/link.py"],"n":13,"from":"live_voice","edge":"live_voice->portrait_svc:websocket"},{"node":"web_chat","action":"Gateway streams PCM and avatar frames to the browser","files":["src/app/platform/live_voice/transport/avatar_websocket.py"],"n":14,"from":"gateway","edge":"gateway->web_chat:websocket"}]},{"id":"group_call","name":"Group call: who answers","trigger":"A call with up to four guest characters","summary":"The floor picks which character answers; that character's profile, voice and portrait drive the live turn.","steps":[{"node":"web_chat","action":"Owner invites guests into the call","n":1},{"node":"web_api","action":"Call roster update","n":2,"from":"web_chat","edge":"web_chat->web_api:calls"},{"node":"gateway","action":"Routes to character interactions","n":3,"from":"web_api","edge":"web_api->gateway:http"},{"node":"character_interactions","action":"floor.py decides who takes the floor (the AI picks; characters may join in)","files":["src/app/apps/character_interactions/floor.py"],"n":4,"from":"gateway","edge":"gateway->character_interactions:mounts"},{"node":"characters","action":"Speaker's profile, voice and portrait settings","n":5,"from":"character_interactions","edge":"character_interactions->characters:depends_on"},{"node":"assistant_memory","action":"Speaker's memories","n":6,"from":"character_interactions","edge":"character_interactions->assistant_memory:depends_on"},{"node":"live_voice","action":"Live turn as that speaker","n":7,"from":"gateway","edge":"gateway->live_voice:mounts"},{"node":"tts_svc","action":"Speaker's voice","n":8,"from":"live_voice","edge":"live_voice->tts_svc:http"},{"node":"portrait_svc","action":"Speaker's portrait stream","n":9,"from":"live_voice","edge":"live_voice->portrait_svc:websocket"}]},{"id":"rpg_turn","name":"RPG turn","trigger":"Player acts in a campaign","summary":"One pipeline: load turn-start campaign, model reads intent (proposal), deterministic rules return StateChange, reducer applies, commit saves, narrator phrases the committed outcome.","steps":[{"node":"web_rpg","action":"Player submits an action","n":1},{"node":"web_api","action":"Turn request","n":2,"from":"web_rpg","edge":"web_rpg->web_api:calls"},{"node":"gateway","action":"RPG routes","n":3,"from":"web_api","edge":"web_api->gateway:http"},{"node":"rpg","action":"TurnRequest; load the turn-start campaign","files":["src/app/apps/rpg/session/turn/request.py","src/app/apps/rpg/session/turn/run.py"],"n":4,"from":"gateway","edge":"gateway->rpg:mounts"},{"node":"providers","action":"Intent reading: model output is a proposal","files":["src/app/apps/rpg/session/turn/intent.py"],"n":5,"from":"rpg","edge":"rpg->providers:calls"},{"node":"rpg","action":"planning.py picks the PipelineMechanic; pure rules return StateChange values; reducer applies them","files":["src/app/apps/rpg/session/turn/planning.py","src/app/apps/rpg/foundation/state/changes.py","src/app/apps/rpg/foundation/state/reducer.py"],"n":6,"from":"providers","edge":"rpg->providers:calls"},{"node":"persistence","action":"Turn commit saves the document in parts, keeping JSONB key order","files":["src/app/apps/rpg/foundation/persistence/document_parts.py"],"n":7,"from":"rpg","edge":"rpg->persistence:sql"},{"node":"postgres","action":"Campaign + turn rows committed","n":8,"from":"persistence","edge":"persistence->postgres:sql"},{"node":"providers","action":"Narrator phrases the committed outcome; its claims are checked against it","n":9,"from":"rpg","edge":"rpg->providers:calls"},{"node":"voice","action":"Optional voice-cast speech audio","n":10,"from":"rpg","edge":"rpg->voice:uses"},{"node":"web_rpg","action":"Turn stream to the browser","files":["src/app/apps/rpg/foundation/turn_stream.py"],"n":11,"from":"gateway","edge":"gateway->web_rpg:sse"}]},{"id":"durable_job","name":"Durable background job (audiobook render)","trigger":"User starts a long-running render","summary":"Submit -> job row -> worker pool claims with a lease -> handler runs stages on GPU services -> asset stored -> outbox event -> SSE.","steps":[{"node":"web_media","action":"Start an audiobook render","n":1},{"node":"web_api","action":"Submit","n":2,"from":"web_media","edge":"web_media->web_api:calls"},{"node":"gateway","action":"Audiobook routes","n":3,"from":"web_api","edge":"web_api->gateway:http"},{"node":"audiobook","action":"Plan the render (render_planner.py)","files":["src/app/apps/audiobook/render_planner.py"],"n":4,"from":"gateway","edge":"gateway->audiobook:mounts"},{"node":"jobs","action":"Enqueue job: type, resource class, stages","n":5,"from":"audiobook","edge":"audiobook->jobs:calls"},{"node":"persistence","action":"Job row","n":6,"from":"jobs","edge":"jobs->persistence:sql"},{"node":"postgres","action":"Committed","n":7,"from":"persistence","edge":"persistence->postgres:sql"},{"node":"worker","action":"Pool claims with SKIP LOCKED + per-attempt lease token","n":8,"from":"jobs","edge":"worker->jobs:calls"},{"node":"audiobook","action":"Registered handler executes stages","n":9,"from":"worker","edge":"worker->audiobook:calls"},{"node":"voice","action":"Synthesis through the voice feature","n":10,"from":"audiobook","edge":"audiobook->voice:uses"},{"node":"tts_svc","action":"TTS renders speech","n":11,"from":"voice","edge":"voice->tts_svc:http"},{"node":"assets","action":"Rendered audio stored as an asset","n":12,"from":"audiobook","edge":"audiobook->assets:calls"},{"node":"blobs","action":"Media bytes written","n":13,"from":"assets","edge":"assets->blobs:writes"},{"node":"events","action":"Job progress/completion via outbox relay","n":14,"from":"jobs","edge":"jobs->events:calls"},{"node":"web_events","action":"SSE","n":15,"from":"events","edge":"events->web_events:sse"},{"node":"web_media","action":"Progress and result render","n":16,"from":"web_events","edge":"web_events->web_media:calls"}]},{"id":"image_generation","name":"Image generation with residency","trigger":"User loads a model and generates an image","summary":"Service availability is separate from GPU residency: load weights explicitly, generate as a job, store the image asset.","steps":[{"node":"web_media","action":"Image Generation page: load model, then generate","n":1},{"node":"web_api","action":"Request","n":2,"from":"web_media","edge":"web_media->web_api:calls"},{"node":"gateway","action":"Image routes","n":3,"from":"web_api","edge":"web_api->gateway:http"},{"node":"image","action":"Explicit load/unload; submits the generate job","files":["src/app/platform/image/lifecycle.py"],"n":4,"from":"gateway","edge":"gateway->image:mounts"},{"node":"jobs","action":"Image job","n":5,"from":"image","edge":"image->jobs:calls"},{"node":"worker","action":"Claims the job","n":6,"from":"jobs","edge":"worker->jobs:calls"},{"node":"image","action":"Handler runs","n":7,"from":"worker","edge":"worker->image:calls"},{"node":"image_svc","action":"Generates on GPU","n":8,"from":"image","edge":"image->image_svc:http"},{"node":"assets","action":"Store image asset","n":9,"from":"image","edge":"image->assets:calls"},{"node":"blobs","action":"Image bytes","n":10,"from":"assets","edge":"assets->blobs:writes"}]},{"id":"agent_run","name":"Agent run","trigger":"User asks for a task that needs an agent","summary":"Routing decides AGENT; plan/TaskGraph; capability grants narrow authority; isolated execution; candidate validated by tests, evidence and independent review before finish.","steps":[{"node":"web_chat","action":"User asks for a task","n":1},{"node":"web_api","action":"Message","n":2,"from":"web_chat","edge":"web_chat->web_api:calls"},{"node":"gateway","action":"Chat routes","n":3,"from":"web_api","edge":"web_api->gateway:http"},{"node":"chat","action":"Turn admitted","n":4,"from":"gateway","edge":"gateway->chat:mounts"},{"node":"agent_runtime","action":"chat_bridge semantic routing: CHAT / WORKFLOW / AGENT; plan -> TaskGraph","files":["src/app/platform/agent_runtime/chat_bridge.py","src/app/platform/agent_runtime/planning.py"],"n":5,"from":"chat","edge":"agent_runtime->chat:uses"},{"node":"capabilities","action":"Capability + resource grants (profiles are ceilings, not grants)","n":6,"from":"agent_runtime","edge":"agent_runtime->capabilities:calls"},{"node":"agent_runtime","action":"Isolated workspace; Pi runtime with broker/guard extensions","files":["src/app/platform/agent_runtime/pi_runtime.py","src/app/platform/agent_runtime/isolation.py"],"n":7,"from":"capabilities","edge":"agent_runtime->capabilities:calls"},{"node":"providers","action":"Model gateway with fidelity checks","n":8,"from":"agent_runtime","edge":"agent_runtime->providers:calls"},{"node":"llm_cloud","action":"Model reasons and proposes tool use","n":9,"from":"providers","edge":"providers->llm_cloud:http"},{"node":"assistant_tools","action":"Broker-mediated integration actions","n":10,"from":"agent_runtime","edge":"agent_runtime->assistant_tools:uses"},{"node":"agent_runtime","action":"Candidate WorkspaceState + RunChangeSet -> tests/acceptance, evidence coverage, coding quality, independent review","files":["src/app/platform/agent_runtime/acceptance.py","src/app/platform/agent_runtime/evidence.py"],"n":11,"from":"assistant_tools","edge":"agent_runtime->assistant_tools:uses"},{"node":"persistence","action":"Durable run, evidence and review records","n":12,"from":"agent_runtime","edge":"agent_runtime->persistence:sql"},{"node":"postgres","action":"Authoritative for recovery","n":13,"from":"persistence","edge":"persistence->postgres:sql"}]},{"id":"tool_call","name":"Governed assistant tool call","trigger":"The model proposes using an integration","summary":"A tool call is a proposal; the gate checks the capability registry and approval policy before an adapter acts; the ledger records it.","steps":[{"node":"chat","action":"Model output contains a tool-call proposal","n":1},{"node":"assistant_tools","action":"Validate + gate (owner grants, proposals)","files":["src/app/platform/assistant_tools/gate.py"],"n":2,"from":"chat","edge":"assistant_tools->chat:depends_on"},{"node":"capabilities","action":"Registry lookup + approval policy; never expands issued capabilities","n":3,"from":"assistant_tools","edge":"assistant_tools->capabilities:calls"},{"node":"assistant_tools","action":"Adapter executes","n":4,"from":"capabilities","edge":"assistant_tools->capabilities:calls"},{"node":"integrations","action":"Gmail / Calendar / GitHub / Kasa / browser / MCP","n":5,"from":"assistant_tools","edge":"assistant_tools->integrations:http"},{"node":"persistence","action":"Ledger + audit","n":6,"from":"assistant_tools","edge":"assistant_tools->persistence:sql"},{"node":"chat","action":"Result context returns to the turn","n":7,"from":"assistant_tools","edge":"assistant_tools->chat:depends_on"}]},{"id":"research_query","name":"Deep research","trigger":"User or trading asks for research","summary":"Planner -> outbound web under policy -> extraction -> synthesis -> adversarial gate.","steps":[{"node":"chat","action":"Research request","n":1},{"node":"research","action":"Planner builds the search plan","files":["src/app/platform/research/planner.py"],"n":2,"from":"chat","edge":"research->chat:depends_on"},{"node":"public_web","action":"Search + fetch under outbound policy","files":["src/app/platform/research/outbound_web.py"],"n":3,"from":"research","edge":"research->public_web:http"},{"node":"research","action":"Extraction, source store","n":4,"from":"public_web","edge":"research->public_web:http"},{"node":"providers","action":"Synthesis + adversarial gate","n":5,"from":"research","edge":"research->providers:calls"},{"node":"llm_cloud","action":"Model drafts the synthesis","n":6,"from":"providers","edge":"providers->llm_cloud:http"}]},{"id":"trading_handoff","name":"Trading premarket handoff import","trigger":"Scheduled 04:00-09:30 ET","summary":"Research publishes a frozen handoff on GitHub main; Omnix imports it into PostgreSQL. Research is read-only: no order authority.","steps":[{"node":"github_research","action":"Research run commits resources/trading/prospective_gap_inbox/YYYY-MM-DD.json by 09:20 ET","n":1},{"node":"worker","action":"Scheduler fires trading.prospective_gap_handoff_import","n":2,"from":"trading","edge":"worker->trading:calls"},{"node":"trading","action":"Import job runs on trading's own loop thread","n":3,"from":"worker","edge":"worker->trading:calls"},{"node":"github_research","action":"Fetch the frozen handoff from GitHub (never from a checkout)","n":4,"from":"trading","edge":"trading->github_research:http"},{"node":"persistence","action":"Store handoff (immutable once imported)","n":5,"from":"trading","edge":"trading->persistence:sql"},{"node":"postgres","action":"Committed","n":6,"from":"persistence","edge":"persistence->postgres:sql"},{"node":"market_data","action":"Live data for the session's watchlist","n":7,"from":"trading","edge":"trading->market_data:http"},{"node":"gateway","action":"Read models served","n":8,"from":"trading","edge":"gateway->trading:mounts"},{"node":"web_api","action":"Fetch","n":9,"from":"gateway","edge":"web_api->gateway:http"},{"node":"web_trading","action":"Terminal shows the session's candidates","n":10,"from":"web_api","edge":"web_trading->web_api:calls"}]},{"id":"startup","name":"Startup & composition","trigger":"Launcher or desktop app starts Omnix","summary":"Bind RuntimeConfig, derive process capabilities, compose repositories and features, mount routers; the worker owns schedulers and recovery.","steps":[{"node":"launcher","action":"Start services from launcher.toml (or the desktop app)","n":1},{"node":"tts_svc","action":"GPU services start (TTS, STT, image, audio, portrait)","n":2,"from":"launcher","edge":"launcher->tts_svc:spawns"},{"node":"gateway","action":"Gateway process starts","n":3,"from":"launcher","edge":"launcher->gateway:spawns"},{"node":"runtime","action":"RuntimeConfig -> RuntimeCapabilities; feature catalog resolves enabled features + depends_on","files":["src/app/runtime/config.py","src/app/runtime/feature_catalog.py"],"n":4,"from":"gateway","edge":"gateway->runtime:calls"},{"node":"persistence","action":"runtime_composition selects repositories; migrations checked","files":["src/app/composition/runtime_composition.py"],"n":5,"from":"runtime","edge":"runtime->persistence:calls"},{"node":"postgres","action":"Connect","n":6,"from":"persistence","edge":"persistence->postgres:sql"},{"node":"gateway","action":"Mount each feature's routers + FeatureLifecycle","files":["src/app/composition/gateway/feature_registry.py"],"n":7,"from":"runtime","edge":"gateway->runtime:calls"},{"node":"worker","action":"Job pools start; singleton worker owns schedulers and recovery","n":8,"from":"launcher","edge":"launcher->worker:spawns"},{"node":"chat","action":"Recovery finalizes abandoned chat generation once","n":9,"from":"worker","edge":"worker->chat:calls"}]}],"path_index":{"desktop/":"desktop","docker-compose.postgres.yml":"postgres","resources/":"blobs","resources/examples/rpg/world-bundles/":"world_bundles","src/app/apps/audiobook/":"audiobook","src/app/apps/character_interactions/":"character_interactions","src/app/apps/desktop_companion/":"desktop_companion","src/app/apps/dubbing/":"dubbing","src/app/apps/rpg/":"rpg","src/app/apps/rpg/edge/hermes/":"hermes_rpg","src/app/apps/story/":"story","src/app/apps/trading/":"trading","src/app/apps/trading/finviz_gapper_discovery.py":"market_data","src/app/apps/trading/ibkr_market_data_monitor.py":"market_data","src/app/apps/trading/prospective_gap_inputs.py":"github_research","src/app/capabilities/":"capabilities","src/app/composition/gateway/":"gateway","src/app/composition/launcher/":"launcher","src/app/composition/runtime_composition.py":"runtime","src/app/composition/worker/":"worker","src/app/composition/worker_runtime/":"worker","src/app/config/":"settings","src/app/desktop/":"desktop","src/app/events/":"events","src/app/jobs/":"jobs","src/app/models/":"model_catalog","src/app/observability/":"observability","src/app/persistence/":"persistence","src/app/persistence/asset_repository.py":"assets","src/app/persistence/asset_service.py":"assets","src/app/persistence/blob_store.py":"assets","src/app/platform/agent_runtime/":"agent_runtime","src/app/platform/assistant_memory/":"assistant_memory","src/app/platform/assistant_tools/":"assistant_tools","src/app/platform/characters/":"characters","src/app/platform/chat/":"chat","src/app/platform/companion_activity/":"companion_activity","src/app/platform/image/":"image","src/app/platform/live_speech/":"live_speech","src/app/platform/live_voice/":"live_voice","src/app/platform/research/":"research","src/app/platform/research/outbound_web.py":"public_web","src/app/platform/voice/":"voice","src/app/prompts/":"prompts","src/app/providers/":"providers","src/app/providers/cerebras_provider.py":"llm_cloud","src/app/providers/chatgpt_codex_provider.py":"llm_cloud","src/app/providers/claude_cli_provider.py":"llm_cloud","src/app/providers/hermes_client.py":"hermes_sidecar","src/app/providers/llamacpp_provider.py":"llm_local","src/app/providers/lmstudio_provider.py":"llm_local","src/app/providers/openrouter_provider.py":"llm_cloud","src/app/runtime/":"runtime","src/app/security/":"security","src/app/settings/":"settings","src/services/audio/":"audio_svc","src/services/image/":"image_svc","src/services/omnivoice/":"omnivoice_svc","src/services/portrait/":"portrait_svc","src/services/stt/":"stt_svc","src/services/tts/":"tts_svc","web/src/api/":"web_api","web/src/api/generated/":"web_api","web/src/app/":"web_shell","web/src/design/":"web_shell","web/src/events/":"web_events","web/src/features/assistant/":"web_chat","web/src/features/audiobook/":"web_media","web/src/features/dubbing/":"web_media","web/src/features/image-generation/":"web_media","web/src/features/platform/":"web_platform","web/src/features/podcast/":"web_media","web/src/features/rpg/":"web_rpg","web/src/features/settings/":"web_platform","web/src/features/setup/":"web_platform","web/src/features/storyteller/":"web_media","web/src/features/stt/":"web_media","web/src/features/trading/":"web_trading","web/src/features/voice-cloning/":"web_media","web/src/features/voice/":"web_media","web/src/main.tsx":"web_shell"}}</script>
+<script>
+(() => {
+'use strict';
+const DATA = JSON.parse(document.getElementById('omnix-map-data').textContent);
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s) => document.querySelector(s);
+const svgEl = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byId = (list) => Object.fromEntries(list.map((x) => [x.id, x]));
+const layers = DATA.meta.layers, nodes = DATA.nodes, edges = DATA.edges, flows = DATA.flows;
+const layerById = byId(layers), nodeById = byId(nodes), edgeById = byId(edges), flowById = byId(flows);
+const kinds = DATA.meta.edge_kinds;
+
+// ---------- layout
+const NW = 154, NH = 50, GX = 16, LGAP = 22, PAD = 16, GUTTER = 156, MAXPER = 9;
+const contentW = GUTTER + MAXPER * (NW + GX) - GX + 24;
+const pos = {}, bands = [];
+let y = 16;
+layers.forEach((L) => {
+  const ns = nodes.filter((n) => n.layer === L.id);
+  if (!ns.length) return;
+  const lines = Math.ceil(ns.length / MAXPER), per = Math.ceil(ns.length / lines), top = y;
+  y += PAD;
+  for (let li = 0; li < lines; li++) {
+    const row = ns.slice(li * per, (li + 1) * per);
+    const rowW = row.length * (NW + GX) - GX;
+    let x = GUTTER + (contentW - GUTTER - 24 - rowW) / 2;
+    row.forEach((n) => { pos[n.id] = { x, y, line: L.id + li }; x += NW + GX; });
+    y += NH + (li < lines - 1 ? LGAP : 0);
+  }
+  y += PAD;
+  bands.push({ L, top, bottom: y });
+  y += 8;
+});
+const contentH = y + 8;
+
+// ports: spread edge endpoints along each node side, ordered by the far end's x
+const sides = {};
+const ends = {};
+edges.forEach((e) => {
+  const a = pos[e.from], b = pos[e.to];
+  let sa, sb;
+  if (a.line === b.line) { sa = sb = 'top'; } else if (b.y > a.y) { sa = 'bottom'; sb = 'top'; } else { sa = 'top'; sb = 'bottom'; }
+  (sides[e.from + '|' + sa] ||= []).push({ e, end: 'from', ox: b.x });
+  (sides[e.to + '|' + sb] ||= []).push({ e, end: 'to', ox: a.x });
+  ends[e.id] = { sa, sb };
+});
+Object.entries(sides).forEach(([key, list]) => {
+  const id = key.split('|')[0], p = pos[id];
+  list.sort((m, n) => m.ox - n.ox);
+  list.forEach((it, i) => { (ends[it.e.id][it.end + 'X'] = p.x + NW * 0.1 + ((i + 1) / (list.length + 1)) * NW * 0.8); });
+});
+function edgePath(e) {
+  const a = pos[e.from], b = pos[e.to], d = ends[e.id];
+  const x1 = d.fromX, y1 = d.sa === 'bottom' ? a.y + NH : a.y;
+  const x2 = d.toX, y2 = d.sb === 'bottom' ? b.y + NH : b.y;
+  if (d.sa === 'top' && d.sb === 'top') {
+    const lift = 22 + Math.abs(x2 - x1) * 0.1;
+    return `M${x1},${y1} C${x1},${y1 - lift} ${x2},${y2 - lift} ${x2},${y2}`;
+  }
+  const dir = y2 > y1 ? 1 : -1, c = Math.max(28, Math.abs(y2 - y1) * 0.45);
+  return `M${x1},${y1} C${x1},${y1 + dir * c} ${x2},${y2 - dir * c} ${x2},${y2}`;
+}
+
+// ---------- draw
+const svg = $('#map');
+const defs = svgEl('defs', {}, svg);
+[['mk', 'mk'], ['mk-hi', 'mk-hi'], ['mk-flow', 'mk-flow']].forEach(([id, cls]) => {
+  const m = svgEl('marker', { id, class: cls, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }, defs);
+  svgEl('path', { d: 'M0,0 L10,5 L0,10 z' }, m);
+});
+const vp = svgEl('g', {}, svg);
+bands.forEach((b, i) => {
+  svgEl('rect', { class: 'band' + (i % 2 ? ' alt' : ''), x: 0, y: b.top, width: contentW, height: b.bottom - b.top, rx: 14 }, vp);
+  svgEl('rect', { x: 14, y: b.top + 15, width: 8, height: 8, rx: 2, fill: b.L.color }, vp);
+  const t = svgEl('text', { class: 'band-label', x: 28, y: b.top + 23 }, vp);
+  t.textContent = b.L.label;
+});
+const gEdges = svgEl('g', {}, vp), gHits = svgEl('g', {}, vp), gNodes = svgEl('g', {}, vp);
+const edgeEls = {}, nodeEls = {};
+edges.forEach((e) => {
+  const d = edgePath(e);
+  const p = svgEl('path', { d, class: 'edge k-' + e.kind, 'marker-end': 'url(#mk)' }, gEdges);
+  const hit = svgEl('path', { d, class: 'edge-hit' }, gHits);
+  hit.addEventListener('pointerenter', (ev) => { p.classList.add('hover'); showTip(ev, edgeTip(e)); });
+  hit.addEventListener('pointermove', moveTip);
+  hit.addEventListener('pointerleave', () => { p.classList.remove('hover'); hideTip(); });
+  hit.addEventListener('click', () => select(e.from === S.sel ? e.to : e.from));
+  edgeEls[e.id] = { p, hit };
+});
+nodes.forEach((n) => {
+  const p = pos[n.id], L = layerById[n.layer];
+  const g = svgEl('g', { class: 'node', transform: `translate(${p.x},${p.y})`, tabindex: 0, role: 'button', 'aria-label': n.label }, gNodes);
+  svgEl('rect', { class: 'ring', x: 0, y: 0, width: NW, height: NH, rx: 11, style: `transform-origin:${NW / 2}px ${NH / 2}px` }, g);
+  svgEl('rect', { class: 'box', width: NW, height: NH, rx: 10 }, g);
+  svgEl('rect', { x: 5, y: 9, width: 3.5, height: NH - 18, rx: 1.75, fill: L.color }, g);
+  const t = svgEl('text', { class: 'nl', x: 15, y: 21 }, g); t.textContent = n.label;
+  const s = svgEl('text', { class: 'ns', x: 15, y: 37 }, g);
+  s.textContent = n.port ? ':' + n.port : (n.feature_id || n.id);
+  const badge = svgEl('g', { class: 'badge', style: 'display:none' }, g);
+  svgEl('rect', { height: 16, rx: 8, y: -8 }, badge);
+  svgEl('text', { y: 3.5, 'text-anchor': 'middle' }, badge);
+  g.addEventListener('pointerenter', (ev) => showTip(ev, nodeTip(n)));
+  g.addEventListener('pointermove', moveTip);
+  g.addEventListener('pointerleave', hideTip);
+  g.addEventListener('click', (ev) => { if (!dragMoved) nodeClick(n.id); ev.stopPropagation(); });
+  g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nodeClick(n.id); } });
+  nodeEls[n.id] = { g, badge };
+});
+
+// ---------- legend, header, kinds
+$('#legend').innerHTML = layers.map((L) => `<span><i style="background:${L.color}"></i>${esc(L.label)}</span>`).join('');
+const m = DATA.meta;
+$('#meta').textContent = `${m.counts.nodes} nodes · ${m.counts.edges} edges · ${m.counts.flows} flows · commit ${m.repo_commit} · ${m.generated}`;
+const S = { sel: null, flow: null, step: -1, q: '', hidden: new Set(['mounts']), timer: null };
+const kindCount = {}; edges.forEach((e) => { kindCount[e.kind] = (kindCount[e.kind] || 0) + 1; });
+const dashFor = { depends_on: '5 3', uses: '2 3', mounts: '1 4', sse: '7 3', spawns: '3 2', loads: '3 2', hosts: '3 2' };
+$('#kinds').innerHTML = Object.keys(kinds).filter((k) => kindCount[k]).map((k) =>
+  `<button class="kchip${S.hidden.has(k) ? ' off' : ''}" data-kind="${k}" title="${esc(kinds[k])}"><svg viewBox="0 0 20 6"><line x1="0" y1="3" x2="20" y2="3" stroke="currentColor" stroke-width="${k === 'websocket' ? 2.4 : 1.5}" stroke-dasharray="${dashFor[k] || ''}"/></svg>${k}<b>${kindCount[k]}</b></button>`).join('');
+$('#kinds').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.kchip'); if (!b) return;
+  const k = b.dataset.kind;
+  S.hidden.has(k) ? S.hidden.delete(k) : S.hidden.add(k);
+  b.classList.toggle('off', S.hidden.has(k));
+  refresh();
+});
+
+// ---------- tooltips
+const tip = $('#tip');
+function nodeTip(n) {
+  const L = layerById[n.layer];
+  const sum = n.summary.length > 190 ? n.summary.slice(0, 187) + '…' : n.summary;
+  return `<h4>${esc(n.label)}</h4><div class="m">${esc(L.label)}${n.port ? ' · port ' + esc(n.port) : ''}${n.feature_id ? ' · feature <code>' + esc(n.feature_id) + '</code>' : ''}</div>
+    <div style="margin:5px 0">${esc(sum)}</div><code>${esc(n.paths[0])}</code><div class="m" style="margin-top:4px">Click for details and connections</div>`;
+}
+function edgeTip(e) {
+  return `<h4>${esc(nodeById[e.from].label)} → ${esc(nodeById[e.to].label)}</h4><div class="m"><code>${esc(e.kind)}</code> · ${esc(kinds[e.kind])}</div><div style="margin-top:4px">${esc(e.label)}</div>`;
+}
+function showTip(ev, html) { tip.innerHTML = html; tip.classList.add('show'); moveTip(ev); }
+function moveTip(ev) {
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, yy = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (yy + r.height > innerHeight - 8) yy = ev.clientY - r.height - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, yy) + 'px';
+}
+function hideTip() { tip.classList.remove('show'); }
+
+// ---------- pan & zoom
+const T = { x: 0, y: 0, k: 1 };
+let userMoved = false, dragMoved = false;
+const applyT = () => vp.setAttribute('transform', `translate(${T.x},${T.y}) scale(${T.k})`);
+function fit() {
+  const r = svg.getBoundingClientRect();
+  let k = Math.min(r.width / contentW, r.height / contentH) * 0.98;
+  // narrow screens: fit the height and pan sideways rather than shrinking text to nothing
+  if (r.width < 760) k = Math.min(1, (r.height / contentH) * 0.98);
+  T.k = k; T.x = contentW * k <= r.width ? (r.width - contentW * k) / 2 : 0; T.y = Math.max(6, (r.height - contentH * k) / 2);
+  applyT(); userMoved = false;
+}
+function zoomAt(f, mx, my) {
+  const k2 = Math.min(3.2, Math.max(0.2, T.k * f));
+  T.x = mx - (mx - T.x) * (k2 / T.k); T.y = my - (my - T.y) * (k2 / T.k); T.k = k2; applyT(); userMoved = true;
+}
+svg.addEventListener('wheel', (ev) => {
+  ev.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX - r.left, ev.clientY - r.top);
+}, { passive: false });
+const ptrs = new Map(); let start = null;
+svg.addEventListener('pointerdown', (ev) => {
+  ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  dragMoved = false;
+  start = { x: ev.clientX, y: ev.clientY, tx: T.x, ty: T.y, k: T.k, dist: null };
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; start.dist = Math.hypot(a.x - b.x, a.y - b.y); start.mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+});
+svg.addEventListener('pointermove', (ev) => {
+  if (!ptrs.has(ev.pointerId) || !start) return;
+  ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (ptrs.size === 2 && start.dist) {
+    const [a, b] = [...ptrs.values()], r = svg.getBoundingClientRect();
+    const f = Math.hypot(a.x - b.x, a.y - b.y) / start.dist;
+    T.k = start.k; T.x = start.tx; T.y = start.ty;
+    zoomAt(f, start.mid.x - r.left, start.mid.y - r.top); dragMoved = true; return;
+  }
+  const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+  if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+  if (!dragMoved) { svg.setPointerCapture(ev.pointerId); svg.classList.add('panning'); hideTip(); }
+  dragMoved = true; T.x = start.tx + dx; T.y = start.ty + dy; applyT(); userMoved = true;
+});
+const endPtr = (ev) => { ptrs.delete(ev.pointerId); if (!ptrs.size) { svg.classList.remove('panning'); start = null; setTimeout(() => { dragMoved = false; }, 0); } };
+svg.addEventListener('pointerup', endPtr); svg.addEventListener('pointercancel', endPtr);
+svg.addEventListener('click', (ev) => { if (!dragMoved && !ev.target.closest('.node,.edge-hit')) clearAll(); });
+$('#zin').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(1.25, r.width / 2, r.height / 2); };
+$('#zout').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(0.8, r.width / 2, r.height / 2); };
+$('#fit').onclick = fit;
+new ResizeObserver(() => { if (!userMoved) fit(); }).observe($('#stage'));
+function ensureVisible(id) {
+  const p = pos[id], r = svg.getBoundingClientRect(), mg = 40;
+  const sx = T.x + p.x * T.k, sy = T.y + p.y * T.k, sw = NW * T.k, sh = NH * T.k;
+  if (sx < mg || sy < mg || sx + sw > r.width - mg || sy + sh > r.height - mg) {
+    T.x = r.width / 2 - (p.x + NW / 2) * T.k; T.y = r.height / 2 - (p.y + NH / 2) * T.k; applyT(); userMoved = true;
+  }
+}
+
+// ---------- state
+const matches = (n, q) => {
+  const hay = [n.id, n.label, n.summary, n.feature_id || '', ...n.paths, ...(n.key_files || [])].join(' ').toLowerCase();
+  return hay.includes(q) || n.paths.some((p) => q.startsWith(p.toLowerCase()));
+};
+function refresh() {
+  const nc = {}, ec = {};
+  const add = (o, k, c) => { (o[k] ||= new Set()).add(c); };
+  let dim = false;
+  if (S.flow) {
+    dim = true;
+    const f = flowById[S.flow];
+    f.steps.forEach((st, i) => {
+      add(nc, st.node, 'on');
+      if (st.edge) { add(ec, st.edge, 'flow'); if (edgeById[st.edge].from !== st.from) add(ec, st.edge, 'rev'); if (S.step >= 0 && i !== S.step) add(ec, st.edge, 'faded'); }
+    });
+    if (S.step >= 0) {
+      const st = f.steps[S.step];
+      add(nc, st.node, 'current');
+      if (st.edge) { add(ec, st.edge, 'current'); ec[st.edge].delete('faded'); if (edgeById[st.edge].from !== st.from) ec[st.edge].add('rev'); else ec[st.edge].delete('rev'); }
+    }
+  } else if (S.sel) {
+    dim = true; add(nc, S.sel, 'sel');
+    edges.forEach((e) => { if (e.from === S.sel || e.to === S.sel) { add(ec, e.id, 'hi'); add(nc, e.from === S.sel ? e.to : e.from, 'on'); } });
+  } else if (S.q) {
+    dim = true; nodes.forEach((n) => { if (matches(n, S.q)) add(nc, n.id, 'match'); });
+  }
+  svg.classList.toggle('dimmed', dim);
+  svg.classList.toggle('flowing', !!S.flow);
+  nodes.forEach((n) => {
+    const { g, badge } = nodeEls[n.id];
+    g.setAttribute('class', 'node ' + [...(nc[n.id] || [])].join(' '));
+    let nums = [];
+    if (S.flow) flowById[S.flow].steps.forEach((st, i) => { if (st.node === n.id) nums.push(i + 1); });
+    if (nums.length) {
+      const label = nums.length > 4 ? nums.slice(0, 3).join(',') + '…' : nums.join(',');
+      const w = Math.max(16, label.length * 6.2 + 8);
+      badge.style.display = ''; badge.setAttribute('transform', `translate(${NW - w / 2 - 2},0)`);
+      const [r, t] = badge.children; r.setAttribute('width', w); r.setAttribute('x', -w / 2); t.textContent = label;
+    } else badge.style.display = 'none';
+  });
+  edges.forEach((e) => {
+    const { p, hit } = edgeEls[e.id];
+    const cls = ec[e.id] || new Set();
+    p.setAttribute('class', `edge k-${e.kind} ` + [...cls].join(' '));
+    const show = !S.hidden.has(e.kind) || cls.has('flow') || cls.has('hi');
+    p.style.display = hit.style.display = show ? '' : 'none';
+    p.setAttribute('marker-end', cls.has('flow') ? 'url(#mk-flow)' : cls.has('hi') ? 'url(#mk-hi)' : 'url(#mk)');
+  });
+  // bring flow/highlight edges to the top
+  [...gEdges.querySelectorAll('.edge.flow,.edge.hi')].forEach((el) => gEdges.appendChild(el));
+  const cur = gEdges.querySelector('.edge.current'); if (cur) gEdges.appendChild(cur);
+  writeHash();
+}
+function writeHash() {
+  let h = '';
+  if (S.flow) h = `flow=${S.flow}` + (S.step >= 0 ? `&step=${S.step + 1}` : '');
+  else if (S.sel) h = `node=${S.sel}`;
+  history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
+}
+function stopPlay() { if (S.timer) { clearInterval(S.timer); S.timer = null; } const b = $('#fplay'); if (b) b.textContent = '▶ Play'; }
+function clearAll() { stopPlay(); S.sel = null; S.flow = null; S.step = -1; renderFlows(); renderDetails(); refresh(); }
+function select(id) { stopPlay(); S.flow = null; S.step = -1; S.sel = id; renderFlows(); renderDetails(); showTab('details'); refresh(); }
+function nodeClick(id) {
+  if (S.flow) {
+    const steps = flowById[S.flow].steps;
+    const idx = steps.map((s, i) => (s.node === id ? i : -1)).filter((i) => i >= 0);
+    if (idx.length) { setStep(idx.find((i) => i > S.step) ?? idx[0]); return; }
+  }
+  select(id);
+}
+function openFlow(id) {
+  stopPlay();
+  if (S.flow === id) { S.flow = null; S.step = -1; } else { S.flow = id; S.step = -1; S.sel = null; }
+  renderFlows(); showTab('flows'); refresh();
+}
+function setStep(i) {
+  const f = flowById[S.flow]; if (!f) return;
+  S.step = Math.max(0, Math.min(f.steps.length - 1, i));
+  document.querySelectorAll('ol.steps li').forEach((li) => li.classList.toggle('cur', +li.dataset.i === S.step));
+  const li = document.querySelector(`ol.steps li[data-i="${S.step}"]`); if (li) li.scrollIntoView({ block: 'nearest' });
+  const pz = $('#fpos'); if (pz) pz.textContent = `step ${S.step + 1} / ${f.steps.length}`;
+  ensureVisible(f.steps[S.step].node);
+  refresh();
+}
+function togglePlay() {
+  if (S.timer) { stopPlay(); return; }
+  const f = flowById[S.flow]; if (!f) return;
+  if (S.step >= f.steps.length - 1) S.step = -1;
+  setStep(S.step + 1);
+  $('#fplay').textContent = '❚❚ Pause';
+  S.timer = setInterval(() => { if (S.step >= f.steps.length - 1) stopPlay(); else setStep(S.step + 1); }, 1700);
+}
+
+// ---------- panel
+const chip = (id) => { const n = nodeById[id], c = layerById[n.layer].color; return `<span class="chipn" style="--c:${c}">${esc(n.label)}</span>`; };
+function renderFlows() {
+  const pane = $('#pane-flows');
+  pane.innerHTML = `<p class="hint">Click a flow to trace its path on the map. Step through it, or play it. Click a node on the path to jump to its step.</p>` +
+    flows.map((f) => {
+      const on = S.flow === f.id;
+      return `<div class="fcard${on ? ' active' : ''}" data-flow="${f.id}">
+        <button class="fhead" data-open="${f.id}"><span class="fcount">${f.steps.length} steps</span><span class="fname">${esc(f.name)}</span><div class="ftrig">${esc(f.trigger)}</div></button>
+        ${on ? `<div class="fbody"><p class="fsum">${esc(f.summary)}</p>
+          <div class="fctl"><button class="btn" id="fprev">‹ Prev</button><button class="btn" id="fplay">▶ Play</button><button class="btn" id="fnext">Next ›</button><span class="pos" id="fpos">${S.step >= 0 ? `step ${S.step + 1} / ${f.steps.length}` : 'overview'}</span></div>
+          <ol class="steps">${f.steps.map((st, i) => `<li data-i="${i}" class="${i === S.step ? 'cur' : ''}"><span class="sn">${i + 1}</span><div>${chip(st.node)} <span class="act">${esc(st.action)}</span>${st.files ? `<div class="files">${st.files.map((p) => `<code>${esc(p)}</code>`).join('')}</div>` : ''}</div></li>`).join('')}</ol></div>` : ''}
+      </div>`;
+    }).join('') + `<div class="keys"><kbd>Esc</kbd> clear · <kbd>←</kbd>/<kbd>→</kbd> step · <kbd>Space</kbd> play · <kbd>/</kbd> search · <kbd>F</kbd> fit</div>`;
+}
+$('#pane-flows').addEventListener('click', (ev) => {
+  const open = ev.target.closest('[data-open]'); if (open) { openFlow(open.dataset.open); return; }
+  if (ev.target.closest('#fprev')) { stopPlay(); setStep(S.step - 1); return; }
+  if (ev.target.closest('#fnext')) { stopPlay(); setStep(S.step + 1); return; }
+  if (ev.target.closest('#fplay')) { togglePlay(); return; }
+  const li = ev.target.closest('ol.steps li'); if (li) { stopPlay(); setStep(+li.dataset.i); }
+});
+function list(title, items, fmt) { return items && items.length ? `<div class="d-sec"><h3>${title}</h3>${fmt(items)}</div>` : ''; }
+function renderDetails() {
+  const pane = $('#pane-details');
+  const id = S.sel;
+  if (!id) {
+    pane.innerHTML = `<p class="hint">Select a node to see what it owns, the invariants and tests that apply, and what it connects to. Search accepts a file path to find its owner.</p>` +
+      list('Global invariants', m.global_invariants, (xs) => `<ul>${xs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`) +
+      list('Validation', Object.entries(m.validation), (xs) => `<ul>${xs.map(([k, v]) => `<li><b>${esc(k)}</b>: ${esc(v)}</li>`).join('')}</ul>`);
+    return;
+  }
+  const n = nodeById[id], L = layerById[n.layer];
+  const out = edges.filter((e) => e.from === id), inc = edges.filter((e) => e.to === id);
+  const conn = (es, other) => `<div class="conn">${es.map((e) => `<button data-node="${e[other]}" title="${esc(e.label)}">${esc(nodeById[e[other]].label)} <span>${esc(e.kind)}</span></button>`).join('')}</div>`;
+  const inFlows = flows.filter((f) => f.steps.some((s) => s.node === id));
+  const paths = (xs) => `<div class="plist">${xs.map((p) => `<code title="Click to copy">${esc(p)}</code>`).join('')}</div>`;
+  pane.innerHTML = `<div class="d-h"><h2>${esc(n.label)}</h2><span class="chipn" style="--c:${L.color}">${esc(L.label)}</span>${n.port ? `<span class="chipn" style="--c:#64748b">port ${esc(n.port)}</span>` : ''}</div>
+    <div>${esc(n.summary)}</div>
+    ${n.feature_id ? `<div class="d-sec"><h3>Feature id</h3><div class="plist"><code>${esc(n.feature_id)}</code></div></div>` : ''}
+    ${list('Paths', n.paths, paths)}${list('Key files', n.key_files, paths)}
+    ${list('Invariants', n.invariants, (xs) => `<ul>${xs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`)}
+    ${list('Tests', n.tests, paths)}${list('Docs', n.docs, paths)}
+    ${list(`Outgoing (${out.length})`, out, (es) => conn(es, 'to'))}
+    ${list(`Incoming (${inc.length})`, inc, (es) => conn(es, 'from'))}
+    ${list('Flows through here', inFlows, (fs) => `<div class="conn">${fs.map((f) => `<button data-flow="${f.id}">${esc(f.name)}</button>`).join('')}</div>`)}`;
+}
+$('#pane-details').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-node]'); if (b) { select(b.dataset.node); ensureVisible(b.dataset.node); return; }
+  const f = ev.target.closest('button[data-flow]'); if (f) { openFlow(f.dataset.flow); return; }
+  const c = ev.target.closest('.plist code'); if (c) copy(c.textContent);
+});
+function showTab(t) {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('active', p.id === 'pane-' + t));
+}
+document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+const toast = $('#toast');
+function say(msg) { toast.textContent = msg; toast.classList.add('show'); clearTimeout(say.t); say.t = setTimeout(() => toast.classList.remove('show'), 1400); }
+function copy(text) { (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => say('Copied ' + text), () => say(text)); }
+
+// ---------- header controls
+const search = $('#search');
+search.addEventListener('input', () => { stopPlay(); S.q = search.value.trim().toLowerCase(); S.sel = null; S.flow = null; S.step = -1; renderFlows(); refresh(); });
+search.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && S.q) { const hit = nodes.find((n) => matches(n, S.q)); if (hit) { search.blur(); select(hit.id); ensureVisible(hit.id); } }
+  if (ev.key === 'Escape') { search.value = ''; S.q = ''; search.blur(); refresh(); }
+});
+$('#clear').onclick = () => { search.value = ''; S.q = ''; clearAll(); };
+function setTheme(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem('omnix-map-theme', t); } catch (e) { /* file:// may refuse */ } }
+let saved = null; try { saved = localStorage.getItem('omnix-map-theme'); } catch (e) { /* ignore */ }
+setTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+$('#theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+$('#dl').onclick = () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(DATA, null, 2)], { type: 'application/json' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'omnix-system-map.json' });
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+document.addEventListener('keydown', (ev) => {
+  if (ev.target === search) return;
+  if (ev.key === '/') { ev.preventDefault(); search.focus(); }
+  else if (ev.key === 'Escape') { search.value = ''; S.q = ''; clearAll(); }
+  else if ((ev.key === 'f' || ev.key === 'F') && !ev.ctrlKey && !ev.metaKey) fit();
+  else if (S.flow && ev.key === 'ArrowRight') { stopPlay(); setStep(S.step + 1); }
+  else if (S.flow && ev.key === 'ArrowLeft') { stopPlay(); setStep(S.step - 1); }
+  else if (S.flow && ev.key === ' ' && !ev.target.closest('button')) { ev.preventDefault(); togglePlay(); }
+});
+
+// ---------- boot
+const hp = new URLSearchParams(location.hash.slice(1));
+fit();
+if (hp.get('flow') && flowById[hp.get('flow')]) {
+  S.flow = hp.get('flow'); renderFlows(); renderDetails(); refresh();
+  if (hp.get('step')) setStep(+hp.get('step') - 1);
+} else if (hp.get('node') && nodeById[hp.get('node')]) { select(hp.get('node')); }
+else { renderFlows(); renderDetails(); refresh(); }
+})();
+</script>
+</body>
+</html>
