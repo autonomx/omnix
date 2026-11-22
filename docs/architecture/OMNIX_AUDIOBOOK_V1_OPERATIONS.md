@@ -1,9 +1,11 @@
 # Omnix Audiobook V1 operations
 
 The Audiobook workspace is available at `/audiobook` in the Omnix web gateway.
-The gateway registers the Audiobook routes and starts separate ingest/analysis,
-offline render, and preview worker loops. PostgreSQL jobs and render batches are
-the durable queue; the browser is only a view of that state.
+The gateway registers the Audiobook routes. The ingest/analysis, offline render,
+and preview worker loops run in the job-worker process
+(`python -m app.composition.worker`), which `scripts/run_omnix_gateway.py` starts
+alongside the gateway. PostgreSQL jobs and render batches are the durable queue;
+the browser is only a view of that state and polls it.
 
 ## Prerequisites
 
@@ -35,7 +37,7 @@ the durable queue; the browser is only a view of that state.
 4. Start rendering from Production. One chapter is a leased job, and each
    completed span is checkpointed under an immutable render key. The shared
    provider prioritizes realtime, then preview, then offline generation
-   between spans in the gateway process.
+   between spans in the job-worker process.
 5. After chapter assembly and mastering, export M4B, FLAC, WAV, or MP3.
    The export job freezes its source, render, chapter, cover, and setting
    references. Download the file or open its integrity and provenance report.

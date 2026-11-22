@@ -129,13 +129,16 @@ def build(root: Path = ROOT) -> tuple[dict, list[str]]:
                 if not (root / p).exists():
                     problems.append(f"{flow['id']} step {i}: missing file {p}")
             src = step.pop("from", None) or prev
+            via = step.pop("via", None)  # names the edge kind when two edges join the same nodes
             if src:
-                candidates = [e for e in edges if {e["from"], e["to"]} == {src, step["node"]}]
+                candidates = [e for e in edges if {e["from"], e["to"]} == {src, step["node"]}
+                              and (via is None or e["kind"] == via)]
                 if candidates:
                     best = min(candidates, key=lambda e: (_HOP_RANK[e["kind"]], e["from"] != src))
                     step["from"], step["edge"] = src, best["id"]
-                elif src != step["node"]:
-                    problems.append(f"{flow['id']} step {i}: no edge between {src} and {step['node']}")
+                elif src != step["node"] or via:
+                    kind = f"{via} " if via else ""
+                    problems.append(f"{flow['id']} step {i}: no {kind}edge between {src} and {step['node']}")
             prev = step["node"]
 
     path_index: dict[str, str] = {}
