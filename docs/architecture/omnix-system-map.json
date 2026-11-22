@@ -1,16 +1,15 @@
 {
   "meta": {
     "name": "Omnix system map",
-    "schema": "omnix-system-map-v1",
-    "generated": "2026-11-22",
-    "repo_commit": "057bb8e8d1",
+    "schema": "omnix-system-map-v2",
     "purpose": "Orientation for an AI agent before changing Omnix: which node owns a behavior, what it talks to, which invariants and tests apply, and how the main request paths flow.",
     "how_to_use": [
+      "Do not read this file whole. Ask scripts/system_map.py: owner <path>, node <id>, flow <id>, flows, nodes, search <text>.",
       "Find the owner of a file: longest matching prefix in path_index, else search nodes[].paths and key_files.",
       "Before editing a node: read its docs, honor its invariants, run its tests; check edges into it for callers.",
       "Flows are ordered steps; each step names the node, what happens there, the edge used to arrive (from/edge) and the files to read.",
-      "depends_on/uses edges are the declared feature contracts (feature.py); calls/http/websocket/sse/sql edges are runtime traffic.",
-      "This map is a snapshot at repo_commit; verify a cited file still exists before relying on it."
+      "depends_on/uses/mounts edges are derived from the feature catalog and feature.py; calls/http/websocket/sse/sql edges are runtime traffic read from the code.",
+      "src/tests/scripts/test_system_map.py keeps this file a fresh build with every cited path present; regenerate with python scripts/system_map.py build."
     ],
     "layers": [
       {
@@ -1424,370 +1423,6 @@
       "label": "recovery of abandoned turns"
     },
     {
-      "id": "gateway->chat:mounts",
-      "from": "gateway",
-      "to": "chat",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->live_voice:mounts",
-      "from": "gateway",
-      "to": "live_voice",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->voice:mounts",
-      "from": "gateway",
-      "to": "voice",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->characters:mounts",
-      "from": "gateway",
-      "to": "characters",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->assistant_memory:mounts",
-      "from": "gateway",
-      "to": "assistant_memory",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->assistant_tools:mounts",
-      "from": "gateway",
-      "to": "assistant_tools",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->agent_runtime:mounts",
-      "from": "gateway",
-      "to": "agent_runtime",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->research:mounts",
-      "from": "gateway",
-      "to": "research",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->image:mounts",
-      "from": "gateway",
-      "to": "image",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->character_interactions:mounts",
-      "from": "gateway",
-      "to": "character_interactions",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->desktop_companion:mounts",
-      "from": "gateway",
-      "to": "desktop_companion",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->rpg:mounts",
-      "from": "gateway",
-      "to": "rpg",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->hermes_rpg:mounts",
-      "from": "gateway",
-      "to": "hermes_rpg",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->trading:mounts",
-      "from": "gateway",
-      "to": "trading",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->audiobook:mounts",
-      "from": "gateway",
-      "to": "audiobook",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->story:mounts",
-      "from": "gateway",
-      "to": "story",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->dubbing:mounts",
-      "from": "gateway",
-      "to": "dubbing",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "gateway->companion_activity:mounts",
-      "from": "gateway",
-      "to": "companion_activity",
-      "kind": "mounts",
-      "label": "mounts feature routers"
-    },
-    {
-      "id": "agent_runtime->chat:uses",
-      "from": "agent_runtime",
-      "to": "chat",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "agent_runtime->assistant_tools:uses",
-      "from": "agent_runtime",
-      "to": "assistant_tools",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "assistant_memory->chat:depends_on",
-      "from": "assistant_memory",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "assistant_memory->assistant_tools:uses",
-      "from": "assistant_memory",
-      "to": "assistant_tools",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "assistant_tools->chat:depends_on",
-      "from": "assistant_tools",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "characters->chat:depends_on",
-      "from": "characters",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "characters->assistant_memory:depends_on",
-      "from": "characters",
-      "to": "assistant_memory",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "characters->companion_activity:depends_on",
-      "from": "characters",
-      "to": "companion_activity",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "characters->image:depends_on",
-      "from": "characters",
-      "to": "image",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "live_speech->voice:uses",
-      "from": "live_speech",
-      "to": "voice",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "live_voice->chat:depends_on",
-      "from": "live_voice",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "live_voice->characters:depends_on",
-      "from": "live_voice",
-      "to": "characters",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "live_voice->assistant_memory:depends_on",
-      "from": "live_voice",
-      "to": "assistant_memory",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "live_voice->assistant_tools:depends_on",
-      "from": "live_voice",
-      "to": "assistant_tools",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "live_voice->voice:uses",
-      "from": "live_voice",
-      "to": "voice",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "research->chat:depends_on",
-      "from": "research",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "research->assistant_tools:uses",
-      "from": "research",
-      "to": "assistant_tools",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "audiobook->voice:uses",
-      "from": "audiobook",
-      "to": "voice",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "character_interactions->characters:depends_on",
-      "from": "character_interactions",
-      "to": "characters",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "character_interactions->chat:depends_on",
-      "from": "character_interactions",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "character_interactions->assistant_memory:depends_on",
-      "from": "character_interactions",
-      "to": "assistant_memory",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "character_interactions->companion_activity:depends_on",
-      "from": "character_interactions",
-      "to": "companion_activity",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "desktop_companion->chat:depends_on",
-      "from": "desktop_companion",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "desktop_companion->companion_activity:depends_on",
-      "from": "desktop_companion",
-      "to": "companion_activity",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "desktop_companion->assistant_memory:uses",
-      "from": "desktop_companion",
-      "to": "assistant_memory",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "dubbing->voice:uses",
-      "from": "dubbing",
-      "to": "voice",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "rpg->chat:depends_on",
-      "from": "rpg",
-      "to": "chat",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
-      "id": "rpg->image:uses",
-      "from": "rpg",
-      "to": "image",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "rpg->voice:uses",
-      "from": "rpg",
-      "to": "voice",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "trading->research:uses",
-      "from": "trading",
-      "to": "research",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "trading->assistant_tools:uses",
-      "from": "trading",
-      "to": "assistant_tools",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "trading->agent_runtime:uses",
-      "from": "trading",
-      "to": "agent_runtime",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "trading->chat:uses",
-      "from": "trading",
-      "to": "chat",
-      "kind": "uses",
-      "label": "uses (optional)"
-    },
-    {
-      "id": "hermes_rpg->rpg:depends_on",
-      "from": "hermes_rpg",
-      "to": "rpg",
-      "kind": "depends_on",
-      "label": "depends_on (required)"
-    },
-    {
       "id": "chat->providers:calls",
       "from": "chat",
       "to": "providers",
@@ -2157,6 +1792,370 @@
       "to": "postgres",
       "kind": "sql",
       "label": "psycopg pool"
+    },
+    {
+      "id": "gateway->audiobook:mounts",
+      "from": "gateway",
+      "to": "audiobook",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->assistant_tools:mounts",
+      "from": "gateway",
+      "to": "assistant_tools",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->agent_runtime:mounts",
+      "from": "gateway",
+      "to": "agent_runtime",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->chat:mounts",
+      "from": "gateway",
+      "to": "chat",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->assistant_memory:mounts",
+      "from": "gateway",
+      "to": "assistant_memory",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->companion_activity:mounts",
+      "from": "gateway",
+      "to": "companion_activity",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->characters:mounts",
+      "from": "gateway",
+      "to": "characters",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->character_interactions:mounts",
+      "from": "gateway",
+      "to": "character_interactions",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->desktop_companion:mounts",
+      "from": "gateway",
+      "to": "desktop_companion",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->hermes_rpg:mounts",
+      "from": "gateway",
+      "to": "hermes_rpg",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->image:mounts",
+      "from": "gateway",
+      "to": "image",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->voice:mounts",
+      "from": "gateway",
+      "to": "voice",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->live_voice:mounts",
+      "from": "gateway",
+      "to": "live_voice",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->research:mounts",
+      "from": "gateway",
+      "to": "research",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->story:mounts",
+      "from": "gateway",
+      "to": "story",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->rpg:mounts",
+      "from": "gateway",
+      "to": "rpg",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->trading:mounts",
+      "from": "gateway",
+      "to": "trading",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "gateway->dubbing:mounts",
+      "from": "gateway",
+      "to": "dubbing",
+      "kind": "mounts",
+      "label": "mounts feature routers"
+    },
+    {
+      "id": "audiobook->voice:uses",
+      "from": "audiobook",
+      "to": "voice",
+      "kind": "uses",
+      "label": "uses in src/app/apps/audiobook/feature.py"
+    },
+    {
+      "id": "assistant_tools->chat:depends_on",
+      "from": "assistant_tools",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/assistant_tools/feature.py"
+    },
+    {
+      "id": "agent_runtime->chat:uses",
+      "from": "agent_runtime",
+      "to": "chat",
+      "kind": "uses",
+      "label": "uses in src/app/platform/agent_runtime/feature.py"
+    },
+    {
+      "id": "agent_runtime->assistant_tools:uses",
+      "from": "agent_runtime",
+      "to": "assistant_tools",
+      "kind": "uses",
+      "label": "uses in src/app/platform/agent_runtime/feature.py"
+    },
+    {
+      "id": "live_speech->voice:uses",
+      "from": "live_speech",
+      "to": "voice",
+      "kind": "uses",
+      "label": "uses in src/app/platform/live_speech/feature.py"
+    },
+    {
+      "id": "assistant_memory->chat:depends_on",
+      "from": "assistant_memory",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/assistant_memory/feature.py"
+    },
+    {
+      "id": "assistant_memory->assistant_tools:uses",
+      "from": "assistant_memory",
+      "to": "assistant_tools",
+      "kind": "uses",
+      "label": "uses in src/app/platform/assistant_memory/feature.py"
+    },
+    {
+      "id": "characters->chat:depends_on",
+      "from": "characters",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/characters/feature.py"
+    },
+    {
+      "id": "characters->assistant_memory:depends_on",
+      "from": "characters",
+      "to": "assistant_memory",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/characters/feature.py"
+    },
+    {
+      "id": "characters->companion_activity:depends_on",
+      "from": "characters",
+      "to": "companion_activity",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/characters/feature.py"
+    },
+    {
+      "id": "characters->image:depends_on",
+      "from": "characters",
+      "to": "image",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/characters/feature.py"
+    },
+    {
+      "id": "character_interactions->characters:depends_on",
+      "from": "character_interactions",
+      "to": "characters",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/character_interactions/feature.py"
+    },
+    {
+      "id": "character_interactions->chat:depends_on",
+      "from": "character_interactions",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/character_interactions/feature.py"
+    },
+    {
+      "id": "character_interactions->assistant_memory:depends_on",
+      "from": "character_interactions",
+      "to": "assistant_memory",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/character_interactions/feature.py"
+    },
+    {
+      "id": "character_interactions->companion_activity:depends_on",
+      "from": "character_interactions",
+      "to": "companion_activity",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/character_interactions/feature.py"
+    },
+    {
+      "id": "desktop_companion->chat:depends_on",
+      "from": "desktop_companion",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/desktop_companion/feature.py"
+    },
+    {
+      "id": "desktop_companion->companion_activity:depends_on",
+      "from": "desktop_companion",
+      "to": "companion_activity",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/desktop_companion/feature.py"
+    },
+    {
+      "id": "desktop_companion->assistant_memory:uses",
+      "from": "desktop_companion",
+      "to": "assistant_memory",
+      "kind": "uses",
+      "label": "uses in src/app/apps/desktop_companion/feature.py"
+    },
+    {
+      "id": "hermes_rpg->rpg:depends_on",
+      "from": "hermes_rpg",
+      "to": "rpg",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/rpg/edge/hermes/feature.py"
+    },
+    {
+      "id": "live_voice->chat:depends_on",
+      "from": "live_voice",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/live_voice/feature.py"
+    },
+    {
+      "id": "live_voice->characters:depends_on",
+      "from": "live_voice",
+      "to": "characters",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/live_voice/feature.py"
+    },
+    {
+      "id": "live_voice->assistant_memory:depends_on",
+      "from": "live_voice",
+      "to": "assistant_memory",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/live_voice/feature.py"
+    },
+    {
+      "id": "live_voice->assistant_tools:depends_on",
+      "from": "live_voice",
+      "to": "assistant_tools",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/live_voice/feature.py"
+    },
+    {
+      "id": "live_voice->voice:uses",
+      "from": "live_voice",
+      "to": "voice",
+      "kind": "uses",
+      "label": "uses in src/app/platform/live_voice/feature.py"
+    },
+    {
+      "id": "research->chat:depends_on",
+      "from": "research",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/platform/research/feature.py"
+    },
+    {
+      "id": "research->assistant_tools:uses",
+      "from": "research",
+      "to": "assistant_tools",
+      "kind": "uses",
+      "label": "uses in src/app/platform/research/feature.py"
+    },
+    {
+      "id": "rpg->chat:depends_on",
+      "from": "rpg",
+      "to": "chat",
+      "kind": "depends_on",
+      "label": "depends_on in src/app/apps/rpg/feature.py"
+    },
+    {
+      "id": "rpg->image:uses",
+      "from": "rpg",
+      "to": "image",
+      "kind": "uses",
+      "label": "uses in src/app/apps/rpg/feature.py"
+    },
+    {
+      "id": "rpg->voice:uses",
+      "from": "rpg",
+      "to": "voice",
+      "kind": "uses",
+      "label": "uses in src/app/apps/rpg/feature.py"
+    },
+    {
+      "id": "trading->research:uses",
+      "from": "trading",
+      "to": "research",
+      "kind": "uses",
+      "label": "uses in src/app/apps/trading/feature.py"
+    },
+    {
+      "id": "trading->assistant_tools:uses",
+      "from": "trading",
+      "to": "assistant_tools",
+      "kind": "uses",
+      "label": "uses in src/app/apps/trading/feature.py"
+    },
+    {
+      "id": "trading->agent_runtime:uses",
+      "from": "trading",
+      "to": "agent_runtime",
+      "kind": "uses",
+      "label": "uses in src/app/apps/trading/feature.py"
+    },
+    {
+      "id": "trading->chat:uses",
+      "from": "trading",
+      "to": "chat",
+      "kind": "uses",
+      "label": "uses in src/app/apps/trading/feature.py"
+    },
+    {
+      "id": "dubbing->voice:uses",
+      "from": "dubbing",
+      "to": "voice",
+      "kind": "uses",
+      "label": "uses in src/app/apps/dubbing/feature.py"
     }
   ],
   "flows": [

@@ -13,6 +13,22 @@ For implementation work:
 5. Inspect the complete final diff and search impacted call sites before declaring the implementation ready.
 6. Run task-relevant validation after the final code change. Earlier passing tests are stale after a mutation.
 
+## Finding your way
+
+To learn which module owns a file, what it talks to, which invariants and tests apply, or how a request travels
+(chat turn, live call, RPG turn, durable job, agent run, trading handoff), ask the system map. Do not read
+`docs/architecture/omnix-system-map.json` whole (about 100 KB); each answer below is a few hundred tokens:
+
+- `python scripts/system_map.py owner <path>`, `node <id>`, `flow <id>`
+- `python scripts/system_map.py flows`, `nodes`, `search <text>`
+
+The map is a starting point, not the authority: read the cited files before changing them. Keeping it true is
+part of the change that makes it untrue: when your work moves, renames or reorders what a node's summary, an edge
+or a flow step describes, run `python scripts/system_map.py owner <path>` and `node`/`flow` on what you touched,
+fix `scripts/system_map_data.py` in the same commit, then run `python scripts/system_map.py build` and commit the
+regenerated JSON and HTML. `src/tests/scripts/test_system_map.py` catches missing paths and a stale build, not
+a description that has stopped being true.
+
 ## Python
 
 Prefer the repository's existing pytest configuration and focused test files before broad suites.

@@ -1,0 +1,4 @@
+# Read by ripgrep and the tools built on it (agents' code search). Not a .gitignore: these files stay tracked.
+# The system map page embeds the whole map on one ~100 KB line; a search hit there floods an agent's context.
+# Ask scripts/system_map.py instead; the pretty-printed omnix-system-map.json stays searchable.
+docs/architecture/omnix-system-map.html
