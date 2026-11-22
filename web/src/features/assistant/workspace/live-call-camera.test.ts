@@ -202,5 +202,9 @@ describe('a turn with a camera picture', () => {
     expect(speculationRequestCanReuse({ content: 'what is this?' }, null, null)).toBe(true);
     expect(speculationRequestCanReuse({ content: 'what is this?', camera_image: 'data:image/jpeg;base64,AA' }, null, null))
       .toBe(false);
+    // A shared camera's turn reuses only a speculation written with the camera's description, and the reverse.
+    expect(speculationRequestCanReuse({ content: 'can you see me?', camera_shared: true }, null, null)).toBe(false);
+    expect(speculationRequestCanReuse({ content: 'can you see me?', camera_shared: true }, null, null, true)).toBe(true);
+    expect(speculationRequestCanReuse({ content: 'can you see me?' }, null, null, true)).toBe(false);
   });
 });

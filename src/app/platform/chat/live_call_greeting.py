@@ -10,6 +10,7 @@ from typing import Any
 from app.providers import service as provider_service
 from app.providers import ChatMessage as ProviderMessage
 
+from .camera_glance import CameraShareLook, proactive_camera_note
 from .models import ChatMessage, ChatSession
 from .store import _model_key, _provider_key, _pop_ready_sentences
 from app.prompts import prompt_template
@@ -72,8 +73,10 @@ def stream_live_call_greeting_chunks(
     *,
     provider_id: str | None = None,
     model_id: str | None = None,
+    camera: CameraShareLook | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Generate one short greeting without mutating the durable chat transcript."""
+    """Generate one short greeting without mutating the durable chat transcript. ``camera`` is the shared camera's
+    look as the call started (camera share): when it saw something, the greeting may take it in."""
 
     resolved_provider_id = provider_id or session.provider_id
     resolved_model_id = model_id or session.model_id
@@ -85,7 +88,7 @@ def stream_live_call_greeting_chunks(
     synthetic_message = ChatMessage(
         id=f"live-call-greeting:{uuid.uuid4().hex}",
         role="user",
-        content=LIVE_CALL_GREETING_PROMPT,
+        content=LIVE_CALL_GREETING_PROMPT + (proactive_camera_note(camera) if camera and camera.snapshot else ""),
         created_at=_utcnow(),
         metadata={"source": "live_call_greeting", "transient": True},
     )

@@ -112,6 +112,22 @@ def test_a_conversation_and_a_json_contract_reach_the_cli(provider) -> None:
     assert call["system"].startswith("Rules.") and "valid JSON object" in call["system"]
 
 
+def test_the_latest_user_messages_pictures_go_to_the_cli_ahead_of_the_prompt(provider) -> None:
+    _FakePopen.stdout_text = _events("A person at a desk.")
+    old = ChatMessage("user", "earlier", vision_images=[{"data": "data:image/png;base64,T0xE"}])
+    latest = ChatMessage("user", "can you see me?", vision_images=[
+        {"data": "data:image/jpeg;base64,TkVX\nRlJBTUU="},
+        {"data": "https://example.com/not-a-data-url.png"},
+    ])
+    provider.chat_completion([ChatMessage("system", "Look."), old, ChatMessage("assistant", "ok"), latest])
+
+    content = _FakePopen.calls[0]["prompt"]
+    assert content == [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "TkVXRlJBTUU="}},
+        {"type": "text", "text": "USER: earlier\n\nASSISTANT: ok\n\nUSER: can you see me?"},
+    ]
+
+
 def test_a_cli_error_result_is_a_provider_error(provider) -> None:
     _FakePopen.stdout_text = _events(result={"type": "result", "is_error": True, "result": "Not logged in"})
     with pytest.raises(ProviderError, match="Not logged in"):

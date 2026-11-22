@@ -15,6 +15,57 @@
     padding-bottom: 1rem;
   }
 
+  /* The page's sections as tabs (owner request, 2026-11-21); styled like the Characters page's section tabs. */
+  .live-chat-tabs {
+    background: var(--bg-slate-150-2);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 17%, transparent);
+    border-radius: 0.85rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.3rem;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .live-chat-tabs button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--c-blue-660);
+    flex: 1 1 auto;
+    font-size: 0.82rem;
+    padding: 0 0.7rem;
+    white-space: nowrap;
+  }
+
+  .live-chat-tabs button.is-active {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 22%, transparent), color-mix(in srgb, var(--c-blue-580) 18%, transparent));
+    border-color: color-mix(in srgb, var(--accent-violet-660) 32%, transparent);
+    color: var(--fg-neutral-960);
+  }
+
+  :root[data-omnix-appearance='light'] .live-chat-tabs {
+    background: var(--c-neutral-1000);
+    border-color: var(--c-slate-910);
+  }
+
+  :root[data-omnix-appearance='light'] .live-chat-tabs button {
+    color: var(--c-slate-510);
+  }
+
+  :root[data-omnix-appearance='light'] .live-chat-tabs button.is-active {
+    background: var(--accent-slate-940);
+    border-color: var(--accent-violet-810);
+    color: var(--accent-indigo-430);
+  }
+
+  .live-chat-section {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+
   .live-chat-page-header,
   .live-chat-card > header {
     align-items: flex-start;

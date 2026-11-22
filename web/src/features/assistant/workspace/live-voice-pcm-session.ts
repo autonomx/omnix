@@ -24,8 +24,8 @@ const TRANSITION_FADE_SECONDS = 0.008;
 const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
-// The longest a turn's start waits for its first portrait frames (D-5).
-const PORTRAIT_START_HOLD_SECONDS = 0.25;
+// A turn's start waits for its first portrait frames, at most 250 ms (D-5), unless the call's engine says otherwise.
+const PORTRAIT_START_RULE: PortraitStartRule = { holdMs: 250, leadMs: 0 };
 
 export type LiveOutputOwnership = {
   outputId: string;
@@ -135,14 +135,18 @@ type QueuedOutput = {
   cancelled: boolean;
 };
 
+/** How a turn's start waits for the portrait (D-5, revised 2026-11-21): until its frames cover `leadMs` of the first
+ * phrase (all of a shorter one; 0: its first frame), at most `holdMs`. The gateway's `ready` names the engine's. */
+export type PortraitStartRule = { holdMs: number; leadMs: number };
+
 export type LiveVoicePcmSession = {
   readonly sampleRate: number;
   /** The playback context: the portrait reads its time and output latency. */
   readonly audioContext: AudioContext;
-  /** Turn the portrait on or off in the worklet: its 20 ms clock and the start hold (D-5, at most 250 ms). */
-  setPortraitClock: (enabled: boolean) => void;
-  /** A segment's first portrait frames are here: a start held for them can go. */
-  portraitFramesReady: (segmentId: string) => void;
+  /** Turn the portrait on or off in the worklet: its 20 ms clock and the start hold (`start`, else D-5's 250 ms). */
+  setPortraitClock: (enabled: boolean, start?: PortraitStartRule) => void;
+  /** A segment's portrait frames now cover its first `coveredMs` (absent: its first frame is here). */
+  portraitFramesReady: (segmentId: string, coveredMs?: number) => void;
   /** The turn's last phrase is queued: the portrait commits its held frames. */
   sendOutputEnd: (outputId: string, generationEpoch: number) => void;
   enqueuePhrase: (
@@ -1050,14 +1054,20 @@ function portraitControls(
   currentSocket: () => WebSocket,
   isClosed: () => boolean,
 ): Pick<LiveVoicePcmSession, 'audioContext' | 'setPortraitClock' | 'portraitFramesReady' | 'sendOutputEnd'> {
-  const startHoldSamples = Math.round(audioContext.sampleRate * PORTRAIT_START_HOLD_SECONDS);
+  const samples = (ms: number) => Math.round(audioContext.sampleRate * Math.max(0, ms) / 1000);
   return {
     audioContext,
-    setPortraitClock: (enabled) => {
-      if (!isClosed()) node.port.postMessage({ type: 'set_portrait_clock', enabled, startHoldSamples });
+    setPortraitClock: (enabled, start = PORTRAIT_START_RULE) => {
+      if (isClosed()) return;
+      node.port.postMessage({
+        type: 'set_portrait_clock', enabled, startHoldSamples: samples(start.holdMs), startLeadSamples: samples(start.leadMs),
+      });
     },
-    portraitFramesReady: (segmentId) => {
-      if (!isClosed()) node.port.postMessage({ type: 'portrait_frames_ready', segmentId });
+    portraitFramesReady: (segmentId, coveredMs) => {
+      if (isClosed()) return;
+      node.port.postMessage({
+        type: 'portrait_frames_ready', segmentId, ...(coveredMs === undefined ? {} : { coveredSamples: samples(coveredMs) }),
+      });
     },
     sendOutputEnd: (outputId, generationEpoch) => {
       const socket = currentSocket();

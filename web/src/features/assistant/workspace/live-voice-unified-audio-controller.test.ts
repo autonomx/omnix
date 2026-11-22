@@ -50,6 +50,13 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+const camera = vi.hoisted(() => ({ shared: false }));
+
+vi.mock('./camera-share', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./camera-share')>()),
+  cameraShared: () => camera.shared,
+}));
+
 vi.mock('./assistant-pcm-stream-websocket-player', () => ({
   stopAssistantPcmStream: mocks.stopButtonStream,
 }));
@@ -73,7 +80,7 @@ import { resetLiveSpeechCueState } from './live-speech-synthesis-options';
 import { liveCallPresentationStore, liveCallVoiceMode } from './live-call-presentation-store';
 import { markProposalQuestionAudible, noteUserSpeechOnset, openProposalQuestion, proposalQuestionStore } from './live-call-proposal-question';
 import { liveConversationStore } from './live-conversation-store';
-import { livePortrait } from '../chat/portrait/livePortrait';
+import { livePortrait, requestLiveVideo, resetLiveVideoRequests } from '../chat/portrait/livePortrait';
 import { characterClient } from '../chat/characterClient';
 
 let cleanup: (() => void) | null = null;
@@ -163,6 +170,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  camera.shared = false;
   const hadSharedSession = mocks.createSession.mock.calls.length > 0;
   cleanup?.();
   cleanup = null;
@@ -184,11 +192,13 @@ describe('a portrait at the start of a call', () => {
 
   afterEach(() => {
     livePortrait.setPack(null);
+    resetLiveVideoRequests();
     liveConversationStore.dispatch({ type: 'session', sessionId: null });
   });
 
   it('opens the audio session when the call connects, and the first reply reuses it', async () => {
     livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite' });
+    requestLiveVideo('s1');
 
     connected();
 
@@ -206,6 +216,7 @@ describe('a portrait at the start of a call', () => {
 
   it('replaces a session whose websocket failed, so the next reply is heard and drawn', async () => {
     livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite' });
+    requestLiveVideo('s1');
     connected();
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
     await waitFor(() => expect(livePortrait.attachSession).toHaveBeenCalledOnce());
@@ -227,6 +238,28 @@ describe('a portrait at the start of a call', () => {
     await waitFor(() => expect(livePortrait.attachSession).toHaveBeenCalledTimes(2));
   });
 
+  it('brings no portrait up until live video is asked for in the chat, and then with the next reply', async () => {
+    livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite' });
+    connected();
+    await Promise.resolve();
+    expect(mocks.createSession).not.toHaveBeenCalled(); // a voice-only call
+
+    streamEvents = null;
+    await (await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST', body: JSON.stringify({ content: 'hi' }) })).text();
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.createSession).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(),
+      expect.objectContaining({ portrait: undefined }));
+
+    requestLiveVideo('s1'); // "Load live video" during the call
+    streamEvents = null;
+    await (await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST', body: JSON.stringify({ content: 'again' }) })).text();
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(2));
+    expect(mocks.session.stop).toHaveBeenCalledWith('live_audio_session_replaced');
+    expect(mocks.createSession).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(),
+      expect.objectContaining({ portrait: expect.anything() }));
+    await waitFor(() => expect(livePortrait.attachSession).toHaveBeenCalledOnce());
+  });
+
   it('opens nothing early for a call without a portrait', async () => {
     livePortrait.setPack({ renderer: 'live2d' });
 
@@ -238,6 +271,7 @@ describe('a portrait at the start of a call', () => {
 
   it('waits for a chat to be selected', async () => {
     livePortrait.setPack({ renderer: 'portrait' });
+    requestLiveVideo('s1');
     liveConversationStore.dispatch({ type: 'session', sessionId: null });
 
     connected();
@@ -506,6 +540,20 @@ describe('live voice unified audio controller', () => {
     expect(fetchMock.mock.calls.filter(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'))).toHaveLength(1);
   });
 
+  it('tells the greeting the camera is shared, so it may take what the call-start glance saw', async () => {
+    camera.shared = true;
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
+    await pipelineFetch('/api/chat/sessions/s1/live-call/runtime');
+    window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
+
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream')),
+    ).toBe(true));
+    const [input] = fetchMock.mock.calls.find(([call]) => requestPath(call).endsWith('/live-call/greeting/stream'))!;
+    const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+    expect(new URL(raw, window.location.origin).searchParams.get('camera_shared')).toBe('true');
+  });
+
   it('does not generate a greeting when the user speaks before startup is ready', async () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
     await pipelineFetch('/api/chat/sessions/s1/live-call/runtime');
@@ -709,6 +757,7 @@ describe('a call with guests', () => {
   it("draws a guest's turn with the guest's own portrait, never the host's", async () => {
     const guestPack = { renderer: 'portrait', fallback_renderer: 'orb', character_id: 'bea' } as const;
     livePortrait.setPack({ renderer: 'portrait', fallback_renderer: 'sprite', character_id: 'maya' });
+    requestLiveVideo('s1');
     const begin = vi.spyOn(livePortrait, 'begin');
     vi.spyOn(livePortrait, 'attachSession').mockImplementation(() => undefined);
     const base = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -739,5 +788,6 @@ describe('a call with guests', () => {
       expect.objectContaining({ portrait: expect.anything() }));
     expect(begin).toHaveBeenLastCalledWith('s1', { id: 'bea', pack: expect.objectContaining({ character_id: 'bea' }) });
     livePortrait.setPack(null);
+    resetLiveVideoRequests();
   });
 });

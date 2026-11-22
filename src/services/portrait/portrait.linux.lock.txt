@@ -218,6 +218,18 @@ click==8.5.0 \
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   uvicorn
+diffusers==0.39.0 \
+    --hash=sha256:14bb1d98c85a0e463d734c99aaa73b480a7bc9bad22af30fbf730ef8f09c1d67 \
+    --hash=sha256:912aca51b5787365110806e984d5555735bf8a461073bb8459029d0bca7870ef
+    # via
+    #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   -r src/services/portrait/portrait.in
+einops==0.8.2 \
+    --hash=sha256:54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193 \
+    --hash=sha256:609da665570e5e265e27283aab09e7f279ade90c4f01bcfca111f3d3e13f2827
+    # via
+    #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   -r src/services/portrait/portrait.in
 face-alignment==1.4.1 \
     --hash=sha256:90e47b827a7913de19de99d0df0bf0ab539fb29ed674aeaec0ac27666cafbed9 \
     --hash=sha256:e153254a1162cedae593c085b4ff7eea2cac4e2be821cdc4a90ce04ff71d5c52
@@ -235,6 +247,7 @@ filelock==4.2.4 \
     --hash=sha256:c6d8663535e1650ee430507b4ffbac7b464dd64b7647ea0112a9f406499d163d
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   diffusers
     #   huggingface-hub
     #   torch
     #   transformers
@@ -270,7 +283,9 @@ hf-xet==1.7.1 \
     --hash=sha256:e2f21d368a84f798cd394549292e3abe3be22d362aaf13fdd10b0f85a630590c \
     --hash=sha256:f26bfd4a6e31b4e37e749a07e8642589406e8537be05eccfd633a92b95e2fb51 \
     --hash=sha256:fc2767e5b6ba9f74aa5b86728e64cef48668bed91c50e7313ba1d78f7c510c75
-    # via huggingface-hub
+    # via
+    #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   huggingface-hub
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
     --hash=sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8
@@ -405,11 +420,13 @@ httpx==0.28.1 \
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   -r src/services/portrait/portrait.in
+    #   diffusers
 huggingface-hub==0.36.2 \
     --hash=sha256:1934304d2fb224f8afa3b87007d58501acfda9215b334eed53072dd5e815ff7a \
     --hash=sha256:48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   diffusers
     #   timm
     #   tokenizers
     #   transformers
@@ -427,11 +444,23 @@ imageio==2.38.1 \
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   scikit-image
+importlib-metadata==10.2.0 \
+    --hash=sha256:9413a2029fd9ca5669d27f1386071bbfe3c7ebca0545692ec975088241fe1d79 \
+    --hash=sha256:c7a4bf1c7479601f6b8e437cfc14f4f77028ba62a8f34ae95cd93d9774dfba51
+    # via
+    #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   diffusers
 jinja2==3.1.6 \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   torch
+lazy-importer==0.1.0 \
+    --hash=sha256:b2e296716ce015c0cd80e57b940e52727c5b934b34b8656d5ce06bdd0ee5fbdd \
+    --hash=sha256:bd93fab7bef18e842eea02b839410954d37889140dc64ca4d9680aec6880c739
+    # via
+    #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   importlib-metadata
 lazy-loader==0.6 \
     --hash=sha256:2f4b7824d6401958639008a0cae20c776b61dff619accd6890693e2de8260167 \
     --hash=sha256:77253be3391b06124a0e16105bd663b6c54470af1a9ca8e1cf026f38d58ed056
@@ -758,6 +787,7 @@ numpy==2.4.6 \
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   -r src/services/portrait/portrait.in
+    #   diffusers
     #   face-alignment
     #   imageio
     #   numba
@@ -951,6 +981,7 @@ pillow==13.0.0 \
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   -r src/services/portrait/portrait.in
+    #   diffusers
     #   imageio
     #   scikit-image
     #   torchvision
@@ -1355,12 +1386,14 @@ regex==2026.9.29 \
     --hash=sha256:fe3fa1dd453ed5c7f5ea23a26218329790ed7197a99b90e94330e313959a7f52
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   diffusers
     #   transformers
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   diffusers
     #   huggingface-hub
     #   transformers
 safetensors==0.8.0 \
@@ -1383,6 +1416,7 @@ safetensors==0.8.0 \
     --hash=sha256:fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   diffusers
     #   timm
     #   transformers
 scikit-image==0.26.0 \
@@ -1931,3 +1965,9 @@ websockets==17.3 \
     # via
     #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
     #   uvicorn
+zipp==4.1.2 \
+    --hash=sha256:b30cb6cd253122169c47de245ca24a86bac2a5d3802ba15bf7ba6414eb9e144d \
+    --hash=sha256:cf474b90b07ea932637e17c6b9479de2b2882900b0d311bdaf4f5c000a15a97f
+    # via
+    #   -c C:/Users/unx47/AppData/Local/Temp/claude/f--LLM-omnix/410536d1-698b-45d9-809c-b5f50fae20a1/scratchpad/portrait-pins.txt
+    #   importlib-metadata

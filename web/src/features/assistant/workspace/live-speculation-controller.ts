@@ -1,5 +1,6 @@
  
 import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
+import { cameraShared } from './camera-share';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 import { livePortrait } from '../chat/portrait/livePortrait';
@@ -78,6 +79,7 @@ type ChatStreamRequestBody = Record<string, unknown> & {
   speech_segment_id?: string;
   live_voice_turn_id?: string;
   camera_image?: string;
+  camera_shared?: boolean;
 };
 
 type ActiveSpeculation = {
@@ -89,6 +91,8 @@ type ActiveSpeculation = {
   createdAtMs: number;
   providerId: string | null;
   modelId: string | null;
+  // Whether the camera was shared when it started: the gateway then wrote it with the camera's description.
+  cameraShared: boolean;
   generationId: string | null;
   chunks: string[];
   subscribers: Set<() => void>;
@@ -175,12 +179,16 @@ export function speculationRequestCanReuse(
   body: ChatStreamRequestBody | null,
   speculativeProviderId: string | null,
   speculativeModelId: string | null,
+  speculativeCameraShared = false,
 ): boolean {
   if (!body) return false;
   // A turn with a camera picture (companion 4.1) is answered about the picture, never by a speculative reply.
   if (body.agent_mode === true || body.dry_run === true || body.research_mode || typeof body.camera_image === 'string') {
     return false;
   }
+  // A shared camera's reply takes the glance's description; a speculation is reused only if it was written the same
+  // way, with the camera shared or without it.
+  if ((body.camera_shared === true) !== speculativeCameraShared) return false;
   const providerId = typeof body.provider_id === 'string' ? body.provider_id : null;
   const modelId = typeof body.model_id === 'string' ? body.model_id : null;
   if (providerId && providerId !== speculativeProviderId) return false;
@@ -400,7 +408,7 @@ async function interceptChatStream(input: RequestInfo | URL, init: RequestInit |
   if (
     !active
     || active.error
-    || !speculationRequestCanReuse(body, active.providerId, active.modelId)
+    || !speculationRequestCanReuse(body, active.providerId, active.modelId, active.cameraShared)
   ) {
     activeSpeculations
       .filter((candidate) => candidate.sessionId === sessionId && candidate.finalText)
@@ -540,6 +548,7 @@ function createSpeculation(
     createdAtMs: performance.now(),
     providerId: null,
     modelId: null,
+    cameraShared: cameraShared(),
     generationId: null,
     chunks: [],
     subscribers: new Set(),
@@ -590,6 +599,7 @@ async function consumeSpeculation(active: ActiveSpeculation, probability?: numbe
         content: active.candidateText,
         segment_id: active.segmentId,
         source_sequence: active.sourceSequence,
+        ...(active.cameraShared ? { camera_shared: true } : {}),
       }),
       signal: active.abortController.signal,
     },

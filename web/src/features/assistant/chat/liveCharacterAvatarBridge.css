@@ -254,6 +254,76 @@
     text-align: center;
   }
 
+  /* "Load live video": the load's progress under the button (LiveVideoLoadProgress.tsx). */
+  .assistant-live-video-progress {
+    display: grid;
+    gap: 0.3rem;
+    width: min(17rem, 100%);
+  }
+
+  .assistant-live-video-progress-track {
+    position: relative;
+    height: 0.4rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-slate-170-2) 70%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-violet-660) 28%, transparent);
+  }
+
+  .assistant-live-video-progress-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    overflow: hidden;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent-indigo-430), var(--accent-violet-660));
+    transition: width 0.25s linear;
+  }
+
+  .assistant-live-video-progress-fill::after {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+    animation: assistant-live-video-shimmer 1.4s ease-in-out infinite;
+    content: '';
+  }
+
+  .assistant-live-video-progress.is-indeterminate .assistant-live-video-progress-fill {
+    width: 35%;
+    animation: assistant-live-video-slide 1.3s ease-in-out infinite;
+  }
+
+  .assistant-live-video-progress-caption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.6rem;
+    justify-content: space-between;
+  }
+
+  .assistant-live-video-progress-caption span:last-child {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+  }
+
+  @keyframes assistant-live-video-shimmer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+  }
+
+  @keyframes assistant-live-video-slide {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(290%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .assistant-live-video-progress-fill { transition: none; }
+    .assistant-live-video-progress-fill::after { animation: none; }
+    .assistant-live-video-progress.is-indeterminate .assistant-live-video-progress-fill {
+      width: 100%;
+      animation: none;
+      opacity: 0.5;
+    }
+  }
+
   .assistant-live-portrait-notice.is-avatar-loading {
     animation: assistant-live-avatar-loading 0.2s ease-out 0.4s backwards;
   }

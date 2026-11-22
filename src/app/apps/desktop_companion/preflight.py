@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.desktop_vision import (
-    CodexDesktopVisionClient,
+    ProviderVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,
     is_remote_vision_endpoint,
@@ -44,7 +44,7 @@ class DesktopCompanionPreflightService:
     def __init__(
         self,
         *,
-        client_factory: Callable[[], DesktopVisionClient | CodexDesktopVisionClient] = (
+        client_factory: Callable[[], DesktopVisionClient | ProviderVisionClient] = (
             default_desktop_vision_client
         ),
         clock: Callable[[], float] = time.monotonic,

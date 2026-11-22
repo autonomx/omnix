@@ -117,12 +117,35 @@ def test_the_models_state_is_reported_without_loading_it(monkeypatch, health: st
     assert prepared == []
 
 
+@pytest.mark.parametrize(("answer", "expected"), [
+    ("exiting", {"ok": True, "code": ""}),
+    (PortraitUnavailable("service_unreachable", "restarting"), {"ok": True, "code": ""}),
+    (PortraitUnavailable("model_busy", "A call is using the portrait"), {"ok": False, "code": "model_busy"}),
+    (PortraitUnavailable("warming", "loading"), {"ok": False, "code": "warming"}),
+])
+def test_unloading_asks_the_service_and_passes_on_a_refusal(monkeypatch, answer, expected) -> None:
+    client, prepared = _load_client(monkeypatch)
+    asked: list[str] = []
+
+    async def unload(base_url: str) -> str:
+        asked.append(base_url)
+        if isinstance(answer, PortraitUnavailable):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(portrait_load, "unload_portrait", unload)
+    body = client.delete(portrait_load.PORTRAIT_LOAD_PATH).json()
+    assert {key: body[key] for key in expected} == expected
+    assert asked == ["http://portrait.test"] and prepared == []
+
+
 def test_without_a_portrait_service_loading_says_so(monkeypatch) -> None:
     client, _prepared = _load_client(monkeypatch)
     monkeypatch.setattr(portrait_load, "portrait_url", lambda: "")
     assert client.post(portrait_load.PORTRAIT_LOAD_PATH, json={"asset_id": "image:maya"}).json()["code"] == (
         "portrait_not_configured")
     assert client.get(portrait_load.PORTRAIT_LOAD_PATH).json() == {"status": "unavailable"}
+    assert client.delete(portrait_load.PORTRAIT_LOAD_PATH).json()["ok"] is True
 
 
 def test_a_released_portrait_is_forgotten_by_its_tenant_and_image_digest(monkeypatch) -> None:

@@ -3,6 +3,7 @@ import type { OmnixThemeId } from '../../design/appearanceThemes';
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 
 export type ResearchMode = 'disabled' | 'quick' | 'deep';
+export type LivePortraitEngine = 'float' | 'flashhead-lite';
 export type ResearchProvider = 'duckduckgo' | 'brave' | 'tavily' | 'playwright';
 export type DesktopCompanionRolloutStage = 'disabled' | 'shadow' | 'text' | 'speech';
 export type ProviderDefaults = { llm: string; tts: string; stt: string; image: string; voiceCloning: string };
@@ -27,6 +28,7 @@ export type AssistantSettings = {
   autoSpeakReplies: boolean;
   speechLanguage: string;
   streamingAudio: boolean;
+  livePortraitEngine: LivePortraitEngine;
   researchDefaultMode: ResearchMode;
   researchProvider: ResearchProvider;
   researchProviderFallbacks: ResearchProvider[];

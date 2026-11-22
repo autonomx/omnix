@@ -370,6 +370,19 @@ export {
   useLiveCallCamera,
 } from './live-call-camera';
 export type { LiveCallCameraPhase, LiveCallCameraState } from './live-call-camera';
+export {
+  cameraShareState,
+  cameraShared,
+  dismissCameraShareError,
+  glanceCameraShare,
+  glanceOnTyping,
+  resetCameraShareForTests,
+  startCameraShare,
+  stopCameraShare,
+  toggleCameraShare,
+  useCameraShare,
+} from './camera-share';
+export type { CameraSharePhase, CameraShareState } from './camera-share';
 export { useLiveConversationSelector } from './live-conversation-store';
 export { isLiveVoiceUnifiedAudioInstalled } from './live-voice-unified-audio-controller';
 export { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from './assistant-pcm-stream-websocket-player';

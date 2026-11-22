@@ -84,19 +84,19 @@ def model_folder(model_id: str) -> Path | None:
     return folder if folder.is_dir() else None
 
 
-def cap_vram() -> int:
+def cap_vram(default_mb: int = VRAM_CAP_MB) -> int:
     """Cap this process's CUDA allocator before anything is allocated; returns the cap in MB."""
     from app.config.env import env_int
 
-    cap_mb = env_int("OMNIX_PORTRAIT_VRAM_CAP_MB", VRAM_CAP_MB, minimum=1024, maximum=65_536)
+    cap_mb = env_int("OMNIX_PORTRAIT_VRAM_CAP_MB", default_mb, minimum=1024, maximum=65_536)
     total = torch.cuda.get_device_properties(0).total_memory
     torch.cuda.set_per_process_memory_fraction(min(1.0, cap_mb * 2**20 / total))
     return cap_mb
 
 
-def required_folders() -> dict[str, Path]:
+def required_folders(models: tuple[str, ...] = REQUIRED_MODELS) -> dict[str, Path]:
     folders, missing = {}, []
-    for model_id in REQUIRED_MODELS:
+    for model_id in models:
         folder = model_folder(model_id)
         if folder is None:
             missing.append(model_id)
@@ -107,15 +107,30 @@ def required_folders() -> dict[str, Path]:
     return folders
 
 
-def verify_code(folder: Path) -> None:
+def verify_code(folder: Path, model_id: str = CODE_MODEL, name: str = "FLOAT") -> None:
     """Upstream's source files must match their catalogued digests before they are imported."""
     from app.models.catalog import load
     from app.models.downloads import sha256_file
 
-    for item in load().model(CODE_MODEL).files:
+    for item in load().model(model_id).files:
         path = folder / item.path
         if not path.is_file() or sha256_file(path) != item.sha256:
-            raise PortraitModelMissing(f"FLOAT's code file {item.path} is missing or changed; reinstall {CODE_MODEL}")
+            raise PortraitModelMissing(f"{name}'s code file {item.path} is missing or changed; reinstall {model_id}")
+
+
+def encode_jpegs(pixels: torch.Tensor, level: int = 0) -> list[bytes]:
+    """JPEG frames for RGB pixels (frames x 3 x 512 x 512, uint8), at a quality level's size and JPEG quality.
+
+    Encoded on the CPU (libjpeg-turbo, about 2 ms a frame): torchvision's GPU encoder returned noise for
+    some frames of a batch in the Phase 1 runtime check (2026-10-29), which SyncNet scored as lost sync.
+    """
+    from torchvision.io import encode_jpeg
+
+    size, _, quality = QUALITY_LEVELS[level]
+    if size != FRAME_SIZE:
+        pixels = F.interpolate(pixels.float(), size=(size, size), mode="bilinear", antialias=True,
+                               align_corners=False).round().clamp(0, 255).to(torch.uint8)
+    return [bytes(encode_jpeg(frame, quality=quality).numpy()) for frame in pixels.cpu()]
 
 
 # --- Omnix's parts of the model ----------------------------------------------------------------------
@@ -407,23 +422,13 @@ class FloatRuntime:
 
     @torch.no_grad()
     def render(self, portrait: Portrait, latents: torch.Tensor, level: int = 0) -> list[bytes]:
-        """JPEG frames for motion latents (frames x dim), at a quality level's size and JPEG quality.
-
-        Encoded on the CPU (libjpeg-turbo, about 2 ms a frame): torchvision's GPU encoder returned noise for
-        some frames of a batch in the Phase 1 runtime check (2026-10-29), which SyncNet scored as lost sync.
-        """
+        """JPEG frames for motion latents (frames x dim), at a quality level's size and JPEG quality."""
         return self.encode_pixels(self.render_pixels(portrait, latents), level)
 
     @torch.no_grad()
     def encode_pixels(self, pixels: torch.Tensor, level: int = 0) -> list[bytes]:
-        """JPEG frames for RGB pixels (frames x 3 x 512 x 512, uint8), at a quality level's size and JPEG quality."""
-        from torchvision.io import encode_jpeg
-
-        size, _, quality = QUALITY_LEVELS[level]
-        if size != FRAME_SIZE:
-            pixels = F.interpolate(pixels.float(), size=(size, size), mode="bilinear", antialias=True,
-                                   align_corners=False).round().clamp(0, 255).to(torch.uint8)
-        return [bytes(encode_jpeg(frame, quality=quality).numpy()) for frame in pixels.cpu()]
+        """JPEG frames for RGB pixels (frames x 3 x 512 x 512, uint8) (``encode_jpegs``)."""
+        return encode_jpegs(pixels, level)
 
     @torch.no_grad()
     def idle_latents(self, portrait: Portrait) -> torch.Tensor:
@@ -603,6 +608,6 @@ class FloatSession:
 
 __all__ = [
     "CODE_MODEL", "DEFAULT_NFE", "EMOTIONS", "FloatRuntime", "FloatSession", "Portrait", "PortraitModelMissing",
-    "REQUIRED_MODELS", "TRANSITION_MAX_FRAMES", "TRANSITION_MIN_FRAMES", "model_folder", "required_folders",
-    "verify_code",
+    "REQUIRED_MODELS", "TRANSITION_MAX_FRAMES", "TRANSITION_MIN_FRAMES", "cap_vram", "encode_jpegs", "model_folder",
+    "required_folders", "verify_code",
 ]

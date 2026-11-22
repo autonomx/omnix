@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
     autoSpeakReplies: false,
     speechLanguage: 'en-US',
     streamingAudio: true,
+    livePortraitEngine: 'float',
     researchDefaultMode: 'disabled',
     researchProvider: 'brave',
     researchProviderFallbacks: ['playwright', 'duckduckgo'],

@@ -4223,6 +4223,11 @@ export interface components {
             /** Camera Image */
             camera_image?: string | null;
             /**
+             * Camera Shared
+             * @default false
+             */
+            camera_shared?: boolean;
+            /**
              * Coding Approval Policy
              * @default ask_sensitive
              * @enum {string}

@@ -5,7 +5,8 @@ starts. ``POST /api/tts/live-call/portrait-load`` with the portrait's image asse
 starts a load when none is under way and renders the portrait's idle loop, so ``ready`` means a call has no rendering
 left to wait for; the browser asks again while the answer is ``loading``. The service's own checks
 apply as they do to a call: with too little memory it refuses (``model_busy``). ``GET
-/api/tts/live-call/portrait-load`` says where the model stands, since it unloads after an idle while.
+/api/tts/live-call/portrait-load`` says where the model stands, since it unloads after an idle while. ``DELETE``
+unloads it at once, outside a call (the button pressed again, owner request 2026-11-22).
 """
 from __future__ import annotations
 
@@ -15,7 +16,13 @@ import asyncio
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.platform.live_voice.portrait.link import PortraitUnavailable, portrait_health, portrait_url, prepare_portrait
+from app.platform.live_voice.portrait.link import (
+    PortraitUnavailable,
+    portrait_health,
+    portrait_url,
+    prepare_portrait,
+    unload_portrait,
+)
 from app.platform.live_voice.transport.portrait_preview import _read_image
 
 PORTRAIT_LOAD_PATH = "/api/tts/live-call/portrait-load"
@@ -35,6 +42,12 @@ class PortraitLoadResponse(BaseModel):
 
 class PortraitModelStatus(BaseModel):
     status: Literal["ready", "loading", "unloaded", "unavailable"]
+
+
+class PortraitUnloadResponse(BaseModel):
+    ok: bool
+    code: str = ""
+    message: str = ""
 
 
 def register_portrait_load_routes(router: APIRouter) -> None:
@@ -62,6 +75,19 @@ def register_portrait_load_routes(router: APIRouter) -> None:
         state = await portrait_health(base_url)
         return PortraitModelStatus(status="ready" if state == "ready" else "loading" if state == "warming" else "unloaded")
 
+    @router.delete(PORTRAIT_LOAD_PATH, response_model=PortraitUnloadResponse, tags=["live-voice"])
+    async def portrait_unload() -> PortraitUnloadResponse:
+        base_url = portrait_url()
+        if not base_url:
+            return PortraitUnloadResponse(ok=True)  # nothing to unload
+        try:
+            await unload_portrait(base_url)
+        except PortraitUnavailable as exc:
+            if exc.code == "service_unreachable":
+                return PortraitUnloadResponse(ok=True)  # restarting already, light
+            return PortraitUnloadResponse(ok=False, code=exc.code, message=str(exc))
+        return PortraitUnloadResponse(ok=True)
+
 
 __all__ = ["PORTRAIT_LOAD_PATH", "PortraitLoadRequest", "PortraitLoadResponse", "PortraitModelStatus",
-           "register_portrait_load_routes"]
+           "PortraitUnloadResponse", "register_portrait_load_routes"]

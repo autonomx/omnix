@@ -107,7 +107,7 @@ def camera_vision(
     """Whether the call may offer Show, and why not. Nothing is sent to a model here."""
     client_factory = client_factory or _default_client
     assistant_settings = assistant_settings or _assistant_settings
-    from app.providers.desktop_vision import CodexDesktopVisionClient, is_remote_vision_endpoint
+    from app.providers.desktop_vision import ProviderVisionClient, is_remote_vision_endpoint
 
     assistant = assistant_settings()
     try:
@@ -116,7 +116,9 @@ def camera_vision(
         logger.warning("live call camera: vision client could not be built", exc_info=True)
         return CameraVision(False, False, "vision_unavailable")
     configured = (
-        isinstance(client, CodexDesktopVisionClient)
+        # Codex or the Claude CLI, or the chat's own local model: no vision model needs setting.
+        isinstance(client, ProviderVisionClient)
+        or getattr(client, "follows_chat", False) is True
         or bool(_vision_model(assistant))
         or any(environment().get(name, "").strip() for name in ("OMNIX_VISION_BASE_URL", "OMNIX_VISION_MODEL",
                                                              "OMNIX_VISION_PROVIDER"))

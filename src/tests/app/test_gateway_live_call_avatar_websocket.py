@@ -44,7 +44,8 @@ def portrait(monkeypatch):
     opened: list[dict[str, Any]] = []
     state: dict[str, Any] = {"pack": PORTRAIT, "prepare_error": None, "frames": [b"frame-0"]}
 
-    async def prepare(base_url: str, tenant: str, image: bytes) -> str:
+    async def prepare(base_url: str, tenant: str, image: bytes, *, engine: str | None = None) -> str:
+        state.setdefault("engines", []).append(engine)
         if state.get("prepare_errors"):
             raise state["prepare_errors"].pop(0)
         if state["prepare_error"]:
@@ -74,6 +75,7 @@ def portrait(monkeypatch):
     monkeypatch.setattr(avatar_websocket, "default_character_avatar_service",
                         lambda: SimpleNamespace(portrait_image=lambda pack, max_bytes: b"portrait bytes"))
     monkeypatch.setattr(avatar_websocket, "prepare_portrait", prepare)
+    monkeypatch.setattr(avatar_websocket, "portrait_engine", lambda: state.get("engine", "float"))
     monkeypatch.setattr(avatar_websocket.PortraitLink, "open", open_link)
     return SimpleNamespace(opened=opened, state=state)
 
@@ -216,9 +218,9 @@ def test_while_loading_the_service_is_asked_at_its_own_pace_whatever_the_browser
     portrait.state["prepare_errors"] = [PortraitUnavailable("warming", "loading") for _ in range(2)]
     original = avatar_websocket.prepare_portrait
 
-    async def counted(*args: Any) -> str:
+    async def counted(*args: Any, **kwargs: Any) -> str:
         asked.append(time.monotonic())
-        return await original(*args)
+        return await original(*args, **kwargs)
 
     monkeypatch.setattr(avatar_websocket, "prepare_portrait", counted)
     client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
@@ -248,13 +250,26 @@ def test_an_ack_with_a_number_that_is_not_a_count_closes_the_socket_cleanly(monk
     assert portrait.opened[0]["link"].closed
 
 
+def test_a_flashhead_call_holds_its_starts_until_the_video_is_a_pass_ahead(monkeypatch, portrait) -> None:
+    # FlashHead renders 24 frames a pass, each from that pass's audio: a start on its first frames runs late (D-5,
+    # revised 2026-11-21). The engine prepared with is the one whose rule the browser gets.
+    portrait.state["engine"] = "flashhead-lite"
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        with client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])) as avatar:
+            ready = avatar.receive_json()
+    assert (ready["start_hold_ms"], ready["start_lead_ms"]) == (1_200, 1_280)
+    assert portrait.state["engines"] == ["flashhead-lite"]
+
+
 def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monkeypatch, portrait) -> None:
     client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
         hello = tts.receive_json()
         with client.websocket_connect(_avatar_url(hello["avatar_token"])) as avatar:
             # The test client is not a loopback address, so it starts one level down.
-            assert avatar.receive_json() == {"type": "ready", "fallback_renderer": "sprite", "level": 1}
+            assert avatar.receive_json() == {"type": "ready", "fallback_renderer": "sprite", "level": 1,
+                                             "start_hold_ms": 250, "start_lead_ms": 0}
             assert avatar.receive_bytes() == b"frame-0"
             opened = portrait.opened[0]
             assert (opened["call_key"], opened["latent_key"], opened["emotion"], opened["level"]) == (

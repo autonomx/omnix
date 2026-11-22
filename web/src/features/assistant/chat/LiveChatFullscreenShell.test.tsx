@@ -1,6 +1,6 @@
  
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveCallPresentationStore } from '../workspace/live-call-presentation-store';
@@ -9,8 +9,9 @@ import { liveConversationStore } from '../workspace/live-conversation-store';
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import type { CharacterLiveCallRuntime } from './characterClient';
 import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
-import { livePortrait } from './portrait/livePortrait';
-import { resetMemberLoops } from './portrait/memberIdleLoops';
+import { livePortrait, portraitNotice, requestLiveVideo, resetLiveVideoRequests } from './portrait/livePortrait';
+import { packRevision, rememberMemberLoop, resetMemberLoops } from './portrait/memberIdleLoops';
+import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
 import { fixture } from '../../../test/fixture';
 import { createTestQueryClient, TestProviders } from '../../../test/renderWithProviders';
 
@@ -141,6 +142,7 @@ describe('LiveChatFullscreenShell', () => {
     dispose();
     cleanup();
     liveConversationStore.reset();
+    resetLiveVideoRequests();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
   });
@@ -237,6 +239,7 @@ describe('LiveChatFullscreenShell', () => {
       return new Response(JSON.stringify(body), { status: 'detail' in body ? 404 : 200, headers: { 'Content-Type': 'application/json' } });
     });
     liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:maya' });
+    requestLiveVideo('chat:maya'); // "Load live video" was pressed in this chat
     enterLiveChatFullscreen('header');
     renderShell();
     act(() => {
@@ -262,11 +265,91 @@ describe('LiveChatFullscreenShell', () => {
     expect(tiles[0].querySelector('canvas')).toBeNull();
     expect(within(tiles[0]).getByAltText('Maya live portrait').getAttribute('src')).toBe('/api/assets/image%3Amaya-portrait/file');
 
+    // Leo's portrait cannot keep up: his fallback is only his picture, so he idles on his loop rather than swapping
+    // to the uncropped still (the tile resizing and going still each time, 2026-11-21).
+    act(() => {
+      const hooks = livePortrait.begin('chat:maya', { id: 'leo', pack: leoPack });
+      hooks.onHello({ callKey: 'call', avatarToken: 'token' });
+    });
+    const socket = sockets.at(-1) as { emit: (type: string, event: unknown) => void };
+    act(() => socket.emit('message', { data: JSON.stringify({ type: 'unavailable', code: 'portrait_busy' }) }));
+    expect(livePortrait.getSnapshot()).toMatchObject({ status: 'unavailable', speakerId: 'leo' });
+    expect(tiles[1].querySelector('canvas')).toBeNull();
+    expect(tiles[1].querySelector('.live-chat-stage-tile-picture')?.getAttribute('data-renderer')).toBe('portrait');
+    expect(within(tiles[1]).getByAltText('Leo avatar').getAttribute('src')).toBe('blob:leo-idle');
+
     act(() => {
       livePortrait.end();
       livePortrait.setPack(null);
       liveCallPresentationStore.resetForTests();
       callSceneStore.resetForTests();
+      resetMemberLoops();
+    });
+  });
+
+  it('keeps a voice-only call still until live video is asked for, and offers it on the call card', async () => {
+    const portraitPack = (id: string) => ({ ...mayaRuntime.avatar_pack, character_id: id, renderer: 'portrait',
+      fallback_renderer: 'sprite', base_asset_id: `image:${id}-portrait` }) as CharacterLiveCallRuntime['avatar_pack'];
+    const withGuest = fixture<CharacterLiveCallRuntime>({
+      ...mayaRuntime,
+      avatar_pack: portraitPack('maya'),
+      scene_guests: [{ character_id: 'leo', display_name: 'Leo', voice_asset_id: null, voice_speaker_id: null, speech_style: null, avatar_pack: portraitPack('leo') }],
+    });
+    const members = [
+      { character_id: 'maya', display_name: 'Maya', role: 'host', seat: 0 },
+      { character_id: 'leo', display_name: 'Leo', role: 'guest', seat: 1 },
+    ];
+    const idleAsked: (string | null)[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+      const url = new URL(raw, window.location.origin);
+      let body: Record<string, unknown> = { detail: 'not_found' };
+      if (url.pathname.endsWith('/scene')) body = { available: true, reason: 'ready', max_guests: 2, members };
+      if (url.pathname === '/api/tts/live-call/portrait-idle') idleAsked.push(url.searchParams.get('speaker_id'));
+      return new Response(JSON.stringify(body), { status: 'detail' in body ? 404 : 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:maya' });
+    enterLiveChatFullscreen('header');
+    renderShell();
+    act(() => publishCharacterAvatarRuntime(withGuest));
+    await act(async () => { await loadCallScene('chat:maya'); });
+
+    await screen.findByRole('list', { name: 'Call members' });
+    const dialog = screen.getByRole('dialog', { name: 'Immersive Live Chat with Maya' });
+    expect(await within(dialog).findByRole('button', { name: 'Load live video' })).toBeEnabled();
+    await act(async () => { await Promise.resolve(); });
+    expect(idleAsked).toEqual([]); // no idle loops: the faces stay still pictures
+
+    act(() => {
+      liveCallPresentationStore.resetForTests();
+      callSceneStore.resetForTests();
+      resetMemberLoops();
+    });
+  });
+
+  it("idles a failing portrait on its loop only when its fallback is a still picture; a moving fallback is kept", () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:loop');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const still = { ...mayaRuntime.avatar_pack, character_id: 'leo', renderer: 'portrait', fallback_renderer: 'sprite',
+      base_asset_id: 'image:leo-portrait' } as CharacterLiveCallRuntime['avatar_pack'];
+    const talking = { ...still, mouth_frames: { closed: 'image:leo-closed', wide: 'image:leo-wide' } } as typeof still;
+    rememberMemberLoop('chat:maya', 'leo', { frameMs: 80, idle: [new Uint8Array([1])], blink: [] }, packRevision(still));
+    const { result, rerender } = renderHook(({ pack }) => useDrawnAvatarPack(pack, 'leo'), { initialProps: { pack: still } });
+    act(() => {
+      const hooks = livePortrait.begin('chat:maya', { id: 'leo', pack: still });
+      hooks.onHello({ callKey: 'call', avatarToken: 'token' });
+    });
+    const socket = sockets.at(-1) as { emit: (type: string, event: unknown) => void };
+    act(() => socket.emit('message', { data: JSON.stringify({ type: 'unavailable', code: 'portrait_busy' }) }));
+    expect(result.current.pack?.renderer).toBe('portrait'); // its loop, not the uncropped still
+    expect(result.current.mine).toBe(false); // the failed stream is not drawn
+    expect(result.current.notice).toBe(portraitNotice(livePortrait.getSnapshot())); // and why is still said
+
+    rerender({ pack: talking });
+    expect(result.current.pack?.renderer).toBe('sprite'); // a mouth that moves beats a silent loop
+
+    act(() => {
+      livePortrait.end();
       resetMemberLoops();
     });
   });

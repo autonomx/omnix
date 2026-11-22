@@ -27,6 +27,8 @@ class AssistantSettingsProfile(BaseModel):
     auto_speak_replies: bool = Field(default=False, alias="autoSpeakReplies")
     speech_language: str = Field(default="en-US", alias="speechLanguage")
     streaming_audio: bool = Field(default=True, alias="streamingAudio")
+    # The live portrait's engine in calls (app.conversation.portrait_stream_contract.PORTRAIT_ENGINES).
+    live_portrait_engine: Literal["float", "flashhead-lite"] = Field(default="float", alias="livePortraitEngine")
 
     research_default_mode: ResearchMode = Field(default="disabled", alias="researchDefaultMode")
     research_provider: ResearchProvider = Field(

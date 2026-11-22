@@ -295,6 +295,9 @@ class SendChatMessageRequest(BaseModel):
     # A picture shown through the front camera in a live call (companion 4.2). Only its description is kept: the
     # field is never serialised (``exclude``), so it is not in the job's payload, the message or a later prompt.
     camera_image: str | None = Field(default=None, max_length=_MAX_CAMERA_IMAGE_DATA_URL_CHARS, exclude=True)
+    # The person shares their front camera (camera share, 2026-11-21): the turn takes the newest glance's
+    # description (``chat.camera_glance``). It carries no image and grants nothing.
+    camera_shared: bool = False
     # Set by admission, never by the client (companion 6.5): the person's words mostly repeat a character's line
     # the microphone heard. The turn is still answered; memory and conversation readings skip it.
     _suspected_echo: bool = PrivateAttr(default=False)

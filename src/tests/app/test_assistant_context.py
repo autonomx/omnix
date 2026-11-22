@@ -9,9 +9,11 @@ from app.platform.chat.assistant_context.models import AssistantContextBuildResu
 from app.conversation.contracts import AssistantContextItem
 from app.platform.chat.assistant_context.service import AssistantContextService
 from app.providers.desktop_vision import (
+    ClaudeCliDesktopVisionClient,
     CodexDesktopVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,
+    is_remote_vision_endpoint,
 )
 from app.platform.research.web_search import should_search_automatically
 import pytest
@@ -271,6 +273,103 @@ def test_default_desktop_vision_respects_explicit_local_model_override(monkeypat
 
     assert isinstance(client, DesktopVisionClient)
     assert not isinstance(client, CodexDesktopVisionClient)
+
+
+def _profile(monkeypatch, **profile):
+    for name in ("OMNIX_VISION_BASE_URL", "OMNIX_VISION_MODEL", "OMNIX_VISION_PROVIDER"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("app.settings.access.load_settings", lambda: {"settings_control_center": profile})
+
+
+def test_with_no_vision_model_a_claude_chat_looks_with_its_own_claude_model(monkeypatch):
+    _profile(
+        monkeypatch,
+        **{"global": {"providers": {"llm": "claude_cli"}, "models": {"chat": "llm:claude_cli:claude-haiku-4-5-20251001"}},
+           "providerConfigs": {"claudeCli": {"model": "sonnet"}}},
+    )
+
+    client = default_desktop_vision_client()
+
+    assert isinstance(client, ClaudeCliDesktopVisionClient)
+    assert client.default_model == "claude-haiku-4-5-20251001"
+    # Anthropic is off this machine: the remote-consent check applies.
+    assert is_remote_vision_endpoint(client.base_url)
+
+
+def test_a_claude_chat_with_another_chat_model_route_uses_the_clis_model(monkeypatch):
+    _profile(monkeypatch, **{"global": {"providers": {"llm": "claude_cli"}},
+                             "providerConfigs": {"claudeCli": {"model": "haiku"}}})
+
+    assert default_desktop_vision_client().default_model == "haiku"
+
+
+def test_a_claude_vision_reference_picks_the_claude_cli_whatever_the_chat(monkeypatch):
+    _profile(monkeypatch, **{"global": {"providers": {"llm": "lmstudio"}},
+                             "assistant": {"desktopCompanionVisionModelId": "claude_cli:sonnet"}})
+
+    client = default_desktop_vision_client()
+
+    assert isinstance(client, ClaudeCliDesktopVisionClient)
+    assert client.default_model == "sonnet"
+
+
+def test_with_no_vision_model_a_local_chat_looks_with_its_own_model(monkeypatch):
+    _profile(
+        monkeypatch,
+        **{"global": {"providers": {"llm": "lmstudio"}, "models": {"chat": "llm:lmstudio:qwen3.8-27b"}},
+           "providerConfigs": {"lmstudio": {"baseUrl": "http://localhost:1234", "model": "other"}}},
+    )
+
+    client = default_desktop_vision_client()
+
+    assert type(client) is DesktopVisionClient
+    assert (client.base_url, client.default_model, client.follows_chat) == (
+        "http://localhost:1234/v1", "qwen3.8-27b", True,
+    )
+
+
+def test_an_explicit_local_vision_model_does_not_follow_the_chat(monkeypatch):
+    _profile(monkeypatch, **{"global": {"providers": {"llm": "claude_cli"}},
+                             "assistant": {"desktopCompanionVisionModelId": "gemma-4-12b"}})
+
+    client = default_desktop_vision_client()
+
+    assert type(client) is DesktopVisionClient and client.follows_chat is False
+
+
+def test_claude_cli_vision_sends_the_picture_through_the_cli_provider():
+    calls = []
+
+    class FakeClaudeProvider:
+        def chat_completion(self, messages, model, stream=False, **kwargs):
+            calls.append({"messages": messages, "model": model, "stream": stream, **kwargs})
+            return SimpleNamespace(content="A person at a desk.", model=model)
+
+    observation = ClaudeCliDesktopVisionClient(
+        default_model="claude_cli:haiku", provider_factory=FakeClaudeProvider,
+    ).describe(image_data("CURRENT"), "Can you see me?")
+
+    assert calls[0]["model"] == "haiku" and calls[0]["stream"] is False
+    # Haiku thinks at any effort: about 2.2 s to the first word instead of 0.55 s, longer than a spoken turn waits.
+    assert calls[0]["thinking"] is False
+    assert calls[0]["messages"][1].vision_images == [{"data": image_data("CURRENT")}]
+    assert observation.content == "A person at a desk."
+    assert (observation.metadata["provider"], observation.metadata["base_url"]) == ("claude_cli", "claude-cli://local")
+
+
+def test_the_call_camera_offers_show_for_a_chat_model_that_looks():
+    from app.platform.chat.live_call_camera import camera_vision
+
+    claude = ClaudeCliDesktopVisionClient(provider_factory=lambda: None)
+    refused = camera_vision(client_factory=lambda: claude, assistant_settings=lambda: {})
+    assert (refused.available, refused.reason) == (False, "remote_vision_not_allowed")
+    allowed = camera_vision(client_factory=lambda: claude,
+                            assistant_settings=lambda: {"desktopCompanionRemoteVisionAllowed": True})
+    assert (allowed.available, allowed.reason) == (True, "ready")
+
+    local = DesktopVisionClient(base_url="http://localhost:1234/v1")
+    local.follows_chat = True
+    assert camera_vision(client_factory=lambda: local, assistant_settings=lambda: {}).available
 
 
 def test_context_service_passes_temporal_images_and_records_resolution_mode():

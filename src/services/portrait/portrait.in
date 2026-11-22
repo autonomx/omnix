@@ -9,6 +9,10 @@ transformers==4.57.6
 timm==1.0.30
 # FMT imports it, though the service solves with its own CUDA-graph Euler loop.
 torchdiffeq==0.2.5
+# SoulX-FlashHead Lite's code is installed from the catalog too (flashhead-code); its model and LTX VAE import
+# these (diffusers' model base classes, einops' reshapes). The 2026-11-21 spike ran with exactly these versions.
+diffusers==0.39.0
+einops==0.8.2
 # Face detection for the portrait crop: face_alignment's S3FD detector (its weights come from the catalog).
 face-alignment==1.4.1
 numpy

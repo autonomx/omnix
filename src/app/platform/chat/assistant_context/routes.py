@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.platform.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
+from app.platform.chat.camera_glance import camera_share_context
 from app.platform.chat.contracts import CHAT_RESEARCH, ResearchTurn
 from app.platform.chat.generation_jobs import start_chat_generation_job
 from app.platform.chat.research_citations import validate_completed_research_reply
@@ -169,6 +170,8 @@ def register_assistant_context_routes(
         def build_context() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             context = context_service_factory().build(request)
             context_items = [item.model_dump(mode="json") for item in context.items]
+            if request.camera_shared:
+                context_items.extend(camera_share_context(chat_store, session_id, user_message))
             return context_items, {**context.diagnostics, **_release_diagnostics(turn)}
 
         def finalize_context_chat(
@@ -284,6 +287,12 @@ def register_assistant_context_routes(
             contract="assistant_context_chat_v1",
         )
 
+        if request.camera_shared and not admission.existing:
+            # The glance was sent as the person began; it has had the context's time to be described.
+            context_items = [*context_items, *await asyncio.to_thread(
+                camera_share_context, chat_store, session_id, admission.user_message,
+            )]
+
         def annotate_reply(metadata: dict[str, Any]) -> None:
             if context_sources:
                 metadata["context_sources"] = context_sources
@@ -332,6 +341,7 @@ def _send_request(request: AssistantContextChatRequest) -> SendChatMessageReques
         workspace_root=request.workspace_root,
         research_mode=request.web_research_mode,
         ui_action=request.ui_action,
+        camera_shared=request.camera_shared,
     )
 
 

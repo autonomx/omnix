@@ -33,6 +33,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.platform.characters.avatar_generation_service",
     "app.platform.characters.avatar_viseme_generation",
     "app.platform.chat.assist.hermes",
+    "app.platform.chat.camera_glance",
     "app.platform.chat.live_agent_store",
     "app.platform.chat.live_call_camera",
     "app.platform.chat.live_call_greeting",

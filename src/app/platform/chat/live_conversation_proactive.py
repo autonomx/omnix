@@ -6,7 +6,7 @@ import re
 import uuid
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -33,6 +33,9 @@ from .scene import (
 from .store import _model_key, _pop_ready_sentences, _provider_key
 from app.conversation.scene import scene_of
 from app.prompts import prompt_template
+
+if TYPE_CHECKING:
+    from .camera_glance import CameraShareLook
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +242,20 @@ def _prompt(
     )
 
 
+def _camera_note(camera: CameraShareLook | None) -> str:
+    if camera is None:
+        return ""
+    from .camera_glance import proactive_camera_note
+
+    return proactive_camera_note(camera)
+
+
+def _camera_only_and_unseen(reason: str, state_summary: str | None, camera: CameraShareLook) -> bool:
+    # The call's summary names fresh desktop context as ``desktop=`` (live-conversation-initiative-controller.ts).
+    return (reason.strip() == "ambient_visual_presence" and camera.snapshot is None
+            and "desktop=" not in (state_summary or ""))
+
+
 def _untrusted(text: str, limit: int) -> str:
     """Tool or request text for a prompt: one bounded line that cannot close its own delimiters."""
     compact = " ".join(str(text or "").replace("<<<", "").replace(">>>", "").split())
@@ -368,11 +385,14 @@ def stream_proactive_turn_chunks(
     open_loop: OpenLoopMaterial | None = None,
     scene_reaction: ReactionOpening | None = None,
     scene_talk: SceneTalkMaterial | None = None,
+    camera: CameraShareLook | None = None,
 ) -> Iterator[dict[str, Any]]:
     """One proactive turn. A ``task_report:`` reason needs the report the server checked (``task_report``), and an
     ``open_loop:`` reason the loop it checked (``open_loop``), and a ``scene_reaction:`` reason the opening it
     checked (``scene_reaction``), with ``session`` the reacting member's view (companion 5.4). A ``scene_line:``
-    or ``scene_talk:`` reason needs its checked opening (``scene_talk``) and the speaking member's view (6.4)."""
+    or ``scene_talk:`` reason needs its checked opening (``scene_talk``) and the speaking member's view (6.4).
+    ``camera`` is the shared camera's newest look (camera share), for a turn that is not a report, loop or scene
+    line: the companion may speak up about what it shows."""
     scene = scene_of(session)
     _check_materials(initiative_reason, scene, task_report, open_loop, scene_reaction, scene_talk)
     purpose = _effective_purpose(purpose, initiative_reason)
@@ -389,6 +409,15 @@ def stream_proactive_turn_chunks(
     fixed = _fixed_reply(turn_id, initiative_reason, purpose, task_report)
     if fixed is not None:
         yield from fixed
+        return
+    plain = task_report is None and open_loop is None and not scene_turn
+    if camera is not None and plain and _camera_only_and_unseen(initiative_reason, state_summary, camera):
+        # A visual presence turn the camera alone stood for, with nothing seen: nothing to say, no model call.
+        yield {"type": "initiative", "turn_id": turn_id, "initiative_reason": initiative_reason, "purpose": purpose}
+        yield {"type": "complete", "content": "", "metadata": {
+            "generation_status": "skipped", "skip_reason": "ambient_camera_unseen", "purpose": purpose,
+            "source": purpose, "transient": True, "turn_id": turn_id, "initiative_reason": initiative_reason,
+        }}
         return
 
     resolved_provider_id = provider_id or session.provider_id
@@ -407,7 +436,7 @@ def stream_proactive_turn_chunks(
             else talk_line_prompt(scene, scene_talk.opening)
             if scene is not None and scene_talk is not None and scene_talk.kind == "line"
             else talk_opener_prompt(scene) if scene is not None and scene_talk is not None
-            else _prompt(initiative_reason, state_summary, purpose=purpose)
+            else _prompt(initiative_reason, state_summary, purpose=purpose) + _camera_note(camera if plain else None)
         ),
         created_at=_utcnow(),
         metadata={"source": purpose, "purpose": purpose, "transient": True},

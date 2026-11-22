@@ -412,7 +412,12 @@ describe('live voice PCM session', () => {
 
     session.setPortraitClock(true);
     const port = FakeAudioWorkletNode.instances[0].port;
-    expect(port.messages).toContainEqual({ type: 'set_portrait_clock', enabled: true, startHoldSamples: 6_000 });
+    expect(port.messages).toContainEqual({ type: 'set_portrait_clock', enabled: true, startHoldSamples: 6_000, startLeadSamples: 0 });
+    // A FlashHead call's start waits for its video to be a pass ahead (D-5, revised 2026-11-21).
+    session.setPortraitClock(true, { holdMs: 1_200, leadMs: 1_280 });
+    expect(port.messages).toContainEqual({ type: 'set_portrait_clock', enabled: true, startHoldSamples: 28_800, startLeadSamples: 30_720 });
+    session.portraitFramesReady('seg', 500);
+    expect(port.messages).toContainEqual({ type: 'portrait_frames_ready', segmentId: 'seg', coveredSamples: 12_000 });
     reporter.record.mockClear();
     port.onmessage?.({ data: { type: 'portrait_clock', segment_id: 'seg', segment_played_samples: 480, audio_context_time_seconds: 1 } } as MessageEvent);
     expect(portrait.onWorkletEvent).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'portrait_clock', sample_rate: 24_000 }));

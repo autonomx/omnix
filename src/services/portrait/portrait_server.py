@@ -1,12 +1,17 @@
 """Omnix live portrait service (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 1).
 
-FLOAT turns a call's TTS audio into a talking-head video of a character's portrait. The gateway talks to
-this service only; the browser never does. Routes:
+A portrait engine turns a call's TTS audio into a talking-head video of a character's portrait: FLOAT
+(``services.portrait.float_runtime``) or SoulX-FlashHead Lite (``services.portrait.flashhead_runtime``), one loaded
+at a time, chosen in Settings (``PORTRAIT_ENGINES``). The gateway talks to this service only; the browser never
+does. Routes:
 
-- ``GET /health``: the model's state (``missing``, ``short``, ``warming``, ``ready``, ``failed``), streams in
-  use, free VRAM and host commit.
-- ``POST /portrait/prepare``: form fields ``tenant`` and ``image_sha256`` and the image file. Crops and
-  encodes the portrait once per (tenant, image digest, FLOAT revision) and returns its ``latent_key``.
+- ``GET /health``: the engine and its state (``missing``, ``short``, ``warming``, ``ready``, ``failed``), streams
+  in use, free VRAM and host commit.
+- ``POST /portrait/prepare``: form fields ``tenant``, ``image_sha256`` and ``engine`` (``float`` when absent) and
+  the image file. Crops and encodes the portrait once per (tenant, image digest, engine and its code revision) and
+  returns its ``latent_key``. Asked for the engine that is not loaded, the service switches when no call streams
+  (``model_busy`` while one does): it exits to be started again light, as after an idle while, and the gateway's
+  retry loads the other engine.
 - ``DELETE /portrait/cache/{tenant}/{image_sha256}``: forget that encoding and its idle loop (no pack shows it).
 - ``POST /portrait/preview``: form fields ``latent_key``, ``emotion``, ``sample_rate`` and up to 8 s of 16-bit PCM:
   the frames for that audio, rendered as a call's would be (base64 JPEGs, 25 a second), for the setup preview.
@@ -25,7 +30,8 @@ Loading takes about a minute (cuDNN builds its plans for each network's one inpu
 demand, when a call to a character with a portrait (or the avatar setup's preview) first asks for it; until
 then the service holds no model and no CUDA context (``OMNIX_PORTRAIT_PRELOAD=1`` loads it at start instead).
 After ten minutes without a call it unloads and the process exits with ``IDLE_EXIT_CODE``, which its launcher
-answers by starting it again, light: only the process's end releases its CUDA context. One
+answers by starting it again, light: only the process's end releases its CUDA context. ``POST /portrait/unload``
+does the same at once, outside a call (the call panel's live-video button). One
 stream per GPU by default: a stream is a lease kept by heartbeats; the same principal and session reopening
 (a browser reload) replaces its old stream, and any other call is refused with ``portrait_busy``. Outcomes the
 gateway acts on travel as ``{"ok": false, "code", "message"}`` (the middleware replaces error bodies).
@@ -35,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import contextlib
+import dataclasses
 import hashlib
 import json
 import logging
@@ -52,15 +59,26 @@ import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
 from app.config.env import env_bool, env_int
-from app.conversation.portrait_stream_contract import QUALITY_LEVELS, PortraitMessageError, pack, unpack
+from app.conversation.portrait_stream_contract import (
+    DEFAULT_PORTRAIT_ENGINE,
+    PORTRAIT_ENGINES,
+    QUALITY_LEVELS,
+    PortraitMessageError,
+    pack,
+    unpack,
+)
 from app.runtime.net import bind_host
 from app.runtime.process_control import IDLE_EXIT_CODE
 from app.security.model_service import ModelServiceMiddleware
 
 logger = logging.getLogger(__name__)
 
-LOAD_VRAM_GB = 4.0  # the runtime's allocator cap (float_runtime.VRAM_CAP_MB); the load peaks at 3.5 GB
-LOAD_COMMIT_BYTES = 8 * 1024**3  # the load's process commit peaks at 6.4-6.7 GB
+# What a load needs free, by engine: its allocator cap's VRAM and its process commit. FLOAT's cap is 4 GB
+# (float_runtime.VRAM_CAP_MB; its load peaks at 3.5 GB) and its commit peaks at 6.4-6.7 GB. FlashHead's cap is
+# 7 GB (flashhead_runtime.VRAM_CAP_MB; the spike peaked at 5.5 GB) and its commit was about 10 GB in the spike.
+LOAD_NEEDS: dict[str, tuple[float, int]] = {"float": (4.0, 8 * 1024**3), "flashhead-lite": (7.0, 12 * 1024**3)}
+# The catalog entry whose revision a portrait's encoding belongs to, by engine.
+CODE_MODELS = {"float": "float-code", "flashhead-lite": "flashhead-code"}
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 OPEN_TIMEOUT_SECONDS = 5.0
 OUTBOX_FRAMES = 256
@@ -90,18 +108,32 @@ class Unavailable(RuntimeError):
         self.code = code
 
 
-def portrait_key(tenant: str, image_sha256: str) -> str:
-    """The cache key: the tenant, the image's digest and the FLOAT code revision it was encoded with."""
+def portrait_key(tenant: str, image_sha256: str, engine: str = DEFAULT_PORTRAIT_ENGINE) -> str:
+    """The cache key: the tenant, the image's digest, and the engine and its code revision it was encoded with.
+
+    FLOAT's keys are what they were before there were two engines (its revision alone)."""
     from app.models.catalog import load
 
-    revision = load().model("float-code").revision
-    return hashlib.sha256(f"{tenant}\x00{image_sha256}\x00{revision}".encode()).hexdigest()
+    revision = load().model(CODE_MODELS[engine]).revision
+    tag = revision if engine == DEFAULT_PORTRAIT_ENGINE else f"{engine}\x00{revision}"
+    return hashlib.sha256(f"{tenant}\x00{image_sha256}\x00{tag}".encode()).hexdigest()
 
 
-def _default_load() -> Any:
-    from services.portrait.float_runtime import FloatRuntime, required_folders
+def _engine_runtime(engine: str) -> tuple[Any, Callable[[], Any]]:
+    """An engine's runtime class and its ``required_folders``."""
+    if engine == "flashhead-lite":
+        from services.portrait.flashhead_runtime import FlashHeadRuntime, required_folders
 
-    return FloatRuntime(required_folders())
+        return FlashHeadRuntime, required_folders
+    from services.portrait.float_runtime import FloatRuntime
+    from services.portrait.float_runtime import required_folders as float_folders
+
+    return FloatRuntime, float_folders
+
+
+def _default_load(engine: str) -> Any:
+    runtime, folders = _engine_runtime(engine)
+    return runtime(folders())
 
 
 def free_vram_gb() -> float | None:
@@ -140,24 +172,25 @@ def _cuda_initialized() -> bool:
     return torch is not None and torch.cuda.is_initialized()
 
 
-def _default_resources() -> tuple[bool, str]:
-    """Whether a load fits now (free VRAM and host commit), and why not."""
+def _default_resources(engine: str) -> tuple[bool, str]:
+    """Whether an engine's load fits now (free VRAM and host commit), and why not."""
     from app.models.host_memory import available_commit_bytes
 
+    vram_gb, commit_bytes = LOAD_NEEDS[engine]
     free = free_vram_gb()
-    if free is not None and free < LOAD_VRAM_GB:
-        return False, f"The portrait needs about {LOAD_VRAM_GB} GB of VRAM but {free:.1f} GB is free"
+    if free is not None and free < vram_gb:
+        return False, f"The portrait needs about {vram_gb:g} GB of VRAM but {free:.1f} GB is free"
     commit = available_commit_bytes()
-    if commit is not None and commit < LOAD_COMMIT_BYTES:
-        return False, f"The portrait needs about {LOAD_COMMIT_BYTES // 1024**3} GB of host memory to load"
+    if commit is not None and commit < commit_bytes:
+        return False, f"The portrait needs about {commit_bytes // 1024**3} GB of host memory to load"
     return True, ""
 
 
-def _default_installed() -> tuple[bool, str]:
-    from services.portrait.float_runtime import PortraitModelMissing, required_folders
+def _default_installed(engine: str) -> tuple[bool, str]:
+    from services.portrait.float_runtime import PortraitModelMissing
 
     try:
-        required_folders()
+        _engine_runtime(engine)[1]()
     except PortraitModelMissing as exc:
         return False, str(exc)
     return True, ""
@@ -171,10 +204,16 @@ class RuntimeHost:
     pay it again. Streams are stepped in turn between tasks. Unloads after a long idle.
     """
 
-    def __init__(self, load: Callable[[], Any], installed: Callable[[], tuple[bool, str]],
-                 resources: Callable[[], tuple[bool, str]]) -> None:
+    def __init__(self, load: Callable[[str], Any], installed: Callable[[str], tuple[bool, str]],
+                 resources: Callable[[str], tuple[bool, str]]) -> None:
+        # One engine at a time: ``engine`` is the one loaded, loading or last asked for, and the loader and both
+        # checks are called with its name. ``exit_hook`` gives the call that ends the process (None when it may
+        # not): switching engines ends a process that holds a CUDA context, as an idle unload does, since only the
+        # process's end gives it back; without one the old runtime is dropped in place.
         self._load, self._installed, self._resources = load, installed, resources
         self.runtime: Any = None
+        self.engine = DEFAULT_PORTRAIT_ENGINE
+        self.exit_hook: Callable[[], Callable[[int], None] | None] = lambda: None
         self.status = "unloaded"
         self.message = ""
         self.last_used = time.monotonic()
@@ -229,9 +268,10 @@ class RuntimeHost:
         with self._lock:
             if self.status in {"warming", "ready", "exiting"}:
                 return
+            engine = self.engine
             try:
-                installed, why = self._installed()
-                fits, short = self._resources() if installed else (True, "")
+                installed, why = self._installed(engine)
+                fits, short = self._resources(engine) if installed else (True, "")
             except Exception as exc:  # noqa: BLE001 - a broken check is reported, never fatal to the service
                 logger.exception("Portrait load check failed")
                 self.status, self.message = "failed", f"The portrait load check failed ({type(exc).__name__})"
@@ -243,12 +283,12 @@ class RuntimeHost:
                 self.status, self.message = "short", short
                 return
             self.status, self.message = "warming", "The portrait model is loading"
-        self.submit(self._load_now)
+        self.submit(self._load_now, engine)
 
-    def _load_now(self) -> None:
+    def _load_now(self, engine: str) -> None:
         started = time.monotonic()
         try:
-            runtime = self._load()
+            runtime = self._load(engine)
         except Exception as exc:  # noqa: BLE001 - reported in /health; the next request retries
             logger.exception("Portrait model failed to load")
             with self._lock:
@@ -260,9 +300,12 @@ class RuntimeHost:
             self.last_used = time.monotonic()
         logger.info("Portrait model ready in %.1f s", time.monotonic() - started)
 
-    def get(self) -> Any:
-        """The ready runtime, or Unavailable (and a load is started when one can be)."""
+    def get(self, engine: str | None = None) -> Any:
+        """The ready runtime of ``engine`` (None: the current one), or Unavailable (and a load is started when one
+        can be)."""
         with self._lock:
+            if engine is not None and engine != self.engine:
+                self._switch(engine)
             if self.status == "ready":
                 self.last_used = time.monotonic()
                 return self.runtime
@@ -273,6 +316,34 @@ class RuntimeHost:
             code = {"missing": "model_missing", "short": "model_busy", "warming": "warming",
                     "exiting": "service_unreachable"}.get(self.status, "model_failed")
             raise Unavailable(code, self.message or "The portrait model is not ready")
+
+    def _switch(self, engine: str) -> None:
+        """Give up the current engine for ``engine`` (under the lock), or raise Unavailable while that cannot be."""
+        if self.status == "warming":
+            raise Unavailable("warming", f"The {self.engine} portrait engine is loading; {engine} loads after it")
+        if self.status == "exiting":
+            raise Unavailable("service_unreachable", "The portrait service is restarting")
+        if self._workers:
+            raise Unavailable("model_busy", f"A call is using the {self.engine} portrait engine")
+        restart = self.exit_hook() if self.runtime is not None or _cuda_initialized() else None
+        if restart is not None:
+            self.runtime = None
+            self.status, self.message = "exiting", f"The portrait service is restarting to load {engine}"
+            logger.info("Switching the portrait engine from %s to %s: exiting so its launcher starts it light",
+                        self.engine, engine)
+            restart(IDLE_EXIT_CODE)
+            raise Unavailable("service_unreachable", self.message)
+        logger.info("Switching the portrait engine from %s to %s", self.engine, engine)
+        dropped, self.runtime = self.runtime is not None, None
+        self.engine, self.status, self.message = engine, "unloaded", ""
+        if dropped:
+            with contextlib.suppress(Exception):
+                import gc
+
+                import torch
+
+                gc.collect()
+                torch.cuda.empty_cache()
 
     def ready_runtime(self) -> Any:
         """The loaded runtime, or None (read under the lock: an unload may be under way)."""
@@ -438,8 +509,9 @@ def render_preview(runtime: Any, portrait: Any, emotion: str, pcm: np.ndarray, s
     frames: list[bytes] = []
     stream = PortraitStream(_GivesWay(runtime.session(portrait, emotion), abort),
                             lambda frame: frames.append(frame.jpeg) if frame.output_id != TRANSITION_OUTPUT_ID else None,
-                            resample=runtime.resample,
-                            settings=StreamSettings(render_ahead_seconds=None))  # the whole clip, nothing plays it
+                            resample=runtime.resample,  # the whole clip, nothing plays it
+                            settings=dataclasses.replace(getattr(runtime, "stream_settings", None) or StreamSettings(),
+                                                         render_ahead_seconds=None))
     stream.phrase_start("preview", 0, "preview", sample_rate)
     stream.pcm("preview", 0, pcm)
     stream.phrase_done("preview")
@@ -468,9 +540,9 @@ def quality_level(value: Any) -> int:
         return 0
 
 
-def create_app(*, load: Callable[[], Any] = _default_load,
-               installed: Callable[[], tuple[bool, str]] = _default_installed,
-               resources: Callable[[], tuple[bool, str]] = _default_resources,
+def create_app(*, load: Callable[[str], Any] = _default_load,
+               installed: Callable[[str], tuple[bool, str]] = _default_installed,
+               resources: Callable[[str], tuple[bool, str]] = _default_resources,
                max_streams: int | None = None, lease_seconds: float = 6.0,
                idle_unload_seconds: float | None = None, preload: bool | None = None) -> FastAPI:
     """The service app; tests pass their own model loader and checks.
@@ -490,32 +562,55 @@ def create_app(*, load: Callable[[], Any] = _default_load,
     app.add_middleware(ModelServiceMiddleware)
     app.state.host, app.state.admission = host, admission
     app.state.request_exit = None
+    # Preloaded, the service stays loaded: an engine switch then happens in place, never by a restart that would
+    # preload the other engine again.
+    host.exit_hook = lambda: None if preload else app.state.request_exit
 
     @app.get("/health")
     def health() -> dict[str, Any]:
         from app.models.host_memory import available_commit_bytes
 
         free, commit = free_vram_gb(), available_commit_bytes()
-        return {"ok": True, "status": host.status, "message": host.message,
+        return {"ok": True, "engine": host.engine, "status": host.status, "message": host.message,
                 "streams": {"active": admission.active, "max": admission.max_streams},
                 "gpu": {"vram_free_bytes": int(free * 1024**3)} if free is not None else {},
                 "host": {"commit_free_bytes": commit} if commit is not None else {}}
+
+    @app.post("/portrait/unload")
+    def unload() -> dict[str, Any]:
+        """Unload the model now, as an idle unload does (owner request, 2026-11-22: the call panel's live-video
+        button turns it off). Never under a call's stream, nor mid-load; with a launcher the process exits, since
+        only that gives back its CUDA context."""
+        if admission.active:
+            return {"ok": False, "code": "model_busy", "message": "A call is using the portrait"}
+        if host.status == "warming":
+            return {"ok": False, "code": "warming", "message": "The portrait model is loading"}
+        restart = host.exit_hook()
+        if host.unload_if_idle(0.0, admission.active, exit_after=restart is not None):
+            logger.info("Unloaded the portrait model on request%s", "; exiting so its launcher starts the service light"
+                        if restart is not None else "")
+            if restart is not None:
+                restart(IDLE_EXIT_CODE)
+        return {"ok": True, "status": host.status}
 
     @app.post("/portrait/prepare")
     async def prepare(tenant: str = Form(..., min_length=1, max_length=200),  # noqa: B008
                       image_sha256: str = Form(..., min_length=64, max_length=64),  # noqa: B008
                       file: UploadFile = File(...),  # noqa: B008
-                      render_idle: bool = Form(True)) -> dict[str, Any]:  # noqa: B008
+                      render_idle: bool = Form(True),  # noqa: B008
+                      engine: str = Form(DEFAULT_PORTRAIT_ENGINE, max_length=40)) -> dict[str, Any]:  # noqa: B008
+        if engine not in PORTRAIT_ENGINES:
+            raise HTTPException(status_code=400, detail="unknown_engine")
         payload = await file.read(MAX_IMAGE_UPLOAD_BYTES + 1)
         if not payload or len(payload) > MAX_IMAGE_UPLOAD_BYTES:
             raise HTTPException(status_code=413 if payload else 400, detail="invalid_image")
         if hashlib.sha256(payload).hexdigest() != image_sha256.lower():
             raise HTTPException(status_code=400, detail="digest_mismatch")
         try:
-            runtime = host.get()
+            runtime = host.get(engine)
         except Unavailable as exc:
             return {"ok": False, "code": exc.code, "message": str(exc)}
-        key = portrait_key(tenant, image_sha256.lower())
+        key = portrait_key(tenant, image_sha256.lower(), engine)
         try:
             portrait = await asyncio.wrap_future(host.submit(runtime.prepare, key, payload))
         except PortraitImageError as exc:
@@ -526,6 +621,9 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             started = time.monotonic()
             try:
                 await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, 0))
+                if (find_blink := getattr(runtime, "find_blink", None)) is not None:
+                    # FlashHead: a blink from another silent render when the loop's has none; never in a call.
+                    await asyncio.wrap_future(host.submit(find_blink, portrait))
                 await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, 0))
             except Exception:  # noqa: BLE001 - the portrait is prepared; a call renders its idle loop itself
                 logger.warning("Portrait idle loop could not be rendered ahead of the call", exc_info=True)
@@ -598,7 +696,7 @@ def create_app(*, load: Callable[[], Any] = _default_load,
     def forget(tenant: str, image_sha256: str) -> dict[str, Any]:
         runtime = host.ready_runtime()
         if runtime is not None:
-            runtime.forget(portrait_key(tenant, image_sha256.lower()))
+            runtime.forget(portrait_key(tenant, image_sha256.lower(), host.engine))
         return {"ok": True}
 
     @app.websocket("/portrait/stream")
@@ -704,7 +802,8 @@ def create_app(*, load: Callable[[], Any] = _default_load,
             session = await asyncio.wrap_future(host.submit(runtime.session, portrait,
                                                             str(opened.get("emotion") or "neutral")))
             session.level = quality_level(opened.get("level"))
-            portrait_stream = PortraitStream(session, emit, resample=runtime.resample)
+            portrait_stream = PortraitStream(session, emit, resample=runtime.resample,
+                                             settings=getattr(runtime, "stream_settings", None))
             worker = StreamWorker(portrait_stream)
             host.attach(worker)
             tasks.append(asyncio.create_task(send_frames()))

@@ -8,6 +8,7 @@ import {
   storeLocalWorkspace,
   type AssistantContextState,
 } from './assistant-context-store';
+import { cameraShared, cameraShareTurnFields } from './camera-share';
 import type { DesktopTemporalCapture } from './desktop-temporal-capture';
 
 /** The route a chat message goes to: the chat route, or the context route with the tools' fields. */
@@ -29,7 +30,8 @@ type DesktopFrames = Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>>
  * context route's planning would hold the reply for many seconds. A turn
  * with a camera picture (companion 4.1) always goes to the chat route, the
  * only one that describes it; agent mode and the other tools sit out that
- * one turn.
+ * one turn. A shared camera only marks the turn `camera_shared` (after a
+ * glance, when the chat has no recent one); both routes take it.
  */
 export async function sendChatWithAssistantContext<T>(
   sessionId: string,
@@ -38,6 +40,9 @@ export async function sendChatWithAssistantContext<T>(
   { liveCallTurn = false }: { liveCallTurn?: boolean } = {},
 ): Promise<T> {
   adoptActiveSession(sessionId);
+  // A shared camera's turn takes the glance's description; a Show picture already speaks for the camera.
+  // Only a shared camera waits here: other turns go out in the same tick.
+  if (typeof body.camera_image !== 'string' && cameraShared()) body = { ...body, ...await cameraShareTurnFields(sessionId) };
   const context = assistantContextStore.getState();
   const { agentMode, researchMode, desktopShare, localWorkspace } = context;
   if (localWorkspace) storeLocalWorkspace(sessionId, localWorkspace);

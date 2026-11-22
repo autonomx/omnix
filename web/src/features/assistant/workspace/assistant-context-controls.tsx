@@ -13,6 +13,7 @@ import {
   useAssistantContext,
   type ResearchMode,
 } from './assistant-context-store';
+import { toggleCameraShare, useCameraShare } from './camera-share';
 import { shouldOfferResearchDowngrade } from './research-release-controller';
 import { emitOmnixEvent } from '../../../events/bus';
 
@@ -55,11 +56,13 @@ function ToolItem({ role, checked, disabled, className, onClick, title, descript
 
 /**
  * The composer's "+" menu (attachments, web research, agent mode, desktop
- * sharing, local folder), the active-tool summary, the deep-research page
+ * sharing, camera sharing, local folder), the active-tool summary, the deep-research page
  * budget and the research release fallback.
  */
 export function AssistantContextControls() {
   const context = useAssistantContext();
+  const cameraShare = useCameraShare().phase;
+  const cameraSharing = cameraShare === 'on' || cameraShare === 'opening';
   const [open, setOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -136,6 +139,7 @@ export function AssistantContextControls() {
           <div className="assistant-context-tool-menu-divider" role="separator" />
           <ToolItem role="menuitemcheckbox" checked={context.agentMode} title="Agent mode" description="Route every request through the Pi coding agent." onClick={toggleAgentMode} data={{ 'data-omnix-context-tool-agent': 'true' }} />
           <ToolItem role="menuitemcheckbox" checked={context.desktopShare !== null} title="Desktop" description="Share a live desktop view with the assistant." onClick={() => void toggleDesktopShare()} data={{ 'data-omnix-context-tool-desktop': 'true' }} />
+          <ToolItem role="menuitemcheckbox" checked={cameraSharing} title="Camera" description="Share your front camera so the assistant can see you." onClick={() => void toggleCameraShare()} data={{ 'data-omnix-context-tool-camera': 'true' }} />
           <ToolItem
             role="menuitemcheckbox"
             checked={context.localWorkspace !== null}

@@ -1,9 +1,8 @@
 """OpenAI-compatible desktop image resolver."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
-import os
 from urllib.parse import urlparse
 from typing import Any, Callable, Literal
 
@@ -72,6 +71,10 @@ _VISION_MODEL_HINTS = (
 # Names that select the Codex vision client in a model reference
 # (``codex:<model>``) or in ``OMNIX_VISION_PROVIDER``.
 _CODEX_REFERENCE_NAMES = frozenset({"codex", "chatgpt_codex"})
+# The same for the Claude CLI vision client (``claude_cli:haiku``).
+_CLAUDE_REFERENCE_NAMES = frozenset({"claude", "claude_cli"})
+# Chat providers that run a local OpenAI-compatible server: with no vision model set, the chat's own model looks.
+_LOCAL_CHAT_PROVIDERS = {"lmstudio": "http://localhost:1234", "llamacpp": "http://localhost:8180"}
 
 
 def _model_key(value: str | None) -> str | None:
@@ -81,9 +84,13 @@ def _model_key(value: str | None) -> str | None:
     parts = text.split(":", 2)
     if len(parts) == 3 and parts[0] == "llm":
         return parts[2] or None
-    if len(parts) == 2 and parts[0].casefold() in _CODEX_REFERENCE_NAMES:
+    if len(parts) == 2 and parts[0].casefold() in _CODEX_REFERENCE_NAMES | _CLAUDE_REFERENCE_NAMES:
         return parts[1] or None
     return text
+
+
+def _is_claude_model_ref(value: str | None) -> bool:
+    return (value or "").strip().casefold().startswith(("llm:claude_cli:", "claude_cli:", "claude:"))
 
 
 def _is_codex_model_ref(value: str | None) -> bool:
@@ -113,6 +120,25 @@ def _configured_codex_model() -> str:
         if model:
             return _model_key(model) or model
     return "gpt-5.6-sol"
+
+
+def _provider_config(name: str) -> dict[str, Any]:
+    configs = _settings_profile().get("providerConfigs")
+    config = configs.get(name) if isinstance(configs, dict) else None
+    return config if isinstance(config, dict) else {}
+
+
+def _configured_claude_model() -> str:
+    """The chat's Claude model when the chat runs on the Claude CLI, else the CLI's configured model."""
+    chat_model = _configured_chat_model()
+    model = chat_model if _is_claude_model_ref(chat_model) else str(_provider_config("claudeCli").get("model") or "")
+    return _model_key(model.strip()) or "haiku"
+
+
+def _configured_chat_model() -> str:
+    global_settings = _settings_profile().get("global")
+    models = global_settings.get("models") if isinstance(global_settings, dict) else None
+    return str(models.get("chat") or "").strip() if isinstance(models, dict) else ""
 
 
 def _configured_companion_vision_model() -> str:
@@ -158,6 +184,8 @@ class DesktopVisionClient:
             environment().get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
         )
         self.client = client
+        # Set when this client is the chat's own local model (no vision model was set; see default_desktop_vision_client).
+        self.follows_chat = False
 
     def describe(
         self,
@@ -170,8 +198,11 @@ class DesktopVisionClient:
         history_timestamps: list[float] | None = None,
         capture_mode: DesktopCaptureMode = "single",
     ) -> AssistantContextItem:
-        if _is_codex_model_ref(model_id):
-            return CodexDesktopVisionClient(default_model=model_id).describe(
+        if _is_codex_model_ref(model_id) or _is_claude_model_ref(model_id):
+            reference_client = (
+                CodexDesktopVisionClient if _is_codex_model_ref(model_id) else ClaudeCliDesktopVisionClient
+            )
+            return reference_client(default_model=model_id).describe(
                 image_data_url,
                 question,
                 model_id,
@@ -403,16 +434,20 @@ class DesktopVisionClient:
         return ""
 
 
-class CodexDesktopVisionClient:
-    """Resolve desktop frames through the authenticated Codex app-server.
+class ProviderVisionClient:
+    """Resolve desktop frames through an Omnix LLM provider that takes images itself (its CLI's own sign-in).
 
-    Codex's app-server accepts the same data URLs used by chat attachments, but
-    it is a remote model boundary. The Desktop Companion preflight therefore
-    exposes a ``codex://`` endpoint so the existing explicit remote-consent
-    policy remains in force.
+    The provider is a remote model boundary: ``base_url`` is a pseudo-endpoint
+    (``codex://``, ``claude-cli://``) that ``is_remote_vision_endpoint`` reads as
+    remote, so the explicit remote-consent policy stays in force.
     """
 
-    base_url = "codex://app-server"
+    base_url = ""
+    provider_name = ""
+    provider_label = ""
+    fallback_model = ""
+    # Extra options for the provider's chat_completion.
+    completion_options: dict[str, Any] = {}
 
     def __init__(
         self,
@@ -425,21 +460,24 @@ class CodexDesktopVisionClient:
             default_model
             or environment().get("OMNIX_VISION_MODEL")
             or _configured_companion_vision_model()
-            or _configured_codex_model()
+            or self._configured_model()
         )
-        self.default_model = _model_key(configured_model) or "gpt-5.6-sol"
+        self.default_model = _model_key(configured_model) or self.fallback_model
         self.timeout_seconds = timeout_seconds or float(
             environment().get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
         )
         self._provider_factory = provider_factory or self._default_provider
 
     @staticmethod
-    def _default_provider() -> Any:
+    def _configured_model() -> str:
+        return ""
+
+    def _default_provider(self) -> Any:
         from app.providers.service import get_provider
 
-        provider = get_provider("chatgpt_codex")
+        provider = get_provider(self.provider_name)
         if provider is None:
-            raise RuntimeError("ChatGPT Codex provider is unavailable")
+            raise RuntimeError(f"{self.provider_label} provider is unavailable")
         return provider
 
     def describe(
@@ -488,7 +526,7 @@ class CodexDesktopVisionClient:
                 content=content[:3000],
                 metadata={
                     "model": model,
-                    "provider": "chatgpt_codex",
+                    "provider": self.provider_name,
                     "base_url": self.base_url,
                     "capture_mode": capture_mode,
                     "fallback_mode": fallback_mode,
@@ -531,11 +569,44 @@ class CodexDesktopVisionClient:
             model=model,
             stream=False,
             request_timeout_seconds=self.timeout_seconds,
+            **self.completion_options,
         )
         content = " ".join(str(getattr(response, "content", "") or "").split()).strip()
         if not content:
             raise RuntimeError("vision provider returned an empty observation")
         return content
+
+
+class CodexDesktopVisionClient(ProviderVisionClient):
+    """Resolve desktop frames through the authenticated Codex app-server.
+
+    Codex's app-server accepts the same data URLs used by chat attachments.
+    """
+
+    base_url = "codex://app-server"
+    provider_name = "chatgpt_codex"
+    provider_label = "ChatGPT Codex"
+    fallback_model = "gpt-5.6-sol"
+
+    @staticmethod
+    def _configured_model() -> str:
+        return _configured_codex_model()
+
+
+class ClaudeCliDesktopVisionClient(ProviderVisionClient):
+    """Resolve desktop frames through the local Claude Code CLI, which sends the image to Claude with its own sign-in."""
+
+    base_url = "claude-cli://local"
+    provider_name = "claude_cli"
+    provider_label = "Claude CLI"
+    fallback_model = "haiku"
+    # Describing a picture needs no thinking first: Haiku 4.5 thinks at any effort, about 2.2 s to its first word
+    # against 0.55 s without, and a call's turn waits on the description.
+    completion_options: dict[str, Any] = {"thinking": False}
+
+    @staticmethod
+    def _configured_model() -> str:
+        return _configured_claude_model()
 
 
 def is_remote_vision_endpoint(value: str) -> bool:
@@ -545,27 +616,49 @@ def is_remote_vision_endpoint(value: str) -> bool:
     return hostname not in {"", "localhost", "127.0.0.1", "::1"} and not hostname.startswith("127.")
 
 
-def default_desktop_vision_client() -> DesktopVisionClient | CodexDesktopVisionClient:
-    """Select the configured vision boundary, including Codex/Luna.
+def default_desktop_vision_client() -> DesktopVisionClient | ProviderVisionClient:
+    """Select the configured vision boundary.
 
-    A Codex model selected in Desktop Companion settings, explicitly selected
-    through ``OMNIX_VISION_MODEL``, or configured as the active LLM is routed to
-    Codex. The companion's remote-consent check still decides whether images may
-    actually be sent there.
+    A vision model set explicitly (``OMNIX_VISION_*`` or the Desktop Companion's
+    vision model) is used as set: a Codex or Claude reference
+    (``codex:<model>``, ``claude_cli:<model>``) goes through that provider's CLI,
+    anything else to the OpenAI-compatible endpoint. With none set, the chat's
+    own model looks (owner, 2026-11-22): Codex and the Claude CLI through their
+    CLIs, LM Studio and llama.cpp through their local server with the chat's
+    model. The companion's and the call camera's remote-consent check still
+    decides whether images may actually be sent there.
     """
 
     provider = environment().get("OMNIX_VISION_PROVIDER", "").strip().casefold()
     environment_model = environment().get("OMNIX_VISION_MODEL", "").strip()
-    companion_model = _configured_companion_vision_model()
-    configured_model = environment_model or companion_model
-    use_codex = provider in _CODEX_REFERENCE_NAMES
-    use_codex = use_codex or _is_codex_model_ref(configured_model)
-    # An explicit local Companion model takes precedence over the chat model.
-    # Only inherit the active LLM provider when Companion has no model override.
-    if not configured_model:
-        from app.providers.catalog import DESKTOP_VISION, provider_supports
-
-        use_codex = use_codex or provider_supports(_configured_llm_provider(), DESKTOP_VISION)
-    if use_codex:
+    configured_model = environment_model or _configured_companion_vision_model()
+    if provider in _CODEX_REFERENCE_NAMES or _is_codex_model_ref(configured_model):
         return CodexDesktopVisionClient(default_model=configured_model or None)
-    return DesktopVisionClient()
+    if provider in _CLAUDE_REFERENCE_NAMES or _is_claude_model_ref(configured_model):
+        return ClaudeCliDesktopVisionClient(default_model=configured_model or None)
+    # An explicit local vision model or endpoint takes precedence over the chat model.
+    if configured_model or provider or environment().get("OMNIX_VISION_BASE_URL", "").strip():
+        return DesktopVisionClient()
+    return _chat_model_vision_client()
+
+
+def _chat_model_vision_client() -> DesktopVisionClient | ProviderVisionClient:
+    """The chat's own model as the vision model; an unknown chat provider leaves the default local endpoint."""
+    chat_provider = _configured_llm_provider()
+    if chat_provider in _CODEX_REFERENCE_NAMES:
+        return CodexDesktopVisionClient()
+    if chat_provider in _CLAUDE_REFERENCE_NAMES:
+        return ClaudeCliDesktopVisionClient()
+    default_base = _LOCAL_CHAT_PROVIDERS.get(chat_provider)
+    if default_base is None:
+        return DesktopVisionClient()
+    config = _provider_config(chat_provider)
+    base = str(config.get("baseUrl") or config.get("base_url") or default_base).strip().rstrip("/")
+    chat_model = _configured_chat_model()
+    model = chat_model if chat_model.startswith(f"llm:{chat_provider}:") else str(config.get("model") or "")
+    client = DesktopVisionClient(
+        base_url=base if base.endswith("/v1") else f"{base}/v1",
+        default_model=_model_key(model) or None,
+    )
+    client.follows_chat = True
+    return client

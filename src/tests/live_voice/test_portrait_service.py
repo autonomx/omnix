@@ -51,7 +51,8 @@ class FakeSession:
 class FakeRuntime:
     resample = staticmethod(linear_resample)
 
-    def __init__(self) -> None:
+    def __init__(self, engine: str = "float") -> None:
+        self.engine = engine
         self.portraits: dict[str, object] = {}
         self.sessions: list[FakeSession] = []
 
@@ -97,17 +98,17 @@ def _client(app, token: str | None) -> TestClient:
 
 
 def _ready_app(runtime: FakeRuntime, **options):
-    app = portrait_server.create_app(load=lambda: runtime, installed=lambda: (True, ""),
-                                     resources=lambda: (True, ""), preload=False, **options)
+    app = portrait_server.create_app(load=lambda _engine: runtime, installed=lambda _engine: (True, ""),
+                                     resources=lambda _engine: (True, ""), preload=False, **options)
     app.state.host.ensure_loading()
     if wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01):
         return app
     raise AssertionError("the fake runtime did not load")
 
 
-def _prepare(client: TestClient, tenant: str = "tenant-a", image: bytes = IMAGE) -> dict:
-    return client.post("/portrait/prepare", data={"tenant": tenant, "image_sha256": hashlib.sha256(image).hexdigest()},
-                       files={"file": ("portrait.png", io.BytesIO(image))}).json()
+def _prepare(client: TestClient, tenant: str = "tenant-a", image: bytes = IMAGE, engine: str | None = None) -> dict:
+    data = {"tenant": tenant, "image_sha256": hashlib.sha256(image).hexdigest(), **({"engine": engine} if engine else {})}
+    return client.post("/portrait/prepare", data=data, files={"file": ("portrait.png", io.BytesIO(image))}).json()
 
 
 class CountingRuntime(FakeRuntime):
@@ -135,6 +136,21 @@ def test_preparing_a_portrait_renders_its_idle_loop_so_a_call_finds_it_ready(tok
         assert _prepare(client)["ok"] is True
 
     assert runtime.rendered == ["idle-l0", "blink-l0"]
+
+
+class BlinkSearchingRuntime(CountingRuntime):
+    """As flashhead_runtime.FlashHeadRuntime: looks for a blink in more silent renders when asked."""
+
+    def find_blink(self, portrait: object) -> None:
+        self.rendered.append("find-blink")
+
+
+def test_preparing_a_flashhead_portrait_looks_for_its_blink_before_its_twins(token: str) -> None:
+    # Owner report 2026-11-21: FlashHead's idle loop looked like a still image; its loop render often has no blink.
+    runtime = BlinkSearchingRuntime()
+    with _client(_ready_app(runtime), token) as client:
+        assert _prepare(client)["ok"] is True
+    assert runtime.rendered == ["idle-l0", "find-blink", "blink-l0"]
 
 
 def test_between_speakers_neither_prepare_nor_idle_renders_a_loop_when_asked_not_to(token: str) -> None:
@@ -194,8 +210,8 @@ def _frames(websocket, count: int) -> tuple[list[tuple[dict, bytes]], list[tuple
 
 
 def test_health_is_public_and_says_why_the_model_is_not_ready(token: str) -> None:
-    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (False, "Install float"),
-                                     resources=lambda: (True, ""), preload=False)
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda _engine: (False, "Install float"),
+                                     resources=lambda _engine: (True, ""), preload=False)
     client = _client(app, None)
     assert client.get("/health").json()["status"] == "unloaded"
     authed = _client(app, token)
@@ -206,17 +222,17 @@ def test_health_is_public_and_says_why_the_model_is_not_ready(token: str) -> Non
 
 
 def test_a_short_gpu_is_reported_and_not_loaded(token: str) -> None:
-    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""),
-                                     resources=lambda: (False, "needs 2.5 GB"), preload=False)
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda _engine: (True, ""),
+                                     resources=lambda _engine: (False, "needs 2.5 GB"), preload=False)
     assert _prepare(_client(app, token))["code"] == "model_busy"
     assert app.state.host.status == "short"
 
 
 def test_a_failing_load_check_is_reported_not_fatal(token: str) -> None:
-    def broken() -> tuple[bool, str]:
+    def broken(_engine: str) -> tuple[bool, str]:
         raise ModuleNotFoundError("httpx")
 
-    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=broken, preload=True)
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda _engine: (True, ""), resources=broken, preload=True)
     with _client(app, token) as client:  # runs the startup hook, which starts loading
         health = client.get("/health").json()
     assert health["status"] == "failed" and "ModuleNotFoundError" in health["message"]
@@ -326,7 +342,7 @@ def test_leases_expire_without_heartbeats() -> None:
 
 
 def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
-    host = portrait_server.RuntimeHost(FakeRuntime, lambda: (True, ""), lambda: (True, ""))
+    host = portrait_server.RuntimeHost(FakeRuntime, lambda _engine: (True, ""), lambda _engine: (True, ""))
     host.ensure_loading()
     wait_until(lambda: host.status == "ready", bool, timeout=2, interval=0.01)
     assert not host.unload_if_idle(0.0, active_streams=1)
@@ -336,7 +352,7 @@ def test_an_idle_model_unloads_only_with_no_stream_open() -> None:
 def test_the_model_loads_on_demand(monkeypatch, token: str) -> None:
     monkeypatch.setattr(portrait_server, "free_vram_gb", lambda: 8.0)
     monkeypatch.delenv("OMNIX_PORTRAIT_PRELOAD", raising=False)
-    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=lambda: (True, ""))
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda _engine: (True, ""), resources=lambda _engine: (True, ""))
     with _client(app, token) as client:  # runs the startup hook: nothing loads
         assert client.get("/health").json()["status"] == "unloaded"
         assert _prepare(client).get("code") in {"warming", None}  # a call's prepare starts the load
@@ -358,7 +374,7 @@ def test_the_load_check_never_asks_cuda(monkeypatch) -> None:
                                                                   is_initialized=lambda: False))
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setattr(portrait_server, "free_vram_gb", lambda: 1.0)
-    fits, why = portrait_server._default_resources()
+    fits, why = portrait_server._default_resources("float")
     assert not fits and "VRAM" in why
 
 
@@ -373,8 +389,33 @@ def test_an_unloaded_idle_model_asks_its_launcher_to_start_the_service_again_lig
     assert exits == [IDLE_EXIT_CODE] and app.state.host.status == "exiting"  # nothing loads before it exits
 
 
+def test_unload_on_request_exits_light_but_never_under_a_call_or_mid_load(token: str, monkeypatch) -> None:
+    from app.runtime.process_control import IDLE_EXIT_CODE
+
+    app = _ready_app(FakeRuntime())
+    exits: list[int] = []
+    app.state.request_exit = exits.append
+    with _client(app, token) as client:
+        with monkeypatch.context() as patched:
+            patched.setattr(portrait_server.Admission, "active", property(lambda _self: 1))  # a call's stream
+            assert client.post("/portrait/unload").json()["code"] == "model_busy"
+        app.state.host.status = "warming"
+        assert client.post("/portrait/unload").json()["code"] == "warming"
+        app.state.host.status = "ready"
+        assert client.post("/portrait/unload").json() == {"ok": True, "status": "exiting"}
+    assert exits == [IDLE_EXIT_CODE] and app.state.host.runtime is None
+
+
+def test_unload_without_a_launcher_drops_the_model_in_place(token: str) -> None:
+    app = _ready_app(FakeRuntime())
+    with _client(app, token) as client:
+        assert client.post("/portrait/unload").json() == {"ok": True, "status": "unloaded"}
+        assert client.post("/portrait/unload").json() == {"ok": True, "status": "unloaded"}  # nothing loaded: a no-op
+    assert app.state.host.runtime is None
+
+
 def test_an_exiting_service_loads_nothing_and_says_it_is_restarting() -> None:
-    host = portrait_server.RuntimeHost(FakeRuntime, lambda: (True, ""), lambda: (True, ""))
+    host = portrait_server.RuntimeHost(FakeRuntime, lambda _engine: (True, ""), lambda _engine: (True, ""))
     host.ensure_loading()
     wait_until(lambda: host.status == "ready", bool, timeout=2, interval=0.01)
     assert host.unload_if_idle(0.0, active_streams=0, exit_after=True) and host.status == "exiting"
@@ -387,10 +428,10 @@ def test_an_exiting_service_loads_nothing_and_says_it_is_restarting() -> None:
 
 
 def test_a_failed_load_that_woke_cuda_exits_once_idle(monkeypatch) -> None:
-    def broken() -> object:
+    def broken(_engine: str) -> object:
         raise RuntimeError("no")
 
-    host = portrait_server.RuntimeHost(broken, lambda: (True, ""), lambda: (True, ""))
+    host = portrait_server.RuntimeHost(broken, lambda _engine: (True, ""), lambda _engine: (True, ""))
     host.ensure_loading()
     wait_until(lambda: host.status == "failed", bool, timeout=2, interval=0.01)
     monkeypatch.setattr(portrait_server, "_cuda_initialized", lambda: False)
@@ -401,7 +442,7 @@ def test_a_failed_load_that_woke_cuda_exits_once_idle(monkeypatch) -> None:
 
 
 def test_a_preloaded_model_stays_loaded(token: str) -> None:
-    app = portrait_server.create_app(load=FakeRuntime, installed=lambda: (True, ""), resources=lambda: (True, ""),
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda _engine: (True, ""), resources=lambda _engine: (True, ""),
                                      idle_unload_seconds=0.0, preload=True)
     exits: list[int] = []
     app.state.request_exit = exits.append
@@ -554,3 +595,75 @@ def test_a_loop_whose_blink_was_never_rendered_is_not_ready_and_a_rendered_one_s
     body = idle(rendered_only="true")
     assert body["ok"] is True and len(body["blink"]) == 3
     assert runtime.rendered == []
+
+
+def _loaded_switching_app(monkeypatch, **options):
+    monkeypatch.setattr(portrait_server, "_cuda_initialized", lambda: False)
+    app = portrait_server.create_app(load=FakeRuntime, installed=lambda _engine: (True, ""),
+                                     resources=lambda _engine: (True, ""), **options)
+    app.state.host.ensure_loading()
+    wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01)
+    return app
+
+
+def test_float_keys_are_unchanged_and_each_engine_keys_its_own_encodings() -> None:
+    from app.models.catalog import load
+
+    revision = load().model("float-code").revision
+    before = hashlib.sha256(f"t\x00{IMAGE_SHA}\x00{revision}".encode()).hexdigest()  # the key before two engines
+    assert portrait_server.portrait_key("t", IMAGE_SHA) == portrait_server.portrait_key("t", IMAGE_SHA, "float") == before
+    assert portrait_server.portrait_key("t", IMAGE_SHA, "flashhead-lite") != before
+
+
+def test_an_unknown_engine_is_refused(token: str) -> None:
+    app = _ready_app(FakeRuntime())
+    response = _client(app, token).post("/portrait/prepare", data={"tenant": "t", "image_sha256": IMAGE_SHA,
+                                                                   "engine": "nope"},
+                                        files={"file": ("p.png", io.BytesIO(IMAGE))})
+    assert response.status_code == 400  # the service middleware hides the detail ("unknown_engine")
+
+
+def test_the_other_engine_loads_in_place_when_the_service_may_not_exit(monkeypatch, token: str) -> None:
+    app = _loaded_switching_app(monkeypatch, preload=False)
+    client = _client(app, token)
+    assert _prepare(client)["ok"] is True and app.state.host.runtime.engine == "float"
+    assert _prepare(client, engine="flashhead-lite").get("code") in {"warming", None}
+    wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01)
+    assert _prepare(client, engine="flashhead-lite")["ok"] is True
+    assert app.state.host.runtime.engine == "flashhead-lite" and client.get("/health").json()["engine"] == "flashhead-lite"
+    assert _prepare(client).get("code") in {"warming", None}  # no engine named: FLOAT, as before there were two
+    wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01)
+    assert app.state.host.runtime.engine == "float"
+
+
+def test_a_service_holding_cuda_exits_to_switch_engines(monkeypatch, token: str) -> None:
+    from app.runtime.process_control import IDLE_EXIT_CODE
+
+    app = _loaded_switching_app(monkeypatch, preload=False)
+    exits: list[int] = []
+    app.state.request_exit = exits.append
+    client = _client(app, token)
+    assert _prepare(client, engine="flashhead-lite")["code"] == "service_unreachable"  # the gateway waits it out
+    assert exits == [IDLE_EXIT_CODE] and app.state.host.status == "exiting" and app.state.host.runtime is None
+    assert _prepare(client)["code"] == "service_unreachable"  # nothing loads before it exits
+
+
+def test_a_preloaded_service_switches_in_place_never_by_a_restart(monkeypatch, token: str) -> None:
+    app = _loaded_switching_app(monkeypatch, preload=True)
+    exits: list[int] = []
+    app.state.request_exit = exits.append
+    assert _prepare(_client(app, token), engine="flashhead-lite").get("code") in {"warming", None}
+    wait_until(lambda: app.state.host.status == "ready", bool, timeout=2, interval=0.01)
+    assert exits == [] and app.state.host.runtime.engine == "flashhead-lite"
+
+
+def test_engines_do_not_switch_under_a_call_or_a_load(monkeypatch, token: str) -> None:
+    app = _loaded_switching_app(monkeypatch, preload=False)
+    client = _client(app, token)
+    host = app.state.host
+    host._workers.append(SimpleNamespace(step=lambda: None))
+    assert _prepare(client, engine="flashhead-lite")["code"] == "model_busy"
+    host._workers.clear()
+    host.status = "warming"
+    assert _prepare(client, engine="flashhead-lite")["code"] == "warming"
+    assert host.engine == "float"

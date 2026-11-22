@@ -7,6 +7,7 @@ import {
   characterAvatarAssetUrl,
   useLiveAvatar,
 } from './liveCharacterAvatarBridge';
+import { CameraSelfView } from './CameraShare';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
 import { AvatarLoadingNotice } from './portrait/LivePortraitCanvas';
 import { MemberPortrait } from './portrait/MemberPortrait';
@@ -81,6 +82,7 @@ export function LiveCallVisual({ voiceMode, thinking, runtimeLoading = false }: 
       )}
       {notice ? <p className="assistant-live-portrait-notice" role="status">{notice}</p> : null}
       {!notice && runtimeLoading && !showAvatar ? <AvatarLoadingNotice /> : null}
+      <CameraSelfView />
     </div>
   );
 }

@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.providers.desktop_vision import (
-    CodexDesktopVisionClient,
+    ProviderVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,
 )
@@ -34,7 +34,7 @@ from .observation import (
 
 ObservationRuntimeStatus = Literal["completed", "deferred", "suppressed", "error"]
 Clock = Callable[[], float]
-VisionClientFactory = Callable[[], DesktopVisionClient | CodexDesktopVisionClient]
+VisionClientFactory = Callable[[], DesktopVisionClient | ProviderVisionClient]
 
 
 class DesktopCompanionObserveRequest(BaseModel):

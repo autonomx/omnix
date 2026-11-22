@@ -1643,6 +1643,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/camera/glance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Camera Glance
+         * @description A frame from the person's shared camera, described in the background for their next turn.
+         */
+        post: operations["post_camera_glance_api_chat_sessions__session_id__camera_glance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/interaction": {
         parameters: {
             query?: never;
@@ -2912,7 +2932,8 @@ export interface paths {
         put?: never;
         /** Portrait Load */
         post: operations["portrait_load_api_tts_live_call_portrait_load_post"];
-        delete?: never;
+        /** Portrait Unload */
+        delete: operations["portrait_unload_api_tts_live_call_portrait_load_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3776,6 +3797,11 @@ export interface components {
              */
             allow_research_downgrade?: boolean;
             /**
+             * Camera Shared
+             * @default false
+             */
+            camera_shared?: boolean;
+            /**
              * Coding Approval Policy
              * @default ask_sensitive
              * @enum {string}
@@ -4571,6 +4597,25 @@ export interface components {
             reason: "ready" | "vision_not_configured" | "remote_vision_not_allowed" | "vision_unavailable";
             /** Remote */
             remote: boolean;
+        };
+        /**
+         * CameraGlanceRequest
+         * @description One frame from the person's shared camera (camera share). Only its description is kept.
+         */
+        CameraGlanceRequest: {
+            /** Image */
+            image: string;
+        };
+        /**
+         * CameraGlanceResult
+         * @description Whether the frame is being described; it is described in the background and joins the next turn.
+         */
+        CameraGlanceResult: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "in_progress" | "vision_not_configured" | "remote_vision_not_allowed" | "vision_unavailable";
         };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
@@ -7705,6 +7750,11 @@ export interface components {
         };
         /** LiveSpeculationRequest */
         LiveSpeculationRequest: {
+            /**
+             * Camera Shared
+             * @default false
+             */
+            camera_shared?: boolean;
             /** Content */
             content: string;
             /** Model Id */
@@ -8612,6 +8662,21 @@ export interface components {
              * @default 0
              */
             sample_rate: number;
+        };
+        /** PortraitUnloadResponse */
+        PortraitUnloadResponse: {
+            /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Ok */
+            ok: boolean;
         };
         /** PresencePolicyValues */
         PresencePolicyValues: {
@@ -14400,6 +14465,41 @@ export interface operations {
             };
         };
     };
+    post_camera_glance_api_chat_sessions__session_id__camera_glance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CameraGlanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraGlanceResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_session_interaction_api_chat_sessions__session_id__interaction_get: {
         parameters: {
             query?: never;
@@ -14504,6 +14604,7 @@ export interface operations {
                 initiative_reason?: string;
                 state_summary?: string | null;
                 scene_talk_switched_off?: boolean;
+                camera_shared?: boolean;
             };
             header?: never;
             path: {
@@ -17160,6 +17261,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portrait_unload_api_tts_live_call_portrait_load_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortraitUnloadResponse"];
                 };
             };
         };

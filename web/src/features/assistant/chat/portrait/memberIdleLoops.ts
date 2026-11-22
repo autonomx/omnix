@@ -18,6 +18,8 @@ let loops = new Map<string, { revision: string; loop: MemberIdleLoop }>();
 // Members (at a pack revision) asked for, or refused for good (not a portrait, not on the call); a busy service may be
 // asked again.
 const asked = new Set<string>();
+// Guests whose loops "Load live video" has had rendered (or tried to), so a second button on screen does not again.
+const rendered = new Set<string>();
 const listeners = new Set<() => void>();
 let version = 0;
 
@@ -67,14 +69,15 @@ export function rememberMemberLoop(chatSessionId: string, characterId: string, l
 }
 
 /**
- * Ask the gateway for a member's loop, once (again only after a busy refusal); `speakerId` is null for the chat's
- * own character. A refusal leaves the member's picture in its tile.
+ * Ask the gateway for a member's loop, once (again only after a busy refusal, or with `again` when the loop has just
+ * been rendered); `speakerId` is null for the chat's own character. A refusal leaves the member's picture in its tile.
  */
 export async function loadMemberLoop(
-  chatSessionId: string, characterId: string, speakerId: string | null, revision = '',
+  chatSessionId: string, characterId: string, speakerId: string | null, revision = '', { again = false } = {},
 ): Promise<void> {
   forChat(chatSessionId);
   const key = askKey(characterId, revision);
+  if (again) asked.delete(key);
   if (known(characterId, revision) || asked.has(key)) return;
   asked.add(key);
   try {
@@ -95,6 +98,25 @@ export async function loadMemberLoop(
   }
 }
 
+/**
+ * Claims a guest's loop for rendering before the call: true once per member and pack revision in the chat, so only
+ * one caller has the service render it. The gateway hands out only rendered loops, and a guest's is otherwise first
+ * rendered by its own turn.
+ */
+export function claimGuestRender(chatSessionId: string, characterId: string, revision = ''): boolean {
+  forChat(chatSessionId);
+  const key = askKey(characterId, revision);
+  if (known(characterId, revision) || rendered.has(key)) return false;
+  rendered.add(key);
+  return true;
+}
+
+/** Whether `claimGuestRender` would still claim this guest, without claiming it (the load's progress counts it). */
+export function guestRenderPending(chatSessionId: string, characterId: string, revision = ''): boolean {
+  if (sessionId !== chatSessionId) return true;
+  return !known(characterId, revision) && !rendered.has(askKey(characterId, revision));
+}
+
 function decode(base64: string): Uint8Array<ArrayBuffer> {
   const text = atob(base64);
   const bytes = new Uint8Array(text.length);
@@ -112,6 +134,7 @@ export function resetMemberLoops(): void {
   loops.forEach((entry) => revoke(entry.loop));
   loops = new Map();
   asked.clear();
+  rendered.clear();
   sessionId = null;
   notify();
 }

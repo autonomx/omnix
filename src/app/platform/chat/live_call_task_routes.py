@@ -6,17 +6,20 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.platform.chat.live_call_tasks import (
     CallTask, CallTaskList, InitiativeCandidate, call_proposal_message, cancel_call_task, initiative_candidate,
     list_call_tasks, proposal_button_allowed,
 )
+from app.platform.chat.live_call_camera import CAMERA_IMAGE_MAX_CHARS
+from app.platform.chat.models import _normalize_chat_image_data_url
 from .live_call_open_loops import open_loop_candidate
 
 LIVE_CALL_TASKS_PATH = "/api/chat/sessions/{session_id}/live-call/tasks"
 LIVE_CALL_INITIATIVE_CANDIDATE_PATH = "/api/chat/sessions/{session_id}/live-call/initiative-candidate"
 LIVE_CALL_CAMERA_PATH = "/api/chat/sessions/{session_id}/live-call/camera"
+CAMERA_GLANCE_PATH = "/api/chat/sessions/{session_id}/camera/glance"
 
 
 class CameraAvailability(BaseModel):
@@ -25,6 +28,29 @@ class CameraAvailability(BaseModel):
     available: bool
     remote: bool
     reason: Literal["ready", "vision_not_configured", "remote_vision_not_allowed", "vision_unavailable"]
+
+
+class CameraGlanceRequest(BaseModel):
+    """One frame from the person's shared camera (camera share). Only its description is kept."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image: str = Field(max_length=CAMERA_IMAGE_MAX_CHARS)
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, value: str) -> str:
+        image = _normalize_chat_image_data_url(value)
+        if image is None:
+            raise ValueError("image must be a JPEG, PNG or WebP data URL")
+        return image
+
+
+class CameraGlanceResult(BaseModel):
+    """Whether the frame is being described; it is described in the background and joins the next turn."""
+
+    status: Literal["started", "in_progress", "vision_not_configured", "remote_vision_not_allowed",
+                    "vision_unavailable"]
 
 
 class CallProposalDecisionRequest(BaseModel):
@@ -133,8 +159,22 @@ def register_live_call_task_routes(router: APIRouter, *, chat_store_factory: Cal
 
         return await asyncio.to_thread(read)
 
+    @router.post(CAMERA_GLANCE_PATH, response_model=CameraGlanceResult)
+    async def post_camera_glance(session_id: str, request: CameraGlanceRequest) -> CameraGlanceResult:
+        """A frame from the person's shared camera, described in the background for their next turn."""
+        from app.platform.chat.camera_glance import begin_glance
+
+        def start() -> CameraGlanceResult:
+            _session(session_id)
+            return CameraGlanceResult(status=begin_glance(session_id, request.image))
+
+        return await asyncio.to_thread(start)
+
 
 __all__ = [
+    "CAMERA_GLANCE_PATH",
+    "CameraGlanceRequest",
+    "CameraGlanceResult",
     "LIVE_CALL_CAMERA_PATH",
     "LIVE_CALL_INITIATIVE_CANDIDATE_PATH",
     "LIVE_CALL_TASKS_PATH",

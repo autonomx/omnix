@@ -264,6 +264,61 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert re.fullmatch(r"spec-[0-9a-f]{32}", generation_id)
 
 
+def test_a_shared_cameras_early_reply_takes_the_glance_and_keeps_its_description(monkeypatch) -> None:
+    # Camera share: the early reply is written with the glance's description, and accepting it keeps the description
+    # on the person's message like a turn does.
+    from app.platform.chat.camera_glance import begin_glance, camera_share_look, reset_camera_glances_for_tests
+    from tests.chat.test_live_call_camera import IMAGE, LOCAL, FakeVision
+
+    speculation.clear_live_speculation_session_cache()
+    reset_camera_glances_for_tests()
+    contexts: list[list[dict]] = []
+    recorded: list[dict] = []
+
+    class _Store(_FakeStore):
+        def build_provider_prompt(self, session, user_message, context_items):
+            contexts.append(list(context_items))
+            return super().build_provider_prompt(session, user_message, context_items)
+
+        def update_user_message_metadata(self, *, session_id, message_id, metadata):
+            recorded.append({"session_id": session_id, "message_id": message_id, **metadata})
+
+    store = _Store()
+    monkeypatch.setattr(provider_service, "get_provider", lambda _provider_id: _FakeProvider())
+    app = FastAPI()
+    include_router_registrar(app, speculation.register_live_chat_speculation_routes, chat_store_factory=lambda: store)
+    client = TestClient(app)
+    try:
+        begin_glance("session-1", IMAGE, client_factory=lambda: FakeVision(reply="They are waving."),
+                     assistant_settings=lambda: LOCAL)
+        assert camera_share_look("session-1", wait_seconds=2).snapshot is not None
+
+        shared = client.post(
+            "/api/live/speculation/sessions/session-1/stream",
+            json={"content": "Can you see me now", "segment_id": "segment-1", "source_sequence": 0,
+                  "camera_shared": True},
+        )
+        unshared = client.post(
+            "/api/live/speculation/sessions/session-1/stream",
+            json={"content": "Tell me a story", "segment_id": "segment-2", "source_sequence": 0},
+        )
+        assert shared.status_code == 200 and unshared.status_code == 200
+        generation_id = shared.headers["x-omnix-speculation-generation-id"]
+        accepted = client.post(
+            f"/api/live/speculation/sessions/session-1/{generation_id}/accept",
+            json={"final_text": "can you see me now"},
+        )
+    finally:
+        reset_camera_glances_for_tests()
+
+    assert accepted.status_code == 200
+    assert [item["content"] for item in contexts[0]] == ["They are waving."]
+    assert contexts[1] == []
+    (snapshot,) = recorded
+    assert snapshot["message_id"] == "accepted-user"
+    assert snapshot["camera_snapshot"]["description"] == "They are waving."
+
+
 def test_primed_session_avoids_speculation_reload(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     store = _FakeStore()

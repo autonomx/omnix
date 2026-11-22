@@ -69,6 +69,8 @@ class AssistantContextChatRequest(BaseModel):
     live_repair: LiveConversationRepairContext | None = None
     # The reply widget this message answers; validated at admission (chat generative UI).
     ui_action: ChatUiAction | None = None
+    # The person shares their front camera (camera share): the turn takes the newest glance's description.
+    camera_shared: bool = False
 
     @model_validator(mode="before")
     @classmethod

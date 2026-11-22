@@ -25,10 +25,13 @@ from app.conversation.memory_contracts import (
 )
 from app.platform.chat.contracts import stream_live_call_greeting_chunks
 from app.platform.chat.contracts import (
+    GREETING_WAIT_SECONDS,
+    PROACTIVE_TURN_WAIT_SECONDS,
     ProactiveDeliveryRequest,
     ProactiveDeliveryResponse,
     SCENE_SPEAKER_HEADER,
     SceneTalkMaterial,
+    camera_share_look,
     claim_proposal_report,
     commit_proactive_delivery,
     direct_scene_reaction,
@@ -777,6 +780,7 @@ def register_character_integration_routes(
         initiative_reason: str = Query(default="quiet_follow_up", max_length=120),
         state_summary: str | None = Query(default=None, max_length=500),
         scene_talk_switched_off: bool = Query(default=False),
+        camera_shared: bool = Query(default=False),
     ) -> StreamingResponse:
         store = chat_store_factory()
         session = require_session(session_id)
@@ -884,6 +888,14 @@ def register_character_integration_routes(
                 )
                 released = True
             try:
+                # The camera the person shares (camera share): the web glanced just before asking for this turn.
+                camera = (
+                    None if not camera_shared or task_report is not None or open_loop is not None
+                    or reaction is not None
+                    else camera_share_look(session_id, wait_seconds=PROACTIVE_TURN_WAIT_SECONDS)
+                    if purpose == "proactive_reengagement"
+                    else camera_share_look(session_id, wait_seconds=GREETING_WAIT_SECONDS)
+                )
                 events = (
                     stream_proactive_turn_chunks(
                         store,
@@ -894,9 +906,10 @@ def register_character_integration_routes(
                         open_loop=open_loop,
                         scene_reaction=(reaction.opening if reaction is not None and scene_talk is None else None),
                         scene_talk=scene_talk,
+                        camera=camera,
                     )
                     if purpose == "proactive_reengagement"
-                    else stream_live_call_greeting_chunks(store, session)
+                    else stream_live_call_greeting_chunks(store, session, camera=camera)
                 )
                 for event in events:
                     if scene_ask is not None and event.get("type") == "complete":

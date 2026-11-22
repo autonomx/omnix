@@ -3,7 +3,7 @@
  "runtime": "portrait-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/portrait.windows-x64.lock.txt",
- "lock_sha256": "c33a251e9d7345d43155134866edf1f74a2ba6a5f881074e7236a811e9ebdd3b",
+ "lock_sha256": "86d273ed68c71f6fd73dbe8c94cf7b9af5d872ad0dcebaac093f285577040dc8",
  "files": [
   {
    "name": "annotated-doc",
@@ -67,6 +67,24 @@
    "size": 25335,
    "source": "index",
    "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl"
+  },
+  {
+   "name": "diffusers",
+   "version": "0.39.0",
+   "filename": "diffusers-0.39.0-py3-none-any.whl",
+   "sha256": "912aca51b5787365110806e984d5555735bf8a461073bb8459029d0bca7870ef",
+   "size": 5631176,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/3f/3f/7469c46e9d22307ea686bab687d70e6bf328722952f9d10339f5e913e608/diffusers-0.39.0-py3-none-any.whl"
+  },
+  {
+   "name": "einops",
+   "version": "0.8.2",
+   "filename": "einops-0.8.2-py3-none-any.whl",
+   "sha256": "54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193",
+   "size": 65638,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/2a/09/f8d8f8f31e4483c10a906437b4ce31bdf3d6d417b73fe33f1a8b59e34228/einops-0.8.2-py3-none-any.whl"
   },
   {
    "name": "face-alignment",
@@ -168,6 +186,15 @@
    "url": "https://files.pythonhosted.org/packages/7d/8a/3b7f62b9df56460959f1b9bef094248d2a4d7f393c5b0d2da8efcdf0e40e/imageio-2.38.1-py3-none-any.whl"
   },
   {
+   "name": "importlib-metadata",
+   "version": "10.2.0",
+   "filename": "importlib_metadata-10.2.0-py3-none-any.whl",
+   "sha256": "c7a4bf1c7479601f6b8e437cfc14f4f77028ba62a8f34ae95cd93d9774dfba51",
+   "size": 34109,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/7f/61/0c0fae37eb561d8fddb788cbae0f227051628d70d67498a8a116c1f547d7/importlib_metadata-10.2.0-py3-none-any.whl"
+  },
+  {
    "name": "jinja2",
    "version": "3.1.6",
    "filename": "jinja2-3.1.6-py3-none-any.whl",
@@ -175,6 +202,15 @@
    "size": 134899,
    "source": "index",
    "url": "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl"
+  },
+  {
+   "name": "lazy-importer",
+   "version": "0.1.0",
+   "filename": "lazy_importer-0.1.0-py3-none-any.whl",
+   "sha256": "bd93fab7bef18e842eea02b839410954d37889140dc64ca4d9680aec6880c739",
+   "size": 12580,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/0a/28/7ded071d0975dcc6d5d106ffbf7b3ca420f7caa3b8a235fa604b6e37032a/lazy_importer-0.1.0-py3-none-any.whl"
   },
   {
    "name": "lazy-loader",
@@ -508,6 +544,15 @@
    "size": 219017,
    "source": "index",
    "url": "https://files.pythonhosted.org/packages/28/11/7469f3f28513ec0d43f10b1c88bf970b0b6f0aa8190c42731954297e824c/websockets-17.3-cp311-cp311-win_amd64.whl"
+  },
+  {
+   "name": "zipp",
+   "version": "4.1.2",
+   "filename": "zipp-4.1.2-py3-none-any.whl",
+   "sha256": "b30cb6cd253122169c47de245ca24a86bac2a5d3802ba15bf7ba6414eb9e144d",
+   "size": 10581,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/b8/44/7bd2007260da11cccca29ba2d4c345f1287aa663db38ee7cefeabf6386a5/zipp-4.1.2-py3-none-any.whl"
   }
  ]
 }

@@ -4,7 +4,7 @@ import {
   recordLiveVoiceReleaseSamples,
   setLiveVoiceReleasePortrait,
 } from '../../workspace/live-voice-release-observer';
-import type { LiveVoicePcmSession, LiveVoicePortraitHooks } from '../../workspace/live-voice-pcm-session';
+import type { LiveVoicePcmSession, LiveVoicePortraitHooks, PortraitStartRule } from '../../workspace/live-voice-pcm-session';
 import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { startTicker } from '../../../../shared/timers';
@@ -96,7 +96,10 @@ export class LivePortrait {
   private previousTransition: ImageBitmap[] = [];
   // Replaced transitions the compositor may still be playing: closed once it no longer shows them.
   private retiredTransitions: ImageBitmap[][] = [];
-  private readySegments = new Set<string>();
+  // How much of each segment its frames cover (ms), as last told to the session's start hold.
+  private coverage = new Map<string, number>();
+  // The call's engine's start hold, from the gateway's `ready` (none yet: the session's default, D-5's 250 ms).
+  private startRule: PortraitStartRule | undefined;
   private level = 0;
   private received = 0;
   private late = 0;
@@ -123,11 +126,12 @@ export class LivePortrait {
   }
 
   /**
-   * Whether the speaking member's avatar is a portrait (the audio session then asks for a hello), unless switched off:
-   * a guest's own pack when a guest speaks, else the call's.
+   * Whether the speaking member's avatar is a portrait (the audio session then asks for a hello), unless switched off
+   * or not asked for in this chat (`requestLiveVideo`): a guest's own pack when a guest speaks, else the call's.
    */
-  wanted(speaker: LivePortraitSpeaker | null = null): boolean {
-    return (speaker ? speaker.pack : this.pack)?.renderer === 'portrait' && portraitEnabled();
+  wanted(chatSessionId: string | null, speaker: LivePortraitSpeaker | null = null): boolean {
+    return (speaker ? speaker.pack : this.pack)?.renderer === 'portrait' && portraitEnabled()
+      && liveVideoRequested(chatSessionId);
   }
 
   /**
@@ -173,7 +177,7 @@ export class LivePortrait {
     this.clock = new PortraitPlaybackClock(session.audioContext.sampleRate);
     // The clock, and with it the start hold, only once frames can come: connecting or loading, none can, and a
     // hold would only delay the audio (``ready`` turns it on).
-    session.setPortraitClock(this.snapshot.status === 'ready' || this.snapshot.status === 'degraded');
+    session.setPortraitClock(this.snapshot.status === 'ready' || this.snapshot.status === 'degraded', this.startRule);
     // The session is open: its hello is due now (opening it can wait on the browser's audio and the gateway).
     const generation = this.generation;
     if (this.liveCallKey === null && !this.socket) {
@@ -238,7 +242,8 @@ export class LivePortrait {
     this.loopBytes = EMPTY_LOOP_BYTES();
     this.speaker = null;
     this.closeTransitions();
-    this.readySegments.clear();
+    this.coverage.clear();
+    this.startRule = undefined;
     this.liveCallKey = null;
     this.level = 0;
     this.received = this.late = this.decoded = this.decodeMs = 0;
@@ -294,7 +299,10 @@ export class LivePortrait {
   }
 
   private control(raw: string, generation: number): void {
-    let message: { type?: string; code?: string; level?: number; fallback_renderer?: PortraitFallbackRenderer };
+    let message: {
+      type?: string; code?: string; level?: number; fallback_renderer?: PortraitFallbackRenderer;
+      start_hold_ms?: number; start_lead_ms?: number;
+    };
     try {
       message = JSON.parse(raw) as typeof message;
     } catch {
@@ -302,8 +310,11 @@ export class LivePortrait {
     }
     if (message.type === 'ready') {
       this.level = message.level ?? 0;
+      if (typeof message.start_hold_ms === 'number') {
+        this.startRule = { holdMs: message.start_hold_ms, leadMs: Math.max(0, message.start_lead_ms ?? 0) };
+      }
       // A late hello may have come after the portrait was given up on: the worklet's clock is needed again.
-      this.session?.setPortraitClock(true);
+      this.session?.setPortraitClock(true, this.startRule);
       this.publish({ status: 'ready', fallbackRenderer: message.fallback_renderer ?? this.snapshot.fallbackRenderer, reason: null });
       this.stopAcks = startTicker(() => this.acknowledge(), FRAME_ACK_INTERVAL_MS);
     } else if (message.type === 'loading') {
@@ -342,7 +353,7 @@ export class LivePortrait {
     const late = Boolean(this.clock && this.buffer.isLate(header, this.heard(), this.clock.rate));
     if (late) this.late += 1;
     if (!this.buffer.add(header, image)) return;
-    this.framesReady(header.segment_id);
+    this.framesReady(header);
     // A new turn whose frames keep up gets the portrait back.
     if (this.snapshot.status === 'degraded' && !late && header.epoch !== this.degradedEpoch) {
       this.degradedEpoch = null;
@@ -350,12 +361,18 @@ export class LivePortrait {
     }
   }
 
-  /** A segment's first frame is here: a turn's start held for it can play (sent once per segment). */
-  private framesReady(segmentId: string): void {
-    if (this.readySegments.has(segmentId)) return;
-    this.readySegments.add(segmentId);
-    if (this.readySegments.size > 64) this.readySegments.delete(this.readySegments.values().next().value as string);
-    this.session?.portraitFramesReady(segmentId);
+  /** How much of its segment a frame's arrival covers, for a turn's start held for it: the first frame, then (when
+   * the engine's start waits for video ahead) each further frame until the lead is covered. */
+  private framesReady(header: PortraitFrameHeader): void {
+    const segmentId = header.segment_id;
+    const rate = this.buffer.sourceRate(segmentId);
+    const coveredMs = ((header.offset + rate / 25) / rate) * 1000;
+    const told = this.coverage.get(segmentId);
+    if (told !== undefined && (told >= (this.startRule?.leadMs ?? 0) || coveredMs <= told)) return;
+    this.coverage.delete(segmentId); // the newest last, so the oldest goes first
+    this.coverage.set(segmentId, coveredMs);
+    if (this.coverage.size > 64) this.coverage.delete(this.coverage.keys().next().value as string);
+    this.session?.portraitFramesReady(segmentId, coveredMs);
   }
 
   /** The member's idle loop, kept as JPEGs once whole, for its tile while another member speaks. */
@@ -524,6 +541,41 @@ export function portraitEnabled(): boolean {
   } catch {
     return true;
   }
+}
+
+/*
+ * Live video is asked for per chat (owner, 2026-11-22): starting a call does not bring the portrait up; "Load live
+ * video" does, for that chat until the page reloads, so a call can be voice only. Asked for during a call, it starts
+ * with the next reply's audio session.
+ */
+const videoChats = new Set<string>();
+const videoListeners = new Set<() => void>();
+
+export function requestLiveVideo(chatSessionId: string): void {
+  if (videoChats.has(chatSessionId)) return;
+  videoChats.add(chatSessionId);
+  videoListeners.forEach((listener) => listener());
+}
+
+/** Turns live video back off for a chat: its next call is voice only until asked again. */
+export function cancelLiveVideo(chatSessionId: string): void {
+  if (!videoChats.delete(chatSessionId)) return;
+  videoListeners.forEach((listener) => listener());
+}
+
+export function liveVideoRequested(chatSessionId: string | null | undefined): boolean {
+  return Boolean(chatSessionId) && videoChats.has(chatSessionId ?? '');
+}
+
+export function subscribeLiveVideo(listener: () => void): () => void {
+  videoListeners.add(listener);
+  return () => { videoListeners.delete(listener); };
+}
+
+/** Forget every chat's request (tests). */
+export function resetLiveVideoRequests(): void {
+  videoChats.clear();
+  videoListeners.forEach((listener) => listener());
 }
 
 function outputLatency(context: AudioContext): number {

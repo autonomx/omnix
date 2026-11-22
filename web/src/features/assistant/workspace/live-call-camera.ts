@@ -88,7 +88,7 @@ export async function openLiveCallCamera(): Promise<void> {
 /** The second press: one frame from the preview, then the camera stops. Returns whether a picture was taken. */
 export function takeLiveCallCameraPicture(video: HTMLVideoElement): boolean {
   if (state.phase !== 'preview') return false;
-  const picture = frameFrom(video);
+  const picture = cameraFrameFrom(video);
   stopTracks(state.stream);
   openToken += 1;
   if (!picture) {
@@ -145,11 +145,12 @@ export function resetLiveCallCamera(): void {
   closeLiveCallCamera();
 }
 
-function frameFrom(video: HTMLVideoElement): string | null {
+/** One JPEG frame from a playing camera video, its longest side at most `longestSide`; null when none can be taken. */
+export function cameraFrameFrom(video: HTMLVideoElement, longestSide = LIVE_CALL_CAMERA_LONGEST_SIDE): string | null {
   const width = video.videoWidth;
   const height = video.videoHeight;
   if (!width || !height) return null;
-  const scale = Math.min(1, LIVE_CALL_CAMERA_LONGEST_SIDE / Math.max(width, height));
+  const scale = Math.min(1, longestSide / Math.max(width, height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));

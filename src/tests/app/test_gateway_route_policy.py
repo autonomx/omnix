@@ -100,9 +100,14 @@ def test_what_a_live_call_holds_per_process_follows_its_replica():
     for path in (AVATAR_WEBSOCKET_PATH, '/api/live/speculation/tts-prefetch',
                  '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel',
                  '/api/live-call/sessions/chat%3Aabc/prewarm',
-                 '/api/live-call/sessions/chat%3Aabc/overlap-judgement'):
+                 '/api/live-call/sessions/chat%3Aabc/overlap-judgement',
+                 # A shared camera's glance is described and held in one process; the call's turns, its greeting
+                 # and its unprompted remarks read it there.
+                 '/api/chat/sessions/chat%3Aabc/camera/glance',
+                 '/api/chat/sessions/chat%3Aabc/live-call/greeting/stream'):
         assert bound.fullmatch(path)
-    for path in ('/api/live/speculation/sessions/s/stream', '/api/tts/live-call/other', '/api/settings'):
+    for path in ('/api/live/speculation/sessions/s/stream', '/api/tts/live-call/other', '/api/settings',
+                 '/api/chat/sessions/chat%3Aabc/live-call/camera'):
         assert not bound.fullmatch(path)
     rendered = _renderer().render(POLICY, speech_on_api=True)
     assert f"~^1:.+:{POLICY['live_call_bound_pattern'][1:-1]}$ omnix_live_api;" in rendered

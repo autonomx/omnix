@@ -292,6 +292,32 @@
           "note": "Shares the GPU with live speech: one call's portrait at a time."
         }
       ]
+    },
+    "live-portrait-flashhead": {
+      "label": "Live portrait (FlashHead Lite)",
+      "capability": "live_portrait",
+      "description": "A character's portrait that talks in live calls, with SoulX-FlashHead Lite: closer lip-sync than FLOAT, about twice its GPU time (Apache-2.0; its VAE is Open RAIL-M).",
+      "recommended_rank": 6,
+      "variants": [
+        {
+          "platform": "windows-x64",
+          "accelerator": "cuda",
+          "models": [
+            "flashhead-lite",
+            "flashhead-code",
+            "wav2vec2-base-960h",
+            "s3fd-face-detector",
+            "liveportrait-code",
+            "liveportrait-weights"
+          ],
+          "runtimes": [
+            "portrait-windows-x64"
+          ],
+          "min_vram_mb": 7168,
+          "min_commit_mb": 12288,
+          "note": "Shares the GPU with live speech: one call's portrait at a time. Chosen over FLOAT in Settings, Assistant."
+        }
+      ]
     }
   },
   "models": {
@@ -1309,6 +1335,268 @@
         "live_portrait"
       ],
       "voice_studio": true
+    },
+    "flashhead-lite": {
+      "label": "SoulX-FlashHead Lite talking portrait (weights)",
+      "kind": "portrait",
+      "service": "portrait",
+      "repo": "Soul-AILab/SoulX-FlashHead-1_3B",
+      "revision": "74d81686a7bd750b276ec1ade295bc4077c5868a",
+      "source": "huggingface",
+      "files": {
+        "Model_Lite/config.json": {
+          "sha256": "2ac56ba975a80da49f8ef1b27bfe740be473a1b250fced52f8f1df9ac101bc2c",
+          "size": 357
+        },
+        "Model_Lite/diffusion_pytorch_model.safetensors": {
+          "sha256": "aaf1cde6e80ca23f740aae236c47954249f65b151db133cc0f77d3a138ccdf6e",
+          "size": 6107542048
+        },
+        "VAE_LTX/config.json": {
+          "sha256": "e8f12ad5305b1508f6e456797d48ab8e9fdd091c686ccf814a293ee96ce89dbb",
+          "size": 501
+        },
+        "VAE_LTX/diffusion_pytorch_model.safetensors": {
+          "sha256": "265ca87cb5dff5e37f924286e957324e282fe7710a952a7dafc0df43883e2010",
+          "size": 1676798532
+        }
+      },
+      "licence": {
+        "id": "Apache-2.0 AND OpenRAIL-M",
+        "url": "https://huggingface.co/Soul-AILab/SoulX-FlashHead-1_3B",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": "The DiT weights (Model_Lite) are Apache-2.0. The VAE (VAE_LTX, LTX-Video 0.9's) is under Open RAIL-M, whose use restrictions apply to the videos made with it; it keeps that licence and is downloaded unmodified from the Hub."
+      },
+      "vram_gb": 5.5,
+      "residency": "helper",
+      "capabilities": [
+        "live_portrait"
+      ],
+      "voice_studio": true,
+      "legacy_folder": "flashhead-lite"
+    },
+    "flashhead-code": {
+      "label": "SoulX-FlashHead talking portrait (model code)",
+      "kind": "portrait",
+      "service": "portrait",
+      "repo": "Soul-AILab/SoulX-FlashHead",
+      "revision": "9bc03de06bb0de82cd6bc477804512ae06144bf2",
+      "source": "direct",
+      "files": {
+        "LICENSE": {
+          "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+          "size": 11558,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/LICENSE"
+        },
+        "flash_head/src/modules/flash_head_model.py": {
+          "sha256": "0a44cbdd4d7582e31176da5a714bda69576a610a68568e0f616b9cd205751a2e",
+          "size": 22137,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/src/modules/flash_head_model.py"
+        },
+        "flash_head/utils/utils.py": {
+          "sha256": "29b4129dabc39f95edca95858a9da0743dfca0940925bbc2638e17210f5bf74f",
+          "size": 8925,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/utils/utils.py"
+        },
+        "flash_head/audio_analysis/torch_utils.py": {
+          "sha256": "5a523b78211a64d7efd838cc000c6251184de2a37c73614e2581faa5d09378cb",
+          "size": 620,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/audio_analysis/torch_utils.py"
+        },
+        "flash_head/audio_analysis/wav2vec2.py": {
+          "sha256": "afaa24190de82d2489e80a2d506657e48a5c6e4f234e3206edb897b4bc4bd2a0",
+          "size": 4617,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/audio_analysis/wav2vec2.py"
+        },
+        "flash_head/ltx_video/ltx_vae.py": {
+          "sha256": "4cece96544a9fb1cbe2119adf14018357ef17c679ba76768787e4e84a2c3bb11",
+          "size": 1518,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/ltx_vae.py"
+        },
+        "flash_head/ltx_video/models/autoencoders/causal_conv3d.py": {
+          "sha256": "1d4c4e3f1363e786e1145937be85af68c27cadb7889a7ad6ff4aa6302ff0ecca",
+          "size": 1822,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/autoencoders/causal_conv3d.py"
+        },
+        "flash_head/ltx_video/models/autoencoders/causal_video_autoencoder.py": {
+          "sha256": "1e35e27403b1585f9fb22485194726d7b41c3ff6c30035af23a19a0417de11f8",
+          "size": 54136,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/autoencoders/causal_video_autoencoder.py"
+        },
+        "flash_head/ltx_video/models/autoencoders/conv_nd_factory.py": {
+          "sha256": "412850739a73a0495d49046edbf73edc0c9a0b8a43db32c5f3ff4111e4c1049b",
+          "size": 2721,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/autoencoders/conv_nd_factory.py"
+        },
+        "flash_head/ltx_video/models/autoencoders/dual_conv3d.py": {
+          "sha256": "2f189c6056797d106495b86e0037ebb57e228fb04975bba17c981d80e9bf17fe",
+          "size": 7102,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/autoencoders/dual_conv3d.py"
+        },
+        "flash_head/ltx_video/models/autoencoders/pixel_norm.py": {
+          "sha256": "d5526c6cc396a78138226d85cb0b09fdba2e3caf4d10173e5232985b3297d25e",
+          "size": 319,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/autoencoders/pixel_norm.py"
+        },
+        "flash_head/ltx_video/models/autoencoders/vae.py": {
+          "sha256": "1796bf266d8e2a0925ed4e3c1b2270efa195411618482bc751cc0355b6af446d",
+          "size": 14795,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/autoencoders/vae.py"
+        },
+        "flash_head/ltx_video/models/transformers/attention.py": {
+          "sha256": "4773bddb5ff7fb2a3d06a7d2487957bf6d6c670cf80120a6891cc6dc851b68d5",
+          "size": 53660,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/models/transformers/attention.py"
+        },
+        "flash_head/ltx_video/utils/diffusers_config_mapping.py": {
+          "sha256": "ad58e5c63d5aadd5e9959a998dccee96041af052ced093d2ce558b33c22c8bff",
+          "size": 5752,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/utils/diffusers_config_mapping.py"
+        },
+        "flash_head/ltx_video/utils/skip_layer_strategy.py": {
+          "sha256": "67911f1e7444fd5638287cbf6419e35f9ea08d08790154332a99a9cff64f1ef5",
+          "size": 177,
+          "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/flash_head/ltx_video/utils/skip_layer_strategy.py"
+        }
+      },
+      "licence": {
+        "id": "Apache-2.0",
+        "url": "https://raw.githubusercontent.com/Soul-AILab/SoulX-FlashHead/9bc03de06bb0de82cd6bc477804512ae06144bf2/LICENSE",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 0.0,
+      "residency": "helper",
+      "capabilities": [
+        "live_portrait"
+      ],
+      "voice_studio": true,
+      "legacy_folder": "flashhead-code"
+    },
+    "liveportrait-code": {
+      "label": "LivePortrait idle motion (model code)",
+      "kind": "portrait",
+      "service": "portrait",
+      "repo": "KwaiVGI/LivePortrait",
+      "revision": "9b294b3d0536135442ea73cb01e6cb3ca7029dd3",
+      "source": "direct",
+      "licence": {
+        "id": "MIT",
+        "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/LICENSE",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 0.0,
+      "residency": "helper",
+      "capabilities": [
+        "live_portrait"
+      ],
+      "voice_studio": true,
+      "legacy_folder": "liveportrait-code",
+      "files": {
+        "LICENSE": {
+          "sha256": "75fcad03ad21369e9eeb369b97b73fc0bba7f7f3243d0a661f968bd1478207bb",
+          "size": 1417,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/LICENSE"
+        },
+        "src/config/models.yaml": {
+          "sha256": "da135e5d5104441675411caba2ededdf26606bfa8a511a2504018d2d149512c4",
+          "size": 1235,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/config/models.yaml"
+        },
+        "src/modules/appearance_feature_extractor.py": {
+          "sha256": "106131d0f20036d9418167911c63eddfd901552c9942d8c55c92afc6e41bc7c1",
+          "size": 1974,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/appearance_feature_extractor.py"
+        },
+        "src/modules/convnextv2.py": {
+          "sha256": "477a1c0005d6d126ed29dee8cba387a7993050f67d0ac88a80381ac7a879c4c3",
+          "size": 5126,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/convnextv2.py"
+        },
+        "src/modules/dense_motion.py": {
+          "sha256": "941cef6bf200a600c0e58e0a8e119eecfb1224e02b1fdc80e871817db28f427f",
+          "size": 5547,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/dense_motion.py"
+        },
+        "src/modules/motion_extractor.py": {
+          "sha256": "9c2397ce43c81bd38377dfb539765bb51f3999c58b72c61309724a5fc0fb66a0",
+          "size": 1083,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/motion_extractor.py"
+        },
+        "src/modules/spade_generator.py": {
+          "sha256": "2c8efda8979a0eb3f68c6fa0e1185e4360b42319c078d5420b5bb72255d7785a",
+          "size": 2659,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/spade_generator.py"
+        },
+        "src/modules/stitching_retargeting_network.py": {
+          "sha256": "6c6c3f4114b66e4682181651e6e334385418eca6d278812e67f71cc380243106",
+          "size": 1501,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/stitching_retargeting_network.py"
+        },
+        "src/modules/util.py": {
+          "sha256": "15c209b3951ff7b739fb5b7c518711005dffb298e4afc2fbdeb49b528f9a177f",
+          "size": 15937,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/util.py"
+        },
+        "src/modules/warping_network.py": {
+          "sha256": "0ed1c96263c58e0be8cae8a921a83ed777bcf561e67f060c5b1364e2b00b1f3f",
+          "size": 2846,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/modules/warping_network.py"
+        },
+        "src/utils/camera.py": {
+          "sha256": "8f8f5c31d688c8a67b0497430fe0fa96b1d268fa446b9fd495cb923dc55eb003",
+          "size": 1809,
+          "url": "https://raw.githubusercontent.com/KwaiVGI/LivePortrait/9b294b3d0536135442ea73cb01e6cb3ca7029dd3/src/utils/camera.py"
+        }
+      }
+    },
+    "liveportrait-weights": {
+      "label": "LivePortrait idle motion (weights)",
+      "kind": "portrait",
+      "service": "portrait",
+      "repo": "KwaiVGI/LivePortrait",
+      "revision": "82a4fa6735ca58432b6ce39301b4b9ee066dea47",
+      "source": "huggingface",
+      "licence": {
+        "id": "MIT",
+        "url": "https://huggingface.co/KwaiVGI/LivePortrait",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 1.0,
+      "residency": "helper",
+      "capabilities": [
+        "live_portrait"
+      ],
+      "voice_studio": true,
+      "legacy_folder": "liveportrait-weights",
+      "files": {
+        "liveportrait/base_models/appearance_feature_extractor.pth": {
+          "sha256": "5279bb8654293dbdf327030b397f107237dd9212fb11dd75b83dfb635211ceb5",
+          "size": 3387959
+        },
+        "liveportrait/base_models/motion_extractor.pth": {
+          "sha256": "251e6a94ad667a1d0c69526d292677165110ef7f0cf0f6d199f0e414e8aa0ca5",
+          "size": 112545506
+        },
+        "liveportrait/base_models/spade_generator.pth": {
+          "sha256": "4780afc7909a9f84e24c01d73b31a555ef651521a1fe3b2429bd04534d992aee",
+          "size": 221813590
+        },
+        "liveportrait/base_models/warping_module.pth": {
+          "sha256": "2f61a6f265fe344f14132364859a78bdbbc2068577170693da57fb96d636e282",
+          "size": 182180086
+        },
+        "liveportrait/retargeting_models/stitching_retargeting_module.pth": {
+          "sha256": "3652d5a3f95099141a56986aaddec92fadf0a73c87a20fac9a2c07c32b28b611",
+          "size": 2393098
+        }
+      }
     }
   }
 }

@@ -13,6 +13,17 @@ as ``offset``, the loop's length as ``count`` and its frame period as ``frame_ms
 Remote quality levels (roadmap Phase 3, "Remote quality"): the service encodes only the level the call's client is
 on, set by the gateway's ``quality`` message; ``QUALITY_LEVELS[level]`` is (frame size, frame step, JPEG quality),
 a frame step of 2 sending every other frame (12.5 frames a second).
+
+Engines: the service renders with one of ``PORTRAIT_ENGINES`` at a time (Settings, Assistant, "Live portrait engine");
+the gateway names it when it prepares a portrait, and a portrait's ``latent_key`` belongs to the engine it was
+prepared with.
+
+A turn's start hold (roadmap D-5, revised 2026-11-21): the browser's audio holds a reply's first phrase until the
+portrait's frames cover ``lead_ms`` of it (or all of a shorter phrase), at most ``hold_ms``; the gateway sends the
+call's engine's ``PORTRAIT_START_RULES`` in its ``ready``. FLOAT keeps up from its first frame (lead 0, the 250 ms
+cap). FlashHead commits 24 frames a pass and needs a pass's audio before it renders it: started on its first
+8 frames, the next pass is late unless TTS runs about 3x real time, so a start waits until the video is a whole pass
+ahead (8 + 24 frames, 1.28 s), at most 1.2 s (a near-real-time voice, a group call's guest on 2026-11-21).
 """
 from __future__ import annotations
 
@@ -22,6 +33,10 @@ from typing import Any
 
 MAX_HEADER_BYTES = 1_024
 QUALITY_LEVELS: tuple[tuple[int, int, int], ...] = ((512, 1, 85), (512, 1, 70), (384, 1, 70), (384, 2, 70))
+PORTRAIT_ENGINES: tuple[str, ...] = ("float", "flashhead-lite")
+DEFAULT_PORTRAIT_ENGINE = "float"
+# engine: (hold_ms, lead_ms), the start hold's cap and the video it waits for.
+PORTRAIT_START_RULES: dict[str, tuple[int, int]] = {"float": (250, 0), "flashhead-lite": (1_200, 1_280)}
 _LENGTH = struct.Struct(">I")
 
 
@@ -52,4 +67,5 @@ def unpack(message: bytes) -> tuple[dict[str, Any], bytes]:
     return header, message[_LENGTH.size + length:]
 
 
-__all__ = ["MAX_HEADER_BYTES", "PortraitMessageError", "QUALITY_LEVELS", "pack", "unpack"]
+__all__ = ["DEFAULT_PORTRAIT_ENGINE", "MAX_HEADER_BYTES", "PORTRAIT_ENGINES", "PORTRAIT_START_RULES",
+           "PortraitMessageError", "QUALITY_LEVELS", "pack", "unpack"]

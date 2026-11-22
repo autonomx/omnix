@@ -8,7 +8,8 @@ seated on the call; anyone else is ``speaker_not_on_call``),
 reads the portrait image itself (never from the browser), prepares it on the portrait service, opens the
 call's portrait link and attaches it to the TTS connection, which starts copying the call's audio.
 
-To the browser: ``{"type": "ready", "fallback_renderer": ...}``, then frames as binary messages exactly as the
+To the browser: ``{"type": "ready", "fallback_renderer", "level", "start_hold_ms", "start_lead_ms"}`` (the call's
+engine's start hold, ``PORTRAIT_START_RULES``), then frames as binary messages exactly as the
 service sends them (``app.conversation.portrait_stream_contract``: a header with the output, epoch, segment and
 offset, then a JPEG; the idle loop's frames first). When the portrait cannot serve,
 ``{"type": "unavailable", "code", "message"}`` and the socket closes; the browser shows the pack's fallback
@@ -34,7 +35,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.conversation.portrait_stream_contract import PortraitMessageError, unpack
+from app.conversation.portrait_stream_contract import PORTRAIT_START_RULES, PortraitMessageError, unpack
 
 from app.platform.characters.contracts import (
     default_character_avatar_service,
@@ -42,7 +43,13 @@ from app.platform.characters.contracts import (
     resolve_live_call_runtime,
 )
 from app.platform.live_voice.portrait.calls import PortraitCalls, principal_id
-from app.platform.live_voice.portrait.link import PortraitLink, PortraitUnavailable, portrait_url, prepare_portrait
+from app.platform.live_voice.portrait.link import (
+    PortraitLink,
+    PortraitUnavailable,
+    portrait_engine,
+    portrait_url,
+    prepare_portrait,
+)
 from app.platform.live_voice.portrait.quality import QualityController, starting_level
 from app.platform.live_voice.transport.call_session import load_session, speaker_session
 
@@ -78,7 +85,7 @@ def _worth_waiting(code: str, waited: float) -> bool:
 
 
 async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str, image: bytes,
-                               call_open: Callable[[], bool]) -> str | None:
+                               call_open: Callable[[], bool], engine: str | None = None) -> str | None:
     """The portrait's latent key, once its model has loaded; None when the browser left, or the call ended, while it
     loaded. The service is asked again at a steady pace whatever the browser sends meanwhile, and each kind of wait
     gets its full time however long the one before it took."""
@@ -87,7 +94,7 @@ async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str,
     told: dict[str, str] | None = None
     while True:
         try:
-            return await prepare_portrait(base_url, tenant, image)
+            return await prepare_portrait(base_url, tenant, image, engine=engine)
         except PortraitUnavailable as exc:
             if exc.code != waiting_for:
                 waiting_for, started = exc.code, time.monotonic()
@@ -180,8 +187,10 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
         try:
             image = await asyncio.to_thread(default_character_avatar_service().portrait_image, pack,
                                             max_bytes=MAX_PORTRAIT_BYTES)
+            # One engine for the whole stream: the one prepared with is the one whose start hold the browser keeps.
+            engine = await asyncio.to_thread(portrait_engine)
             latent_key = await _prepare_when_loaded(websocket, base_url, current_tenant().workspace_id, image,
-                                                    lambda: calls.open(call))
+                                                    lambda: calls.open(call), engine)
             if latent_key is None:  # the browser left, or the call ended, while the model loaded
                 with contextlib.suppress(Exception):
                     await websocket.close(code=1000, reason="call_ended")
@@ -214,8 +223,9 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
             return
         call.attach(link)  # no await since the check: the TTS route cannot end the call in between
         try:
+            hold_ms, lead_ms = PORTRAIT_START_RULES.get(engine, PORTRAIT_START_RULES["float"])
             await websocket.send_json({"type": "ready", "fallback_renderer": pack.fallback_renderer,
-                                       "level": quality.level})
+                                       "level": quality.level, "start_hold_ms": hold_ms, "start_lead_ms": lead_ms})
             while True:
                 if link.closed:
                     await _unavailable(websocket, "portrait_lost", "The portrait stopped")

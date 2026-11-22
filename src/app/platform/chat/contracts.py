@@ -296,6 +296,10 @@ _LAZY_EXPORTS = {
     "default_chat_store": "character_store",
     # Whether a call may offer the camera (companion 4.3).
     "camera_vision": "live_call_camera",
+    # The shared camera's newest look, for an unprompted turn (camera share).
+    "camera_share_look": "camera_glance",
+    "PROACTIVE_TURN_WAIT_SECONDS": "camera_glance",
+    "GREETING_WAIT_SECONDS": "camera_glance",
     # The request a Quick Search through CHAT_RESEARCH reads (a call looking something up).
     "AssistantContextChatRequest": "assistant_context.models",
 }

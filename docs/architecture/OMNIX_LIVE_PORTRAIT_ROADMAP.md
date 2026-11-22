@@ -650,6 +650,11 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 **Start hold (D-5).**
 - **What it measures:** the extra delay of the worklet's `started` event beyond the existing 0.4 s start buffer.
 - **What it waits for:** only until frames covering the start of the output's first segment have arrived, never past a **250 ms cap**.
+- **Per engine (revised 2026-11-21, owner):** the gateway's `ready` message carries the rule
+  (`PORTRAIT_START_RULES`, `start_hold_ms`/`start_lead_ms`). FLOAT keeps the above. FlashHead Lite renders 24 frames a pass
+  and each pass needs about 1 s of audio ahead of it, so a start released on its first frames ran out of video at once.
+  A FlashHead start therefore waits until frames cover 1.28 s of the phrase (its first pass and the next), or all but
+  80 ms of a shorter phrase whose audio has all come, capped at **1.2 s**.
 - **If the cap passes**, audio starts, the idle loop shows, and the renderer crossfades in when frames arrive.
 - **Mid-reply**, audio is never paused to wait for video.
 - **Diagnostics:** the hold is a new delivery-ledger event.
@@ -716,7 +721,7 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - **The clock** (`portrait/clock.ts`), as planned. The worklet posts `portrait_clock` every 20 ms while a portrait shows, stamped at the end of the quantum it counts; it goes to the portrait and never to the diagnostics log. The heard segment is looked up at `now − outputLatency`; the estimate runs at most 20 ms past the last count, and backwards too; it stalls during an underrun.
 - **Idle loop** (`services/portrait/idle_loop.py`, `FloatRuntime.idle_frames`). About 12 s of silence rendered window after window from the rest pose (motion latent zero, the source portrait), the least-moving 150-frame span kept, the loop cut between its two closest latents (at least 4 s), rendered once per portrait and level and kept with the encoding. It goes out after `ready`, at half its level's frame rate, behind any speech frame. The plan's "asset per latent" became this: the service keeps it with the portrait, so `DELETE /portrait/cache` forgets both.
 - **The compositor** (`portrait/compositor.ts`). The idle loop before the first speech; the speech frame for what is heard; the last frame held through gaps under 250 ms and frozen during an underrun; an 80 ms crossfade into the idle loop after that, and back at the next speech; a cut to idle when a turn is cancelled or interrupted (its frames are already gone). Before the idle loop arrives the pack's image shows.
-- **Start hold (D-5).** The worklet holds a turn's start until the first frames of its first speech segment have arrived (`portrait_frames_ready`), at most 250 ms, never mid-reply; each hold is a `start_hold` worklet event and the delivery ledger's `startHoldMs`. A portrait that becomes unavailable turns the hold off.
+- **Start hold (D-5).** The worklet holds a turn's start until the first frames of its first speech segment have arrived (`portrait_frames_ready`), at most 250 ms (FlashHead Lite: until 1.28 s of the phrase is covered, at most 1.2 s), never mid-reply; each hold is a `start_hold` worklet event and the delivery ledger's `startHoldMs`. A portrait that becomes unavailable turns the hold off.
 - **Speculative frames.** As planned: the prefetch request carries the call key (403 for another principal's call), only that call's phrases claim the entry, and the prefetch thread copies each chunk under the entry's condition through a bounded count of pending sends to the call's loop. Every drop path sends `spec_drop`. The service renders each speculation's first two passes on its own motion session and holds the frames; `spec_bind` (sent right after the phrase's `phrase_start`) relabels them and sends them at once; the phrase's own copy skips the replayed audio, and `spec_prefix_end` (at the first chunk without a copy) fits the segment: cut, or silence where a copy was lost. A later phrase of a reply already under way joins the reply's own motion instead.
 - **Remote quality (D-6).** Levels L0–L3 in the stream contract; the service encodes only the call's level (384 px resized on the GPU, every other frame at L3). The gateway (`portrait/quality.py`) counts speech frames relayed minus received as in flight: any late frame, or more than 12 in flight for 3 acks in a row, steps down at once, then 1 s to settle; 5 s healthy steps up. The browser's decode time is reported, not stepped on: it is timed from arrival, so a burst's decodes queue behind each other and would read as slow decoding (revised in Phase 3; the earlier text stepped down on decoding over 30 ms). Loopback starts at L0, remote at L1. Still late at L3, the browser shows the fallback for that turn (`degraded`) and tries the next.
 - **On the real model** (`scripts/portrait_phase3_check.py`, `docs/measurements/portrait-phase3-check-2026-10-30.json`, the service alone, after the review fixes): all of them passed.
@@ -824,6 +829,7 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 - **D-5 Start hold: as small as possible.**
     - Measured as the extra delay beyond the existing 0.4 s start buffer.
     - ≤ 150 ms p50 is a gate threshold. The 250 ms hard cap holds by design; p95 is recorded.
+    - Revised 2026-11-21 (owner): FlashHead Lite waits for 1.28 s of video, capped at 1.2 s; the gate above is FLOAT's.
     - Zero when speculative frames cover the start.
 - **D-6 Clients: both local and remote, from the first release.** The avatar socket is bound to the call by a server-issued token and replica affinity. Adaptive levels down to L3, then the fallback renderer.
 
@@ -851,6 +857,11 @@ During any of them the renderer holds the last speaking frame. If the gap passes
   Since 2026-11-04 a loaded portrait is shown from the call's start: `prepare` renders the idle loop and its blink at
   L0 (they used to hold the GPU thread at the call's start), and a portrait call opens its audio session, and so its
   link, when the call connects rather than with the first reply (8.5 s later on the call that showed it).
+  Since 2026-11-22 (owner) a call is voice only until "Load live video" is pressed in its chat, so a chat can have
+  live calls without video: starting a call no longer brings the portrait up (`liveVideoRequested` in
+  `livePortrait.ts`). Pressed during a call, the portrait starts with the next reply's audio session. Pressed again
+  once ready, it unloads the model at once (`POST /portrait/unload`: refused under a call's stream or mid-load; with a
+  launcher the service exits and comes back light, as after the idle unload) and turns the chat's video off.
 - **D-10 The paired gate's underrun bound: +0.1 per reply (settled 2026-10-31).** Underruns per reply may be at most
   0.1 higher with the portrait on than off (about 4 in 40 replies). Both runs underrun about 1.4 times a reply from TTS
   alone on this machine, and with no allowance one more in 40 replies failed the gate from run to run.

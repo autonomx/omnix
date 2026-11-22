@@ -98,7 +98,8 @@ def test_live_call_greeting_stream_is_generated_and_transient(
     session_id = _create_character_session(client)
     before = client.get(f"/api/chat/sessions/{session_id}").json()
 
-    def fake_greeting_stream(_store, session):
+    def fake_greeting_stream(_store, session, *, camera=None):
+        assert camera is None  # no camera shared
         assert session.id == session_id
         yield {"type": "text_chunk", "text": "Hey! How's your day going?"}
         yield {

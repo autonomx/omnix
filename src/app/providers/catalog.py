@@ -102,7 +102,7 @@ CATALOG: tuple[ProviderSpec, ...] = (
     ),
     _llm(
         "claude_cli", "claude_cli_provider", "ClaudeCliProvider",
-        STREAMING, MODELS, NATIVE_JSON_SCHEMA, LIVE_TURNS, THINKING_OFF,
+        STREAMING, MODELS, NATIVE_JSON_SCHEMA, LIVE_TURNS, THINKING_OFF, DESKTOP_VISION,
     ),
     _llm("llamacpp", "llamacpp_provider", "LlamaCppProvider", STREAMING, MODELS, LOCAL_DEVICE),
     _llm(

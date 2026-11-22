@@ -187,6 +187,18 @@
     "sha256": "e01134f3a5113e7699c4d6516cf9ed0ea6078de7964f00c965ac92e97c232861",
     "version": "1"
   },
+  "chat.camera_share.glance": {
+    "sha256": "e8eee40d077dcc054291ceda18c7c34719c2dd0f7b785a9d6ab19ef801072ec3",
+    "version": "1"
+  },
+  "chat.camera_share.proactive_seen": {
+    "sha256": "554cbb0f675bc6d3259fe663386efc007062abead5e39828ab59773f7afc1cf8",
+    "version": "1"
+  },
+  "chat.camera_share.proactive_unseen": {
+    "sha256": "f78283172e044f95248da6c948bf218729625edc9acff1a79ce0ec3d5168a4eb",
+    "version": "1"
+  },
   "chat.live_agent_store.confirmation_prompt": {
     "sha256": "29fadb90082e080dbd7cf056ff594b99d79df0fd295d4c2945e8c0f4612e8db1",
     "version": "1"

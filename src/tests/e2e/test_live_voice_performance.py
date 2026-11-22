@@ -349,6 +349,10 @@ def test_five_turn_live_voice_hardware_performance(
         if auto_speak.count() and not auto_speak.is_checked():
             auto_speak.check()
 
+        if os.environ.get("OMNIX_LIVE_VOICE_BENCHMARK_PORTRAIT", "").strip() == "on":
+            # A call is voice only until the chat asks for live video (owner, 2026-11-22).
+            page.get_by_role("button", name="Load live video").click(timeout=30_000)
+            expect(page.get_by_role("button", name="Live video ready")).to_be_visible(timeout=180_000)
         live_card.get_by_role("button", name="Start Call").click()
         expect(live_card.locator("header strong")).to_have_text("Connected", timeout=30_000)
         page.evaluate("() => window.__omnixBenchmarkMic.resume()")

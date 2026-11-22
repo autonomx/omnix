@@ -21,6 +21,7 @@ import { LiveMuteButton } from './LiveMuteButton';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
 import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 import { LiveVoiceprintPanel } from './LiveVoiceprintPanel';
+import { LivePortraitEngineCard } from './portrait/LivePortraitEngineCard';
 import './LiveChatPanel.css';
 import './LiveChatFullscreenEntry.css';
 
@@ -31,11 +32,29 @@ export type LiveChatPanelProps = {
   onToggleCall: () => void;
 };
 
+/** The page's sections, one tab each (owner request, 2026-11-21). */
+const LIVE_CHAT_TABS = [
+  ['character', 'Character'],
+  ['presence', 'Presence'],
+  ['voice', 'Voice'],
+  ['video', 'Video'],
+  ['call', 'Call'],
+] as const;
+type LiveChatTab = (typeof LIVE_CHAT_TABS)[number][0];
+
+// The open tab outlives the page, so going back to Live Chat returns to it.
+let lastTab: LiveChatTab = 'character';
+
 export function LiveChatPanel({ sessionId, onSessionResolved, onToggleCall }: LiveChatPanelProps) {
   const runtimeState = useLiveConversationState();
   const snapshot = selectLiveChatSnapshot(runtimeState);
   const fullscreen = useLiveChatFullscreenState();
   const [callStatus, setCallStatus] = useState<string | null>(null);
+  const [tab, setTab] = useState<LiveChatTab>(lastTab);
+  function openTab(next: LiveChatTab): void {
+    lastTab = next;
+    setTab(next);
+  }
 
   useEffect(() => {
     liveConversationStore.dispatch({ type: 'session', sessionId });
@@ -83,52 +102,99 @@ export function LiveChatPanel({ sessionId, onSessionResolved, onToggleCall }: Li
         </div>
       </header>
 
-      {!sessionId ? (
-        <article className="live-chat-card live-chat-empty" role="status">
-          <h3>Select a Chat session</h3>
-          <p>Choose or create a Chat session to configure its character. Presence changes below update your user defaults.</p>
-        </article>
-      ) : (
-        <CharacterModePanel sessionId={sessionId} onSessionResolved={onSessionResolved} />
-      )}
+      <div className="live-chat-tabs" role="tablist" aria-label="Live Chat sections">
+        {LIVE_CHAT_TABS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`live-chat-tab-${id}`}
+            aria-controls={`live-chat-section-${id}`}
+            aria-selected={tab === id}
+            className={tab === id ? 'is-active' : undefined}
+            onClick={() => openTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      <LiveConversationControls sessionId={sessionId} />
-      <LiveVoiceCalibrationPanel />
-      <LiveVoiceprintPanel />
-      <LivePronunciationPanel sessionId={sessionId} />
-
-      <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
-        <header>
-          <div>
-            <p className="eyebrow">Call preview</p>
-            <h3 id="live-chat-call-heading">Live conversation</h3>
-            <p>This page controls the same microphone, STT, LLM, and PCM session used by Chats.</p>
-          </div>
-          <div className="live-chat-call-actions">
-            <button
-              type="button"
-              className="live-chat-secondary-action"
-              aria-pressed={fullscreen.immersive}
-              onClick={() => enterLiveChatFullscreen('call-card')}
-            >
-              Fullscreen
-            </button>
-            <LiveMuteButton className="live-chat-secondary-action" />
-            <button type="button" onClick={toggleCall}>{snapshot.connected ? 'End Call' : 'Start Call'}</button>
-          </div>
-        </header>
-        <dl className="live-chat-metrics">
-          <div><dt>Identity</dt><dd>{snapshot.identity}</dd></div>
-          <div><dt>State</dt><dd>{snapshot.state}</dd></div>
-          <div><dt>Floor</dt><dd>{snapshot.floorOwner}</dd></div>
-          <div><dt>Duplex</dt><dd>{duplexLabel}</dd></div>
-        </dl>
-        <LiveCallScene sessionId={sessionId} />
-        <LiveCallTaskChips />
-        {callStatus ? <p className="live-chat-note" role="status">{callStatus}</p> : null}
-      </section>
-
-      <LiveConversationEvaluationPanel />
+      <div className="live-chat-section" role="tabpanel" id={`live-chat-section-${tab}`} aria-labelledby={`live-chat-tab-${tab}`}>
+        {tab === 'character' ? (!sessionId ? (
+          <article className="live-chat-card live-chat-empty" role="status">
+            <h3>Select a Chat session</h3>
+            <p>Choose or create a Chat session to configure its character. Presence changes update your user defaults.</p>
+          </article>
+        ) : (
+          <CharacterModePanel sessionId={sessionId} onSessionResolved={onSessionResolved} />
+        )) : null}
+        {tab === 'presence' ? <LiveConversationControls sessionId={sessionId} /> : null}
+        {tab === 'voice' ? (
+          <>
+            <LiveVoiceCalibrationPanel />
+            <LiveVoiceprintPanel />
+            <LivePronunciationPanel sessionId={sessionId} />
+          </>
+        ) : null}
+        {tab === 'video' ? <LivePortraitEngineCard /> : null}
+        {tab === 'call' ? (
+          <>
+            <LiveCallPreview
+              sessionId={sessionId}
+              connected={snapshot.connected}
+              metrics={[['Identity', snapshot.identity], ['State', snapshot.state], ['Floor', snapshot.floorOwner], ['Duplex', duplexLabel]]}
+              immersive={fullscreen.immersive}
+              callStatus={callStatus}
+              onToggleCall={toggleCall}
+            />
+            <LiveConversationEvaluationPanel />
+          </>
+        ) : null}
+      </div>
     </section>
   );
+}
+
+function LiveCallPreview({ sessionId, connected, metrics, immersive, callStatus, onToggleCall }: {
+  sessionId: string | null;
+  connected: boolean;
+  metrics: ReadonlyArray<readonly [string, string]>;
+  immersive: boolean;
+  callStatus: string | null;
+  onToggleCall: () => void;
+}) {
+  return (
+    <section className="live-chat-card" aria-labelledby="live-chat-call-heading">
+      <header>
+        <div>
+          <p className="eyebrow">Call preview</p>
+          <h3 id="live-chat-call-heading">Live conversation</h3>
+          <p>This page controls the same microphone, STT, LLM, and PCM session used by Chats.</p>
+        </div>
+        <div className="live-chat-call-actions">
+          <button
+            type="button"
+            className="live-chat-secondary-action"
+            aria-pressed={immersive}
+            onClick={() => enterLiveChatFullscreen('call-card')}
+          >
+            Fullscreen
+          </button>
+          <LiveMuteButton className="live-chat-secondary-action" />
+          <button type="button" onClick={onToggleCall}>{connected ? 'End Call' : 'Start Call'}</button>
+        </div>
+      </header>
+      <dl className="live-chat-metrics">
+        {metrics.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}
+      </dl>
+      <LiveCallScene sessionId={sessionId} />
+      <LiveCallTaskChips />
+      {callStatus ? <p className="live-chat-note" role="status">{callStatus}</p> : null}
+    </section>
+  );
+}
+
+/** Tests: start each on the first tab. */
+export function resetLiveChatTabForTests(): void {
+  lastTab = 'character';
 }

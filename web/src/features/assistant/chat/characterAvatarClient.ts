@@ -93,6 +93,10 @@ export const characterAvatarClient = {
   portraitModelStatus(): Promise<components['schemas']['PortraitModelStatus']> {
     return avatar(api.GET('/api/tts/live-call/portrait-load'));
   },
+  /** Unloads the portrait's model now; refused (`model_busy`) while a call streams video. */
+  unloadPortrait(): Promise<components['schemas']['PortraitUnloadResponse']> {
+    return avatar(api.DELETE('/api/tts/live-call/portrait-load'));
+  },
   backfillClonedVoices(input: components['schemas']['BackfillClonedVoiceCharactersRequest']): Promise<ClonedVoiceBackfillResponse> {
     return avatar(api.POST('/api/characters/backfill-cloned-voices', { body: input }));
   },

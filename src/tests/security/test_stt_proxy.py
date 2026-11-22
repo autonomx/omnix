@@ -295,6 +295,25 @@ def test_websocket_proxy_sends_the_calls_own_names_never_the_browsers(setup, mon
     assert roster.stamped == ["chat-1"] * 3  # each name read stamps the call's seats
 
 
+def test_a_call_name_heard_as_another_spelling_reaches_the_browser_as_the_name():
+    # Owner report 2026-11-21: "Jinx" was heard as "Jenks" though the decoder boosted it.
+    names = proxy._CallNames(None, "acct-a")
+    final = json.dumps({"type": "result_available", "segmentId": "s1", "text": "Hey Jenks, what do you see?"})
+    assert proxy._to_browser(final, names) == final  # no call names yet: as the service sent it
+    names._sent = ["Jinx", "Ehsan Matean"]
+    assert json.loads(proxy._to_browser(final, names)) == {
+        "type": "result_available", "segmentId": "s1", "text": "Hey Jinx, what do you see?"}
+    partial = json.dumps({"type": "partial", "text": "Jenks, what"})
+    assert json.loads(proxy._to_browser(partial, names))["text"] == "Jinx, what"
+    resumed = json.dumps({"type": "session_ready", "results": [
+        {"type": "result_available", "text": "tell jenks"}, {"type": "result_available", "text": "Thanks, Jenks!"}]})
+    assert [result["text"] for result in json.loads(proxy._to_browser(resumed, names))["results"]] == [
+        "tell jenks", "Thanks, Jinx!"]  # lower-case and not set off: not said as a name
+    for untouched in (json.dumps({"type": "endpoint_score", "text": "Jenks,"}),
+                      json.dumps({"type": "result_available", "text": "Don't jinx it."}), "not json \"text\"", "[1]"):
+        assert proxy._to_browser(untouched, names) == untouched
+
+
 def test_an_open_call_keeps_stamping_its_seats_and_a_roster_failure_is_no_names(monkeypatch):
     roster = _Roster()
     names = proxy._CallNames(roster, "acct-a")

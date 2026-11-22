@@ -5,6 +5,7 @@ import {
   openLiveCallCamera,
   refreshLiveCallCameraAvailability,
   takeLiveCallCameraPicture,
+  useCameraShare,
   useLiveCallCamera,
   useLiveCallPresentation,
   useLiveConversationSelector,
@@ -15,17 +16,24 @@ import './LiveShowButton.css';
  * Show: one picture from the front camera for the person's next turn (live companion roadmap 4.1). It appears only
  * while a call runs and its vision is configured and allowed. The first press opens the camera with a preview and
  * a visible "Camera on"; the second takes the picture and the camera stops. Only a press opens it: when the call
- * asks to see something (4.3), the button is only shown more prominently.
+ * asks to see something (4.3), the button is only shown more prominently. While the camera is shared (camera
+ * share), the call already sees it: Show steps aside and a picture it held is let go.
  */
 export function LiveShowButton({ className }: { className?: string }) {
   const { captureOwned, captureActive } = useLiveCallPresentation();
   const sessionId = useLiveConversationSelector((runtime) => runtime.sessionId);
   const camera = useLiveCallCamera();
+  const cameraShare = useCameraShare().phase;
+  const shared = cameraShare === 'on' || cameraShare === 'opening';
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (captureOwned && captureActive && sessionId) void refreshLiveCallCameraAvailability(sessionId);
   }, [captureOwned, captureActive, sessionId]);
+
+  useEffect(() => {
+    if (shared && camera.phase !== 'off') closeLiveCallCamera();
+  }, [shared, camera.phase]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -34,7 +42,7 @@ export function LiveShowButton({ className }: { className?: string }) {
     if (camera.stream) void video.play?.()?.catch?.(() => undefined);
   }, [camera.stream]);
 
-  if (!captureOwned || !captureActive || !camera.available || camera.availabilitySessionId !== sessionId) return null;
+  if (shared || !captureOwned || !captureActive || !camera.available || camera.availabilitySessionId !== sessionId) return null;
 
   const previewing = camera.phase === 'preview';
   const requested = camera.requested !== null && (camera.phase === 'off' || camera.phase === 'error');

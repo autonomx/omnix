@@ -52,8 +52,8 @@ def test_the_cap_is_configurable_and_never_past_the_card(float_runtime, monkeypa
 def test_the_load_check_asks_for_the_capped_peak(monkeypatch) -> None:
     from services.portrait import portrait_server
 
-    assert portrait_server.LOAD_VRAM_GB * 1024 >= 4096
-    assert portrait_server.LOAD_COMMIT_BYTES >= 8 * 1024**3
+    assert portrait_server.LOAD_NEEDS["float"][0] * 1024 >= 4096
+    assert portrait_server.LOAD_NEEDS["float"][1] >= 8 * 1024**3
 
 
 def test_encoded_portraits_are_capped_least_recently_used_first(float_runtime) -> None:

@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
+from app.conversation.heard_names import repair_heard_names
 from app.runtime.config import get_runtime_config
 from app.security.model_service import max_upload_bytes
 from app.security.service_token import service_headers
@@ -215,6 +216,11 @@ class _CallNames:
             logger.warning("live speech: the call's seats could not be stamped")
         return names
 
+    @property
+    def called(self) -> list[str]:
+        """The call's names as last read (none before the browser names its chat)."""
+        return self._sent or []
+
     def keep_seats(self) -> None:
         if self.roster is not None and self.chat:
             try:
@@ -242,6 +248,41 @@ class _CallNames:
 def _carries_phrases(data: Any) -> bool:
     return isinstance(data, dict) and (data.get("type") == CONTEXT_PHRASES or (
         data.get("type") == "hello" and ("contextPhrases" in data or "context_phrases" in data)))
+
+
+# The service's messages that carry what was heard: a partial, a pause's preview, a final, and a resumed session's
+# finals again.
+_HEARD_TEXT_TYPES = frozenset({"partial", "preview_result", "result_available"})
+
+
+def _to_browser(text: str, names: _CallNames) -> str:
+    """The service's message as the browser gets it: a call name heard as an everyday spelling written as the name
+    ("Jenks" for Jinx, owner report 2026-11-21). Recognition boosts the names, but a short name sharing its first
+    sound with a common one can still lose; the gateway, which owns the call's names, writes them as they are."""
+    called = names.called
+    if not called or '"text"' not in text:
+        return text
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+    if not isinstance(data, dict):
+        return text
+    changed = False
+
+    def repaired(message: Any) -> Any:
+        nonlocal changed
+        if isinstance(message, dict) and message.get("type") in _HEARD_TEXT_TYPES and isinstance(message.get("text"), str):
+            fixed = repair_heard_names(message["text"], called)
+            if fixed != message["text"]:
+                changed = True
+                return {**message, "text": fixed}
+        return message
+
+    data = repaired(data)
+    if data.get("type") == "session_ready" and isinstance(data.get("results"), list):
+        data = {**data, "results": [repaired(result) for result in data["results"]]}
+    return json.dumps(data) if changed else text
 
 
 async def _keep_seats(names: _CallNames) -> None:
@@ -314,7 +355,7 @@ async def _proxy_websocket(socket: WebSocket) -> None:
                     if isinstance(value, bytes):
                         await socket.send_bytes(value)
                     else:
-                        await socket.send_text(value)
+                        await socket.send_text(_to_browser(value, names))
 
             tasks = [asyncio.create_task(to_service()), asyncio.create_task(to_browser()),
                      asyncio.create_task(_keep_seats(names))]

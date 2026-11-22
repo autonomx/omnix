@@ -1,5 +1,5 @@
  
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
@@ -14,14 +14,17 @@ import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterAvatarPack, type CharacterLiveCallRuntime } from './characterClient';
 import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar, type LiveAvatarState } from './liveCharacterAvatarBridge';
+import { CameraSelfView, LiveCallCameraButtons } from './CameraShare';
 import { LiveCallScene } from './LiveCallScene';
 import { LiveCallTaskChips } from './LiveCallTaskChips';
 import { LiveMuteButton } from './LiveMuteButton';
 import { LiveQuietButton } from './LiveQuietButton';
-import { LiveShowButton } from './LiveShowButton';
+import { LivePortraitLoadControl } from './portrait/LivePortraitLoadControl';
 import { MemberPortrait } from './portrait/MemberPortrait';
+import { liveVideoRequested, subscribeLiveVideo } from './portrait/livePortrait';
 import { loadMemberLoop, packRevision } from './portrait/memberIdleLoops';
 import { useDrawnAvatarPack } from './portrait/useDrawnAvatarPack';
+import { glanceOnTyping } from '../workspace/camera-share';
 import { useLiveCallPresentation } from '../workspace/live-call-presentation-store';
 import { callSceneGuests, useCallScene } from '../workspace/live-call-scene';
 import './LiveChatFullscreenShell.css';
@@ -187,10 +190,11 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
               <strong>Live voice</strong>
               <span>{microphoneStatus} · {duplexLabel}</span>
             </div>
+            <LivePortraitLoadControl />
             <div className="live-chat-fullscreen-call-buttons">
               <LiveMuteButton />
               <LiveQuietButton />
-              <LiveShowButton />
+              <LiveCallCameraButtons />
               <button className={snapshot.connected ? 'danger' : undefined} type="button" onClick={toggleCall}>
                 <span aria-hidden="true">{snapshot.connected ? '■' : '●'}</span>
                 {snapshot.connected ? 'End voice chat' : 'Start voice chat'}
@@ -209,7 +213,7 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
                 value={composerText}
                 placeholder="Write a message…"
                 onChange={(event) => setComposerText(event.currentTarget.value)}
-                onKeyDown={handleComposerKeyDown}
+                onKeyDown={handleComposerKeyDown} onInput={glanceOnTyping}
               />
             </label>
             <button type="submit" aria-label="Send fullscreen Live Chat message" disabled={!composerText.trim()}>➤</button>
@@ -278,7 +282,8 @@ function LiveCharacterStage({
   );
 
   // Every portrait member idles live while another speaks: each one's loop is asked for once it is on the call.
-  // Keyed by each pack's revision too: a pack changed mid-chat is asked for again.
+  // Keyed by each pack's revision too: a pack changed mid-chat is asked for again. Only with live video on.
+  const liveVideo = useSyncExternalStore(subscribeLiveVideo, () => liveVideoRequested(sessionId));
   const hostPack = shownRuntime?.avatar_pack;
   const hostId = hostPack?.renderer === 'portrait' ? hostPack.character_id : null;
   const hostRevision = packRevision(hostPack);
@@ -288,13 +293,13 @@ function LiveCharacterStage({
     .map((guestPack) => `${guestPack?.character_id}\n${packRevision(guestPack)}`)
     .join('\t');
   useEffect(() => {
-    if (!sessionId || !portraitGuests) return;
+    if (!sessionId || !portraitGuests || !liveVideo) return;
     if (hostId) void loadMemberLoop(sessionId, hostId, null, hostRevision);
     for (const guest of portraitGuests.split('\t')) {
       const [guestId, revision] = guest.split('\n');
       void loadMemberLoop(sessionId, guestId, guestId, revision);
     }
-  }, [sessionId, hostId, hostRevision, portraitGuests, speakerId]);
+  }, [sessionId, hostId, hostRevision, portraitGuests, speakerId, liveVideo]);
 
   useEffect(() => {
     if (!isLive2D || !live2dRuntime || !live2dHostRef.current) return;
@@ -344,6 +349,7 @@ function LiveCharacterStage({
       {isLive2D ? <Live2DMotionControl rigAssetId={pack?.rig_asset_id} /> : null}
       {isLive2D ? <Live2DZoomControl /> : null}
       <div className="live-chat-stage-caption" aria-live="polite"><i aria-hidden="true" /><span>{status}</span></div>
+      <CameraSelfView />
       <footer><span>Character-first mode</span><span>{isPortrait ? 'Live portrait linked' : avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>
     </section>
   );

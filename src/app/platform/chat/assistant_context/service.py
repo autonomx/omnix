@@ -10,7 +10,7 @@ from app.conversation.contracts import AssistantContextItem
 from app.runtime.ports import optional
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest
-from app.providers.desktop_vision import DesktopVisionClient, CodexDesktopVisionClient, default_desktop_vision_client
+from app.providers.desktop_vision import DesktopVisionClient, ProviderVisionClient, default_desktop_vision_client
 
 
 class AssistantContextService:
@@ -20,7 +20,7 @@ class AssistantContextService:
         web_search_factory: Callable[..., Any] | None = None,
         quick_search_factory: Callable[[], Any] | None = None,
         research_factory: Callable[[], Any] | None = None,
-        desktop_vision_factory: Callable[[], DesktopVisionClient | CodexDesktopVisionClient] = (
+        desktop_vision_factory: Callable[[], DesktopVisionClient | ProviderVisionClient] = (
             default_desktop_vision_client
         ),
     ) -> None:

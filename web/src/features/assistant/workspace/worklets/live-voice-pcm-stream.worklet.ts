@@ -44,6 +44,8 @@ type PcmStreamMessage = {
   reason?: unknown;
   enabled?: unknown;
   startHoldSamples?: unknown;
+  startLeadSamples?: unknown;
+  coveredSamples?: unknown;
 };
 
 function integer(value: unknown): number | undefined {
@@ -88,13 +90,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   // The live portrait's clock: the active segment's played samples every 20 ms, while a portrait shows.
   portraitClockIntervalSamples = 0;
   portraitClockSamples = 0;
-  // The portrait's start hold (D-5): an output's start waits for its first frames, at most this long.
+  // The portrait's start hold (D-5, revised 2026-11-21): an output's start waits until its frames cover
+  // `startLeadSamples` of its first phrase (all of a shorter one; 0: its first frame), at most `startHoldSamples`.
   startHoldSamples = 0;
+  startLeadSamples = 0;
   // When the hold began, and for which segment: a hold given up (the turn cancelled, the clock off) never
   // carries its start over to the next turn's (review finding, 2026-10-31).
   startHold: { segmentId: string; since: number } | null = null;
   lastHeldEpoch: number | null = null;
-  portraitReadySegments = new Set<string>();
+  // How much of each segment the portrait's frames cover, in this context's samples.
+  portraitCoverage = new Map<string, number>();
 
   constructor(options: ProcessorOptions) {
     super();
@@ -202,13 +207,17 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       this.portraitClockIntervalSamples = message.enabled ? Math.max(128, Math.round(sampleRate * 0.02)) : 0;
       this.portraitClockSamples = 0;
       this.startHoldSamples = message.enabled ? Math.max(0, Math.round(Number(message.startHoldSamples) || 0)) : 0;
+      this.startLeadSamples = message.enabled ? Math.max(0, Math.round(Number(message.startLeadSamples) || 0)) : 0;
       this.maybeStartOrResume();
       return;
     }
     if (message.type === 'portrait_frames_ready') {
-      this.portraitReadySegments.add(String(message.segmentId || ''));
-      if (this.portraitReadySegments.size > 64) {
-        this.portraitReadySegments.delete(this.portraitReadySegments.values().next().value as string);
+      const segmentId = String(message.segmentId || '');
+      const covered = message.coveredSamples === undefined ? Infinity : Math.max(0, Number(message.coveredSamples) || 0);
+      this.portraitCoverage.delete(segmentId); // the newest last, so the oldest goes first
+      this.portraitCoverage.set(segmentId, covered);
+      if (this.portraitCoverage.size > 64) {
+        this.portraitCoverage.delete(this.portraitCoverage.keys().next().value as string);
       }
       this.maybeStartOrResume();
       return;
@@ -443,7 +452,24 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     return this.queue.length > 0 && this.queue.every((segment) => this.endedSegments.has(segment.segmentId));
   }
 
-  /** Whether the start waits for the portrait: its first speech has no frames yet, and the cap has not passed. */
+  /** Whether the portrait's frames cover enough of a segment to start it: the start rule's lead, or nearly all of a
+   * segment shorter than that whose audio has all come (its last frame ends a frame or two before its end). */
+  portraitCovers(segmentId: string): boolean {
+    const covered = this.portraitCoverage.get(segmentId);
+    if (covered === undefined) return false;
+    if (!this.startLeadSamples) return true;
+    let need = this.startLeadSamples;
+    if (this.endedSegments.has(segmentId)) {
+      let length = 0;
+      for (const segment of this.queue) {
+        if (segment.segmentId === segmentId && segment.segmentKind !== 'silence') length += segment.samples.length;
+      }
+      need = Math.min(need, Math.max(0, length - Math.round(sampleRate * 0.08)));
+    }
+    return covered >= need;
+  }
+
+  /** Whether the start waits for the portrait: its first speech is not covered yet, and the cap has not passed. */
   holdingStartForPortrait(): boolean {
     const head = this.queue.find((segment) => segment.segmentKind === 'speech');
     // Only a turn's start: audio is never paused mid-reply to wait for video.
@@ -451,7 +477,7 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       this.startHold = null;
       return false;
     }
-    const ready = this.portraitReadySegments.has(head.segmentId);
+    const ready = this.portraitCovers(head.segmentId);
     if (this.startHold?.segmentId !== head.segmentId) {
       this.startHold = { segmentId: head.segmentId, since: this.renderClockSamples };
     }

@@ -72,3 +72,59 @@ def test_a_long_segment_id_outside_the_basic_plane_still_packs() -> None:
     segment = "\U0001F600" * 160
     header, payload = unpack(pack({"segment_id": segment, "offset": 0}, b"pcm"))
     assert header["segment_id"] == segment and payload == b"pcm"
+
+
+class FakeHttpClient:
+    def __init__(self) -> None:
+        self.data: list[dict[str, Any]] = []
+
+    async def post(self, url: str, **kwargs: Any) -> Any:
+        import httpx
+
+        self.data.append(kwargs["data"])
+        return httpx.Response(200, json={"ok": True, "latent_key": "key"})
+
+
+def test_prepare_names_the_engine_chosen_in_settings(monkeypatch) -> None:
+    client = FakeHttpClient()
+    monkeypatch.setattr(link_module, "portrait_engine", lambda: "flashhead-lite")
+    assert asyncio.run(link_module.prepare_portrait("http://portrait.test", "t", b"image", client=client)) == "key"
+    assert asyncio.run(link_module.prepare_portrait("http://portrait.test", "t", b"image", client=client,
+                                                    engine="float")) == "key"
+    assert [data["engine"] for data in client.data] == ["flashhead-lite", "float"]
+
+
+@pytest.mark.parametrize(("settings", "engine"), [
+    ({"settings_control_center": {"assistant": {"livePortraitEngine": "flashhead-lite"}}}, "flashhead-lite"),
+    ({"settings_control_center": {"assistant": {"livePortraitEngine": "float"}}}, "float"),
+    ({"settings_control_center": {"assistant": {"livePortraitEngine": "something-else"}}}, "float"),
+    ({"settings_control_center": {"assistant": {}}}, "float"),
+    ({}, "float"),
+    (RuntimeError("no settings"), "float"),
+])
+def test_the_engine_comes_from_settings_and_falls_back_to_float(monkeypatch, settings: Any, engine: str) -> None:
+    from app.settings import access
+
+    def load_settings() -> Any:
+        if isinstance(settings, Exception):
+            raise settings
+        return settings
+
+    monkeypatch.setattr(access, "load_settings", load_settings)
+    assert link_module.portrait_engine() == engine
+
+
+def test_the_settings_offer_exactly_the_services_engines() -> None:
+    import typing
+
+    from pydantic import ValidationError
+
+    from app.conversation.portrait_stream_contract import DEFAULT_PORTRAIT_ENGINE, PORTRAIT_ENGINES
+    from app.settings.profile_experience import AssistantSettingsProfile
+
+    field = AssistantSettingsProfile.model_fields["live_portrait_engine"]
+    assert typing.get_args(field.annotation) == PORTRAIT_ENGINES and field.default == DEFAULT_PORTRAIT_ENGINE
+    chosen = AssistantSettingsProfile(livePortraitEngine="flashhead-lite")
+    assert chosen.model_dump(by_alias=True)["livePortraitEngine"] == "flashhead-lite"
+    with pytest.raises(ValidationError):
+        AssistantSettingsProfile(livePortraitEngine="other")

@@ -431,7 +431,7 @@ or a score that came too late all mean today's behaviour. The final transcript i
   observation, used by `chat/assistant_context/service.py`.
   - It runs on a local OpenAI-compatible vision model or on Codex, configured by `OMNIX_VISION_*`.
   - Codex is remote and needs explicit remote consent (`desktop_vision.py`).
-- The call's own model (Claude CLI) takes no images.
+- The call's own model (Claude CLI) takes no images. (Since 2026-11-22 it does: see that day's camera entry.)
 
 **Work packages.**
 - 4.1 "Show" button in the call. It appears only when vision is configured and allowed: local, or remote with
@@ -481,6 +481,49 @@ or a score that came too late all mean today's behaviour. The final transcript i
 - 4.1. **Known limit:** the `camera` grant gates only the model's `look`. Show is the person's own button, so a
   picture they send is described even when the companion may not ask for one. The remote-consent check of the
   vision client still applies.
+
+**4.4 Camera share (added 2026-11-21, owner request).** The camera can be shared like the screen: it stays on
+until the person turns it off, in live calls and typed chat.
+- **Owner choices (2026-11-21).** Glance as the person speaks, so replies don't wait. Offered in live calls and
+  typed chat. Camera and screen can be shared at once.
+- **Web.**
+  - The toggle is a Camera button beside Desktop in the composer, a Camera item in the "+" menu, and Camera in
+    both call rows. Only that press opens the camera (`facingMode: 'user'`, video only).
+  - While the camera is shared, a mirrored self-view tile sits in the stage's bottom-right corner, with a
+    "Camera on" badge (`chat/CameraShare.tsx`).
+  - Show steps aside while the camera is shared, and a picture Show held is let go.
+  - The store is `workspace/camera-share.ts`.
+- **Glances.** A frame (longest side 768 px) goes to `POST /api/chat/sessions/{id}/camera/glance`:
+  - when the person's speech is confirmed, at most every 4 s;
+  - on typing, at most every 10 s;
+  - before a turn whose chat had no glance in the last 15 s.
+
+  The gateway describes the frame in the background (`chat/camera_glance.py`, one at a time per chat) and keeps
+  only the description, in memory.
+- **Turns.** A turn sent while the camera is shared says `camera_shared: true`. It carries no image.
+  - The chat, context and job routes all take the newest glance if it is under 30 s old. A live turn waits up to
+    2 s for it; a typed turn waits up to 8 s.
+  - The description joins that turn's context as untrusted `camera` content, and is saved as `camera_snapshot`.
+  - With no fresh description, the model is told it cannot see the camera right now. There is no filler.
+- **Unprompted turns (owner request, 2026-11-21).** The companion may speak up about what the camera shows.
+  - A shared camera is a reason for the quiet-call turn, like fresh desktop context (`ambient_visual_presence`). The
+    same idle threshold, cooldown and hourly cap apply; there is no polling loop of its own.
+  - Just before such a turn, the web glances and sends `camera_shared=true` to `.../live-call/greeting/stream`.
+    Task reports, open loops and scene lines don't carry it.
+  - The server waits up to 8 s for the description and adds it to the prompt as untrusted content
+    (`chat.camera_share.proactive_seen` v1). The prompt allows one specific thing worth a word, never the person's
+    appearance, body or health, and the model may still answer SKIP.
+  - If the camera alone was the reason and nothing was seen, the turn ends with `ambient_camera_unseen` and no
+    model call. With another reason, the model is told it cannot see (`chat.camera_share.proactive_unseen` v1).
+  - The description isn't saved with an unprompted line: its delivery is built from what the web sends.
+- **Call start (owner request, 2026-11-21).** The web glances as the call starts (`ASSISTANT_LIVE_VOICE_CALL_START_EVENT`),
+  while it connects. The generated greeting sends `camera_shared=true` and waits up to 2 s for that look
+  (`GREETING_WAIT_SECONDS`). Only a look that saw something adds `chat.camera_share.proactive_seen` to the greeting
+  prompt; with nothing seen, the greeting is unchanged. The first turn reuses the same glance while it is fresh (30 s).
+- **Vision unavailable.** If vision is unavailable or remote without consent, the glance says so, and the web
+  turns the share off with the reason.
+- **Known limit.** As with Show, sharing is the person's own act, so it does not need the `camera` grant. The
+  `look` instructions still speak of Show only.
 
 ## 5. Several characters in one call
 
@@ -1312,3 +1355,133 @@ with how often they talk.
       - Member idle loops are keyed by the pack revision, so a changed face is asked for again.
       - A PCM session stopped before its socket opened ends the phrases waiting for it.
     - Before a call uses this: migrate 0201 on live, then restart the gateway and the STT service.
+- 2026-11-21: 4.4 camera share built (uncommitted, beside the FlashHead work).
+  - Server: `chat/camera_glance.py`, the glance route in `live_call_task_routes.py`, and `camera_shared` on the
+    chat and context requests. The prompt is `chat.camera_share.glance` v1.
+  - Web: `workspace/camera-share.ts`, plus `chat/CameraShare.tsx` (toggle and self-view tile).
+  - Tests: `src/tests/chat/test_camera_glance.py` (PG), `camera-share.test.ts`, and `CameraShare.test.tsx`.
+  - Unprompted turns see the camera too (owner request, same day): `camera_shared` on the greeting stream,
+    `proactive_camera_note` and the `ambient_camera_unseen` skip. Tests are in
+    `src/tests/unit/chat/test_live_conversation_proactive_camera.py` and
+    `live-conversation-initiative-camera.test.ts`.
+  - Call start (owner request, same day): the glance on call start, and the greeting takes a look that saw something.
+    Tests are in the same Python file, `camera-share.test.ts` and `live-voice-unified-audio-controller.test.ts`.
+  - Live idle video before the call (owner request, same day). Once the portrait model is ready and the chat asked
+    for live video ("Load live video"; since 2026-11-22 a loaded model alone is not enough), `LivePortraitLoadControl` fetches the chat character's idle loop
+    (`GET /api/tts/live-call/portrait-idle`, which serves a rendered loop outside a call too). The stage plays the
+    loop until the call's first frame. If the model is ready but this face's loop is not known, the button stays
+    pressable, and pressing it renders the loop. Tests: `LivePortraitLoadControl.test.tsx`.
+  - Not yet tried on a real camera or vision model.
+- 2026-11-21: the Live Chat page is tabbed: Character, Presence, Voice, Video and Call (owner request). The open tab
+  is remembered, and Start Call and the call preview are on the Call tab. The live portrait engine (FLOAT or
+  FlashHead Lite) moved from Settings → Assistant & Chat to the Video tab (`portrait/LivePortraitEngineCard.tsx`).
+  It saves `assistant.livePortraitEngine` at once through `settings/assistantSettingsUpdate.ts`.
+  Tests: `LiveChatPanel.test.tsx`.
+- 2026-11-21, review of the owner's call with Jinx: "Jinx" was transcribed as "Jenks" and stayed that way.
+  - Both names were boosted before the first utterance (`stt_context_phrases_applied`, 1 then 2 phrases), and the
+    finals came from the boosted full decode.
+  - The boost is too small to change this word. "Jinx" and "Jenks" share their first token (`▁J`), and the deciding
+    token (`in` against `en`) gains only about 1.35 nats (alpha 0.5 × 2.69).
+  - Fix: the speech proxy now writes a heard word as the call's name when it sounds like exactly one of them and is
+    said as a name. It applies to partials, previews, finals and a resumed session's finals
+    (`app/conversation/heard_names.py`, `stt_proxy_routes._to_browser`). An everyday use ("don't jinx it") stays as
+    heard. `scene.py` now uses the same helpers.
+  - Tests: `test_heard_names.py`, `test_stt_proxy.py`. It takes effect when the gateway restarts.
+- 2026-11-21, owner report: FlashHead's "live video" looked like the still picture.
+  - Cause: the browser did get the loop and play it. But FLOAT's rest-pose rule had cut it from the stillest 4.3 s
+    of the render: mean change from the first frame was 2.0/255, with no visible blink or sway.
+  - Fix: a FlashHead reply starts from the loop's own last frames, not from the picture, so the loop no longer has
+    to stay near the picture. `flashhead_runtime.idle_loop_bounds` cuts a loop of at least 8 s from 15 passes of
+    silence (about 14.4 s), skipping the first pass.
+  - Re-measured on the service with Jinx: a 9.6 s loop with a head turn and eye movement. Mean change from the first
+    frame is 2.4 (max 3.1), and the eye band's std reaches 33. The seam step is 2.5, against 1.0 for an average step.
+  - Test: `test_flashhead_runtime.py`.
+- 2026-11-21, owner report: in a group call with Ehsan the picture kept resizing and the live video was choppy.
+  - Cause: each speaker change opens a new FlashHead stream (one stream, one GPU thread). FlashHead renders 24 frames
+    a pass and needs about 1 s of audio ahead of each, so a start released on its first frames ran out of video at
+    once. Frames came late, the portrait fell back to the still picture and back again, every turn. The quality
+    levels only change the JPEG, not the render, so they could not catch up.
+  - Fix 1: a portrait that drops out mid-call idles on its loop instead of a still fallback picture
+    (`useDrawnAvatarPack.ts`). A moving fallback (sprite with mouth frames, Live2D, Rive) is kept.
+  - Fix 2, D-5 revised by the owner: the start hold is per engine (`PORTRAIT_START_RULES`, sent in the avatar
+    socket's `ready`). FlashHead Lite waits until frames cover 1.28 s of the phrase, or all but 80 ms of a shorter
+    one, capped at 1.2 s. FLOAT is unchanged (first frames, 250 ms cap). A slow FlashHead start now costs up to 1.2 s
+    of silence before a reply.
+  - Deferred: one stream per call shared by the speakers.
+  - Tests: `LiveChatFullscreenShell.test.tsx`, `livePortrait.test.tsx`, `live-voice-pcm-session.test.ts`,
+    `live-voice-pcm-worklet.test.ts`, `test_gateway_live_call_avatar_websocket.py`, `test_flashhead_runtime.py`.
+    Not yet tried in a call; takes effect when the gateway restarts and the page reloads.
+- 2026-11-21, owner report: FlashHead's idle loop barely moves, "almost a still image with blinking"; blink more.
+  - Head motion: none found from the model. In silence FlashHead moves the head 0 px with any seed or with room tone,
+    and faint speech at any gain lip-syncs (wav2vec ignores scale). A post-render sway was shown and rejected by the
+    owner. Open; a reference recording of the wanted motion would help.
+  - Blinks: the browser fades the idle loop into its eyes-shut twins every 3.5-8 s, but FlashHead's twins were its
+    loop frames, so those blinks showed nothing, and the model blinks in only about a third of 14 s silent renders.
+    Fix (`flashhead_runtime.py`): `blink_frame` finds a silent render's own blink (a brief change in the eye band);
+    the twin is the loop frame with the eye area from that frame (`eye_region_mask`, as FLOAT's). Ahead of a call,
+    `find_blink` tries up to two more seeds (about 5 s each) when the loop's render has none; never in a call.
+    Six test faces: four get twins, Abhishek missed with both seeds, Mohammad wears dark glasses (no twins, as before).
+  - Tests: `test_flashhead_runtime.py`, `test_portrait_service.py`. Live after the portrait service restart of
+    2026-11-21 19:40; not yet seen in a call.
+- 2026-11-21: FlashHead idle head motion from LivePortrait (owner approved after an offline prototype).
+  - A recorded idle motion (each frame's pose, expression, x/y shift and scale change from the first frame; lips
+    held) drives LivePortrait (KwaiVGI, MIT) to animate the portrait into a closed loop ahead of a call; LivePortrait's
+    eye retargeting makes the eyes-shut twins. FlashHead still renders all speech, starting from the loop's frames.
+    Without LivePortrait's models or the motion file, or when either fails to load or render, the loop is FlashHead's
+    own as before.
+  - Code: `services/portrait/liveportrait_idle.py` (motion file, loop closure, renderer), `flashhead_runtime.py`
+    (`load_liveportrait`, `liveportrait_idle`; the twins replace the blink search). Catalog: `liveportrait-code`
+    and `liveportrait-weights` in the FlashHead bundle (pinned revisions, checksums). Motion from a recording:
+    `scripts/portrait_idle_motion.py` (OPERATIONS §7).
+  - The motion ships (owner, 2026-11-22): `services/portrait/assets/idle-motion.npz`, 237 frames of head pose and
+    expression numbers taken from the reference video the owner chose (a third-party demo); no pixels are kept and the
+    video was deleted. A user's own
+    motion in the portrait models' folder, or `OMNIX_PORTRAIT_IDLE_MOTION`, replaces it.
+  - Real service (Afra, the shipped motion): loop and twins in 12.9 s of a 34 s prepare;
+    seam 2.5 vs a 2.24 frame step; idle → speech first frame 4.5; colours matched; GPU peak 17.6 GB total with the
+    other services; commit headroom 36.8 GB.
+  - Handover: FlashHead's speech frames lose the eye catchlight and draw a darker lash line than LivePortrait's idle
+    frames (sharpness 493 vs 266). A blur of the loop doesn't match that, so none is applied; watch it in a call.
+  - Open: a real call.
+  - Tests: `test_liveportrait_idle.py`.
+- 2026-11-22: live calls without live video (owner request). Start Call no longer brings the portrait up; a chat
+  gets live video only after "Load live video" is pressed in it.
+  - The request is kept per chat in the page (`requestLiveVideo` and `liveVideoRequested` in `livePortrait.ts`) until
+    the page reloads. `livePortrait.wanted` needs it, so a call without it opens a voice-only audio session and the
+    faces stay still pictures: no idle loops are fetched, on the call card or in the full-screen call.
+  - "Load live video" also shows in the full-screen call card. Pressed during a call, it loads the model, and the
+    next reply replaces the audio session with one that draws the portrait (`ensureSharedAudioSession` compares the
+    session's `portrait` flag).
+  - The benchmark's `--portrait on` presses the button before the call (`test_live_voice_performance.py`).
+  - Owner report, same day: an invited guest (Abhishek) stayed a still picture after "Load live video". The button
+    rendered only the host's loop, and the gateway hands out rendered loops only, so a guest's came first with its own
+    turn. Now the button also has each portrait guest's picture prepared (and its loop rendered), one at a time,
+    outside a call only, and fetches its loop; a guest invited later is prepared then (`claimGuestRender` in
+    `memberIdleLoops.ts`, so the call card's and the full-screen button do not both ask).
+  - Owner request, same day: pressing "Live video ready" again unloads the video. The portrait service gained
+    `POST /portrait/unload` (refused while a call streams, `model_busy`, or mid-load, `warming`; with a launcher it
+    exits and restarts light, as the idle unload does), the gateway `DELETE /api/tts/live-call/portrait-load`
+    (`unload_portrait` in `link.py`), and the button: on success it turns the chat's video off (`cancelLiveVideo`) and
+    drops the idle loops, so the faces are still pictures again; a refusal keeps the video and says why.
+  - Owner request, same day: the load shows its progress. The service reports only loading or ready, so the bar
+    (`LiveVideoLoadProgress.tsx`, `loadProgress.ts`) follows the button's own steps: the model (when it is not up),
+    the chat's face, then each portrait guest, each named ("Rendering Jinx's live video…", "Step 2 of 3 · about 6 s
+    left"). A step fills evenly to 90% at its expected time and then creeps toward 99%; the expected times start at
+    12 s for the model and 5 s a face (the service logs: 9.5-13.5 s and 1-4 s) and follow this browser's own loads
+    (`omnix.livePortrait.loadTimes`). A load the button did not start (a call's) shows a sliding bar.
+  - Tests: `livePortrait.test.tsx`, `LivePortraitLoadControl.test.tsx`, `LiveChatFullscreenShell.test.tsx`,
+    `live-voice-unified-audio-controller.test.ts`, `test_portrait_service.py`, `test_portrait_setup.py`. Not yet
+    tried in a real call.
+- 2026-11-22: the camera sees with the chat's own model (owner report and decision). Shared from the Mac, the camera
+  turned itself off at the first question: no vision model was set ("No vision model is set up"), and the chat ran on
+  Claude Haiku 4.5 through the Claude CLI, which took no images. Now, with no vision model set, the chat's model looks:
+  - The Claude CLI provider sends the latest user message's pictures as image blocks ahead of the prompt in its
+    stream-json message (`prompt_content` in `claude_cli_provider.py`; measured: Haiku 4.5 described a test picture
+    in 1.7 s, CLI 2.1.330). Like Codex, only the latest message's pictures go.
+  - `default_desktop_vision_client` follows the chat provider: Codex and the Claude CLI through their CLIs
+    (`ProviderVisionClient`, with `CodexDesktopVisionClient` and the new `ClaudeCliDesktopVisionClient`), and
+    LM Studio or llama.cpp through their local server with the chat's model (`follows_chat`). A vision model set
+    explicitly still wins, and `claude_cli:<model>` picks Claude as `codex:<model>` picks Codex.
+  - Claude and Codex are remote, so the owner still ticks "Allow remote vision provider" before a picture goes.
+    A local chat model without vision fails its look, which the call already says ("I couldn't see it").
+  - Tests: `test_assistant_context.py`, `test_claude_cli_provider.py`. Not yet tried in a real call.

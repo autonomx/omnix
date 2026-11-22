@@ -4,6 +4,7 @@ import { companionInitiativeArbiter, type CompanionInitiativeSource } from './co
 import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { closeProposalQuestion, markProposalQuestionAudible, noteUserSpeechOnset, openProposalQuestion } from './live-call-proposal-question';
 import { callTasksAwaitingReport } from './live-call-tasks-controller';
+import { cameraShared, glanceCameraShare } from './camera-share';
 import { callSceneHasGuests, isSceneTalkReason, isSceneTurnId, SCENE_LINE_REASON, SCENE_REACTION_REASON, SCENE_TALK_REASON, SCENE_TALK_SILENCE_MS } from './live-call-scene';
 import { decideInitiative, decideTaskReport, insideQuietHours } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
@@ -302,7 +303,7 @@ function evaluateInitiative(): void {
       ? 'gentle_reassurance'
       : profile.long_pause_behavior === 'ask_to_continue'
         ? 'ask_to_continue'
-        : visualContext
+        : visualContext || cameraShared()
           ? 'ambient_visual_presence'
           : null);
   const decision = decideInitiative({
@@ -339,6 +340,7 @@ function evaluateInitiative(): void {
     idle_threshold_ms: timing.idleThresholdMs,
     cooldown_ms: timing.cooldownMs,
     visual_context_available: Boolean(visualContext),
+    camera_shared: cameraShared(),
   });
   if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) {
     void startProactiveTurn(selectedSessionId, reason, profile, timing);
@@ -539,6 +541,12 @@ async function startProactiveTurn(
     } else {
       params.set('state_summary', conversationStateSummary(profile, timing, sessionId));
       if (timing.typicalTurnWords !== null) params.set('target_words', String(timing.typicalTurnWords));
+      if (cameraShared() && !turnReason.startsWith(OPEN_LOOP_REASON_PREFIX)) {
+        // A fresh look as the companion speaks up; the server waits briefly for its description.
+        await glanceCameraShare(sessionId);
+        if (controller.signal.aborted) return;
+        params.set('camera_shared', 'true');
+      }
     }
     dispatchPerf('initiative_generation_started', {
       session_id: sessionId,

@@ -1,18 +1,20 @@
 """Live portrait Phase 1 smoke test: the service process itself, started from its own environment.
 
 Starts ``services.portrait.portrait_server`` with the given interpreter on a free local port and a fresh
-service token, waits for ``/health`` to report ``ready``, prepares a photo, streams a clip over the websocket
+service token, waits for ``/health`` to answer, prepares a photo with ``--engine`` (``float`` or
+``flashhead-lite``; the prepare loads it, asked again while it warms), streams a clip over the websocket
 at the given pace (TTS runs faster than real time), and checks the frames: count, order, stamps, JPEG
 validity, and the time from the first audio to the first frame. Stops the service at the end.
 Refuses to start while the machine is busy (as the spike does).
 
     .venv/dev-clean/Scripts/python.exe scripts/portrait_service_smoke.py --python <omnix-portrait python> \
-        --photo <photo> --audio a.wav --out <dir>
+        --photo <photo> --audio a.wav --out <dir> [--engine flashhead-lite]
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import collections
 import hashlib
 import io
 import json
@@ -69,15 +71,19 @@ async def stream_clip(url: str, token: str, latent_key: str, pcm, rate: int, pac
         await websocket.send(json.dumps({"type": "output_end", "output_id": "out", "epoch": 1}))
         expected = -(-len(pcm) * 16_000 // rate // 640)
         deadline = time.perf_counter() + 30
-        while len(frames) < expected and time.perf_counter() < deadline:
+        while sum(header["output_id"] == "out" for header, _j, _a in frames) < expected and time.perf_counter() < deadline:
             await asyncio.sleep(0.05)
+        await asyncio.sleep(0.5)  # the hand-back to idle
         receiver.cancel()
-    offsets = [header["offset"] for header, _jpeg, _at in frames]
-    decodable = sum(1 for _header, jpeg, _at in frames if Image.open(io.BytesIO(jpeg)).size == (512, 512))
-    return {"frames": len(frames), "expected": expected, "in_order": offsets == sorted(offsets),
-            "decodable_512": decodable, "first_frame_after_first_audio_ms": round((frames[0][2] - started) * 1000)
-            if frames else None, "stream_seconds": round(frames[-1][2] - started, 2) if frames else None,
-            "audio_seconds": round(len(pcm) / rate, 2)}
+    # The speech's frames are checked; the idle loop's, its blink's and the hand-back's are counted by output.
+    by_output = collections.Counter(header["output_id"] for header, _jpeg, _at in frames)
+    speech = [(header, jpeg, at) for header, jpeg, at in frames if header["output_id"] == "out"]
+    offsets = [header["offset"] for header, _jpeg, _at in speech]
+    decodable = sum(1 for _header, jpeg, _at in speech if Image.open(io.BytesIO(jpeg)).size == (512, 512))
+    return {"frames": len(speech), "expected": expected, "in_order": offsets == sorted(offsets),
+            "decodable_512": decodable, "first_frame_after_first_audio_ms": round((speech[0][2] - started) * 1000)
+            if speech else None, "stream_seconds": round(speech[-1][2] - started, 2) if speech else None,
+            "audio_seconds": round(len(pcm) / rate, 2), "frames_by_output": dict(by_output)}
 
 
 def main() -> int:
@@ -87,6 +93,7 @@ def main() -> int:
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--pace", type=float, default=3.0, help="audio sent this many times faster than real time")
+    parser.add_argument("--engine", default="float", choices=("float", "flashhead-lite"))
     parser.add_argument("--allow-busy", action="store_true")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -109,30 +116,29 @@ def main() -> int:
     results: dict = {}
     try:
         started = time.perf_counter()
-        status = "starting"
+        photo = args.photo.read_bytes()
+        headers = {"X-Omnix-Service-Token": token, "X-Omnix-Client": "smoke"}
+        prepared: dict = {"code": "service_unreachable"}
         while time.perf_counter() - started < 300:
             if process.poll() is not None:
                 results["exited"] = process.returncode
                 return 1
-            try:
-                health = httpx.get(f"{base}/health", timeout=2).json()
-                status = health["status"]
-                if status in {"ready", "missing", "short", "failed"}:
-                    break
+            began = time.perf_counter()
+            try:  # the first prepare loads the engine; asked again while it warms
+                prepared = httpx.post(f"{base}/portrait/prepare", headers=headers, timeout=120,
+                                      data={"tenant": "smoke", "image_sha256": hashlib.sha256(photo).hexdigest(),
+                                            "engine": args.engine},
+                                      files={"file": (args.photo.name, photo)}).json()
             except httpx.HTTPError:
-                pass
+                prepared = {"code": "service_unreachable"}
+            if prepared.get("ok") or prepared.get("code") not in {"warming", "service_unreachable"}:
+                break
             time.sleep(1)
         results["ready_after_s"] = round(time.perf_counter() - started, 1)
-        results["health"] = health if status != "starting" else None
-        if status != "ready":
-            return 1
-        photo = args.photo.read_bytes()
-        headers = {"X-Omnix-Service-Token": token, "X-Omnix-Client": "smoke"}
-        began = time.perf_counter()
-        prepared = httpx.post(f"{base}/portrait/prepare", headers=headers, timeout=60,
-                              data={"tenant": "smoke", "image_sha256": hashlib.sha256(photo).hexdigest()},
-                              files={"file": (args.photo.name, photo)}).json()
         results["prepare"] = {**prepared, "ms": round((time.perf_counter() - began) * 1000)}
+        results["health"] = httpx.get(f"{base}/health", timeout=2).json()
+        if not prepared.get("ok"):
+            return 1
         audio, rate = soundfile.read(str(args.audio), dtype="int16")
         pcm = (audio if audio.ndim == 1 else audio[:, 0]).astype("<i2")
         results["stream"] = asyncio.run(stream_clip(f"ws://127.0.0.1:{port}/portrait/stream", token,

@@ -213,6 +213,35 @@ describe('live voice PCM worklet state machine', () => {
     expect(events(processor, 'started')).toHaveLength(3);
   });
 
+  it("holds a start until the frames cover the engine's lead, or nearly all of a shorter phrase", () => {
+    // FlashHead (D-5, revised 2026-11-21): a start on its first frames ran late, so it waits for a pass ahead.
+    const processor = createProcessor();
+    send(processor, { type: 'set_portrait_clock', enabled: true, startHoldSamples: 8_192, startLeadSamples: 4_096 });
+    const push = (segmentId: string, generationEpoch: number, length: number) => send(processor, {
+      type: 'push_segment_samples', segmentId, segmentKind: 'speech', phraseIndex: 0, outputId: segmentId,
+      generationEpoch, samples: new Float32Array(length).fill(0.2),
+    });
+    push('speech-0', 1, 6_000);
+    render(processor);
+    send(processor, { type: 'portrait_frames_ready', segmentId: 'speech-0', coveredSamples: 2_048 });
+    render(processor);
+    expect(events(processor, 'started')).toHaveLength(0); // its first frames only
+    send(processor, { type: 'portrait_frames_ready', segmentId: 'speech-0', coveredSamples: 4_096 });
+    expect(events(processor, 'started')).toHaveLength(1);
+    expect(events(processor, 'start_hold').at(-1)).toEqual(expect.objectContaining({ released_by: 'frames' }));
+    send(processor, { type: 'segment_end', segmentId: 'speech-0' });
+
+    // A phrase shorter than the lead, all its audio in: frames to within 80 ms (1,920 samples) of its end suffice.
+    for (let quantum = 0; quantum < 60; quantum += 1) render(processor);
+    push('speech-1', 2, 3_000);
+    send(processor, { type: 'segment_end', segmentId: 'speech-1' });
+    render(processor);
+    send(processor, { type: 'portrait_frames_ready', segmentId: 'speech-1', coveredSamples: 1_000 });
+    expect(events(processor, 'started')).toHaveLength(1);
+    send(processor, { type: 'portrait_frames_ready', segmentId: 'speech-1', coveredSamples: 1_080 });
+    expect(events(processor, 'started')).toHaveLength(2);
+  });
+
   it('starts a fresh hold for the next turn when a held turn is cancelled', () => {
     // Review finding (2026-10-31): the given-up hold's start carried over, so the next turn's hold ended at once.
     const processor = createProcessor();

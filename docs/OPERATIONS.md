@@ -436,8 +436,16 @@ For STT:
 
 For a live call's portrait (`docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md`):
 
+- a call is voice only until "Load live video" is pressed in that chat (on the call card or in the full-screen call);
+  pressed during a call, the video starts with the next reply. The choice lasts until the page reloads. A call that
+  shows no portrait for this reason logs nothing: it is not a failure. Pressed again once it says "Live video ready",
+  the button unloads the portrait model (`DELETE /api/tts/live-call/portrait-load`, the service's
+  `POST /portrait/unload`, which restarts it light) and turns that chat back to voice only. The service refuses while a
+  call streams video (`model_busy`) or the model is still loading (`warming`);
 - a call with a portrait character shows the pack's fallback (its image, its Live2D rig or the orb) whenever the
-  portrait cannot serve; the call itself goes on. The browser's live-call diagnostics name the reason
+  portrait cannot serve; the call itself goes on. When that fallback is only the picture (a sprite with no mouth
+  frames) and the character's idle loop is already known, the tile idles on the loop instead, so it keeps its size
+  and its cropping. The browser's live-call diagnostics name the reason
   (`portrait_not_configured`, `portrait_busy`, `warming`, `portrait_lost`, `frames_late`, ...);
 - check `GET 127.0.0.1:5501/health`: `status` is `missing` (install the live-portrait bundle in Settings, Models),
   `short` (less than 2.5 GB of free VRAM or 6 GB of commit headroom: close something), `warming` (cuDNN builds its
@@ -446,7 +454,15 @@ For a live call's portrait (`docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md`):
   the same user and session reloading replaces its own stream. A stream whose heartbeats stop is closed after 6 s;
 - the model unloads after 30 idle minutes with no stream open (`OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS`) and loads again
   on the next call's prepare, which then reports `warming`;
-- the diagnostics page lists the service with the other model services when `OMNIX_PORTRAIT_URL` is set.
+- the diagnostics page lists the service with the other model services when `OMNIX_PORTRAIT_URL` is set;
+- FlashHead Lite's idle loop moves the head when the bundle's `liveportrait-code` and `liveportrait-weights` models
+  are installed. The motion ships with the service (`src/services/portrait/assets/idle-motion.npz`); your own
+  replaces it from `resources/models/portrait/idle-motion.npz`, or from any file named by
+  `OMNIX_PORTRAIT_IDLE_MOTION`. To make your own from a 10-15 s recording of someone sitting still, looking at the
+  camera and not talking, run with the portrait service's interpreter while no call runs:
+  `python scripts/portrait_idle_motion.py clip.mp4 [--start S] [--end S]`, then restart the portrait service. The
+  log says `flashhead idle loops: LivePortrait, idle motion of N frames (path)`; without the models (or if loading
+  fails) it says why and the loop is FlashHead's own nearly still one.
 
 ### 8. An agent proposes but does not execute
 

@@ -2517,6 +2517,11 @@
             "title": "Allow Research Downgrade",
             "type": "boolean"
           },
+          "camera_shared": {
+            "default": false,
+            "title": "Camera Shared",
+            "type": "boolean"
+          },
           "coding_approval_policy": {
             "default": "ask_sensitive",
             "enum": [
@@ -7219,6 +7224,43 @@
           "reason"
         ],
         "title": "CameraAvailability",
+        "type": "object"
+      },
+      "CameraGlanceRequest": {
+        "additionalProperties": false,
+        "description": "One frame from the person's shared camera (camera share). Only its description is kept.",
+        "properties": {
+          "image": {
+            "maxLength": 3000000,
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "CameraGlanceRequest",
+        "type": "object"
+      },
+      "CameraGlanceResult": {
+        "description": "Whether the frame is being described; it is described in the background and joins the next turn.",
+        "properties": {
+          "status": {
+            "enum": [
+              "started",
+              "in_progress",
+              "vision_not_configured",
+              "remote_vision_not_allowed",
+              "vision_unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CameraGlanceResult",
         "type": "object"
       },
       "CampaignEnded": {
@@ -30711,6 +30753,11 @@
       },
       "LiveSpeculationRequest": {
         "properties": {
+          "camera_shared": {
+            "default": false,
+            "title": "Camera Shared",
+            "type": "boolean"
+          },
           "content": {
             "maxLength": 8000,
             "minLength": 2,
@@ -41859,6 +41906,31 @@
           "frames"
         ],
         "title": "PortraitPreviewResponse",
+        "type": "object"
+      },
+      "PortraitUnloadResponse": {
+        "properties": {
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "code",
+          "message"
+        ],
+        "title": "PortraitUnloadResponse",
         "type": "object"
       },
       "PostcloseRunRequest": {
@@ -61502,6 +61574,11 @@
               }
             ],
             "title": "Camera Image"
+          },
+          "camera_shared": {
+            "default": false,
+            "title": "Camera Shared",
+            "type": "boolean"
           },
           "coding_approval_policy": {
             "default": "ask_sensitive",
@@ -86878,6 +86955,56 @@
         ]
       }
     },
+    "/api/chat/sessions/{session_id}/camera/glance": {
+      "post": {
+        "description": "A frame from the person's shared camera, described in the background for their next turn.",
+        "operationId": "post_camera_glance_api_chat_sessions__session_id__camera_glance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraGlanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraGlanceResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Camera Glance"
+      }
+    },
     "/api/chat/sessions/{session_id}/interaction": {
       "get": {
         "operationId": "get_session_interaction_api_chat_sessions__session_id__interaction_get",
@@ -87068,6 +87195,16 @@
             "schema": {
               "default": false,
               "title": "Scene Talk Switched Off",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "camera_shared",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Camera Shared",
               "type": "boolean"
             }
           }
@@ -111977,6 +112114,25 @@
       }
     },
     "/api/tts/live-call/portrait-load": {
+      "delete": {
+        "operationId": "portrait_unload_api_tts_live_call_portrait_load_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortraitUnloadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portrait Unload",
+        "tags": [
+          "live-voice"
+        ]
+      },
       "get": {
         "operationId": "portrait_model_status_api_tts_live_call_portrait_load_get",
         "responses": {

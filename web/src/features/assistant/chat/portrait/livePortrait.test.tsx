@@ -5,7 +5,9 @@ import type { LiveVoicePcmSession } from '../../workspace/live-voice-pcm-session
 import { drawnAvatarPack, publishCharacterAvatarRuntime } from '../liveCharacterAvatarBridge';
 import { LiveCallVisual } from '../LiveCallVisual';
 import { fixture } from '../../../../test/fixture';
-import { LivePortrait, livePortrait, portraitNotice } from './livePortrait';
+import {
+  LivePortrait, livePortrait, liveVideoRequested, portraitNotice, requestLiveVideo, resetLiveVideoRequests, subscribeLiveVideo,
+} from './livePortrait';
 import { memberLoop, packRevision, resetMemberLoops } from './memberIdleLoops';
 
 const release = vi.hoisted(() => ({ samples: vi.fn(), counter: vi.fn(), portrait: vi.fn() }));
@@ -100,18 +102,36 @@ afterEach(() => {
   livePortrait.end();
   livePortrait.setPack(null);
   publishCharacterAvatarRuntime(null);
+  resetLiveVideoRequests();
   vi.useRealTimers();
 });
 
 describe('the live portrait client', () => {
-  it('is wanted only for a portrait pack', () => {
+  it('is wanted only for a portrait pack, in a chat that asked for live video', () => {
     const { portrait } = setup();
-    expect(portrait.wanted()).toBe(true);
+    expect(portrait.wanted('chat:maya')).toBe(false); // a call alone is voice only
+    requestLiveVideo('chat:maya');
+    expect(portrait.wanted('chat:maya')).toBe(true);
+    expect(portrait.wanted('chat:other')).toBe(false);
+    expect(portrait.wanted(null)).toBe(false);
     window.localStorage.setItem('omnix.livePortrait.enabled', '0'); // the paired gate's portrait-off run
-    expect(portrait.wanted()).toBe(false);
+    expect(portrait.wanted('chat:maya')).toBe(false);
     window.localStorage.removeItem('omnix.livePortrait.enabled');
     portrait.setPack({ renderer: 'sprite' });
-    expect(portrait.wanted()).toBe(false);
+    expect(portrait.wanted('chat:maya')).toBe(false);
+  });
+
+  it('tells its listeners when a chat asks for live video, once', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeLiveVideo(listener);
+    requestLiveVideo('chat:maya');
+    requestLiveVideo('chat:maya');
+    expect(listener).toHaveBeenCalledOnce();
+    expect(liveVideoRequested('chat:maya')).toBe(true);
+    unsubscribe();
+    resetLiveVideoRequests();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(liveVideoRequested('chat:maya')).toBe(false);
   });
 
   it('gives up when the TTS websocket sends no hello within a second of the session opening', () => {
@@ -135,7 +155,7 @@ describe('the live portrait client', () => {
     hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
     sockets[0].message(JSON.stringify({ type: 'ready' }));
     expect(portrait.getSnapshot().status).toBe('ready');
-    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true, undefined);
   });
 
   it('opens the avatar websocket with the hello token and becomes ready', () => {
@@ -158,12 +178,12 @@ describe('the live portrait client', () => {
     const hooks = portrait.begin('chat:maya');
     portrait.attachSession(session);
     // Connecting, no frame can come: no clock, so no start held for frames (review finding, 2026-10-31).
-    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false);
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(false, undefined);
     hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
     hooks.onSegmentRate('seg-1', 24_000);
     const socket = sockets[0];
     socket.message(JSON.stringify({ type: 'ready' }));
-    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true, undefined);
     for (const [index, offset] of [0, 960, 1920].entries()) {
       socket.message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, index));
     }
@@ -171,7 +191,7 @@ describe('the live portrait client', () => {
     expect(portrait.currentFrame()).toBeNull();
     // The first frame of the segment lets a start held for it go, once.
     expect(session.portraitFramesReady).toHaveBeenCalledTimes(1);
-    expect(session.portraitFramesReady).toHaveBeenCalledWith('seg-1');
+    expect(session.portraitFramesReady).toHaveBeenCalledWith('seg-1', 40); // its first frame: 40 ms of the phrase
 
     hooks.onWorkletEvent({ type: 'segment_started', segment_id: 'seg-1', audio_context_time_seconds: 10 });
     // 50 ms at 48 kHz is 1200 source samples at 24 kHz: the second frame (offset 960).
@@ -189,6 +209,25 @@ describe('the live portrait client', () => {
     portrait.end();
     expect(release.samples).toHaveBeenCalledWith('av_offset_ms', [-10]);
     expect(release.portrait).toHaveBeenLastCalledWith(false);
+  });
+
+  it("keeps the engine's start hold from ready and tells the session how far each segment's frames reach", async () => {
+    // FlashHead: a start waits until the video is a pass ahead (D-5, revised 2026-11-21).
+    const { portrait, sockets } = setup();
+    const { session } = fakeSession({ currentTime: 0 });
+    const hooks = portrait.begin('chat:maya');
+    portrait.attachSession(session);
+    hooks.onHello({ callKey: 'call-1', avatarToken: 'token' });
+    hooks.onSegmentRate('seg-1', 24_000);
+    sockets[0].message(JSON.stringify({ type: 'ready', start_hold_ms: 1_200, start_lead_ms: 80 }));
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true, { holdMs: 1_200, leadMs: 80 });
+    for (const [index, offset] of [0, 960, 1920].entries()) {
+      sockets[0].message(frameMessage({ output_id: 'turn-1', epoch: 1, segment_id: 'seg-1', offset }, index));
+    }
+    await flush();
+    // Each frame until the lead is covered (40, then 80 ms), and none after.
+    expect(vi.mocked(session.portraitFramesReady).mock.calls).toEqual([['seg-1', 40], ['seg-1', 80]]);
+    portrait.end();
   });
 
   it('never draws a cancelled turn, even frames that arrive after the cancel', async () => {
@@ -457,7 +496,7 @@ describe('the live portrait client', () => {
     vi.advanceTimersByTime(60_000); // the model takes about a minute: no timeout gives up on it
     sockets[0].message(JSON.stringify({ type: 'ready' }));
     expect(portrait.getSnapshot().status).toBe('ready');
-    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true);
+    expect(session.setPortraitClock).toHaveBeenLastCalledWith(true, undefined);
 
     portrait.begin('chat:maya').onHello({ callKey: 'call-2', avatarToken: 'token' });
     sockets[1].message(JSON.stringify({ type: 'loading' }));

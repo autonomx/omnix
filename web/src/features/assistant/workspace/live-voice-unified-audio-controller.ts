@@ -45,6 +45,7 @@ import {
 } from './live-voice-pcm-session';
 import { openStream, statusError } from '../../../api/transport';
 import { chatStreamEventSchema, parseJson } from '../../../api/schemas/streams';
+import { cameraShared } from './camera-share';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { takeHeardProposalTurnId } from './live-call-proposal-question';
 import { sceneSpeakerFrom, sceneSpeakerVoiceId } from './live-call-scene';
@@ -104,6 +105,8 @@ type SharedLiveAudioSession = {
   voiceId: string | null;
   /** The guest the session speaks as (its portrait is that guest's face); null for the chat's own character. */
   speakerId: string | null;
+  /** Whether the session follows the live portrait (live video asked for in this chat when it opened). */
+  portrait: boolean;
   traceId: string;
   reporter: LiveCallDiagnosticsReporter;
   sessionPromise: Promise<LiveVoicePcmSession>;
@@ -320,7 +323,7 @@ function handleGreetingCallStart(): void {
  */
 function openPortraitForCall(): void {
   const sessionId = liveConversationStore.getState().sessionId;
-  if (!sessionId || !livePortrait.wanted() || !isAutoSpeakEnabled() || !readLiveVoiceHumanizationFlags().master) return;
+  if (!sessionId || !livePortrait.wanted(sessionId) || !isAutoSpeakEnabled() || !readLiveVoiceHumanizationFlags().master) return;
   void ensureSharedAudioSession(sessionId, selectedVoiceId());
 }
 
@@ -360,7 +363,9 @@ function maybeStartGeneratedGreeting(): void {
   startup.started = true;
   const abortController = new AbortController();
   startup.requestAbortController = abortController;
-  const path = `/api/chat/sessions/${encodeURIComponent(startup.sessionId)}/live-call/greeting/stream` as const;
+  // A shared camera was glanced at as the call started: the greeting may take what it shows.
+  const camera = cameraShared() ? '?camera_shared=true' : '';
+  const path = `/api/chat/sessions/${encodeURIComponent(startup.sessionId)}/live-call/greeting/stream${camera}` as const;
   void openStream(path, { body: {}, signal: abortController.signal }).catch(statusError('Live-call greeting')).then(async (response) => {
     await response.text();
   }).catch((error: unknown) => {
@@ -756,7 +761,10 @@ async function ensureSharedAudioSession(
 ): Promise<SharedLiveAudioSession> {
   const current = sharedAudioSession;
   const speakerId = speaker?.id ?? null;
-  if (current && current.sessionId === sessionId && current.voiceId === voiceId && current.speakerId === speakerId) {
+  // Live video asked for during a call: the next reply opens a session that follows the portrait.
+  const portrait = livePortrait.wanted(sessionId, speaker);
+  if (current && current.sessionId === sessionId && current.voiceId === voiceId && current.speakerId === speakerId
+    && current.portrait === portrait) {
     const session = current.session ?? await current.sessionPromise;
     // A failed session (its websocket refused or lost) is replaced: reused, every later turn would be silent.
     if (!session.isClosed() && !session.hasFailed()) return current;
@@ -771,7 +779,7 @@ async function ensureSharedAudioSession(
     websocket_scope: 'live_session',
   }, 'controller');
   // A portrait avatar asks the TTS websocket for a hello and follows the call's playback.
-  const portraitHooks = livePortrait.wanted(speaker) ? livePortrait.begin(sessionId, speaker) : undefined;
+  const portraitHooks = portrait ? livePortrait.begin(sessionId, speaker) : undefined;
   const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
     sessionScoped: true,
     affinityKey: sessionId,
@@ -781,6 +789,7 @@ async function ensureSharedAudioSession(
     sessionId,
     voiceId,
     speakerId,
+    portrait,
     traceId,
     reporter,
     sessionPromise,

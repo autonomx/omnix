@@ -295,6 +295,27 @@ def split_messages(messages: list[ChatMessage]) -> tuple[str, str]:
     return system, "\n\n".join(rendered)
 
 
+_IMAGE_DATA_URL = re.compile(r"^data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=\s]+)$")
+
+
+def prompt_content(prompt: str, messages: list[ChatMessage]) -> str | list[dict[str, Any]]:
+    """The stream-json message's content: the prompt alone, or the latest user message's images and then the prompt.
+
+    Like the Codex provider, only the latest user message's images go: an earlier picture is not sent again with every
+    turn. A picture that is not a base64 PNG, JPEG, WebP or GIF data URL is left out.
+    """
+    users = [message for message in messages if message.role == "user"]
+    images: list[dict[str, Any]] = []
+    for image in (users[-1].vision_images or []) if users else []:
+        match = _IMAGE_DATA_URL.match(str(image.get("data") or "").strip())
+        if match:
+            images.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": match.group(1), "data": "".join(match.group(2).split())},
+            })
+    return [*images, {"type": "text", "text": prompt}] if images else prompt
+
+
 class ClaudeCliProvider(BaseProvider):
     """Use the Claude Code CLI (subscription or its own configured key) as an Omnix LLM provider."""
 
@@ -409,7 +430,7 @@ class ClaudeCliProvider(BaseProvider):
         )
         schema = _response_schema(kwargs.get("response_format"))
         events = self._run(
-            selected_model, system, prompt, timeout=timeout, owner=current_turn_owner(), schema=schema,
+            selected_model, system, prompt_content(prompt, list(messages)), timeout=timeout, owner=current_turn_owner(), schema=schema,
             live_turn=bool(kwargs.get("live_turn")), thinking=kwargs.get("thinking") is not False,
         )
         if stream:
@@ -498,7 +519,7 @@ class ClaudeCliProvider(BaseProvider):
             raise ConnectionError(f"Claude CLI could not start: {exc}") from exc
 
     def _run(
-        self, model: str, system: str, prompt: str, *, timeout: float, owner: str | None,
+        self, model: str, system: str, prompt: str | list[dict[str, Any]], *, timeout: float, owner: str | None,
         schema: dict[str, Any] | None = None, live_turn: bool = False, thinking: bool = True,
     ) -> Iterator[ChatResponse]:
         """Run one ``claude -p`` call; yield text deltas, then one final chunk with the result.

@@ -4,7 +4,8 @@
 the TTS route copies its phrases' PCM in through ``send`` and ``send_pcm``, which never wait (a bounded queue;
 when it is full the copy is dropped and the link marked degraded, and the voice is never held up), and frames
 come back through ``on_frame`` as the service sent them (``app.conversation.portrait_stream_contract``).
-A heartbeat keeps the service's lease on the stream.
+A heartbeat keeps the service's lease on the stream. The portrait engine is the one chosen on Live Chat's Video
+tab (``livePortraitEngine``); every prepare names it, so the service loads it.
 """
 from __future__ import annotations
 
@@ -17,7 +18,12 @@ from collections.abc import Awaitable, Callable
 from typing import Any, NamedTuple
 
 from app.config.env import env_str
-from app.conversation.portrait_stream_contract import PortraitMessageError, pack
+from app.conversation.portrait_stream_contract import (
+    DEFAULT_PORTRAIT_ENGINE,
+    PORTRAIT_ENGINES,
+    PortraitMessageError,
+    pack,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,21 @@ def portrait_url() -> str:
     return (env_str("OMNIX_PORTRAIT_URL", "") or "").strip().rstrip("/")
 
 
+def portrait_engine() -> str:
+    """The portrait engine chosen in Settings (Assistant), or FLOAT when none is or the settings cannot be read."""
+    try:
+        from app.settings.access import load_settings
+
+        settings = load_settings()
+    except Exception:  # noqa: BLE001 - no settings: the default engine
+        logger.warning("live portrait: settings could not be read", exc_info=True)
+        return DEFAULT_PORTRAIT_ENGINE
+    profile = settings.get("settings_control_center") if isinstance(settings, dict) else None
+    assistant = profile.get("assistant") if isinstance(profile, dict) else None
+    engine = assistant.get("livePortraitEngine") if isinstance(assistant, dict) else None
+    return engine if engine in PORTRAIT_ENGINES else DEFAULT_PORTRAIT_ENGINE
+
+
 async def portrait_health(base_url: str, *, client: Any = None) -> str:
     """The model's state on the service (``unloaded``, ``warming``, ``ready``...), or ``""`` when it does not answer."""
     import httpx
@@ -58,19 +79,20 @@ async def portrait_health(base_url: str, *, client: Any = None) -> str:
 
 
 async def prepare_portrait(base_url: str, tenant: str, image: bytes, *, client: Any = None,
-                           render_idle: bool = True) -> str:
-    """Encode a portrait on the service; returns its latent key. ``render_idle`` False skips the idle loop the
-    service otherwise renders when no call streams."""
+                           render_idle: bool = True, engine: str | None = None) -> str:
+    """Encode a portrait on the service with ``engine`` (None: the one chosen in Settings); returns its latent key.
+    ``render_idle`` False skips the idle loop the service otherwise renders when no call streams."""
     import httpx
 
     from app.security.service_token import service_headers
 
     digest = hashlib.sha256(image).hexdigest()
+    engine = engine or await asyncio.to_thread(portrait_engine)
     owned = client is None
     client = client or httpx.AsyncClient(timeout=30.0, follow_redirects=False)
     try:
         response = await client.post(f"{base_url}/portrait/prepare", headers=service_headers(),
-                                     data={"tenant": tenant, "image_sha256": digest,
+                                     data={"tenant": tenant, "image_sha256": digest, "engine": engine,
                                            **({} if render_idle else {"render_idle": "false"})},
                                      files={"file": ("portrait", image)})
     except httpx.HTTPError as exc:
@@ -146,6 +168,30 @@ async def idle_portrait(base_url: str, latent_key: str, *, client: Any = None,
         raise PortraitUnavailable(str(body.get("code") or "service_error"), str(body.get("message") or ""))
     return PortraitIdleLoop(int(body.get("frame_ms") or 40), [str(frame) for frame in body.get("idle") or []],
                             [str(frame) for frame in body.get("blink") or []])
+
+
+async def unload_portrait(base_url: str, *, client: Any = None) -> str:
+    """Unload the service's model now; returns its state after (``exiting``, ``unloaded``). Refused while a call
+    streams (``model_busy``) or a load is under way (``warming``)."""
+    import httpx
+
+    from app.security.service_token import service_headers
+
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=10.0, follow_redirects=False)
+    try:
+        response = await client.post(f"{base_url}/portrait/unload", headers=service_headers())
+    except httpx.HTTPError as exc:
+        raise PortraitUnavailable("service_unreachable", "The portrait service did not answer") from exc
+    finally:
+        if owned:
+            await client.aclose()
+    if response.status_code != 200:
+        raise PortraitUnavailable("service_error", f"The portrait service refused the unload ({response.status_code})")
+    body = response.json()
+    if not body.get("ok"):
+        raise PortraitUnavailable(str(body.get("code") or "service_error"), str(body.get("message") or ""))
+    return str(body.get("status") or "")
 
 
 class PortraitLink:
@@ -262,4 +308,4 @@ class PortraitLink:
 
 
 __all__ = ["PortraitIdleLoop", "PortraitLink", "PortraitUnavailable", "idle_portrait", "portrait_health", "portrait_url",
-           "prepare_portrait", "preview_portrait"]
+           "prepare_portrait", "preview_portrait", "unload_portrait"]

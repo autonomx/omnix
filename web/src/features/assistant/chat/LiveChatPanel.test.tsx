@@ -1,11 +1,11 @@
  
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveConversationStore } from '../workspace/live-conversation-store';
-import { LiveChatPanel } from './LiveChatPanel';
+import { LiveChatPanel, resetLiveChatTabForTests } from './LiveChatPanel';
 import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 const defaultProfile = {
@@ -17,11 +17,23 @@ const defaultProfile = {
   pronunciation_save_policy: 'ask', profile_version: 1,
 };
 
+let savedProfiles: unknown[] = [];
+
 beforeEach(() => {
   window.localStorage.clear();
   liveConversationStore.reset();
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-    const url = input.toString();
+  resetLiveChatTabForTests();
+  savedProfiles = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? new URL(input.url).pathname : input.toString();
+    if (url.endsWith('/api/settings/profile')) {
+      const method = input instanceof Request ? input.method : init?.method ?? 'GET';
+      if (method === 'POST') {
+        savedProfiles.push(await (input instanceof Request ? input.json() : JSON.parse(String(init?.body))));
+        return Response.json({ success: true });
+      }
+      return Response.json({ settings: { settings_control_center: { assistant: { livePortraitEngine: 'float' } } } });
+    }
     if (url === '/api/characters') return Response.json({ characters: [] });
     if (url.includes('/interaction')) {
       return Response.json({
@@ -53,13 +65,55 @@ function renderPanel(sessionId: string | null, onToggleCall = vi.fn()) {
   );
 }
 
+function openTab(name: string): void {
+  fireEvent.click(screen.getByRole('tab', { name }));
+}
+
 describe('LiveChatPanel', () => {
+  it('shows one section at a time, as tabs, starting with the character', () => {
+    renderPanel('chat:one');
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Character', 'Presence', 'Voice', 'Video', 'Call']);
+    expect(screen.getByRole('tab', { name: 'Character' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: 'Start Call' })).toBeNull();
+
+    openTab('Call');
+    expect(screen.getByRole('tab', { name: 'Call' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'live-chat-tab-call');
+    expect(screen.getByRole('button', { name: 'Start Call' })).toBeInTheDocument();
+  });
+
+  it('keeps the open tab when the page is opened again', () => {
+    const first = renderPanel('chat:one');
+    openTab('Voice');
+    first.unmount();
+
+    renderPanel('chat:one');
+    expect(screen.getByRole('tab', { name: 'Voice' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('uses user defaults when no chat session is selected', async () => {
     renderPanel(null);
     expect(screen.getByRole('heading', { name: 'Live Chat' })).toBeInTheDocument();
     expect(screen.getByText('Select a Chat session')).toBeInTheDocument();
-    expect(await screen.findByLabelText('Presence')).toHaveValue('natural');
+    openTab('Presence');
+    await waitFor(() => expect(screen.getByLabelText('Presence', { selector: 'select' })).toHaveValue('natural'));
+    openTab('Voice');
     expect(screen.getByText('Select a Chat session before saving pronunciation guidance.')).toBeInTheDocument();
+  });
+
+  it('chooses the live portrait engine on the Video tab, saving it to the settings profile', async () => {
+    renderPanel('chat:one');
+    openTab('Video');
+
+    const float = await screen.findByRole('button', { name: /^FLOAT/ });
+    await waitFor(() => expect(float).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(screen.getByRole('button', { name: /^FlashHead Lite/ }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^FlashHead Lite/ })).toHaveAttribute('aria-pressed', 'true'));
+    expect(savedProfiles).toEqual([
+      expect.objectContaining({ settings_profile_patch: { assistant: expect.objectContaining({ livePortraitEngine: 'flashhead-lite' }) } }),
+    ]);
+    expect(screen.getByText('Saved. The next call uses this engine.')).toBeInTheDocument();
   });
 
   it('renders identity, floor, and status from the authoritative store', () => {
@@ -73,6 +127,7 @@ describe('LiveChatPanel', () => {
     });
 
     renderPanel('chat:one');
+    openTab('Call');
     expect(screen.getByText('Call connected')).toBeInTheDocument();
     expect(screen.getByText('Maya is listening')).toBeInTheDocument();
     expect(screen.getByText('Echo-aware barge-in')).toBeInTheDocument();
@@ -82,6 +137,7 @@ describe('LiveChatPanel', () => {
   it('starts the call through Chat instead of creating another voice pipeline', () => {
     const onToggleCall = vi.fn();
     renderPanel('chat:one', onToggleCall);
+    openTab('Call');
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
 

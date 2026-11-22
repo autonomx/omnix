@@ -1,0 +1,258 @@
+{
+  "measurement": "SoulX-FlashHead Lite spike: streaming speed, memory and SyncNet lip-sync vs FLOAT (scripts in resources/cache/flashhead-spike/scripts)",
+  "date": "2026-11-21",
+  "environment": "own conda env (CPython 3.10, torch 2.7.1+cu128, transformers 4.57.3, triton-windows 3.3.1, torch sdpa attention); RTX 4090 otherwise idle, no Omnix services running",
+  "upstream": {
+    "repo": "Soul-AILab/SoulX-FlashHead",
+    "commit": "9bc03de06bb0de82cd6bc477804512ae06144bf2",
+    "weights": "Soul-AILab/SoulX-FlashHead-1_3B Model_Lite + VAE_LTX, facebook/wav2vec2-base-960h",
+    "licence": "code and DiT weights Apache-2.0; LTX-Video 0.9 VAE Open-RAIL-M",
+    "windows_changes": "none to upstream files; the spike stubs xfuser (multi-GPU only, imports fcntl) and sets the compile flags"
+  },
+  "inputs": "same as portrait-lipsync-2026-10-29: sam_altman_512x512.jpg; aud-sample-vs-1.wav, voice_clones Maya, Morgan, Sofia. Visual: tmp/portrait/ehsan.jpeg + ehsan-sample.wav",
+  "scorer": "same as portrait-lipsync-2026-10-29 (joonson/syncnet_python, scripts/portrait_lipsync.py --videos)",
+  "chunking": {
+    "frame_num": 33,
+    "motion_frames": 9,
+    "new_frames_per_chunk": 24,
+    "audio_per_chunk_s": 0.96,
+    "cached_audio_s": 8,
+    "sample_steps": 4
+  },
+  "speed": {
+    "eager_4_steps_chunk_ms": {
+      "n": 6,
+      "p50": 305.6,
+      "p95": 599.3,
+      "max": 599.3,
+      "mean": 350.4
+    },
+    "compiled_4_steps_chunk_ms": {
+      "n": 47,
+      "p50": 234.2,
+      "p95": 242.1,
+      "max": 279.9,
+      "mean": 235.5
+    },
+    "compiled_4_steps_components_ms": {
+      "wav2vec2": {
+        "n": 47,
+        "p50": 6.6,
+        "p95": 7.9,
+        "max": 8.0,
+        "mean": 6.5
+      },
+      "dit": {
+        "n": 188,
+        "p50": 31.4,
+        "p95": 34.3,
+        "max": 74.8,
+        "mean": 32.0
+      },
+      "vae_decode": {
+        "n": 47,
+        "p50": 67.4,
+        "p95": 69.7,
+        "max": 70.1,
+        "mean": 67.3
+      },
+      "vae_encode": {
+        "n": 47,
+        "p50": 19.4,
+        "p95": 21.3,
+        "max": 22.8,
+        "mean": 19.8
+      }
+    },
+    "compiled_2_steps_chunk_ms": {
+      "n": 49,
+      "p50": 176.7,
+      "p95": 180.4,
+      "max": 217.0,
+      "mean": 177.7
+    },
+    "first_compile_s": 185,
+    "compile_warmup_with_cache_s": 17.4,
+    "load_s": 7.1,
+    "derived_4_steps": {
+      "frames_per_second_generated": 102.5,
+      "gpu_seconds_per_audio_second": 0.244,
+      "first_frame_after_audio_start_ms_estimate": 1194.0,
+      "note": "first frame needs one full chunk of audio (no shorter first chunk upstream) plus one chunk's work"
+    },
+    "derived_4_steps_first_hop_8": {
+      "frames_per_second_generated": 98.8,
+      "gpu_seconds_per_audio_second": 0.253,
+      "first_frame_after_audio_start_ms_estimate": 563.0,
+      "first_hop_frames": 8,
+      "note": "first frame needs the first hop's audio plus one chunk's work (chunk cost does not depend on hop)"
+    },
+    "derived_2_steps_first_hop_8": {
+      "frames_per_second_generated": 135.8,
+      "gpu_seconds_per_audio_second": 0.184,
+      "first_frame_after_audio_start_ms_estimate": 497.0,
+      "first_hop_frames": 8,
+      "note": "first frame needs the first hop's audio plus one chunk's work (chunk cost does not depend on hop)"
+    },
+    "float_reference": "portrait-spike-optimized-2026-10-29: 0.14 GPU s per audio s (nfe 10, batch 4); first frame needs ~0.5 s of audio"
+  },
+  "memory": {
+    "after_load": {
+      "commit_free_gb": 25.92,
+      "ram_free_gb": 8.7,
+      "process_commit_gb": 7.83,
+      "vram_allocated_gb": 4.0,
+      "vram_reserved_gb": 4.26
+    },
+    "peak": {
+      "vram_allocated_gb": 4.91,
+      "vram_reserved_gb": 5.38,
+      "min_commit_free_gb": 20.64,
+      "process_commit_gb_end": 10.03
+    },
+    "commit_breakdown_gb": {
+      "import torch": 1.22,
+      "cuda context": 0.51,
+      "import flash_head (mediapipe)": 0.74,
+      "pipeline load (= VRAM, WDDM charges device memory to commit)": 4.58
+    },
+    "float_reference": "6.7 GB commit, 2.09/2.83 GB VRAM allocated/reserved"
+  },
+  "lipsync": {
+    "flashhead_lite_4_steps": {
+      "aud-sample-vs-1-flashhead-lite.mp4": {
+        "tracks": 1,
+        "lse_d": 7.056,
+        "lse_c": 9.378,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Maya-flashhead-lite.mp4": {
+        "tracks": 1,
+        "lse_d": 6.504,
+        "lse_c": 9.145,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Morgan-flashhead-lite.mp4": {
+        "tracks": 1,
+        "lse_d": 7.922,
+        "lse_c": 5.483,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Sofia-flashhead-lite.mp4": {
+        "tracks": 1,
+        "lse_d": 7.918,
+        "lse_c": 7.509,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "mean": {
+        "lse_d": 7.35,
+        "lse_c": 7.879,
+        "clips": 4
+      }
+    },
+    "flashhead_lite_4_steps_first_hop_8": {
+      "aud-sample-vs-1-flashhead-lite-hop8.mp4": {
+        "tracks": 1,
+        "lse_d": 6.74,
+        "lse_c": 9.645,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Maya-flashhead-lite-hop8.mp4": {
+        "tracks": 1,
+        "lse_d": 7.355,
+        "lse_c": 8.43,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Morgan-flashhead-lite-hop8.mp4": {
+        "tracks": 1,
+        "lse_d": 8.427,
+        "lse_c": 5.086,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Sofia-flashhead-lite-hop8.mp4": {
+        "tracks": 1,
+        "lse_d": 6.888,
+        "lse_c": 8.527,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "mean": {
+        "lse_d": 7.352,
+        "lse_c": 7.922,
+        "clips": 4
+      }
+    },
+    "flashhead_lite_2_steps_first_hop_8": {
+      "aud-sample-vs-1-flashhead-lite-hop8-s2.mp4": {
+        "tracks": 1,
+        "lse_d": 7.591,
+        "lse_c": 8.472,
+        "offset_frames": [
+          0
+        ]
+      },
+      "Maya-flashhead-lite-hop8-s2.mp4": {
+        "tracks": 1,
+        "lse_d": 7.318,
+        "lse_c": 8.464,
+        "offset_frames": [
+          0
+        ]
+      },
+      "Morgan-flashhead-lite-hop8-s2.mp4": {
+        "tracks": 1,
+        "lse_d": 7.519,
+        "lse_c": 5.395,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "Sofia-flashhead-lite-hop8-s2.mp4": {
+        "tracks": 1,
+        "lse_d": 7.881,
+        "lse_c": 7.351,
+        "offset_frames": [
+          -1
+        ]
+      },
+      "mean": {
+        "lse_d": 7.577,
+        "lse_c": 7.42,
+        "clips": 4
+      }
+    },
+    "float_streamed_R5_H20_nfe7_mean": {
+      "lse_d": 8.2,
+      "lse_c": 6.47
+    },
+    "float_whole_nfe10_mean": {
+      "lse_d": 8.01,
+      "lse_c": 6.77
+    }
+  },
+  "findings": [
+    "Runs on Windows unmodified; ~102 generated fps compiled (paper: 96), 78 fps eager.",
+    "Lip-sync clearly better than FLOAT on every clip: mean LSE-C 7.88-7.92 vs 6.47 streamed FLOAT; LSE-D 7.35 vs 8.20.",
+    "A short first hop (8 frames, window still ends at the newest audio, last 8 frames kept) costs no lip-sync (7.92) and brings the first frame to ~0.56 s after audio start (upstream 1.2 s).",
+    "2 denoise steps: 177 ms per chunk, LSE-C 7.42, but visibly washed out with ghosted eyes; 4 steps needed.",
+    "GPU time per audio second 0.25 (4 steps) vs FLOAT 0.14, about 1.8x; each reply also costs one extra chunk for the short first hop.",
+    "Peak VRAM 4.9/5.4-5.6 GB and process commit ~10 GB vs FLOAT 2.8 GB / 6.7 GB. Commit follows VRAM on Windows.",
+    "Silence renders a natural closed-mouth idle with slight head motion; blinks happen on their own while speaking.",
+    "Not measured: loaded runs with TTS/STT/LLM resident (contention, commit headroom on a real call)."
+  ]
+}

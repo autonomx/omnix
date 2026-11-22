@@ -50,7 +50,9 @@ describe('gateway routing policy', () => {
   });
   it('keeps what a live call holds per process with the call, and on the worker without one', () => {
     for (const url of ['/api/tts/live-call/avatar-websocket?token=t&session_id=a', '/api/live/speculation/tts-prefetch',
-      '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel']) {
+      '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel',
+      // A shared camera's glance is held where the call's turns and greeting read it.
+      '/api/chat/sessions/chat%3Aa/camera/glance', '/api/chat/sessions/chat%3Aa/live-call/greeting/stream?purpose=greeting']) {
       const inCall = { url, method: 'POST', headers: { cookie: 'omnix_call_affinity=session-a' } };
       expect(canUseApi(inCall, true)).toBe(true);
       expect(canUseApi(inCall)).toBe(false);
