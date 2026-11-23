@@ -273,7 +273,8 @@ def _to_browser(text: str, names: _CallNames) -> str:
     def repaired(message: Any) -> Any:
         nonlocal changed
         if isinstance(message, dict) and message.get("type") in _HEARD_TEXT_TYPES and isinstance(message.get("text"), str):
-            fixed = repair_heard_names(message["text"], called)
+            # A partial or preview may go on after its last word, so that word is not yet set off as an address.
+            fixed = repair_heard_names(message["text"], called, complete=message.get("type") == "result_available")
             if fixed != message["text"]:
                 changed = True
                 return {**message, "text": fixed}

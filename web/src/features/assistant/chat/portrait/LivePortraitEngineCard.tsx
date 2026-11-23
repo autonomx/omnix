@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { loadSettingsProfile, saveAssistantSettings, type LivePortraitEngine } from '../../../settings';
+import { resetMemberLoops } from './memberIdleLoops';
 
 const ENGINE_KEY = ['feature', 'chatbot', 'live-portrait-engine'];
+// LivePortraitLoadControl's status of the loaded model.
+const PORTRAIT_MODEL_KEY = ['feature', 'chatbot', 'portrait-model'];
 
 const ENGINES: ReadonlyArray<{ id: LivePortraitEngine; label: string; description: string }> = [
   { id: 'float', label: 'FLOAT', description: 'Lighter on the GPU and memory.' },
@@ -23,7 +26,13 @@ export function LivePortraitEngineCard() {
   });
   const save = useMutation({
     mutationFn: (choice: LivePortraitEngine) => saveAssistantSettings({ livePortraitEngine: choice }),
-    onSuccess: (assistant) => queryClient.setQueryData(ENGINE_KEY, assistant.livePortraitEngine),
+    onSuccess: (assistant) => {
+      queryClient.setQueryData(ENGINE_KEY, assistant.livePortraitEngine);
+      // The loaded model and the idle loops it rendered were the other engine's (review 2026-11-22: the video button
+      // still said ready and the stage played the old engine's loop).
+      void queryClient.invalidateQueries({ queryKey: PORTRAIT_MODEL_KEY });
+      resetMemberLoops();
+    },
   });
   const current = engine.data;
   const status = save.isError ? 'The engine could not be saved.'

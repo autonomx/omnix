@@ -48,7 +48,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from app.conversation.portrait_stream_contract import QUALITY_LEVELS
+from app.conversation.portrait_stream_contract import PORTRAIT_START_RULES, QUALITY_LEVELS
 from services.portrait.float_runtime import (AUDIO_MODEL, DETECTOR_MODEL, FRAME_SIZE, FloatRuntime,
                                              cap_vram, encode_jpegs, verify_code)
 from services.portrait.float_runtime import required_folders as _required_folders
@@ -100,14 +100,18 @@ KEEP_FRAMES = 150
 # TRANSITION_MIN_FRAMES) closest to the idle loop's first, whose last TRANSITION_BLEND_FRAMES fade into it.
 TRANSITION_MIN_FRAMES = 6
 TRANSITION_BLEND_FRAMES = 4
-# Encoded portraits kept (the reference latent and the idle loop's frames on the CPU, about 120 MB each).
+# Encoded portraits kept: the reference latent, the idle loop's JPEGs, and until those are made its raw frames on the
+# CPU (0.8 MB each, 200 or more a loop and as many eyes-shut twins with LivePortrait: 300 MB or more a portrait;
+# review 2026-11-22: kept for good, four portraits held over a gigabyte of host commit; ``release_frames``).
 MAX_PORTRAITS = 4
 # The scheduler's settings for FlashHead's windows: 24 new frames a pass from the 9 before them, the first pass 8
 # frames (the spike: the same lip-sync, the first frame ~0.56 s after the audio starts), no lookahead (a pass's
-# 8 s of audio ends with its window), and a pass taking about 0.35 s eager.
+# 8 s of audio ends with its window), and a pass taking about 0.35 s eager. The browser holds a start up to the
+# engine's ``PORTRAIT_START_RULES`` hold, so the play estimate before its first report does too.
 STREAM_SETTINGS = StreamSettings(window=NEW_FRAMES, carry=MOTION_FRAMES, first_hop=8, hop=NEW_FRAMES, lookahead=0,
                                  context=AUDIO_FRAMES - NEW_FRAMES, decode_batch=8, pass_seconds=0.35,
-                                 render_ahead_seconds=1.5)
+                                 render_ahead_seconds=1.5,
+                                 start_hold_seconds=PORTRAIT_START_RULES["flashhead-lite"][0] / 1000)
 
 
 def required_folders() -> dict[str, Path]:
@@ -263,6 +267,15 @@ class FlashHeadPortrait:
     idle_first: torch.Tensor | None = None
     idle_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
     blink_jpegs: dict[int, list[bytes]] = field(default_factory=dict)
+    # The raw frames above were given up (``release_frames``): another level is encoded from level 0's JPEGs.
+    released: bool = False
+
+
+def decode_jpegs(jpegs: list[bytes]) -> torch.Tensor:
+    """RGB pixels (frames x 3 x height x width, uint8, on the CPU) from JPEG frames."""
+    from torchvision.io import decode_jpeg
+
+    return torch.stack([decode_jpeg(torch.frombuffer(bytearray(jpeg), dtype=torch.uint8)) for jpeg in jpegs])
 
 
 class FlashHeadRuntime:
@@ -423,6 +436,8 @@ class FlashHeadRuntime:
         """When the idle loop's render has no blink, look for one in up to BLINK_SEARCH_SEEDS more silent renders
         (about 7.5 s each; owner report 2026-11-21: the model blinks in one 14 s render of three). Only ahead of a
         call: in a call the GPU thread is the reply's."""
+        if portrait.blink_searched:  # before the loop's pixels: once searched, they may have been given up
+            return
         self.idle_pixels(portrait)
         if portrait.blink_searched or portrait.twins is not None:
             return
@@ -440,6 +455,8 @@ class FlashHeadRuntime:
         last frame comes back closest to its first (``idle_loop_bounds``)."""
         if portrait.idle is not None:
             return portrait.idle
+        if portrait.released:  # given up once encoded: level 0's frames (every idle_frame_step(0)th) stand in
+            return decode_jpegs(portrait.idle_jpegs[0])
         idle = self.liveportrait_idle(portrait)
         if idle is None:
             render, features, shut = self.silent_render(portrait, IDLE_SEED)
@@ -484,8 +501,9 @@ class FlashHeadRuntime:
         from services.portrait.idle_loop import idle_frame_step
 
         if level not in portrait.idle_jpegs:
-            portrait.idle_jpegs[level] = encode_jpegs(self.idle_pixels(portrait)[::idle_frame_step(level)].cuda(),
-                                                      level)
+            step = idle_frame_step(level) // (idle_frame_step(0) if portrait.released else 1)
+            portrait.idle_jpegs[level] = encode_jpegs(self.idle_pixels(portrait)[::step].cuda(), level)
+            self.release_frames(portrait)
         return portrait.idle_jpegs[level]
 
     def blink_frames(self, portrait: FlashHeadPortrait, level: int = 0) -> list[bytes]:
@@ -495,6 +513,10 @@ class FlashHeadRuntime:
         from services.portrait.idle_loop import eye_region_mask, idle_frame_step
 
         if level not in portrait.blink_jpegs:
+            if portrait.released:  # level 0's twins, already made, stand in for the raw frames given up
+                twins = decode_jpegs(portrait.blink_jpegs[0])[::idle_frame_step(level) // idle_frame_step(0)]
+                portrait.blink_jpegs[level] = encode_jpegs(twins.cuda(), level)
+                return portrait.blink_jpegs[level]
             idle = self.idle_pixels(portrait)
             if portrait.twins is not None:
                 portrait.blink_jpegs[level] = encode_jpegs(portrait.twins[::idle_frame_step(level)].cuda(), level)
@@ -507,7 +529,16 @@ class FlashHeadRuntime:
                                                         .numpy()))
                 twins = (opened + (shut - opened) * mask).round().clamp(0, 255).to(torch.uint8)
                 portrait.blink_jpegs[level] = encode_jpegs(twins.cuda(), level)
+            self.release_frames(portrait)
         return portrait.blink_jpegs[level]
+
+    @staticmethod
+    def release_frames(portrait: FlashHeadPortrait) -> None:
+        """Give up the loop's raw frames, its twins and the blink's frames once level 0's JPEGs of both are made and
+        no blink search is left to change them (``MAX_PORTRAITS``). The GPU's lead-in and first frame stay."""
+        if portrait.blink_searched and 0 in portrait.idle_jpegs and 0 in portrait.blink_jpegs:
+            portrait.idle = portrait.twins = portrait.shut = portrait.opened = None
+            portrait.released = True
 
     @staticmethod
     def rendered_idle_level(portrait: FlashHeadPortrait) -> int | None:

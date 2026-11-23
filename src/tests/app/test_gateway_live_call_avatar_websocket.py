@@ -262,6 +262,33 @@ def test_a_flashhead_call_holds_its_starts_until_the_video_is_a_pass_ahead(monke
     assert portrait.state["engines"] == ["flashhead-lite"]
 
 
+def test_a_call_keeps_its_engine_when_settings_change_it_mid_call(monkeypatch, portrait) -> None:
+    # Review 2026-11-22: a group call opens a stream per speaker; asking the service for another engine mid-call
+    # would end the call's video while the service switches. The next call takes the new one.
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with client.websocket_connect(_avatar_url(token)) as avatar:
+            assert avatar.receive_json()["start_hold_ms"] == 250
+        portrait.state["engine"] = "flashhead-lite"
+        with client.websocket_connect(_avatar_url(token)) as avatar:
+            assert avatar.receive_json()["start_hold_ms"] == 250
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        with client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])) as avatar:
+            assert avatar.receive_json()["start_hold_ms"] == 1_200
+    assert portrait.state["engines"] == ["float", "float", "flashhead-lite"]
+
+
+def test_another_engine_in_use_a_moment_ago_is_waited_out(monkeypatch, portrait) -> None:
+    monkeypatch.setattr(avatar_websocket, "LOAD_POLL_SECONDS", 0.01)
+    portrait.state["prepare_errors"] = [PortraitUnavailable("engine_in_use", "in use")] * 2
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        with client.websocket_connect(_avatar_url(tts.receive_json()["avatar_token"])) as avatar:
+            assert avatar.receive_json() == {"type": "loading"}
+            assert avatar.receive_json()["type"] == "ready"
+
+
 def test_the_portrait_attaches_to_the_call_relays_frames_and_play_positions(monkeypatch, portrait) -> None:
     client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
     with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:

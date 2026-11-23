@@ -405,7 +405,7 @@
       "id": "voice",
       "label": "Voice",
       "layer": "platform",
-      "summary": "TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names).",
+      "summary": "TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names, and writes a heard call name back as the name).",
       "paths": [
         "src/app/platform/voice/"
       ],
@@ -2469,7 +2469,10 @@
         },
         {
           "node": "voice",
-          "action": "Partials, endpoint and final segments relayed back",
+          "action": "Partials, endpoint and final segments relayed back; a word said as a name and heard like one of the call's names is written as it (conversation/heard_names.py)",
+          "files": [
+            "src/app/conversation/heard_names.py"
+          ],
           "n": 5,
           "from": "stt_svc",
           "edge": "voice->stt_svc:websocket"

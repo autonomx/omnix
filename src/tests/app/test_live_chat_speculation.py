@@ -314,9 +314,44 @@ def test_a_shared_cameras_early_reply_takes_the_glance_and_keeps_its_description
     assert accepted.status_code == 200
     assert [item["content"] for item in contexts[0]] == ["They are waving."]
     assert contexts[1] == []
+    # The web reuses the early reply only after the camera event says it saw: sent before any text.
+    shared_events = [payload.get("type") for payload in _event_payloads(shared.text)]
+    camera_event = next(payload for payload in _event_payloads(shared.text) if payload.get("type") == "camera")
+    assert camera_event["looking"] is False
+    assert shared_events.index("camera") < shared_events.index("text_chunk")
+    assert "camera" not in [payload.get("type") for payload in _event_payloads(unshared.text)]
     (snapshot,) = recorded
     assert snapshot["message_id"] == "accepted-user"
     assert snapshot["camera_snapshot"]["description"] == "They are waving."
+
+
+def test_an_early_reply_written_while_the_picture_is_described_says_so(monkeypatch) -> None:
+    # No view yet and a glance still being described: the camera event says looking, so the web does not reuse
+    # this reply and the final turn, a moment later, can see what it could not.
+    from app.platform.chat.camera_glance import CameraShareLook
+
+    speculation.clear_live_speculation_session_cache()
+    looks: list[str] = []
+
+    def _pending(session_id, *, wait_seconds):
+        looks.append(session_id)
+        return CameraShareLook([{"source_id": "camera", "title": "t", "content": "looking"}], None, True)
+
+    monkeypatch.setattr(speculation, "camera_share_look", _pending)
+    monkeypatch.setattr(provider_service, "get_provider", lambda _provider_id: _FakeProvider())
+    app = FastAPI()
+    include_router_registrar(app, speculation.register_live_chat_speculation_routes, chat_store_factory=_FakeStore)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/live/speculation/sessions/session-1/stream",
+        json={"content": "Can you see me now", "segment_id": "segment-1", "source_sequence": 0, "camera_shared": True},
+    )
+
+    assert response.status_code == 200
+    assert looks == ["session-1"]
+    camera_event = next(payload for payload in _event_payloads(response.text) if payload.get("type") == "camera")
+    assert camera_event["looking"] is True
 
 
 def test_primed_session_avoids_speculation_reload(monkeypatch) -> None:

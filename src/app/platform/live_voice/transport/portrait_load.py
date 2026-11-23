@@ -6,7 +6,8 @@ starts a load when none is under way and renders the portrait's idle loop, so ``
 left to wait for; the browser asks again while the answer is ``loading``. The service's own checks
 apply as they do to a call: with too little memory it refuses (``model_busy``). ``GET
 /api/tts/live-call/portrait-load`` says where the model stands, since it unloads after an idle while. ``DELETE``
-unloads it at once, outside a call (the button pressed again, owner request 2026-11-22).
+unloads it at once, outside a call (the button pressed again, owner request 2026-11-22). Another engine than the one
+chosen in Settings, loaded, is ``unloaded``: a call loads the chosen one.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.platform.live_voice.portrait.link import (
     PortraitUnavailable,
+    portrait_engine,
     portrait_health,
     portrait_url,
     prepare_portrait,
@@ -72,7 +74,11 @@ def register_portrait_load_routes(router: APIRouter) -> None:
         base_url = portrait_url()
         if not base_url:
             return PortraitModelStatus(status="unavailable")
-        state = await portrait_health(base_url)
+        state, engine = await portrait_health(base_url)
+        if state == "ready" and engine != await asyncio.to_thread(portrait_engine):
+            # Another engine is loaded (Settings changed it since): a call would load the chosen one first (review
+            # 2026-11-22: the button said ready).
+            state = "unloaded"
         return PortraitModelStatus(status="ready" if state == "ready" else "loading" if state == "warming" else "unloaded")
 
     @router.delete(PORTRAIT_LOAD_PATH, response_model=PortraitUnloadResponse, tags=["live-voice"])

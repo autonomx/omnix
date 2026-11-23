@@ -60,33 +60,42 @@ def sounds_like(heard: str, name: str) -> bool:
     return _edit_distance(heard_spelled, name_spelled) <= max(1, len(name_spelled) // 4)
 
 
-# Words said set off by commas that sound like names ("Like, I don't know" and Luke): never taken as one.
-_SOUND_FILLERS = frozenset({"like", "well", "right", "sure", "maybe", "please", "okay", "anyway", "really", "nice",
-                            "fine", "mine", "though", "mate", "dude", "yeah", "yes", "nope"})
-_GREETINGS = frozenset({"hey", "hi", "hello", "thanks", "ok", "okay", "oh", "and"})
+# Everyday words that sound like names and are said on their own or set off: never taken as one. Fillers ("Like, I
+# don't know" and Luke), words a contraction or answer is made of ("there's" and Terry, "here?") and numbers
+# ("Nine?" and Nina): recognition spells these right, so one heard is the word, not a name.
+_EVERYDAY_WORDS = frozenset({
+    "like", "well", "right", "sure", "maybe", "please", "okay", "anyway", "really", "nice", "fine", "mine", "though",
+    "mate", "dude", "yeah", "yes", "nope",
+    "there", "here", "where", "what", "that", "this", "it", "let", "who", "how", "when", "why", "he", "she",
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+    "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+    "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "million", "billion",
+})
+_GREETINGS = frozenset({"hey", "hi", "hello", "thanks", "ok", "okay", "oh"})
 
 
-def said_as_name(text: str, start: int, end: int) -> bool:
+def said_as_name(text: str, start: int, end: int, *, complete: bool = True) -> bool:
     """Whether the word at ``text[start:end]`` is used as a name, not as the everyday word it may also be.
 
     Recognition writes a name it hears as a name ("what do you think, Aphra?"), so a capitalised word inside a
     sentence counts; so does a word set off as an address ("afro, what's yours?", "and you, afro?"). "I like
-    that" never names Luke, nor "make it shorter" Mike.
+    that" never names Luke, nor "make it shorter" Mike. A text still being heard (``complete`` false, a partial)
+    may go on after its last word, so the end of it does not set a word off.
     """
     word = text[start:end]
-    if word.lower() in _SOUND_FILLERS:
+    if word.lower() in _EVERYDAY_WORDS:
         return False
-    if re.match(r"['’]s\b", text[end:]):
-        return True  # "Aphra's turn": a word is owned only as a name
     before = text[:start].rstrip()
     sentence_start = not before or before[-1] in ".!?"
+    if re.match(r"['’]s\b", text[end:]) and (word[0].isupper() or not sentence_start):
+        return True  # "Aphra's turn": a word is owned only as a name
     if word[0].isupper() and not sentence_start:
         return True
     previous = re.search(r"([^\W\d_]+)$", before)
     set_off_before = sentence_start or before[-1] == "," or (
         previous is not None and previous.group(1).lower() in _GREETINGS)
     after = text[end:].lstrip()
-    set_off_after = not after or after[0] in ",?!"
+    set_off_after = (not after and complete) or (bool(after) and after[0] in ",?!")
     return set_off_before and set_off_after
 
 
@@ -107,11 +116,12 @@ def called_by(names: Iterable[str]) -> list[str]:
     return words
 
 
-def repair_heard_names(text: str, names: Iterable[str]) -> str:
+def repair_heard_names(text: str, names: Iterable[str], *, complete: bool = True) -> str:
     """``text`` with each word said as a name and heard as one of ``names`` written as that name.
 
     Only a word that sounds like exactly one of the names is written over ("Jenks" for Jinx); one that sounds like
     two stays as heard, and so does an everyday word used as one ("don't jinx it", "I like that" beside Luke).
+    ``complete`` is false for a text still being heard (see ``said_as_name``).
     """
     words = called_by(names)
     if not words or not text:
@@ -123,7 +133,7 @@ def repair_heard_names(text: str, names: Iterable[str]) -> str:
         if heard in words:
             continue
         matches = {word for word in words if heard.lower() == word.lower() or sounds_like(heard, word)}
-        if len(matches) != 1 or not said_as_name(text, found.start(), found.end()):
+        if len(matches) != 1 or not said_as_name(text, found.start(), found.end(), complete=complete):
             continue
         pieces += [text[kept:found.start()], matches.pop()]
         kept = found.end()

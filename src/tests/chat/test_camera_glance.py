@@ -70,6 +70,7 @@ def test_a_turn_without_a_fresh_glance_is_told_it_cannot_see():
         assert look.snapshot is None
         assert look.items[0]["source_id"] == CAMERA_SOURCE_ID
         assert "Do not claim to see anything" in look.items[0]["content"]
+        assert look.looking is False
 
 
 def test_a_slow_glance_is_not_waited_on_past_the_turns_wait():
@@ -81,6 +82,8 @@ def test_a_slow_glance_is_not_waited_on_past_the_turns_wait():
         assert look.snapshot is None
         # The view is on its way: the reply must not tell the person it cannot see them.
         assert "do not say the camera is not working or that you cannot see them" in look.items[0]["content"]
+        # A later look may see it: an early reply written now is not reused.
+        assert look.looking is True
         # One glance per chat at a time: a second frame while the first is described is not sent.
         assert _begin("s1", vision) == "in_progress"
     finally:
@@ -104,7 +107,10 @@ def test_a_slow_new_glance_falls_back_to_the_previous_fresh_description():
     current = camera_share_look("s1", wait_seconds=2, clock=lambda: 112.0)
 
     assert behind.snapshot == {"description": "They are holding a blue pen.", "described_at": NOW.isoformat()}
+    # The previous description is a view: an early reply written with it may be reused.
+    assert behind.looking is False
     assert too_old.snapshot is None
+    assert too_old.looking is True
     assert current.items[0]["content"] == "They are drinking tea."
 
 

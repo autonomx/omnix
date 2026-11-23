@@ -62,17 +62,21 @@ def portrait_engine() -> str:
     return engine if engine in PORTRAIT_ENGINES else DEFAULT_PORTRAIT_ENGINE
 
 
-async def portrait_health(base_url: str, *, client: Any = None) -> str:
-    """The model's state on the service (``unloaded``, ``warming``, ``ready``...), or ``""`` when it does not answer."""
+async def portrait_health(base_url: str, *, client: Any = None) -> tuple[str, str]:
+    """The model's state on the service (``unloaded``, ``warming``, ``ready``...) and the engine it is for, or
+    ``("", "")`` when it does not answer."""
     import httpx
 
     owned = client is None
     client = client or httpx.AsyncClient(timeout=3.0, follow_redirects=False)
     try:
         response = await client.get(f"{base_url}/health")
-        return str(response.json().get("status") or "") if response.status_code == 200 else ""
-    except (httpx.HTTPError, ValueError):
-        return ""
+        if response.status_code != 200:
+            return "", ""
+        body = response.json()
+        return str(body.get("status") or ""), str(body.get("engine") or "")
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return "", ""
     finally:
         if owned:
             await client.aclose()

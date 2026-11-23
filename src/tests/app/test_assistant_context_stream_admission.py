@@ -120,6 +120,47 @@ def test_a_repeated_assistant_stream_returns_the_existing_job_without_researchin
     assert len(user_turns) == 1
 
 
+def test_a_shared_camera_is_looked_at_inside_the_stream_after_the_turn_is_shown(tmp_path, monkeypatch):
+    # Review 2026-11-22: the look (up to 8 s for a typed turn) ran before the stream began, so the person's message
+    # appeared only once the picture was described.
+    from app.platform.chat.assistant_context import routes
+
+    import asyncio
+
+    from app.platform.chat.assistant_context.models import AssistantContextChatRequest
+
+    chat_store, job_store, context, session = _setup(tmp_path)
+    events: list[dict] = []
+    looks: list[list[str]] = []  # the events the person had been sent when the camera was looked at
+
+    def camera_share_context(store, session_id, user_message):
+        looks.append([event["type"] for event in events])
+        return [{"source_id": "camera", "title": "Camera", "content": "A mug on a desk."}]
+
+    monkeypatch.setattr(routes, "camera_share_context", camera_share_context)
+    client = _client(chat_store, job_store, context)
+    router = APIRouter()  # the test client buffers a stream, so its body is stepped here
+    register_assistant_context_routes(router, chat_store_factory=lambda: chat_store,
+                                      job_store_factory=lambda: job_store, context_service_factory=lambda: context)
+    endpoint = next(route.endpoint for route in router.routes
+                    if getattr(route, "name", "") == "assistant_context_stream_chat_message_endpoint")
+    body = {"content": "What is this?", "user_turn_id": "turn-1", "web_research_mode": "disabled",
+            "camera_shared": True}
+
+    async def stream() -> None:
+        response = await endpoint(session.id, AssistantContextChatRequest(**body))
+        async for chunk in response.body_iterator:
+            events.append(json.loads(chunk.removeprefix("data: ")))
+
+    asyncio.run(stream())
+
+    assert [event["type"] for event in events] == ["user_message", "job", "delta", "complete", "session", "done"]
+    assert looks == [["user_message", "job"]]
+    assert [item["source_id"] for item in chat_store.context_items_seen[0]] == ["web_search", "camera"]
+    client.post(f"/api/assistant/context/chat/sessions/{session.id}/messages/stream", json=body)
+    assert len(looks) == 1  # a repeated submission reports its turn without a second look
+
+
 def test_an_assistant_stream_interrupts_an_older_active_turn(tmp_path):
     chat_store, job_store, context, session = _setup(tmp_path)
     older = admit_chat_turn(

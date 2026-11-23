@@ -58,6 +58,9 @@ class PortraitCall:
     principal: str
     opened_at: float = field(default_factory=time.monotonic)
     link: PortraitLink | None = None
+    # The portrait engine of the call's first stream: every stream of the call (a group call's speakers) keeps it,
+    # so an engine changed in Settings mid-call applies to the next call.
+    engine: str | None = None
     # Source samples sent per segment (phrase): each PCM block's offset in its phrase.
     _offsets: dict[str, int] = field(default_factory=dict)
     _priority: bool = False

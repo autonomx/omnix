@@ -465,6 +465,9 @@ def _generate_side_effect_free(
             # person is usually still speaking, so waiting as long as the turn would costs the reply nothing.
             look = camera_share_look(speculation.session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS)
             context_items, speculation.camera_snapshot = look.items, look.snapshot
+            # Before any text: a reply written while the picture was still being described is not reused, so the
+            # final turn, a moment later, can see what this one could not.
+            yield _sse({"type": "camera", "generation_id": speculation.generation_id, "looking": look.looking})
         assembly, rendered = store.build_provider_prompt(session, user_message, context_items)
         live_turn = provider_supports(provider, LIVE_TURNS)
         messages = [

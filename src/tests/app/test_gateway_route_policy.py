@@ -104,10 +104,14 @@ def test_what_a_live_call_holds_per_process_follows_its_replica():
                  # A shared camera's glance is described and held in one process; the call's turns, its greeting
                  # and its unprompted remarks read it there.
                  '/api/chat/sessions/chat%3Aabc/camera/glance',
-                 '/api/chat/sessions/chat%3Aabc/live-call/greeting/stream'):
+                 '/api/chat/sessions/chat%3Aabc/live-call/greeting/stream',
+                 # An early reply reads the glance too, and its accept finds the reply in the process that wrote it
+                 # (review 2026-11-22: on the worker, it never saw a camera the call's replica described).
+                 '/api/live/speculation/sessions/chat%3Aabc/stream',
+                 '/api/live/speculation/sessions/chat%3Aabc/gen/accept'):
         assert bound.fullmatch(path)
-    for path in ('/api/live/speculation/sessions/s/stream', '/api/tts/live-call/other', '/api/settings',
-                 '/api/chat/sessions/chat%3Aabc/live-call/camera'):
+    for path in ('/api/live/speculation/sessions/s', '/api/live/speculation/sessions/s/gen/other',
+                 '/api/tts/live-call/other', '/api/settings', '/api/chat/sessions/chat%3Aabc/live-call/camera'):
         assert not bound.fullmatch(path)
     rendered = _renderer().render(POLICY, speech_on_api=True)
     assert f"~^1:.+:{POLICY['live_call_bound_pattern'][1:-1]}$ omnix_live_api;" in rendered

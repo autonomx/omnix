@@ -305,6 +305,12 @@ def test_a_call_name_heard_as_another_spelling_reaches_the_browser_as_the_name()
         "type": "result_available", "segmentId": "s1", "text": "Hey Jinx, what do you see?"}
     partial = json.dumps({"type": "partial", "text": "Jenks, what"})
     assert json.loads(proxy._to_browser(partial, names))["text"] == "Jinx, what"
+    # A partial or preview may go on after its last word ("hey jenks..." may be "hey jenkins"): not yet an address.
+    for still_heard in ("partial", "preview_result"):
+        unfinished = json.dumps({"type": still_heard, "text": "hey jenks"})
+        assert proxy._to_browser(unfinished, names) == unfinished
+    assert json.loads(proxy._to_browser(json.dumps({"type": "result_available", "text": "hey jenks"}), names))[
+        "text"] == "hey Jinx"
     resumed = json.dumps({"type": "session_ready", "results": [
         {"type": "result_available", "text": "tell jenks"}, {"type": "result_available", "text": "Thanks, Jenks!"}]})
     assert [result["text"] for result in json.loads(proxy._to_browser(resumed, names))["results"]] == [

@@ -287,12 +287,6 @@ def register_assistant_context_routes(
             contract="assistant_context_chat_v1",
         )
 
-        if request.camera_shared and not admission.existing:
-            # The glance was sent as the person began; it has had the context's time to be described.
-            context_items = [*context_items, *await asyncio.to_thread(
-                camera_share_context, chat_store, session_id, admission.user_message,
-            )]
-
         def annotate_reply(metadata: dict[str, Any]) -> None:
             if context_sources:
                 metadata["context_sources"] = context_sources
@@ -306,13 +300,19 @@ def register_assistant_context_routes(
                 yield _sse({"type": "session", "session": admission.session.model_dump(mode="json")})
                 yield _sse({"type": "done"})
                 return
+            turn_items = context_items
+            if request.camera_shared:
+                # The glance was sent as the person began; it has had the context's time to be described. Waited for
+                # here (up to TYPED_TURN_WAIT_SECONDS), after the turn is shown, never before the stream starts
+                # (review 2026-11-22: the person's message appeared only once the picture was described).
+                turn_items = [*context_items, *camera_share_context(chat_store, session_id, admission.user_message)]
             try:
                 for event in stream_chat_turn(
                     chat_store,
                     job_store,
                     admission,
                     send_request,
-                    context_items=context_items,
+                    context_items=turn_items,
                     annotate_reply=annotate_reply,
                 ):
                     yield _sse(event)

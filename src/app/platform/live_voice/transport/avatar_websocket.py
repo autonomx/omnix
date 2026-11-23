@@ -64,6 +64,9 @@ LOAD_POLL_SECONDS = 2.0
 MEMORY_POLL_SECONDS = 5.0
 # The service restarts itself after an idle unload (a few seconds without it).
 RESTART_WAIT_SECONDS = 20.0
+# Another engine was in use a moment ago (a call that just ended): the service switches once its grace has passed
+# (services.portrait.portrait_server.ENGINE_SWITCH_GRACE_SECONDS, 20 s).
+ENGINE_IN_USE_WAIT_SECONDS = 30.0
 # The service's refusal when VRAM or host commit cannot take the load (services.portrait.portrait_server).
 MEMORY_SHORT = "model_busy"
 # Above any offset or frame count a call reaches (about 12 hours of 48 kHz samples).
@@ -81,7 +84,8 @@ def _worth_waiting(code: str, waited: float) -> bool:
     if code == MEMORY_SHORT:
         return True
     return ((code == "warming" and waited < LOAD_WAIT_SECONDS)
-            or (code == "service_unreachable" and waited < RESTART_WAIT_SECONDS))
+            or (code == "service_unreachable" and waited < RESTART_WAIT_SECONDS)
+            or (code == "engine_in_use" and waited < ENGINE_IN_USE_WAIT_SECONDS))
 
 
 async def _prepare_when_loaded(websocket: WebSocket, base_url: str, tenant: str, image: bytes,
@@ -187,8 +191,10 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
         try:
             image = await asyncio.to_thread(default_character_avatar_service().portrait_image, pack,
                                             max_bytes=MAX_PORTRAIT_BYTES)
-            # One engine for the whole stream: the one prepared with is the one whose start hold the browser keeps.
-            engine = await asyncio.to_thread(portrait_engine)
+            # One engine for the whole call: the one prepared with is the one whose start hold the browser keeps, and
+            # a group call's next speaker keeps it, since asking the service for another would end the call's video.
+            engine = call.engine or await asyncio.to_thread(portrait_engine)
+            call.engine = engine
             latent_key = await _prepare_when_loaded(websocket, base_url, current_tenant().workspace_id, image,
                                                     lambda: calls.open(call), engine)
             if latent_key is None:  # the browser left, or the call ended, while the model loaded

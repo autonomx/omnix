@@ -616,6 +616,12 @@ def is_remote_vision_endpoint(value: str) -> bool:
     return hostname not in {"", "localhost", "127.0.0.1", "::1"} and not hostname.startswith("127.")
 
 
+def is_provider_vision_model_ref(value: str | None) -> bool:
+    """Whether a vision model id names Codex or the Claude CLI: ``describe`` sends a picture for it through that
+    provider whatever the client's own endpoint is, so it is remote (and needs the person's consent)."""
+    return _is_codex_model_ref(value) or _is_claude_model_ref(value)
+
+
 def default_desktop_vision_client() -> DesktopVisionClient | ProviderVisionClient:
     """Select the configured vision boundary.
 

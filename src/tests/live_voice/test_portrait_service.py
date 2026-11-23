@@ -662,8 +662,30 @@ def test_engines_do_not_switch_under_a_call_or_a_load(monkeypatch, token: str) -
     client = _client(app, token)
     host = app.state.host
     host._workers.append(SimpleNamespace(step=lambda: None))
-    assert _prepare(client, engine="flashhead-lite")["code"] == "model_busy"
+    # Not "model_busy": the gateway waits that one out for the whole call, as too little memory.
+    assert _prepare(client, engine="flashhead-lite")["code"] == "engine_in_use"
     host._workers.clear()
     host.status = "warming"
     assert _prepare(client, engine="flashhead-lite")["code"] == "warming"
     assert host.engine == "float"
+
+
+def test_engines_do_not_switch_between_a_calls_streams(monkeypatch, token: str) -> None:
+    # Review 2026-11-22: a group call replaces its stream at each speaker change, so the service is briefly without
+    # one; an engine changed in Settings meanwhile ended the call's video (the process exits to switch).
+    from services.portrait import portrait_server
+
+    app = _loaded_switching_app(monkeypatch, preload=False)
+    exits: list[int] = []
+    app.state.request_exit = exits.append
+    client = _client(app, token)
+    admission = app.state.admission
+    lease = portrait_server.Lease("call-1", "local", "chat-1", SimpleNamespace())
+    assert admission.admit(lease)[0] is True
+    assert _prepare(client, engine="flashhead-lite")["code"] == "engine_in_use"  # a stream is open
+    admission.release(lease)
+    assert _prepare(client, engine="flashhead-lite")["code"] == "engine_in_use"  # between two speakers
+    assert exits == [] and app.state.host.engine == "float"
+    monkeypatch.setattr(portrait_server, "ENGINE_SWITCH_GRACE_SECONDS", 0.0)
+    assert _prepare(client, engine="flashhead-lite")["code"] == "service_unreachable"  # the call is over: it switches
+    assert exits

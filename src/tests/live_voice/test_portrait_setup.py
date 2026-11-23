@@ -71,7 +71,8 @@ def test_without_a_portrait_service_the_preview_says_so(monkeypatch) -> None:
                        json={"asset_id": "image:maya"}).json()["code"] == "portrait_not_configured"
 
 
-def _load_client(monkeypatch, outcome: Any = "latent-key", health: str = "unloaded") -> tuple[TestClient, list[bytes]]:
+def _load_client(monkeypatch, outcome: Any = "latent-key", health: str = "unloaded",
+                 engine: str = "float") -> tuple[TestClient, list[bytes]]:
     prepared: list[bytes] = []
 
     async def prepare(base_url: str, tenant: str, image: bytes) -> str:
@@ -80,10 +81,11 @@ def _load_client(monkeypatch, outcome: Any = "latent-key", health: str = "unload
             raise outcome
         return outcome
 
-    async def service_health(base_url: str) -> str:
-        return health
+    async def service_health(base_url: str) -> tuple[str, str]:
+        return health, engine
 
     monkeypatch.setattr(portrait_load, "portrait_url", lambda: "http://portrait.test")
+    monkeypatch.setattr(portrait_load, "portrait_engine", lambda: "float")  # the engine chosen in Settings
     monkeypatch.setattr(portrait_load, "_read_image", lambda asset_id: b"portrait bytes")
     monkeypatch.setattr(portrait_load, "prepare_portrait", prepare)
     monkeypatch.setattr(portrait_load, "portrait_health", service_health)
@@ -115,6 +117,32 @@ def test_the_models_state_is_reported_without_loading_it(monkeypatch, health: st
     client, prepared = _load_client(monkeypatch, health=health)
     assert client.get(portrait_load.PORTRAIT_LOAD_PATH).json() == {"status": status}
     assert prepared == []
+
+
+def test_another_engine_loaded_is_not_the_chosen_one_ready(monkeypatch) -> None:
+    # Review 2026-11-22: with FlashHead loaded and FLOAT chosen since, the button said ready; a call loads FLOAT first.
+    client, _ = _load_client(monkeypatch, health="ready", engine="flashhead-lite")
+    assert client.get(portrait_load.PORTRAIT_LOAD_PATH).json() == {"status": "unloaded"}
+
+
+def test_the_services_health_names_its_engine() -> None:
+    import asyncio
+
+    class Client:
+        def __init__(self, status: int, body: Any) -> None:
+            self.status, self.body = status, body
+
+        async def get(self, url: str) -> Any:
+            return type("Response", (), {"status_code": self.status, "json": lambda _: self.body})()
+
+    from app.platform.live_voice.portrait.link import portrait_health
+
+    def health(status: int, body: Any) -> tuple[str, str]:
+        return asyncio.run(portrait_health("http://portrait.test", client=Client(status, body)))
+
+    assert health(200, {"status": "ready", "engine": "flashhead-lite"}) == ("ready", "flashhead-lite")
+    assert health(503, {"status": "ready"}) == ("", "")
+    assert health(200, ["not", "an", "object"]) == ("", "")
 
 
 @pytest.mark.parametrize(("answer", "expected"), [

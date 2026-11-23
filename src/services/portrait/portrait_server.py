@@ -9,9 +9,10 @@ does. Routes:
   in use, free VRAM and host commit.
 - ``POST /portrait/prepare``: form fields ``tenant``, ``image_sha256`` and ``engine`` (``float`` when absent) and
   the image file. Crops and encodes the portrait once per (tenant, image digest, engine and its code revision) and
-  returns its ``latent_key``. Asked for the engine that is not loaded, the service switches when no call streams
-  (``model_busy`` while one does): it exits to be started again light, as after an idle while, and the gateway's
-  retry loads the other engine.
+  returns its ``latent_key``. Asked for the engine that is not loaded, the service switches when no call has
+  streamed for ``ENGINE_SWITCH_GRACE_SECONDS`` (``engine_in_use`` until then: a group call's speaker swap leaves it
+  briefly without a stream): it exits to be started again light, as after an idle while, and the gateway's retry
+  loads the other engine.
 - ``DELETE /portrait/cache/{tenant}/{image_sha256}``: forget that encoding and its idle loop (no pack shows it).
 - ``POST /portrait/preview``: form fields ``latent_key``, ``emotion``, ``sample_rate`` and up to 8 s of 16-bit PCM:
   the frames for that audio, rendered as a call's would be (base64 JPEGs, 25 a second), for the setup preview.
@@ -77,6 +78,9 @@ logger = logging.getLogger(__name__)
 # (float_runtime.VRAM_CAP_MB; its load peaks at 3.5 GB) and its commit peaks at 6.4-6.7 GB. FlashHead's cap is
 # 7 GB (flashhead_runtime.VRAM_CAP_MB; the spike peaked at 5.5 GB) and its commit was about 10 GB in the spike.
 LOAD_NEEDS: dict[str, tuple[float, int]] = {"float": (4.0, 8 * 1024**3), "flashhead-lite": (7.0, 12 * 1024**3)}
+# No engine switch this soon after a stream: a group call replaces its stream at each speaker change, and an
+# engine changed in Settings meanwhile must not end the call's portrait (the gateway keeps one engine per call).
+ENGINE_SWITCH_GRACE_SECONDS = 20.0
 # The catalog entry whose revision a portrait's encoding belongs to, by engine.
 CODE_MODELS = {"float": "float-code", "flashhead-lite": "flashhead-code"}
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
@@ -214,6 +218,8 @@ class RuntimeHost:
         self.runtime: Any = None
         self.engine = DEFAULT_PORTRAIT_ENGINE
         self.exit_hook: Callable[[], Callable[[int], None] | None] = lambda: None
+        # Whether a call streams, or did a moment ago (set by ``create_app`` from the admission's leases).
+        self.in_use: Callable[[], bool] = lambda: False
         self.status = "unloaded"
         self.message = ""
         self.last_used = time.monotonic()
@@ -323,8 +329,8 @@ class RuntimeHost:
             raise Unavailable("warming", f"The {self.engine} portrait engine is loading; {engine} loads after it")
         if self.status == "exiting":
             raise Unavailable("service_unreachable", "The portrait service is restarting")
-        if self._workers:
-            raise Unavailable("model_busy", f"A call is using the {self.engine} portrait engine")
+        if self._workers or self.in_use():
+            raise Unavailable("engine_in_use", f"A call is using the {self.engine} portrait engine")
         restart = self.exit_hook() if self.runtime is not None or _cuda_initialized() else None
         if restart is not None:
             self.runtime = None
@@ -386,6 +392,8 @@ class Admission:
         self.max_streams = max_streams
         self.timeout_seconds = timeout_seconds
         self.leases: dict[str, Lease] = {}
+        # When a lease last ended (monotonic): a call between two streams is still a call.
+        self._last_held = -float("inf")
         self._lock = threading.Lock()
 
     def admit(self, lease: Lease) -> tuple[bool, list[Lease]]:
@@ -397,6 +405,8 @@ class Admission:
                        or (item.principal, item.session) == (lease.principal, lease.session)]
             for item in evicted:
                 self.leases.pop(item.call_key, None)
+            if evicted:
+                self._last_held = now
             if len(self.leases) >= self.max_streams:
                 return False, evicted
             self.leases[lease.call_key] = lease
@@ -408,12 +418,20 @@ class Admission:
             gone = [item for item in self.leases.values() if now - item.last_seen > self.timeout_seconds]
             for item in gone:
                 self.leases.pop(item.call_key, None)
+            if gone:
+                self._last_held = now
             return gone
 
     def release(self, lease: Lease) -> None:
         with self._lock:
             if self.leases.get(lease.call_key) is lease:
                 del self.leases[lease.call_key]
+                self._last_held = time.monotonic()
+
+    def held_within(self, seconds: float) -> bool:
+        """Whether a stream is open, or one ended less than ``seconds`` ago."""
+        with self._lock:
+            return bool(self.leases) or time.monotonic() - self._last_held < seconds
 
     @property
     def active(self) -> int:
@@ -565,6 +583,7 @@ def create_app(*, load: Callable[[str], Any] = _default_load,
     # Preloaded, the service stays loaded: an engine switch then happens in place, never by a restart that would
     # preload the other engine again.
     host.exit_hook = lambda: None if preload else app.state.request_exit
+    host.in_use = lambda: admission.held_within(ENGINE_SWITCH_GRACE_SECONDS)
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -621,8 +640,9 @@ def create_app(*, load: Callable[[str], Any] = _default_load,
             started = time.monotonic()
             try:
                 await asyncio.wrap_future(host.submit(runtime.idle_frames, portrait, 0))
-                if (find_blink := getattr(runtime, "find_blink", None)) is not None:
-                    # FlashHead: a blink from another silent render when the loop's has none; never in a call.
+                if (find_blink := getattr(runtime, "find_blink", None)) is not None and not admission.active:
+                    # FlashHead: a blink from another silent render when the loop's has none (about 5 s a seed); never
+                    # in a call, nor in one that started while the loop rendered.
                     await asyncio.wrap_future(host.submit(find_blink, portrait))
                 await asyncio.wrap_future(host.submit(runtime.blink_frames, portrait, 0))
             except Exception:  # noqa: BLE001 - the portrait is prepared; a call renders its idle loop itself

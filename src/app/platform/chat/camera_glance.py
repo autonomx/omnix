@@ -117,6 +117,8 @@ class CameraShareLook:
 
     items: list[dict[str, Any]]
     snapshot: dict[str, str] | None
+    # Nothing seen yet while a glance is still being described: a later look may see it.
+    looking: bool = False
 
 
 _lock = threading.Lock()
@@ -181,7 +183,7 @@ def camera_share_look(session_id: str, *, wait_seconds: float, clock: Callable[[
     with _lock:
         previous = _seen.get(session_id)
     if previous is None or clock() - previous.started > GLANCE_FRESH_SECONDS:
-        return CameraShareLook([dict(_LOOKING_ITEM if looking else _UNSEEN_ITEM)], None)
+        return CameraShareLook([dict(_LOOKING_ITEM if looking else _UNSEEN_ITEM)], None, looking)
     return _look(previous.description, previous.described_at)
 
 

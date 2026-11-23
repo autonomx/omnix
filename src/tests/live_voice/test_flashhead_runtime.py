@@ -58,6 +58,9 @@ def test_a_start_waits_for_the_video_to_be_a_whole_pass_ahead(flashhead_runtime)
     hold_ms, lead_ms = PORTRAIT_START_RULES["flashhead-lite"]
     assert lead_ms == (settings.first_hop + settings.hop) * 40
     assert PORTRAIT_START_RULES["float"] == (250, 0)
+    # The scheduler's play estimate before the browser's first report holds the start as long as the browser does
+    # (review 2026-11-22: it assumed FLOAT's 0.25 s, so it thought FlashHead's first frames played a second early).
+    assert settings.start_hold_seconds == hold_ms / 1000
 
 
 def test_the_first_pass_pads_the_window_before_the_speech(flashhead_runtime) -> None:
@@ -115,6 +118,41 @@ def test_the_idle_loop_keeps_the_motion_not_the_stillest_stretch(flashhead_runti
     assert np.linalg.norm(features[stop] - features[start]) < 0.1  # and seamless
     # A render shorter than the loop asked for still gives a loop.
     assert flashhead_runtime.idle_loop_bounds(features[:40])[1] <= 40
+
+
+class _Frames(list):
+    """A stand-in for a tensor of frames: slices stay frames, and the GPU is itself."""
+
+    def __getitem__(self, item):
+        result = list.__getitem__(self, item)
+        return _Frames(result) if isinstance(item, slice) else result
+
+    def cuda(self):
+        return self
+
+
+def test_a_portrait_gives_up_its_raw_frames_once_its_loop_is_encoded(flashhead_runtime, monkeypatch) -> None:
+    # Review 2026-11-22: each kept portrait held its raw loop and twins (300 MB or more) for good.
+    module = flashhead_runtime
+    monkeypatch.setattr(module, "encode_jpegs", lambda frames, level: [f"{level}:{frame}" for frame in frames])
+    monkeypatch.setattr(module, "decode_jpegs", lambda jpegs: _Frames(int(jpeg.split(":")[1]) for jpeg in jpegs))
+    runtime = object.__new__(module.FlashHeadRuntime)  # no model: every pixel below is already rendered
+    portrait = module.FlashHeadPortrait(key="k", cond=None, ref_latent=None, reference=None,
+                                        idle=_Frames(range(10)), twins=_Frames(range(100, 110)))
+
+    assert runtime.idle_frames(portrait, 0) == ["0:0", "0:2", "0:4", "0:6", "0:8"]
+    assert runtime.blink_frames(portrait, 0) == ["0:100", "0:102", "0:104", "0:106", "0:108"]
+    assert portrait.idle is not None and not portrait.released  # a blink search may still change the twins
+
+    portrait.blink_searched = True
+    runtime.find_blink(portrait)  # searched: it renders nothing (the runtime has no model to render with)
+    runtime.release_frames(portrait)
+    assert portrait.released and portrait.idle is None and portrait.twins is None
+
+    # Another level comes from level 0's JPEGs: the same frames as the raw loop's, every idle_frame_step(3)th.
+    assert runtime.idle_frames(portrait, 3) == ["3:0", "3:4", "3:8"]
+    assert runtime.blink_frames(portrait, 3) == ["3:100", "3:104", "3:108"]
+    assert runtime.rendered_idle_level(portrait) == 0
 
 
 def _render(frames: int = 360) -> np.ndarray:

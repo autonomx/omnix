@@ -52,7 +52,9 @@ describe('gateway routing policy', () => {
     for (const url of ['/api/tts/live-call/avatar-websocket?token=t&session_id=a', '/api/live/speculation/tts-prefetch',
       '/api/live/speculation/tts-prefetch/gen/accept', '/api/live/speculation/tts-prefetch/gen/cancel',
       // A shared camera's glance is held where the call's turns and greeting read it.
-      '/api/chat/sessions/chat%3Aa/camera/glance', '/api/chat/sessions/chat%3Aa/live-call/greeting/stream?purpose=greeting']) {
+      '/api/chat/sessions/chat%3Aa/camera/glance', '/api/chat/sessions/chat%3Aa/live-call/greeting/stream?purpose=greeting',
+      // So are an early reply, which reads the glance, and its accept, which finds the reply where it was written.
+      '/api/live/speculation/sessions/chat%3Aa/stream', '/api/live/speculation/sessions/chat%3Aa/gen/accept']) {
       const inCall = { url, method: 'POST', headers: { cookie: 'omnix_call_affinity=session-a' } };
       expect(canUseApi(inCall, true)).toBe(true);
       expect(canUseApi(inCall)).toBe(false);

@@ -181,6 +181,20 @@ def test_a_remote_vision_model_needs_the_owners_consent():
     assert camera_vision(client_factory=lambda: remote, assistant_settings=lambda: allowed).available
 
 
+@pytest.mark.parametrize("model", ["codex:gpt-5.5", "claude_cli:claude-haiku-4-5", "llm:claude_cli:sonnet"])
+def test_a_provider_model_id_is_remote_even_from_a_local_client(model):
+    # Review 2026-11-22: a local client given a Codex or Claude model id describes through that provider's CLI.
+    local = FakeVision()
+    settings = {**LOCAL, "desktopCompanionVisionModelId": model}
+
+    refused = look_at_camera_image(IMAGE, "look", client_factory=lambda: local, assistant_settings=lambda: settings)
+    assert refused.outcome == "remote_vision_not_allowed"
+    assert local.calls == []
+    status = camera_vision(client_factory=lambda: local,
+                           assistant_settings=lambda: {**settings, "desktopCompanionRemoteVisionAllowed": True})
+    assert (status.available, status.remote) == (True, True)
+
+
 def test_no_vision_model_configured_is_not_offered(monkeypatch):
     for name in ("OMNIX_VISION_BASE_URL", "OMNIX_VISION_MODEL", "OMNIX_VISION_PROVIDER"):
         monkeypatch.delenv(name, raising=False)

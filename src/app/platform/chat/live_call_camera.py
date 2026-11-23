@@ -107,7 +107,11 @@ def camera_vision(
     """Whether the call may offer Show, and why not. Nothing is sent to a model here."""
     client_factory = client_factory or _default_client
     assistant_settings = assistant_settings or _assistant_settings
-    from app.providers.desktop_vision import ProviderVisionClient, is_remote_vision_endpoint
+    from app.providers.desktop_vision import (
+        ProviderVisionClient,
+        is_provider_vision_model_ref,
+        is_remote_vision_endpoint,
+    )
 
     assistant = assistant_settings()
     try:
@@ -125,7 +129,10 @@ def camera_vision(
     )
     if not configured:
         return CameraVision(False, False, "vision_not_configured")
-    remote = is_remote_vision_endpoint(str(getattr(client, "base_url", "") or ""))
+    # The picture goes where ``describe`` sends it: a Codex or Claude model id goes through that provider's CLI even
+    # from a local client (review 2026-11-22: a local endpoint with such a model id sent it without consent).
+    remote = (is_remote_vision_endpoint(str(getattr(client, "base_url", "") or ""))
+              or is_provider_vision_model_ref(_vision_model(assistant)))
     if remote and not _remote_allowed(assistant):
         return CameraVision(False, True, "remote_vision_not_allowed")
     return CameraVision(True, remote, "ready")

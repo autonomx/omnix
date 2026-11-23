@@ -58,7 +58,13 @@ export type SpeculationEvent = {
   message?: string;
   provider_id?: string | null;
   model_id?: string | null;
+  // A ``camera`` event: the reply was written while the camera's picture was still being described.
+  looking?: boolean;
 };
+
+// How long a turn waits for a camera-sharing speculation to say whether it saw the picture; the gateway's own look
+// waits at most 2 s (camera_glance.LIVE_TURN_WAIT_SECONDS).
+const SPECULATION_CAMERA_SETTLE_MS = 2500;
 
 type AcceptedSpeculation = {
   ok: boolean;
@@ -93,6 +99,11 @@ type ActiveSpeculation = {
   modelId: string | null;
   // Whether the camera was shared when it started: the gateway then wrote it with the camera's description.
   cameraShared: boolean;
+  // With the camera shared: whether the reply was written while the picture was still being described (null until
+  // the gateway says). Such a reply is not reused; the final turn may see what it could not.
+  cameraLooking: boolean | null;
+  cameraSettled: Promise<void>;
+  resolveCamera: () => void;
   generationId: string | null;
   chunks: string[];
   subscribers: Set<() => void>;
@@ -405,9 +416,14 @@ async function interceptChatStream(input: RequestInfo | URL, init: RequestInit |
       && transcriptsCanReuseSpeculation(candidate.candidateText, finalText)
     ))
     .sort((left, right) => right.createdAtMs - left.createdAtMs)[0];
+  if (active?.cameraShared && active.cameraLooking === null) {
+    // No longer than the gateway's own look waits; the final turn would wait on the same picture.
+    await Promise.race([active.cameraSettled, delay(SPECULATION_CAMERA_SETTLE_MS)]);
+  }
   if (
     !active
     || active.error
+    || active.cameraLooking !== false
     || !speculationRequestCanReuse(body, active.providerId, active.modelId, active.cameraShared)
   ) {
     activeSpeculations
@@ -523,6 +539,7 @@ function startHypothesis(
     active.error = error instanceof Error ? error.message : 'Speculative generation failed.';
     active.completed = true;
     active.resolveStarted();
+    active.resolveCamera();
     active.resolveGeneration();
     notify(active);
   });
@@ -537,8 +554,12 @@ function createSpeculation(
 ): ActiveSpeculation {
   let resolveStarted: () => void = () => {};
   let resolveGeneration: () => void = () => {};
+  let resolveCamera: () => void = () => {};
   const startedPromise = new Promise<void>((resolve) => { resolveStarted = resolve; });
   const generationPromise = new Promise<void>((resolve) => { resolveGeneration = resolve; });
+  const cameraSettled = new Promise<void>((resolve) => { resolveCamera = resolve; });
+  const shared = cameraShared();
+  if (!shared) resolveCamera();
   return {
     sessionId,
     segmentId,
@@ -548,7 +569,10 @@ function createSpeculation(
     createdAtMs: performance.now(),
     providerId: null,
     modelId: null,
-    cameraShared: cameraShared(),
+    cameraShared: shared,
+    cameraLooking: shared ? null : false,
+    cameraSettled,
+    resolveCamera,
     generationId: null,
     chunks: [],
     subscribers: new Set(),
@@ -624,6 +648,7 @@ async function consumeSpeculation(active: ActiveSpeculation, probability?: numbe
     reader.releaseLock();
     active.completed = true;
     active.resolveStarted();
+    active.resolveCamera();
     active.resolveGeneration();
     notify(active);
   }
@@ -637,6 +662,11 @@ function applySpeculationEvent(active: ActiveSpeculation, event: SpeculationEven
     active.modelId = event.model_id ?? null;
     active.resolveStarted();
     if (active.prefetchedClause) startSpeculativeTtsPrefetch(active, active.prefetchedClause);
+    return;
+  }
+  if (event.type === 'camera') {
+    active.cameraLooking = event.looking === true;
+    active.resolveCamera();
     return;
   }
   if (event.type === 'text_chunk' && typeof event.text === 'string') {
@@ -951,6 +981,7 @@ function cancelSpeculation(active: ActiveSpeculation, reason: string): void {
   cancelSpeculativeTts(active, reason);
   active.abortController.abort(reason);
   active.resolveStarted();
+  active.resolveCamera();
   active.resolveGeneration();
   active.subscribers.clear();
   dispatchPerformance('llm_speculation_cancelled', {
