@@ -48,6 +48,12 @@ def _canonical_survival_seed(simulation_state: Mapping[str, Any]) -> dict[str, A
     return _legacy_survival_candidate(simulation_state)
 
 
+def current_survival(simulation_state: Mapping[str, Any]) -> dict[str, Any]:
+    """The hero's survival as the rules keep it: the stored record (or, for a campaign without one, what an older
+    shape held), normalized. Reads only; ``simulation_state`` is not changed."""
+    return normalize_survival_state(_canonical_survival_seed(simulation_state))
+
+
 def _normalize_owned_simulation_state(normalized: dict[str, Any]) -> dict[str, Any]:
     state = normalize_survival_state(_canonical_survival_seed(normalized))
     normalized[SURVIVAL_STATE_KEY] = state

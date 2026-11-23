@@ -1,9 +1,9 @@
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
+import { isJobActive } from '../../api/jobs';
 
 // Project states once classification has finished, and once quote review is behind the book.
 const CLASSIFIED_STATES = new Set(['review_required', 'ready_to_render', 'rendering', 'mastering', 'ready_to_export', 'exported']);
 const PAST_QUOTE_REVIEW_STATES = new Set(['analyzing', ...CLASSIFIED_STATES]);
-const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 
 /** Something still standing between a phase and its completion; `open` goes where it is done. */
 export type ProductionTodo = { label: string; open?: () => void };
@@ -68,7 +68,7 @@ export function productionPhases(ws: AudiobookWorkspaceModel): ProductionPhase[]
 
   const exportTodos: ProductionTodo[] = latestExport && ['failed', 'dead_letter'].includes(latestExport.status)
     ? [{ label: 'The last export failed: export again', open: openProduction }]
-    : latestExport && ACTIVE_STATUSES.has(latestExport.status) ? [{ label: 'Wait for the export to finish', open: openProduction }]
+    : latestExport && isJobActive(latestExport.status) ? [{ label: 'Wait for the export to finish', open: openProduction }]
       : project.state === 'ready_to_export' ? [{ label: 'Export the audiobook', open: openProduction }]
         : [{ label: 'Render every chapter first', open: openProduction }];
 

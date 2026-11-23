@@ -8,6 +8,7 @@ import { NEUTRAL_SPEECH_STYLE } from './neutralLiveCallRuntime';
 import { STREAMING_TTS_RECOVERY_DELAY_SECONDS, STREAMING_TTS_SAMPLE_RATE, audioSourceToArrayBuffer, canUseDecodedAudioPlayback, getSynthesizedAudioSource, getVoiceJobAudioSource, makePlayableAudioSource, voiceJobErrorMessage, voiceProfileId, waitForAudioElementPlaying, waitForAudioElementToFinish, waitForStreamingPlaybackToFinish, type AssistantSettings, type StreamingTtsPlayback, type StreamingTtsWindow, type VoiceProfileAsset } from './chatbotWorkspaceModel';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
 import { ASSISTANT_VOICE_INTERRUPT_EVENT } from '../../../events/bus';
+import { jobKeys } from '../../../api/jobs';
 
 type ResponseAudioOptions = Omit<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef'> & {
   runtimeConfig: AssistantWorkspaceRuntimeConfig;
@@ -255,7 +256,7 @@ export function useResponseAudio({
       voiceId: currentLiveCallVoiceId() || null,
       style: liveCallRuntimeRef.current?.speech_style.expressiveness || selectedPersonalityLabel,
     }), { timeoutMs: 120_000, timeoutMessage: 'Voice synthesis timed out after 120s.' });
-    await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+    await queryClient.invalidateQueries({ queryKey: jobKeys.all });
     const source = getVoiceJobAudioSource(job);
     if (!source) throw new Error(voiceJobErrorMessage(job) || 'Voice Studio did not return playable speech audio.');
     return source;

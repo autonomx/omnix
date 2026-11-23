@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
 import { DEFAULT_TRADING_RIGHT_OFFSET } from './chart/chartAdapter';
-import { type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import { type CoreIndicatorId } from './indicators/coreIndicators';
 import { isIntervalAvailable } from './tradingIntervals';
-import { dateInputValue, tradingDateRangeWithinLoadedHistory, zonedDateTimeToUtc } from './tradingTime';
-import { CustomVisibleRange, TradingChartPanelProps, applyVisibleRange, closestSupportedInterval, isAlertIndicatorId, rightOffsetOptions, rightOffsetStorageKey } from './tradingChartPanelModel';
+import { TradingChartPanelProps, applyVisibleRange, closestSupportedInterval, rightOffsetOptions, rightOffsetStorageKey } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
@@ -12,14 +10,21 @@ import type { useChartLifecycle } from './useTradingChartPanelLifecycle';
 import type { useChartSync } from './useTradingChartPanelSync';
 import type { useChartView } from './useTradingChartPanelView';
 
-/** Indicator pane actions: fullscreen, minimize, close and resize. */
-export function useChartIndicatorActions(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync> & ReturnType<typeof useChartView>) {
+/** What the pane actions read from the rest of the panel: the chart, the pane state and the focus callback. */
+export type ChartIndicatorPaneInput = Pick<TradingChartPanelProps, 'chartFocusMode' | 'onChartFocusChange' | 'onToggleIndicator'>
+  & Pick<ReturnType<typeof useChartPanelState>, 'adapterRef' | 'fullscreenIndicatorRef' | 'fullscreenMainPaneRef'
+    | 'indicatorResizeRef' | 'minimizedIndicatorsRef' | 'setFullscreenIndicator' | 'setFullscreenMainPane'
+    | 'setHoveredIndicatorPane' | 'setMinimizedIndicators' | 'setResizingIndicatorPane' | 'setSettingsIndicator'>
+  & Pick<ReturnType<typeof useChartIndicatorScheduling>, 'refreshIndicatorPanes'>;
+
+/** Indicator pane actions: fullscreen, minimize, close and resize. Returns one `panes` slice. */
+export function useChartIndicatorActions(input: ChartIndicatorPaneInput) {
   const {
     adapterRef, chartFocusMode, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorResizeRef,
     minimizedIndicatorsRef, onChartFocusChange, onToggleIndicator, refreshIndicatorPanes, setFullscreenIndicator,
     setFullscreenMainPane, setHoveredIndicatorPane, setMinimizedIndicators, setResizingIndicatorPane,
     setSettingsIndicator,
-  } = ws;
+  } = input;
 
   const toggleFullscreen = () => {
     const nextFocused = !chartFocusMode;
@@ -131,20 +136,19 @@ export function useChartIndicatorActions(ws: TradingChartPanelProps & ReturnType
   }, [refreshIndicatorPanes, adapterRef, indicatorResizeRef, setResizingIndicatorPane]);
 
   return {
-    toggleFullscreen, toggleMinimizedIndicator, resetIndicatorPaneView, toggleFullscreenIndicator, closeIndicator,
-    startIndicatorPaneResize,
+    panes: {
+      toggleFullscreen, toggleMinimized: toggleMinimizedIndicator, resetView: resetIndicatorPaneView,
+      toggleIndicatorFullscreen: toggleFullscreenIndicator, close: closeIndicator, startResize: startIndicatorPaneResize,
+    },
   };
 }
 
-/** Visible-range, context-menu and pointer actions. */
+/** Visible-range and pointer actions. */
 export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync> & ReturnType<typeof useChartView> & ReturnType<typeof useChartIndicatorActions>) {
   const {
-    active, adapterRef, allBarsRef, barsRef, chartQuery, contextMenu, customRangeEnd, customRangeStart, drawingTool,
-    drawings, hostRef, indicatorPaneGeometry, indicators, interval, onActivate, onChangeInterval, onClearIndicators,
-    onToggleIndicator, paneIndicators, pendingRangeIntervalRef, replayChoosingStart, rightOffset,
-    selectedRangeRef, selectedTimezone, setAlertPlacement, setContextMenu, setCustomRangeEnd, setCustomRangeError,
-    setCustomRangeOpen, setCustomRangeStart, setHoveredIndicatorPane, setPriceScaleHovered, setReplaySelectionIndex,
-    setRightOffset, setSelectedIndicator, setSelectedRangeLabel, setTimezoneMenuOpen,
+    adapterRef, allBarsRef, barsRef, chartQuery, drawingTool, indicatorPaneGeometry, interval, onChangeInterval,
+    pendingRangeIntervalRef, replayChoosingStart, rightOffset, selectedRangeRef, selectedTimezone,
+    setHoveredIndicatorPane, setPriceScaleHovered, setReplaySelectionIndex, setRightOffset, setSelectedRangeLabel,
   } = ws;
 
   const changeRightOffset = (value: string | number) => {
@@ -164,54 +168,6 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
     }
   };
 
-  const openCustomRange = () => {
-    const first = barsRef.current[0]?.start_time ?? new Date().toISOString();
-    const last = barsRef.current.at(-1)?.end_time ?? new Date().toISOString();
-    setCustomRangeStart((current) => current || dateInputValue(first, selectedTimezone));
-    setCustomRangeEnd((current) => current || dateInputValue(last, selectedTimezone));
-    setCustomRangeError(null);
-    setCustomRangeOpen((current) => !current);
-    setTimezoneMenuOpen(false);
-  };
-
-  const applyCustomRange = () => {
-    const fromTime = zonedDateTimeToUtc(customRangeStart, selectedTimezone);
-    const toTime = zonedDateTimeToUtc(customRangeEnd, selectedTimezone, true);
-    if (fromTime === null || toTime === null) {
-      setCustomRangeError('Choose both a start and end date.');
-      return;
-    }
-    if (fromTime > toTime) {
-      setCustomRangeError('The start date must be before the end date.');
-      return;
-    }
-    const firstLoaded = barsRef.current[0]?.start_time;
-    const lastLoaded = barsRef.current.at(-1)?.end_time ?? barsRef.current.at(-1)?.start_time;
-    if (!firstLoaded || !lastLoaded) {
-      setCustomRangeError('No chart history is loaded for this range.');
-      return;
-    }
-    if (!tradingDateRangeWithinLoadedHistory(
-      customRangeStart,
-      customRangeEnd,
-      firstLoaded,
-      lastLoaded,
-      selectedTimezone,
-    )) {
-      setCustomRangeError(
-        `Requested dates are outside loaded history (${dateInputValue(firstLoaded, selectedTimezone)} to ${dateInputValue(lastLoaded, selectedTimezone)}).`,
-      );
-      return;
-    }
-    const selection = { from: customRangeStart, to: customRangeEnd } satisfies CustomVisibleRange;
-    selectedRangeRef.current = selection;
-    setSelectedRangeLabel('Custom');
-    setCustomRangeError(null);
-    setCustomRangeOpen(false);
-    const chart = adapterRef.current?.api();
-    if (chart) applyVisibleRange(chart, selection, barsRef.current, interval, rightOffset, selectedTimezone);
-  };
-
   const showRange = (label: string, days: number | null, requestedInterval: string) => {
     selectedRangeRef.current = days;
     setSelectedRangeLabel(label);
@@ -224,52 +180,6 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
     const chart = adapterRef.current?.api();
     if (!chart) return;
     if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current, interval, rightOffset, selectedTimezone);
-  };
-
-  const openContextMenu = (point: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => {
-    if (!active) onActivate();
-    setSelectedIndicator(null);
-    const resolvedIndicatorId = indicatorId;
-    const resolvedIndicator = resolvedIndicatorId
-      ? indicators.find((indicator) => indicator.id === resolvedIndicatorId && indicator.enabled)
-      : undefined;
-    const alertIndicatorId = resolvedIndicatorId && isAlertIndicatorId(resolvedIndicatorId)
-      ? resolvedIndicatorId
-      : undefined;
-    const stage = hostRef.current?.parentElement;
-    const width = stage?.clientWidth ?? 0;
-    const height = stage?.clientHeight ?? 0;
-    setContextMenu({
-      ...point,
-      contextIndicatorId: resolvedIndicatorId,
-      indicatorId: alertIndicatorId,
-      chartIndicatorId: resolvedIndicatorId,
-      indicatorPeriod: resolvedIndicator?.period,
-      x: Math.max(6, Math.min(point.x, Math.max(6, width - 286))),
-      y: Math.max(6, Math.min(point.y, Math.max(6, height - 420))),
-    });
-  };
-
-  const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const target = event.target as Element;
-    if (target.closest('.trading-chart-context-menu, .trading-price-scale-menu, .trading-price-scale-trigger, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings, .trading-indicator-pane-controls, .trading-indicator-object-toolbar')) return;
-    const stage = event.currentTarget;
-    const bounds = stage.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
-    const indicatorId = adapterRef.current?.indicatorPaneIdAtClientY(event.clientY);
-    const indicator = indicatorId === null || indicatorId === undefined
-      ? undefined
-      : paneIndicators.find((item) => item.id === indicatorId);
-    if (indicator) {
-      const point = adapterRef.current?.drawingPointFromCoordinate(x, y);
-      const indicatorValue = adapterRef.current?.indicatorValueFromClientY(indicator.id, event.clientY);
-      if (point) openContextMenu({ ...point, price: indicatorValue ?? point.price, x, y, source: 'context-menu' }, indicator.id);
-      return;
-    }
-    const point = adapterRef.current?.drawingPointFromCoordinate(x, y);
-    if (point) openContextMenu({ ...point, x, y, source: 'context-menu' });
   };
 
   const handleStagePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -313,40 +223,5 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
     setHoveredIndicatorPane(null);
   };
 
-  const copyContextPrice = () => {
-    if (!contextMenu) return;
-    void navigator.clipboard?.writeText(String(contextMenu.price));
-  };
-
-  const pasteContextPrice = () => {
-    if (!contextMenu) return;
-    void navigator.clipboard?.readText().then((value) => {
-      const pasted = Number(value.trim());
-      if (Number.isFinite(pasted)) setAlertPlacement({ ...contextMenu, price: pasted, source: 'context-menu' });
-    }).catch(() => undefined);
-  };
-
-  const applyChartTemplate = (template: 'default' | 'clean' | 'momentum') => {
-    if (template === 'clean') {
-      onClearIndicators();
-      drawings.removeAll();
-      return;
-    }
-    if (template === 'momentum') {
-      for (const id of ['rsi', 'macd'] as CoreIndicatorId[]) {
-        if (!indicators.some((indicator) => indicator.id === id && indicator.enabled)) onToggleIndicator(id);
-      }
-    }
-  };
-
-  const contextMenuAlert = () => {
-    // Any pane's indicator can be alerted on from the dialog's chart indicators (TVP-1.3).
-    if (contextMenu) setAlertPlacement(contextMenu);
-  };
-
-  return {
-    changeRightOffset, openCustomRange, applyCustomRange, showRange, openContextMenu, handleStageContextMenu,
-    handleStagePointerMove, handleStagePointerLeave, copyContextPrice, pasteContextPrice, applyChartTemplate,
-    contextMenuAlert,
-  };
+  return { changeRightOffset, showRange, handleStagePointerMove, handleStagePointerLeave };
 }

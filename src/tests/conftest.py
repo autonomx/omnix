@@ -166,6 +166,28 @@ def capability_runtime_installed():
     yield
 
 
+_fresh_authority_checked = False
+
+
+def _initialize_fresh_test_authority(database) -> None:
+    """Open a freshly migrated scratch database for writes once per worker, as the persistence suite's session
+    fixture does. It changes only an untouched ``legacy_preflight`` database with no rows, so a database a
+    cutover test has put in another state keeps it; without this, every later PostgreSQL test outside
+    ``tests/persistence`` failed on a workspace foreign key."""
+    global _fresh_authority_checked
+    if _fresh_authority_checked:
+        return
+    _fresh_authority_checked = True
+    from app.persistence.authority import initialize_fresh_install_authority
+    from app.persistence.migrations import migration_status
+
+    schema_version = str(migration_status(database, initialize_table=False).get("current_schema") or "unknown-schema")
+    with database.transaction() as connection:
+        initialize_fresh_install_authority(
+            connection, software_revision="fresh-install-unversioned", schema_version=schema_version,
+        )
+
+
 @pytest.fixture(autouse=True)
 def postgres_local_identity(request):
     # Persistence tests truncate shared tables (cascading to workspaces) and
@@ -182,6 +204,7 @@ def postgres_local_identity(request):
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=1))
     try:
+        _initialize_fresh_test_authority(database)
         ensure_local_identity(database)
     except PostgresAuthorityError:
         pass  # Runtime writes are closed (cutover tests own that state).

@@ -491,6 +491,17 @@ class MemoryEventRepository:
         matching = [event for event in self.events if event.strategy_id == strategy_id]
         return sorted(matching, key=lambda event: event.observed_at, reverse=True)[:limit]
 
+    def events_by_types_between(self, strategy_id, *, event_types, start_time, end_time, limit=10_000):
+        # Oldest first, like the repository's query.
+        matching = [
+            event
+            for event in self.events
+            if event.strategy_id == strategy_id
+            and event.event_type in event_types
+            and start_time <= event.observed_at < end_time
+        ]
+        return sorted(matching, key=lambda event: event.observed_at)[:limit]
+
     def append_event(self, event):
         if any(existing.idempotency_key == event.idempotency_key for existing in self.events):
             return False
@@ -593,8 +604,8 @@ def test_monitor_persists_event_trigger_payload_mode_and_token_estimate():
     )
 
     assert analyzer.calls == 1
-    assert monitor.intraday_llm_call_count == 1
-    assert monitor.intraday_llm_assessment_count == 1
+    assert monitor.metrics.intraday_llm_call_count == 1
+    assert monitor.metrics.intraday_llm_assessment_count == 1
     assert [event.event_type for event in repository.events] == [
         "intraday_llm",
         "intraday_llm_batch",
@@ -614,10 +625,10 @@ def test_monitor_persists_event_trigger_payload_mode_and_token_estimate():
         "output_tokens": 50,
         "total_tokens": 250,
     }
-    assert monitor.intraday_llm_input_token_count == 200
-    assert monitor.intraday_llm_output_token_count == 50
-    assert monitor.intraday_llm_total_token_count == 250
-    assert monitor.intraday_llm_estimated_usage_count == 1
+    assert monitor.metrics.intraday_llm_input_token_count == 200
+    assert monitor.metrics.intraday_llm_output_token_count == 50
+    assert monitor.metrics.intraday_llm_total_token_count == 250
+    assert monitor.metrics.intraday_llm_estimated_usage_count == 1
 
     # Same causal minute has neither a material change nor a heartbeat.
     asyncio.run(
@@ -629,7 +640,7 @@ def test_monitor_persists_event_trigger_payload_mode_and_token_estimate():
         )
     )
     assert analyzer.calls == 1
-    assert monitor.intraday_llm_call_count == 1
+    assert monitor.metrics.intraday_llm_call_count == 1
 
 
 def test_monitor_uses_delta_heartbeat_then_periodic_full_refresh():
@@ -695,8 +706,8 @@ def test_monitor_failure_checkpoint_bounds_event_driven_provider_retries():
     )
 
     assert analyzer.calls == 1
-    assert monitor.intraday_llm_call_count == 1
-    assert monitor.intraday_llm_error_count == 1
+    assert monitor.metrics.intraday_llm_call_count == 1
+    assert monitor.metrics.intraday_llm_error_count == 1
     assert len(repository.events) == 1
     assert repository.events[0].event_type == "intraday_llm_batch"
     assert repository.events[0].state == "error"
@@ -731,7 +742,7 @@ def test_open_shared_circuit_is_a_skipped_batch_not_an_error():
             monitor._run_intraday_llm(_llm_strategy(), repository, _llm_universe(), ranked)
         )
 
-    assert monitor.intraday_llm_error_count == 0
+    assert monitor.metrics.intraday_llm_error_count == 0
     assert [(event.event_type, event.state, event.reason_code) for event in repository.events] == [
         ("intraday_llm_batch", "skipped", "INTRADAY_LLM_BATCH_SKIPPED"),
     ]
@@ -811,8 +822,8 @@ def test_strategies_share_one_assessment_of_a_name_at_the_same_bar():
         asyncio.run(monitor._run_intraday_llm(strategy, repository, _llm_universe(), [row("AAA", 1)]))
 
     assert analyzer.calls == 1
-    assert monitor.intraday_llm_call_count == 1
-    assert monitor.intraday_llm_shared_assessment_count == 1
+    assert monitor.metrics.intraday_llm_call_count == 1
+    assert monitor.metrics.intraday_llm_shared_assessment_count == 1
     by_strategy = {
         (event.strategy_id, event.event_type): event for event in repository.events
     }
@@ -844,9 +855,9 @@ def test_a_refused_budget_skips_the_call_and_is_recorded_once(monkeypatch):
         asyncio.run(monitor._run_intraday_llm(_llm_strategy(), repository, _llm_universe(), [row("AAA", 1, observed_at=at)]))
 
     assert analyzer.calls == 0
-    assert monitor.intraday_llm_call_count == 0
-    assert monitor.intraday_llm_error_count == 0
-    assert monitor.intraday_llm_budget_skip_count == 2
+    assert monitor.metrics.intraday_llm_call_count == 0
+    assert monitor.metrics.intraday_llm_error_count == 0
+    assert monitor.metrics.intraday_llm_budget_skip_count == 2
     assert [(event.event_type, event.state) for event in repository.events] == [
         ("intraday_llm_batch", "budget_exhausted"),
     ]
@@ -864,7 +875,7 @@ def test_a_budget_refusal_from_the_provider_path_is_not_an_error():
     monitor = _monitor(FixtureAnalyzer(fail=refused))
     asyncio.run(monitor._run_intraday_llm(_llm_strategy(), repository, _llm_universe(), [row("AAA", 1)]))
 
-    assert monitor.intraday_llm_error_count == 0
+    assert monitor.metrics.intraday_llm_error_count == 0
     assert [(event.event_type, event.state) for event in repository.events] == [
         ("intraday_llm_batch", "budget_exhausted"),
     ]

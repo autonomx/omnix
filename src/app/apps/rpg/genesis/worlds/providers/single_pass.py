@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-from contextlib import nullcontext
 from dataclasses import replace
 from typing import Any, Literal, Mapping, Sequence, cast
 
@@ -19,7 +18,6 @@ from pydantic import (
 )
 
 from app.providers.base import ChatMessage
-from app.persistence.device_permits import device_permit_slot
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputGateway,
@@ -42,6 +40,8 @@ from app.apps.rpg.genesis.worlds.providers.world_forge import (
     _topic_contract,
 )
 from app.prompts import prompt_template
+from app.providers.catalog import provider_id_of
+from app.providers.llm_admission import llm_admission
 
 _PROMPT_1 = prompt_template('rpg.worlds_providers_single_pass.prompt', "1", (
     " PROFILE_FIELD_CONTRACT is authoritative. Use the exact allocated ID "
@@ -257,8 +257,8 @@ class SinglePassProviderWorldForgeTopicGenerator(ProviderWorldForgeTopicGenerato
     """Use one provider call for each planned registry or entity generation unit."""
 
     def _limiter(self):
-        provider = self.config.provider.strip().casefold().removeprefix("llm:")
-        return device_permit_slot("llm-local", priority="batch") if provider == "lmstudio" else nullcontext()
+        provider = provider_id_of(self.config.provider)
+        return llm_admission(provider)
 
     def _generate_response(
         self,

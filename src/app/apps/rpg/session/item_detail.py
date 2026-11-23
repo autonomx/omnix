@@ -5,21 +5,16 @@ from typing import Any
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
-from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, clean_text
 
 
 GENERIC_GENRES = {"", "deterministic_rpg_campaign", "rpg_campaign", "default"}
 
 
-def _text(value: Any, fallback: str = "") -> str:
-    text = str(value or "").strip()
-    return text or fallback
-
-
 def _session_genre(state: dict[str, Any], requested_genre: str | None) -> str:
     metadata = _safe_dict(state.get("metadata"))
     identity = _safe_dict(state.get("character_identity"))
-    raw_genre = _text(
+    raw_genre = clean_text(
         requested_genre
         or metadata.get("genre")
         or identity.get("genre")
@@ -31,9 +26,9 @@ def _session_genre(state: dict[str, Any], requested_genre: str | None) -> str:
 
     clues = " ".join(
         [
-            _text(state.get("location") or state.get("current_location")),
-            _text(metadata.get("origin")),
-            " ".join(_text(item) for item in _safe_list(metadata.get("starter_gear"))),
+            clean_text(state.get("location") or state.get("current_location")),
+            clean_text(metadata.get("origin")),
+            " ".join(clean_text(item) for item in _safe_list(metadata.get("starter_gear"))),
         ]
     ).casefold()
     if any(token in clues for token in ("tavern", "cloak", "dagger", "silver", "village", "torch")):
@@ -54,15 +49,15 @@ def _setting_context(state: dict[str, Any], genre: str) -> dict[str, Any]:
     story_options = _safe_dict(genesis.get("story_options"))
     return {
         "genre": genre,
-        "campaign_template": _text(metadata.get("campaign_template")),
-        "tone": _text(metadata.get("tone") or identity.get("tone")),
-        "location": _text(state.get("location") or state.get("current_location")),
-        "origin": _text(metadata.get("origin") or identity.get("origin")),
-        "character_background": _text(identity.get("background")),
-        "power_source": _text(identity.get("power_source") or metadata.get("power_source")),
-        "opening_hook": _text(metadata.get("opening_hook") or story_options.get("opening_hook")),
-        "climate_profile": _text(environment.get("climate_profile_id")),
-        "starter_gear": [_text(item) for item in _safe_list(metadata.get("starter_gear"))[:8] if _text(item)],
+        "campaign_template": clean_text(metadata.get("campaign_template")),
+        "tone": clean_text(metadata.get("tone") or identity.get("tone")),
+        "location": clean_text(state.get("location") or state.get("current_location")),
+        "origin": clean_text(metadata.get("origin") or identity.get("origin")),
+        "character_background": clean_text(identity.get("background")),
+        "power_source": clean_text(identity.get("power_source") or metadata.get("power_source")),
+        "opening_hook": clean_text(metadata.get("opening_hook") or story_options.get("opening_hook")),
+        "climate_profile": clean_text(environment.get("climate_profile_id")),
+        "starter_gear": [clean_text(item) for item in _safe_list(metadata.get("starter_gear"))[:8] if clean_text(item)],
     }
 
 

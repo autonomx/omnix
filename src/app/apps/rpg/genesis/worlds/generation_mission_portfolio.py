@@ -1,10 +1,10 @@
 """Structured mission-signature and intentional campaign-arc certification."""
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, fingerprint as _fingerprint, mapping as _mapping, rows as _rows
 
 _SIGNATURE_COMPONENTS = (
     "activity",
@@ -63,39 +63,9 @@ class MissionPortfolioIssue:
         }
 
 
-class MissionPortfolioCompilationError(ValueError):
-    def __init__(self, issues: Sequence[MissionPortfolioIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.code}:{issue.topic_id}:{issue.item_id}:{issue.fingerprint}"
-            for issue in self.issues
-        )
-        super().__init__("mission_portfolio_integrity_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "mission_portfolio_integrity_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
+class MissionPortfolioCompilationError(GraphAuditError):
+    code = "mission_portfolio_integrity_failed"
+    fields = ("code", "topic_id", "item_id", "fingerprint")
 
 
 def _mission_domains(topic_graph: Mapping[str, Any] | None) -> set[str]:
@@ -141,16 +111,6 @@ def _signature_payload(value: Any) -> tuple[dict[str, Any] | None, tuple[str, ..
             continue
         payload[field] = rendered
     return (payload if not issues else None), tuple(issues)
-
-
-def _fingerprint(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        dict(payload),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def _arc_values(row: Mapping[str, Any]) -> tuple[str, str, int, bool, bool]:

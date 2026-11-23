@@ -28,8 +28,8 @@ from app.persistence.unit_of_work import unit_of_work
 from app.runtime.features import FeatureContext
 
 from .metric_data import MarketMetricPoint, MarketMetricResponse, MarketMetricSeries
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
-from .us_equity_calendar import EASTERN, regular_close_time, regular_holidays
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
+from .us_equity_calendar import EASTERN, is_trading_day, regular_close_time
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def session_close(day: date) -> datetime:
 def last_completed_session(now: datetime) -> date:
     """The latest US session whose close, plus 30 minutes for the bars to settle, has passed."""
     day = now.astimezone(EASTERN).date()
-    while day.weekday() >= 5 or day in regular_holidays(day.year) or now < session_close(day) + timedelta(minutes=30):
+    while not is_trading_day(day) or now < session_close(day) + timedelta(minutes=30):
         day -= timedelta(days=1)
     return day
 
@@ -206,13 +206,7 @@ class AlpacaBreadthSource:
         return _alpaca_bars(self.runtime, alpaca_iex_auth_headers(), symbols, timeframe="1Day", start=start, end=end, chunk_size=CHUNK_SYMBOLS, feed=self.feed)  # type: ignore[arg-type]
 
 
-def breadth_monitor_enabled() -> bool:
-    from app.config.env import environment
-
-    values = environment()
-    if values.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return False
-    return values.get("OMNIX_TRADING_BREADTH_MONITOR", "1").strip().lower() in {"1", "true", "yes", "on"}
+breadth_monitor_enabled = monitor_switch("OMNIX_TRADING_BREADTH_MONITOR")
 
 
 class BreadthMonitor(ScheduledTradingMonitor):

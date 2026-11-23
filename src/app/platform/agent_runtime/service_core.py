@@ -27,6 +27,7 @@ from .contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    IssuedRunSpec,
     EvidencePolicy,
     TaskRevision,
     RunChangeSet,
@@ -35,7 +36,7 @@ from .contracts import (
 from app.observability.agent_logging import configure_agent_debug_logging
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
-from .review_orchestration_core import consume_terminal_reviewer_in_repository
+from .review_orchestration import consume_terminal_reviewer_in_repository
 from .run_locks import RunLockRegistry
 from .semantic_task_parser import (
     default_semantic_task_parser,
@@ -122,23 +123,6 @@ class _DiffFileStat(TypedDict):
     path: str
     additions: int
     deletions: int
-
-
-class _LeaseBoundRunRepository:
-    """Bind worker state changes in a job to the run's current lease owner."""
-
-    def __init__(self, repository, *, worker_id: str, lease_token: str) -> None:
-        self._repository = repository
-        self._worker_id = worker_id
-        self._lease_token = lease_token
-
-    def update_state(self, run_id: str, **kwargs):
-        kwargs["worker_id"] = self._worker_id
-        kwargs["lease_token"] = self._lease_token
-        return self._repository.update_state(run_id, **kwargs)
-
-    def __getattr__(self, name: str):
-        return getattr(self._repository, name)
 
 
 def _acceptance_retry_limit() -> int:
@@ -387,11 +371,6 @@ class AgentRunService:
 
         return run_lifecycle.start_prepared_run(self, run_id, reference_context=reference_context, reference_images=reference_images)
 
-    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
-        from . import run_lifecycle
-
-        return run_lifecycle.start_child(self, parent_run_id, request)
-
     def submit_child_start(self, parent_run_id: str, request, *, job_store) -> AgentRunSnapshot:
         from . import run_lifecycle
 
@@ -423,7 +402,7 @@ class AgentRunService:
     def _persist_starting_run(
         self,
         repository: PostgresAgentRunRepository,
-        issued: AgentRunSpec,
+        issued: IssuedRunSpec,
     ) -> AgentRunSnapshot:
         from . import run_lifecycle
 

@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from contextlib import nullcontext
 from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import BaseProvider, ChatMessage
-from app.persistence.device_permits import device_permit_slot
 from app.providers.registry import get_provider
 from app.providers.structured import (
     StructuredContract,
@@ -31,6 +29,8 @@ from app.apps.rpg.genesis.forge.world_forge_profiles import (
     RuntimeCapabilityDefaults,
 )
 from app.apps.rpg.genesis.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.providers.catalog import provider_id_of
+from app.providers.llm_admission import llm_admission
 
 _CORE_DOMAINS = _core_domains()
 _ALLOWED_CORE_IDS = tuple(domain.domain_id for domain in _CORE_DOMAINS)
@@ -319,13 +319,7 @@ class ProviderGenreProfileGenerator:
         ]
         gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         total_calls = max(1, self.config.max_retries + 2)
-        provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
-        call_limiter = (
-            device_permit_slot("llm-local", priority="batch")
-            if provider_key in {"lmstudio", "ollama", "local"}
-            else nullcontext()
-        )
-        with call_limiter:
+        with llm_admission(self.config.provider):
             outcome = gateway.try_generate(
                 messages,
                 contract=replace(
@@ -391,9 +385,7 @@ def build_genre_profile_generator_from_settings(
 ) -> GenreProfileGenerator:
     """Build the exact provider/model pinned into a durable profile job."""
 
-    provider_id = str(settings.get("provider_route") or "").strip().casefold()
-    if provider_id.startswith("llm:"):
-        provider_id = provider_id.split(":", 1)[1]
+    provider_id = provider_id_of(settings.get("provider_route"))
     model_id = str(settings.get("model") or "").strip()
     if provider_id in {"", "configured", "auto", "settings"}:
         raise RuntimeError("world profile job contains an unresolved provider route")

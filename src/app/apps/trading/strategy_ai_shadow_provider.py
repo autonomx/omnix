@@ -24,6 +24,7 @@ from typing import Any, cast
 from pydantic import ValidationError
 
 from app.config.env import environment
+from app.persistence.runtime import is_legacy_test_persistence
 from app.providers.service import get_provider
 from app.providers import ChatMessage, ConnectionError as ProviderConnectionError, get_registry
 from app.providers.structured.contracts import StructuredMode
@@ -87,7 +88,7 @@ class _CircuitState:
 
 
 def _circuit_persistence_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if is_legacy_test_persistence():
         return False
     return environment().get(
         "OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE",

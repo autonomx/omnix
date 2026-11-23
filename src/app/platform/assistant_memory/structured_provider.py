@@ -8,14 +8,13 @@ from app.config.env import environment
 import json
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from contextlib import nullcontext
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import BaseProvider, ChatMessage
-from app.providers.catalog import LIVE_TURNS, LOCAL_DEVICE, provider_supports
-from app.persistence.device_permits import device_permit_slot
+from app.providers.catalog import LIVE_TURNS, provider_supports
+from app.providers.llm_admission import llm_admission
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputError,
@@ -165,15 +164,7 @@ class ProviderStructuredProposalProvider:
         return [row.model_dump(mode="python") for row in value.proposals]
 
     def propose(self, content: str, *, earlier: Sequence[dict[str, str]] = ()) -> list[dict[str, Any]]:
-        admission = (
-            device_permit_slot(
-                "llm-local",
-                priority="batch",
-                timeout_seconds=self.timeout_seconds,
-            )
-            if provider_supports(self.provider, LOCAL_DEVICE)
-            else nullcontext()
-        )
+        admission = llm_admission(self.provider, timeout_seconds=self.timeout_seconds)
         future = _PROVIDER_EXECUTOR.submit(self._call_admitted, content, admission, earlier)
         try:
             return future.result(timeout=self.timeout_seconds)

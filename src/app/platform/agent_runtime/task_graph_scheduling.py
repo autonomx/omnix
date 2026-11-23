@@ -11,8 +11,10 @@ import uuid
 from typing import Any
 from .capability_requests import AssistantToolRequest
 from app.persistence.unit_of_work import unit_of_work
-from .contracts import ModelRef
+from .contracts import ModelRef, TERMINAL_RUN_STATUSES
 from .task_graph import (
+    TERMINAL_GRAPH_RUN_STATUSES,
+    TERMINAL_NODE_RUN_STATUSES,
     TaskEdge,
     TaskGraph,
     TaskGraphRunSnapshot,
@@ -161,7 +163,7 @@ def _poll_children(graph_runtime: PostgresTaskGraphRuntime, snapshot: TaskGraphR
             continue
         if (
             state.status == "waiting_for_approval"
-            and child.status not in {"completed", "failed", "cancelled"}
+            and child.status not in TERMINAL_RUN_STATUSES
         ):
             graph_runtime._store_node(
                 snapshot.run_id,
@@ -178,7 +180,7 @@ def _poll_children(graph_runtime: PostgresTaskGraphRuntime, snapshot: TaskGraphR
                 graph_revision=snapshot.graph.revision,
             )
             continue
-        if child.status not in {"completed", "failed", "cancelled"}:
+        if child.status not in TERMINAL_RUN_STATUSES:
             continue
 
         terminal_expected_statuses = ("running", "waiting_for_approval")
@@ -672,7 +674,7 @@ def _fail_graph(
     last_error: str,
 ) -> TaskGraphRunSnapshot:
     for state in snapshot.node_states:
-        if state.status in {"completed", "failed", "cancelled", "skipped"}:
+        if state.status in TERMINAL_NODE_RUN_STATUSES:
             continue
         if (
             state.child_run_id
@@ -705,7 +707,7 @@ def advance(graph_runtime: PostgresTaskGraphRuntime, run_id: str) -> TaskGraphRu
     snapshot = graph_runtime.get_status(run_id)
     if snapshot is None:
         raise KeyError(run_id)
-    if snapshot.status in {"completed", "failed", "cancelled"}:
+    if snapshot.status in TERMINAL_GRAPH_RUN_STATUSES:
         return snapshot
 
     graph_runtime._poll_children(snapshot)

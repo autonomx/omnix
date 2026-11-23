@@ -15,7 +15,7 @@ from typing import Any, Sequence
 from pydantic import BaseModel, Field
 
 from app.apps.rpg.session.ability_models import ALLOWED_DIMENSIONS
-from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, clean_text
 
 REQUIRED_ABILITY_COVERAGE_DIMENSIONS = (
     "resources",
@@ -49,11 +49,6 @@ class RpgAbilityCoverageReport(BaseModel):
 
 def _utc_now() -> str:
     return utc_now().isoformat().replace("+00:00", "Z")
-
-
-def _text(value: Any, fallback: str = "") -> str:
-    text = str(value or "").strip()
-    return text or fallback
 
 
 def _append(target: dict[str, Any], key: str, value: dict[str, Any], *, limit: int = 20) -> None:
@@ -161,7 +156,7 @@ def _scan_trace_list(
 ) -> None:
     for raw_record in records:
         record = _safe_dict(raw_record)
-        ability_id = _text(record.get("ability_id"))
+        ability_id = clean_text(record.get("ability_id"))
         ability = _enrich_from_ability(ability_index, ability_id)
         _record_observation(
             observations,
@@ -169,12 +164,12 @@ def _scan_trace_list(
             warnings,
             source=source,
             dimensions=record.get("dimensions") or record.get("dimension") or ability.get("dimensions"),
-            ability_id=ability_id or _text(ability.get("ability_id")) or None,
-            ability_name=_text(record.get("ability_name") or record.get("name") or ability.get("name")) or None,
-            kind=_text(record.get("kind") or ability.get("kind")) or None,
-            purpose=_text(record.get("purpose") or ability.get("purpose")) or None,
-            capability=_text(record.get("capability") or ability.get("capability")) or None,
-            op=_text(record.get("op")) or None,
+            ability_id=ability_id or clean_text(ability.get("ability_id")) or None,
+            ability_name=clean_text(record.get("ability_name") or record.get("name") or ability.get("name")) or None,
+            kind=clean_text(record.get("kind") or ability.get("kind")) or None,
+            purpose=clean_text(record.get("purpose") or ability.get("purpose")) or None,
+            capability=clean_text(record.get("capability") or ability.get("capability")) or None,
+            op=clean_text(record.get("op")) or None,
             applied=record.get("applied") is not False,
         )
 
@@ -189,12 +184,12 @@ def _scan_timeline_events(
 ) -> None:
     for raw_event in _safe_list(state.get("timeline")):
         event = _safe_dict(raw_event)
-        kind = _text(event.get("kind"))
+        kind = clean_text(event.get("kind"))
         if kind not in {"ability", "ability_effect", "world_ability", "passive", "trait"}:
             continue
         for raw_effect in _safe_list(event.get("effects")):
             effect = _safe_dict(raw_effect)
-            ability_id = _text(effect.get("ability_id") or event.get("ability_id"))
+            ability_id = clean_text(effect.get("ability_id") or event.get("ability_id"))
             ability = _enrich_from_ability(ability_index, ability_id)
             _record_observation(
                 observations,
@@ -202,12 +197,12 @@ def _scan_timeline_events(
                 warnings,
                 source=f"timeline:{kind}",
                 dimensions=effect.get("dimensions") or effect.get("dimension") or ability.get("dimensions"),
-                ability_id=ability_id or _text(ability.get("ability_id")) or None,
-                ability_name=_text(effect.get("ability_name") or event.get("title") or ability.get("name")) or None,
-                kind=_text(ability.get("kind")) or kind,
-                purpose=_text(ability.get("purpose")) or None,
-                capability=_text(ability.get("capability")) or None,
-                op=_text(effect.get("op")) or None,
+                ability_id=ability_id or clean_text(ability.get("ability_id")) or None,
+                ability_name=clean_text(effect.get("ability_name") or event.get("title") or ability.get("name")) or None,
+                kind=clean_text(ability.get("kind")) or kind,
+                purpose=clean_text(ability.get("purpose")) or None,
+                capability=clean_text(ability.get("capability")) or None,
+                op=clean_text(effect.get("op")) or None,
                 applied=effect.get("applied") is not False,
                 extra={"event_kind": kind},
             )
@@ -257,10 +252,10 @@ def summarize_ability_coverage(state: dict[str, Any], *, required_dimensions: Se
             source="unlocked_narrative_trait",
             dimensions=ability.get("dimensions"),
             ability_id=ability_id,
-            ability_name=_text(ability.get("name")) or None,
+            ability_name=clean_text(ability.get("name")) or None,
             kind="narrative_trait",
-            purpose=_text(ability.get("purpose")) or None,
-            capability=_text(ability.get("capability")) or None,
+            purpose=clean_text(ability.get("purpose")) or None,
+            capability=clean_text(ability.get("capability")) or None,
         )
 
     _scan_timeline_events(observations, counters, warnings, state=state, ability_index=ability_index)

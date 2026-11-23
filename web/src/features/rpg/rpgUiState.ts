@@ -266,38 +266,21 @@ function buildHeroStats(session: RpgSession | undefined): RpgStatPreview[] {
 function buildSurvivalState(session: RpgSession | undefined): RpgSurvivalPreview {
   if (!session) return previewSurvival;
 
-  const simulation = recordValue(session.simulation_state) ?? {};
-  const climate = recordValue(simulation.climate_survival);
-  const climateNeeds = recordValue(climate?.survival);
-  const playerState = recordValue(simulation.player_state) ?? getPlayerRecord(session) ?? {};
-  const playerNeeds = recordValue(playerState.survival_state);
-  const resources = recordValue(playerState.resources);
-  const legacyNeeds = recordValue(simulation.survival);
-  const readNeed = (key: 'hunger' | 'thirst' | 'fatigue') => Math.max(
-    0,
-    Math.min(100, firstNumber(climateNeeds?.[key], playerNeeds?.[key], resources?.[key], legacyNeeds?.[key]) ?? 0),
-  );
-  const values = {
-    hunger: readNeed('hunger'),
-    thirst: readNeed('thirst'),
-    fatigue: readNeed('fatigue'),
+  // The campaign's view carries the needs as the survival rules keep them, with the levels the rules decide.
+  const needs = recordValue(session.needs);
+  const levelOf = (value: unknown): RpgSurvivalNeedPreview['severity'] =>
+    value === 'critical' || value === 'warning' ? value : 'stable';
+  const reading = (id: RpgSurvivalNeedPreview['id']) => {
+    const row = recordValue(needs?.[id]);
+    return { value: firstNumber(row?.value) ?? 0, level: levelOf(row?.level) };
   };
-  const warnings = firstArray(climateNeeds?.warnings, playerNeeds?.warnings, legacyNeeds?.warnings)
-    .map((warning) => firstString(warning))
-    .filter((warning): warning is string => Boolean(warning))
-    .map((warning) => titleCase(warning));
-  const maxPressure = Math.max(values.hunger, values.thirst, values.fatigue);
-  const status: RpgSurvivalPreview['status'] = maxPressure >= 85
-    ? 'Critical'
-    : maxPressure >= 60 || warnings.length
-      ? 'Warning'
-      : 'Stable';
+  const status = ({ critical: 'Critical', warning: 'Warning', stable: 'Stable' } as const)[levelOf(needs?.level)];
   const need = (id: RpgSurvivalNeedPreview['id'], label: string): RpgSurvivalNeedPreview => ({
     id,
     label,
-    percent: values[id],
-    severity: values[id] >= 85 ? 'critical' : values[id] >= 60 ? 'warning' : 'stable',
-    value: `${values[id]} / 100`,
+    percent: reading(id).value,
+    severity: reading(id).level,
+    value: `${reading(id).value} / 100`,
   });
 
   return {
@@ -314,7 +297,8 @@ function buildSurvivalState(session: RpgSession | undefined): RpgSurvivalPreview
     needs: [need('hunger', 'Hunger'), need('thirst', 'Thirst'), need('fatigue', 'Fatigue')],
     source: 'live',
     status,
-    warnings,
+    // The rules keep no warnings beside the levels; the preview shows what they look like.
+    warnings: [],
   };
 }
 

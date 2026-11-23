@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNow } from '../../../../shared/timers';
 import { type LoadPlan, finishLoad, loadFraction, moveTo, secondsLeft, stepLabel } from './loadProgress';
 
 const TICK_MS = 250;
@@ -34,13 +35,9 @@ export function useLoadPlan() {
  * left. Without a plan (a load this button did not start, such as a call's) it slides, saying only that it loads.
  */
 export function LiveVideoLoadProgress({ plan }: { plan: LoadPlan | null }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-
   const step = plan?.steps[plan.index];
+  // The shared clock, and only while a step's bar is shown: the sliding bar without a plan needs no time.
+  const now = useNow(TICK_MS, Boolean(plan && step)).getTime();
   if (!plan || !step) {
     return (
       <div className="assistant-live-video-progress is-indeterminate">

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, rows as _rows
 
 _IDENTITY_FIELDS = {
     "id",
@@ -65,35 +67,9 @@ class ManifestReferenceIssue:
         }
 
 
-class ManifestReferenceCompilationError(ValueError):
-    def __init__(self, issues: Sequence[ManifestReferenceIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.code}:{issue.topic_id}:{issue.path}:{issue.target_id}"
-            for issue in self.issues
-        )
-        super().__init__("manifest_reference_closure_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "manifest_reference_closure_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(row) for row in value if isinstance(row, Mapping))
+class ManifestReferenceCompilationError(GraphAuditError):
+    code = "manifest_reference_closure_failed"
+    fields = ("code", "topic_id", "path", "target_id")
 
 
 def _profile_reference_fields(topic_graph: Mapping[str, Any] | None) -> set[str]:

@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { startPolling } from '../../shared/timers';
 import type { TradingScannerResult } from './scannerTypes';
+import { isConflict } from '../../api/errors';
 
 export const AUTO_REFRESH_OPTIONS = [
   { value: 0, label: 'Off' },
@@ -60,7 +61,7 @@ export function useScannerAutoRefresh(
         await latest.current.start(scannerId);
         failures = 0;
       } catch (error) {
-        if (error instanceof Error && error.message.includes('(409)')) return;
+        if (isConflict(error)) return;
         failures += 1;
         if (failures >= MAX_AUTO_REFRESH_FAILURES) latest.current.onGiveUp(error);
       } finally {

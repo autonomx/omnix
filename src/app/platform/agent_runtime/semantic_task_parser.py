@@ -5,6 +5,9 @@ capabilities, evidence source classes, trust policy, or approval policy.
 """
 from __future__ import annotations
 
+from app.providers.model_route import model_name_of
+from app.providers.catalog import provider_id_of
+
 from .exception_logging import log_recovered_exception
 
 from app.config.env import env_str
@@ -186,23 +189,6 @@ def _system_prompt() -> str:
     return (
         SYSTEM_PROMPT_TEMPLATE.text
     )
-
-
-def _provider_key(value: str | None) -> str:
-    text = str(value or "").strip()
-    if text.startswith("llm:"):
-        return text.split(":", 1)[1]
-    return text
-
-
-def _model_key(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
-    return text
 
 
 def _cache_enabled() -> bool:
@@ -477,7 +463,7 @@ def default_semantic_task_parser(
         env_str("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", "") or ""
     ).strip()
     raw_provider = override_provider or str(provider_id or "").strip()
-    provider_name = _provider_key(raw_provider)
+    provider_name = provider_id_of(raw_provider)
     if not provider_name:
         return None
     # The configured provider registry is the trust boundary. SemanticTask v2 is
@@ -494,7 +480,7 @@ def default_semantic_task_parser(
                 )
                 or ""
             ).strip()
-            or _model_key(model_id)
+            or model_name_of(model_id)
             or str(getattr(getattr(provider, "config", None), "model", "") or "").strip()
             or None
         )

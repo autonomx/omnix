@@ -11,6 +11,7 @@ A task's state afterwards is its job's (``list_call_tasks``).
 """
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_message
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
@@ -449,12 +450,6 @@ def mark_proposal_reported(chat_store: Any, session: Any, task_id: str) -> Any:
     return message
 
 
-def _is_voice_turn(message: Any) -> bool:
-    metadata = getattr(message, "metadata", None) or {}
-    return bool(str(metadata.get("speech_segment_id") or "").strip()) or str(
-        metadata.get("user_turn_id") or "").startswith("voice-user-turn:")
-
-
 def proposal_confirmable(session: Any, proposal: Any, user_message: Any) -> bool:
     """Whether ``user_message`` may confirm or cancel a call's proposal: its question has begun, this is the first
     user turn after that, within ``PROPOSAL_CONFIRM_WINDOW``, and a voice turn began after the question did (the web
@@ -467,7 +462,7 @@ def proposal_confirmable(session: Any, proposal: Any, user_message: Any) -> bool
                   if message.role == "user" and (_parse_time(message.created_at) or started) >= started), None)
     if first is not None and first.id != user_message.id:
         return False
-    if _is_voice_turn(user_message):
+    if is_live_voice_message(user_message):
         task_id = str(proposal.metadata.get("call_task_id") or "")
         return user_message.metadata.get(HEARD_TURN_ID) == task_report_turn_id(task_id)
     return True

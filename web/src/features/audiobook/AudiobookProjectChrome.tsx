@@ -4,6 +4,7 @@ import { AudiobookRenderQueueTable } from './AudiobookRenderQueue';
 import { LibrarySection, renderJobLabel } from './audiobookWorkspaceModel';
 import type { AudiobookJobView } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
+import { isJobActive } from '../../api/jobs';
 
 /** Delete confirmations for the project and for an asset. */
 export function AudiobookProjectDialogs({ ws }: { ws: AudiobookWorkspaceModel }) {
@@ -89,7 +90,6 @@ export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
   );
 }
 
-const ACTIVE_EXPORT_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 
 /** The latest export's progress while it encodes, then its outcome. */
 function AudiobookExportStatus({ job, onViewAssets }: { job: AudiobookJobView; onViewAssets: () => void }) {
@@ -100,7 +100,7 @@ function AudiobookExportStatus({ job, onViewAssets }: { job: AudiobookJobView; o
   if (job.status === 'failed' || job.status === 'dead_letter') {
     return <div className="audiobook-export-status error" role="alert"><span>{format} export failed{job.error?.message ? `: ${job.error.message}` : '.'}</span></div>;
   }
-  if (!ACTIVE_EXPORT_STATUSES.has(job.status)) return null;
+  if (!isJobActive(job.status)) return null;
   const started = job.status !== 'queued' && job.status !== 'waiting';
   const total = Number(job.progress?.total);
   const current = Number(job.progress?.current);
@@ -129,7 +129,7 @@ export function AudiobookProduction({ ws }: { ws: AudiobookWorkspaceModel }) {
   } = ws;
   if (!project) return null;
   const latestExport = project.export_jobs[0];
-  const exportActive = Boolean(latestExport && ACTIVE_EXPORT_STATUSES.has(latestExport.status));
+  const exportActive = Boolean(latestExport && isJobActive(latestExport.status));
   return (
     <>
       {workspaceMode === 'production' && <>

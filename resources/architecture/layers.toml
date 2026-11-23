@@ -57,7 +57,7 @@ world = ["world", "world.world_graph", "world.locations", "world.spatial", "worl
 narration = ["narration", "narration.ai", "narration.cognitive", "narration.narrative", "narration.narrative_engine", "narration.narrative_delivery", "narration.narrative_reference", "narration.narrative_repository", "narration.narrative_retirement", "narration.response_generation", "narration.dialogue", "narration.dialogue_state", "narration.npc_dialogue", "narration.presentation", "narration.coherence", "narration.prompt_profiles", "narration.visual", "narration.story", "narration.journal", "narration.campaign_journal_runtime"]
 genesis = ["genesis", "genesis.creator", "genesis.profiles", "genesis.modding", "genesis.worlds", "genesis.forge"]
 session = ["session", "session.jobs", "session.interactive_cli_state_checkpoint"]
-edge = ["edge", "edge.api", "edge.hermes", "edge.replay", "edge.narrative_replay", "feature", "declarations", "edge.services", "edge.release_finalization", "edge.release_gates", "edge.local_live_smoke", "edge.dialogue_quality_benchmark", "edge.local_dialogue_quality_fixtures", "edge.agent", "__init__"]
+edge = ["edge", "edge.api", "edge.hermes", "edge.replay", "feature", "declarations", "edge.services", "edge.release_finalization", "edge.release_gates", "edge.local_live_smoke", "edge.dialogue_quality_benchmark", "edge.local_dialogue_quality_fixtures", "edge.agent", "__init__"]
 
 # RQ-2.8 (A4): engine code holds no world content. AL021 counts strings in these contexts that name the starter
 # world's people and places, or the ids the engine's old copies of it used; the world is its bundle,
@@ -81,7 +81,6 @@ entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/services/
 modules = [
   "app.apps.rpg.edge.api.traced_response",
   "app.apps.rpg.edge.api.turn_pipeline",
-  "app.apps.rpg.edge.narrative_replay",
   "app.apps.rpg.foundation.core.determinism",
   "app.apps.rpg.foundation.debug_logging",
   "app.apps.rpg.foundation.dynamic_npc_profiles",
@@ -159,6 +158,7 @@ modules = [
   "app.apps.rpg.narration.narrative_engine.validation",
   "app.apps.rpg.narration.narrative_engine.writer",
   "app.apps.rpg.narration.narrative_reference",
+  "app.apps.rpg.narration.narrative_replay",
   "app.apps.rpg.narration.narrative_repository",
   "app.apps.rpg.narration.narrative_retirement",
   "app.apps.rpg.narration.persistence.rpg_narrative_delivery_repository",
@@ -209,6 +209,7 @@ modules = [
   "app.apps.rpg.rules.wording",
   "app.apps.rpg.session.campaign_state",
   "app.apps.rpg.session.causal_turn_runtime",
+  "app.apps.rpg.session.committed_narration",
   "app.apps.rpg.session.deferred_narration_guard",
   "app.apps.rpg.session.durable_store",
   "app.apps.rpg.session.foreground_turn_record",

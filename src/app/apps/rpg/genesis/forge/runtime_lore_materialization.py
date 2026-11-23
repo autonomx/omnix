@@ -12,7 +12,7 @@ from typing import Any, Mapping, Sequence
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.rules.contracts import for_the_model, secrets_held
 
-from .campaign_lore_store import _mapping, _rows, _text, current_location_identity
+from .campaign_lore_store import _mapping, _rows, current_location_identity
 from .world_forge_dossiers import (
     dossier_prompt_contract,
     project_entity_dossier,
@@ -20,6 +20,7 @@ from .world_forge_dossiers import (
 )
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import clean_text
 
 _PROMPT_1 = prompt_template('rpg.session_genesis_runtime_lore_materialization.prompt', "1", (
     "Return one JSON object that materializes durable, player-safe RPG canon "
@@ -196,7 +197,7 @@ def _name_from_id(entity_id: str) -> str:
 
 
 def _kind(entity_id: str, value: Mapping[str, Any] | None = None) -> str:
-    raw = _text((value or {}).get("kind") or (value or {}).get("type")).casefold()
+    raw = clean_text((value or {}).get("kind") or (value or {}).get("type")).casefold()
     if raw in _KIND_PREFIXES:
         return _KIND_PREFIXES[raw]
     prefix = entity_id.split(":", 1)[0].casefold() if ":" in entity_id else ""
@@ -204,7 +205,7 @@ def _kind(entity_id: str, value: Mapping[str, Any] | None = None) -> str:
 
 
 def canonical_lore_topic_id(kind: str) -> str:
-    normalized = _KIND_PREFIXES.get(_text(kind).casefold(), _text(kind).casefold())
+    normalized = _KIND_PREFIXES.get(clean_text(kind).casefold(), clean_text(kind).casefold())
     return _TOPIC_BY_KIND.get(normalized, f"{normalized or 'entity'}s")
 
 
@@ -246,7 +247,7 @@ def _target(
     kind_hint: str = "",
 ) -> SceneLoreTarget | None:
     if isinstance(value, Mapping):
-        entity_id = _text(
+        entity_id = clean_text(
             value.get("entity_id")
             or value.get("npc_id")
             or value.get("creature_id")
@@ -273,7 +274,7 @@ def _target(
             or value.get("network_id")
             or value.get("id")
         )
-        name = _text(
+        name = clean_text(
             value.get("name")
             or value.get("title")
             or value.get("label")
@@ -282,7 +283,7 @@ def _target(
         )
         resolved_kind = _kind(entity_id, value)
     else:
-        entity_id = _text(value)
+        entity_id = clean_text(value)
         name = ""
         resolved_kind = _kind(entity_id)
     if not entity_id or entity_id == "player" or entity_id.startswith("player:"):
@@ -382,7 +383,7 @@ def _document_for_entity(
     return any(
         target
         in {
-            _text(value).casefold()
+            clean_text(value).casefold()
             for value in (
                 *list(row.get("entity_refs") or ()),
                 *list(row.get("entities") or ()),
@@ -395,13 +396,13 @@ def _document_for_entity(
 def scene_lore_entity_is_rich(entity: Mapping[str, Any]) -> bool:
     """Require a full character dossier, not merely an encountered-NPC stub."""
 
-    if not _text(entity.get("name") or entity.get("title")):
+    if not clean_text(entity.get("name") or entity.get("title")):
         return False
     # A published world's own people and places are written by its author; generating a dossier over them
     # costs a model call per newcomer and can contradict the canon.
-    if _text(entity.get("canon_source")) == "published_world":
+    if clean_text(entity.get("canon_source")) == "published_world":
         return True
-    kind = _text(entity.get("kind")).casefold()
+    kind = clean_text(entity.get("kind")).casefold()
     if kind == "npc":
         dossier = _mapping(entity.get("dossier"))
         sections = dossier.get("sections")
@@ -411,7 +412,7 @@ def scene_lore_entity_is_rich(entity: Mapping[str, Any]) -> bool:
             and len(sections) >= 4
         )
         rich_fields = all(
-            bool(_text(entity.get(field)))
+            bool(clean_text(entity.get(field)))
             for field in (
                 "description",
                 "appearance",
@@ -422,7 +423,7 @@ def scene_lore_entity_is_rich(entity: Mapping[str, Any]) -> bool:
         ) and bool(entity.get("goals")) and bool(entity.get("motives"))
         return valid_dossier or rich_fields
     return bool(
-        _text(
+        clean_text(
             entity.get("description")
             or entity.get("public_bio")
             or entity.get("sensory_profile")
@@ -439,16 +440,16 @@ def _rich_entity(entity: Mapping[str, Any]) -> bool:
 def _context(bible: Mapping[str, Any], target: SceneLoreTarget) -> dict[str, Any]:
     visible_documents = []
     for row in _rows(bible.get("documents")):
-        if _text(row.get("visibility")).casefold() not in _VISIBLE:
+        if clean_text(row.get("visibility")).casefold() not in _VISIBLE:
             continue
-        summary = _text(
+        summary = clean_text(
             row.get("summary_500")
             or row.get("summary_120")
             or row.get("full_text")
         )
         if summary:
             visible_documents.append(
-                {"title": _text(row.get("title")), "summary": summary[:600]}
+                {"title": clean_text(row.get("title")), "summary": summary[:600]}
             )
         if len(visible_documents) >= 10:
             break
@@ -497,7 +498,7 @@ def _generate_bundle(
         if target.kind == "location"
         else fallback_entity_bundle(
             target,
-            location_name=_text(_mapping(_mapping(bible.get("entities")).get(target.location_id)).get("name")),
+            location_name=clean_text(_mapping(_mapping(bible.get("entities")).get(target.location_id)).get("name")),
         )
     )
     fallback["generator"] = DETERMINISTIC_GENERATOR
@@ -542,11 +543,11 @@ def _document_duplicate(
 ) -> bool:
     expected_refs = {value.casefold() for value in refs}
     return any(
-        _text(row.get("title")).casefold() == title.casefold()
-        and _text(row.get("topic_id")).casefold() == topic_id.casefold()
+        clean_text(row.get("title")).casefold() == title.casefold()
+        and clean_text(row.get("topic_id")).casefold() == topic_id.casefold()
         and expected_refs.issubset(
             {
-                _text(value).casefold()
+                clean_text(value).casefold()
                 for value in row.get("entity_refs") or ()
             }
         )
@@ -577,16 +578,16 @@ def _merge_bundle(
         if not isinstance(raw, Mapping):
             continue
         row = deepcopy(dict(raw))
-        entity_id = _text(row.get("id") or row.get("entity_id")) or (
-            f"{_text(row.get('kind')) or 'entity'}:"
-            f"{_slug(_text(row.get('name')) or str(index))}"
+        entity_id = clean_text(row.get("id") or row.get("entity_id")) or (
+            f"{clean_text(row.get('kind')) or 'entity'}:"
+            f"{_slug(clean_text(row.get('name')) or str(index))}"
         )
         row.update(
             {
                 "id": entity_id,
-                "kind": _text(row.get("kind")) or _kind(entity_id, row),
-                "name": _text(row.get("name")) or _name_from_id(entity_id),
-                "visibility": _text(row.get("visibility")) or "public",
+                "kind": clean_text(row.get("kind")) or _kind(entity_id, row),
+                "name": clean_text(row.get("name")) or _name_from_id(entity_id),
+                "visibility": clean_text(row.get("visibility")) or "public",
                 "canon_revision": revision,
                 "provenance": {
                     **_mapping(row.get("provenance")),
@@ -602,7 +603,7 @@ def _merge_bundle(
             content=bible,
             entity_id=entity_id,
         )
-        row["short_summary"] = _text(row.get("short_summary")) or short_summary
+        row["short_summary"] = clean_text(row.get("short_summary")) or short_summary
         if validate_entity_dossier(row.get("dossier")):
             row["dossier"] = dossier
         existing = deepcopy(_mapping(entities.get(entity_id)))
@@ -618,27 +619,27 @@ def _merge_bundle(
             created_entities.append(entity_id)
         entity_status.setdefault(entity_id, "partially_known")
 
-    occupied = {_text(row.get("document_id")) for row in documents}
+    occupied = {clean_text(row.get("document_id")) for row in documents}
     for index, raw in enumerate(bundle.get("documents") or (), start=1):
         if not isinstance(raw, Mapping):
             continue
         row = deepcopy(dict(raw))
         # Models name these fields differently (Claude: ``entity_id`` and ``body``).
         refs = [
-            _text(value)
+            clean_text(value)
             for value in (*(row.get("entity_refs") or ()), *(row.get("entity_ids") or ()), row.get("entity_id"))
-            if _text(value)
+            if clean_text(value)
         ]
-        title = _text(row.get("title")) or source_target.name
-        topic_id = _text(row.get("topic_id")) or f"{source_target.kind}s"
+        title = clean_text(row.get("title")) or source_target.name
+        topic_id = clean_text(row.get("topic_id")) or f"{source_target.kind}s"
         if _document_duplicate(documents, title=title, topic_id=topic_id, refs=refs):
             continue
-        document_id = _text(row.get("document_id")) or (
+        document_id = clean_text(row.get("document_id")) or (
             f"lore:{topic_id}:{_slug(title)}"
         )
         if document_id in occupied:
             document_id = f"{document_id}:{index}"
-        full_text = _text(
+        full_text = clean_text(
             row.get("full_text") or row.get("content") or row.get("body") or row.get("text")
             or row.get("summary")
         )
@@ -650,13 +651,13 @@ def _merge_bundle(
                 "topic_id": topic_id,
                 "title": title,
                 "full_text": full_text,
-                "summary_500": _text(row.get("summary_500")) or full_text[:500],
-                "summary_120": _text(row.get("summary_120")) or full_text[:120],
+                "summary_500": clean_text(row.get("summary_500")) or full_text[:500],
+                "summary_120": clean_text(row.get("summary_120")) or full_text[:120],
                 "keywords": list(
                     dict.fromkeys([*list(row.get("keywords") or ()), *refs, title])
                 ),
                 "entity_refs": refs or [source_target.entity_id],
-                "visibility": _text(row.get("visibility")) or "public",
+                "visibility": clean_text(row.get("visibility")) or "public",
                 "canon_revision": revision,
                 "provenance": {
                     **_mapping(row.get("provenance")),
@@ -671,15 +672,15 @@ def _merge_bundle(
         page_status[document_id] = "partially_known"
         created_documents.append(document_id)
 
-    fact_ids = {_text(row.get("id") or row.get("evidence_id")) for row in facts}
+    fact_ids = {clean_text(row.get("id") or row.get("evidence_id")) for row in facts}
     for index, raw in enumerate(bundle.get("facts") or (), start=1):
         if not isinstance(raw, Mapping):
             continue
         row = deepcopy(dict(raw))
-        fact_id = _text(row.get("id") or row.get("evidence_id")) or (
+        fact_id = clean_text(row.get("id") or row.get("evidence_id")) or (
             f"fact:{_slug(source_target.entity_id)}:{index}"
         )
-        content = _text(row.get("content") or row.get("statement") or row.get("text") or row.get("fact"))
+        content = clean_text(row.get("content") or row.get("statement") or row.get("text") or row.get("fact"))
         if fact_id in fact_ids or not content:
             continue
         row.update(
@@ -688,7 +689,7 @@ def _merge_bundle(
                 "content": content,
                 "authority": "objective_canon",
                 "approved_authority": "objective_canon",
-                "visibility": _text(row.get("visibility")) or "public",
+                "visibility": clean_text(row.get("visibility")) or "public",
                 "canon_revision": revision,
             }
         )
@@ -697,12 +698,12 @@ def _merge_bundle(
         facts.append(row)
         fact_ids.add(fact_id)
 
-    relationship_ids = {_text(row.get("id")) for row in relationships}
+    relationship_ids = {clean_text(row.get("id")) for row in relationships}
     for index, raw in enumerate(bundle.get("relationships") or (), start=1):
         if not isinstance(raw, Mapping):
             continue
         row = deepcopy(dict(raw))
-        relationship_id = _text(row.get("id")) or (
+        relationship_id = clean_text(row.get("id")) or (
             f"relationship:{_slug(source_target.entity_id)}:{index}"
         )
         if relationship_id in relationship_ids:
@@ -712,7 +713,7 @@ def _merge_bundle(
                 "id": relationship_id,
                 "authority": "objective_canon",
                 "approved_authority": "objective_canon",
-                "visibility": _text(row.get("visibility")) or "public",
+                "visibility": clean_text(row.get("visibility")) or "public",
                 "canon_revision": revision,
             }
         )
@@ -756,7 +757,7 @@ def _count_canon(bible: dict[str, Any], revision: int) -> None:
 
 def _provisional_for(row: Mapping[str, Any], target_id: str) -> bool:
     provenance = _mapping(row.get("provenance"))
-    return provenance.get("provisional") is True and _text(provenance.get("source_target_id")) == target_id
+    return provenance.get("provisional") is True and clean_text(provenance.get("source_target_id")) == target_id
 
 
 def _drop_provisional(bible: dict[str, Any], target_id: str) -> None:
@@ -766,7 +767,7 @@ def _drop_provisional(bible: dict[str, Any], target_id: str) -> None:
         for entity_id, entity in _mapping(bible.get("entities")).items()
         if not _provisional_for(_mapping(entity), target_id)
     }
-    dropped = {_text(row.get("document_id")) for row in _rows(bible.get("documents")) if _provisional_for(row, target_id)}
+    dropped = {clean_text(row.get("document_id")) for row in _rows(bible.get("documents")) if _provisional_for(row, target_id)}
     for key in ("documents", "facts", "relationships"):
         bible[key] = [row for row in _rows(bible.get(key)) if not _provisional_for(row, target_id)]
     discovery = deepcopy(_mapping(bible.get("discovery_state")))
@@ -785,8 +786,8 @@ def _bound_to_target(bundle: Mapping[str, Any], target: SceneLoreTarget) -> dict
     for row in bound.get("entities") or ():
         if not isinstance(row, dict):
             continue
-        entity_id = _text(row.get("id") or row.get("entity_id"))
-        if entity_id != target.entity_id and _text(row.get("name")).casefold() == name:
+        entity_id = clean_text(row.get("id") or row.get("entity_id"))
+        if entity_id != target.entity_id and clean_text(row.get("name")).casefold() == name:
             renamed.add(entity_id)
             row["id"] = target.entity_id
             row.pop("entity_id", None)
@@ -794,8 +795,8 @@ def _bound_to_target(bundle: Mapping[str, Any], target: SceneLoreTarget) -> dict
         if isinstance(row, dict) and renamed:
             for key in ("entity_refs", "entity_ids"):
                 if isinstance(row.get(key), list):
-                    row[key] = [target.entity_id if _text(ref) in renamed else ref for ref in row[key]]
-            if _text(row.get("entity_id")) in renamed:
+                    row[key] = [target.entity_id if clean_text(ref) in renamed else ref for ref in row[key]]
+            if clean_text(row.get("entity_id")) in renamed:
                 row["entity_id"] = target.entity_id
     return bound
 
@@ -822,7 +823,7 @@ def enrich_provisional_scene_lore(
     revision = int(canon_revision or int(candidate.get("canon_revision") or 0) + 1)
     enriched: list[str] = []
     for raw in targets:
-        target = SceneLoreTarget(**{field: _text(_mapping(raw).get(field)) for field in ("entity_id", "kind", "name", "location_id")})
+        target = SceneLoreTarget(**{field: clean_text(_mapping(raw).get(field)) for field in ("entity_id", "kind", "name", "location_id")})
         if not target.entity_id:
             continue
         has_provisional = any(
@@ -861,10 +862,10 @@ def known_scene_entity(entities: Mapping[str, Any], target: SceneLoreTarget) -> 
     named = [
         (str(entity_id), _mapping(entity))
         for entity_id, entity in entities.items()
-        if _text(_mapping(entity).get("name") or _mapping(entity).get("title")).casefold() == wanted
+        if clean_text(_mapping(entity).get("name") or _mapping(entity).get("title")).casefold() == wanted
     ]
     # Several of that name (a model-written copy beside the author's): the author's is the one meant.
-    authored = [row for row in named if _text(row[1].get("canon_source")) == "published_world"]
+    authored = [row for row in named if clean_text(row[1].get("canon_source")) == "published_world"]
     if len(authored) == 1:
         return authored[0]
     return named[0] if len(named) == 1 else (target.entity_id, existing)

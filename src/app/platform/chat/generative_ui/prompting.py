@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from app.conversation.contracts import estimate_tokens
+from app.conversation.contracts import estimate_tokens, is_live_voice_turn
 
 from .catalog import CATALOG
 
@@ -66,7 +66,7 @@ def turn_model(session: Any, user_message: Any, provider_id: str | None = None, 
 def excluded_turn_mode(session: Any, user_message: Any) -> str | None:
     """Why this kind of turn never gets rich replies, or None."""
     metadata = _metadata(user_message)
-    if str(metadata.get("speech_segment_id") or "").strip() or str(metadata.get("user_turn_id") or "").startswith("voice-user-turn:"):
+    if is_live_voice_turn(metadata):
         return "live_voice"
     # Live-call greetings, proactive turns and speculation prompt with a synthetic message;
     # their replies are spoken or appended without a compile.

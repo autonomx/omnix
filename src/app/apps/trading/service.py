@@ -6,7 +6,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 from time import perf_counter
 from typing import Any, Literal
@@ -46,7 +46,7 @@ from .streaming.manager import (
     StreamingBarUpdate,
 )
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
-from app.apps.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import EASTERN, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
@@ -418,7 +418,7 @@ class TradingMarketDataService:
         if yahoo_intraday:
             et = EASTERN
             session_open = datetime.combine(
-                session_date, time(9, 30), tzinfo=et
+                session_date, REGULAR_OPEN, tzinfo=et
             ).astimezone(timezone.utc)
             session_close = datetime.combine(
                 session_date, regular_close_time(session_date), tzinfo=et

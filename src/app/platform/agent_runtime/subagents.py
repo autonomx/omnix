@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from .evidence import classify_evidence, compile_task_authority, task_requires_workspace_mutation
 from .profiles import get_agent_profile, profile_produces_diff
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentRunSnapshot,
     AgentRunSpec,
     EvidencePolicy,
@@ -64,6 +65,9 @@ def derive_child_spec(
         raise ValueError("child local capabilities exceed child profile ceiling")
     if not set(external).issubset(set(parent_spec.external_capabilities)):
         raise ValueError("child external capabilities exceed parent authority")
+    # Owner decision 2026-11-23: a child keeps its profile's declared and optional external ceiling. It never
+    # gets the operator MCP tools that `profile_external_ceiling` adds for a top-level run, even when the
+    # parent holds them, so a delegated run cannot gain authority through MCP configuration.
     if not set(external).issubset(set(profile.external_capabilities) | set(profile.optional_external_capabilities)):
         raise ValueError("child external capabilities exceed child profile ceiling")
 
@@ -150,7 +154,7 @@ def reserve_child_budget(
     active = [
         item.spec.limits
         for item in existing_children
-        if item.status not in {"completed", "failed", "cancelled"}
+        if item.status not in TERMINAL_RUN_STATUSES
     ]
     _bounded_sum(
         "max_steps",

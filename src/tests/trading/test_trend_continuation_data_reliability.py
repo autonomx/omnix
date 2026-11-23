@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.apps.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
-class _UnavailableHistory:
+class _UnavailableHistory(RecoveringMarketService):
     def bars(self, *_args, **_kwargs):
         raise RuntimeError("Yahoo returned no bars")
 

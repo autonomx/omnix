@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from app.apps.rpg.foundation.safe_values import folded_text
 
 SOURCE = "hermes_sequence_checkpoint_policy"
 
@@ -11,10 +12,6 @@ QUEST_WORDS = {"quest", "objective", "complete", "accept", "turn in", "report"}
 NPC_WORDS = {"befriend", "threaten", "persuade", "romance", "recruit", "dismiss"}
 REPEATED_WORDS = {"repeat", "again", "same thing"}
 NOOP_WORDS = {"wait", "do nothing", "idle"}
-
-
-def _text(value: Any) -> str:
-    return value.strip().lower() if isinstance(value, str) else ""
 
 
 def _tokens(statement: str) -> set[str]:
@@ -28,9 +25,9 @@ def _contains_phrase(statement: str, phrases: set[str]) -> bool:
 def hermes_sequence_checkpoint_reason(sequence: dict[str, Any], item: dict[str, Any]) -> str | None:
     if sequence.get("state_owner") != "rpg_sim":
         return "invalid_state_owner"
-    if _text(sequence.get("risk")) == "high":
+    if folded_text(sequence.get("risk")) == "high":
         return "high_risk_sequence"
-    statement = _text(item.get("statement"))
+    statement = folded_text(item.get("statement"))
     words = _tokens(statement)
     if words & INVENTORY_WORDS:
         return "inventory_currency_change"

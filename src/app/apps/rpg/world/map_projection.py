@@ -16,6 +16,8 @@ from app.apps.rpg.world.map_world_integration import (
     canonical_route_id_for_locations,
     map_repository_for_session,
 )
+from app.apps.rpg.foundation.safe_values import stripped_text
+from app.apps.rpg.foundation.state.access import turn_count_of
 
 MAP_STATE_SCHEMA_VERSION = 1
 
@@ -29,7 +31,7 @@ def project_session_map_overlay(
     state = _mapping(session.get("state"))
     manifest = _mapping(session.get("manifest"))
     session_id = str(manifest.get("session_id") or manifest.get("id") or state.get("session_id") or "")
-    turn_index = _non_negative_int(state.get("current_turn") or state.get("turn_count"))
+    turn_index = _non_negative_int(turn_count_of(session))
     map_state = _mapping(state.get("map_state"))
     overlay_revision = _non_negative_int(map_state.get("overlay_revision"), fallback=turn_index)
 
@@ -61,8 +63,8 @@ def project_session_map_overlay(
             "map_state_schema_unsupported",
         )
 
-    current_map_id = _text(map_state.get("current_map_id"))
-    current_location_id = _text(map_state.get("current_location_id"))
+    current_map_id = stripped_text(map_state.get("current_map_id"))
+    current_location_id = stripped_text(map_state.get("current_location_id"))
     if not current_map_id or not current_location_id:
         return _unavailable_overlay(
             map_id,
@@ -152,7 +154,7 @@ def _route_overlays(route_geometry: Sequence[Any], route_states: Mapping[str, An
     for route in route_geometry:
         route_id = str(getattr(route, "route_id"))
         state = _mapping(route_states.get(route_id))
-        status = _text(state.get("status")) or "open"
+        status = stripped_text(state.get("status")) or "open"
         if status not in {"open", "blocked", "locked", "unknown"}:
             status = "unknown"
         overlays.append(
@@ -161,7 +163,7 @@ def _route_overlays(route_geometry: Sequence[Any], route_states: Mapping[str, An
                 status=status,  # type: ignore[arg-type]
                 known=bool(state.get("known", True)),
                 safe=bool(state.get("safe", True)),
-                reason=_text(state.get("reason")),
+                reason=stripped_text(state.get("reason")),
             )
         )
     return tuple(overlays)
@@ -178,13 +180,13 @@ def _markers(
     map_state = _mapping(state.get("map_state"))
     for raw in _sequence(map_state.get("markers")):
         marker = _mapping(raw)
-        object_id = _text(marker.get("object_id")) or None
+        object_id = stripped_text(marker.get("object_id")) or None
         if object_id and object_id not in visible:
             continue
-        kind = _text(marker.get("kind"))
+        kind = stripped_text(marker.get("kind"))
         if kind not in {"quest", "danger", "event", "npc", "resource"}:
             continue
-        marker_id = _text(marker.get("id"))
+        marker_id = stripped_text(marker.get("id"))
         if not marker_id:
             continue
         markers.append(
@@ -194,7 +196,7 @@ def _markers(
                 int(marker.get("x") or 0),
                 int(marker.get("y") or 0),
                 object_id=object_id,
-                label=_text(marker.get("label")),
+                label=stripped_text(marker.get("label")),
             )
         )
     return tuple(sorted(markers, key=lambda item: item.id))
@@ -285,10 +287,6 @@ def _sequence(value: object) -> tuple[object, ...]:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return tuple(value)
     return ()
-
-
-def _text(value: object) -> str:
-    return str(value).strip() if value is not None else ""
 
 
 def _non_negative_int(value: Any, *, fallback: int = 0) -> int:

@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery import (
     DEEP_RECOVERY_RULE_VERSION,
@@ -49,14 +49,7 @@ _STATE_EVENT_TYPE = "deep_recovery_state"
 _SIGNAL_EVENT_TYPE = "deep_recovery_shadow"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def strategy_deep_recovery_shadow_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR", "1")
+strategy_deep_recovery_shadow_monitor_enabled = monitor_switch("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -150,21 +143,14 @@ class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
         day_end: datetime,
     ) -> list[StrategyEvent]:
         event_types = (_STATE_EVENT_TYPE, _SIGNAL_EVENT_TYPE)
-        if hasattr(repository, "events_by_types_between"):
-            return await asyncio.to_thread(
-                repository.events_by_types_between,
-                config.strategy_id,
-                event_types=event_types,
-                start_time=day_start,
-                end_time=day_end,
-                limit=10_000,
-            )
-        events = await asyncio.to_thread(repository.recent_events, config.strategy_id, 10_000)
-        return [
-            event for event in events
-            if event.event_type in event_types
-            and day_start <= event.observed_at.astimezone(timezone.utc) < day_end
-        ]
+        return await asyncio.to_thread(
+            repository.events_by_types_between,
+            config.strategy_id,
+            event_types=event_types,
+            start_time=day_start,
+            end_time=day_end,
+            limit=10_000,
+        )
 
     async def _universe(
         self,

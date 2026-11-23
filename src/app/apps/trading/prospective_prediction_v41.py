@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .canonical import canonical_sha256
+
 """Pre-registered prospective-gap v4.1 challenger contract.
 
 This file is intentionally inactive. It freezes the next research hypothesis
@@ -7,8 +9,6 @@ before any session after 2026-09-21 can be used to evaluate it. Nothing here
 mutates prospective-gap-v3 or prospective-gap-v4-shadow.
 """
 
-import hashlib
-import json
 from datetime import date
 from decimal import Decimal
 from typing import Final, Literal
@@ -28,12 +28,6 @@ V41_DESIGN_EVIDENCE_SESSIONS = (
     date(2026, 9, 18),
     date(2026, 9, 21),
 )
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 def _clamp01(value: Decimal) -> Decimal:
@@ -116,7 +110,7 @@ class V41ModelSpec(BaseModel):
 
     @property
     def implementation_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class V41ScoreInputs(BaseModel):

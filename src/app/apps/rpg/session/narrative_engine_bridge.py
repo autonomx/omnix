@@ -31,6 +31,7 @@ from app.apps.rpg.genesis.forge.turn_grounding import (
 )
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import clean_text
 
 _SCENE_MODES = {"observation", "investigation", "travel"}
 _DIALOGUE_MODES = {"dialogue", "conversation", "social"}
@@ -75,10 +76,6 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 _PLACEHOLDER_SPEAKER_ID = "npc:npc"
 
 
@@ -92,17 +89,17 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
     from app.apps.rpg.foundation.state.people import world_people
 
     people = world_people(_sections.simulation_state_of(_mapping(result.get("session"))))
-    target = _text(resolved.get("target_id"))
-    target_kind = _text(resolved.get("target_kind")).casefold()
+    target = clean_text(resolved.get("target_id"))
+    target_kind = clean_text(resolved.get("target_kind")).casefold()
     typed_as = target.split(":", 1)[0].casefold() if ":" in target else ""
     if target not in people and ((typed_as and typed_as != "npc") or target_kind not in {"", "npc", "person"}):
         target = ""
-    raw_id = _text(
+    raw_id = clean_text(
         npc.get("speaker_id")
         or visible_npc.get("speaker_id")
         or target
     )
-    name = _text(
+    name = clean_text(
         npc.get("speaker")
         or visible_npc.get("speaker")
         or (resolved.get("target_name") if target else "")
@@ -120,7 +117,7 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
 
 def _response_mode(result: Mapping[str, Any]) -> str:
     resolved = _mapping(result.get("resolved_result") or result.get("result"))
-    mode = _text(
+    mode = clean_text(
         resolved.get("response_mode")
         or resolved.get("semantic_family")
         or resolved.get("action_type")
@@ -135,7 +132,7 @@ def _profile(result: Mapping[str, Any], default: PresentationProfile) -> Present
     session = _mapping(result.get("session"))
     runtime = _mapping(_sections.runtime_state_of(session) or _sections.runtime_state_of(result))
     settings = _mapping(runtime.get("runtime_settings") or runtime.get("settings"))
-    value = _text(
+    value = clean_text(
         result.get("presentation_profile")
         or runtime.get("presentation_profile")
         or settings.get("presentation_profile")
@@ -167,7 +164,7 @@ def _scene_changes(
     )
     if isinstance(raw_triggers, list | tuple):
         for row in raw_triggers:
-            raw_kind = _text(
+            raw_kind = clean_text(
                 row.get("kind") if isinstance(row, Mapping) else row
             ).casefold()
             kind = _TRIGGER_KIND.get(raw_kind)
@@ -304,7 +301,7 @@ def _request(
 ) -> TurnPresentationRequest:
     speaker_id, _ = _npc_identity(result)
     has_speaker = bool(target_actor_id or speaker_id)
-    interaction_token = _text(result.get("interaction_id"))
+    interaction_token = clean_text(result.get("interaction_id"))
     turn_token = (
         interaction_token
         or result.get("turn_id")
@@ -320,9 +317,9 @@ def _request(
     )
     dialogue_speaker_ids = tuple(
         dict.fromkeys(
-            _text(value)
+            clean_text(value)
             for value in quality_context.get("speaker_ids") or ()
-            if _text(value)
+            if clean_text(value)
         )
     )
     actor_ids = dialogue_speaker_ids or ((speaker_id,) if has_speaker else ())
@@ -330,7 +327,7 @@ def _request(
         request_id=f"{mode}:{session_id}:{turn_token}",
         turn_id=(
             interaction_token
-            or _text(result.get("turn_id"))
+            or clean_text(result.get("turn_id"))
             or f"turn:{result.get('interaction_seq') or result.get('sequence') or result.get('tick') or 0}"
         ),
         campaign_id=session_id,
@@ -398,9 +395,9 @@ def canonicalize_direct_dialogue_result(
         player_input=player_input,
     )
     quality_speaker_ids = tuple(
-        _text(value)
+        clean_text(value)
         for value in quality_context.get("speaker_ids") or ()
-        if _text(value)
+        if clean_text(value)
     )
     if quality_speaker_ids:
         speaker_id = quality_speaker_ids[0]
@@ -441,13 +438,13 @@ def _compact_provider_visible_response(
     advisory = _mapping(result.get("first_call_semantic_advisory"))
     diagnostics = _mapping(advisory.get("first_call_grounding_diagnostics"))
     if (
-        _text(advisory.get("source")) != "compact_grounded_dialogue_v1"
+        clean_text(advisory.get("source")) != "compact_grounded_dialogue_v1"
         or diagnostics.get("provider_called") is not True
     ):
         return {}
     visible = _mapping(advisory.get("visible_response"))
     npc = _mapping(visible.get("npc"))
-    if not _text(npc.get("line")):
+    if not clean_text(npc.get("line")):
         return {}
     return visible
 
@@ -461,16 +458,16 @@ def _adopt_compact_provider_dialogue(
     """Publish the already-generated compact LLM line as canonical prose."""
 
     npc = _mapping(visible.get("npc"))
-    speaker = _text(npc.get("speaker")) or "NPC"
-    line = _text(npc.get("line"))
+    speaker = clean_text(npc.get("speaker")) or "NPC"
+    line = clean_text(npc.get("line"))
     resolved = _mapping(result.get("resolved_result") or result.get("result"))
-    speaker_id = _text(
+    speaker_id = clean_text(
         npc.get("speaker_id")
         or resolved.get("target_id")
         or f"npc:{speaker.casefold().replace(' ', '_')}"
     )
     # Keyed by the committed interaction when there is one, as presentation keys every canonical response.
-    turn_id = _text(result.get("interaction_id")) or _text(result.get("turn_id")) or "turn:0"
+    turn_id = clean_text(result.get("interaction_id")) or clean_text(result.get("turn_id")) or "turn:0"
     request_id = f"dialogue:{session_id}:{turn_id}"
     block_id = f"{request_id}:provider-line"
     response = CanonicalNarrativeResponse(
@@ -523,16 +520,16 @@ def _adopt_compact_provider_dialogue(
         }
     ]
     # What the exchange led to, the game's own words: said after the line, by the narrator.
-    aftermath = _text(visible.get("aftermath"))
+    aftermath = clean_text(visible.get("aftermath"))
     if aftermath:
         messages.append({"kind": "narration", "speaker": "Omnix (Narrator)", "text": aftermath,
                          "block_id": f"{request_id}:aftermath", "sequence": 1})
     projected_visible.update(
         {
             "messages": messages,
-            "narration": _text(visible.get("narration")),
+            "narration": clean_text(visible.get("narration")),
             "plain_text": (
-                f"{_text(visible.get('narration'))}\n\n" if _text(visible.get("narration")) else ""
+                f"{clean_text(visible.get('narration'))}\n\n" if clean_text(visible.get("narration")) else ""
             )
             + f'{speaker}: "{line}"'
             + (f"\n\n{aftermath}" if aftermath else ""),
@@ -546,8 +543,8 @@ def _adopt_compact_provider_dialogue(
         "line": line,
     }
     result["summary"] = projected_visible["plain_text"]
-    result["narration"] = _text(visible.get("narration"))
-    result["final_narration"] = _text(visible.get("narration"))
+    result["narration"] = clean_text(visible.get("narration"))
+    result["final_narration"] = clean_text(visible.get("narration"))
     result["canonical_visible_response"] = dict(projected_visible)
     result["canonical_narrative_response"] = response.as_dict()
     result["canonical_narrative_source"] = "compact_grounded_dialogue_v1"
@@ -566,8 +563,8 @@ def _adopt_compact_provider_dialogue(
                 "visible_response": dict(projected_visible),
                 "npc": dict(result["npc"]),
                 "summary": projected_visible["plain_text"],
-                "narration": _text(visible.get("narration")),
-                "final_narration": _text(visible.get("narration")),
+                "narration": clean_text(visible.get("narration")),
+                "final_narration": clean_text(visible.get("narration")),
                 "canonical_visible_response": dict(projected_visible),
                 "canonical_narrative_response": response.as_dict(),
                 "canonical_narrative_source": "compact_grounded_dialogue_v1",
@@ -656,7 +653,7 @@ def publish_fixed_narration(
 ) -> dict[str, Any]:
     """Publish a line the game wrote itself (a clarifying question) as the turn's canonical prose: no model call."""
     # Keyed by the committed interaction when there is one, as presentation keys every canonical response.
-    turn_id = _text(result.get("interaction_id")) or _text(result.get("turn_id")) or "turn:0"
+    turn_id = clean_text(result.get("interaction_id")) or clean_text(result.get("turn_id")) or "turn:0"
     request_id = f"{purpose.value}:{session_id}:{turn_id}"
     block_id = f"{request_id}:line"
     response = CanonicalNarrativeResponse(
@@ -706,7 +703,7 @@ def canonicalize_resolved_turn_result(
     if not isinstance(result, dict) or result.get("ok") is not True:
         return result
     if isinstance(result.get("canonical_narrative_response"), dict):
-        interaction_id = _text(result.get("interaction_id"))
+        interaction_id = clean_text(result.get("interaction_id"))
         if not interaction_id:
             return result
         response = canonical_response_from_dict(
@@ -714,7 +711,7 @@ def canonicalize_resolved_turn_result(
         )
         if response.turn_id == interaction_id:
             return result
-        request_kind = _text(response.request_id).split(":", 1)[0] or _response_mode(result)
+        request_kind = clean_text(response.request_id).split(":", 1)[0] or _response_mode(result)
         rebound = replace(
             response,
             response_id=(
@@ -763,7 +760,7 @@ def canonicalize_resolved_turn_result(
         # A fight is the hero against the foe: someone standing by is not answering the player.
         target_actor_id=(
             speaker_id
-            if _text(_mapping(result.get("npc")).get("speaker")) and mode != "combat"
+            if clean_text(_mapping(result.get("npc")).get("speaker")) and mode != "combat"
             else None
         ),
     )

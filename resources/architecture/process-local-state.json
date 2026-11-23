@@ -619,12 +619,6 @@
       "invalidation": "configured_job_priority_aging_seconds.cache_clear"
     },
     {
-      "path": "src/app/config/runtime_settings.py",
-      "symbol": "_LOCK",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
-    },
-    {
       "path": "src/app/conversation/concurrency.py",
       "symbol": "CHAT_MUTATION_LOCK",
       "category": "cache",
@@ -830,27 +824,6 @@
       "max_entries_symbol": "_MAX_SETTINGS_CACHE_ENTRIES",
       "ttl_symbol": "_MEMORY_SETTINGS_CACHE_TTL_SECONDS",
       "invalidation": "_invalidate_memory_settings_cache"
-    },
-    {
-      "path": "src/app/platform/live_voice/speech/chat_speculative_tts.py",
-      "symbol": "_CACHE_LOCK",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
-    },
-    {
-      "path": "src/app/platform/live_voice/speech/chat_speculative_tts.py",
-      "symbol": "_ENTRIES",
-      "category": "cache",
-      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
-      "ttl_symbol": "_CACHE_TTL_SECONDS",
-      "invalidation": "clear_speculative_tts_cache"
-    },
-    {
-      "path": "src/app/platform/live_voice/speech/chat_speculative_tts.py",
-      "symbol": "_PROVIDER_GENERATION_LOCK",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
       "path": "src/app/platform/live_voice/speech/speculative_tts.py",
@@ -1880,6 +1853,36 @@
       "symbol": "_executor",
       "category": "coordination",
       "reason": "Two worker threads run a camera picture's vision call off the turn so the turn can stop waiting at its timeout; capping the pool keeps timed-out calls from piling up threads. It holds no records: the description is committed with the turn."
+    },
+    {
+      "path": "src/app/platform/chat/camera_glance.py",
+      "symbol": "_executor",
+      "category": "coordination",
+      "reason": "Two worker threads describe a shared camera's glance off the turn, so a turn waits only as long as it chooses; capping the pool keeps slow vision calls from piling up threads. It holds no records: the description is committed with the turn that uses it."
+    },
+    {
+      "path": "src/app/platform/chat/camera_glance.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/platform/chat/camera_glance.py",
+      "symbol": "_glances",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; a chat's glance in progress is a cache of a vision call, not a cross-process authority: a turn on another replica sees the camera as unseen.",
+      "max_entries_symbol": "_MAX_CHATS",
+      "ttl_symbol": "GLANCE_FRESH_SECONDS",
+      "invalidation": "reset_camera_glances_for_tests"
+    },
+    {
+      "path": "src/app/platform/chat/camera_glance.py",
+      "symbol": "_seen",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; a chat's newest description is a cache, and the description a turn used is committed on its message.",
+      "max_entries_symbol": "_MAX_CHATS",
+      "ttl_symbol": "GLANCE_FRESH_SECONDS",
+      "invalidation": "reset_camera_glances_for_tests"
     },
     {
       "path": "src/app/platform/live_voice/llm/call_tools.py",

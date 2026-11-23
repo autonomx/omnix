@@ -18,9 +18,8 @@ from .models import PromptTemplate
 PROMPT_MODULES: tuple[str, ...] = (
     "app.platform.agent_runtime.coding_quality",
     "app.platform.agent_runtime.pi_runtime",
-    "app.platform.agent_runtime.pi_runtime_core",
     "app.platform.agent_runtime.planning_review",
-    "app.platform.agent_runtime.review_orchestration_core",
+    "app.platform.agent_runtime.review_orchestration",
     "app.platform.agent_runtime.semantic_classifier",
     "app.platform.agent_runtime.semantic_task_parser",
     "app.platform.agent_runtime.service",

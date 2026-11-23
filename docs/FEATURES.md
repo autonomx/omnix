@@ -581,9 +581,9 @@ The backend includes governed TP-Link Kasa/Tapo local-network support.
 
 This is an integration capability rather than a separate top-level workspace.
 
-## Desktop companion and live-speech subsystems
+## Desktop companion subsystem
 
-The source tree also contains desktop-companion and live-speech runtime components used by assistant/live-conversation experiences. These are supporting subsystems rather than separate routed browser modules. Their behavior should be documented under the user-facing Chat/Voice experience unless they become independent application surfaces.
+The source tree also contains desktop-companion runtime components used by assistant/live-conversation experiences. It is a supporting subsystem rather than a separate routed browser module. Its behavior should be documented under the user-facing Chat/Voice experience unless it becomes an independent application surface.
 
 ## Feature ownership rule
 

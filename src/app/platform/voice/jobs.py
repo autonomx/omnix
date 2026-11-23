@@ -20,8 +20,10 @@ from app.providers.tts_service import voice_stem
 from app.persistence.blob_store import default_blob_store
 from app.runtime.paths import resources_data_root
 
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobProgress, JobRecord
-from app.jobs.inline_execution import mark_inline_execution, require_execution_authority
+from app.jobs.errors import JobClaimConflict
+from app.jobs.handlers import JobFailure, JobResult, JobRun
+from app.jobs.models import JobProgress, JobRecord
+from app.jobs.inline_execution import require_execution_authority
 
 from .script import DEFAULT_UNTAGGED_SPEAKER, MAX_PAUSE_MS, parse_script, script_speakers
 
@@ -134,9 +136,12 @@ def _finish_swap_wait(job: JobRecord) -> None:
         logging.getLogger(__name__).warning("Swap request of %s could not be closed: %s", job.id, exc)
 
 
-def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
-    """Run a Voice Studio job synchronously and persist generated assets."""
-    job_store.mark_running(job.id)
+def run_voice_studio_job(run: JobRun[Any]) -> JobResult | JobRecord:
+    """Run a Voice Studio job and persist what it made; a failure raises under its own code.
+
+    It settles the job itself only when it waits for an engine swap (deferred) or a download was cancelled.
+    """
+    job_store, job = run.store, run.job
     try:
         if job.type == "voice-cloning.create-profile":
             result = _execute_clone_job(job, job_store=job_store)
@@ -175,11 +180,13 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
         elif job.type in {"audio.isolate", "audio.enhance", "audio.watermark-detect"}:
             from .audio_tools import execute_detect_job, execute_enhance_job, execute_isolate_job
 
-            run = {"audio.isolate": execute_isolate_job, "audio.enhance": execute_enhance_job,
-                   "audio.watermark-detect": execute_detect_job}[job.type]
-            result = run(job, job_store=job_store)
+            execute = {"audio.isolate": execute_isolate_job, "audio.enhance": execute_enhance_job,
+                       "audio.watermark-detect": execute_detect_job}[job.type]
+            result = execute(job, job_store=job_store)
         else:  # pragma: no cover - guarded by caller.
             raise RuntimeError(f"Unsupported Voice Studio job type: {job.type}")
+    except JobClaimConflict:
+        raise  # a lost lease publishes nothing
     except Exception as exc:
         from app.models.packs import PackCancelled
 
@@ -191,32 +198,13 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
             return deferred
         _finish_swap_wait(job)
         code, retryable = _failure_code(exc)
-        failed = job_store.fail_job(
-            job.id,
-            FailJobRequest(
-                code=code,
-                message=str(exc) or "Voice Studio job failed",
-                retryable=retryable,
-                details={"job_type": job.type, "module": job.module},
-            ),
-        )
-        return failed or job
+        raise JobFailure(code, str(exc) or "Voice Studio job failed", retryable=retryable) from exc
 
     _finish_swap_wait(job)
-    completed = job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=result["output_refs"],
-            logs=[
-                {
-                    "level": "info",
-                    "message": result["log_message"],
-                    "content": result["content"],
-                }
-            ],
-        ),
+    return JobResult(
+        output_refs=tuple(result["output_refs"]),
+        logs=({"level": "info", "message": result["log_message"], "content": result["content"]},),
     )
-    return completed or job
 
 
 def _execute_clone_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]:

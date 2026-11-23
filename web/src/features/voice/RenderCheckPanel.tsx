@@ -2,7 +2,9 @@ import { Button, Text } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { omnixApiClient } from '../../api/client';
-import { firstOutput, jobSettled, useJobResult } from './useJobResult';
+import { firstOutput } from './jobOutput';
+import { useJob } from '../../shared/useJob';
+import { isJobSettled } from '../../api/jobs';
 
 interface RenderCheckLine {
   index: number;
@@ -28,7 +30,7 @@ function percent(value: number): string {
  */
 export function RenderCheckPanel({ assetId }: { assetId: string }) {
   const [jobId, setJobId] = useState('');
-  const job = useJobResult(jobId);
+  const job = useJob(jobId);
   const queue = useMutation({
     mutationFn: () => omnixApiClient.createJob({
       module: 'stt',
@@ -41,7 +43,7 @@ export function RenderCheckPanel({ assetId }: { assetId: string }) {
     }),
     onSuccess: (created) => setJobId(created.id),
   });
-  const settled = jobSettled(job.data);
+  const settled = isJobSettled(job.data?.status);
   const report = settled ? (firstOutput(job.data)?.render_check as RenderCheckReport | undefined) : undefined;
   const worst = report?.lines.filter((line) => line.word_error_rate > 0).sort((a, b) => b.word_error_rate - a.word_error_rate).slice(0, 3) ?? [];
   const failure = job.data?.status === 'failed' ? (typeof job.data.error?.message === 'string' ? job.data.error.message : 'The check failed.') : '';

@@ -9,7 +9,7 @@ from datetime import datetime, time, timezone
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import AttributionEvent, INTERDAY_TRADING_STRATEGY_ID
 from .strategy_dynamic_discovery_learning import build_daily_discovery_report
@@ -35,14 +35,7 @@ logger = logging.getLogger(__name__)
 _STATE_KEY = "_omnix_interday_learning_monitor"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def interday_learning_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_INTERDAY_LEARNING", "1")
+interday_learning_monitor_enabled = monitor_switch("OMNIX_TRADING_INTERDAY_LEARNING")
 
 
 def _interval_seconds() -> float:

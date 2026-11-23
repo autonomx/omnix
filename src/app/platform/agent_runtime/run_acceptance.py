@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .run_settlement import complete_run, fail_run
 from .event_queries import all_events
 import hashlib
 from .acceptance import evaluate_acceptance
@@ -12,6 +13,7 @@ from .evidence import (
     evaluate_evidence_set,
 )
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentArtifact,
     AgentEvent,
     AgentRunCommand,
@@ -42,7 +44,7 @@ def _maybe_finalize_parent_in_repository(
     child = repository.get_run(child_run_id)
     if child is None or not child.spec.parent_run_id:
         return
-    if child.status not in {"completed", "failed", "cancelled"}:
+    if child.status not in TERMINAL_RUN_STATUSES:
         return
     parent = repository.get_run(child.spec.parent_run_id)
     if parent is None or parent.status != "waiting_for_children":
@@ -51,12 +53,11 @@ def _maybe_finalize_parent_in_repository(
     if not terminal:
         return
     if failed:
-        repository.update_state(
+        fail_run(
+            repository,
             parent.run_id,
             expected_revision=parent.revision,
-            status="failed",
-            desired_state="cancelled",
-            last_error="acceptance_failed:child_run_failed",
+            error="acceptance_failed:child_run_failed",
         )
     else:
         queued = service._enqueue_promote_job(
@@ -71,7 +72,7 @@ def _children_terminal_state(repository: PostgresAgentRunRepository, run_id: str
     children = repository.list_children(run_id)
     if not children:
         return True, False
-    terminal = all(child.status in {"completed", "failed", "cancelled"} for child in children)
+    terminal = all(child.status in TERMINAL_RUN_STATUSES for child in children)
     failed = any(child.status in {"failed", "cancelled"} for child in children)
     return terminal, failed
 
@@ -210,14 +211,11 @@ def _finalize_acceptance(
                 payload={"source": "omnix", "workspace_promotion": promotion},
             )
         )
-    repository.update_state(
-        current.run_id,
-        expected_revision=latest.revision,
-        status="completed" if passed else "failed",
-        desired_state=None if passed else "cancelled",
-        worker_id=service.worker_id,
-        last_error=None if passed else "acceptance_failed:" + ",".join(failures),
-    )
+    if passed:
+        complete_run(repository, current.run_id, expected_revision=latest.revision, worker_id=service.worker_id)
+    else:
+        fail_run(repository, current.run_id, expected_revision=latest.revision, worker_id=service.worker_id,
+                 error="acceptance_failed:" + ",".join(failures))
 
 
 def _persist_runtime_event(service: AgentRunService, event: AgentEvent) -> None:
@@ -255,7 +253,7 @@ def _persist_runtime_event(service: AgentRunService, event: AgentEvent) -> None:
                     }
                 })
             repository.append_event(event)
-            if current.status in {"completed", "failed", "cancelled"}:
+            if current.status in TERMINAL_RUN_STATUSES:
                 log_agent_activity(
                     "service.runtime_event.terminal_run_no_transition",
                     category="service",
@@ -308,13 +306,12 @@ def _persist_runtime_event(service: AgentRunService, event: AgentEvent) -> None:
                             worker_id=service.worker_id,
                         )
             elif event.event_type == "run.failed":
-                repository.update_state(
+                fail_run(
+                    repository,
                     event.run_id,
                     expected_revision=current.revision,
-                    status="failed",
-                    desired_state="cancelled",
+                    error=str(event.payload.get("error") or "Pi runtime failed"),
                     worker_id=service.worker_id,
-                    last_error=str(event.payload.get("error") or "Pi runtime failed")[:2000],
                 )
             service._maybe_finalize_parent_in_repository(repository, event.run_id)
             latest = repository.get_run(event.run_id)

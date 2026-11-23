@@ -37,7 +37,7 @@ def fold_encounter(document: Mapping[str, Any], payload: Mapping[str, Any]) -> F
     limit = allows(simulation, "encounter")
     if limit:
         return refused(limit)
-    turns = int(_d(document.get("state")).get("turn_count") or 0)
+    turns = _sections.turn_count_of(document)
     met = fight(simulation, action="confront", target_ref=_s(creature.get("definition_id")), turn_key=f"gm:{turns}")
     if met is None or met.refused:
         return refused(" ".join(met.lines) if met else "it cannot be fought here")

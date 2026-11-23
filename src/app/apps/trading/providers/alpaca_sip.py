@@ -8,14 +8,14 @@ not registered as an execution provider and never produces execution authority.
 """
 
 from collections.abc import Callable
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
 from app.apps.trading.catalog import bindings_for_instrument
 from app.apps.trading.models import AdjustmentMode, MarketBar
 from app.apps.trading.prospective_prediction_evidence import SIPTradeEvent
-from app.apps.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.us_equity_calendar import REGULAR_OPEN, us_equity_session
 
 from .alpaca_iex import alpaca_iex_auth_headers
 from .errors import ProviderContractError, ProviderDataUnavailableError
@@ -67,7 +67,7 @@ def _symbol(instrument_id: str) -> str:
 
 
 def _regular_window(session_date: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     end = datetime.combine(session_date, regular_close_time(session_date), tzinfo=_ET)
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 

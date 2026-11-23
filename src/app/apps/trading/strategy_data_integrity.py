@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from datetime import time
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from .gapper_dataset import GapperUniverseSnapshot
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 
 
-_REGULAR_OPEN = time(9, 30)
 FINVIZ_ATOMIC_FIRST_PAGE_MAX = 20
 FINVIZ_ATOMIC_FIRST_PAGE_TAG = "omnix-atomic-first-page-v1"
 
@@ -56,7 +54,7 @@ def assess_universe_integrity(snapshot: GapperUniverseSnapshot) -> UniverseInteg
     if is_finviz:
         capture_on_time = (
             evaluation_et.date() == snapshot.session_date
-            and evaluation_et.time() < _REGULAR_OPEN
+            and evaluation_et.time() < REGULAR_OPEN
         )
         if not capture_on_time:
             reasons.append("FINVIZ_CAPTURE_NOT_PREOPEN")

@@ -17,6 +17,7 @@ import { downloadBlob } from '../../shared/download';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 import { PaperMarginCallNotifyField, PaperShortingField } from './PaperShortingField';
 import { commissionFromAccount, commissionInput, isMarginCallOrder, leverageFromAccount, longMarginFraction, marginFromLeverage } from './paperAccountMargin';
+import { isConflict } from '../../api/errors';
 
 type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal' | 'notifications';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected' | 'expired';
@@ -350,7 +351,7 @@ export function TradingTerminalDock({
     try {
       const saved = await saveServerSettings(activeAccount, settingsDraft); setSnapshot(saved);
       setAccounts(accounts.map((item) => item.account_id === saved.account.account_id ? saved.account : item)); setStatus('ready'); setModal(null); setNotice('Account settings saved.');
-    } catch (error) { setStatus('error'); setNotice(error instanceof Error && error.message.includes('(409)') ? 'The account changed elsewhere; reopen its settings and try again.' : 'Account settings could not be saved.'); }
+    } catch (error) { setStatus('error'); setNotice(isConflict(error) ? 'The account changed elsewhere; reopen its settings and try again.' : 'Account settings could not be saved.'); }
   };
   const createAccount = async () => {
     const name = createDraft.name.trim(); const balance = Number(createDraft.balance);

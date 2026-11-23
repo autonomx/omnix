@@ -60,8 +60,7 @@ def costs(ability: Mapping[str, Any]) -> dict[str, int]:
 
 
 def _turn(document: Mapping[str, Any]) -> int:
-    state, manifest = _d(document.get("state")), _d(document.get("manifest"))
-    return int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1  # the turn being played
+    return _sections.turn_count_of(document) + 1  # the turn being played
 
 
 def not_ready(document: Mapping[str, Any], ability: Mapping[str, Any]) -> str:

@@ -18,7 +18,8 @@ from typing import Any, Callable
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .canonical import optional_decimal
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .providers.alpaca_sip import AlpacaSipResearchProvider
 from .prospective_experiment_outcomes import evaluate_geometry_on_sip_tape
@@ -45,7 +46,7 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .trade_logging import trade_log
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
@@ -56,14 +57,7 @@ _DEFAULT_CREATE_AFTER = time(16, 5)
 _ATTEMPT_TIMEOUT_SECONDS = 1800.0
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def session_reconciliation_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR", "1")
+session_reconciliation_monitor_enabled = monitor_switch("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -127,7 +121,7 @@ def _confirmed_nontrading_starts(
 ) -> tuple[datetime, ...]:
     session_start = datetime.combine(
         session_date,
-        time(9, 30),
+        REGULAR_OPEN,
         tzinfo=_ET,
     ).astimezone(timezone.utc)
     session_end = _formal_close(session_date)
@@ -195,16 +189,6 @@ def _parse_datetime(value: object, *, fallback: datetime) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _decimal(value: object) -> Decimal | None:
-    if value in {None, ""}:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
-
-
 def _prospective_experiment_outcomes(
     events: list[StrategyEvent],
     trades,
@@ -219,8 +203,8 @@ def _prospective_experiment_outcomes(
             challenger = comparison.get("challenger_geometry")
             if not isinstance(challenger, dict):
                 continue
-            entry = _decimal(challenger.get("entry_reference"))
-            invalidation = _decimal(challenger.get("invalidation_price"))
+            entry = optional_decimal(challenger.get("entry_reference"))
+            invalidation = optional_decimal(challenger.get("invalidation_price"))
             if entry is None or invalidation is None or invalidation >= entry:
                 continue
             try:
@@ -237,7 +221,7 @@ def _prospective_experiment_outcomes(
             champion_outcome = None
             source_decision = payload.get("source_v2_decision")
             champion_invalidation = (
-                _decimal(source_decision.get("invalidation_price"))
+                optional_decimal(source_decision.get("invalidation_price"))
                 if isinstance(source_decision, dict)
                 else None
             )
@@ -280,8 +264,8 @@ def _prospective_experiment_outcomes(
             geometry = payload.get("reference_geometry")
             if not isinstance(geometry, dict):
                 continue
-            entry = _decimal(geometry.get("entry_reference"))
-            invalidation = _decimal(geometry.get("invalidation_price"))
+            entry = optional_decimal(geometry.get("entry_reference"))
+            invalidation = optional_decimal(geometry.get("invalidation_price"))
             if entry is None or invalidation is None or invalidation >= entry:
                 continue
             started_at = _parse_datetime(
@@ -341,9 +325,9 @@ def _summarize_experiment_outcomes(
             for row in rows
             if isinstance(row.get(outcome_key), dict)
         ]
-        mfe = [_decimal(item.get("mfe_pct")) for item in outcomes]
-        mae = [_decimal(item.get("mae_pct")) for item in outcomes]
-        peak = [_decimal(item.get("peak_r")) for item in outcomes]
+        mfe = [optional_decimal(item.get("mfe_pct")) for item in outcomes]
+        mae = [optional_decimal(item.get("mae_pct")) for item in outcomes]
+        peak = [optional_decimal(item.get("peak_r")) for item in outcomes]
         plus_one = [
             item.get("plus_one_r_before_minus_one_r") is True
             for item in outcomes

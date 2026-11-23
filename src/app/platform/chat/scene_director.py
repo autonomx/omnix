@@ -12,8 +12,9 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
+from app.providers.model_route import model_name_of
 from app.observability.tts_stream_diagnostics import stream_log
-from app.platform.chat.store import _model_key, _provider_key
+from app.platform.chat.store import _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import service as provider_service
 from app.providers.catalog import LIVE_TURNS, provider_supports
@@ -88,7 +89,7 @@ def _ask_director(session: Any, opening: ReactionOpening, prompt: str, event: st
             )
             stream = provider.chat_completion(
                 messages=[ProviderMessage(role="user", content=prompt)],
-                model=None if isinstance(provider, LMStudioProvider) else _model_key(getattr(session, "model_id", None)),
+                model=None if isinstance(provider, LMStudioProvider) else (model_name_of(getattr(session, "model_id", None)) or None),
                 stream=True,
                 request_timeout_seconds=timeout_seconds,
                 **kwargs,

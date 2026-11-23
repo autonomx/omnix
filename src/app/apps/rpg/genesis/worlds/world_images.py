@@ -12,6 +12,7 @@ from .generation_jobs import canonical_hash
 from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 _PROMPT_1 = prompt_template('rpg.worlds_world_images.threat_portrait_prompt', "1", 'Cinematic {v0} RPG threat key art of {v1}. Show one complete, immediately readable threat design in a three-quarter view, with the head or primary sensor cluster and full silhouette clearly separated from the background. Define anatomy, chassis, armour, weapons, movement, damage, and scale directly from this canon: {v2} Depict one controlled threatening action and one visible weakness or functional limitation. Use a simple environment with a single scale cue and minimal out-of-focus background activity. Dramatic rim light, realistic materials, restrained volumetric atmosphere, readable detail. No generic soldier or monster design, no duplicate creatures, no crowded background, no excessive armour unrelated to canon, no extra limbs, malformed anatomy, fused equipment, text, logos, watermarks, or UI.')
 _PROMPT_2 = prompt_template('rpg.worlds_world_images.character_portrait_prompt', "1", 'Cinematic {v0} RPG character key art of {v1}, a {v2}. Tight chest-up portrait; head and both shoulders fully inside the frame; face occupying roughly one-third of the image; eye-level camera; three-quarter view; shallow depth of field. Establish one consistent identity from this canonical appearance: {v3} Use an alert, controlled pose that visibly expresses the {v4} tone. Prioritize the face, clothing silhouette, augmentations or signature equipment, and one unique identifying feature. Use a simple environment with only one clear story element and minimal out-of-focus background figures. Realistic materials and skin, dramatic rim light, restrained blue-orange contrast, volumetric atmosphere, intricate but readable detail. No generic model appearance, symmetrical implants unless canonical, excessive armour, bulky exoskeleton, superhero pose, glowing lines covering the face, crowded background, extra limbs or fingers, distorted ears, fused clothing, text, logos, watermarks, UI, or modern photography artifacts.')
@@ -58,20 +59,16 @@ def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _text(value: Any, fallback: str = "") -> str:
-    return str(value).strip() if value is not None and str(value).strip() else fallback
-
-
 def _dossier_section_text(entity: Mapping[str, Any], section_id: str) -> str:
     sections = _record(entity.get("dossier")).get("sections") or ()
     for section_value in sections:
         section = _record(section_value)
-        if _text(section.get("id")).casefold() != section_id.casefold():
+        if stripped_text(section.get("id")).casefold() != section_id.casefold():
             continue
         paragraphs = [
-            _text(paragraph)
+            stripped_text(paragraph)
             for paragraph in section.get("paragraphs") or ()
-            if _text(paragraph)
+            if stripped_text(paragraph)
         ]
         return " ".join(paragraphs)
     return ""
@@ -86,7 +83,7 @@ def _canon_value_text(value: Any) -> str:
         )
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return "; ".join(filter(None, (_canon_value_text(item) for item in value)))
-    return _text(value)
+    return stripped_text(value)
 
 
 def _entity_canon_details(
@@ -156,7 +153,7 @@ def _character_portrait_prompt(
         )
 
     appearance = _dossier_section_text(entity, "appearance") or details
-    role = _text(entity.get("registry_role") or entity.get("kind"), "character")
+    role = stripped_text(entity.get("registry_role") or entity.get("kind"), "character")
     return (
         _PROMPT_2.format(v0=(genre), v1=(subject), v2=(role), v3=(appearance), v4=(tone))
     )
@@ -258,13 +255,13 @@ def _entity_rows(content: Mapping[str, Any]) -> Iterable[dict[str, Any]]:
 
 
 def _clip(value: Any, maximum: int) -> str:
-    text = _text(value)
+    text = stripped_text(value)
     return text[:maximum].rstrip() if text else ""
 
 
 def _is_cyberpunk(genre: Any) -> bool:
     """Keep map art aligned with the world family, not a fantasy-atlas default."""
-    normalized = _text(genre).casefold().replace("_", " ").replace("-", " ")
+    normalized = stripped_text(genre).casefold().replace("_", " ").replace("-", " ")
     return "cyberpunk" in normalized or "corporate dystopia" in normalized
 
 
@@ -339,15 +336,15 @@ def _location_details(entity: Mapping[str, Any]) -> str:
         _dossier_section_text(entity, "details"),
         _dossier_section_text(entity, "setting"),
     ):
-        if _text(value):
+        if stripped_text(value):
             return _clip(value, 520)
     return ""
 
 
 def _location_landmark(entity: Mapping[str, Any], *, genre: Any = "") -> dict[str, str]:
     """Turn a semantic location into a visual instruction for regional map art."""
-    name = _text(entity.get("name") or entity.get("title"), "Unnamed location")
-    explicit_type = _text(
+    name = stripped_text(entity.get("name") or entity.get("title"), "Unnamed location")
+    explicit_type = stripped_text(
         entity.get("location_type")
         or entity.get("subtype")
         or entity.get("category")
@@ -419,13 +416,13 @@ def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     entities: dict[str, dict[str, Any]] = {}
 
     def merge(entity_id: Any, entity: Mapping[str, Any]) -> None:
-        identifier = _text(entity_id)
+        identifier = stripped_text(entity_id)
         if identifier:
             entities[identifier] = {"id": identifier, **entities.get(identifier, {}), **dict(entity)}
 
     for topic in detail.get("topics") or ():
         topic = _record(topic)
-        if _text(topic.get("topic_id")) not in {"locations", "places", "regions", "points_of_interest"}:
+        if stripped_text(topic.get("topic_id")) not in {"locations", "places", "regions", "points_of_interest"}:
             continue
         for entity in _entity_rows(_record(topic.get("content"))):
             merge(entity.get("id") or entity.get("entity_id"), entity)
@@ -434,9 +431,9 @@ def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     revision = _record(revisions[0]) if revisions else {}
     document = _record(revision.get("document"))
     topology_locations = {
-        _text(location)
+        stripped_text(location)
         for location in _record(document.get("topology")).get("locations") or ()
-        if _text(location)
+        if stripped_text(location)
     }
     for source in (
         _record(_record(document.get("entity_manifest")).get("entities")),
@@ -447,7 +444,7 @@ def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
             if (
                 entity_id in entities
                 or entity_id in topology_locations
-                or _text(entity.get("kind")).lower() == "location"
+                or stripped_text(entity.get("kind")).lower() == "location"
             ):
                 merge(entity_id, entity)
     return list(entities.values())
@@ -460,21 +457,21 @@ def _prompt(
     role: str,
     entity: Mapping[str, Any] | None = None,
 ) -> str:
-    title = _text(world.get("title"), "Fantasy World")
-    genre = _text(world.get("genre"), "fantasy").replace("_", " ")
-    tone = _text(world.get("tone"), "heroic adventure")
+    title = stripped_text(world.get("title"), "Fantasy World")
+    genre = stripped_text(world.get("genre"), "fantasy").replace("_", " ")
+    tone = stripped_text(world.get("tone"), "heroic adventure")
     if entity is None:
         subject = title
-        details = _text(world.get("description"), "a reusable campaign setting")
+        details = stripped_text(world.get("description"), "a reusable campaign setting")
     else:
-        subject = _text(entity.get("name") or entity.get("title"), "World entity")
+        subject = stripped_text(entity.get("name") or entity.get("title"), "World entity")
         details = _entity_canon_details(
             entity,
             target_type=target_type,
             role=role,
         )
     character_kinds = {"actor", "character", "npc", "person"}
-    entity_kind = _text(entity.get("kind") if entity else None, target_type).casefold()
+    entity_kind = stripped_text(entity.get("kind") if entity else None, target_type).casefold()
     if role == "portrait" and entity is not None and entity_kind in character_kinds:
         return _character_portrait_prompt(
             subject=subject,
@@ -511,7 +508,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     world = _record(detail.get("world"))
     map_blueprints = [
         {
-            "map_id": _text(blueprint.get("map_id")),
+            "map_id": stripped_text(blueprint.get("map_id")),
             "revision": blueprint.get("blueprint_revision"),
             "document": _record(blueprint.get("document")),
         }
@@ -527,7 +524,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         for landmark in map_landmarks
     )
     map_subject = {
-        "name": f"{_text(world.get('title'), 'Fantasy World')} world map",
+        "name": f"{stripped_text(world.get('title'), 'Fantasy World')} world map",
         "description": (
             "A coherent regional atlas. Depict every listed canonical location as "
             "a distinct visible landmark at map scale. " + _MAP_NO_TEXT_CONSTRAINT + " "
@@ -608,12 +605,12 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         },
     ]
     blueprints_by_location = {
-        _text(cast(Any, blueprint["document"]).get("location_id")): blueprint
+        stripped_text(cast(Any, blueprint["document"]).get("location_id")): blueprint
         for blueprint in map_blueprints
-        if _text(cast(Any, blueprint["document"]).get("location_id"))
+        if stripped_text(cast(Any, blueprint["document"]).get("location_id"))
     }
     for location in map_locations:
-        location_id = _text(location.get("id") or location.get("entity_id"))
+        location_id = stripped_text(location.get("id") or location.get("entity_id"))
         if not location_id:
             continue
         landmark = _location_landmark(location, genre=world.get("genre"))
@@ -671,15 +668,15 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         )
     for topic in detail.get("topics") or []:
         topic = _record(topic)
-        topic_id = _text(topic.get("topic_id"))
+        topic_id = stripped_text(topic.get("topic_id"))
         role = _ROLE_BY_TOPIC.get(topic_id)
         if not role:
             continue
         for entity in _entity_rows(_record(topic.get("content"))):
-            entity_id = _text(entity.get("id") or entity.get("entity_id"))
+            entity_id = stripped_text(entity.get("id") or entity.get("entity_id"))
             if not entity_id:
                 continue
-            entity_type = _text(entity.get("kind"), topic_id.rstrip("s"))
+            entity_type = stripped_text(entity.get("kind"), topic_id.rstrip("s"))
             targets.append(
                 {
                     "target_id": f"entity:{entity_id}:{role}",
@@ -697,7 +694,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     ),
                     "metadata": {
                         "topic_id": topic_id,
-                        "entity_name": _text(
+                        "entity_name": stripped_text(
                             entity.get("name") or entity.get("title"),
                             entity_id,
                         ),
@@ -763,7 +760,7 @@ def _job_asset_id(job: Any) -> str | None:
     for ref in getattr(job, "output_refs", ()) or ():
         if not isinstance(ref, Mapping):
             continue
-        asset_id = _text(ref.get("asset_id"))
+        asset_id = stripped_text(ref.get("asset_id"))
         if asset_id:
             return asset_id
     return None
@@ -923,11 +920,11 @@ def generate_world_images(
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         for target in selected:
-            prompt = _text(
+            prompt = stripped_text(
                 (prompts or {}).get(str(target["target_id"])),
                 str(target["suggested_prompt"]),
             )
-            is_location_map = _text(_record(target.get("metadata")).get("map_level")) == "location"
+            is_location_map = stripped_text(_record(target.get("metadata")).get("map_level")) == "location"
             # Flux Klein caps requests at 1,048,576 pixels. Keep local maps square
             # at the maximum supported resolution so they remain useful for deep zoom.
             if is_location_map:

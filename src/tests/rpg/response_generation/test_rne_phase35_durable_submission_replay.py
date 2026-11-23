@@ -20,7 +20,7 @@ from app.apps.rpg.narration.narrative_engine import (
     NarrativeBlock,
     ValidationReport,
 )
-from app.apps.rpg.edge.narrative_replay import (
+from app.apps.rpg.narration.narrative_replay import (
     CanonicalNarrativeReplayError,
     hydrate_canonical_narrative_replay,
 )

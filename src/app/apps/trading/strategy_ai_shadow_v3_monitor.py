@@ -18,7 +18,7 @@ from typing import Any, Callable, cast
 
 from app.runtime.features import FeatureContext
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .execution import ExecutionObservation
 from .execution_observation_plane import (
     STANDING_QUOTE_MAX_AGE_SECONDS,
@@ -102,14 +102,7 @@ def _iex_book_spread_only(observation: ExecutionObservation, max_spread_bps: Dec
     )
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def ai_shadow_v3_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_AI_SHADOW_V3_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_AI_SHADOW_V3_MONITOR", "1")
+ai_shadow_v3_monitor_enabled = monitor_switch("OMNIX_TRADING_AI_SHADOW_V3_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -143,16 +136,6 @@ def _eligible(config: TradingStrategyConfigDocument) -> bool:
         and config.active_universe_id is None
         and config.config.universe_discovery_source == "finviz"
     )
-
-
-def _decimal(value: object) -> Decimal | None:
-    if value in {None, ""}:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
 
 
 def _session_start_end(now: datetime) -> tuple[datetime, datetime]:

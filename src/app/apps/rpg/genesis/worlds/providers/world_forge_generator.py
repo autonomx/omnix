@@ -4,13 +4,11 @@ from __future__ import annotations
 import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
 from dataclasses import replace
 from typing import Any, Callable, Mapping
 
 from app.providers.base import BaseProvider, ChatMessage
 from app.providers.structured import StructuredOutputGateway, StructuredRetryBudget
-from app.persistence.device_permits import device_permit_slot
 from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
 from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
 from app.apps.rpg.genesis.worlds.providers.world_forge_foundation import (
@@ -30,6 +28,7 @@ from app.apps.rpg.genesis.worlds.providers.world_forge_foundation import (
     _token_estimate,
     _topic_contract,
 )
+from app.providers.llm_admission import llm_admission
 
 
 class ProviderWorldForgeTopicGenerator:
@@ -233,13 +232,7 @@ class ProviderWorldForgeTopicGenerator:
         ]
         total_calls = max(1, self.config.max_retries + 2)
         gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
-        provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
-        call_limiter = (
-            device_permit_slot("llm-local", priority="batch")
-            if provider_key == "lmstudio"
-            else nullcontext()
-        )
-        with call_limiter:
+        with llm_admission(self.config.provider):
             outcome = gateway.try_generate(
                 messages,
                 contract=replace(
@@ -487,13 +480,7 @@ class ProviderWorldForgeTopicGenerator:
         ]
         total_calls = max(1, self.config.max_retries + 2)
         gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
-        provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
-        call_limiter = (
-            device_permit_slot("llm-local", priority="batch")
-            if provider_key == "lmstudio"
-            else nullcontext()
-        )
-        with call_limiter:
+        with llm_admission(self.config.provider):
             outcome = gateway.try_generate(
                 messages,
                 contract=replace(

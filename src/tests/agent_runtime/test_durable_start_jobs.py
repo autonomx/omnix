@@ -180,3 +180,40 @@ def test_http_submission_persists_and_enqueues_without_preparing_or_spawning() -
     assert request.input_payload == {"run_id": spec.run_id}
     service._prepare_workspace.assert_not_called()
     service.runtime.start.assert_not_called()
+
+
+def test_in_process_superseding_revision_is_issued_like_any_start() -> None:
+    """Without a job store, a steering revision still goes through the start policy before its checks."""
+    from app.platform.agent_runtime import run_steering
+
+    replacement = AgentRunSpec(
+        run_id="run-5",
+        task="revised task",
+        profile="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    validated: list[AgentRunSpec] = []
+    service = object.__new__(AgentRunService)
+    service.job_store = None
+    service._prepare_start_spec = lambda value: value.model_copy(update={"objective": "process policy applied"})
+    service._validate_run_spec_authority = validated.append
+    service._validate_evidence_authority = validated.append
+    service._bind_github_repository_authority = lambda value: value
+
+    class Prepared(Exception):
+        pass
+
+    def prepare_workspace(value: AgentRunSpec) -> AgentRunSpec:
+        raise Prepared(value)
+
+    service._prepare_workspace = prepare_workspace
+
+    try:
+        run_steering._start_superseding_revision(service, None, None, None, replacement)
+    except Prepared as stop:
+        prepared = stop.args[0]
+    else:  # pragma: no cover - the stub always raises
+        raise AssertionError("workspace was not prepared")
+
+    assert [spec.objective for spec in validated] == ["process policy applied"] * 2
+    assert prepared.objective == "process policy applied"

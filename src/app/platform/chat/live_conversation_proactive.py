@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.providers.model_route import model_name_of
 from app.providers.catalog import LIVE_TURNS, provider_supports
 from app.providers.service import get_provider
 from app.providers import ChatMessage as ProviderMessage
@@ -30,7 +31,7 @@ from .scene import (
     reaction_speaker, reaction_turn_id, scene_talk_kind, stamp_speaker, talk_line_prompt, talk_member,
     talk_opener_prompt, talk_turn, talk_turn_id, talk_turn_matches,
 )
-from .store import _model_key, _pop_ready_sentences, _provider_key
+from .store import _pop_ready_sentences, _provider_key
 from app.conversation.scene import scene_of
 from app.prompts import prompt_template
 
@@ -450,7 +451,7 @@ def stream_proactive_turn_chunks(
         ProviderMessage(role=message.role, content=message.content, per_turn=bool(getattr(message, "per_turn", False)))
         for message in provider_messages
     ]
-    model_name = _model_key(resolved_model_id)
+    model_name = model_name_of(resolved_model_id) or None
     response = provider.chat_completion(messages=messages, model=model_name, stream=True, **completion_kwargs)
     pending = ""
     full_text = ""

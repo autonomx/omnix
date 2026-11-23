@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
-from app.apps.trading.us_equity_calendar import REGULAR_OPEN, regular_close_time, regular_holidays
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, is_trading_day
+from app.apps.trading.us_equity_calendar import REGULAR_OPEN, regular_close_time
 from app.runtime.features import FeatureContext
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
@@ -74,7 +74,7 @@ def latest_bar_close(now: datetime) -> datetime | None:
     """The end of the latest regular-session 3m bar that should be final now, or None."""
     looked_at = (now - SLOT_GRACE).astimezone(_ET)
     day = looked_at.date()
-    if day.weekday() >= 5 or day in regular_holidays(day.year):
+    if not is_trading_day(day):
         return None
     # An early close (13:00 ET) ends the session's bars early.
     if not REGULAR_OPEN <= now.astimezone(_ET).time() < regular_close_time(day):

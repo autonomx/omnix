@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from typing import Any
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass
+from typing import Any, cast
 
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
@@ -21,6 +21,8 @@ from app.apps.rpg.foundation.performance_trace import (
 from app.apps.rpg.narration.presentation.turn_response import build_turn_response_v2
 from app.apps.rpg.foundation.response_trace_headers import finalize_rpg_trace_headers
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.session.jobs.foreground_context import new_submission_id
+from app.apps.rpg.session.turn.request import TurnKind, TurnRequest
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,45 @@ def _foreground_delivery_mode(request: Request):
         ) from exc
 
 
+@dataclass(frozen=True)
+class TurnDelivery:
+    """How a turn's answer goes back: the narrative delivery mode, the pipeline trace that times the turn, and
+    whether the narration follows the commit on the turn's stream instead of the response (RQ-6.2)."""
+
+    mode: Any
+    trace: Any
+    narrate_after_commit: bool = False
+
+
+def turn_request(*, session_id: str, command: str, submission_id: str = "",
+                 action: dict[str, Any] | None = None) -> TurnRequest:
+    """The turn a caller asks for, built once: its kind is the action's ``turn_kind`` (the player's text when there
+    is none), and a turn its caller did not name gets a submission of its own."""
+    named = dict(action or {})
+    kind = cast(TurnKind, str(named.get("turn_kind") or "player_text"))  # TurnRequest refuses an unknown kind
+    return TurnRequest(kind=kind, session_id=session_id,
+                       submission_id=submission_id.strip() or new_submission_id(), text=command, action=named)
+
+
+@contextmanager
+def turn_scope(name: str, request: TurnRequest, *, fields: Mapping[str, Any], trace_id: str | None = None,
+               drafts: bool = True) -> Iterator[Any]:
+    """The scopes a turn runs in, yielding its pipeline trace: one authority snapshot, every model call counted for
+    its outcome (RQ-1.3), and with ``drafts`` the narration's draft open under the submission, so the client can
+    read it while the turn runs."""
+    from app.apps.rpg.foundation.model_calls import counting_model_calls
+    from app.apps.rpg.narration.narration_drafts import narration_draft_context
+    from app.persistence.authority import authority_snapshot_scope
+
+    with (
+        authority_snapshot_scope(),
+        narration_draft_context(request.session_id, request.submission_id) if drafts else nullcontext(),
+        counting_model_calls(),
+        rpg_pipeline_trace(name, session_id=request.session_id, trace_id=trace_id, fields=dict(fields)) as trace,
+    ):
+        yield trace
+
+
 async def execute_foreground_rpg_turn(
     *,
     session_id: str,
@@ -61,7 +102,7 @@ async def execute_foreground_rpg_turn(
 
     try:
         return await asyncio.to_thread(
-            _execute_with_authority_snapshot,
+            _execute_foreground_rpg_turn,
             session_id=session_id,
             command=command,
             request=request,
@@ -95,24 +136,14 @@ def submit_rpg_turn(
 ) -> dict[str, Any]:
     """A turn submitted from inside Omnix (Hermes, RQ-1.6): the turn route's steps without HTTP, keyed by
     ``submission_id`` like the play screen's. A refused turn returns its detail, with ``status_code``."""
-    from app.apps.rpg.foundation.model_calls import counting_model_calls
     from app.apps.rpg.narration.narrative_engine import DeliveryMode
-    from app.persistence.authority import authority_snapshot_scope
     from app.persistence.errors import RevisionConflict
 
-    with (
-        authority_snapshot_scope(),
-        counting_model_calls(),
-        rpg_pipeline_trace(
-            "turn.pipeline",
-            session_id=session_id,
-            trace_id=None,
-            fields={"command_chars": len(command), "source": source, "submission_id": submission_id},
-        ) as trace,
-    ):
+    turn = turn_request(session_id=session_id, command=command, submission_id=submission_id, action=action)
+    fields = {"command_chars": len(command), "source": source, "submission_id": turn.submission_id}
+    with turn_scope("turn.pipeline", turn, fields=fields, drafts=False) as trace:
         try:
-            return run_rpg_turn(session_id=session_id, command=command, submission_id=submission_id,
-                                delivery_mode=DeliveryMode.BLOCKING, trace=trace, action=action)
+            return run_rpg_turn(turn, TurnDelivery(mode=DeliveryMode.BLOCKING, trace=trace))
         except HTTPException as exc:
             detail = dict(exc.detail) if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
             return {**detail, "ok": False, "status_code": exc.status_code}
@@ -133,22 +164,6 @@ def _launch_gate_session(session_id: str) -> dict[str, Any] | None:
     return load_session(session_id)
 
 
-def _execute_with_authority_snapshot(**kwargs: Any) -> Response:
-    from app.persistence.authority import authority_snapshot_scope
-    from app.apps.rpg.foundation.model_calls import counting_model_calls
-    from app.apps.rpg.narration.narration_drafts import narration_draft_context
-
-    # The client names its submission, so it can read the narration's draft while the turn runs.
-    submission_id = str(kwargs["request"].headers.get("x-omnix-rpg-submission-id") or "").strip()
-    # Every model call the turn makes is counted for its outcome (RQ-1.3).
-    with (
-        authority_snapshot_scope(),
-        narration_draft_context(str(kwargs["session_id"]), submission_id),
-        counting_model_calls(),
-    ):
-        return _execute_foreground_rpg_turn(**kwargs)
-
-
 def _execute_foreground_rpg_turn(
     *,
     session_id: str,
@@ -156,113 +171,79 @@ def _execute_foreground_rpg_turn(
     request: Request,
     action: dict[str, Any] | None = None,
 ) -> Response:
-    submission_id = (
-        str(request.headers.get("x-omnix-rpg-submission-id") or "").strip()
-        or f"submit:{uuid.uuid4().hex}"
-    )
-    trace_id = getattr(request.state, "rpg_trace_id", None)
+    # The client names its submission, so it can read the narration's draft while the turn runs.
+    named_submission = str(request.headers.get("x-omnix-rpg-submission-id") or "").strip()
+    turn = turn_request(session_id=session_id, command=command, submission_id=named_submission, action=action)
     delivery_mode = _foreground_delivery_mode(request)
-    with rpg_pipeline_trace(
-        "turn.pipeline",
-        session_id=session_id,
-        trace_id=trace_id,
-        fields={
-            "command_chars": len(command),
-            "method": request.method,
-            "path": request.url.path,
-            "delivery_mode": delivery_mode.value,
-            "submission_id": submission_id,
-        },
-    ) as trace:
+    fields = {
+        "command_chars": len(command),
+        "method": request.method,
+        "path": request.url.path,
+        "delivery_mode": delivery_mode.value,
+        "submission_id": turn.submission_id,
+    }
+    with turn_scope("turn.pipeline", turn, fields=fields, trace_id=getattr(request.state, "rpg_trace_id", None),
+                    drafts=bool(named_submission)) as trace:
         with rpg_pipeline_span("turn.request_received") as span:
             span["content_length"] = request.headers.get("content-length")
-            span["submission_id"] = (
-                request.headers.get("x-omnix-rpg-submission-id") or submission_id
-            )
-            span["client_request_started"] = request.headers.get(
-                "x-omnix-rpg-client-started"
-            )
+            span["submission_id"] = named_submission or turn.submission_id
+            span["client_request_started"] = request.headers.get("x-omnix-rpg-client-started")
             span["delivery_mode"] = delivery_mode.value
 
-        payload = run_rpg_turn(
-            session_id=session_id,
-            command=command,
-            submission_id=submission_id,
-            delivery_mode=delivery_mode,
-            trace=trace,
-            action=action,
-            # The play screen follows the turn on its stream: the outcome now, the narration after (RQ-6.2).
-            narrate_after_commit=str(request.headers.get("x-omnix-rpg-turn-stream") or "").strip() == "1",
-        )
+        # The play screen follows the turn on its stream: the outcome now, the narration after (RQ-6.2).
+        follows_stream = str(request.headers.get("x-omnix-rpg-turn-stream") or "").strip() == "1"
+        payload = run_rpg_turn(turn, TurnDelivery(mode=delivery_mode, trace=trace,
+                                                  narrate_after_commit=follows_stream))
         with rpg_pipeline_span("turn.response_send_prepare"):
             response = build_traced_json_response(payload)
         finalized_response = finalize_rpg_trace_headers(response, trace)
-        finalized_response.headers["X-Omnix-Rpg-Submission-Id"] = submission_id
+        finalized_response.headers["X-Omnix-Rpg-Submission-Id"] = turn.submission_id
         return finalized_response
 
 
-def run_rpg_turn(
-    *,
-    session_id: str,
-    command: str,
-    submission_id: str,
-    delivery_mode: Any,
-    trace: Any,
-    action: dict[str, Any] | None = None,
-    narrate_after_commit: bool = False,
-) -> dict[str, Any]:
+def run_rpg_turn(turn: TurnRequest, delivery: TurnDelivery) -> dict[str, Any]:
     """One player turn (``_run_rpg_turn``), recorded for the operations view (RQ-8.4): a turn the game refuses (a
     4xx) is no failure; one that breaks is recorded as failed and raised."""
     from app.apps.rpg.foundation.model_calls import current_model_failures
     from app.apps.rpg.session.persistence.turn_metrics import record_turn_metric
     from app.persistence.errors import RevisionConflict
 
-    kind = str((action or {}).get("turn_kind") or "player_text")
+    session_id, submission_id, trace = turn.session_id, turn.submission_id, delivery.trace
     try:
-        payload = _run_rpg_turn(session_id=session_id, command=command, submission_id=submission_id,
-                                delivery_mode=delivery_mode, trace=trace, action=action,
-                                narrate_after_commit=narrate_after_commit)
+        payload = _run_rpg_turn(turn, delivery)
     except HTTPException as exc:
         if exc.status_code >= 500:
             detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
-            record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=kind, ok=False,
+            record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=turn.kind, ok=False,
                                error=str(detail.get("error") or exc.status_code), complete_ms=trace.elapsed_ms,
                                model_failures=current_model_failures())
         raise
     except RevisionConflict:
         raise
     except Exception as exc:
-        record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=kind, ok=False,
+        record_turn_metric(campaign_id=session_id, submission_id=submission_id, turn_class=turn.kind, ok=False,
                            error=type(exc).__name__, complete_ms=trace.elapsed_ms,
                            model_failures=current_model_failures())
         raise
     outcome = raw_outcome if isinstance(raw_outcome := payload.get("outcome"), Mapping) else {}
     calls = raw_model_calls if isinstance(raw_model_calls := outcome.get("model_calls"), Mapping) else {}
     record_turn_metric(campaign_id=session_id, submission_id=submission_id,
-                       turn_class=str(outcome.get("planned_action") or outcome.get("kind") or kind), ok=True,
+                       turn_class=str(outcome.get("planned_action") or outcome.get("kind") or turn.kind), ok=True,
                        degraded_stages=int(payload.get("degraded_stage_count") or 0), complete_ms=trace.elapsed_ms,
                        model_calls=int(calls.get("total") or 0), model_failures=current_model_failures())
     return payload
 
 
-def _run_rpg_turn(
-    *,
-    session_id: str,
-    command: str,
-    submission_id: str,
-    delivery_mode: Any,
-    trace: Any,
-    action: dict[str, Any] | None = None,
-    narrate_after_commit: bool = False,
-) -> dict[str, Any]:
+def _run_rpg_turn(turn: TurnRequest, delivery: TurnDelivery) -> dict[str, Any]:
     """One player turn, from its gates to its response payload: what the turn route and Hermes both run (RQ-1.6).
 
-    The caller holds the pipeline trace (``rpg_pipeline_trace``) and turns the payload into its own response; a
-    refused turn raises ``HTTPException`` with the detail the play screen reads. ``action`` names a turn that is
-    not the player's text, such as a ``world_tick`` (RQ-2.7). With ``narrate_after_commit`` a turn the narrative
+    The caller holds the turn's scopes (``turn_scope``) and turns the payload into its own response; a refused turn
+    raises ``HTTPException`` with the detail the play screen reads. ``turn.action`` names a turn that is not the
+    player's text, such as a ``world_tick`` (RQ-2.7). With ``delivery.narrate_after_commit`` a turn the narrative
     writer must narrate returns at its commit, its narration pending, and is narrated beside the request: its
     events reach ``foundation/turn_stream.py`` (RQ-6.2).
     """
+    session_id, command, submission_id = turn.session_id, turn.text, turn.submission_id
     from app.apps.rpg.narration.lore_links import taken, taken_quotes
 
     taken()  # no lore mark of an earlier response in this context links this one (EV-12)
@@ -353,9 +334,9 @@ def _run_rpg_turn(
             def apply_foreground_turn() -> dict[str, Any]:
                 # The narrative engine presents this turn below (``present_authoritative_turn``).
                 with foreground_rpg_llm_priority(), canonical_presentation_follows_context(), \
-                        narrating_after_commit(narrate_after_commit):
+                        narrating_after_commit(delivery.narrate_after_commit):
                     return execute_foreground_turn(pipeline.apply_turn, session_id, command,
-                                                   submission_id=submission_id, action=action)
+                                                   submission_id=submission_id, action=turn.action or None)
 
             result = apply_foreground_turn()
             attach_rpg_result_timing(result)
@@ -394,178 +375,32 @@ def _run_rpg_turn(
                                                   "revision": result.get("state_revision")})
         if result.get("narration_after_commit") is True:
             # The outcome now; the narration on the stream when the writer is done (RQ-6.2).
-            payload = _respond(result, session_id=session_id, command=command, submission_id=submission_id,
-                               delivery_mode=delivery_mode, trace=trace, before_document=before_document)
+            payload = _respond(result, turn, delivery, before_document=before_document)
             payload["visible_response"] = {"plain_text": "", "status": "pending"}
             payload["narration"] = {"status": "pending",
                                     "stream_path": f"/api/rpg/sessions/{session_id}/submissions/{submission_id}/stream"}
             turn_stream.publish(stream, "outcome", {"outcome": payload.get("outcome")})
-            _narrate_after_commit(result, session_id=session_id, command=command, submission_id=submission_id)
+            _narrate_after_commit(result, turn)
             return payload
-        result = _narrate(result, session_id=session_id, command=command, delivery_mode=delivery_mode)
-        payload = _respond(result, session_id=session_id, command=command, submission_id=submission_id,
-                           delivery_mode=delivery_mode, trace=trace, before_document=before_document)
+        from app.apps.rpg.session.committed_narration import NarrationRefused, narrate_committed_turn
+
+        try:
+            result = narrate_committed_turn(result, session_id=session_id, command=command,
+                                            delivery_mode=delivery.mode)
+        except NarrationRefused as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        payload = _respond(result, turn, delivery, before_document=before_document)
         turn_stream.publish(stream, "outcome", {"outcome": payload.get("outcome")})
         turn_stream.publish(stream, "narration.final", _final(payload))
 
     return payload
 
 
-def _narrate(result: dict[str, Any], *, session_id: str, command: str, delivery_mode: Any) -> dict[str, Any]:
-    """Steps 8-10: the turn's narration written, checked and inserted, its delivery opened."""
-    with rpg_pipeline_span("turn.narrative_replay_hydration") as span:
-        from app.apps.rpg.edge.narrative_replay import (
-            CanonicalNarrativeReplayError,
-            hydrate_canonical_narrative_replay,
-        )
-
-        try:
-            result = hydrate_canonical_narrative_replay(
-                result,
-                campaign_id=session_id,
-            )
-        except CanonicalNarrativeReplayError as exc:
-            span["hydrated"] = False
-            span["error"] = str(exc)
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "ok": False,
-                    "error": "canonical_narrative_replay_mismatch",
-                    "session_id": session_id,
-                    "message": str(exc),
-                },
-            ) from exc
-        replay = (
-            raw_canonical_narrative_replay if isinstance(raw_canonical_narrative_replay := result.get("canonical_narrative_replay"), dict) else {}
-        )
-        span["idempotent_replay"] = result.get("idempotent_replay") is True
-        span["hydrated"] = replay.get("hydrated") is True
-        span["status"] = replay.get("status")
-        span["response_id"] = replay.get("response_id")
-
-    with rpg_pipeline_span("turn.narrative_present") as span:
-        from app.apps.rpg.session.turn_presenter import (
-            TurnPresentationInvariantError,
-            present_authoritative_turn,
-        )
-
-        try:
-            result = present_authoritative_turn(
-                result,
-                session_id=session_id,
-                player_input=command,
-            )
-        except TurnPresentationInvariantError as exc:
-            span["published"] = False
-            span["error"] = str(exc)
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "rpg_turn_presentation_invariant_failed",
-                    "message": str(exc),
-                },
-            ) from exc
-        canonical = (
-            raw_canonical_narrative_response if isinstance(raw_canonical_narrative_response := result.get("canonical_narrative_response"), dict) else {}
-        )
-        span["published"] = bool(canonical)
-        span["response_id"] = canonical.get("response_id")
-        span["block_count"] = len(canonical.get("blocks") or [])
-        span["source"] = result.get("canonical_narrative_source")
-        span["request_count"] = result.get("turn_presentation_request_count")
-
-    with rpg_pipeline_span("turn.narrative_delivery_prepare") as span:
-        from app.apps.rpg.narration.narrative_delivery import (
-            prepare_canonical_result_delivery,
-        )
-
-        result = prepare_canonical_result_delivery(result, delivery_mode)
-        delivery_state = (
-            raw_narrative_delivery_state if isinstance(raw_narrative_delivery_state := result.get("narrative_delivery_state"), dict) else {}
-        )
-        span["mode"] = delivery_mode.value
-        span["status"] = delivery_state.get("status")
-        span["response_id"] = delivery_state.get("response_id")
-        span["semantic_hash"] = delivery_state.get("semantic_hash")
-        span["next_index"] = delivery_state.get("next_index")
-
-    with rpg_pipeline_span("turn.narrative_consumer_projection") as span:
-        from app.apps.rpg.narration.narrative_engine.consumer_publish import (
-            attach_canonical_consumer_bundle,
-        )
-
-        result = attach_canonical_consumer_bundle(result)
-        bundle = (
-            raw_narrative_projections if isinstance(raw_narrative_projections := result.get("narrative_projections"), dict) else {}
-        )
-        publisher = (
-            raw_narrative_publisher_telemetry if isinstance(raw_narrative_publisher_telemetry := result.get("narrative_publisher_telemetry"), dict) else {}
-        )
-        span["attached"] = bool(bundle)
-        span["response_id"] = bundle.get("response_id")
-        span["content_hash"] = bundle.get("content_hash")
-        span["session_patched"] = (
-            result.get("narrative_session_projection_patched") is True
-        )
-        span["publisher"] = result.get("narrative_publisher")
-        span["alternate_publish_count"] = publisher.get(
-            "alternate_publish_count"
-        )
-        span["zero_alternate_publishers"] = publisher.get(
-            "zero_alternate_publishers"
-        )
-
-    with rpg_pipeline_span("turn.narrative_production_certification") as span:
-        from app.apps.rpg.narration.narrative_engine.production_path import (
-            NarrativeProductionPathError,
-            enforce_production_narrative_result,
-        )
-
-        try:
-            result = enforce_production_narrative_result(result)
-        except NarrativeProductionPathError as exc:
-            span["passed"] = False
-            span["error"] = str(exc)
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "rpg_narrative_production_certification_failed",
-                    "message": str(exc),
-                },
-            ) from exc
-        certification = (
-            raw_narrative_production_certification if isinstance(raw_narrative_production_certification := result.get("narrative_production_certification"), dict) else {}
-        )
-        span["passed"] = certification.get("passed") is True
-        span["response_id"] = certification.get("response_id")
-        span["content_hash"] = certification.get("content_hash")
-        span["legacy_ownership_retired"] = (
-            result.get("legacy_presentation_ownership_retired") is True
-        )
-
-    with rpg_pipeline_span("turn.narrative_shadow") as span:
-        from app.apps.rpg.narration.narrative_engine.shadow import attach_shadow_report
-
-        result = attach_shadow_report(
-            result,
-            session_id=session_id,
-            player_input=command,
-        )
-        shadow = (
-            raw_narrative_engine_shadow if isinstance(raw_narrative_engine_shadow := result.get("narrative_engine_shadow"), dict) else {}
-        )
-        span["selected"] = shadow.get("selected") is True
-        span["ok"] = shadow.get("ok") is True
-        span["latency_ms"] = shadow.get("latency_ms")
-        span["beat_count"] = len(shadow.get("beat_purposes") or [])
-
-    return result
-
-
-def _respond(result: dict[str, Any], *, session_id: str, command: str, submission_id: str, delivery_mode: Any,
-             trace: Any, before_document: dict[str, Any] | None) -> dict[str, Any]:
+def _respond(result: dict[str, Any], turn: TurnRequest, delivery: TurnDelivery, *,
+             before_document: dict[str, Any] | None) -> dict[str, Any]:
     """The turn's response: its contract, with the TurnOutcome against the document it started from."""
+    session_id, command, submission_id = turn.session_id, turn.text, turn.submission_id
+    delivery_mode, trace = delivery.mode, delivery.trace
     with rpg_pipeline_span("turn.session_persist") as span:
         session = _persisted_turn_session(result, session_id)
         span["interaction_persisted"] = result.get("interaction_persisted") is True
@@ -700,47 +535,31 @@ def _final(payload: Mapping[str, Any]) -> dict[str, Any]:
             "response_id": canonical.get("response_id") if isinstance(canonical, Mapping) else None}
 
 
-def _narrate_after_commit(result: dict[str, Any], *, session_id: str, command: str, submission_id: str) -> None:
+def _narrate_after_commit(result: dict[str, Any], turn: TurnRequest) -> None:
     """Narrate a committed turn beside the request: the writer's drafts reach the stream, and the response is
     inserted with no campaign save; if it fails, the turn stands and the stream says so."""
     import contextvars
     import threading
 
+    session_id, submission_id = turn.session_id, turn.submission_id
     stream = turn_stream.stream_key(session_id, submission_id)
 
     def narrate() -> None:
-        from app.apps.rpg.foundation.model_calls import counting_model_calls
-        from app.apps.rpg.narration.narration_drafts import narration_draft_context
-        from app.apps.rpg.narration.narrative_engine import DeliveryMode
-        from app.apps.rpg.narration.narrative_engine.consumer_publish import patch_session_canonical_projection
         from app.apps.rpg.foundation.persistence.rpg_session_save_policy import rpg_session_save_policy
-        from app.persistence.authority import authority_snapshot_scope
-        from app.apps.rpg.session.narrative_engine_bridge import canonicalize_resolved_turn_result
+        from app.apps.rpg.session.committed_narration import narrate_turn_after_commit
 
         try:
             # The campaign is never saved here (roadmap §4.1 step 10): a session save the narration's grounding
             # asks for is staged, as inside a turn, and nothing commits it.
-            with authority_snapshot_scope(), narration_draft_context(session_id, submission_id), \
-                    counting_model_calls(), rpg_session_save_policy(defer=True), \
-                    rpg_pipeline_trace("turn.narration", session_id=session_id, trace_id=None,
-                                       fields={"submission_id": submission_id}):
-                from app.apps.rpg.session.service import load_session
-
-                # The committed campaign, as the turn left it.
-                committed = dict(result)
-                committed["session"] = load_session(session_id) or result.get("session")
-                written = canonicalize_resolved_turn_result(committed, session_id=session_id,
-                                                            player_input=command)
-                # The committed document keeps no narration (readers take it from the response table); the copy
-                # in hand carries its projection, which the production checks compare.
-                patch_session_canonical_projection(written)
-                narrated = _narrate(written, session_id=session_id, command=command,
-                                    delivery_mode=DeliveryMode.BLOCKING)
+            with rpg_session_save_policy(defer=True), \
+                    turn_scope("turn.narration", turn, fields={"submission_id": submission_id}):
+                narrated = narrate_turn_after_commit(result, session_id=session_id, command=turn.text)
             from app.apps.rpg.narration.presentation.turn_response import build_visible_response
 
-            visible = _linked(dict(narrated.get("visible_response") or build_visible_response(narrated, command)),
-                              session_id, committed.get("session"), revision=result.get("state_revision"))
-            canonical = narrated.get("canonical_narrative_response")
+            visible = _linked(dict(narrated.result.get("visible_response")
+                                   or build_visible_response(narrated.result, turn.text)),
+                              session_id, narrated.session, revision=result.get("state_revision"))
+            canonical = narrated.result.get("canonical_narrative_response")
             turn_stream.publish(stream, "narration.final", {
                 "visible_response": visible,
                 "response_id": canonical.get("response_id") if isinstance(canonical, Mapping) else None})
@@ -755,8 +574,6 @@ def _narrate_after_commit(result: dict[str, Any], *, session_id: str, command: s
 
     context = contextvars.copy_context()
     threading.Thread(target=context.run, args=(narrate,), name=f"rpg-narration:{session_id}", daemon=True).start()
-
-
 
 
 @contextmanager

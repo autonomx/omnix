@@ -9,49 +9,24 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.jobs.handlers import JobFailure, JobResult, JobRun, PermanentJobError
 from app.jobs.inline_execution import require_execution_authority
-from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.jobs.models import JobRecord
 
 _RETRYABLE = frozenset({"rpg_turn_in_progress", "rpg_state_revision_conflict", "rpg_turn_budget_exceeded"})
 
 
-class TurnJobRefused(RuntimeError):
-    def __init__(self, code: str, message: str, *, retryable: bool) -> None:
-        super().__init__(message or code)
-        self.code = code
-        self.retryable = retryable
-
-
-def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
+def run_rpg_turn_job(run: JobRun[Any]) -> JobResult:
     """Execute one leased RPG turn through the turn route's steps."""
+    job = run.job
     if job.type != "rpg.turn":
-        return _fail(job_store, job, "unsupported_rpg_job_type", f"Unsupported RPG job type: {job.type}",
-                     retryable=False)
-    job_store.mark_running(job.id)
-    try:
-        command, visible = _run_turn(job_store, job)
-    except TurnJobRefused as exc:
-        return _fail(job_store, job, exc.code, str(exc), retryable=exc.retryable)
-    except Exception as exc:  # pragma: no cover - route-level tests cover this path
-        return _fail(job_store, job, "inline_job_failed", str(exc) or "Inline feature job failed", retryable=True)
-    completed = job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[{"type": "rpg_turn_response", "module": job.module, "title": command[:80] or "RPG turn",
-                          "content": visible}],
-            logs=[{"level": "info", "message": "RPG turn applied through the turn route", "content": visible}],
-        ),
+        raise PermanentJobError("unsupported_rpg_job_type", f"Unsupported RPG job type: {job.type}")
+    command, visible = _run_turn(run.store, job)
+    return JobResult(
+        output_refs=({"type": "rpg_turn_response", "module": job.module, "title": command[:80] or "RPG turn",
+                      "content": visible},),
+        logs=({"level": "info", "message": "RPG turn applied through the turn route", "content": visible},),
     )
-    return completed or job
-
-
-def _fail(job_store: Any, job: JobRecord, code: str, message: str, *, retryable: bool) -> JobRecord:
-    failed = job_store.fail_job(
-        job.id,
-        FailJobRequest(code=code, message=message, retryable=retryable,
-                       details={"job_type": job.type, "module": job.module}),
-    )
-    return failed or job
 
 
 def _run_turn(job_store: Any, job: JobRecord) -> tuple[str, str]:
@@ -61,22 +36,20 @@ def _run_turn(job_store: Any, job: JobRecord) -> tuple[str, str]:
     command = str(payload.get("command") or "").strip()
     session_id = str((job.input_ref or {}).get("session_id") or "").strip() if isinstance(job.input_ref, dict) else ""
     if not command:
-        raise TurnJobRefused("rpg_command_required", "RPG command is required", retryable=False)
+        raise PermanentJobError("rpg_command_required", "RPG command is required")
     if not session_id:
-        raise TurnJobRefused("rpg_session_required", "An RPG turn names its campaign (input_ref.session_id)",
-                             retryable=False)
+        raise PermanentJobError("rpg_session_required", "An RPG turn names its campaign (input_ref.session_id)")
     require_execution_authority(job_store, job.id)
     answer = submit_rpg_turn(session_id=session_id, command=command, submission_id=f"job:{job.id}",
                              source="rpg.turn_job")
     if answer.get("ok") is not True:
         code = str(answer.get("error") or "rpg_turn_refused")
-        raise TurnJobRefused(code, str(answer.get("message") or code), retryable=code in _RETRYABLE)
+        raise JobFailure(code, str(answer.get("message") or code), retryable=code in _RETRYABLE)
     visible = raw_visible_response if isinstance(raw_visible_response := answer.get("visible_response"), dict) else {}
     text = str(visible.get("plain_text") or visible.get("narration") or "").strip()
     if not text:
-        raise TurnJobRefused("rpg_turn_without_visible_response", "The turn produced no visible response",
-                             retryable=False)
+        raise PermanentJobError("rpg_turn_without_visible_response", "The turn produced no visible response")
     return command, text
 
 
-__all__ = ["execute_inline_feature_job"]
+__all__ = ["run_rpg_turn_job"]

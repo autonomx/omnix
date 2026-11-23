@@ -28,12 +28,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .evidence_storage import YahooEvidenceBackend, default_evidence_backend
 from .models import AdjustmentMode, MarketBar
 from .providers.bar_semantics import is_whole_minute
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
-_PREMARKET_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 _COUNTERS = (
     "persisted_bar_count",
     "loaded_bar_count",
@@ -268,7 +266,7 @@ class YahooEvidenceStore:
                 continue
             local = start.astimezone(_ET)
             clock = local.timetz().replace(tzinfo=None)
-            if clock < _REGULAR_OPEN:
+            if clock < REGULAR_OPEN:
                 session = "extended_pre"
             elif clock >= regular_close_time(local.date()):
                 session = "extended_post"
@@ -428,12 +426,12 @@ class YahooEvidenceStore:
     @staticmethod
     def _latest_completed_premarket_clock(evaluation_time: datetime) -> time | None:
         local = evaluation_time.astimezone(_ET)
-        opening = datetime.combine(local.date(), _PREMARKET_OPEN, tzinfo=_ET)
+        opening = datetime.combine(local.date(), PREMARKET_OPEN, tzinfo=_ET)
         if local < opening + timedelta(minutes=1):
             return None
         latest = (local - timedelta(minutes=1)).replace(second=0, microsecond=0)
-        if latest.time() >= _REGULAR_OPEN:
-            latest = datetime.combine(local.date(), _REGULAR_OPEN, tzinfo=_ET) - timedelta(minutes=1)
+        if latest.time() >= REGULAR_OPEN:
+            latest = datetime.combine(local.date(), REGULAR_OPEN, tzinfo=_ET) - timedelta(minutes=1)
         return latest.time()
 
     def premarket_relative_volume(
@@ -457,7 +455,7 @@ class YahooEvidenceStore:
             expected = (
                 cutoff.hour * 60
                 + cutoff.minute
-                - (_PREMARKET_OPEN.hour * 60 + _PREMARKET_OPEN.minute)
+                - (PREMARKET_OPEN.hour * 60 + PREMARKET_OPEN.minute)
                 + 1
             )
 

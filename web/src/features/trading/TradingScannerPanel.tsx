@@ -10,6 +10,7 @@ import { tradingScannerApi } from './tradingScannerApi';
 import { useAlertIndicatorIds } from './useTradingAlerts';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 import './TradingScanner.css';
+import { isConflict } from '../../api/errors';
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
 
@@ -123,7 +124,7 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
       await refresh();
     } catch (error) {
       setStatus('error');
-      if (editing && error instanceof Error && error.message.includes('(409)')) {
+      if (editing && isConflict(error)) {
         // Changed elsewhere: take its new revision and keep these edits, so saving again applies them.
         const fresh = (await tradingScannerApi.definitions().catch(() => [])).find((item) => item.scanner_id === editing.scanner_id);
         if (fresh) setEditing(fresh);

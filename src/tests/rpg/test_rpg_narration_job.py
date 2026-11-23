@@ -7,6 +7,7 @@ import pytest
 
 from app.apps.rpg.session import narration_jobs, session_runtime_store
 from app.apps.rpg.session.jobs import narration_job
+from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry
 from app.jobs.models import JobStatus
 from tests.support.in_memory_jobs import InMemoryJobStore
 
@@ -71,9 +72,16 @@ def _enqueue(jobs, kind="ambient_conversation"):
     )
 
 
+def _execute(jobs, job):
+    """Run ``job`` through the feature's registered handler, as the worker does after its claim."""
+    from app.apps.rpg.feature import FEATURE
+
+    spec = next(spec for spec in FEATURE.job_handlers if spec.type == narration_job.JOB_TYPE)
+    return JobHandlerRegistry((spec,)).execute(JobExecutionContext(job_store=jobs), job)
+
+
 def _run(jobs, job_id):
-    job = jobs.get_job(job_id)
-    return narration_job.execute_rpg_narration_job(jobs, job)
+    return _execute(jobs, jobs.get_job(job_id))
 
 
 def test_a_player_turns_narration_job_left_from_an_older_save_is_retired(world) -> None:
@@ -122,13 +130,14 @@ def test_generation_failures_retry_and_the_last_attempt_is_told(world, monkeypat
     job = world["jobs"].get_job(queued["job_id"])
 
     job._attempt_count = 1
-    retried = narration_job.execute_rpg_narration_job(world["jobs"], job)
-    assert retried.status != JobStatus.COMPLETED
+    retried = _execute(world["jobs"], job)
+    assert retried.status != JobStatus.COMPLETED and retried.error.retryable
 
     job = world["jobs"].get_job(queued["job_id"])
     job._attempt_count = narration_job.MAX_ATTEMPTS
-    narration_job.execute_rpg_narration_job(world["jobs"], job)
-    assert world["jobs"].get_job(queued["job_id"]).status == JobStatus.FAILED
+    _execute(world["jobs"], job)
+    failed = world["jobs"].get_job(queued["job_id"])
+    assert failed.status == JobStatus.FAILED and failed.error.code == "rpg_narration_failed"
     assert any(event.get("status") == "failed" for event in world["events"])
 
 

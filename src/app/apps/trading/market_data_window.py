@@ -8,14 +8,13 @@ adds an explicit bounded-window contract so premarket research can recover
 apply to extended hours.
 """
 
-import hashlib
-import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256, require_utc
 from .market_data_recovery import KnowledgeMode, deduplicate_bars
 from .models import MarketBar
 from .providers.bar_semantics import interval_duration
@@ -23,18 +22,6 @@ from .providers.bar_semantics import interval_duration
 
 WindowSession = Literal["extended_pre", "regular", "extended_post", "custom"]
 WindowContinuity = Literal["bucket_complete", "sparse_event"]
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("window timestamps must be timezone-aware")
-    return value.astimezone(timezone.utc)
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 class MarketDataWindow(BaseModel):
@@ -50,7 +37,7 @@ class MarketDataWindow(BaseModel):
     @field_validator("start", "end")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="window timestamps must be timezone-aware")
 
     @model_validator(mode="after")
     def ordered(self):
@@ -72,7 +59,7 @@ class WindowGap(BaseModel):
     @field_validator("start", "end")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="window timestamps must be timezone-aware")
 
 
 class WindowRecoveryReport(BaseModel):
@@ -100,7 +87,7 @@ class WindowRecoveryReport(BaseModel):
     @field_validator("knowledge_cutoff")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="window timestamps must be timezone-aware")
 
 
 @dataclass(frozen=True)
@@ -127,7 +114,7 @@ def finalized_window_bars(
     knowledge_mode: KnowledgeMode,
     knowledge_cutoff: datetime,
 ) -> list[MarketBar]:
-    known_by = _utc(knowledge_cutoff)
+    known_by = require_utc(knowledge_cutoff, error="window timestamps must be timezone-aware")
     selected: list[MarketBar] = []
     for bar in bars:
         if not bar.is_final or bar.interval != window.interval:
@@ -224,7 +211,7 @@ def window_dataset_fingerprint(
             for bar in bars
         ],
     }
-    return _hash(payload)
+    return canonical_sha256(payload)
 
 
 __all__ = [

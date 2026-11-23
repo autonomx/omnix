@@ -7,8 +7,7 @@ import type { TradingChartPanelModel } from './useTradingChartPanel';
 /** Separate indicator panes over the chart. */
 export function ChartPanelIndicatorPanes({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    fullscreenIndicator, fullscreenMainPane, indicatorPaneGeometry, paneIndicators, resizingIndicatorPane,
-    startIndicatorPaneResize,
+    fullscreenIndicator, fullscreenMainPane, indicatorPaneGeometry, paneIndicators, panes, resizingIndicatorPane,
   } = ws;
   return (
     <>
@@ -27,7 +26,7 @@ export function ChartPanelIndicatorPanes({ ws }: { ws: TradingChartPanelModel })
             aria-label={`Resize ${indicator.id.toUpperCase()} ${indicator.period} pane ${edge} border`}
             aria-valuemin={80}
             aria-valuenow={Math.round(geometry.height)}
-            onPointerDown={(event) => startIndicatorPaneResize(event, indicator.id, edge)}
+            onPointerDown={(event) => panes.startResize(event, indicator.id, edge)}
           />
         ));
       }) : null}

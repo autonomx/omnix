@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { voiceApiClient } from './api/voiceClient';
 import { ENGINES_QUERY_KEY } from './TtsEnginePicker';
-import { jobSettled, useJobResult } from './useJobResult';
 import { voiceAssetName, voiceReference } from './voiceAssets';
+import { useJob } from '../../shared/useJob';
+import { isJobSettled } from '../../api/jobs';
 
 const LIBRARY_QUERY_KEY = ['voice', 'library'] as const;
 
@@ -28,8 +29,8 @@ export function BlendPanel({ language, onSaved }: { language: string; onSaved: (
   const [mix, setMix] = useState(0.5);
   const [name, setName] = useState('');
   const [jobId, setJobId] = useState('');
-  const job = useJobResult(jobId);
-  const blending = Boolean(jobId) && !jobSettled(job.data);
+  const job = useJob(jobId);
+  const blending = Boolean(jobId) && !isJobSettled(job.data?.status);
   const blender = engines.data?.engines.find((engine) => engine.voice_blend && engine.installed);
   const voices = library.data?.assets ?? [];
   const start = useMutation({

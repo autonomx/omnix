@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from app.apps.trading import strategy_monitor_leader_momentum as lm_monitor
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategy_leader_momentum_continuation import LeaderMomentumSnapshot
+from app.apps.trading.strategy_monitor import PassMetrics
 from app.apps.trading.strategy_managed_finviz_shadow import INTERDAY_TRADING_STRATEGY_ID
 
 OPEN = datetime(2026, 10, 20, 13, 30, tzinfo=timezone.utc)
@@ -29,7 +30,7 @@ class _Monitor:
     def __init__(self) -> None:
         self.leader_momentum_last: dict = {}
         self.leader_momentum_evaluated_through: dict = {}
-        self.leader_momentum_event_count = 0
+        self.metrics = PassMetrics()
         self.events: list[dict] = []
 
     async def _event(self, repository, config, **event):
@@ -76,4 +77,4 @@ def test_leader_momentum_runs_daily_on_the_interday_group_and_records_changes_on
     payload = monitor.events[-1]["payload"]
     assert payload["arm"] == "leader-momentum-continuation"
     assert payload["execution_authority"] is False and payload["research_only"] is True
-    assert monitor.leader_momentum_event_count == 2
+    assert monitor.metrics.leader_momentum_event_count == 2

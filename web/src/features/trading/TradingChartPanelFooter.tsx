@@ -10,28 +10,25 @@ import { ChartGoToDate } from './TradingChartWorkflowControls';
 /** The footer: replay controls, visible ranges, timezone, offset and clock. */
 export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    active, allBarsRef, applyCustomRange, chartId, chartQuery, customRangeEnd, customRangeError, customRangeOpen,
-    customRangeRef, customRangeStart, drawings, exitReplay, interval, nextReplayBar, openCustomRange,
-    previousReplayBar, provenance, replayChoosingStart, replayCurrentBar, replayHasNextBar, replayHasPreviousBar,
-    replayMode, replayPlaying, replayStartTime, replayVisibleBarCount, resetReplay, selectReplayStart,
-    selectedRangeLabel, selectedTimezone, selectedTimezoneOption, setCustomRangeEnd, setCustomRangeOpen,
-    setCustomRangeStart, setTimezoneId, setTimezoneMenuOpen, showRange, streamStatus, timezoneId, timezoneMenuOpen,
-    timezoneMenuRef, toggleReplayPlaying,
+    active, allBarsRef, chartId, chartQuery, customRange, drawings, interval, provenance, replay,
+    replayChoosingStart, replayCurrentBar, replayHasNextBar, replayHasPreviousBar, replayMode, replayPlaying,
+    replayStartTime, replayVisibleBarCount, selectedRangeLabel, selectedTimezone, selectedTimezoneOption,
+    setTimezoneId, setTimezoneMenuOpen, showRange, streamStatus, timezoneId, timezoneMenuOpen, timezoneMenuRef,
   } = ws;
   return (
     <>
       <footer>
         {replayMode && active ? (
           <div className="trading-replay-toolbar" role="group" aria-label="Chart replay controls" onPointerDown={(event) => event.stopPropagation()}>
-            <button type="button" onClick={selectReplayStart} disabled={replayChoosingStart} aria-label="Choose replay start" title="Jump to a new start bar">Select bar</button>
-            <button type="button" onClick={resetReplay} disabled={replayStartTime === null} aria-label="Reset replay" title="Reset replay">↤</button>
-            <button type="button" onClick={previousReplayBar} disabled={!replayHasPreviousBar} aria-label="Replay previous bar" title="Previous bar">|‹</button>
-            <button type="button" className="trading-replay-play" onClick={toggleReplayPlaying} disabled={!replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
-            <button type="button" onClick={nextReplayBar} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
+            <button type="button" onClick={replay.selectStart} disabled={replayChoosingStart} aria-label="Choose replay start" title="Jump to a new start bar">Select bar</button>
+            <button type="button" onClick={replay.reset} disabled={replayStartTime === null} aria-label="Reset replay" title="Reset replay">↤</button>
+            <button type="button" onClick={replay.previousBar} disabled={!replayHasPreviousBar} aria-label="Replay previous bar" title="Previous bar">|‹</button>
+            <button type="button" className="trading-replay-play" onClick={replay.togglePlaying} disabled={!replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
+            <button type="button" onClick={replay.nextBar} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
             <TradingReplaySpeedSelect />
             <TradingReplayUpdateIntervalSelect interval={interval} />
             <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayVisibleBarCount}/{allBarsRef.current.length}</span>
-            <button type="button" className="trading-replay-exit" onClick={exitReplay} aria-label="Exit replay and return to real time" title="Exit replay and return to real time">Real time</button>
+            <button type="button" className="trading-replay-exit" onClick={replay.exit} aria-label="Exit replay and return to real time" title="Exit replay and return to real time">Real time</button>
           </div>
         ) : null}
         <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>
@@ -47,29 +44,29 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
               {range.label}
             </button>
           ))}
-          <div className="trading-custom-range" ref={customRangeRef}>
+          <div className="trading-custom-range" ref={customRange.ref}>
             <button
               type="button"
               className="trading-custom-range-trigger"
               aria-label="Select custom date range"
-              aria-expanded={customRangeOpen}
+              aria-expanded={customRange.open}
               aria-pressed={selectedRangeLabel === 'Custom'}
               title="Custom date range"
-              onClick={openCustomRange}
+              onClick={customRange.toggle}
             >
               <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
                 <rect x="2.5" y="3.5" width="11" height="10" rx="1" />
                 <path d="M5 2v3M11 2v3M2.5 6.5h11" />
               </svg>
             </button>
-            {customRangeOpen ? (
-              <form className="trading-custom-range-popover" onSubmit={(event) => { event.preventDefault(); applyCustomRange(); }}>
+            {customRange.open ? (
+              <form className="trading-custom-range-popover" onSubmit={(event) => { event.preventDefault(); customRange.apply(); }}>
                 <strong>Custom range</strong>
-                <label>From<input type="date" value={customRangeStart} onChange={(event) => setCustomRangeStart(event.target.value)} /></label>
-                <label>To<input type="date" value={customRangeEnd} onChange={(event) => setCustomRangeEnd(event.target.value)} /></label>
-                {customRangeError ? <small role="alert">{customRangeError}</small> : null}
+                <label>From<input type="date" value={customRange.start} onChange={(event) => customRange.setStart(event.target.value)} /></label>
+                <label>To<input type="date" value={customRange.end} onChange={(event) => customRange.setEnd(event.target.value)} /></label>
+                {customRange.error ? <small role="alert">{customRange.error}</small> : null}
                 <div>
-                  <button type="button" onClick={() => setCustomRangeOpen(false)}>Cancel</button>
+                  <button type="button" onClick={customRange.close}>Cancel</button>
                   <button type="submit" className="primary">Apply</button>
                 </div>
               </form>
@@ -86,7 +83,7 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
               aria-haspopup="listbox"
               aria-expanded={timezoneMenuOpen}
               title={`Timezone: ${selectedTimezoneOption.label}`}
-              onClick={() => { setTimezoneMenuOpen((current) => !current); setCustomRangeOpen(false); }}
+              onClick={() => { setTimezoneMenuOpen((current) => !current); customRange.close(); }}
             >
               <TradingClock timezone={selectedTimezone} />
             </button>

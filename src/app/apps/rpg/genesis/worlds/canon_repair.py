@@ -25,37 +25,34 @@ from app.apps.rpg.genesis.forge.world_forge_quality import apply_world_forge_qua
 from app.apps.rpg.genesis.forge.world_forge_semantic_quality import (
     require_topic_semantic_quality,
 )
+from app.apps.rpg.foundation.safe_values import collapsed_text
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
 
-def _text(value: Any) -> str:
-    return " ".join(str(value or "").split())
-
-
 def _normalize_entity(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
-    entity_id = _text(normalized.get("id") or normalized.get("entity_id"))
+    entity_id = collapsed_text(normalized.get("id") or normalized.get("entity_id"))
     if entity_id:
         normalized["id"] = entity_id
     if "name" not in normalized and normalized.get("title"):
-        normalized["name"] = _text(normalized.get("title"))
+        normalized["name"] = collapsed_text(normalized.get("title"))
     return normalized
 
 
 def _normalize_document(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
-    document_id = _text(normalized.get("document_id") or normalized.get("id"))
+    document_id = collapsed_text(normalized.get("document_id") or normalized.get("id"))
     if document_id:
         normalized["document_id"] = document_id
     if "full_text" not in normalized and normalized.get("content") is not None:
-        normalized["full_text"] = _text(normalized.get("content"))
+        normalized["full_text"] = collapsed_text(normalized.get("content"))
     return normalized
 
 
 def _normalize_fact(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
-    fact_id = _text(
+    fact_id = collapsed_text(
         normalized.get("id")
         or normalized.get("fact_id")
         or normalized.get("evidence_id")
@@ -63,21 +60,21 @@ def _normalize_fact(row: Mapping[str, Any]) -> dict[str, Any]:
     if fact_id:
         normalized["id"] = fact_id
     if "content" not in normalized and normalized.get("statement") is not None:
-        normalized["content"] = _text(normalized.get("statement"))
+        normalized["content"] = collapsed_text(normalized.get("statement"))
     return normalized
 
 
 def _normalize_relationship(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
-    relationship_id = _text(
+    relationship_id = collapsed_text(
         normalized.get("id") or normalized.get("relationship_id")
     )
     if relationship_id:
         normalized["id"] = relationship_id
-    source_id = _text(
+    source_id = collapsed_text(
         normalized.get("source_id") or normalized.get("source_entity_id")
     )
-    target_id = _text(
+    target_id = collapsed_text(
         normalized.get("target_id") or normalized.get("target_entity_id")
     )
     if source_id:

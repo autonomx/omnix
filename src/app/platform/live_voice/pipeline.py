@@ -8,6 +8,7 @@ effective call order here as ordinary feature-owned stages.
 """
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_message
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -42,15 +43,6 @@ class LiveVoicePromptContext:
 class LiveVoicePromptStage:
     name: str
     apply: Callable[[LiveVoicePromptContext], LiveVoicePromptContext]
-
-
-def is_live_voice_message(user_message: Any) -> bool:
-    metadata = getattr(user_message, "metadata", None)
-    if not isinstance(metadata, dict):
-        return False
-    speech_segment_id = str(metadata.get("speech_segment_id") or "").strip()
-    user_turn_id = str(metadata.get("user_turn_id") or "").strip()
-    return bool(speech_segment_id or user_turn_id.startswith("voice-user-turn:"))
 
 
 def _profile_selection_stage(

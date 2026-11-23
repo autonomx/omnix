@@ -18,6 +18,7 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
+from .canonical import optional_decimal
 from .paper import (
     PaperExecutionPolicy,
     PaperMarketObservation,
@@ -82,16 +83,6 @@ class StochExecutionSummary(BaseModel):
     execution_authority: Literal[False] = False
 
 
-def _decimal(value: object) -> Decimal | None:
-    if value in {None, ""}:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
-
-
 def _datetime(value: object) -> datetime | None:
     return value if isinstance(value, datetime) else None
 
@@ -139,11 +130,11 @@ def simulate_stoch_execution(
 
     active = policy or PaperExecutionPolicy()
     side: Literal["buy", "sell"] = "buy" if action == "entry" else "sell"
-    bid = _decimal(execution.get("bid"))
-    ask = _decimal(execution.get("ask"))
-    last = _decimal(execution.get("last"))
+    bid = optional_decimal(execution.get("bid"))
+    ask = optional_decimal(execution.get("ask"))
+    last = optional_decimal(execution.get("last"))
     source_time = _datetime(execution.get("source_time"))
-    spread = _spread_from_book(bid, ask, _decimal(execution.get("spread_bps")))
+    spread = _spread_from_book(bid, ask, optional_decimal(execution.get("spread_bps")))
     halted = execution.get("halted") is True
     execution_eligible = execution.get("execution_eligible") is True
     capture_lag = (
@@ -211,11 +202,11 @@ def simulate_stoch_execution(
         price=last,
         bid=bid,
         ask=ask,
-        bid_size=_decimal(execution.get("bid_size")),
-        ask_size=_decimal(execution.get("ask_size")),
-        high=_decimal(execution.get("high")),
-        low=_decimal(execution.get("low")),
-        volume=_decimal(execution.get("bar_volume")),
+        bid_size=optional_decimal(execution.get("bid_size")),
+        ask_size=optional_decimal(execution.get("ask_size")),
+        high=optional_decimal(execution.get("high")),
+        low=optional_decimal(execution.get("low")),
+        volume=optional_decimal(execution.get("bar_volume")),
         bar_start_time=_datetime(execution.get("bar_start_time")),
         source_time=source_time,
         evaluated_at=source_time,

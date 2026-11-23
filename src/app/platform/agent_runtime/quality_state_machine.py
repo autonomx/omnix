@@ -5,8 +5,8 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .run_settlement import fail_run
 from .profiles import profile_produces_diff
-from .event_queries import events_of_types
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 import hashlib
@@ -18,7 +18,6 @@ from .coding_quality import (
     capture_workspace_state,
     materialize_review_workspace,
     missing_final_validations,
-    parse_review_result,
     parse_self_review_result,
     quality_attempt_limit,
     relevant_file_candidates,
@@ -42,11 +41,6 @@ from .contracts import (
 from app.observability.agent_logging import log_agent_activity
 from .repository import PostgresAgentRunRepository
 from .repository_guidance import compile_repository_guidance
-from .review_orchestration import (
-    launch_reviewer_children,
-    review_snapshot_id_from_child,
-)
-from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
 from .run_change_set import run_change_set_from_artifact
 from .service_core import (
     _acceptance_retry_count as _acceptance_retry_count,
@@ -594,12 +588,11 @@ def _advance_quality_on_settle(
 ) -> tuple | None:
     revision = service._current_revision(repository, current.run_id)
     if revision is None:
-        repository.update_state(
+        fail_run(
+            repository,
             current.run_id,
             expected_revision=current.revision,
-            status="failed",
-            desired_state="cancelled",
-            last_error="quality_task_revision_unavailable",
+            error="quality_task_revision_unavailable",
         )
         return None
     quality = service.quality_repository_factory(repository.connection, service.context)
@@ -1015,51 +1008,6 @@ def _dispatch_pending_quality_commands(service: AgentRunService, run_id: str, *,
         service._execute_quality_action(("dispatch_command", command))
 
 
-def _launch_reviewer_children(service: AgentRunService, parent_run_id: str, snapshot_id: str, count: int) -> None:
-    launch_reviewer_children(service, parent_run_id, snapshot_id, count)
-
-
-def _review_snapshot_id_from_child(child: AgentRunSnapshot) -> str | None:
-    return review_snapshot_id_from_child(child)
-
-
-def _review_result_from_child(
-    service: AgentRunService,
-    repository: PostgresAgentRunRepository,
-    child: AgentRunSnapshot,
-    snapshot: ReviewSnapshot,
-) -> ReviewResult | None:
-    """Compatibility reader that returns substantive review evidence only.
-
-    Runtime/protocol failure is represented by ReviewAttempt and therefore
-    returns ``None`` here instead of fabricating a blocked ReviewResult.
-    """
-
-    if child.status != "completed":
-        return None
-    revision = service._current_revision(
-        repository,
-        child.spec.parent_run_id or snapshot.run_id,
-    )
-    if revision is None or revision.revision_id != snapshot.task_revision_id:
-        return None
-    text = latest_reviewer_text(
-        events_of_types(repository, child.run_id, {"model.message"})
-    )
-    if not review_payload_is_protocol_valid(text, revision):
-        return None
-    result = parse_review_result(
-        text,
-        parent_run_id=child.spec.parent_run_id or snapshot.run_id,
-        reviewer_run_id=child.run_id,
-        snapshot=snapshot,
-    )
-    deterministic_result_id = hashlib.sha256(
-        f"review-result:{child.run_id}:{snapshot.snapshot_id}".encode("utf-8")
-    ).hexdigest()
-    return result.model_copy(update={"review_result_id": deterministic_result_id})
-
-
 def _request_quality_workspace_refresh(
     service: AgentRunService,
     repository: PostgresAgentRunRepository,
@@ -1153,12 +1101,11 @@ def _request_quality_repair(
     attempt = max(1, int(stage.get("attempt") or 1))
     if attempt >= quality_attempt_limit():
         latest = repository.get_run(current.run_id) or current
-        repository.update_state(
+        fail_run(
+            repository,
             current.run_id,
             expected_revision=latest.revision,
-            status="failed",
-            desired_state="cancelled",
-            last_error=("quality_failed:" + ",".join(failures))[:2000],
+            error="quality_failed:" + ",".join(failures),
         )
         return None
     next_attempt = attempt + 1
@@ -1244,11 +1191,5 @@ def _quality_fail(
         fields={"reason": reason, "status_before": current.status, "revision": current.revision},
     )
     latest = repository.get_run(current.run_id) or current
-    repository.update_state(
-        current.run_id,
-        expected_revision=latest.revision,
-        status="failed",
-        desired_state="cancelled",
-        last_error=reason[:2000],
-    )
+    fail_run(repository, current.run_id, expected_revision=latest.revision, error=reason)
     return None

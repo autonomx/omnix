@@ -4,6 +4,7 @@ import { tradingApi } from '../tradingApi';
 import type { TradingDocument } from '../tradingTypes';
 import { tradingDrawingRecordId, useTradingDrawings } from './useTradingDrawings';
 import { currentTradingWorkspaceScopeId } from '../persistence/useTradingWorkspacePersistence';
+import { gatewayCallError } from '../../../test/gatewayErrors';
 
 const point = (minute: number, price: number) => ({ time: new Date(Date.UTC(2026, 9, 7, 0, minute)).toISOString(), price });
 
@@ -85,7 +86,7 @@ describe('drawing persistence and document versions', () => {
     const latest = { ...record, revision: 5, payload: { schemaVersion: 2, instrumentId, drawings: [serverKept] } };
     vi.spyOn(tradingApi, 'documents').mockResolvedValueOnce([record]).mockResolvedValue([latest]);
     const update = vi.spyOn(tradingApi, 'updateDocument')
-      .mockRejectedValueOnce(new Error('Request failed (409)'))
+      .mockRejectedValueOnce(gatewayCallError('Request failed (409)'))
       .mockResolvedValue({ ...latest, revision: 6 });
     const { result } = renderHook(() => useTradingDrawings(instrumentId, 'tab-conflict'));
     await waitFor(() => expect(result.current.status).toBe('saved'));

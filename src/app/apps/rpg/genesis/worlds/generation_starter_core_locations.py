@@ -8,6 +8,7 @@ from app.apps.rpg.world.map_grid_contracts import with_grid_definition_hashes
 
 from .generation_starter_bubble_support import derive_starter_bubble
 from .starter_bubble import StarterBubblePlan, build_starter_map_definitions
+from .graph_audit import GraphAuditError
 
 
 @dataclass(frozen=True)
@@ -28,11 +29,8 @@ class StarterCoreLocationIssue:
         }
 
 
-class StarterCoreLocationCompilationError(ValueError):
-    def __init__(self, issues: Sequence[StarterCoreLocationIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.path}" for row in self.issues)
-        super().__init__("starter_core_location_integrity_failed:" + rendered)
+class StarterCoreLocationCompilationError(GraphAuditError):
+    code = "starter_core_location_integrity_failed"
 
 
 def _portal_targets(definition: Any) -> set[str]:

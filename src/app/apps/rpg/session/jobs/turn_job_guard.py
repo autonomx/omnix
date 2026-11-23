@@ -5,13 +5,14 @@ from typing import Any
 
 from app.jobs.models import CreateJobRequest
 from app.persistence.tenant import LOCAL_USER_ID
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 RPG_TURN_JOB_TYPE = "rpg.turn"
 
 
 def rpg_turn_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
     """Normalize legacy ownership and attach a stable idempotency identity."""
-    owner_id = _text(request.owner_id)
+    owner_id = stripped_text(request.owner_id)
     compat = _dict_value(request.compat)
     if owner_id and not owner_id.startswith("user:"):
         compat.setdefault("subject_owner_id", owner_id)
@@ -22,8 +23,8 @@ def rpg_turn_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
 
     payload = _dict_value(request.input_payload)
     input_ref = _dict_value(request.input_ref)
-    session_id = _text(input_ref.get("session_id"))
-    submission_id = _text(payload.get("submission_id"))
+    session_id = stripped_text(input_ref.get("session_id"))
+    submission_id = stripped_text(payload.get("submission_id"))
     if session_id and submission_id:
         compat.setdefault(
             "idempotency_key",
@@ -36,5 +37,3 @@ def _dict_value(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""

@@ -21,7 +21,7 @@ from .export import (FORMAT_MIME, ffmetadata,
                      encoded_seconds, ffmpeg_binary, ffmpeg_command, ffmpeg_version,
                      freeze_manifest, manifest_hash)
 from .hashing import canonical_json
-from .leases import JOB_LEASE_SECONDS, lease_heartbeat
+from .leases import JOB_LEASE_SECONDS, claimed_job
 
 
 _LOG = logging.getLogger(__name__)
@@ -219,21 +219,10 @@ def start_export(database: PostgresDatabase, blobs: BlobStore,
 
 def run_export_once(database: PostgresDatabase, blobs: BlobStore,
                     context: TenantContext, *, worker_id: str) -> bool:
-    with unit_of_work(database) as work:
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.export"], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.export",
+                     resource_class="cpu") as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id,
-            lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         return _export_claimed(database, blobs, context, job, worker_id=worker_id)
 
 

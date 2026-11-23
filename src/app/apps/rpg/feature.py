@@ -1,7 +1,7 @@
 """RPG feature declaration."""
 from __future__ import annotations
 
-from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
+from app.jobs.handlers import JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.settings.effective_defaults import apply_job_defaults
 from app.runtime.background import BackgroundWorker
@@ -14,39 +14,20 @@ from app.apps.rpg.session.persistence.feature_repositories import RPG_REPOSITORY
 from app.apps.rpg.edge.api.compat_router import create_rpg_compatibility_router
 from app.apps.rpg.edge.api.feature_routes import create_rpg_routes_router
 from app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery
-from app.apps.rpg.edge.api.turn_job import execute_inline_feature_job as execute_rpg_turn_job
+from app.apps.rpg.edge.api.turn_job import run_rpg_turn_job
 
 from app.apps.rpg.session.jobs.turn_job_guard import rpg_turn_submission_policy
 from app.apps.rpg.session.jobs.handlers import (
     RpgNarrationJobInput,
     RpgReportJobInput,
     RpgTurnJobInput,
-    execute_rpg_narration_job,
-    execute_rpg_report_job,
 )
+from app.apps.rpg.session.jobs import game_master_job, narration_job
+from app.apps.rpg.session.jobs.last10_report import run_rpg_last10_report_job
 from app.apps.rpg.session.jobs.debug_observer import rpg_debug_job_observer
-from app.apps.rpg.genesis.forge.scene_lore_job import RpgSceneLoreJobInput, execute_scene_lore_job
-from app.apps.rpg.session.jobs.game_master_job import RpgGameMasterJobInput, execute_game_master_job
-
-
-def _turn(context: JobExecutionContext, job):
-    return execute_rpg_turn_job(context.job_store, job)
-
-
-def _report(context: JobExecutionContext, job):
-    return execute_rpg_report_job(context.job_store, job)
-
-
-def _narration(context: JobExecutionContext, job):
-    return execute_rpg_narration_job(context.job_store, job)
-
-
-def _scene_lore(context: JobExecutionContext, job):
-    return execute_scene_lore_job(context.job_store, job)
-
-
-def _game_master(context: JobExecutionContext, job):
-    return execute_game_master_job(context.job_store, job)
+from app.apps.rpg.genesis.forge import scene_lore_job
+from app.apps.rpg.genesis.forge.scene_lore_job import RpgSceneLoreJobInput
+from app.apps.rpg.session.jobs.game_master_job import RpgGameMasterJobInput
 
 
 def _rpg_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
@@ -112,7 +93,8 @@ FEATURE = FeatureModule(
     job_handlers=(
         JobHandlerSpec(
             type="rpg.turn",
-            handler=_turn,
+            run=run_rpg_turn_job,
+            failure_code="inline_job_failed",
             input_model=RpgTurnJobInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=900,
@@ -121,33 +103,37 @@ FEATURE = FeatureModule(
         JobHandlerSpec(
             # Deferred narration (WP-5.6); the jobs system owns its claims and retries.
             type="rpg.narration",
-            handler=_narration,
+            run=narration_job.run_rpg_narration_job,
+            failure_code="rpg_narration_failed",
             input_model=RpgNarrationJobInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=300,
-            max_attempts=3,
+            max_attempts=narration_job.MAX_ATTEMPTS,
         ),
         JobHandlerSpec(
             # Newcomers' full dossiers, written after the turn that met them.
             type="rpg.scene_lore",
-            handler=_scene_lore,
+            run=scene_lore_job.run_scene_lore_job,
+            failure_code="rpg_scene_lore_failed",
             input_model=RpgSceneLoreJobInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=300,
-            max_attempts=3,
+            max_attempts=scene_lore_job.MAX_ATTEMPTS,
         ),
         JobHandlerSpec(
             # The game master's direction after a turn (EV-0): its proposals go to the proposal record.
             type="rpg.game_master",
-            handler=_game_master,
+            run=game_master_job.run_game_master_job,
+            failure_code="rpg_game_master_failed",
             input_model=RpgGameMasterJobInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=180,
-            max_attempts=2,
+            max_attempts=game_master_job.MAX_ATTEMPTS,
         ),
         JobHandlerSpec(
             type="rpg.report.last10",
-            handler=_report,
+            run=run_rpg_last10_report_job,
+            failure_code="rpg_last10_report_failed",
             input_model=RpgReportJobInput,
             resource_class=ResourceClass.CPU,
             timeout_seconds=120,

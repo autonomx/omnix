@@ -87,7 +87,7 @@ async def record_leader_momentum(
         },
     )
     monitor.leader_momentum_last[key] = marker
-    monitor.leader_momentum_event_count += int(persisted)
+    monitor.metrics.leader_momentum_event_count += int(persisted)
 
 
 __all__ = [

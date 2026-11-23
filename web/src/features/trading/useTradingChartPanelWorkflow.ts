@@ -35,7 +35,6 @@ import type { useChartLifecycle } from './useTradingChartPanelLifecycle';
 import type { useChartSync } from './useTradingChartPanelSync';
 import type { useChartView } from './useTradingChartPanelView';
 import type { useChartIndicatorActions, useChartRangeActions } from './useTradingChartPanelActions';
-import type { useChartReplayActions } from './useTradingChartPanelReplay';
 
 type WorkflowInput = TradingChartPanelProps
   & ReturnType<typeof useChartPanelState>
@@ -45,8 +44,7 @@ type WorkflowInput = TradingChartPanelProps
   & ReturnType<typeof useChartSync>
   & ReturnType<typeof useChartView>
   & ReturnType<typeof useChartIndicatorActions>
-  & ReturnType<typeof useChartRangeActions>
-  & ReturnType<typeof useChartReplayActions>;
+  & ReturnType<typeof useChartRangeActions>;
 
 export type GoToDateTarget = string | number | Date;
 export type GoToDateResult = 'scrolled' | 'loading' | 'invalid' | 'unavailable';
@@ -296,7 +294,7 @@ export function useChartWorkflow(ws: WorkflowInput) {
   const {
     active, adapter, adapterRef, chartFocusMode, chartId, chartQuery, chartSettings, drawingTool,
     fullscreenIndicator, fullscreenMainPane, hostRef, interval, paneIndicators, replayMode, showExtendedHours,
-    toggleFullscreen, toggleFullscreenIndicator, toggleMinimizedIndicator,
+    panes,
   } = ws;
   const updateChart = useTradingStore((state) => state.updateChart);
   const settings: TradingChartSettings = chartSettings ?? {};
@@ -345,9 +343,9 @@ export function useChartWorkflow(ws: WorkflowInput) {
     );
     if (!action) return;
     event.preventDefault();
-    if (action.type === 'toggle-indicator-fullscreen') toggleFullscreenIndicator(action.id);
-    else if (action.type === 'toggle-indicator-minimized') toggleMinimizedIndicator(action.id);
-    else toggleFullscreen();
+    if (action.type === 'toggle-indicator-fullscreen') panes.toggleIndicatorFullscreen(action.id);
+    else if (action.type === 'toggle-indicator-minimized') panes.toggleMinimized(action.id);
+    else panes.toggleFullscreen();
   };
 
   return {

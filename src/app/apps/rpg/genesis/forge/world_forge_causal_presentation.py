@@ -5,10 +5,7 @@ from dataclasses import replace
 from typing import Any
 
 from .world_forge_generation import GeneratedTopic
-
-
-def _text(value: Any) -> str:
-    return " ".join(str(value or "").split())
+from app.apps.rpg.foundation.safe_values import collapsed_text
 
 
 def project_causal_link_presentations(topic: GeneratedTopic) -> GeneratedTopic:
@@ -20,10 +17,10 @@ def project_causal_link_presentations(topic: GeneratedTopic) -> GeneratedTopic:
     for entity in topic.entities:
         row = dict(entity)
         causes = [str(value) for value in row.get("cause_event_ids") or () if str(value)]
-        effect_id = _text(row.get("effect_id"))
-        effect_type = _text(row.get("effect_type"))
-        mechanism = _text(row.get("mechanism"))
-        persistence = _text(row.get("persistence"))
+        effect_id = collapsed_text(row.get("effect_id"))
+        effect_type = collapsed_text(row.get("effect_type"))
+        mechanism = collapsed_text(row.get("mechanism"))
+        persistence = collapsed_text(row.get("persistence"))
         start_year = row.get("start_year")
         end_year = row.get("end_year")
         row["causal_presentation"] = {

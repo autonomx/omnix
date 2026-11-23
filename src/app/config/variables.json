@@ -1,5 +1,12 @@
 [
   {
+    "default": "",
+    "description": "Controls agent browser executable path for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "AGENT_BROWSER_EXECUTABLE_PATH",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls apca api key id for trading.",
     "feature": "trading",
@@ -14,11 +21,25 @@
     "type": "string"
   },
   {
-    "default": "false",
-    "description": "Controls ci for kernel.",
-    "feature": "kernel",
+    "default": null,
+    "description": "Controls ci for kernel, rpg.",
+    "feature": "kernel, rpg",
     "name": "CI",
-    "type": "boolean"
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls cmc pro api key for trading.",
+    "feature": "trading",
+    "name": "CMC_PRO_API_KEY",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls coinmarketcap api key for trading.",
+    "feature": "trading",
+    "name": "COINMARKETCAP_API_KEY",
+    "type": "string"
   },
   {
     "default": "",
@@ -32,6 +53,20 @@
     "description": "Controls fred api key for trading.",
     "feature": "trading",
     "name": "FRED_API_KEY",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls google oauth client id for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "GOOGLE_OAUTH_CLIENT_ID",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls google oauth client secret for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "GOOGLE_OAUTH_CLIENT_SECRET",
     "type": "string"
   },
   {
@@ -70,6 +105,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls hf hub offline for providers.",
+    "feature": "providers",
+    "name": "HF_HUB_OFFLINE",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls hf token for image.",
     "feature": "image",
@@ -77,93 +119,16 @@
     "type": "string"
   },
   {
-    "default": "16000",
-    "description": "Controls live speech input sample rate for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_INPUT_SAMPLE_RATE",
-    "type": "string"
-  },
-  {
-    "default": "http://127.0.0.1:1234/v1",
-    "description": "Controls live speech llm base url for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_LLM_BASE_URL",
-    "type": "string"
-  },
-  {
-    "default": "local-model",
-    "description": "Controls live speech llm model for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_LLM_MODEL",
-    "type": "string"
-  },
-  {
-    "default": "fake",
-    "description": "Controls live speech llm provider for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_LLM_PROVIDER",
-    "type": "string"
-  },
-  {
-    "default": "24000",
-    "description": "Controls live speech output sample rate for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_OUTPUT_SAMPLE_RATE",
-    "type": "string"
-  },
-  {
-    "default": "false",
-    "description": "Controls live speech realtime enabled for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_REALTIME_ENABLED",
-    "type": "string"
-  },
-  {
-    "default": "fake",
-    "description": "Controls live speech stt provider for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_STT_PROVIDER",
-    "type": "string"
-  },
-  {
-    "default": "http://127.0.0.1:8000",
-    "description": "Controls live speech stt url for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_STT_URL",
-    "type": "string"
-  },
-  {
-    "default": "fake",
-    "description": "Controls live speech tts provider for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_TTS_PROVIDER",
-    "type": "string"
-  },
-  {
-    "default": "http://127.0.0.1:5101",
-    "description": "Controls live speech tts url for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_TTS_URL",
-    "type": "string"
-  },
-  {
-    "default": "energy",
-    "description": "Controls live speech vad provider for live-speech.",
-    "feature": "live-speech",
-    "name": "LIVE_SPEECH_VAD_PROVIDER",
-    "type": "string"
-  },
-  {
     "default": null,
-    "description": "Controls lm api token for live-speech.",
-    "feature": "live-speech",
+    "description": "Controls lm api token for providers.",
+    "feature": "providers",
     "name": "LM_API_TOKEN",
     "type": "string"
   },
   {
     "default": "",
-    "description": "Controls localappdata for launcher, security.",
-    "feature": "launcher, security",
+    "description": "Controls localappdata for assistant-tools, launcher, security.",
+    "feature": "assistant-tools, launcher, security",
     "name": "LOCALAPPDATA",
     "type": "string"
   },
@@ -179,6 +144,13 @@
     "description": "Controls omnixdesktop db owner password for desktop.",
     "feature": "desktop",
     "name": "OMNIXDESKTOP_DB_OWNER_PASSWORD",
+    "type": "string"
+  },
+  {
+    "default": "2",
+    "description": "Controls agent acceptance retry limit for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT",
     "type": "string"
   },
   {
@@ -203,10 +175,24 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls agent browser allowed domains for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS",
+    "type": "string"
+  },
+  {
     "default": null,
-    "description": "Controls agent browser backend for launcher.",
-    "feature": "launcher",
+    "description": "Controls agent browser backend for assistant-tools, launcher.",
+    "feature": "assistant-tools, launcher",
     "name": "OMNIX_AGENT_BROWSER_BACKEND",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls agent browser command for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_BROWSER_COMMAND",
     "type": "string"
   },
   {
@@ -215,6 +201,13 @@
     "feature": "assistant-tools",
     "name": "OMNIX_AGENT_BROWSER_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": "45",
+    "description": "Controls agent browser timeout seconds for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS",
+    "type": "string"
   },
   {
     "default": null,
@@ -315,6 +308,41 @@
     "type": "string"
   },
   {
+    "default": "15",
+    "description": "Controls agent evidence hermes timeout for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls agent evidence semantic adviser for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER",
+    "type": "string"
+  },
+  {
+    "default": "2",
+    "description": "Controls agent implementation settle retries for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES",
+    "type": "string"
+  },
+  {
+    "default": "20",
+    "description": "Controls agent lease heartbeat interval seconds for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "90",
+    "description": "Controls agent lease heartbeat ttl seconds for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls agent log dir for launcher, observability.",
     "feature": "launcher, observability",
@@ -355,6 +383,13 @@
     "feature": "assistant-tools",
     "name": "OMNIX_AGENT_MCP_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": "",
+    "description": "Controls agent mcp policy path for capabilities.",
+    "feature": "capabilities",
+    "name": "OMNIX_AGENT_MCP_POLICY_PATH",
+    "type": "string"
   },
   {
     "default": "60",
@@ -421,9 +456,72 @@
   },
   {
     "default": "",
+    "description": "Controls agent preview npm command for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_PREVIEW_NPM_COMMAND",
+    "type": "string"
+  },
+  {
+    "default": "web",
+    "description": "Controls agent preview package path for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_PREVIEW_PACKAGE_PATH",
+    "type": "string"
+  },
+  {
+    "default": "20",
+    "description": "Controls agent preview start timeout seconds for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "300",
+    "description": "Controls agent preview ttl seconds for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_AGENT_PREVIEW_TTL_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "120",
+    "description": "Controls agent progress idle timeout seconds for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "2",
+    "description": "Controls agent quality max attempts for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_QUALITY_MAX_ATTEMPTS",
+    "type": "string"
+  },
+  {
+    "default": "30",
+    "description": "Controls agent read retry after seconds for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_READ_RETRY_AFTER_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "",
     "description": "Controls agent reasoning effort for agent-runtime.",
     "feature": "agent-runtime",
     "name": "OMNIX_AGENT_REASONING_EFFORT",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls agent review root for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_REVIEW_ROOT",
+    "type": "string"
+  },
+  {
+    "default": "2",
+    "description": "Controls agent review runtime retries for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_REVIEW_RUNTIME_RETRIES",
     "type": "string"
   },
   {
@@ -431,6 +529,13 @@
     "description": "Controls agent sandbox gateway host for agent-runtime.",
     "feature": "agent-runtime",
     "name": "OMNIX_AGENT_SANDBOX_GATEWAY_HOST",
+    "type": "string"
+  },
+  {
+    "default": "2",
+    "description": "Controls agent self review protocol retries for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES",
     "type": "string"
   },
   {
@@ -525,10 +630,59 @@
     "type": "integer"
   },
   {
+    "default": "2",
+    "description": "Controls agent stalled recovery limit for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_STALLED_RECOVERY_LIMIT",
+    "type": "string"
+  },
+  {
+    "default": "2",
+    "description": "Controls agent validation retries for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_VALIDATION_RETRIES",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls agent workspace roots for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_WORKSPACE_ROOTS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls agent worktree root for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_WORKTREE_ROOT",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls allowed hosts for security.",
+    "feature": "security",
+    "name": "OMNIX_ALLOWED_HOSTS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls allowed origins for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_ALLOWED_ORIGINS",
+    "type": "string"
+  },
+  {
     "default": "",
     "description": "Controls allowed private networks for security.",
     "feature": "security",
     "name": "OMNIX_ALLOWED_PRIVATE_NETWORKS",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls allow lan for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_ALLOW_LAN",
     "type": "string"
   },
   {
@@ -624,6 +778,13 @@
   },
   {
     "default": null,
+    "description": "Controls assistant memory db path for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_ASSISTANT_MEMORY_DB_PATH",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls assistant tools config path for assistant-tools.",
     "feature": "assistant-tools",
     "name": "OMNIX_ASSISTANT_TOOLS_CONFIG_PATH",
@@ -634,6 +795,27 @@
     "description": "Controls assistant tools connect return url for assistant-tools.",
     "feature": "assistant-tools",
     "name": "OMNIX_ASSISTANT_TOOLS_CONNECT_RETURN_URL",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls assistant tools fake calendar for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls assistant tools fake contacts for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_ASSISTANT_TOOLS_FAKE_CONTACTS",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls assistant tools fake gmail for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_ASSISTANT_TOOLS_FAKE_GMAIL",
     "type": "string"
   },
   {
@@ -791,7 +973,7 @@
     "type": "string"
   },
   {
-    "default": "127.0.0.1",
+    "default": "",
     "description": "Controls bind host for kernel.",
     "feature": "kernel",
     "name": "OMNIX_BIND_HOST",
@@ -824,6 +1006,20 @@
     "feature": "tooling",
     "name": "OMNIX_CHARACTER_CLOUD_SYNC_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls character db path for characters.",
+    "feature": "characters",
+    "name": "OMNIX_CHARACTER_DB_PATH",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls character hermes memory dir for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_CHARACTER_HERMES_MEMORY_DIR",
+    "type": "string"
   },
   {
     "default": null,
@@ -876,6 +1072,13 @@
   },
   {
     "default": null,
+    "description": "Controls chat sqlite store enabled for chat.",
+    "feature": "chat",
+    "name": "OMNIX_CHAT_SQLITE_STORE_ENABLED",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls chat workspace id for assistant-memory.",
     "feature": "assistant-memory",
     "name": "OMNIX_CHAT_WORKSPACE_ID",
@@ -896,6 +1099,13 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls companion trusted capabilities for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_COMPANION_TRUSTED_CAPABILITIES",
+    "type": "string"
+  },
+  {
     "default": "omnix",
     "description": "Controls database application name for kernel.",
     "feature": "kernel",
@@ -911,8 +1121,8 @@
   },
   {
     "default": null,
-    "description": "Controls database url for kernel, trading.",
-    "feature": "kernel, trading",
+    "description": "Controls database url for companion-activity, kernel, trading.",
+    "feature": "companion-activity, kernel, trading",
     "name": "OMNIX_DATABASE_URL",
     "type": "string"
   },
@@ -988,8 +1198,8 @@
   },
   {
     "default": "development",
-    "description": "Controls env for gateway, kernel, production.py, security.",
-    "feature": "gateway, kernel, production.py, security",
+    "description": "Controls env for gateway, production.py, security.",
+    "feature": "gateway, production.py, security",
     "name": "OMNIX_ENV",
     "type": "string"
   },
@@ -1037,8 +1247,8 @@
   },
   {
     "default": null,
-    "description": "Controls gateway port for gateway, kernel.",
-    "feature": "gateway, kernel",
+    "description": "Controls gateway port for gateway.",
+    "feature": "gateway",
     "name": "OMNIX_GATEWAY_PORT",
     "type": "string"
   },
@@ -1047,6 +1257,13 @@
     "description": "Controls gateway startup timeout seconds for launcher.",
     "feature": "launcher",
     "name": "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls github real adapter for assistant-tools.",
+    "feature": "assistant-tools",
+    "name": "OMNIX_GITHUB_REAL_ADAPTER",
     "type": "string"
   },
   {
@@ -1086,6 +1303,27 @@
   },
   {
     "default": null,
+    "description": "Controls hermes api key for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_HERMES_API_KEY",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls hermes memory dir for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_HERMES_MEMORY_DIR",
+    "type": "string"
+  },
+  {
+    "default": "http://127.0.0.1:8642",
+    "description": "Controls hermes url for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_HERMES_URL",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls ibkr client id for trading.",
     "feature": "trading",
     "name": "OMNIX_IBKR_CLIENT_ID",
@@ -1099,10 +1337,24 @@
     "type": "string"
   },
   {
+    "default": "5",
+    "description": "Controls ibkr demand reconcile seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_IBKR_DEMAND_RECONCILE_SECONDS",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls ibkr enabled for trading.",
     "feature": "trading",
     "name": "OMNIX_IBKR_ENABLED",
+    "type": "string"
+  },
+  {
+    "default": "0.25",
+    "description": "Controls ibkr historical min interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS",
     "type": "string"
   },
   {
@@ -1117,6 +1369,13 @@
     "description": "Controls ibkr live authority for trading.",
     "feature": "trading",
     "name": "OMNIX_IBKR_LIVE_AUTHORITY",
+    "type": "string"
+  },
+  {
+    "default": "80",
+    "description": "Controls ibkr market data line budget for trading.",
+    "feature": "trading",
+    "name": "OMNIX_IBKR_MARKET_DATA_LINE_BUDGET",
     "type": "string"
   },
   {
@@ -1138,6 +1397,20 @@
     "description": "Controls ibkr port for trading.",
     "feature": "trading",
     "name": "OMNIX_IBKR_PORT",
+    "type": "string"
+  },
+  {
+    "default": "3",
+    "description": "Controls ibkr quote timeout seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_IBKR_QUOTE_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "1",
+    "description": "Controls ibkr reconnect backoff seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS",
     "type": "string"
   },
   {
@@ -1372,6 +1645,13 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls live chat stream attempts for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_CHAT_STREAM_ATTEMPTS",
+    "type": "string"
+  },
+  {
     "default": "",
     "description": "Controls live conversation profile path for characters.",
     "feature": "characters",
@@ -1386,9 +1666,23 @@
     "type": "string"
   },
   {
-    "default": "true",
-    "description": "Controls live lmstudio stateful responses for launcher.",
-    "feature": "launcher",
+    "default": null,
+    "description": "Controls live lmstudio response max continuations for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_LMSTUDIO_RESPONSE_MAX_CONTINUATIONS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls live lmstudio response state ttl seconds for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_LMSTUDIO_RESPONSE_STATE_TTL_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls live lmstudio stateful responses for launcher, live-voice.",
+    "feature": "launcher, live-voice",
     "name": "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES",
     "type": "string"
   },
@@ -1400,10 +1694,31 @@
     "type": "integer"
   },
   {
+    "default": null,
+    "description": "Controls live memory retrieval deadline ms for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls live memory retrieval limit for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT",
+    "type": "string"
+  },
+  {
     "default": "",
     "description": "Controls live pronunciation path for characters.",
     "feature": "characters",
     "name": "OMNIX_LIVE_PRONUNCIATION_PATH",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls live tts allow serial speculation for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION",
     "type": "string"
   },
   {
@@ -1418,6 +1733,13 @@
     "description": "Controls live tts speculative chunk steps for launcher.",
     "feature": "launcher",
     "name": "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls live voice cue root for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_LIVE_VOICE_CUE_ROOT",
     "type": "string"
   },
   {
@@ -1460,6 +1782,13 @@
     "description": "Controls log levels for observability.",
     "feature": "observability",
     "name": "OMNIX_LOG_LEVELS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls max upload bytes for security.",
+    "feature": "security",
+    "name": "OMNIX_MAX_UPLOAD_BYTES",
     "type": "string"
   },
   {
@@ -1519,7 +1848,7 @@
     "type": "boolean"
   },
   {
-    "default": null,
+    "default": "",
     "description": "Controls migration database url for kernel.",
     "feature": "kernel",
     "name": "OMNIX_MIGRATION_DATABASE_URL",
@@ -1653,9 +1982,16 @@
   },
   {
     "default": null,
-    "description": "Controls persistence mode for kernel, trading.",
-    "feature": "kernel, trading",
+    "description": "Controls persistence mode for kernel.",
+    "feature": "kernel",
     "name": "OMNIX_PERSISTENCE_MODE",
+    "type": "string"
+  },
+  {
+    "default": "pi",
+    "description": "Controls pi path for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_PI_PATH",
     "type": "string"
   },
   {
@@ -1708,7 +2044,7 @@
     "type": "string"
   },
   {
-    "default": "4096",
+    "default": null,
     "description": "Controls portrait vram cap mb for tooling.",
     "feature": "tooling",
     "name": "OMNIX_PORTRAIT_VRAM_CAP_MB",
@@ -1736,11 +2072,11 @@
     "type": "string"
   },
   {
-    "default": "false",
-    "description": "Controls require role separation for kernel.",
-    "feature": "kernel",
-    "name": "OMNIX_REQUIRE_ROLE_SEPARATION",
-    "type": "boolean"
+    "default": "",
+    "description": "Controls qwen3 tts model dir for providers.",
+    "feature": "providers",
+    "name": "OMNIX_QWEN3_TTS_MODEL_DIR",
+    "type": "string"
   },
   {
     "default": "1",
@@ -1757,6 +2093,13 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls research source store path for research.",
+    "feature": "research",
+    "name": "OMNIX_RESEARCH_SOURCE_STORE_PATH",
+    "type": "string"
+  },
+  {
     "default": "",
     "description": "Controls resources dir for kernel.",
     "feature": "kernel",
@@ -1768,6 +2111,20 @@
     "description": "Controls role permissions for security.",
     "feature": "security",
     "name": "OMNIX_ROLE_PERMISSIONS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls rpg authorship key file for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_AUTHORSHIP_KEY_FILE",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls rpg authorship signing key for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_AUTHORSHIP_SIGNING_KEY",
     "type": "string"
   },
   {
@@ -1796,6 +2153,13 @@
     "description": "Controls rpg log retention days for rpg.",
     "feature": "rpg",
     "name": "OMNIX_RPG_LOG_RETENTION_DAYS",
+    "type": "string"
+  },
+  {
+    "default": "0",
+    "description": "Controls rpg narrative shadow sample rate for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE",
     "type": "string"
   },
   {
@@ -1831,6 +2195,13 @@
     "description": "Controls rpg world catalog repo for rpg.",
     "feature": "rpg",
     "name": "OMNIX_RPG_WORLD_CATALOG_REPO",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls rpg world generation spool dir for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_WORLD_GENERATION_SPOOL_DIR",
     "type": "string"
   },
   {
@@ -1939,7 +2310,7 @@
     "type": "string"
   },
   {
-    "default": null,
+    "default": "fresh-install-unversioned",
     "description": "Controls software revision for kernel.",
     "feature": "kernel",
     "name": "OMNIX_SOFTWARE_REVISION",
@@ -1986,6 +2357,13 @@
     "feature": "tooling",
     "name": "OMNIX_STT_PORT",
     "type": "integer"
+  },
+  {
+    "default": "0.012",
+    "description": "Controls stt preview tail rms threshold for providers.",
+    "feature": "providers",
+    "name": "OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD",
+    "type": "string"
   },
   {
     "default": "160",
@@ -2037,6 +2415,13 @@
     "type": "string"
   },
   {
+    "default": "15",
+    "description": "Controls trading ai shadow interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_AI_SHADOW_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading ai shadow monitor for trading.",
     "feature": "trading",
@@ -2051,6 +2436,13 @@
     "type": "boolean"
   },
   {
+    "default": "15",
+    "description": "Controls trading ai shadow v2 interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_AI_SHADOW_V2_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading ai shadow v2 monitor for trading.",
     "feature": "trading",
@@ -2063,6 +2455,13 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_AI_SHADOW_V2_MONITOR_IN_TESTS",
     "type": "boolean"
+  },
+  {
+    "default": "15",
+    "description": "Controls trading ai shadow v3 interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_AI_SHADOW_V3_INTERVAL_SECONDS",
+    "type": "string"
   },
   {
     "default": "1",
@@ -2108,6 +2507,27 @@
   },
   {
     "default": "1",
+    "description": "Controls trading breadth monitor for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_BREADTH_MONITOR",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading breadth monitor in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_BREADTH_MONITOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "30",
+    "description": "Controls trading deep recovery shadow interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_DEEP_RECOVERY_SHADOW_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "1",
     "description": "Controls trading deep recovery shadow monitor for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR",
@@ -2140,6 +2560,13 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_DYNAMIC_DISCOVERY",
     "type": "boolean"
+  },
+  {
+    "default": "300",
+    "description": "Controls trading dynamic discovery interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_DYNAMIC_DISCOVERY_INTERVAL_SECONDS",
+    "type": "string"
   },
   {
     "default": "0",
@@ -2205,6 +2632,20 @@
     "type": "string"
   },
   {
+    "default": "1",
+    "description": "Controls trading fundamentals monitor for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_FUNDAMENTALS_MONITOR",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading fundamentals monitor in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_FUNDAMENTALS_MONITOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
     "default": null,
     "description": "Controls trading hermes research enabled for launcher.",
     "feature": "launcher",
@@ -2217,6 +2658,13 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_INTERDAY_LEARNING",
     "type": "boolean"
+  },
+  {
+    "default": "300",
+    "description": "Controls trading interday learning interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS",
+    "type": "string"
   },
   {
     "default": "0",
@@ -2310,6 +2758,13 @@
     "type": "boolean"
   },
   {
+    "default": "30",
+    "description": "Controls trading prospective economic interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading prospective economic monitor for trading.",
     "feature": "trading",
@@ -2387,6 +2842,13 @@
     "type": "boolean"
   },
   {
+    "default": "30",
+    "description": "Controls trading research outcome interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_RESEARCH_OUTCOME_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading research outcome monitor for trading.",
     "feature": "trading",
@@ -2408,6 +2870,20 @@
     "type": "integer"
   },
   {
+    "default": "300",
+    "description": "Controls trading session reconciliation interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_SESSION_RECONCILIATION_INTERVAL_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": "7",
+    "description": "Controls trading session reconciliation max age days for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_SESSION_RECONCILIATION_MAX_AGE_DAYS",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading session reconciliation monitor for trading.",
     "feature": "trading",
@@ -2422,11 +2898,25 @@
     "type": "boolean"
   },
   {
+    "default": "15",
+    "description": "Controls trading session reconciliation retry minutes for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_SESSION_RECONCILIATION_RETRY_MINUTES",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading stoch sweep for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_STOCH_SWEEP",
     "type": "boolean"
+  },
+  {
+    "default": "30",
+    "description": "Controls trading strategy interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS",
+    "type": "string"
   },
   {
     "default": "1",
@@ -2441,6 +2931,13 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS",
     "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading trend continuation shadow for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_TREND_CONTINUATION_SHADOW",
+    "type": "string"
   },
   {
     "default": "1",
@@ -2469,6 +2966,13 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_V2_QUALIFICATION",
     "type": "boolean"
+  },
+  {
+    "default": "300",
+    "description": "Controls trading v2 qualification interval seconds for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS",
+    "type": "string"
   },
   {
     "default": "0",
@@ -2507,8 +3011,8 @@
   },
   {
     "default": null,
-    "description": "Controls tts model dir for launcher.",
-    "feature": "launcher",
+    "description": "Controls tts model dir for launcher, providers.",
+    "feature": "launcher, providers",
     "name": "OMNIX_TTS_MODEL_DIR",
     "type": "string"
   },
@@ -2552,6 +3056,20 @@
     "description": "Controls tts warmup speaker for voice.",
     "feature": "voice",
     "name": "OMNIX_TTS_WARMUP_SPEAKER",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls user locale for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_USER_LOCALE",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls user timezone for assistant-memory, live-voice.",
+    "feature": "assistant-memory, live-voice",
+    "name": "OMNIX_USER_TIMEZONE",
     "type": "string"
   },
   {
@@ -2710,8 +3228,8 @@
   },
   {
     "default": "",
-    "description": "Controls programfiles for launcher.",
-    "feature": "launcher",
+    "description": "Controls programfiles for assistant-tools, launcher.",
+    "feature": "assistant-tools, launcher",
     "name": "PROGRAMFILES",
     "type": "string"
   },
@@ -2741,6 +3259,13 @@
     "description": "Controls systemroot for agent-runtime.",
     "feature": "agent-runtime",
     "name": "SYSTEMROOT",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls transformers offline for providers.",
+    "feature": "providers",
+    "name": "TRANSFORMERS_OFFLINE",
     "type": "string"
   },
   {

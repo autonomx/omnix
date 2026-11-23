@@ -4,14 +4,13 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.jobs.handlers import JobExecutionContext
-from app.jobs.models import JobProgress, JobStatus
+from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry
+from app.jobs.models import JobProgress, JobRecord, JobStatus
 from app.apps.trading.strategy_api import create_trading_strategy_router
 from app.apps.trading.strategy_range_backtest import StrategyRangeBacktestRequest
 from app.apps.trading.strategy_range_backtest_jobs import (
     STRATEGY_RANGE_BACKTEST_JOB,
     StrategyRangeBacktestJobInput,
-    _execute_range_backtest_job,
     create_strategy_range_backtest_request,
 )
 
@@ -96,17 +95,18 @@ def test_range_backtest_job_persists_progress_and_result(monkeypatch) -> None:
         start_date=date(2026, 1, 5),
         end_date=date(2026, 1, 6),
     )
-    job = SimpleNamespace(
-        id="range-job-2",
-        input_payload={
+    job = JobRecord.model_validate({
+        "id": "range-job-2", "module": "trading", "type": STRATEGY_RANGE_BACKTEST_JOB.type, "status": "running",
+        "resource_class": "cpu", "created_at": "2026-01-05T00:00:00+00:00", "updated_at": "2026-01-05T00:00:00+00:00",
+        "input_payload": {
             "strategy_id": "strategy-1",
             "request": request.model_dump(mode="json"),
             "total_sessions": 2,
         },
-    )
-    context = JobExecutionContext(job_store=jobs)
+    })
+    registry = JobHandlerRegistry((STRATEGY_RANGE_BACKTEST_JOB,))
 
-    result = _execute_range_backtest_job(context, job)
+    result = registry.execute(JobExecutionContext(job_store=jobs), job)
 
     assert result.status == JobStatus.COMPLETED
     jobs.update_progress.assert_called_once_with(

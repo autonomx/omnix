@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from .contracts import WorldRevisionDocument
 from .generation_actor_portfolio import actor_portfolio_report, require_valid_actor_portfolio
@@ -33,11 +33,10 @@ from .generation_publication import WorldGenerationPublication, compile_world_ge
 from .generation_resource_dependencies import require_valid_resource_dependencies, resource_dependency_report
 from .generation_spatial_reachability import require_spatial_reachability, spatial_reachability_report
 from .generation_strict_integrity import require_unique_canon_identifiers, strict_integrity_report
+from .graph_audit import GraphAudit
 
 WorldGenerationCompilationMode = Literal["diagnostic_draft", "certified_release"]
 Report = Mapping[str, Any]
-ReportFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], dict[str, Any]]
-RequireFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], Any]
 
 
 @dataclass(frozen=True)
@@ -88,26 +87,26 @@ def _review_rows(run: Mapping[str, Any], explicit: Sequence[Mapping[str, Any]] |
     return [row for row in embedded if isinstance(row, Mapping)]
 
 
-def _graph_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
+def _graph_audits() -> tuple[GraphAudit, ...]:
     """Resolve functions per call so tests can monkeypatch module-owned gates."""
 
     return (
-        ("profile_reference_integrity", profile_reference_report, require_valid_profile_references),
-        ("profile_dossier_quality", profile_dossier_report, require_profile_dossier_quality),
-        ("manifest_reference_closure", manifest_reference_report, require_manifest_reference_closure),
-        ("cross_topic_duplicate_fields", cross_topic_duplicate_field_report, require_no_cross_topic_duplicate_fields),
-        ("mission_portfolio", mission_portfolio_report, require_valid_mission_portfolio),
-        ("entity_identity_contamination", entity_identity_contamination_report, require_no_entity_identity_contamination),
-        ("naming_portfolio", naming_portfolio_report, require_valid_naming_portfolio),
-        ("conflict_portfolio", conflict_portfolio_report, require_valid_conflict_portfolio),
-        ("actor_portfolio", actor_portfolio_report, require_valid_actor_portfolio),
-        ("network_constraints", network_constraint_report, require_valid_network_constraints),
-        ("spatial_reachability", spatial_reachability_report, require_spatial_reachability),
-        ("resource_dependencies", resource_dependency_report, require_valid_resource_dependencies),
-        ("economic_scale", economic_scale_report, require_valid_economic_scale),
-        ("ordinary_life", ordinary_life_report, require_valid_ordinary_life),
-        ("countervailing_powers", countervailing_power_report, require_valid_countervailing_powers),
-        ("local_markets", local_market_report, require_valid_local_markets),
+        GraphAudit("profile_reference_integrity", profile_reference_report, require_valid_profile_references),
+        GraphAudit("profile_dossier_quality", profile_dossier_report, require_profile_dossier_quality),
+        GraphAudit("manifest_reference_closure", manifest_reference_report, require_manifest_reference_closure),
+        GraphAudit("cross_topic_duplicate_fields", cross_topic_duplicate_field_report, require_no_cross_topic_duplicate_fields),
+        GraphAudit("mission_portfolio", mission_portfolio_report, require_valid_mission_portfolio),
+        GraphAudit("entity_identity_contamination", entity_identity_contamination_report, require_no_entity_identity_contamination),
+        GraphAudit("naming_portfolio", naming_portfolio_report, require_valid_naming_portfolio),
+        GraphAudit("conflict_portfolio", conflict_portfolio_report, require_valid_conflict_portfolio),
+        GraphAudit("actor_portfolio", actor_portfolio_report, require_valid_actor_portfolio),
+        GraphAudit("network_constraints", network_constraint_report, require_valid_network_constraints),
+        GraphAudit("spatial_reachability", spatial_reachability_report, require_spatial_reachability),
+        GraphAudit("resource_dependencies", resource_dependency_report, require_valid_resource_dependencies),
+        GraphAudit("economic_scale", economic_scale_report, require_valid_economic_scale),
+        GraphAudit("ordinary_life", ordinary_life_report, require_valid_ordinary_life),
+        GraphAudit("countervailing_powers", countervailing_power_report, require_valid_countervailing_powers),
+        GraphAudit("local_markets", local_market_report, require_valid_local_markets),
         *extension_audits(),
     )
 

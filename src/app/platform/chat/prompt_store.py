@@ -1,5 +1,6 @@
 """Chat store adapter that routes provider generation through PromptAssembly."""
 from __future__ import annotations
+from app.providers.model_route import model_name_of
 from app.config.env import env_str as _env_str
 
 from app.providers import service as provider_service
@@ -14,6 +15,7 @@ from typing import Any
 from app.conversation.contracts import (
     AcceptedChatActivityRecorder,
     LiveVoiceChatPort,
+    is_live_voice_message,
 )
 from app.conversation.sound_tags import strip_sound_tags_from_stream
 
@@ -41,10 +43,10 @@ from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .routing_context import ChatRoutingContext, build_chat_routing_context
 from app.providers.catalog import CONVERSATION_SESSIONS, LIVE_TURNS, provider_supports
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
+from .turn_routing import persist_routing_metadata, route_typed_turn
 from .prompt_window import build_prompt_assembly_with_window
 from .store import (
     ChatSessionStore as JsonChatSessionStore,
-    _model_key,
     _pop_ready_sentences,
     _provider_message,
     _provider_key,
@@ -53,46 +55,6 @@ from app.platform.chat.history_search import HistorySearchService
 from app.platform.chat.compaction import ConversationSummaryRepository
 
 logger = logging.getLogger(__name__)
-
-
-def _persist_routing_metadata(
-    store: Any,
-    session: ChatSession,
-    user_message: ChatMessage,
-) -> None:
-    """Persist the authoritative route without rewriting unrelated turns."""
-
-    keys = (
-        "omnix_chat_routed",
-        "omnix_route",
-        "semantic_intent",
-        "semantic_task",
-        "semantic_compilation",
-        "routing_decision",
-        "request_mode",
-        "turn_plan",
-        "active_objective",
-        "routing_environment",
-    )
-    patch = {key: user_message.metadata[key] for key in keys if key in user_message.metadata}
-    if not patch:
-        return
-    targeted_update = getattr(store, "update_user_message_metadata", None)
-    if callable(targeted_update):
-        targeted_update(
-            session_id=session.id,
-            message_id=user_message.id,
-            metadata=patch,
-        )
-        return
-    stored_session = store.get_session(session.id)
-    if stored_session is None:
-        return
-    for message in stored_session.messages:
-        if message.id == user_message.id:
-            message.metadata.update(patch)
-            store._save_session(stored_session)
-            return
 
 
 def _generalized_stream_events(content: str, metadata: dict[str, Any]):
@@ -152,31 +114,17 @@ def route_typed_stream_boundary(
 
     already_routed = bool(user_message.metadata.get("omnix_chat_routed"))
     if not already_routed:
-        from app.platform.chat.contracts import route_typed_turn as route_typed_chat_turn
-
-        routing_deadline_at = provider_turn_deadline(
-            provider_id,
-            session_provider_id=getattr(session, "provider_id", None),
-            existing_deadline_at=routing_deadline_at,
-        )
-        generalized = route_typed_chat_turn(
+        generalized = route_typed_turn(
+            store,
             session,
             user_message,
             provider_id=provider_id,
             model_id=model_id,
             context_items=context_items,
             routing_deadline_at=routing_deadline_at,
-            routing_context_factory=lambda: store.build_routing_context(
-                session,
-                user_message,
-                context_items or [],
-            ),
         )
-        _persist_routing_metadata(store, session, user_message)
+        persist_routing_metadata(store, session, user_message)
         if generalized is not None:
-            discard_prompt_context = getattr(store, "discard_prompt_context", None)
-            if callable(discard_prompt_context):
-                discard_prompt_context(session, user_message)
             return list(
                 _generalized_stream_events(
                     generalized.content,
@@ -451,7 +399,7 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
     ) -> tuple[PromptAssembly, RenderedPrompt]:
         live_voice = getattr(self, "live_voice_chat_port", None)
-        if live_voice is not None and live_voice.is_live_voice_message(user_message):
+        if live_voice is not None and is_live_voice_message(user_message):
             prompt = live_voice.build_live_voice_prompt(
                 self,
                 session,
@@ -628,7 +576,10 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
         live_voice = getattr(self, "live_voice_chat_port", None)
-        if live_voice is None:
+        if live_voice is not None:
+            route = live_voice.route_reply(user_message, provider_id=provider_id, model_id=model_id, request=request)
+            provider_id, model_id = route.provider_id, route.model_id
+        try:
             return super(ChatSessionStore, self)._generate_reply(
                 session,
                 user_message,
@@ -637,26 +588,10 @@ class ChatSessionStore(JsonChatSessionStore):
                 request=request,
                 context_items=context_items,
             )
-
-        route = live_voice.resolve_generation_route(
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            request=request,
-        )
-        live_voice.log_provider_route(
-            requested_provider_id=request.provider_id or provider_id,
-            route=route,
-            stream=False,
-        )
-        return super(ChatSessionStore, self)._generate_reply(
-            session,
-            user_message,
-            provider_id=route.provider_id,
-            model_id=route.model_id,
-            request=request,
-            context_items=context_items,
-        )
+        finally:
+            # The router may have built this turn's prompt; a reply that did not use it (agent mode, a live
+            # call's own prompt, a failure) must not leave it cached.
+            self.discard_prompt_context(session, user_message)
 
     def append_user_message(
         self,
@@ -749,7 +684,10 @@ class ChatSessionStore(JsonChatSessionStore):
             raise RuntimeError("Chat provider is not available")
         live_voice = getattr(self, "live_voice_chat_port", None)
         if live_voice is None:
-            assembly = self.build_prompt_context(session, user_message, context_items)
+            assembly = (
+                self._pop_cached_prompt_context(session, user_message)
+                or self.build_prompt_context(session, user_message, context_items)
+            )
             rendered = render_prompt_assembly(assembly)
             self._cache_prompt_context(session, user_message, assembly)
             try:
@@ -774,25 +712,26 @@ class ChatSessionStore(JsonChatSessionStore):
                 },
             }
 
-        if live_voice.is_lmstudio_provider(provider):
-            return live_voice.generate_lmstudio_reply(
-                self,
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                provider=provider,
-                routing_deadline_at=routing_deadline_at,
-            )
+        live_reply = live_voice.generate_reply(
+            self,
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            provider=provider,
+            routing_deadline_at=routing_deadline_at,
+        )
+        if live_reply is not None:
+            return live_reply
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
-        model_name = _model_key(model_id)
+        model_name = model_name_of(model_id) or None
         completion_kwargs: dict[str, Any] = (
             {"conversation_id": session.id}
             if provider_supports(provider_id, CONVERSATION_SESSIONS)
             else {}
         )
-        if provider_supports(provider_id, LIVE_TURNS) and live_voice.is_live_voice_message(user_message):
+        if provider_supports(provider_id, LIVE_TURNS) and is_live_voice_message(user_message):
             completion_kwargs["live_turn"] = True
         messages = self._provider_messages_from_rendered(
             session, user_message, rendered, live_turn=bool(completion_kwargs.get("live_turn")))
@@ -847,7 +786,10 @@ class ChatSessionStore(JsonChatSessionStore):
     ):
         live_voice = getattr(self, "live_voice_chat_port", None)
         if live_voice is None:
-            assembly = self.build_prompt_context(session, user_message, context_items)
+            assembly = (
+                self._pop_cached_prompt_context(session, user_message)
+                or self.build_prompt_context(session, user_message, context_items)
+            )
             rendered = render_prompt_assembly(assembly)
             self._cache_prompt_context(session, user_message, assembly)
             try:
@@ -876,16 +818,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 self.discard_prompt_context(session, user_message)
             return
 
-        route = live_voice.resolve_stream_route(
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-        )
-        live_voice.log_provider_route(
-            requested_provider_id=provider_id,
-            route=route,
-            stream=True,
-        )
+        route = live_voice.route_reply(user_message, provider_id=provider_id, model_id=model_id)
         routed_provider_id = route.provider_id
         routed_model_id = route.model_id
 
@@ -915,7 +848,7 @@ class ChatSessionStore(JsonChatSessionStore):
             provider_id=routed_provider_id,
             model_id=routed_model_id,
         )
-        if live_voice.is_live_voice_message(user_message):
+        if is_live_voice_message(user_message):
             # The browser plays a call's sound tags; the saved reply keeps only the words.
             events = strip_sound_tags_from_stream(events)
         yield from events
@@ -981,26 +914,15 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             return
 
-        stream_args = {
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "context_items": context_items,
-            "provider": provider,
-            "routing_deadline_at": routing_deadline_at,
-        }
-        if live_voice.is_lmstudio_provider(provider):
-            yield from live_voice.stream_lmstudio_reply(
-                self,
-                session,
-                user_message,
-                **stream_args,
-            )
-            return
-        yield from live_voice.stream_low_latency_reply(
+        yield from live_voice.stream_reply(
             self,
             session,
             user_message,
-            **stream_args,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            provider=provider,
+            routing_deadline_at=routing_deadline_at,
         )
 
     @staticmethod

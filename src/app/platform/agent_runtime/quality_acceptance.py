@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .run_settlement import complete_run, fail_run
 from .event_queries import all_events, events_of_types, json_object, latest_event
 from .exception_logging import log_recovered_exception
 from .acceptance import evaluate_acceptance
@@ -20,6 +21,7 @@ from .coding_quality import (
 )
 from .coding_quality_repository import PostgresCodingQualityRepository
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentEvent,
     AgentRunCommand,
     AgentRunSnapshot,
@@ -48,7 +50,6 @@ from .task_revision_quality import (
 from typing import Any, TYPE_CHECKING
 from .service import (
     _BLOCKED_SETTLE,
-    _TERMINAL,
     _is_terminal_self_review_message,
     _terminal_message_settles_quality_stage,
 )
@@ -154,7 +155,7 @@ def command_with_context(
                 }
             )
             persist_task_revision_contract(work.connection, service.context, revision)
-            if service._quality_enabled(current.spec) and current.status not in _TERMINAL:
+            if service._quality_enabled(current.spec) and current.status not in TERMINAL_RUN_STATUSES:
                 quality = service.quality_repository_factory(work.connection, service.context)
                 quality.set_stage(
                     current.run_id,
@@ -177,7 +178,7 @@ def command_with_context(
                 stale_reviewers = [
                     child.run_id
                     for child in repository.list_children(current.run_id)
-                    if child.spec.profile == "coding-reviewer" and child.status not in _TERMINAL
+                    if child.spec.profile == "coding-reviewer" and child.status not in TERMINAL_RUN_STATUSES
                 ]
         work.commit()
 
@@ -257,7 +258,7 @@ def _record_workspace_tool_result(service: AgentRunService, event: AgentEvent) -
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
         current = repository.get_run(event.run_id)
-        if current is None or current.status in _TERMINAL or not service._quality_enabled(current.spec):
+        if current is None or current.status in TERMINAL_RUN_STATUSES or not service._quality_enabled(current.spec):
             log_agent_activity(
                 "quality.tool_result.ignored",
                 category="quality",
@@ -515,9 +516,9 @@ def _persist_runtime_event(service: AgentRunService, event: AgentEvent) -> None:
                 run_id=event.run_id,
                 fields={"event_type": event.event_type, "status": current.status},
             )
-            if current.status in _TERMINAL or current.status in _BLOCKED_SETTLE:
+            if current.status in TERMINAL_RUN_STATUSES or current.status in _BLOCKED_SETTLE:
                 work.commit()
-                if current.status in _TERMINAL:
+                if current.status in TERMINAL_RUN_STATUSES:
                     service._close_terminal_runtime(event.run_id)
                 return
             repository.update_state(
@@ -540,7 +541,7 @@ def _persist_runtime_event(service: AgentRunService, event: AgentEvent) -> None:
                     current = repository.get_run(event.run_id)
                     post_action = (
                         service._advance_quality_on_settle(repository, current)
-                        if current is not None and current.status not in _TERMINAL
+                        if current is not None and current.status not in TERMINAL_RUN_STATUSES
                         else None
                     )
                     work.commit()
@@ -703,7 +704,7 @@ def _acceptance_failures(current, repository, quality_failures, result, workspac
         child for child in repository.list_children(current.run_id)
         if child.spec.profile != "coding-reviewer"
     ]
-    children_terminal = all(child.status in _TERMINAL for child in non_reviewer_children)
+    children_terminal = all(child.status in TERMINAL_RUN_STATUSES for child in non_reviewer_children)
     child_failed = any(child.status in {"failed", "cancelled"} for child in non_reviewer_children)
     failures = list(result.failures) + list(quality_failures)
     if workspace_changed_after_review:
@@ -787,13 +788,7 @@ def _complete_accepted_run(promotion, repository, current, service, quality, rev
         workspace_state_id=state.state_id if state else None,
     )
     latest = repository.get_run(current.run_id) or latest
-    repository.update_state(
-        current.run_id,
-        expected_revision=latest.revision,
-        status="completed",
-        worker_id=service.worker_id,
-        last_error=None,
-    )
+    complete_run(repository, current.run_id, expected_revision=latest.revision, worker_id=service.worker_id)
     return latest
 
 
@@ -805,13 +800,12 @@ def _settle_failed_acceptance(current, latest, repository, service, failures, re
         # must not inject an automatic repair prompt and take control of
         # Pi's implementation loop again.
         latest = repository.get_run(current.run_id) or latest
-        repository.update_state(
+        fail_run(
+            repository,
             current.run_id,
             expected_revision=latest.revision,
-            status="failed",
-            desired_state="cancelled",
+            error="acceptance_failed:" + ",".join(failures),
             worker_id=service.worker_id,
-            last_error=("acceptance_failed:" + ",".join(failures))[:2000],
         )
         return
 
@@ -845,12 +839,11 @@ def _settle_failed_acceptance(current, latest, repository, service, failures, re
         return
 
     latest = repository.get_run(current.run_id) or latest
-    repository.update_state(
+    fail_run(
+        repository,
         current.run_id,
         expected_revision=latest.revision,
-        status="failed",
-        desired_state="cancelled",
+        error="acceptance_failed:" + ",".join(failures),
         worker_id=service.worker_id,
-        last_error=("acceptance_failed:" + ",".join(failures))[:2000],
     )
     return _CONTINUE

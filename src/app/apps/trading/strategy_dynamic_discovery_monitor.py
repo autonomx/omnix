@@ -7,7 +7,7 @@ from datetime import datetime, time, timezone
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .strategy_discovery_acquisition import (
     CausalMarketObservation,
     install_default_discovery_sources,
@@ -17,20 +17,13 @@ from .strategy_dynamic_discovery import (
     INTERDAY_TRADING_STRATEGY_ID,
 )
 from .strategy_repository import TradingStrategyRepository
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN
 from typing import Any
 
 _STATE_KEY = "_omnix_interday_dynamic_discovery_monitor"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def dynamic_discovery_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_DYNAMIC_DISCOVERY", "1")
+dynamic_discovery_monitor_enabled = monitor_switch("OMNIX_TRADING_DYNAMIC_DISCOVERY")
 
 
 def _interval_seconds() -> float:
@@ -46,7 +39,7 @@ def _inside_discovery_window(now: datetime) -> bool:
     if local.weekday() >= 5:
         return False
     clock = local.time().replace(tzinfo=None)
-    return time(4, 0) <= clock <= time(16, 5)
+    return PREMARKET_OPEN <= clock <= time(16, 5)
 
 
 async def run_dynamic_discovery_once(

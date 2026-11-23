@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.config.env import environment
+from app.persistence.runtime import is_legacy_test_persistence
 from app.config.product import product_name
 
 """Idempotent startup provisioning for the managed interday SHADOW profile."""
@@ -71,7 +72,7 @@ def _flag(name: str, default: str) -> bool:
 def managed_finviz_shadow_autoprovision_enabled() -> bool:
     """Production defaults on; legacy tests remain opt-in."""
 
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if is_legacy_test_persistence():
         return _flag("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION", "1")
 

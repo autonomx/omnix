@@ -27,13 +27,13 @@ import subprocess
 import sys
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.config.env import env_str
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
-from app.apps.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import EASTERN, PREMARKET_OPEN, REGULAR_OPEN, is_trading_day
 
 from .prospective_gap_runtime import ProspectiveClimatologyState, SchedulerPremarketHandoff
 
@@ -232,10 +232,8 @@ def previous_session(session_date: date) -> date:
     """The last U.S. equity trading day before ``session_date``."""
     from datetime import timedelta
 
-    from app.apps.trading.us_equity_calendar import regular_holidays
-
     day = session_date - timedelta(days=1)
-    while day.weekday() >= 5 or day in regular_holidays(day.year):
+    while not is_trading_day(day):
         day -= timedelta(days=1)
     return day
 
@@ -268,7 +266,7 @@ def import_todays_handoff_from_github(
 ) -> bool:
     """Import today's inputs during the premarket window; True when a handoff was imported."""
     current = now().astimezone(EASTERN)
-    if not time(4, 0) <= current.time() <= time(9, 30):
+    if not PREMARKET_OPEN <= current.time() <= REGULAR_OPEN:
         return False
     inputs = inputs or ProspectiveGapInputs()
     try:

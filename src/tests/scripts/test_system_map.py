@@ -27,7 +27,6 @@ def test_feature_edges_are_the_ones_feature_py_declares() -> None:
     assert ("live_voice", "chat", "depends_on") in drawn
     assert ("trading", "research", "uses") in drawn
     mounted = {e["to"] for e in the_map["edges"] if e["kind"] == "mounts"}
-    assert "live_speech" not in mounted  # opt-in: mounted only when named
     assert "chat" in mounted
 
 

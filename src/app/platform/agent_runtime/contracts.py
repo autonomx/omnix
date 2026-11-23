@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, NewType, Protocol
 import secrets
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from app.capabilities.approval_policy import ApprovalPolicy
 from app.runtime.ports import Port
 
 AgentRunStatus = Literal[
@@ -25,14 +26,11 @@ AgentRunStatus = Literal[
     "completed",
     "failed",
 ]
+TERMINAL_RUN_STATUSES: frozenset[AgentRunStatus] = frozenset({"completed", "failed", "cancelled"})
+"""A run in one of these states never runs again; only a new run (or a superseding revision) can."""
 AgentDesiredState = Literal["running", "paused", "cancelled"]
 AgentCommandType = Literal["steer", "pause", "resume", "cancel", "approve", "reject"]
-AgentApprovalPolicy = Literal[
-    "allow_automatic",
-    "ask_sensitive",
-    "always_ask",
-    "disabled",
-]
+AgentApprovalPolicy = ApprovalPolicy
 AgentEventType = Literal[
     "run.created",
     "run.started",
@@ -649,6 +647,11 @@ class AgentRunSpec(BaseModel):
     acceptance_plan: AcceptancePlan | None = None
 
 
+# A spec the authority checks have seen (``run_issuance``): the only kind a new run is created with. The type is
+# for the type checker; at run time it is the same ``AgentRunSpec``.
+IssuedRunSpec = NewType("IssuedRunSpec", AgentRunSpec)
+
+
 class AgentEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -746,6 +749,10 @@ class AgentRunSnapshot(BaseModel):
     last_error: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in TERMINAL_RUN_STATUSES
 
 
 class WorkerLease(BaseModel):

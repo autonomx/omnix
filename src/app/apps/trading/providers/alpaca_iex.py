@@ -4,7 +4,7 @@ from app.config.env import environment
 
 import re
 from collections.abc import Callable
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -16,7 +16,7 @@ from app.apps.trading.execution import (
     execution_observation_from_quote,
 )
 from app.apps.trading.models import AdjustmentMode, MarketBar, ProviderBinding
-from app.apps.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.us_equity_calendar import PREMARKET_OPEN, us_equity_session
 
 from .base import ProviderAdapter
 from .alpaca_iex_status import default_alpaca_iex_status_cache
@@ -27,7 +27,6 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
 ALPACA_IEX_PARTIAL_MARKET = True
-_EXTENDED_SESSION_OPEN = time(4, 0)
 _INDICATOR_BAR_LIMIT = 1000
 
 
@@ -262,7 +261,7 @@ class AlpacaIexExecutionProvider(ProviderAdapter):
         local_cutoff = cutoff.astimezone(_ET)
         session_start = datetime.combine(
             local_cutoff.date(),
-            _EXTENDED_SESSION_OPEN,
+            PREMARKET_OPEN,
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         if cutoff <= session_start:

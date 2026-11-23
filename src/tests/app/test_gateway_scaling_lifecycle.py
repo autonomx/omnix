@@ -153,7 +153,9 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
     from concurrent.futures import ThreadPoolExecutor
 
     permit_slots = threading.BoundedSemaphore(2)
-    monkeypatch.setattr(jobs, "device_permit_slot", lambda *_args, **_kwargs: permit_slots)
+    from app.providers import llm_admission
+
+    monkeypatch.setattr(llm_admission, "device_permit_slot", lambda *_args, **_kwargs: permit_slots)
     entered = []
     both_entered, release = threading.Event(), threading.Event()
     state = SimpleNamespace(status=jobs.JobStatus.RUNNING)

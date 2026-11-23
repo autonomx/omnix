@@ -25,7 +25,7 @@ from app.platform.agent_runtime.quality_recovery import (
     reconcile_orphaned_quality_reviews,
 )
 from app.platform.agent_runtime.repository import PostgresAgentRunRepository
-from app.platform.agent_runtime.review_orchestration_core import consume_terminal_reviewer_in_repository
+from app.platform.agent_runtime.review_orchestration import consume_terminal_reviewer_in_repository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity

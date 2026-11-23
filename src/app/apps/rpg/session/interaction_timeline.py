@@ -6,6 +6,7 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
 
@@ -25,7 +26,7 @@ def commit_turn_interaction(
     runtime = _dict(_sections.runtime_state_of(session))
     timeline = _dict(runtime.get("interaction_timeline"))
     events = [deepcopy(item) for item in _list(timeline.get("events")) if isinstance(item, dict)]
-    resolved_submission_id = _text(submission_id or result.get("submission_id"))
+    resolved_submission_id = stripped_text(submission_id or result.get("submission_id"))
 
     replay = _find_existing_event(events, resolved_submission_id)
     if replay is not None:
@@ -60,15 +61,15 @@ def commit_turn_interaction(
             "simulation_tick": tick,
             "turn_id": turn_id,
             "submission_id": resolved_submission_id,
-            "trace_id": _text(trace_id or result.get("trace_id")),
+            "trace_id": stripped_text(trace_id or result.get("trace_id")),
             "kind": _interaction_kind(sources, visible),
             "stateful": stateful,
-            "player_input": _text(player_input),
+            "player_input": stripped_text(player_input),
             "visible_response": _bounded_visible_response(visible),
             "speaker_id": _speaker_field(visible, "speaker_id"),
             "speaker": _speaker_field(visible, "speaker"),
             "npc_line": _speaker_field(visible, "text"),
-            "narration": _text(visible.get("narration")),
+            "narration": stripped_text(visible.get("narration")),
             "action_type": _first_text(sources, "action_type", "semantic_action_type"),
             "semantic_family": _first_text(sources, "semantic_family"),
             "created_at": utc_now().isoformat(),
@@ -116,7 +117,7 @@ def _find_existing_event(events: list[dict[str, Any]], submission_id: str) -> di
     if not submission_id:
         return None
     for event in reversed(events):
-        if _text(event.get("submission_id")) == submission_id:
+        if stripped_text(event.get("submission_id")) == submission_id:
             return deepcopy(event)
     return None
 
@@ -129,16 +130,16 @@ def _bounded_visible_response(visible: dict[str, Any]) -> dict[str, Any]:
         messages.append(
             _drop_empty(
                 {
-                    "kind": _text(item.get("kind")),
-                    "speaker_id": _text(item.get("speaker_id")),
-                    "speaker": _text(item.get("speaker")),
+                    "kind": stripped_text(item.get("kind")),
+                    "speaker_id": stripped_text(item.get("speaker_id")),
+                    "speaker": stripped_text(item.get("speaker")),
                     "text": _clip(item.get("text"), 2_000),
                 }
             )
         )
     return _drop_empty(
         {
-            "format_version": _text(visible.get("format_version")),
+            "format_version": stripped_text(visible.get("format_version")),
             "narration": _clip(visible.get("narration"), 2_000),
             "messages": messages,
             "plain_text": _clip(visible.get("plain_text"), 4_000),
@@ -148,8 +149,8 @@ def _bounded_visible_response(visible: dict[str, Any]) -> dict[str, Any]:
 
 def _speaker_field(visible: dict[str, Any], key: str) -> str:
     for item in _list(visible.get("messages")):
-        if isinstance(item, dict) and _text(item.get("kind")) == "npc_dialogue":
-            return _text(item.get(key))
+        if isinstance(item, dict) and stripped_text(item.get("kind")) == "npc_dialogue":
+            return stripped_text(item.get(key))
     return ""
 
 
@@ -172,7 +173,7 @@ def _result_sources(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
 def _first_text(sources: tuple[dict[str, Any], ...], *keys: str) -> str:
     for source in sources:
         for key in keys:
-            value = _text(source.get(key))
+            value = stripped_text(source.get(key))
             if value:
                 return value
     return ""
@@ -213,7 +214,7 @@ def _safe_int(value: Any) -> int:
 
 
 def _clip(value: Any, limit: int) -> str:
-    return _text(value)[:limit]
+    return stripped_text(value)[:limit]
 
 
 def _drop_empty(value: dict[str, Any]) -> dict[str, Any]:
@@ -232,5 +233,3 @@ def _list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""

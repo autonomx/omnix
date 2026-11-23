@@ -11,6 +11,7 @@ from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .canonical import optional_decimal
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .strategies.models import GapPullbackConfig
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
@@ -202,16 +203,6 @@ def v2_qualification_profile_fingerprint(
     return current if current in V2_QUALIFIABLE_PROFILE_FINGERPRINTS else None
 
 
-def _decimal(value: object) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
-
-
 def _session_date(event: StrategyEvent) -> date | None:
     raw = event.payload.get("session_date")
     if raw:
@@ -269,7 +260,7 @@ def _is_canonical_replay(
         session is not None
         and session in clean_sessions
         and session >= V2_PROSPECTIVE_START
-        and _decimal(event.payload.get("r_result")) is not None
+        and optional_decimal(event.payload.get("r_result")) is not None
     )
 
 
@@ -391,7 +382,7 @@ def evaluate_v2_prospective_qualification(
             used_live.add(candidate.event_id)
             matched.append(replay)
 
-    values = [_decimal(event.payload.get("r_result")) for event in matched]
+    values = [optional_decimal(event.payload.get("r_result")) for event in matched]
     r_values = [value for value in values if value is not None]
     expectancy = sum(r_values, Decimal("0")) / Decimal(len(r_values)) if r_values else None
     lcb = _one_sided_90_lcb(r_values)

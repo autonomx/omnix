@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { voiceApiClient, type SpeechModelListResponse, type SpeechModelStatus } from './api/voiceClient';
+import { jobKeys } from '../../api/jobs';
 
 export const MODELS_QUERY_KEY = ['voice', 'speech-models'] as const;
 
@@ -115,7 +116,7 @@ export function SpeechModelsPanel() {
       const verb = action === 'install' ? 'Installing' : action === 'update' ? 'Updating' : 'Removing';
       setMessage(job.status === 'failed' ? `${model.label}: ${job.error?.message ?? 'the job failed'}` : `${verb} ${model.label}; it shows here when the job finishes.`);
       await queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY });
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      await queryClient.invalidateQueries({ queryKey: jobKeys.all });
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : 'The model job could not be queued.'),
   });

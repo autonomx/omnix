@@ -16,6 +16,7 @@ from .models import (
     ToolRiskLevel,
 )
 from .validation import is_valid_action_id, is_valid_tool_id
+from app.capabilities.approval_policy import default_approval_policy
 
 
 def default_approval_policy_for_action(
@@ -25,13 +26,9 @@ def default_approval_policy_for_action(
     requires_confirmation: bool = False,
     is_destructive: bool = False,
 ) -> ApprovalPolicy:
-    if is_destructive or category == "delete":
-        return "always_ask"
-    if requires_confirmation or risk_level == "high":
-        return "always_ask"
-    if category in {"write", "execute"} or risk_level == "medium":
-        return "ask_sensitive"
-    return "allow_automatic"
+    return default_approval_policy(
+        effect=category, risk=risk_level, needs_confirmation=requires_confirmation, destructive=is_destructive
+    )
 
 
 def tool_action(

@@ -51,10 +51,15 @@ def setting_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def route_model_name(value: Any) -> str:
-    """The model name a provider expects, from a routing override's model: the settings list stores ``llm:<provider>:<model>``."""
-    text = setting_text(value)
-    return text.split(":", 2)[-1] if text.startswith("llm:") else text
+def task_override(profile: SettingsProfile, key: str) -> tuple[str, str]:
+    """The provider and model text a routing override stores for ``key``; empty when it names none.
+
+    ``app.providers.model_route.task_override_route`` parses it; settings is a kernel package and does not.
+    """
+    row = profile.global_settings.routing.task_overrides.get(key)
+    if not isinstance(row, dict):
+        return "", ""
+    return _override_value(row, "providerId", "provider_id"), _override_value(row, "modelId", "model_id")
 
 
 def _missing(value: Any) -> bool:
@@ -77,7 +82,7 @@ def _override_value(row: dict[str, Any], camel: str, snake: str) -> str:
 
 
 def _configured_provider_model(profile: SettingsProfile, provider_id: str) -> str:
-    provider_key = setting_text(provider_id).removeprefix("llm:")
+    provider_key = setting_text(provider_id).casefold().removeprefix("llm:")
     config_by_provider = {
         "lmstudio": profile.provider_configs.lmstudio.model,
         "openrouter": profile.provider_configs.openrouter.model,

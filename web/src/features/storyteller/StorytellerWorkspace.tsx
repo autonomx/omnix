@@ -24,6 +24,7 @@ import { useStoryPersistence } from './useStoryPersistence';
 import { useStoryRequests } from './useStoryRequests';
 import { storyJobRequest } from './storyModel';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
+import { jobKeys } from '../../api/jobs';
 
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -71,7 +72,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         setStoryModeResponse('');
         setWorkspaceMode('story');
       }
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      await queryClient.invalidateQueries({ queryKey: jobKeys.all });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
     },
   });

@@ -9,10 +9,11 @@ logger = logging.getLogger(__name__)
 import hashlib
 import json
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
 
+from .canonical import require_utc
 from . import strategy_dynamic_discovery as dd
 from . import strategy_dynamic_discovery_runtime as runtime
 from .strategy_repository import TradingStrategyRepository
@@ -23,12 +24,6 @@ _BASE_APPLY_SCAN = runtime.apply_discovery_scan
 _BASE_UNION = runtime._union_complete
 _BASE_STRICT_QUALIFICATION = runtime._complete_evaluate_shadow_qualification
 _BASE_COMPLETE_CHARACTERIZATION = runtime._complete_opportunity_characterization
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -63,7 +58,7 @@ def _apply_scan_refined(
     )
     latest_by_symbol: dict[str, datetime] = {}
     for row in observations:
-        if row.session_date != session_date or row.observed_at > _utc(watermark):
+        if row.session_date != session_date or row.observed_at > require_utc(watermark):
             continue
         current = latest_by_symbol.get(row.instrument_id)
         if current is None or row.observed_at > current:
@@ -93,7 +88,7 @@ async def _run_dynamic_discovery_once_refined(
     """Reject explicit future evidence before touching repository state."""
 
     if observations is not None and now is not None:
-        watermark = _utc(now)
+        watermark = require_utc(now)
         for row in observations:
             if row.observed_at > watermark:
                 raise ValueError("live_discovery_observation_cannot_be_future_dated")
@@ -592,9 +587,9 @@ def _replay_captured_scans(
         if observation.observed_at.astimezone(_ET).date() != session_date:
             continue
         if isinstance(watermark_raw, datetime):
-            watermark = _utc(watermark_raw)
+            watermark = require_utc(watermark_raw)
         elif isinstance(watermark_raw, str) and watermark_raw:
-            watermark = _utc(
+            watermark = require_utc(
                 datetime.fromisoformat(watermark_raw.replace("Z", "+00:00"))
             )
         else:

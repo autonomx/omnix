@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.apps.trading import strategy_stoch_rsi_5m as stoch_module
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategy_monitor import TradingStrategyMonitor
@@ -16,7 +17,7 @@ from app.apps.trading.strategies.models import StochRsi5mConfig
 INSTRUMENT = "equity:NASDAQ:TEST"
 SESSION_DATE = date(2026, 9, 10)
 START = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)
-HISTORY_START = datetime(2026, 9, 9, 13, 30, tzinfo=timezone.utc)
+AFTER_LAST_BAR = START + timedelta(minutes=5 * 60, seconds=30)
 
 
 class MemoryRepository:
@@ -34,7 +35,7 @@ class MemoryRepository:
         return _universe()
 
 
-class FixtureMarketService:
+class FixtureMarketService(RecoveringMarketService):
     def __init__(self) -> None:
         self.calls = 0
 
@@ -44,12 +45,10 @@ class FixtureMarketService:
         assert limit == 500
         self.calls += 1
         bars = []
+        # Sixty finalized regular-session 5m bars, the whole tape before the clock
+        # (the shared recovery keeps only the current session).
         for index in range(60):
-            start = (
-                HISTORY_START + timedelta(minutes=5 * index)
-                if index < 50
-                else START + timedelta(minutes=5 * (index - 50))
-            )
+            start = START + timedelta(minutes=5 * index)
             bars.append(
                 MarketBar(
                     instrument_id=INSTRUMENT,
@@ -132,7 +131,7 @@ async def test_monitor_persists_stoch_rsi_evidence_without_execution(
         _config(),
         repository,
         market,
-        now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
+        now_utc=AFTER_LAST_BAR,
     )
 
     assert market.calls == 1
@@ -189,7 +188,7 @@ async def test_monitor_uses_early_single_evaluator_for_early_single_child(
         document,
         repository,
         FixtureMarketService(),
-        now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
+        now_utc=AFTER_LAST_BAR,
     )
 
     assert calls == ["early_single"]

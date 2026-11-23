@@ -13,6 +13,8 @@ from app.apps.trading.providers import alpaca_iex
 from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
 from app.apps.trading.strategy_ai_shadow_v2_monitor import TradingAIShadowV2Monitor
 from app.apps.trading.strategy_outcome_quality import outcome_is_valid as _outcome_is_valid
+from app.apps.trading.market_data_recovery import reconcile_recovery
+from app.apps.trading.models import MarketBar
 from app.apps.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
@@ -57,6 +59,51 @@ def _bar(start: datetime, *, price: str = "10"):
         close=Decimal(price),
         volume=Decimal("100"),
     )
+
+
+def _market_bar(start: datetime, *, price: str = "10", provider: str = "test") -> MarketBar:
+    return MarketBar(
+        instrument_id="equity:NASDAQ:ACVA",
+        interval="1m",
+        start_time=start,
+        end_time=start + timedelta(minutes=1),
+        open=Decimal(price),
+        high=Decimal(price),
+        low=Decimal(price),
+        close=Decimal(price),
+        volume=Decimal("100"),
+        is_final=True,
+        session="regular",
+        provider=provider,
+        received_at=start + timedelta(minutes=1),
+    )
+
+
+class _RecoveryLadderDelegate:
+    """After the open the proxy reads the service's shared recovery, which owns the fallback ladder."""
+
+    def __init__(self, fallback, *, partial_market: bool = False):
+        self.fallback = fallback
+        self.partial_market = partial_market
+
+    def recovered_bars(self, instrument_id, interval, limit=500, binding_id=None, *, session_date, as_of, **_kwargs):
+        return reconcile_recovery(
+            instrument_id=instrument_id,
+            interval=interval,
+            session_date=session_date,
+            as_of=as_of,
+            primary_bars=(),
+            fallback_bars=self.fallback,
+            primary_provider="yahoo",
+            fallback_provider="alpaca_iex",
+            fallback_attempted=True,
+            primary_error="RuntimeError: Yahoo returned no bars",
+            partial_market_fallback=self.partial_market,
+        )
+
+    def bars(self, *_args, **_kwargs):
+        raise AssertionError("after the open the proxy must not ask configured history directly")
+
 
 
 def _snapshot(*, quote_time: datetime, trade_time: datetime, bid: str, ask: str):
@@ -169,48 +216,36 @@ def test_shadow_proxy_drops_previous_session_bars_before_open() -> None:
     assert response.bars == []
 
 
-def test_shadow_proxy_recovers_primary_history_exception_with_complete_iex_prefix() -> None:
+def test_shadow_proxy_does_not_serve_an_iex_only_recovery_of_a_primary_failure() -> None:
     opening = datetime(2026, 9, 11, 13, 30, tzinfo=timezone.utc)
     current_session = [
-        _bar(opening + timedelta(minutes=offset), price="10.42")
+        _market_bar(opening + timedelta(minutes=offset), price="10.42", provider="alpaca_iex")
         for offset in range(81)
     ]
 
-    class Delegate:
-        def bars(self, *_args, **_kwargs):
-            raise RuntimeError("Yahoo returned no bars")
-
-        def execution_indicator_bars(self, *_args, **_kwargs):
-            return current_session
-
     observed = datetime(2026, 9, 11, 14, 51, 30, tzinfo=timezone.utc)
     proxy = _CurrentSessionMarketDataProxy(
-        Delegate(),
+        _RecoveryLadderDelegate(current_session, partial_market=True),
         session_date=datetime(2026, 9, 11, tzinfo=timezone.utc).date(),
         observed_at=observed,
     )
 
     response = proxy.bars("equity:NASDAQ:ACVA", "1m", 500, "binding")
 
-    assert response.bars == current_session
+    # The service's ladder recovered the whole prefix from IEX, but partial-market
+    # prices and volume are never a shadow strategy's OHLC/volume dependency.
+    assert response.bars == []
 
 
 def test_shadow_proxy_keeps_incomplete_fallback_non_actionable() -> None:
     partial = [
-        _bar(datetime(2026, 9, 11, 13, 30, tzinfo=timezone.utc)),
-        _bar(datetime(2026, 9, 11, 13, 32, tzinfo=timezone.utc)),
+        _market_bar(datetime(2026, 9, 11, 13, 30, tzinfo=timezone.utc)),
+        _market_bar(datetime(2026, 9, 11, 13, 32, tzinfo=timezone.utc)),
     ]
-
-    class Delegate:
-        def bars(self, *_args, **_kwargs):
-            raise RuntimeError("Yahoo returned no bars")
-
-        def execution_indicator_bars(self, *_args, **_kwargs):
-            return partial
 
     observed = datetime(2026, 9, 11, 13, 33, 30, tzinfo=timezone.utc)
     proxy = _CurrentSessionMarketDataProxy(
-        Delegate(),
+        _RecoveryLadderDelegate(partial),
         session_date=datetime(2026, 9, 11, tzinfo=timezone.utc).date(),
         observed_at=observed,
     )

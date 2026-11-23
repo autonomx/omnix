@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.providers import ChatMessage
+from app.providers.base import configured_reasoning_effort
 from app.providers.service import get_provider
 from app.settings.access import load_settings
 
@@ -125,12 +126,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], dict[str, Any]], dict
                       load_settings().get("provider", "configured"))
     provider_config = getattr(provider, "config", None)
     configured_model = str(getattr(provider_config, "model", "") or "") or None
-    extra_params = getattr(provider_config, "extra_params", {}) or {}
-    reasoning_effort = str(
-        getattr(provider, "reasoning_effort", "")
-        or extra_params.get("reasoning_effort")
-        or ""
-    ).strip()
+    reasoning_effort = configured_reasoning_effort(provider)
     details: dict[str, Any] = {
         "mode": "configured_llm_classifier", "provider_id": provider_id,
         "model": configured_model, "version": "audiobook-classifier-v8",

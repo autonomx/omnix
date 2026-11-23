@@ -34,6 +34,7 @@ from .world_play_sections import (
     unknown_creatures,
     with_play_sections,
 )
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 class PlaySectionsInvalidError(ValueError):
@@ -42,10 +43,6 @@ class PlaySectionsInvalidError(ValueError):
     def __init__(self, findings: tuple[str, ...]):
         super().__init__("world_play_sections_invalid")
         self.findings = findings
-
-
-def _text(value: Any) -> str:
-    return str(value or "").strip()
 
 
 def _revision(row: Mapping[str, Any] | None) -> WorldRevisionDocument | None:
@@ -69,9 +66,9 @@ def _as_played(document: Mapping[str, Any]) -> str:
     """A draft's hash as it plays: a revision lists its creatures and quests in the lore's order, the draft in the
     author's, and a row that says nothing of how it fights (or how it is done) is no row at all."""
     bestiary = sorted((row for row in document.get("bestiary") or () if _plays(row)),
-                      key=lambda row: _text(dict(row).get("id")))
+                      key=lambda row: clean_text(dict(row).get("id")))
     quests = sorted((row for row in document.get("quests") or () if _quest_plays(row)),
-                    key=lambda row: _text(dict(row).get("id")))
+                    key=lambda row: clean_text(dict(row).get("id")))
     return canonical_hash({**dict(document), "bestiary": bestiary, "quests": quests})
 
 
@@ -88,8 +85,8 @@ def _references(revision: WorldRevisionDocument | None) -> dict[str, list[dict[s
 
     def named(rows: Any) -> list[dict[str, str]]:
         return sorted(
-            ({"id": _text(row.get("id")), "name": _text(row.get("name")) or _text(row.get("id"))}
-             for row in rows if _text(row.get("id"))),
+            ({"id": clean_text(row.get("id")), "name": clean_text(row.get("name")) or clean_text(row.get("id"))}
+             for row in rows if clean_text(row.get("id"))),
             key=lambda row: (row["name"].casefold(), row["id"]),
         )
 
@@ -120,7 +117,7 @@ def _view(world: Mapping[str, Any], revision: WorldRevisionDocument | None) -> d
     )
     return {
         "ok": True,
-        "world_id": _text(world.get("id")),
+        "world_id": clean_text(world.get("id")),
         "document": draft.model_dump(mode="json"),  # every field, as the published contract types it
         "content_hash": canonical_hash(document),
         "saved": stored is not None,
@@ -189,7 +186,7 @@ def draft_play_sections_from_lore(world_id: str, *, database: Any | None = None)
     revision = _revision(latest)
     if revision is None:
         raise ValueError(f"world_play_sections_need_a_published_revision:{world_id}")
-    start = _text(dict(world.get("metadata") or {}).get("starting_location"))
+    start = clean_text(dict(world.get("metadata") or {}).get("starting_location"))
     drafted = PlaySectionsDraft.model_validate(generate_play_sections(revision, start_location_id=start))
     return {"ok": True, "world_id": world_id, "document": drafted.model_dump(mode="json")}
 
@@ -209,7 +206,7 @@ def publish_play_sections(world_id: str, *, database: Any | None = None) -> dict
         pins = []
         for scenario in work.world_library.iter_scenarios(context, world_id=world_id):
             revisions = work.world_library.list_scenario_revisions(context, str(scenario["id"]))
-            start = _text(dict(revisions[0]["document"]).get("starting_location_id")) if revisions else ""
+            start = clean_text(dict(revisions[0]["document"]).get("starting_location_id")) if revisions else ""
             if start:
                 pins.append((str(scenario["id"]), start))
         work.rollback()

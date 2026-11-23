@@ -1,4 +1,11 @@
 @layer features {
+  /* The footer's popovers (custom range, timezone menu) open upward over the chart stage, whose indicator-pane
+     resize handles sit at z-index 100 in the panel's stacking context; the footer layer sits above them. */
+  .trading-chart-panel > footer {
+    position: relative;
+    z-index: 101;
+  }
+
   .trading-chart-panel > footer nav {
     position: relative;
   }

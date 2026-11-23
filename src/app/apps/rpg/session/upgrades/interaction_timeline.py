@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 LEGACY_INTERACTION_MIGRATION_VERSION = "rpg_legacy_interaction_migration_v1"
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
@@ -154,7 +155,7 @@ def _interaction_drafts(rows: list[Any]) -> list[dict[str, Any]]:
                 _drop_empty(
                     {
                         "kind": "npc_dialogue",
-                        "speaker_id": _text(raw.get("speaker_id") or raw.get("npc_id") or raw.get("actor_id")),
+                        "speaker_id": stripped_text(raw.get("speaker_id") or raw.get("npc_id") or raw.get("actor_id")),
                         "speaker": _speaker_name(raw),
                         "text": text,
                     }
@@ -183,15 +184,15 @@ def _is_interaction_row(row: dict[str, Any]) -> bool:
 
 def _draft_from_interaction_row(row: dict[str, Any], index: int) -> dict[str, Any]:
     draft = _new_draft(index)
-    draft["interaction_id"] = _text(row.get("interaction_id"))
-    draft["player_input"] = _text(
+    draft["interaction_id"] = stripped_text(row.get("interaction_id"))
+    draft["player_input"] = stripped_text(
         row.get("player_input")
         or row.get("command")
         or _dict(row.get("input_payload")).get("player_input")
         or _dict(row.get("input_payload")).get("command")
     )
     visible = _dict(row.get("visible_response"))
-    draft["narration"] = _text(
+    draft["narration"] = stripped_text(
         visible.get("narration")
         or row.get("narration")
         or row.get("final_narration")
@@ -202,21 +203,21 @@ def _draft_from_interaction_row(row: dict[str, Any], index: int) -> dict[str, An
         for raw_message in raw_messages:
             if not isinstance(raw_message, dict):
                 continue
-            text = _text(raw_message.get("text") or raw_message.get("line") or raw_message.get("content"))
+            text = stripped_text(raw_message.get("text") or raw_message.get("line") or raw_message.get("content"))
             if not text:
                 continue
             draft["messages"].append(
                 _drop_empty(
                     {
-                        "kind": _text(raw_message.get("kind")) or "npc_dialogue",
-                        "speaker_id": _text(raw_message.get("speaker_id") or raw_message.get("npc_id") or raw_message.get("id")),
-                        "speaker": _text(raw_message.get("speaker") or raw_message.get("name")) or "NPC",
+                        "kind": stripped_text(raw_message.get("kind")) or "npc_dialogue",
+                        "speaker_id": stripped_text(raw_message.get("speaker_id") or raw_message.get("npc_id") or raw_message.get("id")),
+                        "speaker": stripped_text(raw_message.get("speaker") or raw_message.get("name")) or "NPC",
                         "text": text,
                     }
                 )
             )
     npc = _dict(visible.get("npc")) or _dict(row.get("npc"))
-    line = _text(
+    line = stripped_text(
         row.get("npc_line")
         or npc.get("line")
         or npc.get("text")
@@ -227,13 +228,13 @@ def _draft_from_interaction_row(row: dict[str, Any], index: int) -> dict[str, An
             _drop_empty(
                 {
                     "kind": "npc_dialogue",
-                    "speaker_id": _text(npc.get("speaker_id") or npc.get("npc_id") or npc.get("id") or row.get("speaker_id")),
-                    "speaker": _text(npc.get("speaker") or npc.get("name") or row.get("speaker")) or "NPC",
+                    "speaker_id": stripped_text(npc.get("speaker_id") or npc.get("npc_id") or npc.get("id") or row.get("speaker_id")),
+                    "speaker": stripped_text(npc.get("speaker") or npc.get("name") or row.get("speaker")) or "NPC",
                     "text": line,
                 }
             )
         )
-    draft["plain_text"] = _text(visible.get("plain_text") or row.get("plain_text"))
+    draft["plain_text"] = stripped_text(visible.get("plain_text") or row.get("plain_text"))
     _copy_metadata(draft, row)
     return draft
 
@@ -257,26 +258,26 @@ def _new_draft(index: int) -> dict[str, Any]:
 
 
 def _copy_metadata(draft: dict[str, Any], row: dict[str, Any]) -> None:
-    draft["turn_id"] = draft.get("turn_id") or _text(row.get("turn_id"))
-    draft["submission_id"] = draft.get("submission_id") or _text(row.get("submission_id"))
+    draft["turn_id"] = draft.get("turn_id") or stripped_text(row.get("turn_id"))
+    draft["submission_id"] = draft.get("submission_id") or stripped_text(row.get("submission_id"))
     draft["simulation_tick"] = draft.get("simulation_tick") or _int_or_none(
         row.get("simulation_tick") or row.get("tick")
     )
-    draft["created_at"] = draft.get("created_at") or _text(
+    draft["created_at"] = draft.get("created_at") or stripped_text(
         row.get("created_at") or row.get("timestamp") or row.get("time")
     )
     if draft.get("stateful") is None and isinstance(row.get("stateful"), bool):
         draft["stateful"] = row.get("stateful")
-    draft["action_type"] = draft.get("action_type") or _text(
+    draft["action_type"] = draft.get("action_type") or stripped_text(
         row.get("action_type") or row.get("semantic_action_type")
     )
-    draft["semantic_family"] = draft.get("semantic_family") or _text(row.get("semantic_family"))
+    draft["semantic_family"] = draft.get("semantic_family") or stripped_text(row.get("semantic_family"))
 
 
 def _finalize_draft(draft: dict[str, Any]) -> dict[str, Any]:
-    messages = [item for item in draft.get("messages", []) if isinstance(item, dict) and _text(item.get("text"))]
-    narration = _text(draft.get("narration"))
-    plain_text = _text(draft.get("plain_text")) or _compose_plain_text(narration, messages)
+    messages = [item for item in draft.get("messages", []) if isinstance(item, dict) and stripped_text(item.get("text"))]
+    narration = stripped_text(draft.get("narration"))
+    plain_text = stripped_text(draft.get("plain_text")) or _compose_plain_text(narration, messages)
     draft["messages"] = messages
     draft["narration"] = narration
     draft["plain_text"] = plain_text
@@ -285,9 +286,9 @@ def _finalize_draft(draft: dict[str, Any]) -> dict[str, Any]:
 
 def _draft_has_content(draft: dict[str, Any]) -> bool:
     return bool(
-        _text(draft.get("player_input"))
-        or _text(draft.get("narration"))
-        or any(_text(item.get("text")) for item in draft.get("messages", []) if isinstance(item, dict))
+        stripped_text(draft.get("player_input"))
+        or stripped_text(draft.get("narration"))
+        or any(stripped_text(item.get("text")) for item in draft.get("messages", []) if isinstance(item, dict))
     )
 
 
@@ -313,34 +314,34 @@ def _materialize_events(
         sequence = sequence_start + offset
         revision = revision_start + offset
         messages = deepcopy(draft.get("messages") or [])
-        narration = _text(draft.get("narration"))
+        narration = stripped_text(draft.get("narration"))
         event = _drop_empty(
             {
                 "format_version": INTERACTION_TIMELINE_VERSION,
-                "interaction_id": _text(draft.get("interaction_id")) or f"interaction:{sequence}",
+                "interaction_id": stripped_text(draft.get("interaction_id")) or f"interaction:{sequence}",
                 "sequence": sequence,
                 "state_revision": revision,
                 "simulation_tick": draft.get("simulation_tick"),
-                "turn_id": _text(draft.get("turn_id")),
-                "submission_id": _text(draft.get("submission_id")),
+                "turn_id": stripped_text(draft.get("turn_id")),
+                "submission_id": stripped_text(draft.get("submission_id")),
                 "kind": "npc_dialogue" if messages else "player_turn",
                 "stateful": draft.get("stateful"),
-                "player_input": _text(draft.get("player_input")),
+                "player_input": stripped_text(draft.get("player_input")),
                 "visible_response": _drop_empty(
                     {
                         "format_version": "rpg_visible_response_v1",
                         "narration": narration,
                         "messages": messages,
-                        "plain_text": _text(draft.get("plain_text")),
+                        "plain_text": stripped_text(draft.get("plain_text")),
                     }
                 ),
                 "speaker_id": _first_message_field(messages, "speaker_id"),
                 "speaker": _first_message_field(messages, "speaker"),
                 "npc_line": _first_message_field(messages, "text"),
                 "narration": narration,
-                "action_type": _text(draft.get("action_type")),
-                "semantic_family": _text(draft.get("semantic_family")),
-                "created_at": _text(draft.get("created_at")),
+                "action_type": stripped_text(draft.get("action_type")),
+                "semantic_family": stripped_text(draft.get("semantic_family")),
+                "created_at": stripped_text(draft.get("created_at")),
                 "legacy_source": source,
                 "legacy_row_indexes": list(dict.fromkeys(draft.get("row_indexes") or [])),
             }
@@ -391,7 +392,7 @@ def _row_role(row: dict[str, Any]) -> str:
 
 
 def _row_text(row: dict[str, Any]) -> str:
-    return _text(
+    return stripped_text(
         row.get("text")
         or row.get("content")
         or row.get("line")
@@ -402,32 +403,32 @@ def _row_text(row: dict[str, Any]) -> str:
 
 
 def _speaker_name(row: dict[str, Any]) -> str:
-    speaker = _text(row.get("speaker") or row.get("name") or row.get("actor"))
+    speaker = stripped_text(row.get("speaker") or row.get("name") or row.get("actor"))
     return speaker or "NPC"
 
 
 def _append_narration(draft: dict[str, Any], text: Any) -> None:
-    value = _text(text)
+    value = stripped_text(text)
     if not value:
         return
-    current = _text(draft.get("narration"))
+    current = stripped_text(draft.get("narration"))
     draft["narration"] = f"{current}\n\n{value}" if current else value
 
 
 def _compose_plain_text(narration: str, messages: list[dict[str, Any]]) -> str:
     paragraphs = [narration] if narration else []
     for message in messages:
-        text = _text(message.get("text"))
+        text = stripped_text(message.get("text"))
         if not text:
             continue
-        speaker = _text(message.get("speaker")) or "NPC"
+        speaker = stripped_text(message.get("speaker")) or "NPC"
         paragraphs.append(f'{speaker}: "{text}"')
     return "\n\n".join(paragraphs)
 
 
 def _first_message_field(messages: list[dict[str, Any]], key: str) -> str:
     for message in messages:
-        value = _text(message.get(key))
+        value = stripped_text(message.get(key))
         if value:
             return value
     return ""
@@ -441,12 +442,8 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""
-
-
 def _normalize(value: Any) -> str:
-    return " ".join(_text(value).casefold().replace("_", " ").replace("-", " ").split())
+    return " ".join(stripped_text(value).casefold().replace("_", " ").replace("-", " ").split())
 
 
 def _safe_int(value: Any) -> int:

@@ -321,20 +321,13 @@ def _v2_qualification_events(
         tzinfo=timezone.utc,
     )
     end = observed.astimezone(timezone.utc) + timedelta(seconds=1)
-    if hasattr(repository, "events_by_types_between"):
-        return repository.events_by_types_between(
-            strategy_id,
-            event_types=V2_QUALIFICATION_EVENT_TYPES,
-            start_time=start,
-            end_time=end,
-            limit=20_000,
-        )
-    return [
-        event
-        for event in repository.recent_events(strategy_id, 20_000)
-        if event.event_type in V2_QUALIFICATION_EVENT_TYPES
-        and start <= event.observed_at.astimezone(timezone.utc) < end
-    ]
+    return repository.events_by_types_between(
+        strategy_id,
+        event_types=V2_QUALIFICATION_EVENT_TYPES,
+        start_time=start,
+        end_time=end,
+        limit=20_000,
+    )
 
 
 def _require_v2_auto_paper_authorized(

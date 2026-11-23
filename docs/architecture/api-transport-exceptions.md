@@ -22,7 +22,6 @@ WebSocket routes are absent from OpenAPI by protocol definition. The gateway and
 | Source | Route path |
 |---|---|
 | `src/app/apps/audiobook/streaming.py` | `/ws/audiobook` |
-| `src/app/platform/live_speech/api_stub.py` | `/v1/realtime` |
 | `src/app/platform/voice/stt_proxy_routes.py` | `/api/stt/ws/transcribe` |
 | `src/app/platform/voice/tts_pcm_websocket.py` | `/api/tts/stream/websocket` |
 | `src/app/platform/voice/tts_live_call_websocket.py` | `/api/tts/live-call/websocket` |

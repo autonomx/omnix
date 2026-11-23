@@ -23,7 +23,6 @@ from .contracts import (
 )
 
 REVIEW_PROTOCOL_VERSION = "review-v3-subject-attribution"
-_TERMINAL = {"completed", "failed", "cancelled"}
 
 
 def review_runtime_retry_limit() -> int:

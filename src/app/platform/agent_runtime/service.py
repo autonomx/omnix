@@ -31,8 +31,8 @@ from .contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    IssuedRunSpec,
     ReviewResult,
-    ReviewSnapshot,
     RunChangeSet,
     SelfReviewResult,
     TaskRevision,
@@ -82,7 +82,6 @@ REQUEST_VALIDATION_REPAIR_TEMPLATE = prompt_template(
 
 
 
-_TERMINAL = {"completed", "failed", "cancelled"}
 _BLOCKED_SETTLE = {
     "waiting_for_approval",
     "waiting_for_input",
@@ -619,7 +618,7 @@ class AgentRunService(_CoreAgentRunService):
     def _persist_starting_run(
         self,
         repository: PostgresAgentRunRepository,
-        issued: AgentRunSpec,
+        issued: IssuedRunSpec,
     ) -> AgentRunSnapshot:
         snapshot = super()._persist_starting_run(repository, issued)
         revision = repository.latest_task_revision(issued.run_id)
@@ -897,25 +896,9 @@ class AgentRunService(_CoreAgentRunService):
         return quality_state_machine._dispatch_pending_quality_commands(self, run_id, include_parent=include_parent)
 
     def _launch_reviewer_children(self, parent_run_id: str, snapshot_id: str, count: int) -> None:
-        from . import quality_state_machine
+        from .review_orchestration import launch_reviewer_children
 
-        return quality_state_machine._launch_reviewer_children(self, parent_run_id, snapshot_id, count)
-
-    @staticmethod
-    def _review_snapshot_id_from_child(child: AgentRunSnapshot) -> str | None:
-        from . import quality_state_machine
-
-        return quality_state_machine._review_snapshot_id_from_child(child)
-
-    def _review_result_from_child(
-        self,
-        repository: PostgresAgentRunRepository,
-        child: AgentRunSnapshot,
-        snapshot: ReviewSnapshot,
-    ) -> ReviewResult | None:
-        from . import quality_state_machine
-
-        return quality_state_machine._review_result_from_child(self, repository, child, snapshot)
+        launch_reviewer_children(self, parent_run_id, snapshot_id, count)
 
     def _maybe_finalize_parent_in_repository(
         self,

@@ -22,9 +22,7 @@ MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 
 def resolve(planned: PlannedAction, document: Mapping[str, Any]) -> list[StateChange]:
     """The changes the action makes: the turn is counted and the time it took passes."""
-    state, manifest = _d(document.get("state")), _d(document.get("manifest"))
-    count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
-    changes: list[StateChange] = [TurnCounted(turn_count=count)]
+    changes: list[StateChange] = [TurnCounted(turn_count=_sections.turn_count_of(document) + 1)]
     simulation = _d(_sections.simulation_state_of(document))
     if not _s(_d(_sections.player_state_of(simulation)).get("location_id")):
         # A campaign created without placing the hero (the starter town until RQ-2.8) stands them where its

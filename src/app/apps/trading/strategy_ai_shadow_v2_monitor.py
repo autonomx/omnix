@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import TradingResearchRepository, default_research_repository
 from .model_route import local_batch_rows
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
 from .strategy_ai_shadow_v2 import (
@@ -47,7 +47,7 @@ from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import after_regular_close
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,6 @@ _EVENT_TYPES = (
     "ai_v2_arm_unavailable",
 )
 _PREMARKET_START_ET = time(6, 0)
-_REGULAR_SESSION_START_ET = time(9, 30)
 _FULL_SESSION_LAST_ENTRY_ET = time(15, 30)
 AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT = Decimal("8")
 
@@ -111,14 +110,7 @@ class V2PositionState(BaseModel):
         return self.units > 0
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def ai_shadow_v2_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_AI_SHADOW_V2_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_AI_SHADOW_V2_MONITOR", "1")
+ai_shadow_v2_monitor_enabled = monitor_switch("OMNIX_TRADING_AI_SHADOW_V2_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -257,7 +249,7 @@ def _research_selection_is_due(
     local_time = now_et.time()
     if not _PREMARKET_START_ET <= local_time <= _FULL_SESSION_LAST_ENTRY_ET:
         return False
-    if local_time < _REGULAR_SESSION_START_ET:
+    if local_time < REGULAR_OPEN:
         return True
 
     observed_at = getattr(candidate, "observed_at", None)
@@ -266,7 +258,7 @@ def _research_selection_is_due(
     observed_et = observed_at.astimezone(_ET)
     return (
         observed_et.date() == now_et.date()
-        and observed_et.time() >= _REGULAR_SESSION_START_ET
+        and observed_et.time() >= REGULAR_OPEN
         and observed_at <= now
     )
 
@@ -363,19 +355,11 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
     ) -> list[StrategyEvent]:
         start_et = datetime(session_date.year, session_date.month, session_date.day, tzinfo=_ET)
         end = min(now + timedelta(seconds=1), start_et + timedelta(days=1))
-        if hasattr(repository, "events_by_types_between"):
-            return await asyncio.to_thread(
-                repository.events_by_types_between, config.strategy_id,
-                event_types=_EVENT_TYPES, start_time=start_et.astimezone(timezone.utc),
-                end_time=end.astimezone(timezone.utc), limit=30_000,
-            )
-        if not hasattr(repository, "recent_events"):
-            return []
-        recent = await asyncio.to_thread(repository.recent_events, config.strategy_id, 30_000)
-        return [
-            e for e in recent if e.event_type in _EVENT_TYPES
-            and start_et.astimezone(timezone.utc) <= e.observed_at.astimezone(timezone.utc) < end.astimezone(timezone.utc)
-        ]
+        return await asyncio.to_thread(
+            repository.events_by_types_between, config.strategy_id,
+            event_types=_EVENT_TYPES, start_time=start_et.astimezone(timezone.utc),
+            end_time=end.astimezone(timezone.utc), limit=30_000,
+        )
 
     async def _refresh_catalyst_core(
         self, *, candidate, config: TradingStrategyConfigDocument,

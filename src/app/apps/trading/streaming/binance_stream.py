@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import env_str
 
 import json
-import os
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timezone
 from decimal import Decimal

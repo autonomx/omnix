@@ -299,28 +299,17 @@ async def reconcile_protections(
                     entry_price=entry_price,
                     target_price=protection.target_price,
                 )
-                recovery_method = getattr(market_service, "recovered_bars", None)
-                if callable(recovery_method):
-                    response = await asyncio.to_thread(
-                        recovery_method,
-                        protection.instrument_id,
-                        "1m",
-                        240,
-                        binding_id,
-                        session_date=execution.source_time.astimezone(_ET).date(),
-                        as_of=execution.source_time,
-                        knowledge_mode="live",
-                    )
-                    protection_bars = list(response.bars)
-                else:
-                    legacy_response = await asyncio.to_thread(
-                        market_service.bars,
-                        protection.instrument_id,
-                        "1m",
-                        240,
-                        binding_id,
-                    )
-                    protection_bars = list(legacy_response.bars)
+                response = await asyncio.to_thread(
+                    market_service.recovered_bars,
+                    protection.instrument_id,
+                    "1m",
+                    240,
+                    binding_id,
+                    session_date=execution.source_time.astimezone(_ET).date(),
+                    as_of=execution.source_time,
+                    knowledge_mode="live",
+                )
+                protection_bars = list(response.bars)
                 finalized = [
                     bar
                     for bar in protection_bars
@@ -395,28 +384,17 @@ async def reconcile_protections(
 
             if trigger is None and activated_at is not None:
                 try:
-                    recovery_method = getattr(market_service, "recovered_bars", None)
-                    if callable(recovery_method):
-                        indicator_response = await asyncio.to_thread(
-                            recovery_method,
-                            protection.instrument_id,
-                            config.config.execution_interval,
-                            240,
-                            binding_id,
-                            session_date=execution.source_time.astimezone(_ET).date(),
-                            as_of=execution.source_time,
-                            knowledge_mode="live",
-                        )
-                        indicator_bars = list(indicator_response.bars)
-                    else:
-                        legacy_indicator_response = await asyncio.to_thread(
-                            market_service.bars,
-                            protection.instrument_id,
-                            config.config.execution_interval,
-                            240,
-                            binding_id,
-                        )
-                        indicator_bars = list(legacy_indicator_response.bars)
+                    indicator_response = await asyncio.to_thread(
+                        market_service.recovered_bars,
+                        protection.instrument_id,
+                        config.config.execution_interval,
+                        240,
+                        binding_id,
+                        session_date=execution.source_time.astimezone(_ET).date(),
+                        as_of=execution.source_time,
+                        knowledge_mode="live",
+                    )
+                    indicator_bars = list(indicator_response.bars)
                     if _rsi_crossed_after_activation(
                         indicator_bars,
                         period=config.config.exit_rsi_period,

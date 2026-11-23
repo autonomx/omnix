@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+from .topic_graph import mapping as _mapping, rows as _rows
+
 _COLLECTION_ID_FIELDS: dict[str, tuple[str, ...]] = {
     "documents": ("document_id", "id"),
     "entities": ("id",),
@@ -49,22 +51,12 @@ class DuplicateCanonCompilationError(ValueError):
         }
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
 def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
     for key in ("candidate", "content"):
         value = row.get(key)
         if isinstance(value, Mapping):
             return dict(value)
     return dict(row) if any(key in row for key in _COLLECTION_ID_FIELDS) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
 
 
 def _item_id(row: Mapping[str, Any], id_fields: Sequence[str]) -> str:

@@ -21,7 +21,7 @@ from app.apps.rpg.rules.ability_use import known as known_abilities
 from app.apps.rpg.session.turn.scene import reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
-from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, free_action, resolve_turn
+from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, free_action, resolve_turn, timed_changes
 from app.apps.rpg.session.turn.resolvers import outcome_lines
 from app.apps.rpg.session.turn.world_tick import world_tick
 from app.apps.rpg.foundation.state import access as _sections
@@ -85,7 +85,7 @@ def _offered(document: dict[str, Any], planned: PlannedAction | None) -> dict[st
     from app.apps.rpg.narration.presentation.outcome_facts import Suggestion
     from app.apps.rpg.session.turn.suggestions import choices, suggestions
 
-    offered_at = int(_d(document.get("state")).get("turn_count") or 0)  # a card from an older turn is refused
+    offered_at = _sections.turn_count_of(document)  # a card from an older turn is refused
 
     def dealt(rows: list[Suggestion]) -> list[dict[str, Any]]:
         return [{**row.model_dump(), "action": {**row.action, "offered_turn": offered_at}} if row.action
@@ -107,7 +107,7 @@ def _knowledge(document: dict[str, Any], applied: list[StateChange]) -> tuple[di
     from app.apps.rpg.rules.hero_knowledge import entries_met
 
     simulation = _d(_sections.simulation_state_of(document))
-    turns = int(_d(document.get("state")).get("turn_count") or 0)
+    turns = _sections.turn_count_of(document)
     met: list[StateChange] = [*entries_met(simulation, applied), *tracked(simulation, applied, turns),
                               *rooms_cleared(simulation, applied)]  # a site's room beaten or looted (EV-10)
     if met:
@@ -157,7 +157,7 @@ def run_planned_turn(
     document, _ = reduce(session, resolution.changes)
     simulation = _d(_sections.simulation_state_of(document))
     tick = int(simulation.get("tick") or 0)
-    turn_index = int(_d(document.get("state")).get("turn_count") or 0)
+    turn_index = _sections.turn_count_of(document)
     turn_id = f"turn:{tick}"
     tick_changes: list[StateChange] = []
     causal: dict[str, Any] = {}
@@ -376,10 +376,9 @@ def _load(ctx: Any, *, fold: bool = True) -> dict[str, Any]:
 _LOADOUT = {"use": "use_item", "equip": "equip", "drop": "drop", "unequip": "unequip"}
 
 
-def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], count: int) -> dict[str, Any]:
+def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
     """A pack action from the play screen's loadout (use, equip, take off, drop) as a turn: the item rule's, its
     lines the game's own (no model call); what the rule refuses refuses the request, with no turn taken."""
-    from app.apps.rpg.foundation.state.changes import TurnCounted
     from app.apps.rpg.rules.interactions.items import drop_item, equip_item, item_by_name, unequip_item, use_item
     from app.apps.rpg.session.turn.resolution import Resolution
 
@@ -394,10 +393,8 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
     outcome = rule(simulation, item_id)
     if outcome.refused:
         return {"ok": False, "error": "loadout_refused", "status_code": 409, "detail": " ".join(outcome.lines)}
-    ticks = -(-outcome.minutes // MINUTES_PER_TICK)
     resolution = Resolution(
-        [TurnCounted(turn_count=count), *([TimeAdvanced(ticks=ticks, minutes=outcome.minutes)] if outcome.minutes else []),
-         *outcome.changes],
+        timed_changes(session, outcome.changes, outcome.minutes),
         outcome.lines, minutes=outcome.minutes, needs="standard_turn" if outcome.minutes else None, told=False,
         action_result={"kind": "loadout", "action": _s(action.get("action")), "item_name": _s(action.get("item_name")),
                        "detail": " ".join(outcome.lines)})
@@ -539,7 +536,6 @@ def _map_travel_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) 
 def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     """A grid move or attack in a fight (``session/turn/tactical.py``): the campaign revision the player saw is its
     only token; what the grid refuses refuses the request, with no turn taken."""
-    from app.apps.rpg.foundation.state.changes import TurnCounted
     from app.apps.rpg.session.turn.resolution import Resolution
     from app.apps.rpg.session.turn.tactical import grid_attack, grid_move, map_for_turn
     from app.apps.rpg.world.tactical_spatial import TacticalSpatialError
@@ -552,10 +548,9 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "stale_tactical_campaign_revision", "status_code": 409,
                 "message": f"expected={action['expected_campaign_revision']}:current={revision}"}
     simulation = _d(_sections.simulation_state_of(session))
-    state, manifest = _d(session.get("state")), _d(session.get("manifest"))
-    count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
+    count = _sections.turn_count_of(session) + 1
     if action.get("type") == "loadout":
-        return _loadout_turn(ctx, session, action, count)
+        return _loadout_turn(ctx, session, action)
     if action.get("type") == "map_travel":
         return _map_travel_turn(ctx, session, action)
     if action.get("type") == "ability":
@@ -584,10 +579,8 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
                                     reason="grid_attack")
     except (KeyError, TacticalSpatialError) as exc:
         return {"ok": False, "error": str(exc).strip("'"), "status_code": 404 if isinstance(exc, KeyError) else 409}
-    ticks = -(-grid.minutes // MINUTES_PER_TICK)
     resolution = Resolution(
-        [TurnCounted(turn_count=count), *([TimeAdvanced(ticks=ticks, minutes=grid.minutes)] if grid.minutes else []),
-         *grid.changes],
+        timed_changes(session, grid.changes, grid.minutes),
         grid.lines, minutes=grid.minutes, needs="standard_turn" if grid.minutes else None, told=False,
         map_event=grid.map_event, action_result=grid.action_result)
     reading = IntentCandidate(family="attack" if planned.reason == "grid_attack" else "move",
@@ -702,7 +695,7 @@ def _card_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dic
     from app.apps.rpg.session.turn.scene import scene_view
 
     card = _d(action.get("card"))
-    turn_count = int(_d(session.get("state")).get("turn_count") or 0)
+    turn_count = _sections.turn_count_of(session)
     if card.get("offered_turn") is not None and int(card["offered_turn"]) != turn_count:
         return {"ok": False, "error": "stale_card", "status_code": 409,
                 "detail": "That choice was offered before your last turn; choose again."}

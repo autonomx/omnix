@@ -125,7 +125,7 @@ async def record_trend_t1(
         payload={**common, "policy": snapshot.model_dump(mode="json")},
     )
     monitor.trend_t1_last[key] = marker
-    monitor.trend_t1_event_count += int(persisted)
+    monitor.metrics.trend_t1_event_count += int(persisted)
 
 
 __all__ = ["TREND_T1_ARM", "record_trend_t1", "trend_t1_enabled"]

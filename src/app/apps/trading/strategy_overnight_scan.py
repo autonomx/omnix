@@ -39,7 +39,7 @@ from .strategy_overnight_shadow import (
     off_52w_high,
     population,
 )
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ class OvernightMarketData:
                     adv_dollars[symbol] = dollars
         intraday = _alpaca_bars(
             self.runtime, headers, sorted(history), timeframe=f"{SCAN_BAR_MINUTES}Min",
-            start=datetime.combine(session_date, time(9, 30), tzinfo=_ET),
+            start=datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET),
             end=datetime.combine(session_date, config.data_cutoff_et, tzinfo=_ET),
             chunk_size=_CHUNK, feed="sip",
         )
@@ -246,7 +246,7 @@ class OvernightMarketData:
         )
         intraday = _alpaca_bars(
             self.runtime, headers, symbols, timeframe=f"{SCAN_BAR_MINUTES}Min",
-            start=datetime.combine(session_date, time(9, 30), tzinfo=_ET),
+            start=datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET),
             end=datetime.combine(session_date, config.data_cutoff_et, tzinfo=_ET),
             chunk_size=_CHUNK, feed="sip",
         )

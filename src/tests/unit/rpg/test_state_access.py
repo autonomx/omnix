@@ -33,3 +33,31 @@ def test_a_field_accessor_returns_its_own_key() -> None:
     for key, accessor in FIELD_ACCESSORS.items():
         marker = object()
         assert accessor({key: marker}) is marker and accessor({}) is None and accessor(None) is None
+
+
+def test_the_turn_count_has_one_reader_with_one_precedence() -> None:
+    from app.apps.rpg.foundation.state.access import turn_count_of
+    from app.apps.rpg.foundation.state.changes import TimeAdvanced, TurnCounted
+    from app.apps.rpg.session.turn.resolution import next_turn, timed_changes
+
+    assert turn_count_of({"state": {"turn_count": 4}, "manifest": {"turn_count": 2}}) == 4  # the sheet's first
+    assert turn_count_of({"state": {}, "manifest": {"turn_count": 2}}) == 2  # the manifest's for a sheet without one
+    assert turn_count_of({}) == 0 and turn_count_of(None) == 0
+    opened = {"state": {"turn_count": 7}}  # an opening already under way sets the sheet's alone
+    assert next_turn(opened) == TurnCounted(turn_count=8)
+    assert timed_changes(opened, [], 25) == [TurnCounted(turn_count=8), TimeAdvanced(ticks=3, minutes=25)]
+    assert timed_changes(opened, [], 0) == [TurnCounted(turn_count=8)]
+
+
+def test_no_rule_reads_the_turn_count_by_its_key() -> None:
+    """The turn path reads the count through ``turn_count_of``; a second reader would bring back its own
+    precedence (the sheet's or the manifest's, ``turn_count`` or ``current_turn``)."""
+    package = ROOT / "src" / "app" / "apps" / "rpg"
+    readers = [
+        f"{path.relative_to(package)}:{number}"
+        for folder in ("rules", "session/turn", "world", "narration/game_master")
+        for path in sorted((package / folder).rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if '.get("turn_count")' in line or '.get("current_turn")' in line
+    ]
+    assert readers == []

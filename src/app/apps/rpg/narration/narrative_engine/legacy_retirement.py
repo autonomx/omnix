@@ -23,6 +23,7 @@ _RETIRED_PUBLICATION_TOKENS = (
 )
 _PRODUCTION_OWNER_PATHS = (
     "src/app/apps/rpg/edge/api/turn_pipeline.py",
+    "src/app/apps/rpg/session/committed_narration.py",
     "src/app/apps/rpg/session/turn_presenter.py",
     "src/app/apps/rpg/session/narrative_engine_bridge.py",
     "src/app/apps/rpg/narration/narrative_engine/consumer_publish.py",
@@ -84,7 +85,8 @@ def audit_legacy_publisher_retirement(
         if hits:
             forbidden_hits[relative] = hits
 
-    gateway = sources.get("src/app/apps/rpg/edge/api/turn_pipeline.py", "")
+    # The gateway narrates a committed turn through one owner (RQ deep-modules item 6): that owner presents it.
+    gateway = sources.get("src/app/apps/rpg/session/committed_narration.py", "")
     presenter = sources.get("src/app/apps/rpg/session/turn_presenter.py", "")
     bridge = sources.get("src/app/apps/rpg/session/narrative_engine_bridge.py", "")
     publisher = sources.get("src/app/apps/rpg/narration/narrative_engine/consumer_publish.py", "")

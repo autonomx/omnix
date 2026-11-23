@@ -6,11 +6,10 @@ import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable
 
+from app.capabilities.approval_policy import is_approval_policy, only_tightens
+
 from .profiles import AgentProfile
 
-_APPROVAL_STRENGTH = {
-    "allow_automatic": 0, "ask_sensitive": 1, "always_ask": 2, "disabled": 3,
-}
 _ISOLATION_STRENGTH = {
     "supervised_worktree": 0, "immutable_review_snapshot": 0,
     "docker_strong": 1, "unattended": 1,
@@ -21,9 +20,10 @@ def validate_request_policy(
     profile: AgentProfile, *, approval_policy: str,
     isolation_policy: str, allowed_paths: Iterable[str],
 ) -> None:
-    if approval_policy not in _APPROVAL_STRENGTH:
+    ceiling = profile.approval_policy
+    if not is_approval_policy(approval_policy) or not is_approval_policy(ceiling):
         raise ValueError("unknown approval policy")
-    if _APPROVAL_STRENGTH[approval_policy] < _APPROVAL_STRENGTH[profile.approval_policy]:
+    if not only_tightens(approval_policy, ceiling):
         raise ValueError("approval policy may only tighten the profile default")
     if isolation_policy not in _ISOLATION_STRENGTH:
         raise ValueError("unknown isolation policy")
@@ -33,7 +33,7 @@ def validate_request_policy(
         raise ValueError("reviewer requests require immutable review isolation")
     if _ISOLATION_STRENGTH[isolation_policy] < _ISOLATION_STRENGTH[profile.isolation_policy]:
         raise ValueError("isolation policy may only raise the profile default")
-    ceiling = tuple(value.replace("\\", "/") for value in profile.allowed_paths)
+    path_ceiling = tuple(value.replace("\\", "/") for value in profile.allowed_paths)
     requested_paths = tuple(allowed_paths)
     if not requested_paths:
         raise ValueError("allowed paths must not be empty")
@@ -49,7 +49,7 @@ def validate_request_policy(
         if not any(
             limit == "**" or path == limit
             or (limit.endswith("/**") and path.startswith(limit[:-2]))
-            for limit in ceiling
+            for limit in path_ceiling
         ):
             raise ValueError("allowed paths exceed the profile ceiling")
 

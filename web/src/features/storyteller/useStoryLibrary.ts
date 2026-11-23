@@ -4,6 +4,7 @@ import { omnixApiClient, type JobRecord } from '../../api/client';
 import { buildStoryLibraryItems, fullJobOutputText, mergeTrashedStoryLibraryItems } from './storyLibraryModel';
 import { SavedStoryDraft, StoryAssetSummary, StorySceneAddition, TrashedStoryLibraryItem, includeMutationJob } from './storyModel';
 import { applyStorySceneAdditions, isStorySceneAppendJob } from './storyTextModel';
+import { jobKeys } from '../../api/jobs';
 
 type StoryLibraryOptions = {
   /** The job just queued or finished, shown before the job list refreshes. */
@@ -30,7 +31,7 @@ export function useStoryLibrary({
   selectedLibraryItemId,
   setSelectedLibraryItemId,
 }: StoryLibraryOptions) {
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
+  const jobsQuery = useQuery({ queryKey: jobKeys.all, queryFn: () => omnixApiClient.listJobs() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const queriedStoryJobs = useMemo(() => jobsQuery.data?.jobs.filter((job) => job.module === 'storyteller') ?? [], [jobsQuery.data]);
   const storyJobs = useMemo(

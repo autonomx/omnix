@@ -95,6 +95,7 @@ def test_reclaimed_superseded_ingest_is_canceled_before_extraction(monkeypatch):
                               commit=lambda: None, rollback=lambda: None)
 
     monkeypatch.setattr("app.apps.audiobook.worker.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.leases.unit_of_work", work)  # the claim
     assert run_ingest_once(None, None, local_tenant_context(), worker_id="recovery")
     assert canceled == ["old-job"]
 
@@ -126,6 +127,7 @@ def test_ingest_superseded_during_extraction_cannot_publish(monkeypatch):
         return SimpleNamespace(chapters=())
 
     monkeypatch.setattr("app.apps.audiobook.worker.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.leases.unit_of_work", work)  # the claim
     monkeypatch.setattr("app.apps.audiobook.worker.extract_source", extract)
     monkeypatch.setattr("app.apps.audiobook.worker._reuse_existing_dialogue_segmentation",
                         lambda *args: SimpleNamespace(chapters=()))

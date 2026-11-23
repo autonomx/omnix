@@ -167,6 +167,31 @@ class ChatMessage(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+# A spoken turn of a live call carries these ids in its user message's metadata. The browser mints
+# them from one live turn id (`ChatMessageRequest` honours its `live_voice_turn_id`).
+VOICE_USER_TURN_PREFIX = "voice-user-turn:"
+VOICE_SEGMENT_PREFIX = "voice-segment:"
+
+
+def is_live_voice_turn(metadata: Any) -> bool:
+    """True when a user message's metadata marks it as a spoken live-call turn.
+
+    A turn is spoken when it names the speech segment it came from (any id: the field exists only
+    for speech), or when its user turn id is a voice turn id. Every live-voice decision (thinking
+    off, no rich replies, provider sessions, agent routing) asks this one question.
+    """
+    if not isinstance(metadata, dict):
+        return False
+    if str(metadata.get("speech_segment_id") or "").strip():
+        return True
+    return str(metadata.get("user_turn_id") or "").strip().startswith(VOICE_USER_TURN_PREFIX)
+
+
+def is_live_voice_message(message: Any) -> bool:
+    """`is_live_voice_turn` for a message object (anything with a ``metadata`` dict)."""
+    return is_live_voice_turn(getattr(message, "metadata", None))
+
+
 class ChatSessionSummary(BaseModel):
     id: str
     title: str
@@ -267,8 +292,6 @@ class LiveVoiceChatPort(Protocol):
 
     route_metadata_key: str
 
-    def is_live_voice_message(self, user_message: Any) -> bool: ...
-
     def build_live_voice_prompt(
         self,
         store: Any,
@@ -281,11 +304,16 @@ class LiveVoiceChatPort(Protocol):
 
     def begin_routed_user_message(self, store: Any, session_id: str, request: Any, *, persist: Any) -> Any: ...
 
-    def resolve_generation_route(self, user_message: Any, **kwargs: Any) -> Any: ...
-
-    def resolve_stream_route(self, user_message: Any, **kwargs: Any) -> Any: ...
-
-    def log_provider_route(self, **kwargs: Any) -> None: ...
+    def route_reply(
+        self,
+        user_message: Any,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        request: Any = None,
+    ) -> Any:
+        """The provider and model that serve the reply (``provider_id``/``model_id``), already logged."""
+        ...
 
     def stream_with_retry(
         self,
@@ -296,13 +324,13 @@ class LiveVoiceChatPort(Protocol):
         model_id: str | None,
     ) -> Iterator[Any]: ...
 
-    def is_lmstudio_provider(self, provider: Any) -> bool: ...
+    def generate_reply(self, store: Any, session: Any, user_message: Any, *, provider: Any, **kwargs: Any) -> Any:
+        """The whole reply when live voice serves it with this provider, else None."""
+        ...
 
-    def generate_lmstudio_reply(self, store: Any, session: Any, user_message: Any, **kwargs: Any) -> Any: ...
-
-    def stream_lmstudio_reply(self, store: Any, session: Any, user_message: Any, **kwargs: Any) -> Iterator[Any]: ...
-
-    def stream_low_latency_reply(self, store: Any, session: Any, user_message: Any, **kwargs: Any) -> Iterator[Any]: ...
+    def stream_reply(
+        self, store: Any, session: Any, user_message: Any, *, provider: Any, **kwargs: Any
+    ) -> Iterator[Any]: ...
 
     def lmstudio_live_voice_options(self, user_message: Any) -> dict[str, Any]: ...
 

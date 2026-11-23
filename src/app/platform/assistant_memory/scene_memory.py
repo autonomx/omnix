@@ -17,7 +17,6 @@ import json
 import logging
 from collections.abc import Sequence
 from concurrent.futures import TimeoutError
-from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
@@ -227,15 +226,11 @@ class ProviderSceneLineReader:
         return [row.model_dump(mode="python") for row in value.learned]
 
     def read(self, document: dict[str, Any]) -> list[dict[str, Any]]:
-        from app.persistence.device_permits import device_permit_slot
-        from app.providers.catalog import LOCAL_DEVICE, provider_supports
+        from app.providers.llm_admission import llm_admission
 
         from .structured_provider import _PROVIDER_EXECUTOR
 
-        admission = (
-            device_permit_slot("llm-local", priority="batch", timeout_seconds=self.timeout_seconds)
-            if provider_supports(self.provider, LOCAL_DEVICE) else nullcontext()
-        )
+        admission = llm_admission(self.provider, timeout_seconds=self.timeout_seconds)
 
         def admitted() -> list[dict[str, Any]]:
             with admission:

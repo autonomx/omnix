@@ -395,3 +395,40 @@ def test_a_transient_renewal_error_is_retried_before_the_lease_expires(monkeypat
 def test_renewal_failing_until_the_lease_expires_stops_the_handler(monkeypatch):
     worker = _renewal_worker(monkeypatch, [RuntimeError("down")] * 1000)
     assert _renew(worker).is_set()
+
+
+def test_the_claim_starts_the_job_and_tells_the_observers_once(monkeypatch):
+    """The claim marks a job running, so a handler does not: observers hear "started" from the claim."""
+    from contextlib import contextmanager
+
+    from app.composition.worker_runtime import durable_feature_worker as module
+
+    registry = JobHandlerRegistry((
+        JobHandlerSpec(type="feature.claimed", handler=lambda context, job: job, resource_class=ResourceClass.CPU),
+    ))
+    started = []
+    registry.register_observer(SimpleNamespace(on_started=lambda job: started.append(job.id)))
+    steps = []
+
+    class Jobs:
+        def claim_next(self, _context, **_kwargs):
+            steps.append("claim")
+            return {"id": "job:claimed", "lease_token": "lease-1"}
+
+        def mark_running(self, _context, *, job_id, worker_id, lease_token):
+            steps.append(("running", job_id, lease_token))
+            return {"id": job_id, "status": "running"}
+
+    @contextmanager
+    def unit_of_work(_database):
+        yield SimpleNamespace(jobs=Jobs(), commit=lambda: steps.append("commit"), rollback=lambda: None)
+
+    monkeypatch.setattr(module, "unit_of_work", unit_of_work)
+    store = SimpleNamespace(database=object(), context=object(), _record=lambda row: SimpleNamespace(**row))
+    worker = DurableFeatureJobWorker(store, registry)
+
+    claimed = worker._claim_one()
+
+    assert claimed.id == "job:claimed"
+    assert steps == ["claim", ("running", "job:claimed", "lease-1"), "commit"]
+    assert started == ["job:claimed"]

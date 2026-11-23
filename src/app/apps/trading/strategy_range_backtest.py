@@ -24,7 +24,7 @@ from .research.runtime_policy import forbid_external_web_search
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
-from .us_equity_calendar import regular_holidays
+from .us_equity_calendar import REGULAR_OPEN, is_trading_day
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import regular_close_time
 
@@ -129,7 +129,7 @@ def _trading_dates(start_date: date, end_date: date) -> list[date]:
     output: list[date] = []
     cursor = start_date
     while cursor <= end_date:
-        if cursor.weekday() < 5 and cursor not in regular_holidays(cursor.year):
+        if is_trading_day(cursor):
             output.append(cursor)
         cursor += timedelta(days=1)
     return output
@@ -168,7 +168,7 @@ def choose_causal_universe(
 
 def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
     close = regular_close_time(session_date)
-    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     end = datetime.combine(session_date, close, tzinfo=_ET)
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
@@ -227,7 +227,7 @@ def yahoo_historical_session_bars(
             continue
         start = datetime.fromtimestamp(int(raw_timestamp), tz=timezone.utc)
         local = start.astimezone(_ET)
-        if local.date() != session_date or local.timetz().replace(tzinfo=None) < time(9, 30):
+        if local.date() != session_date or local.timetz().replace(tzinfo=None) < REGULAR_OPEN:
             continue
         if start >= session_end:
             continue

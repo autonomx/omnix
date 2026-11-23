@@ -4,25 +4,23 @@ import { replayBarAtClock, replayClockForBar, replayVisibleCount } from './repla
 import { TradingChartPanelProps } from './tradingChartPanelModel';
 import { useTradingReplayStore } from './tradingReplayStore';
 import type { useChartPanelState } from './useTradingChartPanelState';
-import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
-import type { useChartLifecycle } from './useTradingChartPanelLifecycle';
-import type { useChartSync } from './useTradingChartPanelSync';
-import type { useChartView } from './useTradingChartPanelView';
-import type { useChartIndicatorActions } from './useTradingChartPanelActions';
-import type { useChartRangeActions } from './useTradingChartPanelActions';
 
-type ChartReplayWorkspace = TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync> & ReturnType<typeof useChartView> & ReturnType<typeof useChartIndicatorActions> & ReturnType<typeof useChartRangeActions>;
+/** What replay reads from the rest of the panel: the chart, its bars, and the replay clock's start. */
+export type ChartReplayInput = Pick<TradingChartPanelProps, 'active'>
+  & Pick<ReturnType<typeof useChartPanelState>, 'adapter' | 'adapterRef' | 'allBarsRef' | 'hostRef' | 'replayMode'
+    | 'replaySelectionIndex' | 'setReplayMarkerX' | 'setReplayMode' | 'setReplaySelectionIndex' | 'setReplaySelectionX'>
+  & Pick<ReturnType<typeof useChartPanelData>, 'chartQuery' | 'replayChoosingStart' | 'replayStartTime'>;
 
-/** Bar replay on one chart: choosing the start, stepping the shared clock, and leaving replay. */
-export function useChartReplayActions(ws: ChartReplayWorkspace) {
+/** Bar replay on one chart: choosing the start, stepping the shared clock, and leaving replay. Returns one `replay` slice. */
+export function useChartReplayActions(input: ChartReplayInput) {
   const {
     active, adapter, allBarsRef, chartQuery, hostRef, replayChoosingStart, replayMode,
     replaySelectionIndex, replayStartTime, setReplayMarkerX, setReplayMode, setReplaySelectionIndex,
     setReplaySelectionX,
-  } = ws;
+  } = input;
 
-  useChartWheelZoom(ws);
+  useChartWheelZoom(input);
 
   const handleReplayStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!replayMode || !active || !adapter || allBarsRef.current.length === 0) return;
@@ -133,13 +131,15 @@ export function useChartReplayActions(ws: ChartReplayWorkspace) {
   }, [active, adapter, chartQuery.data, replayChoosingStart, replaySelectionIndex, replayStartTime, allBarsRef, hostRef, setReplaySelectionIndex, setReplaySelectionX]);
 
   return {
-    handleReplayStageClick, selectReplayStart, resetReplay, previousReplayBar, nextReplayBar, toggleReplayPlaying,
-    exitReplay,
+    replay: {
+      handleStageClick: handleReplayStageClick, selectStart: selectReplayStart, reset: resetReplay,
+      previousBar: previousReplayBar, nextBar: nextReplayBar, togglePlaying: toggleReplayPlaying, exit: exitReplay,
+    },
   };
 }
 
 /** Wheel zoom and pan on the chart: over the price scale (or with Shift) it zooms prices, sideways it pans time. */
-function useChartWheelZoom({ adapter, adapterRef, hostRef }: Pick<ChartReplayWorkspace, 'adapter' | 'adapterRef' | 'hostRef'>) {
+function useChartWheelZoom({ adapter, adapterRef, hostRef }: Pick<ChartReplayInput, 'adapter' | 'adapterRef' | 'hostRef'>) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;

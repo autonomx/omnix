@@ -13,6 +13,7 @@ time. Only the person's sharing sends a glance; nothing here opens a camera.
 """
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_message
 import concurrent.futures
 import logging
 import threading
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 # A description older than this is not used: the person may have moved.
 GLANCE_FRESH_SECONDS = 30.0
+# At most this many chats keep a glance; the oldest goes first. One person's calls and chats fit with room to spare.
+_MAX_CHATS = 64
 # How long a turn waits for a glance still being described: a spoken turn must not stall, a typed one may.
 LIVE_TURN_WAIT_SECONDS = 2.0
 TYPED_TURN_WAIT_SECONDS = DESCRIBE_TIMEOUT_SECONDS
@@ -154,6 +157,7 @@ def begin_glance(
         future = _executor.submit(_describe, image_data_url, client_factory, assistant_settings)
         glance = _Glance(started, now().isoformat(), future)
         _glances[session_id] = glance
+        _cap(_glances)
     del image_data_url  # the frame is held only by the vision call
     # Added outside the lock: a future already done runs the callback here, and the callback takes the lock.
     future.add_done_callback(lambda done: _remember(session_id, glance, done))
@@ -203,6 +207,7 @@ def _remember(session_id: str, glance: _Glance, future: concurrent.futures.Futur
         previous = _seen.get(session_id)
         if previous is None or previous.started <= glance.started:
             _seen[session_id] = _Seen(glance.started, glance.described_at, description)
+            _cap(_seen)
 
 
 def proactive_camera_note(look: CameraShareLook) -> str:
@@ -222,7 +227,7 @@ def camera_share_context(
 ) -> list[dict[str, Any]]:
     """The camera context for a turn that shares the camera; the description is kept on the person's message."""
     live_voice = getattr(chat_store, "live_voice_chat_port", None)
-    live = live_voice is not None and live_voice.is_live_voice_message(user_message)
+    live = live_voice is not None and is_live_voice_message(user_message)
     seen = look(session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS if live else TYPED_TURN_WAIT_SECONDS)
     if seen.snapshot is not None:
         record_camera_snapshot(chat_store, session_id, user_message, seen.snapshot)
@@ -250,6 +255,14 @@ def _prune(now: float) -> None:
     for session_id, seen in list(_seen.items()):
         if now - seen.started > GLANCE_FRESH_SECONDS:
             del _seen[session_id]
+
+
+def _cap(entries: dict[str, _Glance] | dict[str, _Seen]) -> None:
+    """Drop the oldest chats' entries past ``_MAX_CHATS``; a glance still being described finishes unread."""
+    excess = len(entries) - _MAX_CHATS
+    if excess > 0:
+        for session_id in sorted(entries, key=lambda key: entries[key].started)[:excess]:
+            del entries[session_id]
 
 
 def reset_camera_glances_for_tests() -> None:

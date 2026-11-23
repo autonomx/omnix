@@ -93,8 +93,8 @@
       "docs/rpg/current-state.md"
     ],
     "counts": {
-      "nodes": 59,
-      "edges": 162,
+      "nodes": 58,
+      "edges": 161,
       "flows": 11
     }
   },
@@ -362,7 +362,8 @@
         "src/app/composition/gateway/kernel_routes/core_chat_routes.py"
       ],
       "invariants": [
-        "Recovery finalizes an abandoned chat generation once."
+        "Recovery finalizes an abandoned chat generation once.",
+        "Chat asks the agent runtime about a typed turn only through turn_routing.route_typed_turn, which owns the turn deadline, the routing context and the routing metadata kept on the user message."
       ],
       "tests": [
         "src/tests/chat/"
@@ -424,19 +425,6 @@
       ],
       "docs": [
         "docs/architecture/OMNIX_VOICE_STUDIO_PARITY_ROADMAP.md"
-      ]
-    },
-    {
-      "id": "live_speech",
-      "label": "Live speech (opt-in)",
-      "layer": "platform",
-      "summary": "Standalone realtime speech protocol, VAD and benchmarks. Opt-in feature: enabled only when named (OPT_IN_FEATURES).",
-      "paths": [
-        "src/app/platform/live_speech/"
-      ],
-      "feature_id": "live-speech",
-      "tests": [
-        "src/tests/live_speech/"
       ]
     },
     {
@@ -544,7 +532,8 @@
         "Coordinator/reviewer/subagent authority is explicitly narrowed.",
         "Durable PostgreSQL state decides recovery-sensitive lifecycle.",
         "Evidence binds to subject/task revision/workspace state.",
-        "LLM output is evidence or a proposal; Omnix code owns authority and completion."
+        "LLM output is evidence or a proposal; Omnix code owns authority and completion.",
+        "A run ends only through run_settlement (fail_run / complete_run / cancel_run), which writes through update_state so lease fencing and the revision check still apply."
       ],
       "tests": [
         "src/tests/agent_runtime/"
@@ -693,7 +682,8 @@
       "invariants": [
         "AI/shadow analysis is research; only deterministic strategy/runtime owns execution authority.",
         "Never widen order authority as a side effect of research or agent changes.",
-        "Trading jobs run on their own loop thread, never the gateway's."
+        "Trading jobs run on their own loop thread, never the gateway's.",
+        "A monitor turns on and off through monitor_task.monitor_switch (its name, and <name>_IN_TESTS under pytest)."
       ],
       "tests": [
         "src/tests/trading/"
@@ -766,7 +756,8 @@
         "src/app/providers/tts_service.py"
       ],
       "invariants": [
-        "Features never own provider discovery; use the shared facade."
+        "Features never own provider discovery; use the shared facade.",
+        "Provider ids and llm:<provider>:<model> references are parsed only by catalog.provider_id_of and model_route (ModelRoute, model_name_of); callers do not split them."
       ],
       "tests": [
         "src/tests/providers/"
@@ -819,7 +810,8 @@
         "src/app/composition/gateway/kernel_routes/core_jobs_routes.py"
       ],
       "invariants": [
-        "Long-running work enters the job system, never a request handler or feature-local queue."
+        "Long-running work enters the job system, never a request handler or feature-local queue.",
+        "The worker's claim starts a job and tells the observers; a feature's run (JobHandlerSpec.run) returns a JobResult or raises a JobFailure, and the registry completes or fails the job."
       ]
     },
     {
@@ -1490,7 +1482,7 @@
       "from": "chat",
       "to": "live_voice",
       "kind": "calls",
-      "label": "LiveVoiceChatPort: live prompt + model route"
+      "label": "LiveVoiceChatPort: live prompt, model route, reply"
     },
     {
       "id": "live_voice->providers:calls",
@@ -1672,7 +1664,7 @@
       "from": "chat",
       "to": "agent_runtime",
       "kind": "calls",
-      "label": "TYPED_TURN_ROUTER port"
+      "label": "TYPED_TURN_ROUTER port (turn_routing.py)"
     },
     {
       "id": "chat->research:calls",
@@ -2051,13 +2043,6 @@
       "to": "assistant_tools",
       "kind": "uses",
       "label": "uses in src/app/platform/agent_runtime/feature.py"
-    },
-    {
-      "id": "live_speech->voice:uses",
-      "from": "live_speech",
-      "to": "voice",
-      "kind": "uses",
-      "label": "uses in src/app/platform/live_speech/feature.py"
     },
     {
       "id": "assistant_memory->chat:depends_on",
@@ -2510,7 +2495,7 @@
         },
         {
           "node": "chat",
-          "action": "Stores the turn; asks live voice for the prompt and model route through LiveVoiceChatPort",
+          "action": "Stores the turn; asks live voice for the prompt, the model route and the reply through LiveVoiceChatPort",
           "files": [
             "src/app/platform/live_voice/chat_integration.py"
           ],
@@ -2800,7 +2785,7 @@
         },
         {
           "node": "gateway",
-          "action": "turn_pipeline passes the gates and takes the turn lock, then runs the turn with asyncio.to_thread (the rpg.turn job only when the route 404s)",
+          "action": "turn_pipeline builds the TurnRequest once (turn_request) and its TurnDelivery, opens turn_scope, passes the gates and takes the turn lock, then runs the turn with asyncio.to_thread (the rpg.turn job only when the route 404s)",
           "files": [
             "src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py",
             "src/app/apps/rpg/edge/api/turn_pipeline.py"
@@ -2872,7 +2857,10 @@
         },
         {
           "node": "providers",
-          "action": "_narrate_after_commit on a gateway daemon thread: the narrator phrases the committed outcome; its claims are checked against it",
+          "action": "_narrate_after_commit on a gateway daemon thread: committed_narration.narrate_turn_after_commit runs the narration steps; the narrator phrases the committed outcome; its claims are checked against it",
+          "files": [
+            "src/app/apps/rpg/session/committed_narration.py"
+          ],
           "n": 10,
           "from": "rpg",
           "edge": "rpg->providers:calls"
@@ -3117,7 +3105,7 @@
         },
         {
           "node": "image",
-          "action": "execute_image_job runs the handler",
+          "action": "run_image_job generates the image and completes the job",
           "files": [
             "src/app/platform/image/feature.py",
             "src/app/platform/image/jobs.py"
@@ -3226,9 +3214,10 @@
         },
         {
           "node": "agent_runtime",
-          "action": "submit_start issues the run spec under profile and resource-grant ceilings (profiles are ceilings, not grants) and persists the queued run",
+          "action": "submit_start issues the run spec through run_issuance (issue_run_spec; a child through issue_child_spec, narrowed to its parent) under profile and resource-grant ceilings (profiles are ceilings, not grants) and persists the queued run; only an IssuedRunSpec is created",
           "files": [
             "src/app/platform/agent_runtime/run_lifecycle.py",
+            "src/app/platform/agent_runtime/run_issuance.py",
             "src/app/platform/agent_runtime/profiles.py",
             "src/app/platform/agent_runtime/resource_grants.py"
           ],
@@ -3256,7 +3245,7 @@
           "action": "Prepares the isolated workspace (worktree; Docker sandbox for mutating runs); start_prepared_run takes the lease and launches the Pi subprocess",
           "files": [
             "src/app/platform/agent_runtime/isolation.py",
-            "src/app/platform/agent_runtime/pi_runtime_core.py"
+            "src/app/platform/agent_runtime/pi_runtime.py"
           ],
           "n": 9,
           "from": "worker",
@@ -3264,10 +3253,11 @@
         },
         {
           "node": "gateway",
-          "action": "Pi calls back over HTTP: the model gateway /api/agent-model/v1 and the broker /api/agent-runs/{id}/capabilities",
+          "action": "Pi calls back over HTTP: the model gateway /api/agent-model/v1 and the broker /api/agent-runs/{id}/capabilities, which records each call as a CapabilityCall (its execution and its evidence query settle together)",
           "files": [
             "src/app/platform/agent_runtime/model_gateway.py",
-            "src/app/platform/agent_runtime/broker_api.py"
+            "src/app/platform/agent_runtime/broker_api.py",
+            "src/app/platform/agent_runtime/capability_call.py"
           ],
           "n": 10,
           "from": "agent_runtime",
@@ -3712,7 +3702,6 @@
     "src/app/platform/chat/": "chat",
     "src/app/platform/companion_activity/": "companion_activity",
     "src/app/platform/image/": "image",
-    "src/app/platform/live_speech/": "live_speech",
     "src/app/platform/live_voice/": "live_voice",
     "src/app/platform/research/": "research",
     "src/app/platform/research/outbound_web.py": "public_web",

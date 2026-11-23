@@ -6,13 +6,14 @@ live voice while provider-specific adapters add their own metrics.
 """
 from __future__ import annotations
 
+from app.providers.model_route import model_name_of
+from app.conversation.contracts import is_live_voice_message
 import time
 from contextlib import ExitStack
 from typing import Any, Iterator
 
 from app.platform.chat.contracts import (
     merge_provider_response_metrics,
-    model_key,
     provider_key,
     provider_turn_deadline,
     remaining_turn_seconds,
@@ -126,15 +127,6 @@ def _last_whitespace_cut(text: str, *, minimum: int, maximum: int) -> int | None
     return cut
 
 
-def _is_live_voice_turn(user_message: Any) -> bool:
-    metadata = getattr(user_message, "metadata", None)
-    if not isinstance(metadata, dict):
-        return False
-    if str(metadata.get("speech_segment_id") or "").strip():
-        return True
-    return str(metadata.get("user_turn_id") or "").startswith("voice-user-turn:")
-
-
 def _json_safe_provider_value(value: Any) -> Any:
     """Convert provider metadata into plain values safe for SSE JSON encoding."""
     if value is None or isinstance(value, (str, int, float, bool)):
@@ -196,12 +188,12 @@ def stream_low_latency_reply(
             context_items or [],
         )
         prompt_build_ms = (time.perf_counter() - prompt_started) * 1000.0
-        live_turn = provider_supports(provider_name, LIVE_TURNS) and _is_live_voice_turn(user_message)
+        live_turn = provider_supports(provider_name, LIVE_TURNS) and is_live_voice_message(user_message)
         messages = [
             ProviderMessage(role=message.role, content=message.content, per_turn=live_turn and message.per_turn)
             for message in rendered.messages
         ]
-        model_name = model_key(model_id)
+        model_name = model_name_of(model_id) or None
         completion_kwargs: dict[str, Any] = {"live_turn": True} if live_turn else {}
         if provider_supports(provider_name, CONVERSATION_SESSIONS):
             conversation_id = str(getattr(session, "id", "") or "").strip()
@@ -230,7 +222,7 @@ def stream_low_latency_reply(
             **completion_kwargs,
         )
         chunker = LowLatencyTextChunker(
-            emit_initial_fragment=not _is_live_voice_turn(user_message),
+            emit_initial_fragment=not is_live_voice_message(user_message),
         )
         full_text = ""
         resolved_model = model_name

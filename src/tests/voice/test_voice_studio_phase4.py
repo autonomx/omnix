@@ -20,6 +20,7 @@ from app.assets.models import AssetRecord, AssetType
 from app.jobs.models import JobRecord
 from app.platform.voice import jobs as voice_jobs
 from app.platform.voice.audio_service import AudioServiceUnavailable, Stems
+from tests.support.voice_jobs import execute_voice_studio_job
 
 RATE = 24_000
 
@@ -140,7 +141,7 @@ def watermark_on(monkeypatch) -> None:
 def test_isolation_stores_two_stems_whose_parent_is_the_source(stores, client) -> None:
     store = _JobStore()
     job = _job("audio.isolate", {"model": "demucs"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert client.calls == [("isolate", "demucs")]
     refs = store.completed[job.id].output_refs
@@ -155,11 +156,11 @@ def test_isolation_stores_two_stems_whose_parent_is_the_source(stores, client) -
 def test_enhancement_and_detection_work_on_stored_assets(stores, client) -> None:
     store = _JobStore()
     job = _job("audio.enhance", {})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     enhanced = stores.assets[store.completed[job.id].output_refs[0]["asset_id"]]
     assert enhanced.metadata == {"title": "Interview (enhanced)", "kind": "enhanced", "enhancer": "GTCRN"}
     job = _job("audio.watermark-detect", {})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     check = store.completed[job.id].output_refs[0]
     assert check["detected"] is True and check["message"] == 1234
 
@@ -172,7 +173,7 @@ def test_enhancement_and_detection_work_on_stored_assets(stores, client) -> None
 def test_bad_audio_tool_requests_fail_without_retry(stores, client, payload: dict[str, Any], asset_id: str) -> None:
     store = _JobStore()
     job = _job("audio.isolate", payload, asset_id=asset_id)
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request" and store.failed[job.id].retryable is False
     assert client.calls == []
 
@@ -182,7 +183,7 @@ def test_a_down_service_fails_the_tool_so_it_can_be_retried(stores, monkeypatch)
     monkeypatch.setattr("app.platform.voice.audio_tools.AudioServiceClient", lambda *args, **kwargs: down)
     store = _JobStore()
     job = _job("audio.enhance", {})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "audio_service_unavailable" and store.failed[job.id].retryable is True
 
 
@@ -203,7 +204,7 @@ def test_cloning_can_isolate_and_enhance_the_sample_first(stores, client) -> Non
                "source_file_name": "interview.mp3", "isolate_vocals": True, "enhance_sample": True,
                "reference_text": "hello", "quality": "Draft"}
     job = _job("voice-cloning.create-profile", payload)
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert [call[0] for call in client.calls] == ["isolate", "enhance"]
     assert client.calls[1][1] == "vocals.wav"  # enhancement ran on the isolated voice
@@ -231,7 +232,7 @@ def test_cloning_keeps_the_best_section_and_the_whole_sample(stores, client, mon
                "source_file_name": "interview.wav", "reference_text": "typed words", "quality": "Draft",
                "pick_best_section": True}
     job = _job("voice-cloning.create-profile", payload)
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
 
     assert job.id in store.completed, store.failed.get(job.id)
     assert seen and seen[0]["manual_text"] == "typed words"
@@ -255,7 +256,7 @@ def test_cloning_without_the_option_uses_the_whole_sample(stores, client, monkey
     payload = {"profile_name": "Whole", "sample_audio_base64": base64.b64encode(_wav(seconds=12.0)).decode("ascii"),
                "source_file_name": "whole.wav", "reference_text": "hello", "quality": "Draft"}
     job = _job("voice-cloning.create-profile", payload)
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
 
     assert job.id in store.completed, store.failed.get(job.id)
     voice = next(asset for asset in stores.assets.values() if asset.type == AssetType.VOICE_PROFILE)
@@ -295,7 +296,7 @@ def test_with_watermarking_on_and_no_service_nothing_unmarked_is_saved(stores, m
     before = set(stores.assets)
     store = _JobStore()
     job = _job("voice.design", {"description": "a narrator", "seeds": [1]})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "watermark_unavailable"
     assert "nothing was saved" in store.failed[job.id].message
     assert set(stores.assets) == before
@@ -311,7 +312,7 @@ def test_design_candidates_carry_their_watermark_record(stores, client, monkeypa
     monkeypatch.setattr(design, "_design_engine", lambda: _Engine())
     store = _JobStore()
     job = _job("voice.design", {"description": "a narrator", "seeds": [1]})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     candidate = stores.assets[store.completed[job.id].output_refs[0]["asset_id"]]
     assert candidate.metadata["watermark"]["message"] == 1234
 
@@ -328,11 +329,11 @@ def test_with_watermarking_on_export_refuses_an_unmarked_render(stores, monkeypa
     monkeypatch.setattr("app.platform.voice.watermarking.watermark_enabled", lambda: True)
     store = _JobStore()
     old = _job("voice.export", {"asset_id": "audio:old", "format": "wav16"}, asset_id="audio:old")
-    voice_jobs.execute_voice_studio_job(store, old)
+    execute_voice_studio_job(store, old)
     assert "render it again" in store.failed[old.id].message
     new = _job("voice.export", {"asset_id": "audio:new", "format": "wav16"}, asset_id="audio:new")
     new = new.model_copy(update={"id": "job-export-new"})
-    voice_jobs.execute_voice_studio_job(store, new)
+    execute_voice_studio_job(store, new)
     exported = stores.assets[store.completed[new.id].output_refs[0]["asset_id"]]
     assert exported.metadata["watermark"]["message"] == 1
     # A recording (not a render) exports either way.

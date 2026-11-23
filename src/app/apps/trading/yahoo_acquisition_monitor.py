@@ -16,27 +16,20 @@ from typing import Any, Callable
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import CandidateLifecycleState
 from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN
 
 
 _STATE_KEY = "_omnix_trading_yahoo_acquisition_monitor"
-_SESSION_OPEN = time(4, 0)
+_SESSION_OPEN = PREMARKET_OPEN
 _SESSION_CLOSE = time(16, 5)
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def yahoo_acquisition_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_YAHOO_ACQUISITION", "1")
+yahoo_acquisition_monitor_enabled = monitor_switch("OMNIX_TRADING_YAHOO_ACQUISITION")
 
 
 def _interval_seconds() -> float:

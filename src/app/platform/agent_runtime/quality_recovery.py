@@ -8,6 +8,8 @@ reviewer how to recover.
 """
 from __future__ import annotations
 
+from .run_settlement import complete_run
+from .contracts import TERMINAL_RUN_STATUSES
 from .event_queries import events_of_types
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
@@ -27,7 +29,6 @@ from .review_orchestration import (
 from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
 from .run_repository_queries import PostgresAgentRunQueries
 
-_TERMINAL = {"completed", "failed", "cancelled"}
 
 
 def _queue_acceptance_recovery(service: Any, run_id: str, revision: int) -> None:
@@ -212,7 +213,7 @@ def _promote_protocol_complete_reviewers(service: Any, parent_run_id: str) -> li
         for child in repository.list_children(parent_run_id):
             if (
                 child.spec.profile != "coding-reviewer"
-                or child.status in _TERMINAL
+                or child.status in TERMINAL_RUN_STATUSES
                 or review_snapshot_id_from_child(child) != snapshot.snapshot_id
             ):
                 continue
@@ -231,12 +232,7 @@ def _promote_protocol_complete_reviewers(service: Any, parent_run_id: str) -> li
                 require_path_claims=require_path_claims,
             ):
                 continue
-            repository.update_state(
-                child.run_id,
-                expected_revision=child.revision,
-                status="completed",
-                last_error=None,
-            )
+            complete_run(repository, child.run_id, expected_revision=child.revision)
             promoted.append(child.run_id)
 
         if promoted:
@@ -312,7 +308,7 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
         reconciled.append(run_id)
         if acceptance_revision is not None:
             _queue_acceptance_recovery(service, run_id, acceptance_revision)
-        if action is not None and action[0] == "launch_reviews":
+        if action is not None and len(action) == 3 and action[0] == "launch_reviews":
             launch_actions.append((run_id, str(action[1]), int(action[2])))
         elif action is not None and action[0] == "promote_acceptance":
             promotion_actions.append((run_id, int(action[1])))

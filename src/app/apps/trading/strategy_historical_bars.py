@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from .gapper_dataset import GapperCandidate
@@ -12,7 +12,7 @@ from .providers.alpaca_iex import alpaca_iex_auth_headers
 from .providers.errors import ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategy_replay_reliability import historical_replay_http_runtime
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def alpaca_historical_session_bars(
     )
     headers = alpaca_iex_auth_headers()
     close_time = regular_close_time(session_date)
-    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     end = datetime.combine(session_date, close_time, tzinfo=_ET).astimezone(timezone.utc)
     symbol_to_candidate = {
         candidate.instrument_id.split(":")[-1].upper(): candidate
@@ -79,7 +79,7 @@ def alpaca_historical_session_bars(
             if timestamp is None:
                 continue
             local = timestamp.astimezone(_ET)
-            if local.date() != session_date or local.timetz().replace(tzinfo=None) < time(9, 30):
+            if local.date() != session_date or local.timetz().replace(tzinfo=None) < REGULAR_OPEN:
                 continue
             if timestamp >= end:
                 continue

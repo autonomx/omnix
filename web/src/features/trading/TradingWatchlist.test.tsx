@@ -8,6 +8,7 @@ import { resetTradingWatchlistFlags } from './useTradingWatchlistFlags';
 import { useTradingCommandDispatcher } from './commands/useTradingCommands';
 import { onOmnixEvent } from '../../events/bus';
 import './advancedView';
+import { gatewayCallError } from '../../test/gatewayErrors';
 
 // The column chooser's indicator picker (TVP-5.2) reads the server's indicator list through react-query.
 vi.mock('./useTradingAlerts', async (original) => ({ ...(await original<typeof import('./useTradingAlerts')>()), useAlertIndicatorIds: () => new Set(['rsi']) }));
@@ -315,7 +316,7 @@ describe('TradingWatchlist add symbol', () => {
     });
     mockMarketData();
     const update = vi.spyOn(tradingApi, 'updateDocument')
-      .mockRejectedValueOnce(new Error('Trading request failed (409): revision conflict'))
+      .mockRejectedValueOnce(gatewayCallError('Trading request failed (409): revision conflict'))
       .mockImplementationOnce(async (_kind, currentRecord, nextPayload) => ({ ...currentRecord, revision: 3, payload: nextPayload }));
 
     render(

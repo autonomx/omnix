@@ -17,6 +17,7 @@ import {
 import './TradingPaperDashboard.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 import { chartPalette } from './chartPalette';
+import { formatMoney, formatSigned, numericValue } from './format';
 
 type DashboardTab = 'overview' | 'diagnostics' | 'execution';
 type Point = { x: number; y: number; label?: string };
@@ -33,33 +34,14 @@ type ManualPaperPerformance = {
   daily: DailyPerformanceRow[];
 };
 
-function numeric(value: AnalyticsNumeric | null | undefined): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function fixed(value: AnalyticsNumeric | null | undefined, digits = 2): string {
-  const parsed = numeric(value);
+  const parsed = numericValue(value);
   return parsed === null ? '—' : parsed.toFixed(digits);
 }
 
-function signed(value: AnalyticsNumeric | null | undefined, digits = 2, suffix = ''): string {
-  const parsed = numeric(value);
-  if (parsed === null) return '—';
-  return `${parsed > 0 ? '+' : ''}${parsed.toFixed(digits)}${suffix}`;
-}
-
 function pct(value: AnalyticsNumeric | null | undefined, digits = 1): string {
-  const parsed = numeric(value);
+  const parsed = numericValue(value);
   return parsed === null ? '—' : `${(parsed * 100).toFixed(digits)}%`;
-}
-
-function money(value: AnalyticsNumeric | null | undefined, currency = 'USD', signedValue = false): string {
-  const parsed = numeric(value);
-  if (parsed === null) return '—';
-  const formatted = Math.abs(parsed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${signedValue && parsed > 0 ? '+' : parsed < 0 ? '-' : ''}${formatted} ${currency}`;
 }
 
 function symbol(instrumentId: string): string {
@@ -283,7 +265,7 @@ function MaeMfeScatter({ rows }: { rows: PaperAnalyticsOverview['mae_mfe'] }) {
       <text className="reference-label" x={width - padding - 80} y={y(1.5) - 4}>+1.5R target</text>
       {rows.map((row) => (
         <circle key={row.trade_id} className={Number(row.r_result) >= 0 ? 'scatter-point winner' : 'scatter-point loser'} cx={x(Number(row.mae_r))} cy={y(Number(row.mfe_r))} r="5">
-          <title>{`${symbol(row.instrument_id)} ${row.session_date} · ${signed(row.r_result, 2, 'R')} · MAE ${signed(row.mae_r, 2, 'R')} · MFE ${signed(row.mfe_r, 2, 'R')}`}</title>
+          <title>{`${symbol(row.instrument_id)} ${row.session_date} · ${formatSigned(row.r_result, 2, 'R')} · MAE ${formatSigned(row.mae_r, 2, 'R')} · MFE ${formatSigned(row.mfe_r, 2, 'R')}`}</title>
         </circle>
       ))}
     </svg>
@@ -297,8 +279,8 @@ function Qualification({ data }: { data: NonNullable<PaperAnalyticsOverview['qua
     { label: 'Sessions', value: `${data.distinct_sessions} / ${threshold.minimum_distinct_sessions}`, pass: data.distinct_sessions >= threshold.minimum_distinct_sessions },
     { label: 'Symbols', value: `${data.distinct_symbols} / ${threshold.minimum_distinct_symbols}`, pass: data.distinct_symbols >= threshold.minimum_distinct_symbols },
     { label: 'Execution match', value: data.execution_match_rate == null ? 'N/A' : pct(data.execution_match_rate), pass: Number(data.execution_match_rate ?? 0) >= Number(threshold.minimum_execution_match_rate) },
-    { label: 'Expectancy', value: data.expectancy_r == null ? 'N/A' : signed(data.expectancy_r, 3, 'R'), pass: Number(data.expectancy_r ?? Number.NEGATIVE_INFINITY) >= Number(threshold.minimum_expectancy_r) },
-    { label: '90% LCB', value: data.one_sided_90_lcb_r == null ? 'N/A' : signed(data.one_sided_90_lcb_r, 3, 'R'), pass: Number(data.one_sided_90_lcb_r ?? 0) > 0 },
+    { label: 'Expectancy', value: data.expectancy_r == null ? 'N/A' : formatSigned(data.expectancy_r, 3, 'R'), pass: Number(data.expectancy_r ?? Number.NEGATIVE_INFINITY) >= Number(threshold.minimum_expectancy_r) },
+    { label: '90% LCB', value: data.one_sided_90_lcb_r == null ? 'N/A' : formatSigned(data.one_sided_90_lcb_r, 3, 'R'), pass: Number(data.one_sided_90_lcb_r ?? 0) > 0 },
     { label: 'Max drawdown', value: data.max_drawdown_r == null ? 'N/A' : `${fixed(data.max_drawdown_r, 2)}R`, pass: data.max_drawdown_r != null && Number(data.max_drawdown_r) <= Number(threshold.maximum_drawdown_r) },
     { label: 'Operator review', value: data.reviewed ? 'Recorded' : 'Required', pass: data.reviewed },
   ];
@@ -465,12 +447,12 @@ export function TradingPaperDashboard() {
   const selectedAccount = accounts.find((account) => account.account_id === accountId);
   const currency = selectedAccount?.currency ?? 'USD';
   const selectedEpoch = epochs.find((epoch) => epoch.epoch_id === epochId) ?? epochs.find((epoch) => epoch.is_current) ?? epochs[0];
-  const initialCash = numeric(selectedEpoch?.initial_cash);
+  const initialCash = numericValue(selectedEpoch?.initial_cash);
   const latestEquity = data?.equity.at(-1);
-  const accountBalance = numeric(latestEquity?.cash) ?? initialCash;
-  const accountEquity = numeric(latestEquity?.equity) ?? accountBalance;
-  const realizedPnl = numeric(latestEquity?.realized_pnl);
-  const unrealizedPnl = numeric(latestEquity?.unrealized_pnl);
+  const accountBalance = numericValue(latestEquity?.cash) ?? initialCash;
+  const accountEquity = numericValue(latestEquity?.equity) ?? accountBalance;
+  const realizedPnl = numericValue(latestEquity?.realized_pnl);
+  const unrealizedPnl = numericValue(latestEquity?.unrealized_pnl);
   const equityReturn = initialCash && accountEquity !== null ? (accountEquity - initialCash) / initialCash : null;
   const realizedReturn = initialCash && realizedPnl !== null ? realizedPnl / initialCash : null;
   const unrealizedReturn = initialCash && unrealizedPnl !== null ? unrealizedPnl / initialCash : null;
@@ -556,33 +538,33 @@ export function TradingPaperDashboard() {
 
       {data ? <>
         <div className="paper-overview-strip">
-          <Metric icon="▣" label="Account balance" value={money(accountBalance, currency)} detail={initialCash === null ? undefined : `Initial ${money(initialCash, currency)}`} />
-          <Metric icon="↗" label="Equity" value={money(accountEquity, currency)} detail={equityReturn === null ? undefined : `${equityReturn >= 0 ? '+' : ''}${(equityReturn * 100).toFixed(2)}%`} tone={equityReturn !== null && equityReturn < 0 ? 'negative' : 'primary'} />
-          <Metric icon="$" label="Realized P&L" value={money(realizedPnl, currency, true)} detail={realizedReturn === null ? undefined : `${realizedReturn >= 0 ? '+' : ''}${(realizedReturn * 100).toFixed(2)}%`} tone={realizedPnl !== null && realizedPnl < 0 ? 'negative' : 'positive'} />
-          <Metric icon="＋" label="Unrealized P&L" value={money(unrealizedPnl, currency, true)} detail={unrealizedReturn === null ? undefined : `${unrealizedReturn >= 0 ? '+' : ''}${(unrealizedReturn * 100).toFixed(2)}%`} tone={unrealizedPnl !== null && unrealizedPnl < 0 ? 'negative' : 'positive'} />
+          <Metric icon="▣" label="Account balance" value={formatMoney(accountBalance, currency)} detail={initialCash === null ? undefined : `Initial ${formatMoney(initialCash, currency)}`} />
+          <Metric icon="↗" label="Equity" value={formatMoney(accountEquity, currency)} detail={equityReturn === null ? undefined : `${equityReturn >= 0 ? '+' : ''}${(equityReturn * 100).toFixed(2)}%`} tone={equityReturn !== null && equityReturn < 0 ? 'negative' : 'primary'} />
+          <Metric icon="$" label="Realized P&L" value={formatMoney(realizedPnl, currency, { signed: true })} detail={realizedReturn === null ? undefined : `${realizedReturn >= 0 ? '+' : ''}${(realizedReturn * 100).toFixed(2)}%`} tone={realizedPnl !== null && realizedPnl < 0 ? 'negative' : 'positive'} />
+          <Metric icon="＋" label="Unrealized P&L" value={formatMoney(unrealizedPnl, currency, { signed: true })} detail={unrealizedReturn === null ? undefined : `${unrealizedReturn >= 0 ? '+' : ''}${(unrealizedReturn * 100).toFixed(2)}%`} tone={unrealizedPnl !== null && unrealizedPnl < 0 ? 'negative' : 'positive'} />
           <Metric icon="◎" label="Win rate" value={pct(summary?.win_rate, 2)} detail={`${summary?.wins ?? 0}W / ${summary?.losses ?? 0}L`} tone="primary" />
-          <Metric icon="Σ" label="Expectancy" value={signed(summary?.expectancy_r, 3, 'R')} detail="Per trade" tone={Number(summary?.expectancy_r ?? 0) < 0 ? 'negative' : 'primary'} />
+          <Metric icon="Σ" label="Expectancy" value={formatSigned(summary?.expectancy_r, 3, 'R')} detail="Per trade" tone={Number(summary?.expectancy_r ?? 0) < 0 ? 'negative' : 'primary'} />
           <Metric icon="△" label="Max drawdown" value={maxDrawdown === null ? (summary?.max_drawdown_r == null ? '—' : `-${Math.abs(Number(summary.max_drawdown_r)).toFixed(2)}R`) : `${maxDrawdown.toFixed(2)}${drawdownUnit === 'percent' ? '%' : 'R'}`} tone="negative" />
           <Metric icon="◇" label="Trades" value={String(summary?.trade_count ?? 0)} detail="Filtered sample" />
         </div>
 
         {tab === 'overview' ? <>
           <div className="paper-overview-charts">
-            <article className="paper-chart-card equity-card"><header><div><strong>Equity curve</strong><small>{money(accountEquity, currency)} · {equityReturn === null ? 'No baseline' : `${equityReturn >= 0 ? '+' : ''}${(equityReturn * 100).toFixed(2)}%`}</small></div><span>All time</span></header><LineChart points={equityPoints.length ? equityPoints : cumulativeR} references={equityPoints.length && initialCash !== null ? [{ value: initialCash, label: 'initial' }] : [{ value: 0, label: '0R' }]} formatAxis={equityPoints.length ? (value) => value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : (value) => `${value.toFixed(1)}R`} /></article>
+            <article className="paper-chart-card equity-card"><header><div><strong>Equity curve</strong><small>{formatMoney(accountEquity, currency)} · {equityReturn === null ? 'No baseline' : `${equityReturn >= 0 ? '+' : ''}${(equityReturn * 100).toFixed(2)}%`}</small></div><span>All time</span></header><LineChart points={equityPoints.length ? equityPoints : cumulativeR} references={equityPoints.length && initialCash !== null ? [{ value: initialCash, label: 'initial' }] : [{ value: 0, label: '0R' }]} formatAxis={equityPoints.length ? (value) => value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : (value) => `${value.toFixed(1)}R`} /></article>
             <article className="paper-chart-card daily-card"><header><div><strong>{dailyUnit === 'USD' ? `Daily P&L (${currency})` : 'Daily result (R)'}</strong><small>{dailyUnit === 'USD' ? 'Realized canonical trade P&L' : 'Strategy-normalized session result'}</small></div><span>All time</span></header><DailyBars rows={dailyPerformance} unit={dailyUnit} /></article>
-            <article className="paper-chart-card win-card"><header><div><strong>Win vs loss</strong><small>Completed filtered trades</small></div><span>{pct(summary?.win_rate)}</span></header><WinLossDonut wins={summary?.wins ?? 0} losses={summary?.losses ?? 0} /><footer><div><small>Best trade</small><strong className="positive">{bestTrade ? signed(bestTrade.r_result, 2, 'R') : '—'}</strong></div><div><small>Worst trade</small><strong className="negative">{worstTrade ? signed(worstTrade.r_result, 2, 'R') : '—'}</strong></div></footer></article>
+            <article className="paper-chart-card win-card"><header><div><strong>Win vs loss</strong><small>Completed filtered trades</small></div><span>{pct(summary?.win_rate)}</span></header><WinLossDonut wins={summary?.wins ?? 0} losses={summary?.losses ?? 0} /><footer><div><small>Best trade</small><strong className="positive">{bestTrade ? formatSigned(bestTrade.r_result, 2, 'R') : '—'}</strong></div><div><small>Worst trade</small><strong className="negative">{worstTrade ? formatSigned(worstTrade.r_result, 2, 'R') : '—'}</strong></div></footer></article>
             <article className="paper-chart-card drawdown-card"><header><div><strong>Drawdown</strong><small>Peak-to-trough {drawdownUnit === 'percent' ? 'equity' : 'strategy R'}</small></div><span>All time</span></header><LineChart points={drawdownPoints} references={[{ value: 0, label: 'peak' }]} tone="danger" formatAxis={(value) => `${value.toFixed(2)}${drawdownUnit === 'percent' ? '%' : 'R'}`} /></article>
           </div>
 
           <PaperOrderReferences orders={paperOrderRows} />
 
           <div className="paper-overview-lower">
-            <article className="paper-panel-card recent-trades-card"><header><div><strong>Recent trades</strong><small>Canonical AUTO PAPER and prospective SHADOW outcomes · drill into retained evidence</small></div><span>{tradeRows.length} shown</span></header><div className="paper-trades-table"><table><thead><tr><th>Time</th><th>Symbol</th><th>Mode</th><th>Qty</th><th>P&L</th><th>R-mult</th><th>Outcome</th><th>Exit</th><th>Detail</th></tr></thead><tbody>{tradeRows.slice(0, 8).map((trade) => <tr key={`${trade.source}-${trade.trade_id}`}><td>{compactTime(trade.entry_time)}</td><td><strong>{symbol(trade.instrument_id)}</strong></td><td>{trade.source === 'shadow_replay' ? 'SHADOW' : 'AUTO'}</td><td>{trade.quantity ?? '—'}</td><td className={Number(trade.realized_pnl ?? 0) < 0 ? 'negative' : 'positive'}>{trade.realized_pnl == null ? '—' : money(trade.realized_pnl, currency, true)}</td><td className={Number(trade.r_result) < 0 ? 'negative' : 'positive'}>{signed(trade.r_result, 2, 'R')}</td><td><span className={Number(trade.r_result) >= 0 ? 'trade-outcome win' : 'trade-outcome loss'}>{Number(trade.r_result) >= 0 ? 'Win' : 'Loss'}</span></td><td>{trade.exit_reason ?? '—'}</td><td><button type="button" className="paper-trade-view-button" aria-label={`View ${symbol(trade.instrument_id)} trade evidence`} onClick={() => setSelectedTrade(trade)}>View</button></td></tr>)}{!tradeRows.length ? <tr><td colSpan={9}>No completed trades in this filter.</td></tr> : null}</tbody></table></div></article>
-            <article className="paper-panel-card insights-card"><header><div><strong>Strategy / execution insights</strong><small>Filtered evidence; sample-derived metrics are shown only when the trade sample is complete</small></div></header><div className="paper-insight-grid"><Insight icon="↗" label="Profit factor" value={fixed(summary?.profit_factor, 2)} /><Insight icon="◉" label="Sharpe ratio" value={sharpe === null ? '—' : sharpe.toFixed(2)} detail="Daily R annualized" /><Insight icon="↗" label="Sortino ratio" value={sortino === null ? '—' : sortino.toFixed(2)} detail="Daily R annualized" /><Insight icon="↟" label="Avg win" value={averageWin === null ? '—' : signed(averageWin, 2, 'R')} /><Insight icon="↡" label="Avg loss" value={averageLoss === null ? '—' : signed(averageLoss, 2, 'R')} /><Insight icon="↗" label="Payoff ratio" value={payoffRatio === null ? '—' : payoffRatio.toFixed(2)} /><Insight icon="Σ" label="Avg trade" value={signed(summary?.expectancy_r, 3, 'R')} /><Insight icon="◷" label="Trade duration" value={durationLabel(averageDuration)} /><Insight icon="▲" label="Profitability" value={pct(summary?.win_rate, 2)} /></div></article>
+            <article className="paper-panel-card recent-trades-card"><header><div><strong>Recent trades</strong><small>Canonical AUTO PAPER and prospective SHADOW outcomes · drill into retained evidence</small></div><span>{tradeRows.length} shown</span></header><div className="paper-trades-table"><table><thead><tr><th>Time</th><th>Symbol</th><th>Mode</th><th>Qty</th><th>P&L</th><th>R-mult</th><th>Outcome</th><th>Exit</th><th>Detail</th></tr></thead><tbody>{tradeRows.slice(0, 8).map((trade) => <tr key={`${trade.source}-${trade.trade_id}`}><td>{compactTime(trade.entry_time)}</td><td><strong>{symbol(trade.instrument_id)}</strong></td><td>{trade.source === 'shadow_replay' ? 'SHADOW' : 'AUTO'}</td><td>{trade.quantity ?? '—'}</td><td className={Number(trade.realized_pnl ?? 0) < 0 ? 'negative' : 'positive'}>{trade.realized_pnl == null ? '—' : formatMoney(trade.realized_pnl, currency, { signed: true })}</td><td className={Number(trade.r_result) < 0 ? 'negative' : 'positive'}>{formatSigned(trade.r_result, 2, 'R')}</td><td><span className={Number(trade.r_result) >= 0 ? 'trade-outcome win' : 'trade-outcome loss'}>{Number(trade.r_result) >= 0 ? 'Win' : 'Loss'}</span></td><td>{trade.exit_reason ?? '—'}</td><td><button type="button" className="paper-trade-view-button" aria-label={`View ${symbol(trade.instrument_id)} trade evidence`} onClick={() => setSelectedTrade(trade)}>View</button></td></tr>)}{!tradeRows.length ? <tr><td colSpan={9}>No completed trades in this filter.</td></tr> : null}</tbody></table></div></article>
+            <article className="paper-panel-card insights-card"><header><div><strong>Strategy / execution insights</strong><small>Filtered evidence; sample-derived metrics are shown only when the trade sample is complete</small></div></header><div className="paper-insight-grid"><Insight icon="↗" label="Profit factor" value={fixed(summary?.profit_factor, 2)} /><Insight icon="◉" label="Sharpe ratio" value={sharpe === null ? '—' : sharpe.toFixed(2)} detail="Daily R annualized" /><Insight icon="↗" label="Sortino ratio" value={sortino === null ? '—' : sortino.toFixed(2)} detail="Daily R annualized" /><Insight icon="↟" label="Avg win" value={averageWin === null ? '—' : formatSigned(averageWin, 2, 'R')} /><Insight icon="↡" label="Avg loss" value={averageLoss === null ? '—' : formatSigned(averageLoss, 2, 'R')} /><Insight icon="↗" label="Payoff ratio" value={payoffRatio === null ? '—' : payoffRatio.toFixed(2)} /><Insight icon="Σ" label="Avg trade" value={formatSigned(summary?.expectancy_r, 3, 'R')} /><Insight icon="◷" label="Trade duration" value={durationLabel(averageDuration)} /><Insight icon="▲" label="Profitability" value={pct(summary?.win_rate, 2)} /></div></article>
           </div>
 
           <div className="paper-overview-support">
-            <article><header><div><strong>Regime comparison</strong><small>SHADOW and AUTO PAPER stay statistically separate</small></div></header><div className="paper-execution-kpis"><Kpi label="SHADOW" value={signed(data.mode_comparison.shadow.expectancy_r, 3, 'R')} detail={`${data.mode_comparison.shadow.trade_count} trades`} /><Kpi label="AUTO PAPER" value={signed(data.mode_comparison.auto_paper.expectancy_r, 3, 'R')} detail={`${data.mode_comparison.auto_paper.trade_count} trades`} /><Kpi label="Implementation delta" value={data.mode_comparison.expectancy_delta_r == null ? '—' : signed(data.mode_comparison.expectancy_delta_r, 3, 'R')} detail="AUTO − SHADOW" /></div></article>
+            <article><header><div><strong>Regime comparison</strong><small>SHADOW and AUTO PAPER stay statistically separate</small></div></header><div className="paper-execution-kpis"><Kpi label="SHADOW" value={formatSigned(data.mode_comparison.shadow.expectancy_r, 3, 'R')} detail={`${data.mode_comparison.shadow.trade_count} trades`} /><Kpi label="AUTO PAPER" value={formatSigned(data.mode_comparison.auto_paper.expectancy_r, 3, 'R')} detail={`${data.mode_comparison.auto_paper.trade_count} trades`} /><Kpi label="Implementation delta" value={data.mode_comparison.expectancy_delta_r == null ? '—' : formatSigned(data.mode_comparison.expectancy_delta_r, 3, 'R')} detail="AUTO − SHADOW" /></div></article>
             <article><header><div><strong>Rolling expectancy</strong><small>{rollingWindow}-trade window · +0.20R V2 threshold</small></div><label><span>Window</span><select value={rollingWindow} onChange={(event) => setRollingWindow(Number(event.target.value))}><option value={20}>20</option><option value={30}>30</option><option value={50}>50</option></select></label></header><LineChart points={rollingPoints} references={[{ value: 0, label: '0R' }, { value: 0.2, label: '+0.20R' }]} area={false} /></article>
           </div>
         </> : null}
@@ -593,14 +575,14 @@ export function TradingPaperDashboard() {
           <article><header><div><strong>Rolling 90% lower bound</strong><small>Evidence reliability, not only point estimate</small></div></header><LineChart points={lcbPoints} references={[{ value: 0, label: 'must stay > 0R' }]} area={false} /></article>
           <article className="wide"><header><div><strong>MAE vs MFE</strong><small>Validate stop, protection and target geometry</small></div></header><MaeMfeScatter rows={data.mae_mfe} /></article>
           <article className="wide"><header><div><strong>Candidate lifecycle</strong><small>One strategy/profile/session/universe/instrument lifecycle — not raw event counts</small></div></header><div className="paper-funnel">{data.funnel.map((stage, index) => <div key={stage.stage}><span>{stage.stage}</span><strong>{stage.count}</strong><small>{index === 0 ? 'Captured lifecycle' : stage.conversion_from_previous == null ? '—' : `${(Number(stage.conversion_from_previous) * 100).toFixed(0)}% from prior`}</small>{stage.dominant_drop_reason ? <em>{stage.dominant_drop_count} stopped: {stage.dominant_drop_reason}</em> : null}</div>)}</div></article>
-          <article className="wide"><header><div><strong>Factor studies</strong><small>Persisted setup-feature outcome buckets</small></div></header>{data.factors.length ? <div className="paper-factor-studies">{data.factors.map((study) => <section key={study.factor}><strong>{study.factor}</strong><table><thead><tr><th>Bucket</th><th>N</th><th>Expectancy</th><th>Win rate</th></tr></thead><tbody>{study.buckets.map((bucket) => <tr key={bucket.label}><td>{bucket.label}</td><td>{bucket.count}</td><td className={Number(bucket.expectancy_r) >= 0 ? 'positive' : 'negative'}>{signed(bucket.expectancy_r, 3, 'R')}</td><td>{pct(bucket.win_rate)}</td></tr>)}</tbody></table></section>)}</div> : <div className="paper-dashboard-empty">Factor buckets populate as completed AUTO PAPER trades retain setup features.</div>}</article>
+          <article className="wide"><header><div><strong>Factor studies</strong><small>Persisted setup-feature outcome buckets</small></div></header>{data.factors.length ? <div className="paper-factor-studies">{data.factors.map((study) => <section key={study.factor}><strong>{study.factor}</strong><table><thead><tr><th>Bucket</th><th>N</th><th>Expectancy</th><th>Win rate</th></tr></thead><tbody>{study.buckets.map((bucket) => <tr key={bucket.label}><td>{bucket.label}</td><td>{bucket.count}</td><td className={Number(bucket.expectancy_r) >= 0 ? 'positive' : 'negative'}>{formatSigned(bucket.expectancy_r, 3, 'R')}</td><td>{pct(bucket.win_rate)}</td></tr>)}</tbody></table></section>)}</div> : <div className="paper-dashboard-empty">Factor buckets populate as completed AUTO PAPER trades retain setup features.</div>}</article>
         </div> : null}
 
         {tab === 'execution' ? <div className="paper-dashboard-grid">
           <article className="wide"><header><div><strong>Expected → observed → realized</strong><small>Separate signal deterioration, fill slippage and implementation shortfall</small></div></header><div className="paper-execution-kpis"><Kpi label="AUTO PAPER trades" value={String(data.execution.trade_count)} /><Kpi label="Signal → executable" value={data.execution.average_signal_to_executable_bps == null ? '—' : `${fixed(data.execution.average_signal_to_executable_bps, 1)} bps`} /><Kpi label="Execution → fill" value={data.execution.average_fill_slippage_bps == null ? '—' : `${fixed(data.execution.average_fill_slippage_bps, 1)} bps`} /><Kpi label="Total shortfall" value={data.execution.average_implementation_shortfall_bps == null ? '—' : `${fixed(data.execution.average_implementation_shortfall_bps, 1)} bps`} /></div></article>
           <article><header><div><strong>Gross exposure</strong><small>Mark-to-market notional over time</small></div></header><LineChart points={exposurePoints} formatAxis={(value) => value.toLocaleString(undefined, { maximumFractionDigits: 0 })} /></article>
           <article><header><div><strong>Risk at stop</strong><small>Persisted protection risk over time</small></div></header><LineChart points={riskPoints} formatAxis={(value) => value.toLocaleString(undefined, { maximumFractionDigits: 0 })} tone="danger" /></article>
-          <article className="wide"><header><div><strong>Simulation history</strong><small>Reset starts a new immutable epoch instead of erasing evidence</small></div></header><div className="paper-epochs">{epochs.map((epoch) => <div key={epoch.epoch_id} data-current={epoch.is_current ? 'true' : 'false'}><strong>Epoch {epoch.ordinal}</strong><span>{epoch.is_current ? 'CURRENT' : epoch.end_reason?.replaceAll('_', ' ') ?? 'closed'}</span><small>Initial {money(epoch.initial_cash, currency)} · {timeLabel(epoch.started_at)}{epoch.ended_at ? ` → ${timeLabel(epoch.ended_at)}` : ''}</small></div>)}</div></article>
+          <article className="wide"><header><div><strong>Simulation history</strong><small>Reset starts a new immutable epoch instead of erasing evidence</small></div></header><div className="paper-epochs">{epochs.map((epoch) => <div key={epoch.epoch_id} data-current={epoch.is_current ? 'true' : 'false'}><strong>Epoch {epoch.ordinal}</strong><span>{epoch.is_current ? 'CURRENT' : epoch.end_reason?.replaceAll('_', ' ') ?? 'closed'}</span><small>Initial {formatMoney(epoch.initial_cash, currency)} · {timeLabel(epoch.started_at)}{epoch.ended_at ? ` → ${timeLabel(epoch.ended_at)}` : ''}</small></div>)}</div></article>
         </div> : null}
       </> : <div className="paper-dashboard-empty">{status === 'loading' ? 'Loading durable paper analytics…' : 'No analytics available.'}</div>}
 

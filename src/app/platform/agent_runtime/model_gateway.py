@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict
 from app.observability.tracing import set_span_attributes
 from app.providers.base import ChatMessage, ChatResponse
 from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
+from app.providers.model_route import ModelRoute
 from app.providers.service import get_provider
 
 from .budget import AgentBudgetError, default_agent_budget_manager
@@ -34,18 +35,6 @@ _STREAM_BUFFER = 32
 
 # Returned by an extracted step that did not settle its caller.
 _CONTINUE = object()
-
-
-def normalize_llm_provider_id(provider_id: str) -> str:
-    value = str(provider_id or "").strip()
-    return value.removeprefix("llm:") if value.startswith("llm:") else value
-
-
-def normalize_llm_model_id(provider_id: str, model_id: str) -> str:
-    provider = normalize_llm_provider_id(provider_id)
-    value = str(model_id or "").strip()
-    prefix = f"llm:{provider}:"
-    return value[len(prefix):] if value.startswith(prefix) else value
 
 
 def agent_conversation_id(run_id: str, session_id: str | None = None) -> str:
@@ -149,14 +138,11 @@ def _target_for_run(run_id: str, requested_model: str) -> tuple[str, str, str | 
     expected = f"{snapshot.spec.model.provider_id}::{snapshot.spec.model.model_id}"
     if requested_model != expected:
         raise HTTPException(status_code=403, detail="agent_model_outside_run_spec")
-    return (
-        normalize_llm_provider_id(snapshot.spec.model.provider_id),
-        normalize_llm_model_id(
-            snapshot.spec.model.provider_id,
-            snapshot.spec.model.model_id,
-        ),
-        snapshot.spec.model.reasoning_effort,
-    )
+    route = ModelRoute.parse(snapshot.spec.model.provider_id, snapshot.spec.model.model_id)
+    # A pinned model that names another provider goes as written, so the provider refuses it instead of running
+    # its own default.
+    model = route.model if route.matched else str(snapshot.spec.model.model_id or "").strip()
+    return route.provider, model, snapshot.spec.model.reasoning_effort
 
 
 def _messages(rows: list[AgentModelMessage]) -> list[ChatMessage]:

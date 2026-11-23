@@ -19,7 +19,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .strategies.models import OvernightArmConfig, OvernightShadowConfig
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 OVERNIGHT_TRADING_STRATEGY_ID = "overnight-trading-strategy-shadow"
@@ -226,7 +226,7 @@ def _known_at_cutoff(
         (
             bar for bar in bars
             if bar.start.astimezone(_ET).date() == session_date
-            and bar.start.astimezone(_ET).time() >= time(9, 30)
+            and bar.start.astimezone(_ET).time() >= REGULAR_OPEN
             and bar.start + timedelta(minutes=bar_minutes) <= cutoff
         ),
         key=lambda bar: bar.start,
@@ -425,13 +425,13 @@ def label_outcome(
         datetime.combine(session_date, config.entry_et, tzinfo=_ET),
         datetime.combine(session_date, session_close, tzinfo=_ET),
     )
-    open_at = datetime.combine(next_session_date, time(9, 30), tzinfo=_ET)
+    open_at = datetime.combine(next_session_date, REGULAR_OPEN, tzinfo=_ET)
     flat_at = datetime.combine(next_session_date, next_close, tzinfo=_ET) - timedelta(minutes=5)
     open_bar = _first_at_or_after(next_bars, open_at, flat_at)
     premarket = [
         bar for bar in next_bars
         if bar.start.astimezone(_ET).date() == next_session_date
-        and time(4, 0) <= bar.start.astimezone(_ET).time()
+        and PREMARKET_OPEN <= bar.start.astimezone(_ET).time()
         and bar.start + timedelta(minutes=1) <= datetime.combine(next_session_date, time(8, 0), tzinfo=_ET)
     ]
     bar_0945 = _first_at_or_after(next_bars, datetime.combine(next_session_date, time(9, 45), tzinfo=_ET), flat_at)
@@ -482,7 +482,7 @@ def label_benchmark(
     )
     open_bar = _first_at_or_after(
         next_bars,
-        datetime.combine(next_session_date, time(9, 30), tzinfo=_ET),
+        datetime.combine(next_session_date, REGULAR_OPEN, tzinfo=_ET),
         datetime.combine(next_session_date, next_close, tzinfo=_ET) - timedelta(minutes=5),
     )
     entry = entry_bar.open if entry_bar else None

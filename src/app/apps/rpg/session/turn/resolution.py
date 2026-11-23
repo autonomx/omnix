@@ -45,14 +45,16 @@ class Resolution:
     action_result: dict[str, Any] | None = None  # a structured action's own answer (the tactical route's fields)
 
 
-def _counted(document: Mapping[str, Any]) -> TurnCounted:
-    state, manifest = _d(document.get("state")), _d(document.get("manifest"))
-    return TurnCounted(turn_count=int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1)
+def next_turn(document: Mapping[str, Any]) -> TurnCounted:
+    """The turn being played: the one after those the campaign has counted."""
+    return TurnCounted(turn_count=_sections.turn_count_of(document) + 1)
 
 
-def _timed(document: Mapping[str, Any], changes: list[StateChange], minutes: int) -> list[StateChange]:
+def timed_changes(document: Mapping[str, Any], changes: list[StateChange], minutes: int) -> list[StateChange]:
+    """A turn's changes as the pipeline commits them: the turn counted, then the time it took (in whole ticks,
+    rounded up), then the rule's own changes."""
     ticks = -(-minutes // MINUTES_PER_TICK)
-    return [_counted(document), *([TimeAdvanced(ticks=ticks, minutes=minutes)] if minutes else []), *changes]
+    return [next_turn(document), *([TimeAdvanced(ticks=ticks, minutes=minutes)] if minutes else []), *changes]
 
 
 ABILITY_MINUTES = 5  # an ability used with no fight on: a few minutes
@@ -67,27 +69,27 @@ def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Map
     effect = ability_use.in_fight(ability)
     fighting = _d(_sections.combat_state_of(simulation)).get("active") is True
     if not fighting and effect.strikes and not planned.second_target_id:
-        return Resolution([_counted(session)], [f"{_s(ability.get('name'))} needs a foe to aim at."], refused=True,
+        return Resolution([next_turn(session)], [f"{_s(ability.get('name'))} needs a foe to aim at."], refused=True,
                           told=False)
     if not fighting and not effect.strikes:
         used = ability_use.out_of_fight(session, ability)
         if used.refused:
-            return Resolution([_counted(session)], used.lines, refused=True, told=False)
-        return Resolution(_timed(session, used.changes, ABILITY_MINUTES), used.lines, minutes=ABILITY_MINUTES,
+            return Resolution([next_turn(session)], used.lines, refused=True, told=False)
+        return Resolution(timed_changes(session, used.changes, ABILITY_MINUTES), used.lines, minutes=ABILITY_MINUTES,
                           needs="standard_turn")
     refusal = ability_use.not_ready(session, ability)
     if refusal:
-        return Resolution([_counted(session)], [refusal], refused=True, told=False)
+        return Resolution([next_turn(session)], [refusal], refused=True, told=False)
     spent = ability_use.spend(session, ability)
     paid, _ = reduce(dict(session), spent)
     turn = fight(_d(_sections.simulation_state_of(paid)), action="ability", target_ref=planned.second_target_id,
-                 turn_key=str(_counted(session).turn_count), ability=effect, ability_name=_s(ability.get("name")))
+                 turn_key=str(next_turn(session).turn_count), ability=effect, ability_name=_s(ability.get("name")))
     if turn is None:  # aimed at something that cannot be fought
-        return Resolution([_counted(session)], [f"There is nothing here to aim {_s(ability.get('name'))} at."],
+        return Resolution([next_turn(session)], [f"There is nothing here to aim {_s(ability.get('name'))} at."],
                           refused=True, told=False)
     if turn.refused:
-        return Resolution([_counted(session)], turn.lines, refused=True, told=False)
-    return Resolution(_timed(session, [*spent, *turn.changes], turn.minutes), turn.lines, minutes=turn.minutes,
+        return Resolution([next_turn(session)], turn.lines, refused=True, told=False)
+    return Resolution(timed_changes(session, [*spent, *turn.changes], turn.minutes), turn.lines, minutes=turn.minutes,
                       needs="standard_turn")
 
 
@@ -98,7 +100,7 @@ def met_on_the_road(session: Mapping[str, Any], travel: Any) -> tuple[list[State
 
     arrived, _ = reduce(dict(session), travel.changes)
     arrived_at = _d(_sections.simulation_state_of(arrived))
-    turn_key = str(_counted(session).turn_count)
+    turn_key = str(next_turn(session).turn_count)
     from app.apps.rpg.rules.exploration import room_foe, room_hazard
 
     # A site's room's hazard is met as the hero comes in (EV-10).
@@ -121,7 +123,7 @@ FREE_ACTION_MINUTES = 10
 def free_action(session: Mapping[str, Any]) -> Resolution:
     """What no rule of the game decides (a song, a gesture, a look at the sky): the attempt is told and takes its few
     minutes; the game keeps nothing of it (RQ-3.2)."""
-    return Resolution(_timed(session, [_counted(session)], FREE_ACTION_MINUTES),
+    return Resolution(timed_changes(session, [next_turn(session)], FREE_ACTION_MINUTES),
                       ["You do so. A few minutes pass; nothing comes of it that the world keeps."],
                       minutes=FREE_ACTION_MINUTES, needs="standard_turn")
 
@@ -141,7 +143,7 @@ def _not_here(session: Mapping[str, Any], simulation: Mapping[str, Any], npc_id:
     place_id = getattr(whereabouts(simulation, clock(simulation)).get(npc_id), "location_id", "")
     place = _s(_d(_d(_d(_sections.world_model_of(simulation)).get("locations")).get(place_id)).get("name"))
     line = f"{name} is not here: at this hour, {_called(name)} is at {place}." if place else f"{name} is not here."
-    return Resolution([_counted(session)], [line], refused=True, told=False)
+    return Resolution([next_turn(session)], [line], refused=True, told=False)
 
 
 def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) -> Resolution | None:
@@ -185,15 +187,15 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
     if mechanic == "fight" and planned.reason in {"busy", "nothing_to_use"}:
         said = ("You carry nothing like that to use. The fight goes on: strike, break away, or use something you carry."
                 if planned.reason == "nothing_to_use" else "You are in a fight: strike, break away, or use something you carry.")
-        return Resolution([_counted(session)], [said], refused=True, told=False)
+        return Resolution([next_turn(session)], [said], refused=True, told=False)
     if mechanic == "fight":
         turn = fight(simulation, action={"flee": "flee", "defend": "defend", "sneak": "sneak", "persuade": "parley",  # type: ignore[arg-type]
                                          "intimidate": "parley"}.get(planned.reason, "attack"),
-                     target_ref=planned.target_id, turn_key=str(_counted(session).turn_count),
+                     target_ref=planned.target_id, turn_key=str(next_turn(session).turn_count),
                      parley="intimidate" if planned.reason == "intimidate" else "persuade", weakness=slots.weakness)
         if turn is None:
             return None  # not a creature the world knows: the older path
-        return Resolution(_timed(session, turn.changes, turn.minutes), turn.lines, minutes=turn.minutes,
+        return Resolution(timed_changes(session, turn.changes, turn.minutes), turn.lines, minutes=turn.minutes,
                           refused=turn.refused, needs=None if turn.refused else "standard_turn",
                           told=not turn.refused)
     if mechanic == "ability":
@@ -202,7 +204,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         if int(_d(_sections.player_state_of(simulation)).get("level_choices_pending") or 0) <= 0:
             return None  # no level's choice is waiting: "learn to swim" is an attempt, told as one
         grown = progression.choose(session, slots.choice)
-        return Resolution([_counted(session), *grown.changes], grown.lines, refused=grown.refused, told=False,
+        return Resolution([next_turn(session), *grown.changes], grown.lines, refused=grown.refused, told=False,
                           action_result={"kind": "level_choice", **grown.detail})
     if mechanic == "check":
         target = planned.target_id
@@ -214,13 +216,13 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         away = _not_here(session, simulation, target) if target else None
         if away is not None:  # persuading, intimidating, deceiving someone away: they are told where they are
             return away
-        tried = check(simulation, planned.reason, target, turn_key=str(_counted(session).turn_count))
-        return Resolution(_timed(session, tried.changes, tried.minutes), tried.lines, minutes=tried.minutes,
+        tried = check(simulation, planned.reason, target, turn_key=str(next_turn(session).turn_count))
+        return Resolution(timed_changes(session, tried.changes, tried.minutes), tried.lines, minutes=tried.minutes,
                           needs="standard_turn", action_result={"kind": "check", **tried.record})
     if mechanic == "give":
         given = give_item(simulation, planned.target_id, planned.second_target_id, quantity=slots.quantity,
                           everything=slots.everything)
-        return Resolution(_timed(session, given.changes, given.minutes), given.lines, minutes=given.minutes,
+        return Resolution(timed_changes(session, given.changes, given.minutes), given.lines, minutes=given.minutes,
                           refused=given.refused, told=not given.refused)
     if mechanic in {"use_item", "drop", "take", "equip", "unequip"}:
         counted: dict[str, Any] = {"quantity": slots.quantity, "everything": slots.everything}
@@ -232,11 +234,11 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         if planned.reason == "in_fight" and not outcome.refused:
             # The hero's turn spent on it; then everyone whose turn comes before the hero's next acts.
             used, _ = reduce(dict(session), outcome.changes)
-            turn = fight(_d(_sections.simulation_state_of(used)), action="pass", turn_key=str(_counted(session).turn_count))
+            turn = fight(_d(_sections.simulation_state_of(used)), action="pass", turn_key=str(next_turn(session).turn_count))
             if turn is not None:
-                return Resolution(_timed(session, [*outcome.changes, *turn.changes], turn.minutes),
+                return Resolution(timed_changes(session, [*outcome.changes, *turn.changes], turn.minutes),
                                   [*outcome.lines, *turn.lines], minutes=turn.minutes, needs="standard_turn")
-        return Resolution(_timed(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,
+        return Resolution(timed_changes(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,
                           refused=outcome.refused, told=not outcome.refused)
     if mechanic in {"quest", "practice", "status", "party", "order"}:
         if mechanic == "quest":
@@ -254,7 +256,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
             asked = ordered
         # Asking where one stands, or giving an order, is said by the game; the rest is told to the narrator.
         quiet = mechanic in {"status", "order"} or asked.refused
-        return Resolution(_timed(session, asked.changes, asked.minutes), asked.lines, minutes=asked.minutes,
+        return Resolution(timed_changes(session, asked.changes, asked.minutes), asked.lines, minutes=asked.minutes,
                           refused=asked.refused, needs=None if quiet else "standard_turn", told=not quiet)
     if mechanic == "talk":
         from app.apps.rpg.session.turn.dialogue import resolve_dialogue
@@ -264,17 +266,17 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
             return _not_here(session, simulation, planned.target_id)
         speech = ({"speaker_id": answer.speaker_id, "speaker": answer.speaker_name, "line": answer.line}
                   if answer.line else None)
-        return Resolution(_timed(session, answer.changes, MINUTES_PER_TICK), answer.lines, minutes=MINUTES_PER_TICK,
+        return Resolution(timed_changes(session, answer.changes, MINUTES_PER_TICK), answer.lines, minutes=MINUTES_PER_TICK,
                           needs="standard_turn", speech=speech)
     if mechanic == "explore":  # a search for what is hidden here (rules/exploration.py, EV-10): no model call
         from app.apps.rpg.rules.exploration import explore
 
         searched = explore(session)
-        return Resolution(_timed(session, searched.changes, searched.minutes), searched.lines,
+        return Resolution(timed_changes(session, searched.changes, searched.minutes), searched.lines,
                           minutes=searched.minutes, needs="standard_turn", told=bool(searched.changes))
     if mechanic == "rest":
         rested = rest(simulation, slots.rest)
-        return Resolution(_timed(session, rested.changes, rested.minutes), rested.lines, minutes=rested.minutes,
+        return Resolution(timed_changes(session, rested.changes, rested.minutes), rested.lines, minutes=rested.minutes,
                           refused=rested.refused, needs="rest" if rested.kind == "while" else "sleep",
                           told=not rested.refused)
     return None

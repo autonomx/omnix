@@ -16,6 +16,7 @@ from .turn_outcome import TurnOutcome
 from .turn_response_budget import enforce_turn_response_budget
 from .visible_response import build_visible_response
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 TURN_RESPONSE_CONTRACT_VERSION = "rpg_turn_response_v2"
 TURN_RESPONSE_MAX_BYTES = 50_000
@@ -121,7 +122,7 @@ def build_turn_response_v2(
     authoritative = _dict(root.get("authoritative"))
     sources = (root, nested, authoritative)
     visible = build_visible_response(root, command)
-    text = _text(visible.get("plain_text"))
+    text = stripped_text(visible.get("plain_text"))
     turn_id = _first_text(sources, "turn_id")
     tick = _first_int(sources, "tick", "simulation_tick")
     submission_id = _first_text(sources, "submission_id")
@@ -173,7 +174,7 @@ def build_turn_response_v2(
         "turn_id": turn_id or None,
         "simulation_tick": tick,
         "job_id": job_id or None,
-        "trace_id": _text(trace_id) or None,
+        "trace_id": stripped_text(trace_id) or None,
         "command": command,
         "visible_response": visible,
         "response": text,
@@ -226,9 +227,9 @@ def _session_summary(session: dict[str, Any]) -> dict[str, Any]:
     player = _dict(state.get("player")) or _dict(_sections.player_state_of(simulation))
     return _drop_none(
         {
-            "id": _text(manifest.get("session_id") or manifest.get("id")) or None,
-            "title": _text(manifest.get("title") or session.get("title")) or None,
-            "location": _text(
+            "id": stripped_text(manifest.get("session_id") or manifest.get("id")) or None,
+            "title": stripped_text(manifest.get("title") or session.get("title")) or None,
+            "location": stripped_text(
                 scene.get("location_name")
                 or scene.get("location")
                 or state.get("location")
@@ -257,11 +258,11 @@ def _compact_server_trace(value: dict[str, Any]) -> dict[str, Any]:
 
 def _job_id(root: dict[str, Any]) -> str:
     trace = _dict(root.get("creation_server_trace"))
-    direct = _text(trace.get("job_id"))
+    direct = stripped_text(trace.get("job_id"))
     if direct:
         return direct
     job = _dict(root.get("foreground_job"))
-    return _text(job.get("id"))
+    return stripped_text(job.get("id"))
 
 
 def _changed_domains(sources: tuple[dict[str, Any], ...], *, stateful: bool | None) -> list[str]:
@@ -272,7 +273,7 @@ def _changed_domains(sources: tuple[dict[str, Any], ...], *, stateful: bool | No
             value = _dict(source.get("state")).get("changed_domains")
         if isinstance(value, list):
             for item in value:
-                text = _text(item)
+                text = stripped_text(item)
                 if text and text not in explicit:
                     explicit.append(text)
     if explicit:
@@ -320,7 +321,7 @@ def _first_dict(sources: tuple[dict[str, Any], ...], *keys: str) -> dict[str, An
 
 def _first_text(sources: tuple[dict[str, Any], ...], *keys: str) -> str:
     value = _first_value(sources, *keys)
-    return _text(value)
+    return stripped_text(value)
 
 
 def _first_int(sources: tuple[dict[str, Any], ...], *keys: str) -> int | None:
@@ -358,5 +359,3 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""

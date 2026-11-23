@@ -16,14 +16,13 @@ The design focuses on four questions that are distinct from catalyst quality:
 No v4.2 forecast or historical prediction is rewritten.
 """
 
-import hashlib
-import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Final, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256
 from .gapper_dataset import GapperCandidate
 from .prospective_prediction_v4 import PremarketMarketStateSnapshot
 from .prospective_prediction_v42 import V42Forecast
@@ -43,12 +42,6 @@ V43CohortRegimeClass = Literal[
     "HIGH_EXHAUSTION",
 ]
 V43ModelState = Literal["PRODUCED", "FAILED", "NOT_APPLICABLE"]
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 def _clamp01(value: Decimal) -> Decimal:
@@ -108,7 +101,7 @@ class V43ModelSpec(BaseModel):
 
     @property
     def implementation_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 DEFAULT_V43_SPEC = V43ModelSpec()
@@ -198,7 +191,7 @@ class V43Forecast(BaseModel):
 
     @property
     def immutable_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class V43ForecastAttempt(BaseModel):
@@ -331,7 +324,7 @@ def derive_v43_extension_overlay(
     )
     used = tuple(name for name, value, _ in components if value is not None)
     missing = tuple(name for name, value, _ in components if value is None)
-    fingerprint = _hash(
+    fingerprint = canonical_sha256(
         {
             "candidate": {
                 "instrument_id": candidate.instrument_id,
@@ -382,7 +375,7 @@ def derive_v43_cohort_regime(
             fraction_low_information_technical=Decimal("0"),
             mean_remaining_upside=Decimal("0"),
             risk_score=Decimal("1"),
-            cohort_fingerprint=_hash({"rows": (), "reason": "empty"}),
+            cohort_fingerprint=canonical_sha256({"rows": (), "reason": "empty"}),
         )
 
     n = Decimal(count)
@@ -431,7 +424,7 @@ def derive_v43_cohort_regime(
     else:
         classification = "NORMAL"
 
-    fingerprint = _hash(
+    fingerprint = canonical_sha256(
         {
             "members": [
                 {

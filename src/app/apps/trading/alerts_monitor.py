@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .alerts_watchlist import Target, plan_watchlist_pass, watchlist_members
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .providers.request_budget import upstream_of
@@ -31,14 +31,7 @@ if TYPE_CHECKING:
 _MONITOR_STATE_KEY = "_omnix_trading_alert_monitor"
 
 
-def _env_flag(name: str, default: str = "1") -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def trading_alert_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _env_flag("OMNIX_TRADING_ALERT_MONITOR_IN_TESTS", "0")
-    return _env_flag("OMNIX_TRADING_ALERT_MONITOR", "1")
+trading_alert_monitor_enabled = monitor_switch("OMNIX_TRADING_ALERT_MONITOR")
 
 
 def _interval_seconds() -> float:

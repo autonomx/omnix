@@ -7,6 +7,8 @@ explicit /agent and per-turn Quick/Deep research commands take precedence.
 """
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_message
+from .task_graph import TERMINAL_GRAPH_RUN_STATUSES
 from .exception_logging import log_recovered_exception
 
 # Lane modules resolve these through this module at call time; tests replace them here.
@@ -60,7 +62,6 @@ from .task_graph_runtime import default_task_graph_runtime
 from .service import default_agent_run_service
 from .chat_lane_common import (
     GeneralizedChatResult,
-    _TERMINAL_AGENT as _TERMINAL_AGENT,
 )
 from .chat_lane_agent import (
     _agent_reference_images,
@@ -652,7 +653,7 @@ def route_typed_chat_turn(
     # from model memory alone.
     #
     # ``None`` means "answer as ordinary Chat"; a result settles the turn.
-    if _is_live_voice(user_message):
+    if is_live_voice_message(user_message):
         return None
 
     turn = _begin_chat_turn(session, user_message)
@@ -765,7 +766,7 @@ def _settled_task_graph_objective(
     if graph_snapshot is None:
         return active_objective
     graph_status = str(graph_snapshot.status).casefold()
-    if graph_status in {"completed", "failed", "cancelled"}:
+    if graph_status in TERMINAL_GRAPH_RUN_STATUSES:
         terminal_status = (
             "completed"
             if graph_status == "completed"
@@ -1390,8 +1391,3 @@ def _message_research_mode(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def _is_live_voice(user_message: Any) -> bool:
-    metadata = getattr(user_message, "metadata", {}) or {}
-    return str(metadata.get("user_turn_id") or "").startswith("voice-user-turn:") or str(
-        metadata.get("speech_segment_id") or ""
-    ).startswith("voice-segment:")

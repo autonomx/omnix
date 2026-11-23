@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from app.providers import service as provider_service
-from app.platform.chat import ChatMessage, ChatSession, ChatSessionStore, CreateChatSessionRequest
+from app.platform.chat import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionStore,
+    CreateChatSessionRequest,
+    SendChatMessageRequest,
+)
 from app.platform.chat.context_budget import PromptBudget
 from app.platform.chat.history_search import InMemoryHistorySearchService, build_history_recall_query
 from app.platform.chat.prompt_store import _recent_message_limit_after_summary
@@ -13,7 +21,7 @@ from app.platform.chat.prompt_assembly import (
     PromptTurn,
 )
 from app.platform.chat.repository import InMemoryChatRepository
-from app.platform.chat.routing_context import build_chat_routing_context
+from app.platform.chat.routing_context import ChatRoutingContext, build_chat_routing_context
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
@@ -242,6 +250,71 @@ def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, 
 
     assert assembly.current_user_message.content == "fix it"
     assert store.context_builds == 1
+
+
+def test_a_non_streamed_turn_routes_on_chat_context_and_builds_its_prompt_once(monkeypatch, tmp_path) -> None:
+    """Owner decision 2026-11-23: the generation job's router reads memory, history and summary like a streamed
+    turn's, and the reply reuses the prompt that routing built."""
+
+    class _CountingStore(ChatSessionStore):
+        def __init__(self, path):
+            super().__init__(path)
+            self.context_builds = 0
+
+        def build_prompt_context(self, session, user_message, context_items=None):
+            self.context_builds += 1
+            return super().build_prompt_context(session, user_message, context_items)
+
+    class _Provider:
+        calls = 0
+
+        def chat_completion(self, messages, *, model, stream=False, **_options):
+            _Provider.calls += 1
+            return SimpleNamespace(content="Answered.", model=model, usage=None, thinking="", reasoning="")
+
+    seen: dict = {}
+
+    def router(session, user_message, **options):
+        seen["context"] = options["routing_context_factory"]()
+        return None
+
+    monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_COMPACTION_ENABLED", "0")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: _Provider())
+    monkeypatch.setattr("app.platform.chat.contracts.route_typed_turn", router)
+    store = _CountingStore(tmp_path / "chat.json")
+    session = store.create_session(CreateChatSessionRequest(title="Routed", provider_id="llm:lmstudio"))
+
+    updated, _ = store.append_user_message(
+        session.id, SendChatMessageRequest(content="what did we decide?", provider_id="llm:lmstudio"))
+
+    assert isinstance(seen["context"], ChatRoutingContext)
+    assert updated.messages[-1].content == "Answered." and _Provider.calls == 1
+    assert store.context_builds == 1
+    assert not store._prompt_context_cache
+
+
+def test_a_non_streamed_reply_that_skips_the_routed_prompt_leaves_nothing_cached(monkeypatch, tmp_path) -> None:
+    def router(session, user_message, **options):
+        options["routing_context_factory"]()
+        return None
+
+    monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_COMPACTION_ENABLED", "0")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr("app.platform.chat.contracts.route_typed_turn", router)
+    monkeypatch.setattr(ChatSessionStore, "_generate_mode_reply",
+                        lambda self, session, user_message, **_kw: {"content": "Planned.", "metadata": {}})
+    store = ChatSessionStore(tmp_path / "chat.json")
+    session = store.create_session(CreateChatSessionRequest(title="Mode"))
+
+    updated, _ = store.append_user_message(session.id, SendChatMessageRequest(content="plan it", agent_mode=True))
+
+    assert updated.messages[-1].content == "Planned."
+    assert not store._prompt_context_cache
 
 
 def test_expanded_ambiguous_history_query_keeps_recent_fallback_semantics(tmp_path) -> None:

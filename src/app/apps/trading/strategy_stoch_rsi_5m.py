@@ -29,11 +29,10 @@ from .market_data_recovery import detect_session_gaps, latest_clean_bars
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_timeframes import resample_final_bars
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
-_REGULAR_OPEN = time(9, 30)
 _SOURCE_INTERVAL_MINUTES = {"1m": 1, "5m": 5}
 _EMA_PERIOD = 5
 _STOCH_RSI_MIDLINE_EXIT_THRESHOLD = Decimal("80")
@@ -134,7 +133,7 @@ def _regular_bars(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[MarketB
             for bar in bars
             if bar.is_final
             and bar.session == "regular"
-            and _REGULAR_OPEN
+            and REGULAR_OPEN
             <= bar.start_time.astimezone(_ET).time()
             < regular_close_time(bar.start_time.astimezone(_ET).date())
         ),
@@ -208,7 +207,7 @@ def _first_current_gap(
         return None
     current.sort(key=lambda bar: bar.start_time)
     opening = current[0].start_time.astimezone(_ET)
-    expected_open = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
+    expected_open = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     if opening > expected_open:
         return expected_open.astimezone(timezone.utc), current[0].start_time
 
@@ -276,7 +275,7 @@ def stoch_rsi_first_signal_et(config: StochRsi5mConfig | None = None) -> time:
 
     active = config or StochRsi5mConfig()
     bars = max(_minimum_stochastic_rsi_bars(active), _EMA_PERIOD)
-    opened = datetime.combine(date(2000, 1, 3), _REGULAR_OPEN)
+    opened = datetime.combine(date(2000, 1, 3), REGULAR_OPEN)
     return (opened + timedelta(minutes=5 * bars)).time()
 
 

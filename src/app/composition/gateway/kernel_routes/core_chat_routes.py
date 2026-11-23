@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.conversation.contracts import VOICE_USER_TURN_PREFIX
 from app.platform.chat.generation_jobs import start_chat_generation_job
 from app.platform.chat.models import (
     ChatSession,
@@ -234,8 +235,8 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
         user_turn_id = str(request.user_turn_id or "").strip() or None
         speech_segment_id = str(request.speech_segment_id or "").strip() or None
         voice_turn_id = (
-            user_turn_id.removeprefix("voice-user-turn:")
-            if user_turn_id and user_turn_id.startswith("voice-user-turn:")
+            user_turn_id.removeprefix(VOICE_USER_TURN_PREFIX)
+            if user_turn_id and user_turn_id.startswith(VOICE_USER_TURN_PREFIX)
             else None
         )
         return OmnixStreamingResponse(

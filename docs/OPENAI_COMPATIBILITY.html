@@ -165,9 +165,6 @@
 </tbody></table></div>
 <p>For the shared OpenAI-compatible provider, configure the base URL as the API root expected by the adapter. A common local example is <code>http://127.0.0.1:1234/v1</code>; the provider then appends <code>/chat/completions</code>. The provider sends <code>Authorization: Bearer &lt;api_key&gt;</code> and requires a non-empty API key even when a local server ignores it. For a local server, use a dummy non-secret value only when the server is restricted to the local machine.</p>
 <p>Typical compatible targets include LM Studio, llama.cpp servers, OpenRouter, Azure-style deployments, and other services that preserve the chat-completion request/response shape. Capability and parameter support still varies by provider; expose only the options the target can honor.</p>
-<h2 id="realtime-boundary">Realtime boundary</h2>
-<p>Omnix also exposes <code>WS /v1/realtime</code> for its live-speech service when the realtime routes are mounted. Its event names intentionally resemble an OpenAI/Hugging Face realtime subset, but it is an Omnix protocol with Omnix session, transcript, STT, TTS, interruption, and policy semantics. It is not a drop-in implementation of the full OpenAI Realtime API.</p>
-<p>Use the Live Chat feature and the live-speech compatibility/status contracts to discover the current event flow. Do not assume that an HTTP <code>/v1</code> client can switch to this WebSocket without implementing the Omnix realtime handshake and event types.</p>
 <h2 id="troubleshooting-checklist">Troubleshooting checklist</h2>
 <ol>
 <li>Confirm the main gateway is running on port <code>8000</code>.</li>
@@ -182,7 +179,6 @@
 <ul>
 <li>Agent model gateway: <code>src/app/platform/agent_runtime/model_gateway.py</code></li>
 <li>Shared upstream provider: <code>src/app/providers/openai_compatible_provider.py</code></li>
-<li>Realtime compatibility metadata: <code>src/app/platform/live_speech/compat.py</code></li>
 <li>Provider architecture and authority rules: <a href="ARCHITECTURE.html">ARCHITECTURE.html</a></li>
 <li>Local service setup: <a href="SETUP.html">SETUP.html</a></li>
 </ul>

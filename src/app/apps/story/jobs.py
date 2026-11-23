@@ -1,11 +1,15 @@
 """Story and podcast durable job contracts and execution."""
 from __future__ import annotations
 
+from app.providers.model_route import model_name_of
+from app.providers.catalog import provider_id_of
+
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.jobs.handlers import JobResult, JobRun
+from app.jobs.models import JobRecord
 from app.prompts import prompt_template
 
 
@@ -44,42 +48,22 @@ class PodcastGenerateInput(BaseModel):
     model_id: str | None = None
 
 
-def execute_story_job(job_store: Any, job: JobRecord) -> JobRecord:
-    job_store.mark_running(job.id)
-    try:
-        result = _render_job(job)
-    except Exception as exc:
-        failed = job_store.fail_job(
-            job.id,
-            FailJobRequest(
-                code="story_job_failed",
-                message=str(exc) or "Story job failed",
-                retryable=True,
-                details={"job_type": job.type, "module": job.module},
-            ),
-        )
-        return failed or job
-
-    completed = job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[{
-                "type": result["artifact_type"],
-                "module": job.module,
-                "title": result["title"],
-                "content": result["content"],
-                "provider_id": result.get("provider_id"),
-                "model_id": result.get("model_id"),
-                "resolved_model": result.get("resolved_model"),
-            }],
-            logs=[{
-                "level": "info",
-                "message": result["log_message"],
-                "content": result["content"],
-            }],
-        ),
+def run_story_job(run: JobRun[Any]) -> JobResult:
+    """Write a story or podcast script; a failure is retried (``story_job_failed``)."""
+    job = run.job
+    result = _render_job(job)
+    return JobResult(
+        output_refs=({
+            "type": result["artifact_type"],
+            "module": job.module,
+            "title": result["title"],
+            "content": result["content"],
+            "provider_id": result.get("provider_id"),
+            "model_id": result.get("model_id"),
+            "resolved_model": result.get("resolved_model"),
+        },),
+        logs=({"level": "info", "message": result["log_message"], "content": result["content"]},),
     )
-    return completed or job
 
 
 def _render_job(job: JobRecord) -> dict[str, Any]:
@@ -176,28 +160,17 @@ def _call_chat_provider(
             ChatMessage(role="user", content=prompt),
         ],
         provider_name=provider_name,
-        model=_model_key(model_id),
+        model=model_name_of(model_id) or None,
         stream=False,
     )
     content = (getattr(response, "content", "") or "").strip()
     if not content:
         raise RuntimeError("LLM response was empty")
-    return content, getattr(response, "model", None) or _model_key(model_id)
+    return content, getattr(response, "model", None) or model_name_of(model_id) or None
 
 
 def _provider_key(value: str | None) -> str | None:
-    text = _text(value)
-    return text.split(":", 1)[1] if text and text.startswith("llm:") else text
-
-
-def _model_key(value: str | None) -> str | None:
-    text = _text(value)
-    if not text:
-        return None
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
-    return text
+    return provider_id_of(value) or None
 
 
 def _extract_markdown_title(content: str) -> str | None:

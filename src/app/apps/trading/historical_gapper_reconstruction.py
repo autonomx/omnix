@@ -15,12 +15,10 @@ from .providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategies.models import GapPullbackConfig
-from .us_equity_calendar import regular_holidays
+from .us_equity_calendar import PREMARKET_OPEN, REGULAR_OPEN, is_trading_day
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-_PREMARKET_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 _DEFAULT_TRADING_URL = "https://paper-api.alpaca.markets"
 _ALLOWED_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA"}
 _SYMBOL = re.compile(r"^[A-Z0-9.\-]+$")
@@ -83,7 +81,7 @@ def _trading_dates_before(session_date: date, count: int) -> list[date]:
     output: list[date] = []
     cursor = session_date - timedelta(days=1)
     while len(output) < count and cursor >= session_date - timedelta(days=30):
-        if cursor.weekday() < 5 and cursor not in regular_holidays(cursor.year):
+        if is_trading_day(cursor):
             output.append(cursor)
         cursor -= timedelta(days=1)
     output.reverse()
@@ -273,14 +271,14 @@ def _minute_candidate(
         local = timestamp.astimezone(_ET)
         clock = local.timetz().replace(tzinfo=None)
         completed_clock = (local + timedelta(minutes=1)).timetz().replace(tzinfo=None)
-        if clock < _PREMARKET_OPEN or completed_clock > scan_time:
+        if clock < PREMARKET_OPEN or completed_clock > scan_time:
             continue
         if local.date() > session_date:
             continue
         cumulative_by_date[local.date()] += volume
         if local.date() == session_date:
             current_price = close
-            if clock < _REGULAR_OPEN:
+            if clock < REGULAR_OPEN:
                 current_premarket_volume += volume
     if current_price is None or current_price <= 0:
         return None
@@ -421,7 +419,7 @@ class AlpacaHistoricalGapperReconstructor:
             )
 
         scan_at = datetime.combine(session_date, scan_time, tzinfo=_ET).astimezone(timezone.utc)
-        premarket_start = datetime.combine(session_date, _PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
+        premarket_start = datetime.combine(session_date, PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
         seed_start = max(premarket_start, scan_at - timedelta(minutes=_SCAN_SEED_LOOKBACK_MINUTES))
         scan_window = _alpaca_bars(
             self.runtime,
@@ -457,7 +455,7 @@ class AlpacaHistoricalGapperReconstructor:
                 detail="Historical pre-scan market-data window found no broad gap candidates.",
             )
 
-        minute_start = datetime.combine(session_date - timedelta(days=10), _PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
+        minute_start = datetime.combine(session_date - timedelta(days=10), PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
         minute = _alpaca_bars(
             self.runtime,
             self._headers,

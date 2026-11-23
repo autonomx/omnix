@@ -13,16 +13,18 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.providers.model_route import model_name_of
 from app.settings.access import load_settings
 from app.providers import service as provider_service
 from app.platform.chat import ChatMessage, ChatSessionStore, default_chat_store
-from app.platform.chat.store import _model_key, _provider_key
+from app.platform.chat.store import _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
 from app.providers.service import get_tts_provider
 from app.providers.catalog import LIVE_TURNS, LOADED_MODEL, provider_supports
 
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
+from app.conversation.contracts import VOICE_SEGMENT_PREFIX, VOICE_USER_TURN_PREFIX
 from app.conversation.tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -144,7 +146,7 @@ def _configured_live_route() -> tuple[str | None, str | None, str]:
     if not provider_supports(provider_name, LOADED_MODEL):
         provider_settings = settings.get(provider_name) if provider_name else None
         if isinstance(provider_settings, dict):
-            model_id = _model_key(provider_settings.get("model"))
+            model_id = model_name_of(provider_settings.get("model")) or None
     return resolve_live_voice_chat_route(provider_id, model_id)
 
 
@@ -440,7 +442,7 @@ def _warm_llm(
         live_turn = provider_supports(provider, LIVE_TURNS)
         prompt_messages = _live_voice_warm_messages(store, session, live_turn=live_turn)
         if live_turn:
-            provider.warm_live_turn(prompt_messages, model=_model_key(selected_model_id))
+            provider.warm_live_turn(prompt_messages, model=model_name_of(selected_model_id) or None)
             return _WarmResult(
                 status="warmed",
                 elapsed_ms=(time.perf_counter() - started) * 1000.0,
@@ -452,7 +454,7 @@ def _warm_llm(
         model = (
             None
             if isinstance(provider, LMStudioProvider)
-            else _model_key(selected_model_id)
+            else (model_name_of(selected_model_id) or None)
         )
         response = provider.chat_completion(
             messages=prompt_messages,
@@ -499,8 +501,8 @@ def _live_voice_warm_messages(store: Any, session: Any, *, live_turn: bool = Fal
             "side_effects_allowed": False,
             "tools_allowed": False,
             "memory_writes_allowed": False,
-            "user_turn_id": "voice-user-turn:live-call-prewarm",
-            "speech_segment_id": "voice-segment:live-call-prewarm",
+            "user_turn_id": f"{VOICE_USER_TURN_PREFIX}live-call-prewarm",
+            "speech_segment_id": f"{VOICE_SEGMENT_PREFIX}live-call-prewarm",
         },
     )
     builder = getattr(store, "build_provider_prompt", None)

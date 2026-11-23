@@ -27,7 +27,7 @@ from app.providers.service import get_tts_provider
 from app.providers.tts_priority import generation_class, other_process_priority_pending
 
 from .hashing import canonical_json, text_hash
-from .leases import JOB_LEASE_SECONDS, lease_heartbeat
+from .leases import JOB_LEASE_SECONDS, claimed_job
 from .render_cache import find_valid_render
 from .render_planner import RenderUnit, load_chapter_units
 from .model_identity import assert_model_revision
@@ -421,24 +421,12 @@ def run_render_once(
     database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
-    with unit_of_work(database) as work:
-        if (higher_priority_tts_pending(work.connection, context) or other_process_priority_pending()
-                or _tts_swap_pending()):
-            work.rollback()
-            return False
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["gpu:tts:offline"],
-            job_types=["audiobook.render-chapter"], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.render-chapter",
+                     resource_class="gpu:tts:offline",
+                     wait=lambda connection: bool(higher_priority_tts_pending(connection, context)
+                                                  or other_process_priority_pending() or _tts_swap_pending())) as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         return _render_claimed(database, blobs, context, job, worker_id=worker_id)
 
 
@@ -746,21 +734,10 @@ def run_preview_once(
     *, worker_id: str,
 ) -> bool:
     """Render one explicitly requested span with the same identity as offline work."""
-    with unit_of_work(database) as work:
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["gpu:tts:preview"],
-            job_types=["audiobook.preview-span"], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.preview-span",
+                     resource_class="gpu:tts:preview") as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id,
-            lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         return _preview_claimed(database, blobs, context, job, worker_id=worker_id)
 
 

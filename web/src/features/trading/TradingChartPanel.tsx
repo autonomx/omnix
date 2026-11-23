@@ -25,7 +25,7 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
   useTradingOrderHotkeys({ active: ws.active, adapter: ws.adapter, instrumentId: ws.instrumentId, lastPrice: () => { const close = Number(ws.latest?.close); return Number.isFinite(close) ? close : null; } });
   const {
     active, adapter, chartFocusMode, chartId, chartPanning, chartQuery, compareDialogOpen, comparisons,
-    barCountdownVisible, drawingTool, eventMarkersOn, handleReplayStageClick, handleStageContextMenu, handleStageDoubleClick,
+    barCountdownVisible, drawingTool, eventMarkersOn, handleStageDoubleClick,
     handleStagePointerLeave, handleStagePointerMove, hostRef, indicatorError, instrumentId, interval, latest,
     onActivate, onOpenMarketDataSettings, onUpdateComparisons,
     panelRef, panningIndicatorPane, replayMode, setCompareDialogOpen, streamError, streamStatus,
@@ -43,8 +43,8 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
       <ChartPanelHeader ws={ws} />
       <div
         className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`}
-        onClickCapture={handleReplayStageClick}
-        onContextMenu={handleStageContextMenu}
+        onClickCapture={ws.replay.handleStageClick}
+        onContextMenu={ws.contextMenuActions.handleStageContextMenu}
         onDoubleClick={handleStageDoubleClick}
         onPointerMove={handleStagePointerMove}
         onPointerLeave={handleStagePointerLeave}

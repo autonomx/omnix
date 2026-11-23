@@ -11,6 +11,7 @@ import {
   watchlistSymbolsNeedRewrite,
   type WatchlistPayload,
 } from './tradingWatchlistModel';
+import { isConflict } from '../../api/errors';
 
 export type WatchlistSaveStatus = 'loading' | 'saved' | 'saving' | 'conflict' | 'error';
 
@@ -27,10 +28,6 @@ function withPending(record: TradingDocument, pending: readonly PendingOperation
   if (!pending?.length || isNewerWatchlistPayload(record.payload)) return record;
   const payload = pending.reduce((current, entry) => entry.operation(current), upgradeWatchlistPayload(record.payload));
   return { ...record, payload: serializeWatchlist(payload) };
-}
-
-function isConflictError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('(409)');
 }
 
 function defaultWatchlistInstrumentIds(instruments: CanonicalInstrument[]): string[] {
@@ -151,7 +148,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
         tradingWindowPresence().announceSaved('watchlist', saved.record_id, saved.revision);
         return 'saved';
       } catch (error) {
-        if (!isConflictError(error)) return 'error';
+        if (!isConflict(error)) return 'error';
         const latest = attempt < MAX_CONFLICT_RETRIES
           ? (await tradingApi.documents('watchlists').catch(() => [])).find((item) => item.record_id === recordId)
           : undefined;
@@ -214,7 +211,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
       setSelectedListId(next[0]?.record_id ?? '');
       setStatus('saved');
     } catch (error) {
-      setStatus(isConflictError(error) ? 'conflict' : 'error');
+      setStatus(isConflict(error) ? 'conflict' : 'error');
     }
   };
 

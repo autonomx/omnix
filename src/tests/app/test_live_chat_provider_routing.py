@@ -268,3 +268,30 @@ def test_empty_configured_provider_falls_back_to_lmstudio(monkeypatch) -> None:
     monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": ""})
 
     assert resolve_effective_provider_id(None) == "lmstudio"
+
+
+@pytest.mark.parametrize("stored", [True, False])
+def test_a_route_the_persist_left_off_is_patched_through_the_store_or_the_turn_fails(monkeypatch, stored) -> None:
+    from app.platform.live_voice.llm import routing
+
+    monkeypatch.setattr(settings_access, "load_settings", lambda **_kwargs: {"provider": "lmstudio"})
+    patches: list[dict] = []
+
+    def update_user_message_metadata(**kwargs):
+        patches.append(kwargs)
+        return stored
+
+    store = SimpleNamespace(update_user_message_metadata=update_user_message_metadata)
+    session = SimpleNamespace(id="s1", provider_id=None, model_id=None)
+    user_message = SimpleNamespace(id="m1", metadata={})
+    begin = lambda: routing.begin_routed_user_message(  # noqa: E731
+        store, "s1", SendChatMessageRequest(content="hello"), persist=lambda _request, _route: (session, user_message)
+    )
+
+    if stored:
+        assert begin() == (session, user_message)
+    else:
+        with pytest.raises(RuntimeError, match="could not be persisted"):
+            begin()
+    assert [patch["metadata"][ROUTE_METADATA_KEY]["provider_id"] for patch in patches] == ["lmstudio"]
+    assert session.provider_id == "lmstudio" and user_message.metadata[ROUTE_METADATA_KEY]["provider_explicit"] is False

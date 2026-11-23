@@ -308,6 +308,7 @@ def _test_client(app):
 def _run_feature_job(client, store, job_id: str, *, background: bool = False):
     job = store.get_job(job_id)
     assert job is not None
+    store.mark_running(job_id)  # the worker's claim starts a job; its handler does not
     registry = client.app.state.job_handler_registry
 
     def execute():

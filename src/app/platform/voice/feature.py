@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
+from app.jobs.handlers import JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.settings.effective_defaults import apply_job_defaults
 from app.platform.voice.voice_cloning_defaults import apply_voice_cloning_defaults
@@ -14,7 +14,7 @@ from app.runtime.features import FeatureModule
 from app.runtime.ports import ContributionSpec
 
 from .client_tools import VOICE_CLIENT_TOOLS
-from .jobs import execute_voice_studio_job, store_inline_clone_sample
+from .jobs import run_voice_studio_job, store_inline_clone_sample
 
 
 class VoiceJobInput(BaseModel):
@@ -30,10 +30,6 @@ class VoiceJobInput(BaseModel):
             effects = value["audio_effects"]
             value = {**value, "audio_effects": effect_ids(effects if isinstance(effects, (list, tuple)) else [])}
         return value
-
-
-def _execute(context: JobExecutionContext, job):
-    return execute_voice_studio_job(context.job_store, job)
 
 
 TTS_JOB_TYPES = ("tts.synthesize", "tts.multi_speaker_synthesize")
@@ -176,7 +172,8 @@ FEATURE = FeatureModule(
     job_handlers=tuple(
         JobHandlerSpec(
             type=job_type,
-            handler=_execute,
+            run=run_voice_studio_job,
+            failure_code="voice_studio_job_failed",
             input_model=VoiceJobInput,
             resource_class=_JOB_RESOURCE_CLASSES.get(job_type, ResourceClass.GPU_TTS),
             timeout_seconds=900,

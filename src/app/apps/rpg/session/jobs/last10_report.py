@@ -11,59 +11,35 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
-from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.jobs.handlers import JobResult, JobRun
+from app.jobs.models import JobRecord
 from app.jobs.inline_execution import require_execution_authority
 from .last10_report_artifacts import write_rpg_last10_report
 from .last10_report_debug import build_turn_debug_payload
+from app.apps.rpg.foundation.safe_values import optional_text
 
 RPG_LAST10_REPORT_FORMAT_VERSION = "rpg_last10_turn_debug_report_v2"
 DEFAULT_TURN_LIMIT = 10
 MAX_TURN_LIMIT = 100
 
 
-def execute_rpg_last10_report_job(job_store: Any, job: JobRecord) -> JobRecord:
-    """Execute and complete a last-ten-turn report job."""
-
-    job_store.mark_running(job.id)
-    try:
-        result = render_rpg_last10_report_job(job, job_store=job_store)
-    except Exception as exc:  # pragma: no cover - gateway route tests cover failure handling
-        failed = job_store.fail_job(
-            job.id,
-            FailJobRequest(
-                code="rpg_last10_report_failed",
-                message=str(exc) or "RPG last-ten-turn report generation failed",
-                retryable=True,
-                details={"job_type": job.type, "module": job.module},
-            ),
-        )
-        return failed or job
-
-    completed = job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[
-                {
-                    "type": result["artifact_type"],
-                    "module": job.module,
-                    "title": result["title"],
-                    "content": result["content"],
-                    "zip_path": result.get("zip_path"),
-                    "summary_path": result.get("summary_path"),
-                    "performance_path": result.get("performance_path"),
-                    "html_report_path": result.get("html_report_path"),
-                }
-            ],
-            logs=[
-                {
-                    "level": "info",
-                    "message": result["log_message"],
-                    "content": result["content"],
-                }
-            ],
-        ),
+def run_rpg_last10_report_job(run: JobRun[Any]) -> JobResult:
+    """Write a last-ten-turn report; a failure is retried (``rpg_last10_report_failed``)."""
+    job = run.job
+    result = render_rpg_last10_report_job(job, job_store=run.store)
+    return JobResult(
+        output_refs=({
+            "type": result["artifact_type"],
+            "module": job.module,
+            "title": result["title"],
+            "content": result["content"],
+            "zip_path": result.get("zip_path"),
+            "summary_path": result.get("summary_path"),
+            "performance_path": result.get("performance_path"),
+            "html_report_path": result.get("html_report_path"),
+        },),
+        logs=({"level": "info", "message": result["log_message"], "content": result["content"]},),
     )
-    return completed or job
 
 
 def render_rpg_last10_report_job(job: JobRecord, *, job_store: Any | None = None) -> dict[str, Any]:
@@ -90,7 +66,7 @@ def render_rpg_last10_report_job(job: JobRecord, *, job_store: Any | None = None
     )
     return {
         "artifact_type": "rpg_last10_turn_report",
-        "title": f"RPG last 10 turn debug report: {_text(written.get('session_id')) or 'session'}",
+        "title": f"RPG last 10 turn debug report: {optional_text(written.get('session_id')) or 'session'}",
         "content": content,
         "log_message": "RPG last-ten-turn debug ZIP report generated",
         "provider_id": None,
@@ -234,14 +210,14 @@ def _session_event_row(item: Any, sequence: int) -> dict[str, Any] | None:
     return {
         "sequence": sequence,
         "turn": _number(record.get("turn") or record.get("turn_count") or record.get("index")),
-        "time": _text(
+        "time": optional_text(
             record.get("time")
             or record.get("timestamp")
             or record.get("created_at")
             or record.get("updated_at")
             or record.get("turn_label")
         ),
-        "title": _text(
+        "title": optional_text(
             record.get("title")
             or record.get("label")
             or record.get("event")
@@ -249,13 +225,13 @@ def _session_event_row(item: Any, sequence: int) -> dict[str, Any] | None:
             or record.get("type")
         )
         or f"Session event {sequence}",
-        "command": _text(
+        "command": optional_text(
             record.get("command")
             or record.get("action")
             or record.get("player_action")
             or record.get("input")
         ),
-        "detail": _text(
+        "detail": optional_text(
             record.get("narration")
             or record.get("response")
             or record.get("output")
@@ -285,7 +261,7 @@ def _performance_summary(turns: list[dict[str, Any]]) -> dict[str, Any]:
             stage_row = _dict_value(stage)
             duration = stage_row.get("duration_seconds")
             if isinstance(duration, (int, float)):
-                key = _text(stage_row.get("id") or stage_row.get("label")) or "unknown"
+                key = optional_text(stage_row.get("id") or stage_row.get("label")) or "unknown"
                 stage_totals[key] = round(stage_totals.get(key, 0.0) + float(duration), 3)
     return {
         "metrics_included": True,
@@ -350,7 +326,7 @@ def _diagnostics(
 
 def _session_id_for_job(job: JobRecord) -> str | None:
     input_ref = _dict_value(job.input_ref)
-    return _text(input_ref.get("session_id"))
+    return optional_text(input_ref.get("session_id"))
 
 
 def _turn_limit(value: Any) -> int:
@@ -363,24 +339,24 @@ def _turn_limit(value: Any) -> int:
 
 def _job_command(job: JobRecord) -> str:
     payload = _dict_value(job.input_payload)
-    return _text(payload.get("command") or payload.get("player_input") or payload.get("content")) or ""
+    return optional_text(payload.get("command") or payload.get("player_input") or payload.get("content")) or ""
 
 
 def _job_response(job: JobRecord) -> str:
     for ref in _list_value(job.output_refs):
         record = _dict_value(ref)
-        if _text(record.get("type")) == "rpg_turn_response":
-            text = _text(record.get("content") or record.get("text"))
+        if optional_text(record.get("type")) == "rpg_turn_response":
+            text = optional_text(record.get("content") or record.get("text"))
             if text:
                 return text
     for ref in _list_value(job.output_refs):
         record = _dict_value(ref)
-        text = _text(record.get("content") or record.get("text"))
+        text = optional_text(record.get("content") or record.get("text"))
         if text:
             return text
     for log in _list_value(job.logs):
         record = _dict_value(log)
-        text = _text(record.get("content") or record.get("message"))
+        text = optional_text(record.get("content") or record.get("message"))
         if text:
             return text
     return ""
@@ -425,12 +401,6 @@ def _dict_value(value: Any) -> dict[str, Any]:
 
 def _list_value(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
-
-
-def _text(value: Any) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
 
 
 def _number(value: Any) -> int | float | None:

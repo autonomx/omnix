@@ -22,6 +22,7 @@ vi.mock('./drawings/TradingDrawingOverlay', () => ({
 vi.mock('./drawings/drawingFrame', () => ({ chartAccessFor: () => ({}) }));
 
 import { DRAWING_ALERT_SETTLE_MS, DrawingAlertSync, drawingAlertUpdates, sameAlertLine } from './DrawingAlertSync';
+import { gatewayCallError } from '../../test/gatewayErrors';
 
 const T0 = '2026-10-09T14:00:00.000Z';
 const T1 = '2026-10-09T15:00:00.000Z';
@@ -94,7 +95,7 @@ describe('drawing alerts follow their drawing (TVP-1.4)', () => {
   });
 
   it('keeps the prompt when disabling fails', async () => {
-    api.updateAlert.mockRejectedValue(new Error('Trading request failed (409)'));
+    api.updateAlert.mockRejectedValue(gatewayCallError('Trading request failed (409)'));
     state.alerts = [alert('upper', [])];
     const view = render(sync({ adapter: null, drawings: [channel(100)] }));
     view.rerender(sync({ adapter: null, drawings: [] }));

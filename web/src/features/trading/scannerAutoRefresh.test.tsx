@@ -8,6 +8,7 @@ vi.mock('./useTradingAlerts', () => ({ useAlertIndicatorIds: () => new Set(['rsi
 import { resultChanges, useScannerAutoRefresh } from './scannerAutoRefresh';
 import type { TradingScannerResult } from './scannerTypes';
 import { TradingScannerPanel } from './TradingScannerPanel';
+import { gatewayCallError } from '../../test/gatewayErrors';
 
 afterEach(() => {
   cleanup();
@@ -44,7 +45,7 @@ describe('screener auto-refresh (TVP-9.2)', () => {
   it('treats a refused second run as busy, and gives up after repeated failures', async () => {
     vi.useFakeTimers();
     const onGiveUp = vi.fn();
-    const start = vi.fn(async () => { throw new Error('Scanner request failed (409): scanner_run_active'); });
+    const start = vi.fn(async () => { throw gatewayCallError('Scanner request failed (409): scanner_run_active'); });
     const hook = renderHook(() => useScannerAutoRefresh({ scannerId: 's', everyMs: 10_000 }, () => false, start, onGiveUp));
     await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
     expect(onGiveUp).not.toHaveBeenCalled();
@@ -110,7 +111,7 @@ describe('screener auto-refresh (TVP-9.2)', () => {
     const saved = { scanner_id: 's1', name: 'Movers', instrument_ids: ['crypto:X:spot:AAA-USD'], interval: '1h', revision: 4, rules, history_limit: 100 };
     api.definitions.mockResolvedValue([saved]);
     api.runs.mockResolvedValue([]);
-    api.update.mockRejectedValueOnce(new Error('Trading scanner request failed (409): revision'));
+    api.update.mockRejectedValueOnce(gatewayCallError('Trading scanner request failed (409): revision'));
     render(<TradingScannerPanel instruments={[]} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Movers' }));
     fireEvent.change(screen.getByLabelText('Value of up'), { target: { value: '7' } });

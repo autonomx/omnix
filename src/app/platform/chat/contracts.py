@@ -36,7 +36,6 @@ from app.platform.chat.prompt_rendering import (
 )
 from app.platform.chat.provider_metrics import merge_provider_response_metrics
 from app.platform.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
-from app.platform.chat.store import _model_key as model_key
 from app.platform.chat.store import _provider_key as provider_key
 from app.conversation.contracts import estimate_tokens
 
@@ -228,7 +227,6 @@ __all__ = [
     "hermes_assist_test_payload",
     "live_call_provider_affinity",
     "merge_provider_response_metrics",
-    "model_key",
     "normal_chat_prompt_window_enabled",
     "normal_chat_recent_message_limit",
     "prompt_budget_from_env",

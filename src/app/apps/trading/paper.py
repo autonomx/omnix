@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.apps.trading.us_equity_calendar import EASTERN, regular_close_time, regular_holidays
+from app.apps.trading.us_equity_calendar import EASTERN, is_trading_day, regular_close_time
 
 
 PaperSide = Literal["buy", "sell"]
@@ -503,7 +503,7 @@ def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -
 
 
 def _us_equity_trading_day(day: date) -> bool:
-    return day.weekday() < 5 and day not in regular_holidays(day.year)
+    return is_trading_day(day)
 
 
 def paper_day_expiry(instrument_id: str, placed_at: datetime) -> datetime:

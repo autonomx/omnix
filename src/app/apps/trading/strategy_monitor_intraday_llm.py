@@ -55,7 +55,7 @@ async def _record_budget_refusal(
 ) -> None:
     """One event per strategy and session, instead of an error on every poll."""
 
-    monitor.intraday_llm_budget_skip_count += 1
+    monitor.metrics.intraday_llm_budget_skip_count += 1
     notice = (config.strategy_id, universe.session_date)
     if notice in monitor.intraday_llm_budget_notices:
         return
@@ -103,31 +103,24 @@ async def run_intraday_llm(
             execution_authority=False,
         )
         return
-    if hasattr(strategy_repository, "events_by_types_between"):
-        session_start_et = datetime(
-            universe.session_date.year,
-            universe.session_date.month,
-            universe.session_date.day,
-            tzinfo=_ET,
-        )
-        recent_events = list(
-            reversed(
-                await asyncio.to_thread(
-                    strategy_repository.events_by_types_between,
-                    config.strategy_id,
-                    event_types=("intraday_llm", "intraday_llm_batch"),
-                    start_time=session_start_et.astimezone(timezone.utc),
-                    end_time=observed_at.astimezone(timezone.utc) + timedelta(seconds=1),
-                    limit=5_000,
-                )
+    session_start_et = datetime(
+        universe.session_date.year,
+        universe.session_date.month,
+        universe.session_date.day,
+        tzinfo=_ET,
+    )
+    recent_events = list(
+        reversed(
+            await asyncio.to_thread(
+                strategy_repository.events_by_types_between,
+                config.strategy_id,
+                event_types=("intraday_llm", "intraday_llm_batch"),
+                start_time=session_start_et.astimezone(timezone.utc),
+                end_time=observed_at.astimezone(timezone.utc) + timedelta(seconds=1),
+                limit=5_000,
             )
         )
-    else:
-        recent_events = await asyncio.to_thread(
-            strategy_repository.recent_events,
-            config.strategy_id,
-            2_000,
-        )
+    )
     # A live shadow pass re-freezes its universe under a new id every minute;
     # history belongs to the frozen universe it was built from.
     lineage = universe_lineage_id(universe.universe_id)
@@ -219,7 +212,7 @@ async def run_intraday_llm(
                 return shared, None, True
             if not default_trading_ai_budget().can_acquire(contract_id):
                 return shared, None, False
-            monitor.intraday_llm_call_count += 1
+            monitor.metrics.intraday_llm_call_count += 1
             result = monitor.intraday_llm_analyzer_factory().assess(
                 fresh,
                 ranks=ranks,
@@ -256,7 +249,7 @@ async def run_intraday_llm(
         # recorded as a skip, not counted as a provider error.
         skipped = isinstance(exc, AIShadowLaneUnavailable)
         if not skipped:
-            monitor.intraday_llm_error_count += 1
+            monitor.metrics.intraday_llm_error_count += 1
         trade_log(
             "auto_trading",
             "intraday_llm_skipped" if skipped else "intraday_llm_error",
@@ -354,16 +347,16 @@ async def run_intraday_llm(
                 "execution_authority": False,
             },
         )
-        monitor.intraday_llm_assessment_count += int(persisted)
-        monitor.intraday_llm_shared_assessment_count += int(persisted and reused)
+        monitor.metrics.intraday_llm_assessment_count += int(persisted)
+        monitor.metrics.intraday_llm_shared_assessment_count += int(persisted and reused)
 
     if result is not None:
-        monitor.intraday_llm_input_character_count += result.input_characters
-        monitor.intraday_llm_input_token_count += result.input_tokens
-        monitor.intraday_llm_output_token_count += result.output_tokens
-        monitor.intraday_llm_total_token_count += result.total_tokens
+        monitor.metrics.intraday_llm_input_character_count += result.input_characters
+        monitor.metrics.intraday_llm_input_token_count += result.input_tokens
+        monitor.metrics.intraday_llm_output_token_count += result.output_tokens
+        monitor.metrics.intraday_llm_total_token_count += result.total_tokens
         if result.usage_source == "estimated":
-            monitor.intraday_llm_estimated_usage_count += 1
+            monitor.metrics.intraday_llm_estimated_usage_count += 1
     first = next(iter(entries.values()), None)
     await monitor._event(
         strategy_repository,

@@ -18,7 +18,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.platform.voice.contracts import PausePolicy
 from .assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
 from .hashing import canonical_json
-from .leases import JOB_LEASE_SECONDS, lease_heartbeat
+from .leases import JOB_LEASE_SECONDS, claimed_job
 from .render_cache import find_valid_render
 from .render_planner import load_chapter_units
 
@@ -34,21 +34,10 @@ def run_assemble_once(
     database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
-    with unit_of_work(database) as work:
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.assemble-chapter"], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.assemble-chapter",
+                     resource_class="cpu") as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id,
-            lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         return _assemble_claimed(database, blobs, context, job, worker_id=worker_id)
 
 

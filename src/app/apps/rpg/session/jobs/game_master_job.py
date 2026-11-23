@@ -10,7 +10,8 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
+from app.jobs.handlers import JobResult, JobRun, RetryableJobError
+from app.jobs.models import CreateJobRequest, ResourceClass
 
 JOB_TYPE = "rpg.game_master"
 MAX_ATTEMPTS = 2
@@ -52,6 +53,7 @@ def enqueue_game_master(session_id: str, revision: int, why: str, *, job_store: 
 def after_commit(session_id: str, result: Mapping[str, Any], document: Mapping[str, Any], revision: int) -> None:
     """Queue the game master's direction when the committed turn calls for it; never fails the turn."""
     try:
+        from app.apps.rpg.foundation.state.access import turn_count_of
         from app.apps.rpg.narration.game_master.direction_call import trigger
 
         why = trigger(result, document)
@@ -59,7 +61,7 @@ def after_commit(session_id: str, result: Mapping[str, Any], document: Mapping[s
             enqueue_game_master(session_id, revision, why)
         changes = {str(row.get("type")) for row in (result.get("turn_pipeline") or {}).get("changes") or ()
                    if isinstance(row, Mapping)}
-        if "location_changed" in changes or int((document.get("state") or {}).get("turn_count") or 0) <= 1:
+        if "location_changed" in changes or turn_count_of(document) <= 1:
             fill_areas_ahead(session_id, document, revision)
     except Exception:
         logger.warning("rpg_game_master_enqueue_failed session=%s", session_id, exc_info=True)
@@ -101,13 +103,11 @@ def _here_area(document: Mapping[str, Any]) -> str:
     return str(place.get("region_id") or "") if isinstance(place, Mapping) else ""
 
 
-def execute_game_master_job(job_store: Any, job: JobRecord) -> JobRecord:
+def run_game_master_job(run: JobRun[RpgGameMasterJobInput]) -> JobResult:
     from app.apps.rpg.narration.game_master.direction_call import direct
     from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
 
-    request = RpgGameMasterJobInput.model_validate(job.input_payload or {})
-    attempt = max(1, int(getattr(job, "_attempt_count", 0) or 1))
-    job_store.mark_running(job.id)
+    request = run.input
     try:
         document = load_session_from_postgres(request.session_id) or {}
         if document and request.why.startswith("fill:"):
@@ -119,15 +119,12 @@ def execute_game_master_job(job_store: Any, job: JobRecord) -> JobRecord:
         else:
             report = direct(request.session_id, document, request.why, revision=request.revision) if document else {}
     except Exception as exc:
-        failed = job_store.fail_job(job.id, FailJobRequest(
-            code="rpg_game_master_failed", message=str(exc) or "the game master's direction failed",
-            retryable=attempt < MAX_ATTEMPTS, details={"session_id": request.session_id, "attempt": attempt}))
-        return failed or job
-    completed = job_store.complete_job(job.id, CompleteJobRequest(output_refs=[{
+        raise RetryableJobError("rpg_game_master_failed", str(exc) or "the game master's direction failed",
+                                details={"session_id": request.session_id, "attempt": run.attempt}) from exc
+    return JobResult(output_refs=({
         "type": "rpg_game_master", "module": "rpg", "session_id": request.session_id,
-        "proposed": int(report.get("proposed") or 0), "dropped": list(report.get("dropped") or ())}]))
-    return completed or job
+        "proposed": int(report.get("proposed") or 0), "dropped": list(report.get("dropped") or ())},))
 
 
-__all__ = ["JOB_TYPE", "RpgGameMasterJobInput", "after_commit", "enqueue_game_master", "execute_game_master_job",
+__all__ = ["JOB_TYPE", "RpgGameMasterJobInput", "after_commit", "enqueue_game_master", "run_game_master_job",
            "fill_areas_ahead", "fill_areas_at_launch"]

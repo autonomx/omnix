@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from .config_store import AssistantToolsConfigPayload, default_assistant_tools_config, load_assistant_tools_config
 from .models import AssistantToolAction, AssistantToolReviewDecision, AssistantToolRequest, AssistantToolSpec, ApprovalPolicy
 from .registry import default_assistant_tools
+from app.capabilities.approval_policy import strictest
 from .validation import action_requires_approval, is_valid_action_id, is_valid_tool_id
 
 
@@ -48,9 +49,7 @@ def review_assistant_tool_request(
     tool_config = _tool_config(config_payload, tool_id)
     action_config = _action_config(config_payload, tool_id, action_id)
     policy = (action_config.get("approval_policy") if action_config else None) or action.approval_policy
-    if policy_floor is not None:
-        strength = {"allow_automatic": 0, "ask_sensitive": 1, "always_ask": 2, "disabled": 3}
-        policy = max((policy, policy_floor), key=strength.__getitem__)
+    policy = strictest(policy, policy_floor)
 
     if not action.enabled:
         return AssistantToolReviewDecision(**base, reason="action_disabled", result_summary="Blocked: action is disabled by registry.")

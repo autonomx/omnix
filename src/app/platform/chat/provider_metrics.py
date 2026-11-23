@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
-from app.providers.catalog import RUNTIME_STATS, provider_supports
+from app.providers.catalog import RUNTIME_STATS, provider_id_of, provider_supports
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -63,7 +63,7 @@ def merge_provider_response_metrics(
     usage = _mapping(getattr(response, "usage", None)) or _mapping(raw.get("usage"))
     prompt_token_details = _mapping(usage.get("prompt_tokens_details"))
     input_token_details = _mapping(usage.get("input_tokens_details"))
-    provider_key = str(provider_id or "").strip().lower().removeprefix("llm:")
+    provider_key = provider_id_of(provider_id)
 
     # The normalized row is currently intended for LM Studio. Still accept an
     # explicit stats payload so compatible adapters can opt in without branching.

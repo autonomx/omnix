@@ -387,3 +387,21 @@ def test_closing_the_trading_loop_cancels_its_work_and_the_next_use_starts_a_fre
     assert monitor_task._TRADING_LOOP.loop() is not first
     monitor_task.close_trading_loop()
     monitor_task.close_trading_loop()  # closing twice is nothing
+
+
+def test_a_monitor_switch_is_on_by_default_and_off_in_tests_unless_asked(monkeypatch):
+    # One switch for every monitor (deep-modules wave 2): the name turns it off, <name>_IN_TESTS turns it on under pytest.
+    from app.apps.trading.monitor_task import monitor_switch
+
+    enabled = monitor_switch("OMNIX_TRADING_EXAMPLE_MONITOR")
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "postgres")
+    monkeypatch.delenv("OMNIX_TRADING_EXAMPLE_MONITOR", raising=False)
+    assert enabled() is True
+    monkeypatch.setenv("OMNIX_TRADING_EXAMPLE_MONITOR", "off")
+    assert enabled() is False
+
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.delenv("OMNIX_TRADING_EXAMPLE_MONITOR", raising=False)
+    assert enabled() is False
+    monkeypatch.setenv("OMNIX_TRADING_EXAMPLE_MONITOR_IN_TESTS", "1")
+    assert enabled() is True

@@ -207,8 +207,9 @@ def test_the_loops_twins_are_liveportraits_when_it_made_the_loop(flashhead_runti
 
     monkeypatch.setattr(flashhead_runtime, "encode_jpegs", lambda frames, level: [f"{v}" for v in frames.values])
     portrait = types.SimpleNamespace(blink_jpegs={}, idle_jpegs={}, twins=Frames([1, 2, 3, 4]), shut=None,
-                                     opened=None)
-    runtime = types.SimpleNamespace(idle_pixels=lambda portrait: Frames([0, 0, 0, 0]))
+                                     opened=None, released=False, blink_searched=False)
+    runtime = types.SimpleNamespace(idle_pixels=lambda portrait: Frames([0, 0, 0, 0]),
+                                    release_frames=flashhead_runtime.FlashHeadRuntime.release_frames)
     level = next(index for index in range(8) if importlib.import_module(
         "services.portrait.idle_loop").idle_frame_step(index) == 2)
     assert flashhead_runtime.FlashHeadRuntime.blink_frames(runtime, portrait, level) == ["1", "3"]

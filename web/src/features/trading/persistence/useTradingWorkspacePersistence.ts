@@ -10,6 +10,7 @@ import {
   serializeTradingWorkspace,
   type TradingWorkspacePayload,
 } from './workspaceDocument';
+import { isConflict } from '../../../api/errors';
 
 export type WorkspacePersistenceStatus = 'loading' | 'saved' | 'saving' | 'draft' | 'conflict' | 'error';
 export type WorkspaceImportResult = 'imported' | 'invalid' | 'error';
@@ -241,7 +242,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       return saved;
     } catch (error) {
       if (cancelledRef.current) return null;
-      if (error instanceof Error && error.message.includes('(409)')) {
+      if (isConflict(error)) {
         const latest = await loadLatestRecord(record.record_id);
         conflictRef.current = {
           localPayload: payload,
@@ -415,7 +416,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       refreshSummaries();
       setStatus('saved');
     } catch (error) {
-      if (error instanceof Error && error.message.includes('(409)')) {
+      if (isConflict(error)) {
         await loadLatestRecord(current.record_id);
         setStatus('conflict');
       } else {

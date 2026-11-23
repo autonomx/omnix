@@ -16,7 +16,6 @@ export interface PendingRpgTurnSubmission {
   submittedAt: number;
 }
 
-export const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
 

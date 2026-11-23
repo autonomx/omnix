@@ -43,10 +43,9 @@ _HOP_RANK = {"http": 0, "websocket": 0, "sse": 0, "sql": 0, "calls": 1, "spawns"
 # ---------------------------------------------------------------- feature catalog (read statically)
 
 def catalog_features(root: Path = ROOT) -> dict[str, dict]:
-    """Feature id -> its feature.py file, declared depends_on/uses, and whether it is opt-in."""
+    """Feature id -> its feature.py file and declared depends_on/uses."""
     tree = ast.parse((root / CATALOG_PATH.relative_to(ROOT)).read_text(encoding="utf-8"))
     targets: dict[str, str] = {}
-    opt_in: set[str] = set()
     for stmt in tree.body:
         name = getattr(getattr(stmt, "target", None), "id", None)
         if name is None and isinstance(stmt, ast.Assign) and isinstance(stmt.targets[0], ast.Name):
@@ -54,8 +53,6 @@ def catalog_features(root: Path = ROOT) -> dict[str, dict]:
         if name == "FEATURE_CATALOG":
             mapping = next(n for n in ast.walk(stmt.value) if isinstance(n, ast.Dict))
             targets = ast.literal_eval(mapping)
-        elif name == "OPT_IN_FEATURES":
-            opt_in = set(ast.literal_eval(next(n for n in ast.walk(stmt.value) if isinstance(n, ast.Set))))
     features = {}
     for feature_id, target in targets.items():
         module = target.split(":", 1)[0]
@@ -66,7 +63,7 @@ def catalog_features(root: Path = ROOT) -> dict[str, dict]:
                 for keyword in call.keywords:
                     if keyword.arg in declared:
                         declared[keyword.arg] = tuple(ast.literal_eval(keyword.value))
-        features[feature_id] = {"file": rel, "opt_in": feature_id in opt_in, **declared}
+        features[feature_id] = {"file": rel, **declared}
     return features
 
 
@@ -96,7 +93,7 @@ def build(root: Path = ROOT) -> tuple[dict, list[str]]:
     for feature_id, feature in features.items():
         if feature_id not in by_feature:
             problems.append(f"catalog feature {feature_id} has no node (add one with feature={feature_id!r})")
-        elif not feature["opt_in"]:
+        else:
             rows.append(("gateway", by_feature[feature_id], "mounts", "mounts feature routers"))
     for feature_id, feature in features.items():
         for kind in ("depends_on", "uses"):

@@ -21,6 +21,8 @@ from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from app.config.env import environment
+from app.persistence.runtime import is_legacy_test_persistence
 from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
 
 from .trade_logging import trade_log
@@ -254,6 +256,27 @@ class SingleFlightTasks:
         self._tasks.clear()
 
 
+def _switch_on(name: str, default: str) -> bool:
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def monitor_switch(name: str) -> Callable[[], bool]:
+    """A monitor's on/off switch: ``name``, on unless set off.
+
+    Under legacy test persistence (pytest) the monitor stays off unless ``<name>_IN_TESTS`` turns it on. The
+    configuration registry lists both names for every ``monitor_switch`` call.
+    """
+    in_tests = f"{name}_IN_TESTS"
+
+    def enabled() -> bool:
+        if is_legacy_test_persistence():
+            return _switch_on(in_tests, "0")
+        return _switch_on(name, "1")
+
+    enabled.__name__ = enabled.__qualname__ = f"monitor_switch({name})"
+    return enabled
+
+
 @dataclass(frozen=True, slots=True)
 class TradingMonitorTask:
     """A monitor and how the scheduler runs it."""
@@ -346,6 +369,7 @@ __all__ = [
     "SingleFlightTasks",
     "TradingMonitorTask",
     "close_trading_loop",
+    "monitor_switch",
     "on_trading_loop",
     "scheduled_task_spec",
 ]

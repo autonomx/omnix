@@ -8,17 +8,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from pydantic import ValidationError
-
 from app.assets import AssetRecord, AssetType, default_asset_store
 from app.jobs.models import JobStatus
 from app.runtime.ports import optional
 
+from app.jobs.errors import JobClaimConflict
+from app.jobs.handlers import JobRun, PermanentJobError, RetryableJobError
 from app.jobs.inline_execution import require_execution_authority
 from app.jobs.models import (
     CompleteJobRequest,
     CreateJobRequest,
-    FailJobRequest,
     JobRecord,
     JobStage,
     ResourceClass,
@@ -71,16 +70,18 @@ def enqueue_image_job(
     return create_once(request, idempotency_key=idempotency_key)
 
 
-def execute_image_job(
-    job_store: Any,
-    job: JobRecord,
+def run_image_job(
+    run: JobRun[ImageGenerateInput],
     *,
     generate_fn: Callable[[dict[str, Any]], Any] | None = None,
     asset_store: AssetStore | None = None,
 ) -> JobRecord:
-    """Run one image job, index its file, and complete the shared job."""
+    """Generate one image, index its file and complete the job; a failure raises under its own code.
 
-    job_store.mark_running(job.id)
+    The run completes the job itself, because the avatar finisher reconciles a character's avatars only once
+    its job reads as completed.
+    """
+    job_store, job, request = run.store, run.job, run.input
     _update_progress(
         job_store,
         job.id,
@@ -90,25 +91,10 @@ def execute_image_job(
         stage_id="generate-image",
     )
     try:
-        request = ImageGenerateInput.model_validate(job.input_payload or {})
         provider_payload = request.provider_payload()
-        provider_payload["request_id"] = job.id
-    except ValidationError as exc:
-        return _fail(
-            job_store,
-            job,
-            "image_invalid_request",
-            str(exc),
-            retryable=False,
-        )
     except ValueError as exc:
-        return _fail(
-            job_store,
-            job,
-            "image_provider_unavailable",
-            str(exc),
-            retryable=False,
-        )
+        raise PermanentJobError("image_provider_unavailable", str(exc)) from exc
+    provider_payload["request_id"] = job.id
 
     if generate_fn is None:
         from app.platform.image.service import generate_image
@@ -136,26 +122,13 @@ def execute_image_job(
     try:
         result = generate_fn(provider_payload)
     except Exception as exc:
-        return _fail(
-            job_store,
-            job,
-            "image_generation_failed",
-            str(exc) or "Image generation failed",
-            retryable=True,
-        )
+        raise RetryableJobError("image_generation_failed", str(exc) or "Image generation failed") from exc
 
     if not bool(getattr(result, "ok", False)):
-        message = str(getattr(result, "error", "") or "Image generation failed")
-        return _fail(
-            job_store,
-            job,
+        raise RetryableJobError(
             "image_generation_failed",
-            message,
-            retryable=True,
-            details={
-                "provider": getattr(result, "provider", ""),
-                "status": getattr(result, "status", ""),
-            },
+            str(getattr(result, "error", "") or "Image generation failed"),
+            details={"provider": getattr(result, "provider", ""), "status": getattr(result, "status", "")},
         )
 
     _update_progress(
@@ -184,13 +157,9 @@ def execute_image_job(
             asset_store or default_asset_store(),
         )
     except FileNotFoundError as exc:
-        return _fail(
-            job_store,
-            job,
-            "image_output_missing",
-            str(exc),
-            retryable=True,
-        )
+        raise RetryableJobError("image_output_missing", str(exc)) from exc
+    except JobClaimConflict:
+        raise
     except Exception as exc:
         message = str(exc) or "Image asset could not be stored"
         code = (
@@ -198,7 +167,7 @@ def execute_image_job(
             if message.startswith("avatar_frame_quality_rejected:")
             else "image_asset_store_failed"
         )
-        return _fail(job_store, job, code, message, retryable=True)
+        raise RetryableJobError(code, message) from exc
 
     completed = job_store.complete_job(
         job.id,
@@ -381,27 +350,3 @@ def _generation_progress(job_store: Any, job_id: str) -> Callable[[int, int, str
 
     return report
 
-
-def _fail(
-    job_store: Any,
-    job: JobRecord,
-    code: str,
-    message: str,
-    *,
-    retryable: bool,
-    details: dict[str, Any] | None = None,
-) -> JobRecord:
-    failed = job_store.fail_job(
-        job.id,
-        FailJobRequest(
-            code=code,
-            message=message,
-            retryable=retryable,
-            details={
-                "job_type": job.type,
-                "module": job.module,
-                **(details or {}),
-            },
-        ),
-    )
-    return failed or job

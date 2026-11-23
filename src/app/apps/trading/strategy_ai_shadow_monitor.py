@@ -27,7 +27,8 @@ from typing import Any, cast
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .canonical import optional_decimal
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .execution_observation_plane import (
     STANDING_QUOTE_MAX_AGE_SECONDS,
     ExecutionObservationPlane,
@@ -182,14 +183,7 @@ def _events_with_data_gap_aliases(events: list[StrategyEvent]) -> list[StrategyE
     return output
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def ai_shadow_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_AI_SHADOW_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_AI_SHADOW_MONITOR", "1")
+ai_shadow_monitor_enabled = monitor_switch("OMNIX_TRADING_AI_SHADOW_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -202,16 +196,6 @@ def _interval_seconds() -> float:
 
 def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
-
-
-def _decimal(value: object) -> Decimal | None:
-    if value in {None, ""}:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
 
 
 def _eligible(config: TradingStrategyConfigDocument) -> bool:
@@ -637,24 +621,14 @@ async def _session_events(
         tzinfo=_ET,
     )
     end = min(now + timedelta(seconds=1), start_et + timedelta(days=1))
-    if hasattr(repository, "events_by_types_between"):
-        return await asyncio.to_thread(
-            repository.events_by_types_between,
-            config.strategy_id,
-            event_types=_EVENT_TYPES,
-            start_time=start_et.astimezone(timezone.utc),
-            end_time=end.astimezone(timezone.utc),
-            limit=20_000,
-        )
-    recent = await asyncio.to_thread(repository.recent_events, config.strategy_id, 20_000)
-    return [
-        event
-        for event in recent
-        if event.event_type in _EVENT_TYPES
-        and start_et.astimezone(timezone.utc)
-        <= event.observed_at.astimezone(timezone.utc)
-        < end.astimezone(timezone.utc)
-    ]
+    return await asyncio.to_thread(
+        repository.events_by_types_between,
+        config.strategy_id,
+        event_types=_EVENT_TYPES,
+        start_time=start_et.astimezone(timezone.utc),
+        end_time=end.astimezone(timezone.utc),
+        limit=20_000,
+    )
 
 
 def _comparison_payload(
@@ -674,7 +648,7 @@ def _comparison_payload(
     deterministic_r = [
         value
         for event in deterministic_replays
-        if (value := _decimal(event.payload.get("r_result"))) is not None
+        if (value := optional_decimal(event.payload.get("r_result"))) is not None
     ]
     deterministic_r_drawdown = _max_drawdown(deterministic_r)
     entry_ready_events = [
@@ -696,7 +670,7 @@ def _comparison_payload(
             continue
         if execution.get("execution_eligible") is True:
             deterministic_live_eligible += 1
-        spread = _decimal(execution.get("spread_bps"))
+        spread = optional_decimal(execution.get("spread_bps"))
         if spread is not None:
             deterministic_live_spreads.append(spread)
 
@@ -712,10 +686,10 @@ def _comparison_payload(
         policy_payload = event.payload.get("policy")
         if not isinstance(policy_payload, dict) or policy_payload.get("complete") is not True:
             continue
-        value = _decimal(policy_payload.get("net_execution_return_pct"))
+        value = optional_decimal(policy_payload.get("net_execution_return_pct"))
         if value is not None:
             stoch_net.append(value)
-        drag = _decimal(policy_payload.get("execution_drag_pct"))
+        drag = optional_decimal(policy_payload.get("execution_drag_pct"))
         if drag is not None:
             stoch_drag.append(drag)
 
@@ -744,22 +718,22 @@ def _comparison_payload(
         returns = [
             value
             for event in trades
-            if (value := _decimal(event.payload.get("net_execution_return_pct"))) is not None
+            if (value := optional_decimal(event.payload.get("net_execution_return_pct"))) is not None
         ]
         maes = [
             value
             for event in trades
-            if (value := _decimal(event.payload.get("mae_pct"))) is not None
+            if (value := optional_decimal(event.payload.get("mae_pct"))) is not None
         ]
         stabilities = [
             value
             for event in trades
-            if (value := _decimal(event.payload.get("decision_stability"))) is not None
+            if (value := optional_decimal(event.payload.get("decision_stability"))) is not None
         ]
         drags = [
             value
             for event in trades
-            if (value := _decimal(event.payload.get("execution_drag_pct"))) is not None
+            if (value := optional_decimal(event.payload.get("execution_drag_pct"))) is not None
         ]
         policy_batches = [
             event
@@ -868,7 +842,7 @@ def _comparison_payload(
                     str(value)
                     for event in deterministic_replays
                     if (
-                        value := _decimal(event.payload.get("assumed_spread_bps"))
+                        value := optional_decimal(event.payload.get("assumed_spread_bps"))
                     )
                     is not None
                 }
@@ -2066,7 +2040,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     trigger_reasons=("durable_entry_retry",),
                     record_decision=False,
                     decision_completed_at=self._retry_actionable_at(policy, candidate.instrument_id, actionable_at),
-                    reference_price_override=_decimal(
+                    reference_price_override=optional_decimal(
                         pending_entry.payload.get("reference_price")
                     ),
                 )

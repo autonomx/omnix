@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from app.capabilities.approval_policy import requires_approval
+
 from .models import AssistantToolAction, AssistantToolRequest, AssistantToolSpec, AssistantToolValidationResult, ApprovalPolicy
 
 _TOOL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
@@ -36,16 +38,13 @@ def is_valid_action_id(action_id: str) -> bool:
 def action_requires_approval(action: AssistantToolAction, approval_policy: ApprovalPolicy | None = None) -> bool:
     """Return whether the action must be approved before execution."""
 
-    policy = approval_policy or action.approval_policy
-    if policy == "disabled":
-        return False
-    if policy == "always_ask":
-        return True
-    if action.is_destructive or action.category == "delete":
-        return True
-    if policy == "ask_sensitive":
-        return action.category != "read" or action.risk_level != "low" or action.requires_confirmation or action.is_destructive
-    return False
+    return requires_approval(
+        approval_policy or action.approval_policy,
+        effect=action.category,
+        risk=action.risk_level,
+        needs_confirmation=action.requires_confirmation,
+        destructive=action.is_destructive,
+    )
 
 
 def validate_assistant_tool_request(

@@ -13,6 +13,7 @@ the camera.
 """
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_message
 import concurrent.futures
 import logging
 from collections.abc import Callable, Iterator
@@ -174,7 +175,7 @@ class CameraTurn:
     def __iter__(self) -> Iterator[dict[str, Any]]:
         image, self._image = self._image, None
         live_voice = getattr(self._chat_store, "live_voice_chat_port", None)
-        if not image or live_voice is None or not live_voice.is_live_voice_message(self._user_message):
+        if not image or live_voice is None or not is_live_voice_message(self._user_message):
             return
         yield {"type": "text_chunk", "text": CAMERA_FILLER}
         look = look_at_camera_image(image, str(getattr(self._user_message, "content", "") or ""),

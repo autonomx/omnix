@@ -1,13 +1,24 @@
 """Ordinary-life cultural coverage certification for assembled worlds."""
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.apps.rpg.genesis.forge.world_forge_ordinary_life import ordinary_life_components
+from .graph_audit import GraphAuditError
+from .topic_graph import (
+    fingerprint as _fingerprint,
+)
+from .topic_graph import (
+    mapping as _mapping,
+)
+from .topic_graph import (
+    rows as _rows,
+)
+from .topic_graph import (
+    topic_entities as _entities,
+)
 
 _DIVERSITY_COMPONENTS = ("food_staple", "work_pattern", "leisure_practice", "care_practice")
 _CATEGORY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -38,36 +49,9 @@ class OrdinaryLifeIssue:
         }
 
 
-class OrdinaryLifeCompilationError(ValueError):
-    def __init__(self, issues: Sequence[OrdinaryLifeIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.culture_id}:{row.path}" for row in self.issues)
-        super().__init__("ordinary_life_integrity_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "ordinary_life_integrity_failed",
-            "issues": [row.as_dict() for row in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
+class OrdinaryLifeCompilationError(GraphAuditError):
+    code = "ordinary_life_integrity_failed"
+    fields = ("code", "culture_id", "path")
 
 
 def _domains(topic_graph: Mapping[str, Any] | None) -> set[str]:
@@ -82,16 +66,6 @@ def _domains(topic_graph: Mapping[str, Any] | None) -> set[str]:
             values.add(str(node.get("topic_id") or ""))
     values.discard("")
     return values
-
-
-def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values: list[tuple[str, int, dict[str, Any]]] = []
-    for topic_index, raw in enumerate(topic_rows, start=1):
-        topic = _mapping(raw)
-        candidate = _candidate(topic)
-        topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
-        values.extend((topic_id, index, entity) for index, entity in enumerate(_rows(candidate.get("entities"))))
-    return tuple(values)
 
 
 def _normalise(value: Any) -> str:
@@ -114,11 +88,6 @@ def _payload(value: Any) -> tuple[dict[str, str] | None, tuple[str, ...]]:
         else:
             payload[component] = normalised
     return (payload if not issues else None), tuple(issues)
-
-
-def _fingerprint(value: Mapping[str, Any]) -> str:
-    encoded = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def ordinary_life_issues(

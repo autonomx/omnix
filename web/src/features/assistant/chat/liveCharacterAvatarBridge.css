@@ -282,7 +282,7 @@
   .assistant-live-video-progress-fill::after {
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c-neutral-1000) 45%, transparent), transparent);
     animation: assistant-live-video-shimmer 1.4s ease-in-out infinite;
     content: '';
   }

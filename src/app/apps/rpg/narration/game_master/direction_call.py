@@ -59,7 +59,7 @@ def trigger(result: Mapping[str, Any], document: Mapping[str, Any]) -> str:
     if "location_changed" in changes:
         return "the hero arrived somewhere: a scene ended"
     simulation = _d(_sections.simulation_state_of(document))
-    turns = int(_d(document.get("state")).get("turn_count") or 0)
+    turns = _sections.turn_count_of(document)
     stalled = stall(simulation, turns)
     if stalled >= STALL_TURNS and stalled % STALL_TURNS == 0:  # once each stretch of stalled turns, not every turn
         return f"nothing meaningful has happened for {stalled} turns"
@@ -101,7 +101,7 @@ def _state(document: Mapping[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.rules.routines import companions, hero_location, present_now
 
     simulation = _d(_sections.simulation_state_of(document))
-    turns = int(_d(document.get("state")).get("turn_count") or 0)
+    turns = _sections.turn_count_of(document)
     quests = [_d(row) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))]
     return {
         "hero": {"level": _d(_sections.player_state_of(simulation)).get("level"), "at": hero_location(simulation),

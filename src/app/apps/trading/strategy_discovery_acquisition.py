@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 """Provider-neutral causal acquisition contracts for dynamic discovery."""
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import RLock
 from types import MappingProxyType
@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from .finviz_gapper_discovery import discover_finviz_gappers
 from .strategy_dynamic_discovery import MarketAnomalyFeatures
-from app.apps.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import EASTERN, REGULAR_OPEN
 
 
 class CausalMarketObservation(BaseModel):
@@ -54,14 +54,14 @@ def _regular_session_activity(instrument_id: str, observed_at: datetime) -> tupl
     """
 
     local = observed_at.astimezone(EASTERN)
-    if local.time() < time(9, 30):
+    if local.time() < REGULAR_OPEN:
         return None
     try:
         from .yahoo_evidence import default_yahoo_evidence_store
 
         bars = default_yahoo_evidence_store().load_market_bars(
             instrument_id,
-            start=datetime.combine(local.date(), time(9, 30), tzinfo=EASTERN),
+            start=datetime.combine(local.date(), REGULAR_OPEN, tzinfo=EASTERN),
             end=observed_at,
             session="regular",
         )

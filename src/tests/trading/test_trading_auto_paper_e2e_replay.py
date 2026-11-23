@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.apps.trading import strategy_monitor as strategy_monitor_module
 from app.apps.trading import (
     strategy_monitor_candidates,
@@ -290,7 +291,7 @@ class InMemoryPaperRepository:
         return fills
 
 
-class ReplayMarketService:
+class ReplayMarketService(RecoveringMarketService):
     def __init__(self, bars: list[MarketBar], fixture: dict[str, object], *, now: datetime) -> None:
         self._bars = bars
         assumptions = fixture["execution_assumptions"]
@@ -646,7 +647,7 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
     monitor = session.monitor
     submitted = asyncio.run(monitor.run_once())
     assert submitted == 1
-    assert monitor.paper_order_count == 1
+    assert monitor.metrics.paper_order_count == 1
 
     authorization_events = [
         event for event in strategy_repository.events
@@ -667,7 +668,7 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
 
     submitted_again = asyncio.run(monitor.run_once())
     assert submitted_again == 0
-    assert monitor.paper_order_count == 1
+    assert monitor.metrics.paper_order_count == 1
     protections = strategy_repository.list_protections(config.strategy_id, active_only=True)
     assert len(protections) == 1
     assert protections[0].status == "active"

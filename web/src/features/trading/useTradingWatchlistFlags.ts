@@ -10,13 +10,10 @@ import {
   type WatchlistFlagColor,
   type WatchlistFlagsPayload,
 } from './tradingWatchlistModel';
+import { isConflict } from '../../api/errors';
 
 type FlagsStatus = 'loading' | 'ready' | 'saving' | 'error';
 type FlagsState = { payload: WatchlistFlagsPayload; status: FlagsStatus };
-
-function isConflict(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('(409)');
-}
 
 async function latestFlagsRecord(): Promise<TradingDocument | null> {
   const records = await tradingApi.documents('watchlist-flags');

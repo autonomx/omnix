@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
+from .canonical import canonical_sha256
 from .strategy_repository import StrategyEvent
 
 
@@ -21,17 +22,6 @@ ReconciliationState = Literal[
     "FINAL",
     "PERMANENTLY_UNSCORABLE",
 ]
-
-
-def _hash(value: object) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
-        ).encode("utf-8")
-    ).hexdigest()
 
 
 class EvidenceInput(BaseModel):
@@ -100,7 +90,7 @@ class SessionEvidenceFrozenScope(BaseModel):
 
     @property
     def immutable_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class SessionEvidenceManifest(BaseModel):
@@ -160,7 +150,7 @@ def event_stream_input(
     return EvidenceInput(
         source_type="strategy_event_stream",
         source_id=f"strategy:{strategy_id}",
-        sha256=_hash(payload),
+        sha256=canonical_sha256(payload),
         record_count=len(ordered),
         start_time=ordered[0].observed_at if ordered else None,
         end_time=ordered[-1].observed_at if ordered else None,
@@ -172,7 +162,7 @@ def universe_input(universe) -> EvidenceInput:
     return EvidenceInput(
         source_type="universe_snapshot",
         source_id=str(universe.universe_id),
-        sha256=_hash(payload),
+        sha256=canonical_sha256(payload),
         record_count=len(universe.candidates),
         start_time=universe.evaluation_time,
         end_time=universe.evaluation_time,
@@ -190,7 +180,7 @@ def provider_evidence_input(
     return EvidenceInput(
         source_type="provider_response",
         source_id=source_id,
-        sha256=_hash(payload),
+        sha256=canonical_sha256(payload),
         record_count=record_count,
         start_time=start_time,
         end_time=end_time,
@@ -286,7 +276,7 @@ def build_session_evidence_manifest(
         ),
         frozen_at=frozen_at,
     )
-    manifest_id = _hash(
+    manifest_id = canonical_sha256(
         {
             "strategy_id": strategy_id,
             "session_date": session_date.isoformat(),

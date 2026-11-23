@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import re
-from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any
 
@@ -138,18 +137,18 @@ class Translator:
         return provider
 
     def is_local(self) -> bool:
+        from app.providers.catalog import provider_id_of
+
         provider = self._provider()
-        name = str(getattr(provider, "provider_name", "") or self.provider_name).casefold().removeprefix("llm:")
+        name = provider_id_of(getattr(provider, "provider_name", "") or self.provider_name)
         return name in LOCAL_PROVIDERS
 
     def chat(self, messages: list[dict[str, str]]) -> str:
-        from app.persistence.device_permits import device_permit_slot
         from app.providers import ChatMessage
+        from app.providers.llm_admission import llm_admission
 
         provider = self._provider()
-        name = str(getattr(provider, "provider_name", "") or self.provider_name).casefold().removeprefix("llm:")
-        permit = device_permit_slot("llm-local", priority="batch") if name in LOCAL_PROVIDERS else nullcontext()
-        with permit:
+        with llm_admission(getattr(provider, "provider_name", "") or self.provider_name):
             response = provider.chat_completion(messages=[ChatMessage(role=item["role"], content=item["content"])
                                                           for item in messages])
         return str(getattr(response, "content", "") or "")

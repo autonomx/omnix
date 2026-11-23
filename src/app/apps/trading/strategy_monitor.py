@@ -4,10 +4,10 @@ import asyncio
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from time import perf_counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.config.env import env_str as _env_str
@@ -15,7 +15,7 @@ from app.runtime.features import FeatureContext
 
 from .gapper_dataset import GapperCandidate
 from .indicators.engine import relative_strength_index
-from .monitor_task import ScheduledTradingMonitor, SingleFlightTasks, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, SingleFlightTasks, TradingMonitorTask, monitor_switch
 from .paper import PaperMarketObservation
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
     from .order_gateway import StrategyPaperAccess
 
 _STATE_KEY = "_omnix_trading_strategy_monitor"
-_REGULAR_OPEN = time(9, 30)
 _DIAGNOSTIC_LOG_INTERVAL = timedelta(minutes=5)
 
 
@@ -113,10 +112,7 @@ def _flag(name: str, default: str = "1") -> bool:
     return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def trading_strategy_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_STRATEGY_MONITOR", "1")
+trading_strategy_monitor_enabled = monitor_switch("OMNIX_TRADING_STRATEGY_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -155,20 +151,13 @@ def _v2_qualification_events(
         tzinfo=timezone.utc,
     )
     end = now.astimezone(timezone.utc) + timedelta(seconds=1)
-    if hasattr(repository, "events_by_types_between"):
-        return repository.events_by_types_between(
-            strategy_id,
-            event_types=V2_QUALIFICATION_EVENT_TYPES,
-            start_time=start,
-            end_time=end,
-            limit=20_000,
-        )
-    return [
-        event
-        for event in repository.recent_events(strategy_id, 20_000)
-        if event.event_type in V2_QUALIFICATION_EVENT_TYPES
-        and start <= event.observed_at.astimezone(timezone.utc) < end
-    ]
+    return repository.events_by_types_between(
+        strategy_id,
+        event_types=V2_QUALIFICATION_EVENT_TYPES,
+        start_time=start,
+        end_time=end,
+        limit=20_000,
+    )
 
 
 # Start no new configuration once a pass has used this share of its timeout.
@@ -352,6 +341,40 @@ class _EntryProposal:
         )
 
 
+@dataclass
+class PassMetrics:
+    """What a host's strategy passes have counted since it started.
+
+    The scheduled monitor reports these in its diagnostics and in the strategy
+    operations status; a pass only adds to them. The auto-paper readiness
+    counts restart with each monitor run.
+    """
+
+    auto_paper_archive_not_ready_strategy_count: int = 0
+    auto_paper_blocked_strategy_count: int = 0
+    auto_paper_qualification_blocked_strategy_count: int = 0
+    auto_paper_ready_strategy_count: int = 0
+    evaluation_count: int = 0
+    intraday_learning_snapshot_count: int = 0
+    intraday_llm_assessment_count: int = 0
+    intraday_llm_budget_skip_count: int = 0
+    intraday_llm_call_count: int = 0
+    intraday_llm_error_count: int = 0
+    intraday_llm_estimated_usage_count: int = 0
+    intraday_llm_input_character_count: int = 0
+    intraday_llm_input_token_count: int = 0
+    intraday_llm_output_token_count: int = 0
+    intraday_llm_shared_assessment_count: int = 0
+    intraday_llm_total_token_count: int = 0
+    leader_momentum_event_count: int = 0
+    paper_order_count: int = 0
+    rejection_count: int = 0
+    signal_count: int = 0
+    trend_t1_event_count: int = 0
+    yahoo_recovered_candidate_evaluation_count: int = 0
+    yahoo_unresolved_candidate_evaluation_count: int = 0
+
+
 class StrategyRunHost:
     """The state and helpers one strategy configuration pass uses.
 
@@ -359,7 +382,20 @@ class StrategyRunHost:
     another for the gap pullback configurations it runs. The pass itself
     (``strategy_monitor_config_run.run_config``) and the entry submission path
     (``strategy_entry_path``) are shared.
+
+    A pass calls back into its host only through ``PASS_HOOKS``; a host that
+    changes what a pass does (the runner's parity host stops at the proposals)
+    overrides those and nothing else. Leases, scheduling and the pass order stay
+    with the monitor and the runner, and the order gateway keeps authorization.
     """
+
+    PASS_HOOKS: ClassVar[tuple[str, ...]] = (
+        "_reconcile_protections",
+        "_run_intraday_llm",
+        "_evaluate_candidates",
+        "_record_diagnostic_v2_candidates",
+        "_proposals_evaluated",
+    )
 
     # Strategy diagnostics count their evaluations here.
     diagnostic_evaluation_count: int = 0
@@ -375,23 +411,7 @@ class StrategyRunHost:
         self.intraday_llm_analyzer_factory = intraday_llm_analyzer_factory
         self.current_run_id: str | None = None
         self.last_error: str | None = None
-        self.evaluation_count = 0
-        self.signal_count = 0
-        self.paper_order_count = 0
-        self.rejection_count = 0
-        self.yahoo_recovered_candidate_evaluation_count = 0
-        self.yahoo_unresolved_candidate_evaluation_count = 0
-        self.intraday_learning_snapshot_count = 0
-        self.intraday_llm_call_count = 0
-        self.intraday_llm_assessment_count = 0
-        self.intraday_llm_error_count = 0
-        self.intraday_llm_input_character_count = 0
-        self.intraday_llm_input_token_count = 0
-        self.intraday_llm_output_token_count = 0
-        self.intraday_llm_total_token_count = 0
-        self.intraday_llm_estimated_usage_count = 0
-        self.intraday_llm_shared_assessment_count = 0
-        self.intraday_llm_budget_skip_count = 0
+        self.metrics = PassMetrics()
         # Strategies of this process reuse each other's assessment of a name at
         # the same bar (a custom analyzer factory gets a private cache).
         self.intraday_llm_assessments = (
@@ -404,25 +424,19 @@ class StrategyRunHost:
         # Leader Momentum arm: the last recorded (state, reason, trades) per
         # (strategy, instrument, session), so only changes are recorded.
         self.leader_momentum_last: dict[tuple[str, str, str], tuple[str, str, int]] = {}
-        self.leader_momentum_event_count = 0
         self.leader_momentum_evaluated_through: dict[tuple[str, str], datetime] = {}
         # Trend continuation T1 arm (same bookkeeping, plus captured entries).
         self.trend_t1_last: dict[tuple[str, str, str], tuple[str, str]] = {}
         self.trend_t1_evaluated_through: dict[tuple[str, str], datetime] = {}
         self.trend_t1_entries_captured: set[tuple[str, str, str]] = set()
-        self.trend_t1_event_count = 0
         self._last_evaluated_bar_end: dict[tuple[str, str, str], datetime] = {}
         self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
         self.auto_paper_readiness_by_strategy: dict[str, dict[str, Any]] = {}
-        self.auto_paper_ready_strategy_count = 0
-        self.auto_paper_blocked_strategy_count = 0
-        self.auto_paper_archive_not_ready_strategy_count = 0
-        self.auto_paper_qualification_blocked_strategy_count = 0
         # Intraday LLM annotations run beside the cycle, one per strategy (WP-8.3).
         self.intraday_llm_annotations = SingleFlightTasks(on_error=self._intraday_llm_failed)
 
     def _intraday_llm_failed(self, exc: BaseException) -> None:
-        self.intraday_llm_error_count += 1
+        self.metrics.intraday_llm_error_count += 1
         trade_log("auto_trading", "intraday_llm_error", error_type=type(exc).__name__, detail=str(exc),
                   execution_authority=False)
 
@@ -730,12 +744,12 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
         paper_repository = self.paper_repository_factory()
         market_service = self.market_service_factory()
         configs = await asyncio.to_thread(strategy_repository.list_configs, active_only=True)
-        before = self.paper_order_count
+        before = self.metrics.paper_order_count
         self.auto_paper_readiness_by_strategy = {}
-        self.auto_paper_ready_strategy_count = 0
-        self.auto_paper_blocked_strategy_count = 0
-        self.auto_paper_archive_not_ready_strategy_count = 0
-        self.auto_paper_qualification_blocked_strategy_count = 0
+        self.metrics.auto_paper_ready_strategy_count = 0
+        self.metrics.auto_paper_blocked_strategy_count = 0
+        self.metrics.auto_paper_archive_not_ready_strategy_count = 0
+        self.metrics.auto_paper_qualification_blocked_strategy_count = 0
         started_at = datetime.now(timezone.utc)
         self.current_run_id = _run_id("auto", started_at)
         log_monitor_heartbeat = self._should_log_diagnostic(
@@ -750,10 +764,10 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
                 started_at=started_at,
                 active_strategy_count=len(configs),
                 interval_seconds=self.interval_seconds,
-                evaluation_count_before=self.evaluation_count,
-                signal_count_before=self.signal_count,
-                paper_order_count_before=self.paper_order_count,
-                rejection_count_before=self.rejection_count,
+                evaluation_count_before=self.metrics.evaluation_count,
+                signal_count_before=self.metrics.signal_count,
+                paper_order_count_before=self.metrics.paper_order_count,
+                rejection_count_before=self.metrics.rejection_count,
             )
         pass_started = perf_counter()
         recovery_before = _recovery_snapshot(market_service)
@@ -797,24 +811,24 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
                 finally:
                     timings[config.strategy_id] = round(perf_counter() - config_started, 3)
             readiness = list(self.auto_paper_readiness_by_strategy.values())
-            self.auto_paper_ready_strategy_count = sum(
+            self.metrics.auto_paper_ready_strategy_count = sum(
                 1 for item in readiness if item.get("state") == "ready"
             )
-            self.auto_paper_blocked_strategy_count = sum(
+            self.metrics.auto_paper_blocked_strategy_count = sum(
                 1 for item in readiness if item.get("state") == "blocked"
             )
-            self.auto_paper_archive_not_ready_strategy_count = sum(
+            self.metrics.auto_paper_archive_not_ready_strategy_count = sum(
                 1
                 for item in readiness
                 if item.get("reason") == "daily_universe_not_ready"
             )
-            self.auto_paper_qualification_blocked_strategy_count = sum(
+            self.metrics.auto_paper_qualification_blocked_strategy_count = sum(
                 1
                 for item in readiness
                 if item.get("reason") == "qualification_not_authorized"
             )
             self.last_run_at = datetime.now(timezone.utc)
-            new_orders = self.paper_order_count - before
+            new_orders = self.metrics.paper_order_count - before
             if log_monitor_heartbeat or new_orders:
                 trade_log(
                     "auto_trading",
@@ -824,10 +838,10 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
                     completed_at=self.last_run_at,
                     new_paper_orders=new_orders,
                     last_error=self.last_error,
-                    evaluation_count=self.evaluation_count,
-                    signal_count=self.signal_count,
-                    paper_order_count=self.paper_order_count,
-                    rejection_count=self.rejection_count,
+                    evaluation_count=self.metrics.evaluation_count,
+                    signal_count=self.metrics.signal_count,
+                    paper_order_count=self.metrics.paper_order_count,
+                    rejection_count=self.metrics.rejection_count,
                 )
             return new_orders
         finally:
@@ -860,16 +874,16 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
             "current_run_id": self.current_run_id,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
-            "evaluation_count": self.evaluation_count,
-            "signal_count": self.signal_count,
-            "paper_order_count": self.paper_order_count,
-            "rejection_count": self.rejection_count,
-            "yahoo_recovered_candidate_evaluation_count": self.yahoo_recovered_candidate_evaluation_count,
-            "yahoo_unresolved_candidate_evaluation_count": self.yahoo_unresolved_candidate_evaluation_count,
-            "auto_paper_ready_strategy_count": self.auto_paper_ready_strategy_count,
-            "auto_paper_blocked_strategy_count": self.auto_paper_blocked_strategy_count,
-            "auto_paper_archive_not_ready_strategy_count": self.auto_paper_archive_not_ready_strategy_count,
-            "auto_paper_qualification_blocked_strategy_count": self.auto_paper_qualification_blocked_strategy_count,
+            "evaluation_count": self.metrics.evaluation_count,
+            "signal_count": self.metrics.signal_count,
+            "paper_order_count": self.metrics.paper_order_count,
+            "rejection_count": self.metrics.rejection_count,
+            "yahoo_recovered_candidate_evaluation_count": self.metrics.yahoo_recovered_candidate_evaluation_count,
+            "yahoo_unresolved_candidate_evaluation_count": self.metrics.yahoo_unresolved_candidate_evaluation_count,
+            "auto_paper_ready_strategy_count": self.metrics.auto_paper_ready_strategy_count,
+            "auto_paper_blocked_strategy_count": self.metrics.auto_paper_blocked_strategy_count,
+            "auto_paper_archive_not_ready_strategy_count": self.metrics.auto_paper_archive_not_ready_strategy_count,
+            "auto_paper_qualification_blocked_strategy_count": self.metrics.auto_paper_qualification_blocked_strategy_count,
             "auto_paper_readiness_by_strategy": self.auto_paper_readiness_by_strategy,
             "candidate_arbitration": "observed_at_quality_score_discovery_rank_instrument",
             "live_broker_enabled": False,

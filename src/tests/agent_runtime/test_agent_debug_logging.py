@@ -15,7 +15,7 @@ from app.observability.agent_logging import (
     log_agent_activity,
 )
 from app.platform.agent_runtime.pi_runtime import PiRpcSession
-from app.platform.agent_runtime.pi_runtime_core import _rpc_payload_for_log
+from app.platform.agent_runtime.pi_runtime import _rpc_payload_for_log
 from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 

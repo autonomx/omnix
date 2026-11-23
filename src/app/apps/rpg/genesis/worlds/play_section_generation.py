@@ -48,6 +48,7 @@ from .world_play_sections import (
     parse_play_sections,
     play_sections_document,
 )
+from app.apps.rpg.foundation.safe_values import clean_text
 
 # A pressure's words name the region dimension it wears down; anything else unsettles who governs.
 _DIMENSIONS = (
@@ -59,14 +60,10 @@ _TRUSTED = 50  # the trust a secret waits for
 _QUEST_PULL = 15.0  # how far finishing a quest that names a pressure eases it
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _texts(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value.strip()] if value.strip() else []
-    return [_text(item) for item in value or () if _text(item)] if isinstance(value, (list, tuple)) else []
+    return [clean_text(item) for item in value or () if clean_text(item)] if isinstance(value, (list, tuple)) else []
 
 
 def _slug(value: str) -> str:
@@ -81,27 +78,27 @@ def _short(text: str, limit: int) -> str:
 def _entities(canon: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     entities = canon.get("entities")
     rows = entities.values() if isinstance(entities, Mapping) else entities or ()
-    return {_text(row.get("id")): dict(row) for row in rows if isinstance(row, Mapping) and _text(row.get("id"))}
+    return {clean_text(row.get("id")): dict(row) for row in rows if isinstance(row, Mapping) and clean_text(row.get("id"))}
 
 
 def _economy(canon: Mapping[str, Any], model: Mapping[str, Any]) -> list[ProviderEconomy]:
-    items = {_text(row.get("id")) for row in lore_rows(canon, "items")} - {""}
+    items = {clean_text(row.get("id")) for row in lore_rows(canon, "items")} - {""}
     providers = []
     for provider_id, provider in sorted(model["providers"].items()):
         sells: list[ShopOffer] = []
         keys: set[str] = set()
         for offer in model["offers"].get(provider_id, ()):
             added = [row for row in offer.get("effects", {}).get("items_added") or () if isinstance(row, Mapping)]
-            item_id = _text(added[0].get("item_id")) if added else ""
+            item_id = clean_text(added[0].get("item_id")) if added else ""
             if offer["service_kind"] == "shop_goods" and item_id not in items:
                 continue  # launch's stand-in goods (a healing potion the world never names) are not the world's
-            key = _slug(_text(offer["offer_id"]).removeprefix(f"{provider_id}:"))
+            key = _slug(clean_text(offer["offer_id"]).removeprefix(f"{provider_id}:"))
             while key in keys:
                 key += "-2"
             keys.add(key)
             try:
                 sells.append(ShopOffer(offer_key=key, service=offer["service_kind"], name=_short(offer["label"], 120),
-                                       description=_short(_text(offer.get("description")), 500), price=offer["price"],
+                                       description=_short(clean_text(offer.get("description")), 500), price=offer["price"],
                                        item_id=item_id, stock=offer.get("stock")))
             except ValidationError:
                 continue
@@ -117,7 +114,7 @@ def _with_gear(canon: Mapping[str, Any], providers: list[ProviderEconomy]) -> li
 
     sold = {offer.item_id for provider in providers for offer in provider.sells}
     gear = [row for row in lore_rows(canon, "items") if isinstance(row.get("equipment"), Mapping)
-            and _text(row.get("id")) and _text(row.get("id")) not in sold]
+            and clean_text(row.get("id")) and clean_text(row.get("id")) not in sold]
     index = next((index for index, provider in enumerate(providers)
                   if any(offer.service == "shop_goods" for offer in provider.sells)), None)
     if index is None or not gear:
@@ -125,13 +122,13 @@ def _with_gear(canon: Mapping[str, Any], providers: list[ProviderEconomy]) -> li
     bands = derived(1).items
     offers = list(providers[index].sells)
     for row in gear:
-        band = bands.get(_text(dict(row["equipment"]).get("slot")))
+        band = bands.get(clean_text(dict(row["equipment"]).get("slot")))
         if band is None:
             continue
         copper = (band.price_copper.low + band.price_copper.high) // 2
         try:
-            offers.append(ShopOffer(offer_key=_slug(_text(row["id"]).rsplit(":", 1)[-1]), service="shop_goods",
-                                    name=_short(_text(row.get("name")) or _text(row["id"]), 120), item_id=_text(row["id"]),
+            offers.append(ShopOffer(offer_key=_slug(clean_text(row["id"]).rsplit(":", 1)[-1]), service="shop_goods",
+                                    name=_short(clean_text(row.get("name")) or clean_text(row["id"]), 120), item_id=clean_text(row["id"]),
                                     price=Price(gold=0, silver=copper // 100, copper=copper % 100)))
         except ValidationError:
             continue
@@ -144,10 +141,10 @@ def _routines(model: Mapping[str, Any]) -> list[NpcRoutine]:
     for npc_id, npc in sorted(model["npcs"].items()):
         schedule = (
             (RoutineStep(from_hour=0, to_hour=24, location_id=npc["location_id"],
-                         activity=_short(_text(npc.get("role")), 160)),)
+                         activity=_short(clean_text(npc.get("role")), 160)),)
             if npc.get("location_id") else ()
         )
-        name = _text(npc.get("name")) or npc_id
+        name = clean_text(npc.get("name")) or npc_id
         goals = tuple(
             NpcGoal(goal_id=f"{_slug(npc_id.rsplit(':', 1)[-1])}-goal-{index + 1}", summary=_short(goal, 300),
                     priority=max(1, 4 - index),
@@ -164,7 +161,7 @@ def _knowledge(canon: Mapping[str, Any]) -> list[NpcKnowledge]:
     entities = _entities(canon)
     knowledge = []
     for row in lore_rows(canon, "characters"):
-        npc_id = _text(row.get("id"))
+        npc_id = clean_text(row.get("id"))
         if not npc_id:
             continue
         lore = {**entities.get(npc_id, {}), **row}
@@ -191,30 +188,30 @@ def _dimension(text: str) -> str:
 
 def _pressures(canon: Mapping[str, Any], places: Mapping[str, Mapping[str, Any]]) -> list[WorldPressure]:
     entities = _entities(canon)
-    regions = [_text(row.get("id")) for row in lore_rows(canon, "regions") if _text(row.get("id"))]
+    regions = [clean_text(row.get("id")) for row in lore_rows(canon, "regions") if clean_text(row.get("id"))]
     quests = [dict(row) for row in canon.get("quests") or () if isinstance(row, Mapping)] or [
-        row for row in entities.values() if _text(row.get("kind")).casefold() == "quest"]
+        row for row in entities.values() if clean_text(row.get("kind")).casefold() == "quest"]
     pressures = []
     for entity in entities.values():
-        if _text(entity.get("kind")).casefold() != "pressure":
+        if clean_text(entity.get("kind")).casefold() != "pressure":
             continue
-        pressure_id = _text(entity.get("id"))
+        pressure_id = clean_text(entity.get("id"))
         place = next((places[place_id] for place_id in _texts(entity.get("place_ids")) if place_id in places), {})
-        region_id = _text(entity.get("region_id")) or _text(place.get("region_id")) or _text(place.get("id"))
+        region_id = clean_text(entity.get("region_id")) or clean_text(place.get("region_id")) or clean_text(place.get("id"))
         region_id = region_id or (regions[0] if regions else "")
         if not region_id:
             continue
-        words = " ".join((_text(entity.get("name")), _text(entity.get("short_summary")),
-                          _text(entity.get("consequence"))))
+        words = " ".join((clean_text(entity.get("name")), clean_text(entity.get("short_summary")),
+                          clean_text(entity.get("consequence"))))
         levers = tuple(
-            {"action": f"quest:{_text(quest.get('id'))}", "effect": "lower", "amount": _QUEST_PULL}
+            {"action": f"quest:{clean_text(quest.get('id'))}", "effect": "lower", "amount": _QUEST_PULL}
             for quest in quests
-            if pressure_id in _texts(quest.get("pressure_ids")) and " " not in _text(quest.get("id"))
+            if pressure_id in _texts(quest.get("pressure_ids")) and " " not in clean_text(quest.get("id"))
         )
         try:
             pressures.append(WorldPressure(
-                pressure_id=pressure_id, name=_short(_text(entity.get("name")) or pressure_id, 120),
-                description=_short(_text(entity.get("short_summary") or entity.get("description")), 600),
+                pressure_id=pressure_id, name=_short(clean_text(entity.get("name")) or pressure_id, 120),
+                description=_short(clean_text(entity.get("short_summary") or entity.get("description")), 600),
                 region_id=region_id, dimension=_dimension(words), severity=50.0, levers=levers,  # type: ignore[arg-type]
             ))
         except ValidationError:
@@ -225,10 +222,10 @@ def _pressures(canon: Mapping[str, Any], places: Mapping[str, Mapping[str, Any]]
 def _bestiary(canon: Mapping[str, Any]) -> list[CreaturePlay]:
     creatures = []
     for row in lore_rows(canon, "bestiary"):
-        creature_id = _text(row.get("id"))
+        creature_id = clean_text(row.get("id"))
         if not creature_id:
             continue
-        creatures.append(CreaturePlay(id=creature_id, stats=CreatureStats.model_validate(threat_stats(_text(row.get("threat")))),
+        creatures.append(CreaturePlay(id=creature_id, stats=CreatureStats.model_validate(threat_stats(clean_text(row.get("threat")))),
                                       behaviour=derived_behaviour(row)))  # type: ignore[arg-type]
     return creatures
 
@@ -237,9 +234,9 @@ def _quests(canon: Mapping[str, Any], places: Mapping[str, Mapping[str, Any]]) -
     """Each quest's steps: reach each of its places in order, then, when someone gives it, report back to them."""
     quests = []
     for row in lore_rows(canon, "quests"):
-        quest_id, giver = _text(row.get("id")), _text(row.get("giver_id") or row.get("quest_giver"))
+        quest_id, giver = clean_text(row.get("id")), clean_text(row.get("giver_id") or row.get("quest_giver"))
         locations = [place for place in _texts(row.get("locations")) if place in places]
-        steps = [QuestStep(id=f"step-{index + 1}", summary=_short(f"Go to {_text(places[place].get('name')) or place}.", 300),
+        steps = [QuestStep(id=f"step-{index + 1}", summary=_short(f"Go to {clean_text(places[place].get('name')) or place}.", 300),
                            ways=(QuestWay(conditions=(QuestCondition(kind="reach", subject=place),)),))
                  for index, place in enumerate(locations[:5])]
         if giver:
@@ -259,7 +256,7 @@ def generate_play_sections(revision: Any, *, start_location_id: str = "") -> dic
     written = play_sections_document(canon)
     authored = set(parse_play_sections(canon)[0].authored)
     model = session_world_model(revision, SimpleNamespace(starting_location_id=start_location_id))
-    places = {_text(row.get("id")): row for row in lore_location_rows(canon, dict(getattr(revision, "topology", None)
+    places = {clean_text(row.get("id")): row for row in lore_location_rows(canon, dict(getattr(revision, "topology", None)
                                                                                     or {}))}
     draft = {
         "economy": written["economy"] if "economy" in authored

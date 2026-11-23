@@ -7,7 +7,7 @@ from scripts import check_module
 def test_a_module_maps_to_the_web_features_that_list_it() -> None:
     assert check_module.web_features("trading") == ["trading"]
     assert check_module.web_features("chat") == ["assistant"]
-    assert check_module.web_features("live-speech") == []
+    assert check_module.web_features("companion-activity") == []
 
 
 def test_conformance_fails_on_a_new_gap_and_on_a_fixed_gap_left_in_the_baseline(monkeypatch) -> None:

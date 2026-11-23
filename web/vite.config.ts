@@ -19,7 +19,6 @@ const REPOSITORY_ROOT = resolveRepositoryRoot();
 const LIVE_VOICE_CRITICAL_PATHS = [
   'src/app/platform/live_voice/speech/speculative_tts.py',
   'src/app/platform/live_voice/speech/tts_lane.py',
-  'src/app/platform/live_voice/speech/chat_speculative_tts.py',
   'src/app/platform/chat/live_chat_speculation.py',
   'src/app/platform/chat/live_chat_speculation_inline_stream.py',
   'src/app/platform/live_voice/transport/websocket.py',

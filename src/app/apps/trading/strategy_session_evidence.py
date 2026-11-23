@@ -13,7 +13,7 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .models import MarketBar
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 
 
 FULL_SESSION_1M_LIMIT = 500
@@ -398,14 +398,6 @@ def _current_session_bars(
     return sorted(result, key=lambda item: item.start_time)
 
 
-def _merge_current_session_bars(primary: list[Any], fallback: list[Any]) -> list[Any]:
-    merged: dict[datetime, Any] = {}
-    for values in (fallback, primary):  # configured history wins exact duplicates
-        for bar in values:
-            merged[bar.start_time.astimezone(timezone.utc)] = bar
-    return [merged[key] for key in sorted(merged)]
-
-
 def _copy_response_with_current_session_bars(response: Any, bars: list[Any]) -> Any:
     if response is None:
         return SimpleNamespace(bars=bars, provenance=None)
@@ -438,9 +430,8 @@ class _CurrentSessionMarketDataProxy:
             )
 
         requested_limit = max(500, int(limit or 500))
-        recovery = getattr(self._delegate, "recovered_bars", None)
-        if callable(recovery) and self._observed_at.astimezone(_ET).time() >= time(9, 30):
-            recovered = recovery(
+        if self._observed_at.astimezone(_ET).time() >= REGULAR_OPEN:
+            recovered = self._delegate.recovered_bars(
                 instrument_id,
                 interval,
                 requested_limit,
@@ -455,67 +446,22 @@ class _CurrentSessionMarketDataProxy:
                 list(recovered.bars),
             )
 
-        response = None
-        primary_error: Exception | None = None
+        # Before the open there is no current-session tape to recover: the configured
+        # history's answer is only cut to today's causal prefix (previous-session bars dropped).
+        response = self._delegate.bars(
+            instrument_id,
+            interval,
+            requested_limit,
+            binding_id,
+        )
         try:
-            response = self._delegate.bars(
-                instrument_id,
-                interval,
-                requested_limit,
-                binding_id,
-            )
             primary = _current_session_bars(
                 list(getattr(response, "bars", ()) or ()),
                 session_date=self._session_date,
                 observed_at=self._observed_at,
             )
-        except Exception as exc:
-            primary_error = exc
+        except Exception:
             primary = []
-
-        if self._observed_at.astimezone(_ET).time() < time(9, 30):
-            if response is not None:
-                return _copy_response_with_current_session_bars(response, primary)
-            if primary_error is not None:
-                raise primary_error
-            return SimpleNamespace(bars=[])
-
-        needs_fallback = primary_error is not None or not primary
-        if not needs_fallback:
-            try:
-                from .strategy_evaluability import assess_bar_coverage
-
-                needs_fallback = not assess_bar_coverage(
-                    primary,
-                    session_date=self._session_date,
-                    observed_at=self._observed_at,
-                    provider="shadow_primary_history",
-                ).ready
-            except Exception:
-                needs_fallback = False
-
-        fallback: list[Any] = []
-        if needs_fallback:
-            try:
-                fallback = _current_session_bars(
-                    list(
-                        self._delegate.execution_indicator_bars(
-                            instrument_id,
-                            binding_id,
-                            as_of=self._observed_at,
-                        )
-                    ),
-                    session_date=self._session_date,
-                    observed_at=self._observed_at,
-                )
-            except Exception:
-                fallback = []
-
-        merged = _merge_current_session_bars(primary, fallback)
-        if merged:
-            return _copy_response_with_current_session_bars(response, merged)
-        if primary_error is not None:
-            raise primary_error
         return _copy_response_with_current_session_bars(response, primary)
 
     def bars_for_requirement(

@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategies.models import (
     GapPullbackConfig,
@@ -95,7 +96,7 @@ class MemoryRepository:
         return True
 
 
-class FixtureMarketService:
+class FixtureMarketService(RecoveringMarketService):
     def __init__(self) -> None:
         self.execution_capture_calls = 0
 

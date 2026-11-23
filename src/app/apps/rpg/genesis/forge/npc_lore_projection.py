@@ -10,8 +10,9 @@ from app.apps.rpg.foundation.state.people import world_people
 from app.apps.rpg.foundation.state.sections import read_path
 from app.apps.rpg.world.npc_biography_registry import find_npc_biography
 
-from .campaign_lore_store import _mapping, _text, current_location_identity
+from .campaign_lore_store import _mapping, current_location_identity
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import clean_text
 
 _VISIBLE = {"public", "player_known", "learned", "partially_known", "disputed"}
 _VISIBLE_STATUSES = {"public_at_campaign_start", "learned", "partially_known", "disputed"}
@@ -22,7 +23,7 @@ def _slug(value: str) -> str:
 
 
 def _npc_id(value: Any) -> str:
-    text = _text(value)
+    text = clean_text(value)
     if not text or text == "player":
         return ""
     return text if text.casefold().startswith("npc:") else f"npc:{text}"
@@ -35,12 +36,12 @@ def _rows(value: Any) -> list[dict[str, Any]]:
 def _list(value: Any) -> list[str]:
     if not isinstance(value, list | tuple | set):
         return []
-    return [_text(item) for item in value if _text(item)]
+    return [clean_text(item) for item in value if clean_text(item)]
 
 
 def _first(*values: Any) -> str:
     for value in values:
-        text = _text(value)
+        text = clean_text(value)
         if text:
             return text
     return ""
@@ -84,7 +85,7 @@ def encountered_npc_ids(
     state = _mapping(session.get("state"))
     simulation = _mapping(_sections.simulation_state_of(session))
     runtime = _mapping(_sections.runtime_state_of(session))
-    location_id = _text((current_location_identity(session) or {}).get("id"))
+    location_id = clean_text((current_location_identity(session) or {}).get("id"))
 
     for row in _mapping(simulation.get("scene_population_state")).get("present_npcs") or ():
         value = cast(Any, row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row)
@@ -149,15 +150,15 @@ def _session_profile(session: Mapping[str, Any], npc_id: str) -> dict[str, Any]:
 def _personality(*profiles: Mapping[str, Any]) -> str:
     for profile in profiles:
         value = profile.get("personality")
-        if isinstance(value, str) and _text(value):
-            return _text(value)
+        if isinstance(value, str) and clean_text(value):
+            return clean_text(value)
         data = _mapping(value)
         traits = (
             _list(data.get("traits"))
             or _list(data.get("core_traits"))
             or _list(profile.get("personality_traits"))
         )
-        temperament = _text(data.get("temperament"))
+        temperament = clean_text(data.get("temperament"))
         parts = [part for part in (temperament, ", ".join(traits)) if part]
         if parts:
             return "; ".join(parts)
@@ -167,13 +168,13 @@ def _personality(*profiles: Mapping[str, Any]) -> str:
 def _speech(*profiles: Mapping[str, Any]) -> str:
     for profile in profiles:
         value = profile.get("speech_style") or profile.get("speaking_style")
-        if isinstance(value, str) and _text(value):
-            return _text(value)
+        if isinstance(value, str) and clean_text(value):
+            return clean_text(value)
         if isinstance(value, Mapping):
             parts = [
                 part
                 for part in (
-                    _text(value.get("tone")),
+                    clean_text(value.get("tone")),
                     ", ".join(_list(value.get("quirks"))),
                 )
                 if part
@@ -181,10 +182,10 @@ def _speech(*profiles: Mapping[str, Any]) -> str:
             if parts:
                 return "; ".join(parts)
         nested = _mapping(profile.get("personality"))
-        if _text(nested.get("speech_style")):
-            return _text(nested.get("speech_style"))
-        if _text(nested.get("social_style")):
-            return _text(nested.get("social_style"))
+        if clean_text(nested.get("speech_style")):
+            return clean_text(nested.get("speech_style"))
+        if clean_text(nested.get("social_style")):
+            return clean_text(nested.get("social_style"))
     return ""
 
 
@@ -215,27 +216,27 @@ def _public_bio(
 
 def _document_matches(row: Mapping[str, Any], entity_id: str, name: str) -> bool:
     refs = {
-        _text(value).casefold()
+        clean_text(value).casefold()
         for value in list(row.get("entity_refs") or ()) + list(row.get("entities") or ())
-        if _text(value)
+        if clean_text(value)
     }
     return entity_id.casefold() in refs or (
-        _text(row.get("topic_id")).casefold() in {"npc", "npcs", "characters"}
-        and _text(row.get("title")).casefold() == name.casefold()
+        clean_text(row.get("topic_id")).casefold() in {"npc", "npcs", "characters"}
+        and clean_text(row.get("title")).casefold() == name.casefold()
     )
 
 
 def _rich_existing_dossier(entity: Mapping[str, Any]) -> bool:
-    if _text(entity.get("kind")).casefold() != "npc":
+    if clean_text(entity.get("kind")).casefold() != "npc":
         return False
     biography = entity.get("biography")
     biography_text = (
-        _text(biography)
+        clean_text(biography)
         if isinstance(biography, str)
         else _first(*_mapping(biography).values())
     )
     return bool(
-        _text(entity.get("name"))
+        clean_text(entity.get("name"))
         and _first(
             entity.get("description"),
             entity.get("public_bio"),
@@ -248,7 +249,7 @@ def _rich_existing_dossier(entity: Mapping[str, Any]) -> bool:
 
 
 def _dossier_is_player_visible(entity: Mapping[str, Any], status: str) -> bool:
-    return _text(entity.get("visibility")).casefold() in _VISIBLE or status in _VISIBLE_STATUSES
+    return clean_text(entity.get("visibility")).casefold() in _VISIBLE or status in _VISIBLE_STATUSES
 
 
 def ensure_encountered_npc_lore(
@@ -268,8 +269,8 @@ def ensure_encountered_npc_lore(
     entity_statuses = deepcopy(_mapping(discovery.get("entities")))
     discovery.setdefault("discoveries", [])
     location = current_location_identity(session) or {}
-    location_id = _text(location.get("id"))
-    location_name = _text(location.get("name"))
+    location_id = clean_text(location.get("id"))
+    location_name = clean_text(location.get("name"))
     revision = int(canon_revision or int(candidate.get("canon_revision") or 0) + 1)
     ensured: list[str] = []
     created: list[str] = []
@@ -282,12 +283,12 @@ def ensure_encountered_npc_lore(
             runtime_id,
         )
         existing = deepcopy(_mapping(entities.get(entity_id)))
-        existing_status = _text(entity_statuses.get(entity_id))
+        existing_status = clean_text(entity_statuses.get(entity_id))
         existing_document = next(
             (
                 row
                 for row in documents
-                if _document_matches(row, entity_id, _text(existing.get("name")))
+                if _document_matches(row, entity_id, clean_text(existing.get("name")))
             ),
             None,
         )
@@ -327,7 +328,7 @@ def ensure_encountered_npc_lore(
             refs = [
                 value
                 for value in dict.fromkeys(
-                    [entity_id, runtime_id, _text(registry.get("npc_id"))]
+                    [entity_id, runtime_id, clean_text(registry.get("npc_id"))]
                 )
                 if value
             ]
@@ -378,7 +379,7 @@ def ensure_encountered_npc_lore(
 
         if existing_document is None:
             document_id = f"lore:npc:{_slug(name)}"
-            occupied = {_text(row.get("document_id")) for row in documents}
+            occupied = {clean_text(row.get("document_id")) for row in documents}
             if document_id in occupied:
                 document_id = f"{document_id}:{_slug(entity_id)}"
             details = [public_bio]

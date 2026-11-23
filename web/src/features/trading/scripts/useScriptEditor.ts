@@ -10,6 +10,7 @@ import {
   forgetScriptSource, isScriptIndicatorId, newScriptRecordId, scriptIdOf, scriptIndicatorInstance, scriptRunStatus, subscribeScriptRunStatus,
 } from './scriptIndicators';
 import { scriptsApi, type ScriptCheckResult, type ScriptReference, type ScriptRunResult } from './scriptsApi';
+import { isConflict } from '../../../api/errors';
 
 export const NEW_SCRIPT_SOURCE = `//@version=6
 indicator("My script", overlay=true)
@@ -181,7 +182,7 @@ export function useScriptEditor(chart: ScriptEditorChart) {
       return saved;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setNotice(message.includes('409') ? 'This script changed elsewhere: open it again to see the newer version.' : message);
+      setNotice(isConflict(error) ? 'This script changed elsewhere: open it again to see the newer version.' : message);
       return null;
     } finally {
       setBusy(null);

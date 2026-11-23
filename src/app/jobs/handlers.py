@@ -1,18 +1,19 @@
 """Typed job-handler registry owned by the jobs kernel."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import builtins
 import logging
 import math
 import random
 from threading import Event
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Generic, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from .models import CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
+from .models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
 
 
 # The job a handler is running in this context: (job id, job type). A job it
@@ -59,6 +60,70 @@ class JobExecutionContext:
 
 
 JobHandler = Callable[[JobExecutionContext, JobRecord], JobRecord]
+InputT = TypeVar("InputT", bound=BaseModel)
+
+
+class JobFailure(Exception):
+    """A run's failure under its own code: the job fails, and is tried again when ``retryable``."""
+
+    def __init__(self, code: str, message: str = "", *, retryable: bool,
+                 details: Mapping[str, Any] | None = None) -> None:
+        super().__init__(message or code)
+        self.code = code
+        self.retryable = retryable
+        self.details = dict(details or {})
+
+
+class RetryableJobError(JobFailure):
+    """Another attempt may succeed (a busy provider, a model that failed once)."""
+
+    def __init__(self, code: str, message: str = "", *, details: Mapping[str, Any] | None = None) -> None:
+        super().__init__(code, message, retryable=True, details=details)
+
+
+class PermanentJobError(JobFailure):
+    """Another attempt cannot succeed (an invalid request, a refused turn)."""
+
+    def __init__(self, code: str, message: str = "", *, details: Mapping[str, Any] | None = None) -> None:
+        super().__init__(code, message, retryable=False, details=details)
+
+
+@dataclass(frozen=True, slots=True)
+class JobResult:
+    """What a finished run publishes: the job completes with these outputs and log lines."""
+
+    output_refs: tuple[dict[str, Any], ...] = ()
+    logs: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class JobRun(Generic[InputT]):
+    """One attempt of a leased, running job, as its run function sees it.
+
+    ``input`` is the job's payload validated by the spec's input model. ``store``
+    is bound to this job and lease: progress, logs and follow-up jobs go through
+    it. The run does not start, complete or fail the job; the registry does.
+    """
+
+    job: JobRecord
+    input: InputT
+    store: Any
+    attempt: int
+    max_attempts: int
+    services: Any = None
+    cancellation: Event | None = field(default=None, repr=False)
+
+    @property
+    def final_attempt(self) -> bool:
+        """No attempt follows this one: a failure now is the job's last word."""
+        return self.attempt >= self.max_attempts
+
+    def cancelled(self) -> bool:
+        return bool(self.cancellation and self.cancellation.is_set())
+
+
+# A run returns its result, or the job record when it settled the job itself (deferred it, cancelled it).
+JobRunFunction = Callable[[JobRun[Any]], "JobResult | JobRecord"]
 SubmissionPolicy = Callable[[CreateJobRequest], CreateJobRequest]
 logger = logging.getLogger(__name__)
 
@@ -74,18 +139,33 @@ class JobObserver(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class JobHandlerSpec:
+    """A job type's handler. Give ``run`` (preferred) or ``handler``, not both.
+
+    ``run`` receives a ``JobRun`` and returns a ``JobResult``; the registry
+    completes the job, or fails it: under a ``JobFailure``'s code, or under
+    ``failure_code`` (retryable) for any other exception. A retryable failure
+    on the final attempt is reported as not retryable. ``handler`` is the
+    older form that receives the store and settles the job itself.
+    """
+
     type: str
-    handler: JobHandler
+    handler: JobHandler | None = None
     input_model: JobInputModel = AnyJobInput
     resource_class: ResourceClass = ResourceClass.CPU
     timeout_seconds: float = 300.0
     max_attempts: int = 3
     retry_backoff: Backoff = Backoff()
     submission_policy: SubmissionPolicy | None = None
+    run: JobRunFunction | None = None
+    failure_code: str = ""
 
     def __post_init__(self) -> None:
         if not self.type.strip() or self.type != self.type.strip():
             raise ValueError("job handler type must be a non-empty normalized string")
+        if (self.handler is None) == (self.run is None):
+            raise ValueError(f"job handler {self.type} needs exactly one of handler and run")
+        if self.run is not None and not self.failure_code:
+            raise ValueError(f"job handler {self.type} needs a failure_code for its run")
         if self.timeout_seconds <= 0:
             raise ValueError("job handler timeout must be positive")
         if self.max_attempts < 1:
@@ -180,9 +260,43 @@ class JobHandlerRegistry:
             job = job.model_copy(update={"input_payload": payload.model_dump(mode="python")})
         token = _EXECUTING_JOB.set((str(getattr(job, "id", "")), str(job.type)))
         try:
-            return spec.handler(context, job)
+            if spec.handler is not None:
+                return spec.handler(context, job)
+            return _execute_run(spec, context, job, payload)
         finally:
             _EXECUTING_JOB.reset(token)
+
+
+def job_attempt(job: JobRecord) -> int:
+    """The attempt this claim of ``job`` is, counting from 1."""
+    return max(1, int(getattr(job, "_attempt_count", 0) or 1))
+
+
+def _execute_run(spec: JobHandlerSpec, context: JobExecutionContext, job: JobRecord, payload: BaseModel) -> JobRecord:
+    assert spec.run is not None
+    store = context.job_store
+    run = JobRun(job=job, input=payload, store=store, attempt=job_attempt(job), max_attempts=spec.max_attempts,
+                 services=context.services, cancellation=context.cancellation)
+    details = {"job_type": job.type, "module": job.module}
+    try:
+        outcome = spec.run(run)
+    except JobFailure as exc:
+        failure = FailJobRequest(code=exc.code, message=str(exc), retryable=exc.retryable and not run.final_attempt,
+                                 details={**details, **exc.details})
+        return store.fail_job(job.id, failure) or job
+    except Exception as exc:
+        from .errors import JobClaimConflict
+
+        if isinstance(exc, JobClaimConflict):
+            raise  # a lost lease publishes nothing, not even a failure
+        failure = FailJobRequest(code=spec.failure_code, message=str(exc) or type(exc).__name__,
+                                 retryable=not run.final_attempt, details=details)
+        return store.fail_job(job.id, failure) or job
+    if isinstance(outcome, JobRecord):
+        return outcome
+    completed = store.complete_job(job.id, CompleteJobRequest(output_refs=list(outcome.output_refs),
+                                                              logs=list(outcome.logs)))
+    return completed or job
 
 
 class RetryPolicyJobStore:

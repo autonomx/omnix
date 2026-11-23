@@ -11,6 +11,7 @@ import { RpgSavePointsPanel } from './RpgSavePointsPanel';
 import { setRpgLauncherDialog, setRpgLauncherHomeGrid, useRpgLauncherView } from './rpgLauncherSlots';
 import type { RpgSessionSummaryPreview } from './rpgUiTypes';
 import './RpgSessionLauncher.css';
+import { jobKeys } from '../../api/jobs';
 
 interface RpgCampaignMenuProps {
   campaignMenuHost?: HTMLElement | null;
@@ -79,7 +80,7 @@ export function RpgCampaignMenu({
   const refreshRpgWorkspace = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
-      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+      queryClient.invalidateQueries({ queryKey: jobKeys.all }),
     ]);
   };
 

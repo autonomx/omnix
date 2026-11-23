@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.safe_values import string_text
 
 SOURCE = "hermes_rpg_context_pack"
 DEFAULT_ITEM_LIMIT = 8
@@ -14,10 +15,6 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 def _list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
-
-
-def _text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def _bounded_list(value: Any, limit: int) -> list[Any]:
@@ -65,8 +62,8 @@ def build_hermes_rpg_context_pack(
         "ok": True,
         "source": SOURCE,
         "version": "hermes_rpg_context_pack_v1",
-        "session_id": _text(source.get("session_id")) or _text(source.get("id")),
-        "current_location": _text(location.get("name")) or _text(state.get("current_location")) or _text(state.get("location")),
+        "session_id": string_text(source.get("session_id")) or string_text(source.get("id")),
+        "current_location": string_text(location.get("name")) or string_text(state.get("current_location")) or string_text(state.get("location")),
         "player_stats": _stable_player_stats(state),
         "inventory": _bounded_list(state.get("inventory"), item_limit),
         "party": _bounded_list(state.get("party"), item_limit),

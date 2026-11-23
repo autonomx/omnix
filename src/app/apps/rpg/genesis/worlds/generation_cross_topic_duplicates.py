@@ -6,6 +6,8 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, mapping as _mapping, rows as _rows
 
 _MIN_TEXT_CHARS = 48
 _MIN_TEXT_TOKENS = 8
@@ -78,42 +80,13 @@ class CrossTopicDuplicateFieldIssue:
         }
 
 
-class CrossTopicDuplicateFieldCompilationError(ValueError):
-    def __init__(self, issues: Sequence[CrossTopicDuplicateFieldIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.field_id}:{issue.fingerprint}:"
-            + ",".join(
-                f"{row.topic_id}/{row.entity_id}" for row in issue.occurrences
-            )
-            for issue in self.issues
+class CrossTopicDuplicateFieldCompilationError(GraphAuditError):
+    code = "cross_topic_duplicate_fields_failed"
+    @classmethod
+    def render(cls, issue: Any) -> str:
+        return f"{issue.field_id}:{issue.fingerprint}:" + ",".join(
+            f"{row.topic_id}/{row.entity_id}" for row in issue.occurrences
         )
-        super().__init__("cross_topic_duplicate_fields_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "cross_topic_duplicate_fields_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
 
 
 def _profile_domains(topic_graph: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:

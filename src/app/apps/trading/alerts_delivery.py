@@ -61,7 +61,6 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 from pydantic import BaseModel
 
-from app.config.env import environment
 from app.persistence.tenant_scope import system_scope
 from app.persistence.unit_of_work import unit_of_work
 from app.runtime.features import FeatureContext
@@ -69,7 +68,7 @@ from app.security.tenant_context import RequestTenant, TenantContext
 from app.security.url_policy import Resolver, UrlPolicyError, check_outbound_url, outbound_addresses, resolve_hostname
 
 from .alerts_channels import AlertWebhookStore, ProtectedAlertWebhookStore
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 
 if TYPE_CHECKING:
     from .alerts import TradingAlert, TradingAlertTrigger, UnitOfWorkFactory
@@ -594,14 +593,7 @@ class WebhookSender:
         return DeliveryResult("failed", f"http_{code}", code)
 
 
-def _env_flag(name: str, default: str) -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def notification_delivery_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _env_flag("OMNIX_TRADING_NOTIFICATION_MONITOR_IN_TESTS", "0")
-    return _env_flag("OMNIX_TRADING_NOTIFICATION_MONITOR", "1")
+notification_delivery_monitor_enabled = monitor_switch("OMNIX_TRADING_NOTIFICATION_MONITOR")
 
 
 class NotificationDeliveryMonitor(ScheduledTradingMonitor):

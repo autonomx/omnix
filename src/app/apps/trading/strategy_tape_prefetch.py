@@ -14,13 +14,12 @@ PREFETCH_WORKERS = 4
 
 
 async def prefetch_candidate_tapes(market_service, universe, *, interval: str, as_of: datetime, limit: int = 500) -> None:
-    prefetch = getattr(market_service, "prefetch_recovered_bars", None)
     candidates = list(getattr(universe, "candidates", ()) or ())
-    if not callable(prefetch) or not candidates:
+    if not candidates:
         return
     requests = [(candidate.instrument_id, interval, limit, candidate.binding_id) for candidate in candidates]
     await asyncio.to_thread(
-        prefetch,
+        market_service.prefetch_recovered_bars,
         requests,
         session_date=universe.session_date,
         as_of=as_of,

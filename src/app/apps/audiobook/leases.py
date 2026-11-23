@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import copy_context
 from typing import Any
@@ -64,3 +64,34 @@ def lease_heartbeat(
     finally:
         stop.set()
         thread.join(timeout=5.0)
+
+
+@contextmanager
+def claimed_job(
+    database: Any, context: TenantContext, *, worker_id: str, job_type: str, resource_class: str,
+    wait: Callable[[Any], bool] | None = None,
+) -> Iterator[dict[str, Any] | None]:
+    """Claim the next ``job_type`` job, mark it running, and keep its lease alive while the block runs.
+
+    Yields ``None``, having committed nothing, when no job is queued or ``wait(connection)`` says another
+    claim comes first.
+    """
+    with unit_of_work(database) as work:
+        job = None
+        if wait is None or not wait(work.connection):
+            job = work.jobs.claim_next(
+                context, worker_id=worker_id, resource_classes=[resource_class],
+                job_types=[job_type], lease_seconds=JOB_LEASE_SECONDS,
+            )
+        if job is None:
+            work.rollback()
+        else:
+            job = work.jobs.mark_running(
+                context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
+            )
+            work.commit()
+    if job is None:
+        yield None
+        return
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"]):
+        yield job

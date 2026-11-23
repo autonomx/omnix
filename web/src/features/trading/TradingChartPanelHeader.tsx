@@ -17,7 +17,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapterRef, change, changePercent, chartFocusMode, chartId, chartNumber, chartQuery, direction, drawings,
     instrumentId, interval, latest, latestClose, onOpenSymbolSearch, priceScaleMultiplier, provenance, replayMode, resolvedBinding,
-    selectedDrawing, setCompareDialogOpen, streamStatus, toggleFullscreen,
+    selectedDrawing, setCompareDialogOpen, streamStatus, panes,
   } = ws;
   const linkGroup = useTradingStore((state) => state.charts.find((chart) => chart.chartId === chartId)?.linkGroup);
   const headerRef = useRef<HTMLElement | null>(null);
@@ -87,7 +87,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             aria-pressed={chartFocusMode}
             title={chartFocusMode ? 'Show all charts' : 'Focus this chart'}
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => void toggleFullscreen()}
+            onClick={() => void panes.toggleFullscreen()}
           >
             {chartFocusMode ? '↙' : '⛶'}
           </button>

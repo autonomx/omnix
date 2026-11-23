@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
 from app.apps.trading.strategy_prospective_economic_monitor import TradingStrategyProspectiveEconomicMonitor
@@ -131,7 +132,7 @@ class FakeRepository:
         return True
 
 
-class FakeMarketService:
+class FakeMarketService(RecoveringMarketService):
     def bars(self, instrument_id: str, interval: str, limit: int, binding_id: str | None):
         assert instrument_id == INSTRUMENT
         assert interval == "1m"

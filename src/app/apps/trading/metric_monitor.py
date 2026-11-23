@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.config.env import environment
 
 import asyncio
 from typing import Any
@@ -8,7 +7,7 @@ from typing import Any
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .catalog import INSTRUMENTS, bindings_for_instrument
 from .metric_data import TradingMetricDataService, default_metric_data_service
 
@@ -16,14 +15,7 @@ from .metric_data import TradingMetricDataService, default_metric_data_service
 _MONITOR_STATE_KEY = "_omnix_trading_metric_monitor"
 
 
-def _env_flag(name: str, default: str = "1") -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def trading_liquidation_collector_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _env_flag("OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS", "0")
-    return _env_flag("OMNIX_TRADING_LIQUIDATION_COLLECTOR", "1")
+trading_liquidation_collector_enabled = monitor_switch("OMNIX_TRADING_LIQUIDATION_COLLECTOR")
 
 
 def _binance_symbols() -> tuple[str, ...]:

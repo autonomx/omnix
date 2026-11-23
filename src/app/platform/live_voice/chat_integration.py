@@ -13,11 +13,6 @@ class LiveVoiceChatIntegration:
 
     route_metadata_key = ROUTE_METADATA_KEY
 
-    def is_live_voice_message(self, user_message: Any) -> bool:
-        from .pipeline import is_live_voice_message
-
-        return is_live_voice_message(user_message)
-
     def build_live_voice_prompt(
         self,
         store: Any,
@@ -46,20 +41,28 @@ class LiveVoiceChatIntegration:
 
         return begin_routed_user_message(store, session_id, request, persist=persist)
 
-    def resolve_generation_route(self, user_message: Any, **kwargs: Any) -> Any:
-        from .llm.routing import resolve_generation_route
+    def route_reply(
+        self,
+        user_message: Any,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        request: Any = None,
+    ) -> Any:
+        """The provider and model that serve this reply, logged as the call's route.
 
-        return resolve_generation_route(user_message, **kwargs)
+        A non-streamed reply passes its ``request``, whose own provider or model choice may lead the route.
+        """
+        from .llm.routing import log_provider_route, resolve_generation_route, resolve_stream_route
 
-    def resolve_stream_route(self, user_message: Any, **kwargs: Any) -> Any:
-        from .llm.routing import resolve_stream_route
-
-        return resolve_stream_route(user_message, **kwargs)
-
-    def log_provider_route(self, **kwargs: Any) -> None:
-        from .llm.routing import log_provider_route
-
-        log_provider_route(**kwargs)
+        if request is None:
+            route = resolve_stream_route(user_message, provider_id=provider_id, model_id=model_id)
+            requested = provider_id
+        else:
+            route = resolve_generation_route(user_message, provider_id=provider_id, model_id=model_id, request=request)
+            requested = request.provider_id or provider_id
+        log_provider_route(requested_provider_id=requested, route=route, stream=request is None)
+        return route
 
     def stream_with_retry(
         self,
@@ -78,55 +81,39 @@ class LiveVoiceChatIntegration:
             model_id=model_id,
         )
 
-    def is_lmstudio_provider(self, provider: Any) -> bool:
-        from .llm.metrics import is_lmstudio_provider
-
-        return is_lmstudio_provider(provider)
-
-    def generate_lmstudio_reply(
-        self,
-        store: Any,
-        session: Any,
-        user_message: Any,
-        **kwargs: Any,
-    ) -> Any:
+    def generate_reply(self, store: Any, session: Any, user_message: Any, *, provider: Any, **kwargs: Any) -> Any:
+        """The whole reply from LM Studio, or None when another provider serves it and chat asks that one itself."""
         from .llm import lmstudio_diagnostics, metrics
 
+        if not metrics.is_lmstudio_provider(provider):
+            return None
         return lmstudio_diagnostics.generate_lmstudio_reply(
             store,
             session,
             user_message,
             fallback_generate=metrics.generate_lmstudio_reply,
+            provider=provider,
             **kwargs,
         )
 
-    def stream_lmstudio_reply(
-        self,
-        store: Any,
-        session: Any,
-        user_message: Any,
-        **kwargs: Any,
+    def stream_reply(
+        self, store: Any, session: Any, user_message: Any, *, provider: Any, **kwargs: Any
     ) -> Iterator[Any]:
+        """Stream the reply: the LM Studio path for LM Studio, the low-latency stream for any other provider."""
         from .llm import lmstudio_responses, metrics
-
-        yield from lmstudio_responses.stream_lmstudio_reply(
-            store,
-            session,
-            user_message,
-            fallback_stream=metrics.stream_lmstudio_reply,
-            **kwargs,
-        )
-
-    def stream_low_latency_reply(
-        self,
-        store: Any,
-        session: Any,
-        user_message: Any,
-        **kwargs: Any,
-    ) -> Iterator[Any]:
         from .llm.stream import stream_low_latency_reply
 
-        yield from stream_low_latency_reply(store, session, user_message, **kwargs)
+        if metrics.is_lmstudio_provider(provider):
+            yield from lmstudio_responses.stream_lmstudio_reply(
+                store,
+                session,
+                user_message,
+                fallback_stream=metrics.stream_lmstudio_reply,
+                provider=provider,
+                **kwargs,
+            )
+            return
+        yield from stream_low_latency_reply(store, session, user_message, provider=provider, **kwargs)
 
     def lmstudio_live_voice_options(self, user_message: Any) -> dict[str, Any]:
         from .llm.policy import lmstudio_live_voice_options

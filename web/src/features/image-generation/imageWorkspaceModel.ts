@@ -1,9 +1,9 @@
 import type { AssetListResponse, JobListResponse, JobRecord, ProviderFacadePayload } from '../../api/client';
+import { isJobActive } from '../../api/jobs';
 
 export const IMAGE_JOBS_QUERY_KEY = ['image-generation', 'jobs'] as const;
 export const IMAGE_ASSETS_QUERY_KEY = ['image-generation', 'assets'] as const;
 export const IMAGE_JOB_EVENT_TYPES = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
-const ACTIVE_IMAGE_JOB_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 
 export type ImageAsset = AssetListResponse['assets'][number];
 
@@ -28,7 +28,7 @@ export function isCompletedImageJobEventPayload(value: unknown): boolean {
 }
 
 export function hasActiveImageJobs(payload: JobListResponse | undefined): boolean {
-  return payload?.jobs.some((job) => ACTIVE_IMAGE_JOB_STATUSES.has(job.status)) ?? false;
+  return payload?.jobs.some((job) => isJobActive(job.status)) ?? false;
 }
 
 export function completedImageAssetIds(jobs: JobRecord[]): string[] {

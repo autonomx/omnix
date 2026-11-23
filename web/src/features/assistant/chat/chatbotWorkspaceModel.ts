@@ -98,7 +98,6 @@ export const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
 export const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
 export const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
 export const LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS = 0;
-export const CHAT_JOB_TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
 
 export function liveVoiceSubmissionKey(content: string): string {
   return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();

@@ -13,7 +13,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from tests.conftest_databases import is_disposable_test_database
+from tests.conftest_databases import require_disposable_test_database
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def run():
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
-    assert is_disposable_test_database(url)
+    require_disposable_test_database(url)
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
     context = ensure_local_identity(database)
     identifier = f"workspace-approval-{secrets.token_urlsafe(12)}"

@@ -1,4 +1,5 @@
 """Context-local submission identity shared by the explicit RPG turn pipeline."""
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -8,6 +9,11 @@ from typing import Iterator
 DIRECT_RPG_SUBMISSION_ID: ContextVar[str] = ContextVar(
     "omnix_direct_rpg_submission_id", default=""
 )
+
+
+def new_submission_id() -> str:
+    """A submission id for a turn its caller did not name: the turn still runs once, under its own claim."""
+    return f"submit:{uuid.uuid4().hex}"
 
 
 @dataclass(frozen=True)

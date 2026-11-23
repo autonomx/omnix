@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .strategy_universe_archiver import archive_daily_universe_if_due
 from .trade_logging import trade_log
@@ -17,14 +17,7 @@ from .trade_logging import trade_log
 _STATE_KEY = "_omnix_trading_strategy_universe_archive_monitor"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def strategy_universe_archive_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER", "1")
+strategy_universe_archive_monitor_enabled = monitor_switch("OMNIX_TRADING_UNIVERSE_ARCHIVER")
 
 
 def _interval_seconds() -> float:

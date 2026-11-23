@@ -366,7 +366,10 @@ class DurableFeatureJobWorker:
             )
             work.commit()
         self.claim_count += 1
-        return self.store._record(record)
+        claimed = self.store._record(record)
+        # The claim starts the job; its handler does not mark it running again.
+        self.registry.notify_observers("started", claimed)
+        return claimed
 
     def _execute_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
         lease = job.lease

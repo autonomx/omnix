@@ -7,8 +7,7 @@ configured by the standard ``OTEL_EXPORTER_OTLP_*`` variables. When it is off,
 
 ``configure_tracing`` instruments httpx and psycopg for the process;
 ``instrument_app`` adds the FastAPI server spans to one application. Manual
-spans cover job execution, RPG turn stages, live speech stages and agent
-steps. The active trace id is added to log lines (``trace_id``).
+spans cover job execution, RPG turn stages and agent steps. The active trace id is added to log lines (``trace_id``).
 """
 from __future__ import annotations
 

@@ -10,9 +10,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.capabilities.approval_policy import ApprovalPolicy
+
 ToolActionCategory = Literal["read", "write", "delete", "execute"]
 ToolRiskLevel = Literal["low", "medium", "high"]
-ApprovalPolicy = Literal["allow_automatic", "ask_sensitive", "always_ask", "disabled"]
 ConnectionStatus = Literal["not_configured", "connected", "error"]
 
 

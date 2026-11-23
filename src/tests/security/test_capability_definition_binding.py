@@ -20,7 +20,7 @@ from app.capabilities.registry import (
 AUTHORITY_FIELDS = {
     "id", "namespace", "execution_zone", "effect", "risk", "scope_type", "approval_policy",
     "network_required", "credential_required", "audited", "enabled", "requires_connection",
-    "requires_confirmation", "destructive", "provider", "input_schema", "output_schema",
+    "requires_confirmation", "destructive", "session_scoped", "provider", "input_schema", "output_schema",
 }
 
 
@@ -35,7 +35,7 @@ def _row(**changes):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("risk", "high"), ("scope_type", "global"), ("approval_policy", "always_ask"), ("destructive", True),
+    ("risk", "high"), ("scope_type", "global"), ("approval_policy", "always_ask"), ("destructive", True), ("session_scoped", True),
     ("provider", "Other backend"), ("enabled", False), ("input_schema", {"x": "y"}),
 ])
 def test_authority_fields_change_the_hash(field, value):

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from app.persistence.unit_of_work import unit_of_work
 from app.runtime.features import FeatureContext
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 
 if TYPE_CHECKING:
     from .company_profiles import SecCompanySource
@@ -258,13 +258,7 @@ class FundamentalSnapshotMonitor(ScheduledTradingMonitor):
         return {"enabled": fundamentals_monitor_enabled(), "running": self.scheduled, "last_error": self.last_error, "last_saved": self.last_saved}
 
 
-def fundamentals_monitor_enabled() -> bool:
-    from app.config.env import environment
-
-    values = environment()
-    if values.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return False
-    return values.get("OMNIX_TRADING_FUNDAMENTALS_MONITOR", "1").strip().lower() in {"1", "true", "yes", "on"}
+fundamentals_monitor_enabled = monitor_switch("OMNIX_TRADING_FUNDAMENTALS_MONITOR")
 
 
 _MONITOR_STATE_KEY = "_omnix_trading_fundamentals_monitor"

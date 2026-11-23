@@ -50,45 +50,28 @@ async def record_stoch_rsi_5m_candidates(
         coverage_certificate = None
 
         try:
-            recovery_method = getattr(market_service, "recovered_bars", None)
-            if callable(recovery_method):
-                recovered = await asyncio.to_thread(
-                    recovery_method,
-                    candidate.instrument_id,
-                    "5m",
-                    500,
-                    candidate.binding_id,
-                    session_date=universe.session_date,
-                    as_of=candidate_observed_at,
-                )
-                response_bars = list(recovered.bars)
-                bar_provenance = {
-                    "resolved_binding": recovered.report.resolved_binding,
-                    "dataset_fingerprint": recovered.report.dataset_fingerprint,
-                    "as_of": (
-                        response_bars[-1].end_time
-                        if response_bars
-                        else recovered.report.as_of
-                    ),
-                    "bar_count": len(response_bars),
-                    "source_providers": list(recovered.report.source_providers),
-                    "recovered_bar_count": recovered.report.recovered_bar_count,
-                }
-            else:
-                response = await asyncio.to_thread(
-                    market_service.bars,
-                    candidate.instrument_id,
-                    "5m",
-                    500,
-                    candidate.binding_id,
-                )
-                response_bars = list(response.bars)
-                bar_provenance = {
-                    "resolved_binding": response.provenance.resolved_binding,
-                    "dataset_fingerprint": response.provenance.dataset_fingerprint,
-                    "as_of": response.provenance.as_of,
-                    "bar_count": len(response_bars),
-                }
+            recovered = await asyncio.to_thread(
+                market_service.recovered_bars,
+                candidate.instrument_id,
+                "5m",
+                500,
+                candidate.binding_id,
+                session_date=universe.session_date,
+                as_of=candidate_observed_at,
+            )
+            response_bars = list(recovered.bars)
+            bar_provenance = {
+                "resolved_binding": recovered.report.resolved_binding,
+                "dataset_fingerprint": recovered.report.dataset_fingerprint,
+                "as_of": (
+                    response_bars[-1].end_time
+                    if response_bars
+                    else recovered.report.as_of
+                ),
+                "bar_count": len(response_bars),
+                "source_providers": list(recovered.report.source_providers),
+                "recovered_bar_count": recovered.report.recovered_bar_count,
+            }
             coverage_certificate = qualify_bar_feature(
                 response_bars,
                 FeatureRequirement(

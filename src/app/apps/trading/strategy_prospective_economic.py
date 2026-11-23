@@ -25,6 +25,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .canonical import optional_decimal
 from .strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from .strategy_v2_qualification import v2_profile_fingerprint
@@ -136,16 +137,6 @@ class ProspectiveEconomicStatus(BaseModel):
     reason_codes: tuple[str, ...] = ()
 
 
-def _decimal(value: object) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
-
-
 def _coalesce_decimal(value: Decimal | None, default: Decimal) -> Decimal:
     return default if value is None else value
 
@@ -249,8 +240,8 @@ def _metrics(events: list[StrategyEvent], *, after: datetime | None = None) -> P
     matched_signals = [
         event for event in signals
         if event.payload.get("execution_eligible") is True
-        and _decimal(event.payload.get("entry_price")) is not None
-        and (_decimal(event.payload.get("risk_per_share")) or Decimal("0")) > 0
+        and optional_decimal(event.payload.get("entry_price")) is not None
+        and (optional_decimal(event.payload.get("risk_per_share")) or Decimal("0")) > 0
     ]
     matched_ids = {event.event_id for event in matched_signals}
     outcomes = [
@@ -258,10 +249,10 @@ def _metrics(events: list[StrategyEvent], *, after: datetime | None = None) -> P
         if event.event_type == "prospective_economic_outcome"
         and event.payload.get("signal_event_id") in matched_ids
         and event.payload.get("data_complete") is True
-        and _decimal(event.payload.get("r_result_60m")) is not None
+        and optional_decimal(event.payload.get("r_result_60m")) is not None
         and (after is None or event.observed_at > after)
     ]
-    values = [_decimal(event.payload.get("r_result_60m")) for event in outcomes]
+    values = [optional_decimal(event.payload.get("r_result_60m")) for event in outcomes]
     r_values = [value for value in values if value is not None]
     wins = [event for event in outcomes if event.payload.get("one_r_before_minus_one_r") is True]
     sessions = {_session_date(event) for event in outcomes}

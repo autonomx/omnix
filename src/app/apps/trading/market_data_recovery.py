@@ -15,20 +15,20 @@ explicitly unresolved.
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from collections.abc import Callable
 from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .canonical import require_utc
 from .models import MarketBar
 from .providers.bar_semantics import interval_duration
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
-_REGULAR_OPEN = time(9, 30)
 
 ContinuityMode = Literal["session", "rolling"]
 KnowledgeMode = Literal["live", "causal_replay", "retroactive_research"]
@@ -83,7 +83,7 @@ class RecoveryBucketEvidence(BaseModel):
     @field_validator("start_time", "end_time")
     @classmethod
     def _aware_bucket_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="market-data recovery timestamps must be timezone-aware")
 
 
 class StrategyDataRequirement(BaseModel):
@@ -168,14 +168,8 @@ class RecoveredBars:
     bucket_evidence: tuple[RecoveryBucketEvidence, ...] = ()
 
 
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("market-data recovery timestamps must be timezone-aware")
-    return value.astimezone(timezone.utc)
-
-
 def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
-    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
+    opening = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     close = datetime.combine(session_date, regular_close_time(session_date), tzinfo=_ET)
     return opening.astimezone(timezone.utc), close.astimezone(timezone.utc)
 
@@ -189,9 +183,9 @@ def finalized_session_bars(
     knowledge_mode: KnowledgeMode = "live",
     knowledge_cutoff: datetime | None = None,
 ) -> list[MarketBar]:
-    cutoff = _utc(as_of) if as_of is not None else None
+    cutoff = require_utc(as_of, error="market-data recovery timestamps must be timezone-aware") if as_of is not None else None
     known_by = (
-        _utc(knowledge_cutoff)
+        require_utc(knowledge_cutoff, error="market-data recovery timestamps must be timezone-aware")
         if knowledge_cutoff is not None
         else cutoff
     )
@@ -227,7 +221,7 @@ def deduplicate_bars(
 
     selected: dict[datetime, MarketBar] = {}
     for bar in bars:
-        key = _utc(bar.start_time)
+        key = require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware")
         prior = selected.get(key)
         if prior is None:
             selected[key] = bar
@@ -277,7 +271,7 @@ def expected_bar_starts(
     if duration <= timedelta(0) or duration >= timedelta(days=1):
         return ()
     opening, close = _session_bounds(session_date)
-    cutoff = min(_utc(as_of), close)
+    cutoff = min(require_utc(as_of, error="market-data recovery timestamps must be timezone-aware"), close)
     starts: list[datetime] = []
     cursor = opening
     while cursor + duration <= cutoff and cursor + duration <= close:
@@ -304,7 +298,7 @@ def detect_session_gaps(
         return ()
     duration = interval_duration(interval)
     starts = {
-        _utc(bar.start_time)
+        require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware")
         for bar in finalized_session_bars(
             bars,
             session_date=session_date,
@@ -383,10 +377,10 @@ def _provider_bucket_semantics(
         parts = event_id.split(":", 2)
         if len(parts) >= 2 and parts[1]:
             contract_id = parts[1]
-    start = _utc(bar.start_time)
+    start = require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware")
     return RecoveryBucketEvidence(
         start_time=start,
-        end_time=_utc(bar.end_time),
+        end_time=require_utc(bar.end_time, error="market-data recovery timestamps must be timezone-aware"),
         price_provider=provider,
         volume_provider=provider,
         price_scope=price_scope,
@@ -403,7 +397,7 @@ def _gaps_from_missing_starts(
     *,
     interval: str,
 ) -> tuple[BarGap, ...]:
-    ordered = sorted({_utc(value) for value in starts})
+    ordered = sorted({require_utc(value, error="market-data recovery timestamps must be timezone-aware") for value in starts})
     if not ordered:
         return ()
     duration = interval_duration(interval)
@@ -554,7 +548,7 @@ def aggregate_complete_bars(
         return [bar.model_copy(update={"interval": target_interval}) for bar in rows]
 
     opening, _ = _session_bounds(session_date)
-    by_start = {_utc(bar.start_time): bar for bar in deduplicate_bars(rows)}
+    by_start = {require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware"): bar for bar in deduplicate_bars(rows)}
     output: list[MarketBar] = []
     for bucket_start in expected_bar_starts(
         session_date=session_date,
@@ -659,7 +653,7 @@ def reconcile_recovery(
         ),
         preferred_provider=fallback_provider,
     )
-    recovered = [bar for bar in fallback if _utc(bar.start_time) in missing_starts]
+    recovered = [bar for bar in fallback if require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware") in missing_starts]
     canonical = deduplicate_bars(
         [*primary, *recovered],
         preferred_provider=primary_provider,
@@ -672,7 +666,7 @@ def reconcile_recovery(
         knowledge_mode=knowledge_mode,
         knowledge_cutoff=knowledge_cutoff,
     )
-    confirmed_set = {_utc(value) for value in confirmed_nontrading_starts}
+    confirmed_set = {require_utc(value, error="market-data recovery timestamps must be timezone-aware") for value in confirmed_nontrading_starts}
     unresolved_starts: list[datetime] = []
     for gap in unresolved_detected:
         cursor = gap.start
@@ -684,7 +678,7 @@ def reconcile_recovery(
         unresolved_starts,
         interval=interval,
     )
-    recovered_starts = tuple(sorted(_utc(bar.start_time) for bar in recovered))
+    recovered_starts = tuple(sorted(require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware") for bar in recovered))
     source_providers = tuple(sorted({bar.provider for bar in canonical}))
     expected_count = len(
         expected_bar_starts(
@@ -716,7 +710,7 @@ def reconcile_recovery(
         instrument_id=instrument_id,
         interval=interval,
         session_date=session_date,
-        as_of=_utc(as_of),
+        as_of=require_utc(as_of, error="market-data recovery timestamps must be timezone-aware"),
         primary_provider=primary_provider,
         fallback_provider=fallback_provider,
         requested_binding=requested_binding,
@@ -727,9 +721,9 @@ def reconcile_recovery(
         fallback_error=fallback_error,
         knowledge_mode=knowledge_mode,
         knowledge_cutoff=(
-            _utc(knowledge_cutoff)
+            require_utc(knowledge_cutoff, error="market-data recovery timestamps must be timezone-aware")
             if knowledge_cutoff is not None
-            else _utc(as_of)
+            else require_utc(as_of, error="market-data recovery timestamps must be timezone-aware")
         ),
         expected_bar_count=expected_count,
         primary_bar_count=len(primary),
@@ -738,13 +732,13 @@ def reconcile_recovery(
         recovered_starts=recovered_starts,
         unresolved_gaps=unresolved,
         confirmed_nontrading_starts=tuple(
-            sorted(_utc(value) for value in confirmed_nontrading_starts)
+            sorted(require_utc(value, error="market-data recovery timestamps must be timezone-aware") for value in confirmed_nontrading_starts)
         ),
         unresolved_market_state_starts=tuple(
             sorted(
-                _utc(value)
+                require_utc(value, error="market-data recovery timestamps must be timezone-aware")
                 for value in unresolved_market_state_starts
-                if _utc(value) in set(unresolved_starts)
+                if require_utc(value, error="market-data recovery timestamps must be timezone-aware") in set(unresolved_starts)
             )
         ),
         source_providers=source_providers,
@@ -799,7 +793,7 @@ def assess_data_requirement(
     )
     if recovery_report is not None and recovery_report.confirmed_nontrading_starts:
         confirmed = {
-            _utc(value)
+            require_utc(value, error="market-data recovery timestamps must be timezone-aware")
             for value in recovery_report.confirmed_nontrading_starts
         }
         duration = interval_duration(requirement.interval)
@@ -860,11 +854,11 @@ def assess_data_requirement(
                 ),
             )
 
-    dependency_starts = {_utc(bar.start_time) for bar in dependency}
+    dependency_starts = {require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware") for bar in dependency}
     semantic_rows = [
         row
         for row in bucket_evidence
-        if _utc(row.start_time) in dependency_starts
+        if require_utc(row.start_time, error="market-data recovery timestamps must be timezone-aware") in dependency_starts
     ]
     if bucket_evidence and len(semantic_rows) != len(dependency_starts):
         return DataEvaluability(
@@ -957,7 +951,7 @@ def assess_data_requirement(
         fallback_dependency = False
         if recovery_report is not None and recovery_report.partial_market_fallback:
             recovered = set(recovery_report.recovered_starts)
-            fallback_dependency = any(_utc(bar.start_time) in recovered for bar in dependency)
+            fallback_dependency = any(require_utc(bar.start_time, error="market-data recovery timestamps must be timezone-aware") in recovered for bar in dependency)
         if fallback_dependency:
             if "volume" in requirement.required_fields and not requirement.allow_partial_market_volume:
                 return DataEvaluability(
@@ -1066,7 +1060,7 @@ class RecoveredBarSeries(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def _aware_observed_at(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="market-data recovery timestamps must be timezone-aware")
 
 
 def _recovery_gap_starts(
@@ -1147,7 +1141,7 @@ def recover_market_bars(
     finalized/deduplicated bar semantics above and never fabricates OHLCV values.
     """
 
-    observed_at = _utc(observed_at)
+    observed_at = require_utc(observed_at, error="market-data recovery timestamps must be timezone-aware")
     attempts: list[RecoveryAttempt] = []
     collected: list[MarketBar] = []
 
@@ -1294,7 +1288,7 @@ def recover_market_bars(
         observed_at=observed_at,
         knowledge_mode=knowledge_mode,
         knowledge_cutoff=(
-            _utc(knowledge_cutoff)
+            require_utc(knowledge_cutoff, error="market-data recovery timestamps must be timezone-aware")
             if knowledge_cutoff is not None
             else observed_at
         ),

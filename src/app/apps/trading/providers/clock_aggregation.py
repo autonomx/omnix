@@ -31,7 +31,9 @@ from app.apps.trading.cache import TradingMarketDataCache
 from app.apps.trading.market_session_status import US_EQUITY_CALENDARS
 from app.apps.trading.models import MarketBar
 from app.apps.trading.us_equity_calendar import (
-    early_close_time,
+    PREMARKET_OPEN,
+    REGULAR_OPEN,
+    extended_close_time,
     regular_close_time,
     regular_holidays,
     us_equity_session,
@@ -44,8 +46,6 @@ _INTERVAL = re.compile(r"^([1-9][0-9]*)(mo|m|h|d|w)$")
 _EPOCH = date(1970, 1, 1)
 _EPOCH_MONDAY = date(1970, 1, 5)
 _DAY = timedelta(days=1)
-_PRE_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 
 
 @dataclass(frozen=True)
@@ -170,10 +170,10 @@ def _local(day: date, clock: time, zone: ZoneInfo) -> datetime:
 
 def _segments(day: date, zone: ZoneInfo, include_extended: bool) -> dict[str, tuple[datetime, datetime]]:
     close = regular_close_time(day)
-    extended_close = time(17, 0) if early_close_time(day) is not None else time(20, 0)
-    segments = {"regular": (_local(day, _REGULAR_OPEN, zone), _local(day, close, zone))}
+    extended_close = extended_close_time(day)
+    segments = {"regular": (_local(day, REGULAR_OPEN, zone), _local(day, close, zone))}
     if include_extended:
-        segments["extended_pre"] = (_local(day, _PRE_OPEN, zone), _local(day, _REGULAR_OPEN, zone))
+        segments["extended_pre"] = (_local(day, PREMARKET_OPEN, zone), _local(day, REGULAR_OPEN, zone))
         segments["extended_post"] = (_local(day, close, zone), _local(day, extended_close, zone))
     return segments
 
@@ -201,7 +201,7 @@ class _EquityBuckets:
             index, first_day, last_day = _trading_days_bucket(day, self.shape.count)
             return _Bucket(
                 ("trading_days", index),
-                _local(first_day, _REGULAR_OPEN, self.zone),
+                _local(first_day, REGULAR_OPEN, self.zone),
                 _local(last_day, regular_close_time(last_day), self.zone),
                 "regular",
             )
@@ -217,7 +217,7 @@ class _EquityBuckets:
             return None
         day = start.astimezone(self.zone).date()
         segment_start, segment_end = _segments(day, self.zone, self.include_extended)[session]
-        anchor = _local(day, _PRE_OPEN if self.include_extended else _REGULAR_OPEN, self.zone)
+        anchor = _local(day, PREMARKET_OPEN if self.include_extended else REGULAR_OPEN, self.zone)
         index = (start - anchor) // self.shape.duration
         raw_start = anchor + self.shape.duration * index
         bucket_start = max(raw_start, segment_start)
@@ -229,7 +229,7 @@ class _EquityBuckets:
             days = [first + timedelta(days=offset) for offset in range((after - first).days)]
             trading = [day for day in days if _is_trading_day(day)]
             self._periods[key] = (
-                (_local(trading[0], _REGULAR_OPEN, self.zone), _local(trading[-1], regular_close_time(trading[-1]), self.zone))
+                (_local(trading[0], REGULAR_OPEN, self.zone), _local(trading[-1], regular_close_time(trading[-1]), self.zone))
                 if trading
                 else None
             )

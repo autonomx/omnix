@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 import copy
-from datetime import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,11 +13,10 @@ from .market_data_recovery import (
     assess_data_requirement,
     latest_clean_bars,
 )
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 
 logger = logging.getLogger(__name__)
 
-_REGULAR_OPEN = time(9, 30)
 
 
 def _copy_response(response: Any, bars: list[Any]):
@@ -60,11 +58,8 @@ def _recovered_response(recovered, *, bars=None):
 
 
 def _shared_recovery(proxy, instrument_id, interval, limit, binding_id, cancellation):
-    recovery = getattr(proxy._delegate, "recovered_bars", None)
-    if not callable(recovery):
-        return None
     try:
-        return recovery(
+        return proxy._delegate.recovered_bars(
             instrument_id,
             interval,
             limit,
@@ -166,7 +161,7 @@ def recover_shadow_bars(
 ):
     """Apply the conservative session dependency to the default bars surface."""
 
-    if proxy._observed_at.astimezone(_ET).time() < _REGULAR_OPEN:
+    if proxy._observed_at.astimezone(_ET).time() < REGULAR_OPEN:
         try:
             return base_bars(
                 instrument_id,

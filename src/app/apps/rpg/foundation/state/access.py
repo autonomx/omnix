@@ -184,6 +184,13 @@ def performance_of(runtime: Any) -> Any:
     return _kept(runtime, "performance")
 
 
+def turn_count_of(document: Any) -> int:
+    """The turns the campaign has counted, and the one reader of them. The reducer writes the count to the sheet
+    and the manifest alike (``TurnCounted``); an opening already under way sets the sheet's alone
+    (``published_launch``), so the sheet's count comes first and the manifest's answers for a sheet without one."""
+    return int(_kept(_kept(document, "state"), "turn_count") or _kept(_kept(document, "manifest"), "turn_count") or 0)
+
+
 FIELD_ACCESSORS = {
     "rng_seed": rng_seed_of, "campaign_rules": campaign_rules_of, "campaign_mechanics": campaign_mechanics_of,
     "campaign_end": campaign_end_of, "presentation_state": presentation_state_of, "memory_state": memory_state_of,
@@ -204,5 +211,6 @@ __all__ = [
     "hero_knowledge_of", "interaction_seq_of", "inventory_state_of", "lore_layer_of", "memory_state_of", "needs_of",
     "npc_index_of", "party_state_of", "performance_of", "player_journal_of", "player_state_of",
     "present_npc_state_of", "presentation_state_of", "quest_state_of", "rng_seed_of", "runtime_state_of",
-    "simulation_state_of", "state_revision_of", "survival_of", "travel_state_of", "world_facts_of", "world_model_of",
+    "simulation_state_of", "state_revision_of", "survival_of", "travel_state_of", "turn_count_of", "world_facts_of",
+    "world_model_of",
 ]

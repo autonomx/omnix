@@ -13,6 +13,7 @@ from app.apps.trading.strategy_monitor import StrategyRunHost
 from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
 from app.apps.trading.strategy_runner_pass import (
     RunnerOwnedConfigs,
+    RunnerParityHost,
     _DiscardingStrategyRepository,
     _ReadOnlyPaperRepository,
 )
@@ -208,3 +209,17 @@ def test_the_parity_report_is_served_read_only() -> None:
     assert body["parity"] is True
     assert body["matched"] == 1
     assert body["execution_authority"] is False
+
+
+def test_the_parity_host_changes_a_pass_only_through_its_hooks() -> None:
+    import inspect
+
+    from app.apps.trading import strategy_monitor_candidates
+
+    overridden = {name for name, value in vars(RunnerParityHost).items() if inspect.isfunction(value)}
+    # Parity evaluates candidates as the owner does, then stops at the proposals.
+    assert overridden == set(StrategyRunHost.PASS_HOOKS) - {"_evaluate_candidates"}
+    source = inspect.getsource(strategy_monitor_config_run) + inspect.getsource(strategy_monitor_candidates)
+    for hook in StrategyRunHost.PASS_HOOKS:
+        assert callable(getattr(StrategyRunHost, hook))
+        assert f"monitor.{hook}(" in source, hook

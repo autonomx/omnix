@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.apps.rpg.genesis.forge.world_forge_route_effects import route_effect_components
+from .graph_audit import GraphAuditError
+from .topic_graph import mapping as _map, rows as _rows, topic_entities as _entities
 
 _DIVERSITY = ("hazard_level", "supply_effect", "information_delay")
 _CATEGORY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -28,22 +30,9 @@ class RouteEffectIssue:
         return {"code": self.code, "place_id": self.place_id, "endpoint_id": self.endpoint_id, "path": self.path, "message": self.message, "evidence": dict(self.evidence), "severity": "error", "blocking": True}
 
 
-class RouteEffectCompilationError(ValueError):
-    def __init__(self, issues: Sequence[RouteEffectIssue]) -> None:
-        self.issues = tuple(issues)
-        super().__init__("route_effect_integrity_failed:" + ";".join(f"{row.code}:{row.place_id}:{row.endpoint_id}" for row in self.issues))
-
-
-def _map(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    return tuple(dict(row) for row in value if isinstance(row, Mapping)) if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else ()
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    return next((dict(row[key]) for key in ("candidate", "content") if isinstance(row.get(key), Mapping)), dict(row))
+class RouteEffectCompilationError(GraphAuditError):
+    code = "route_effect_integrity_failed"
+    fields = ("code", "place_id", "endpoint_id")
 
 
 def _domains(graph: Mapping[str, Any] | None) -> set[str]:
@@ -53,14 +42,6 @@ def _domains(graph: Mapping[str, Any] | None) -> set[str]:
         if "route_effects" in fields:
             domains.add(str(node.get("topic_id") or ""))
     domains.discard(""); return domains
-
-
-def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values: list[Any] = []
-    for topic_index, raw in enumerate(topic_rows, 1):
-        topic = _map(raw); candidate = _candidate(topic); topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
-        values.extend((topic_id, index, entity) for index, entity in enumerate(_rows(candidate.get("entities"))))
-    return tuple(values)
 
 
 def _normalise(value: Any) -> str:

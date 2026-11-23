@@ -173,7 +173,7 @@ async def submit_entry_proposals(
                 live_first=True,
             )
         except Exception as exc:
-            host.rejection_count += 1
+            host.metrics.rejection_count += 1
             await host._event(
                 strategy_repository,
                 config,
@@ -207,7 +207,7 @@ async def submit_entry_proposals(
             execution=execution_payload,
         )
         if not execution.execution_eligible:
-            host.rejection_count += 1
+            host.metrics.rejection_count += 1
             await host._event(
                 strategy_repository,
                 config,
@@ -283,7 +283,7 @@ async def submit_entry_proposals(
             decision=decision_payload,
         )
         if not decision.allowed:
-            host.rejection_count += 1
+            host.metrics.rejection_count += 1
             await host._event(
                 strategy_repository,
                 config,
@@ -346,7 +346,7 @@ async def submit_entry_proposals(
                 await asyncio.to_thread(strategy_repository.save_protection, protection)
             except ValueError as cleanup_exc:
                 host.last_error = f"entry_protection_cleanup: {cleanup_exc}"
-            host.rejection_count += 1
+            host.metrics.rejection_count += 1
             await host._event(
                 strategy_repository,
                 config,
@@ -431,7 +431,7 @@ async def submit_entry_proposals(
             execution=execution_payload,
             risk_decision=decision_payload,
         )
-        host.paper_order_count += 1
+        host.metrics.paper_order_count += 1
         trades_today += 1
         traded_symbols.add(candidate.instrument_id)
         submitted_attempts.add(trade_attempt_id)

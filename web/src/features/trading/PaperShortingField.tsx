@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
 import { PRODUCT_NAME } from '../../shared/productIdentity';
+import { isConflict } from '../../api/errors';
 
 type ToggleSetting = 'allow_short' | 'notify_margin_calls';
 
@@ -33,7 +34,7 @@ function PaperAccountToggleField({
     setError(null);
     void tradingPaperApi.updateAccountSettings(account, { [setting]: next })
       .then(onSaved)
-      .catch((caught: unknown) => setError(caught instanceof Error && caught.message.includes('(409)')
+      .catch((caught: unknown) => setError(isConflict(caught)
         ? 'The account changed elsewhere; reopen its settings and try again.'
         : failure))
       .finally(() => setSaving(false));

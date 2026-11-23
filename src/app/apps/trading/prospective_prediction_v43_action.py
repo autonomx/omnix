@@ -7,14 +7,13 @@ causal action snapshot and adds stricter higher-low confirmation, climatology
 edge requirements, cohort-regime risk, and dynamic cash-preserving sizing.
 """
 
-import hashlib
-import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256
 from .prospective_prediction_v42 import V42Forecast
 from .prospective_prediction_v42_action import (
     V42ActionSnapshot,
@@ -36,12 +35,6 @@ V43ActionState = Literal[
     "SUSPENDED_DATA_QUALITY",
 ]
 V43TradeDecision = Literal["LONG", "NO_TRADE", "WATCH"]
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 def _clamp01(value: Decimal) -> Decimal:
@@ -248,7 +241,7 @@ def evaluate_v43_post_open_action(
         instrument_id=forecast.instrument_id,
         forecast_fingerprint=forecast.immutable_fingerprint,
         base_v42_forecast_fingerprint=base_v42.immutable_fingerprint,
-        base_action_fingerprint=_hash(base_snapshot.model_dump(mode="json")),
+        base_action_fingerprint=canonical_sha256(base_snapshot.model_dump(mode="json")),
         required_confirmation_strength=required,
         confirmation_strength=base_snapshot.confirmation_strength,
         trade_quality=base_snapshot.trade_quality,

@@ -4,37 +4,36 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 
 | Variable | Type | Default | Owner | Description |
 | --- | --- | --- | --- | --- |
+| `AGENT_BROWSER_EXECUTABLE_PATH` | string | — | assistant-tools | Controls agent browser executable path for assistant-tools. |
 | `APCA_API_KEY_ID` | string | — | trading | Controls apca api key id for trading. |
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
-| `CI` | boolean | `false` | kernel | Controls ci for kernel. |
+| `CI` | string | — | kernel, rpg | Controls ci for kernel, rpg. |
+| `CMC_PRO_API_KEY` | string | — | trading | Controls cmc pro api key for trading. |
+| `COINMARKETCAP_API_KEY` | string | — | trading | Controls coinmarketcap api key for trading. |
 | `CONDA_ROOT` | string | — | kernel | Controls conda root for kernel. |
 | `FRED_API_KEY` | string | — | trading | Controls fred api key for trading. |
+| `GOOGLE_OAUTH_CLIENT_ID` | string | — | assistant-tools | Controls google oauth client id for assistant-tools. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | string | — | assistant-tools | Controls google oauth client secret for assistant-tools. |
 | `HERMES_API_KEY` | string | — | chat, providers, research, rpg, trading | Controls hermes api key for chat, providers, research, rpg, trading. |
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | launcher, providers | Controls hermes base url for launcher, providers. |
 | `HERMES_ENABLED` | string | — | chat, launcher, providers, research | Controls hermes enabled for chat, launcher, providers, research. |
 | `HERMES_TIMEOUT_SECONDS` | string | `45` | providers | Controls hermes timeout seconds for providers. |
 | `HF_HUB_CACHE` | string | — | models | Controls hf hub cache for models. |
+| `HF_HUB_OFFLINE` | string | — | providers | Controls hf hub offline for providers. |
 | `HF_TOKEN` | string | — | image | Controls hf token for image. |
-| `LIVE_SPEECH_INPUT_SAMPLE_RATE` | string | `16000` | live-speech | Controls live speech input sample rate for live-speech. |
-| `LIVE_SPEECH_LLM_BASE_URL` | string | `http://127.0.0.1:1234/v1` | live-speech | Controls live speech llm base url for live-speech. |
-| `LIVE_SPEECH_LLM_MODEL` | string | `local-model` | live-speech | Controls live speech llm model for live-speech. |
-| `LIVE_SPEECH_LLM_PROVIDER` | string | `fake` | live-speech | Controls live speech llm provider for live-speech. |
-| `LIVE_SPEECH_OUTPUT_SAMPLE_RATE` | string | `24000` | live-speech | Controls live speech output sample rate for live-speech. |
-| `LIVE_SPEECH_REALTIME_ENABLED` | string | `false` | live-speech | Controls live speech realtime enabled for live-speech. |
-| `LIVE_SPEECH_STT_PROVIDER` | string | `fake` | live-speech | Controls live speech stt provider for live-speech. |
-| `LIVE_SPEECH_STT_URL` | string | `http://127.0.0.1:8000` | live-speech | Controls live speech stt url for live-speech. |
-| `LIVE_SPEECH_TTS_PROVIDER` | string | `fake` | live-speech | Controls live speech tts provider for live-speech. |
-| `LIVE_SPEECH_TTS_URL` | string | `http://127.0.0.1:5101` | live-speech | Controls live speech tts url for live-speech. |
-| `LIVE_SPEECH_VAD_PROVIDER` | string | `energy` | live-speech | Controls live speech vad provider for live-speech. |
-| `LM_API_TOKEN` | string | — | live-speech | Controls lm api token for live-speech. |
-| `LOCALAPPDATA` | string | — | launcher, security | Controls localappdata for launcher, security. |
+| `LM_API_TOKEN` | string | — | providers | Controls lm api token for providers. |
+| `LOCALAPPDATA` | string | — | assistant-tools, launcher, security | Controls localappdata for assistant-tools, launcher, security. |
 | `OMNIXDESKTOP_DB_APP_PASSWORD` | string | — | desktop | Controls omnixdesktop db app password for desktop. |
 | `OMNIXDESKTOP_DB_OWNER_PASSWORD` | string | — | desktop | Controls omnixdesktop db owner password for desktop. |
+| `OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT` | string | `2` | agent-runtime | Controls agent acceptance retry limit for agent-runtime. |
 | `OMNIX_AGENT_ALLOW_UNSANDBOXED` | boolean | `false` | agent-runtime | Controls agent allow unsandboxed for agent-runtime. |
 | `OMNIX_AGENT_AUTO_INSTALL_DEPENDENCIES` | string | `true` | agent-runtime | Controls agent auto install dependencies for agent-runtime. |
 | `OMNIX_AGENT_BROKER_URL` | string | `http://127.0.0.1:8000/api/agent-runs` | agent-runtime | Controls agent broker url for agent-runtime. |
-| `OMNIX_AGENT_BROWSER_BACKEND` | string | — | launcher | Controls agent browser backend for launcher. |
+| `OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS` | string | — | assistant-tools | Controls agent browser allowed domains for assistant-tools. |
+| `OMNIX_AGENT_BROWSER_BACKEND` | string | — | assistant-tools, launcher | Controls agent browser backend for assistant-tools, launcher. |
+| `OMNIX_AGENT_BROWSER_COMMAND` | string | — | assistant-tools | Controls agent browser command for assistant-tools. |
 | `OMNIX_AGENT_BROWSER_ENABLED` | boolean | `true` | assistant-tools | Controls agent browser enabled for assistant-tools. |
+| `OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS` | string | `45` | assistant-tools | Controls agent browser timeout seconds for assistant-tools. |
 | `OMNIX_AGENT_CONTAINER_BROKER_URL` | string | — | agent-runtime | Controls agent container broker url for agent-runtime. |
 | `OMNIX_AGENT_CONTAINER_MODEL_GATEWAY_URL` | string | — | agent-runtime | Controls agent container model gateway url for agent-runtime. |
 | `OMNIX_AGENT_DEBUG_LOGS` | string | `0` | launcher, observability | Controls agent debug logs for launcher, observability. |
@@ -49,12 +48,18 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_DOCKER_NETWORK` | string | — | agent-runtime | Controls agent docker network for agent-runtime. |
 | `OMNIX_AGENT_DOCKER_PIDS` | string | `256` | agent-runtime | Controls agent docker pids for agent-runtime. |
 | `OMNIX_AGENT_DOCKER_TMPFS` | string | `256m` | agent-runtime | Controls agent docker tmpfs for agent-runtime. |
+| `OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT` | string | `15` | agent-runtime | Controls agent evidence hermes timeout for agent-runtime. |
+| `OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER` | string | — | agent-runtime | Controls agent evidence semantic adviser for agent-runtime. |
+| `OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES` | string | `2` | agent-runtime | Controls agent implementation settle retries for agent-runtime. |
+| `OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS` | string | `20` | agent-runtime | Controls agent lease heartbeat interval seconds for agent-runtime. |
+| `OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS` | string | `90` | agent-runtime | Controls agent lease heartbeat ttl seconds for agent-runtime. |
 | `OMNIX_AGENT_LOG_DIR` | string | — | launcher, observability | Controls agent log dir for launcher, observability. |
 | `OMNIX_AGENT_LOG_MAX_FIELD_CHARS` | string | — | launcher, observability | Controls agent log max field chars for launcher, observability. |
 | `OMNIX_AGENT_LOG_RETENTION_DAYS` | string | — | launcher, observability | Controls agent log retention days for launcher, observability. |
 | `OMNIX_AGENT_MAX_CONCURRENT_RUNS` | integer | `2` | agent-runtime | Controls agent max concurrent runs for agent-runtime. |
 | `OMNIX_AGENT_MCPORTER_COMMAND` | string | — | assistant-tools | Controls agent mcporter command for assistant-tools. |
 | `OMNIX_AGENT_MCP_ENABLED` | boolean | `true` | assistant-tools | Controls agent mcp enabled for assistant-tools. |
+| `OMNIX_AGENT_MCP_POLICY_PATH` | string | — | capabilities | Controls agent mcp policy path for capabilities. |
 | `OMNIX_AGENT_MCP_TIMEOUT_SECONDS` | string | `60` | assistant-tools | Controls agent mcp timeout seconds for assistant-tools. |
 | `OMNIX_AGENT_PLAN_REVIEW_ENABLED` | string | `false` | agent-runtime | Controls agent plan review enabled for agent-runtime. |
 | `OMNIX_AGENT_PLAN_REVIEW_MAX_ROUNDS` | string | `3` | agent-runtime | Controls agent plan review max rounds for agent-runtime. |
@@ -64,8 +69,18 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_PLAN_REVIEW_REASONING_EFFORT` | string | — | agent-runtime | Controls agent plan review reasoning effort for agent-runtime. |
 | `OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS` | string | `180` | agent-runtime | Controls agent plan review timeout seconds for agent-runtime. |
 | `OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS` | string | `2` | agent-runtime | Controls agent plan review transport attempts for agent-runtime. |
+| `OMNIX_AGENT_PREVIEW_NPM_COMMAND` | string | — | assistant-tools | Controls agent preview npm command for assistant-tools. |
+| `OMNIX_AGENT_PREVIEW_PACKAGE_PATH` | string | `web` | assistant-tools | Controls agent preview package path for assistant-tools. |
+| `OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS` | string | `20` | assistant-tools | Controls agent preview start timeout seconds for assistant-tools. |
+| `OMNIX_AGENT_PREVIEW_TTL_SECONDS` | string | `300` | assistant-tools | Controls agent preview ttl seconds for assistant-tools. |
+| `OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS` | string | `120` | agent-runtime | Controls agent progress idle timeout seconds for agent-runtime. |
+| `OMNIX_AGENT_QUALITY_MAX_ATTEMPTS` | string | `2` | agent-runtime | Controls agent quality max attempts for agent-runtime. |
+| `OMNIX_AGENT_READ_RETRY_AFTER_SECONDS` | string | `30` | agent-runtime | Controls agent read retry after seconds for agent-runtime. |
 | `OMNIX_AGENT_REASONING_EFFORT` | string | — | agent-runtime | Controls agent reasoning effort for agent-runtime. |
+| `OMNIX_AGENT_REVIEW_ROOT` | string | — | agent-runtime | Controls agent review root for agent-runtime. |
+| `OMNIX_AGENT_REVIEW_RUNTIME_RETRIES` | string | `2` | agent-runtime | Controls agent review runtime retries for agent-runtime. |
 | `OMNIX_AGENT_SANDBOX_GATEWAY_HOST` | string | `host.docker.internal` | agent-runtime | Controls agent sandbox gateway host for agent-runtime. |
+| `OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES` | string | `2` | agent-runtime | Controls agent self review protocol retries for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_CLASSIFIER_MIN_CONFIDENCE` | string | `0.60` | agent-runtime | Controls agent semantic classifier min confidence for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE` | string | `auto` | agent-runtime | Controls agent semantic classifier mode for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL` | string | — | agent-runtime | Controls agent semantic classifier model for agent-runtime. |
@@ -79,7 +94,14 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER` | string | — | agent-runtime | Controls agent semantic task parser provider for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS` | string | — | agent-runtime | Controls agent semantic task parser timeout seconds for agent-runtime. |
 | `OMNIX_AGENT_SLOT_WAIT_SECONDS` | integer | — | agent-runtime | Controls agent slot wait seconds for agent-runtime. |
+| `OMNIX_AGENT_STALLED_RECOVERY_LIMIT` | string | `2` | agent-runtime | Controls agent stalled recovery limit for agent-runtime. |
+| `OMNIX_AGENT_VALIDATION_RETRIES` | string | `2` | agent-runtime | Controls agent validation retries for agent-runtime. |
+| `OMNIX_AGENT_WORKSPACE_ROOTS` | string | — | agent-runtime | Controls agent workspace roots for agent-runtime. |
+| `OMNIX_AGENT_WORKTREE_ROOT` | string | — | agent-runtime | Controls agent worktree root for agent-runtime. |
+| `OMNIX_ALLOWED_HOSTS` | string | — | security | Controls allowed hosts for security. |
+| `OMNIX_ALLOWED_ORIGINS` | string | — | kernel | Controls allowed origins for kernel. |
 | `OMNIX_ALLOWED_PRIVATE_NETWORKS` | string | — | security | Controls allowed private networks for security. |
+| `OMNIX_ALLOW_LAN` | string | — | kernel | Controls allow lan for kernel. |
 | `OMNIX_ALLOW_LEGACY_IMPORT` | boolean | `false` | kernel | Controls allow legacy import for kernel. |
 | `OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE` | boolean | `false` | kernel | Controls allow legacy test persistence for kernel. |
 | `OMNIX_ALPACA_API_KEY_ID` | string | — | trading | Controls alpaca api key id for trading. |
@@ -93,8 +115,12 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_APP_OPEN_URL` | string | — | launcher | Controls app open url for launcher. |
 | `OMNIX_APP_PRIVATE_URL` | string | — | launcher | Controls app private url for launcher. |
 | `OMNIX_ASSETS_MANIFEST_PATH` | string | — | assets | Controls assets manifest path for assets. |
+| `OMNIX_ASSISTANT_MEMORY_DB_PATH` | string | — | assistant-memory | Controls assistant memory db path for assistant-memory. |
 | `OMNIX_ASSISTANT_TOOLS_CONFIG_PATH` | string | — | assistant-tools | Controls assistant tools config path for assistant-tools. |
 | `OMNIX_ASSISTANT_TOOLS_CONNECT_RETURN_URL` | string | `/chatbot` | assistant-tools | Controls assistant tools connect return url for assistant-tools. |
+| `OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR` | string | — | assistant-tools | Controls assistant tools fake calendar for assistant-tools. |
+| `OMNIX_ASSISTANT_TOOLS_FAKE_CONTACTS` | string | — | assistant-tools | Controls assistant tools fake contacts for assistant-tools. |
+| `OMNIX_ASSISTANT_TOOLS_FAKE_GMAIL` | string | — | assistant-tools | Controls assistant tools fake gmail for assistant-tools. |
 | `OMNIX_ASSISTANT_TOOLS_LEDGER_PATH` | string | — | assistant-tools | Controls assistant tools ledger path for assistant-tools. |
 | `OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV` | string | — | assistant-tools | Controls assistant tools skip local env for assistant-tools. |
 | `OMNIX_ASSISTANT_TURN_STORE_PATH` | string | — | chat | Controls assistant turn store path for chat. |
@@ -117,11 +143,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AVATAR_GENERATION_LOG_PATH` | string | — | characters | Controls avatar generation log path for characters. |
 | `OMNIX_BINANCE_FUTURES_WS_PROXY` | string | — | trading | Controls binance futures ws proxy for trading. |
 | `OMNIX_BINANCE_WS_PROXY` | string | — | trading | Controls binance ws proxy for trading. |
-| `OMNIX_BIND_HOST` | string | `127.0.0.1` | kernel | Controls bind host for kernel. |
+| `OMNIX_BIND_HOST` | string | — | kernel | Controls bind host for kernel. |
 | `OMNIX_BLOB_BACKEND` | string | `local` | kernel | Controls blob backend for kernel. |
 | `OMNIX_BLOB_ROOT` | string | — | kernel | Controls blob root for kernel. |
 | `OMNIX_BROWSER_EXE` | string | — | launcher | Controls browser exe for launcher. |
 | `OMNIX_CHARACTER_CLOUD_SYNC_ENABLED` | boolean | — | tooling | Controls character cloud sync enabled for tooling. |
+| `OMNIX_CHARACTER_DB_PATH` | string | — | characters | Controls character db path for characters. |
+| `OMNIX_CHARACTER_HERMES_MEMORY_DIR` | string | — | assistant-memory | Controls character hermes memory dir for assistant-memory. |
 | `OMNIX_CHARACTER_HERMES_SYNC_ENABLED` | boolean | — | characters | Controls character hermes sync enabled for characters. |
 | `OMNIX_CHARACTER_MEMORY_ENABLED` | boolean | `1` | characters | Controls character memory enabled for characters. |
 | `OMNIX_CHARACTER_MODE_ENABLED` | string | — | characters, launcher | Controls character mode enabled for characters, launcher. |
@@ -129,12 +157,14 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_CHAT_COMPACTION_THRESHOLD` | string | `40` | chat | Controls chat compaction threshold for chat. |
 | `OMNIX_CHAT_INPUT_TOKEN_BUDGET` | string | — | chat | Controls chat input token budget for chat. |
 | `OMNIX_CHAT_PROFILE_ID` | string | — | assistant-memory | Controls chat profile id for assistant-memory. |
+| `OMNIX_CHAT_SQLITE_STORE_ENABLED` | string | — | chat | Controls chat sqlite store enabled for chat. |
 | `OMNIX_CHAT_WORKSPACE_ID` | string | — | assistant-memory | Controls chat workspace id for assistant-memory. |
 | `OMNIX_CODEX_PROCESS_POOL_SIZE` | integer | `2` | providers | Controls codex process pool size for providers. |
 | `OMNIX_COMPANION_ROLLOUT_STAGE` | string | — | assistant-memory | Controls companion rollout stage for assistant-memory. |
+| `OMNIX_COMPANION_TRUSTED_CAPABILITIES` | string | — | assistant-memory | Controls companion trusted capabilities for assistant-memory. |
 | `OMNIX_DATABASE_APPLICATION_NAME` | string | `omnix` | kernel | Controls database application name for kernel. |
 | `OMNIX_DATABASE_POOL_MAX` | string | — | kernel | Controls database pool max for kernel. |
-| `OMNIX_DATABASE_URL` | string | — | kernel, trading | Controls database url for kernel, trading. |
+| `OMNIX_DATABASE_URL` | string | — | companion-activity, kernel, trading | Controls database url for companion-activity, kernel, trading. |
 | `OMNIX_DEEP_RESEARCH_HERMES_ENABLED` | string | `0` | research | Controls deep research hermes enabled for research. |
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
 | `OMNIX_DEPLOYMENT_PROCESS_COUNTS` | string | — | kernel | Controls deployment process counts for kernel. |
@@ -145,28 +175,37 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DOCUMENT_SCHEMAS_STRICT` | boolean | `false` | kernel | Controls document schemas strict for kernel. |
 | `OMNIX_DRAIN_MIN_SECONDS` | integer | `0` | kernel | Controls drain min seconds for kernel. |
 | `OMNIX_DRAIN_SECONDS` | integer | `30` | kernel | Controls drain seconds for kernel. |
-| `OMNIX_ENV` | string | `development` | gateway, kernel, production.py, security | Controls env for gateway, kernel, production.py, security. |
+| `OMNIX_ENV` | string | `development` | gateway, production.py, security | Controls env for gateway, production.py, security. |
 | `OMNIX_EOU_MODEL` | string | `nvidia/parakeet_realtime_eou_120m-v1` | providers | Controls eou model for providers. |
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |
 | `OMNIX_FFMPEG` | string | — | kernel, tooling | Controls ffmpeg for kernel, tooling. |
 | `OMNIX_FRED_API_KEY` | string | — | trading | Controls fred api key for trading. |
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, observability | Controls gateway background role for kernel, observability. |
-| `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
+| `OMNIX_GATEWAY_PORT` | string | — | gateway | Controls gateway port for gateway. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
+| `OMNIX_GITHUB_REAL_ADAPTER` | string | — | assistant-tools | Controls github real adapter for assistant-tools. |
 | `OMNIX_GITHUB_WORLD_SHARING_CLIENT_ID` | string | — | rpg | Controls github world sharing client id for rpg. |
 | `OMNIX_GOOGLE_ALLOWED_DOMAINS` | list | — | security | Controls google allowed domains for security. |
 | `OMNIX_GOOGLE_CLIENT_ID` | string | — | security | Controls google client id for security. |
 | `OMNIX_GOOGLE_CLIENT_SECRET` | string | — | security | Controls google client secret for security. |
 | `OMNIX_GOOGLE_REDIRECT_URI` | string | — | security | Controls google redirect uri for security. |
+| `OMNIX_HERMES_API_KEY` | string | — | agent-runtime | Controls hermes api key for agent-runtime. |
+| `OMNIX_HERMES_MEMORY_DIR` | string | — | assistant-memory | Controls hermes memory dir for assistant-memory. |
+| `OMNIX_HERMES_URL` | string | `http://127.0.0.1:8642` | agent-runtime | Controls hermes url for agent-runtime. |
 | `OMNIX_IBKR_CLIENT_ID` | string | — | trading | Controls ibkr client id for trading. |
 | `OMNIX_IBKR_CONNECTION` | string | — | trading | Controls ibkr connection for trading. |
+| `OMNIX_IBKR_DEMAND_RECONCILE_SECONDS` | string | `5` | trading | Controls ibkr demand reconcile seconds for trading. |
 | `OMNIX_IBKR_ENABLED` | string | — | trading | Controls ibkr enabled for trading. |
+| `OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS` | string | `0.25` | trading | Controls ibkr historical min interval seconds for trading. |
 | `OMNIX_IBKR_HOST` | string | — | trading | Controls ibkr host for trading. |
 | `OMNIX_IBKR_LIVE_AUTHORITY` | string | — | trading | Controls ibkr live authority for trading. |
+| `OMNIX_IBKR_MARKET_DATA_LINE_BUDGET` | string | `80` | trading | Controls ibkr market data line budget for trading. |
 | `OMNIX_IBKR_MONITOR` | string | — | trading | Controls ibkr monitor for trading. |
 | `OMNIX_IBKR_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls ibkr monitor in tests for trading. |
 | `OMNIX_IBKR_PORT` | string | — | trading | Controls ibkr port for trading. |
+| `OMNIX_IBKR_QUOTE_TIMEOUT_SECONDS` | string | `3` | trading | Controls ibkr quote timeout seconds for trading. |
+| `OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS` | string | `1` | trading | Controls ibkr reconnect backoff seconds for trading. |
 | `OMNIX_IBKR_RECOVERY_AUTHORITY` | string | — | trading | Controls ibkr recovery authority for trading. |
 | `OMNIX_IMAGE_ENABLED` | string | — | image, launcher | Controls image enabled for image, launcher. |
 | `OMNIX_IMAGE_PORT` | integer | `5301` | desktop | Controls image port for desktop. |
@@ -200,19 +239,27 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LIVE_AGENT_ENABLED` | boolean | — | chat | Controls live agent enabled for chat. |
 | `OMNIX_LIVE_AGENT_REQUIRE_HERMES` | boolean | — | chat | Controls live agent require hermes for chat. |
 | `OMNIX_LIVE_CHAT_EVALUATION_PATH` | string | — | chat | Controls live chat evaluation path for chat. |
+| `OMNIX_LIVE_CHAT_STREAM_ATTEMPTS` | string | — | live-voice | Controls live chat stream attempts for live-voice. |
 | `OMNIX_LIVE_CONVERSATION_PROFILE_PATH` | string | — | characters | Controls live conversation profile path for characters. |
 | `OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS` | string | `60` | providers | Controls live global prompt cache ttl seconds for providers. |
-| `OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES` | string | `true` | launcher | Controls live lmstudio stateful responses for launcher. |
+| `OMNIX_LIVE_LMSTUDIO_RESPONSE_MAX_CONTINUATIONS` | string | — | live-voice | Controls live lmstudio response max continuations for live-voice. |
+| `OMNIX_LIVE_LMSTUDIO_RESPONSE_STATE_TTL_SECONDS` | string | — | live-voice | Controls live lmstudio response state ttl seconds for live-voice. |
+| `OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES` | string | — | launcher, live-voice | Controls live lmstudio stateful responses for launcher, live-voice. |
 | `OMNIX_LIVE_MAX_CALLS` | integer | — | kernel | Controls live max calls for kernel. |
+| `OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS` | string | — | live-voice | Controls live memory retrieval deadline ms for live-voice. |
+| `OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT` | string | — | live-voice | Controls live memory retrieval limit for live-voice. |
 | `OMNIX_LIVE_PRONUNCIATION_PATH` | string | — | characters | Controls live pronunciation path for characters. |
+| `OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION` | string | — | live-voice | Controls live tts allow serial speculation for live-voice. |
 | `OMNIX_LIVE_TTS_PROVIDER_NAME` | string | — | kernel | Controls live tts provider name for kernel. |
 | `OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS` | string | `2` | launcher | Controls live tts speculative chunk steps for launcher. |
+| `OMNIX_LIVE_VOICE_CUE_ROOT` | string | — | live-voice | Controls live voice cue root for live-voice. |
 | `OMNIX_LIVE_VOICE_EXECUTION_MODE` | string | — | kernel | Controls live voice execution mode for kernel. |
 | `OMNIX_LIVE_VOICE_MODEL_ID` | string | — | kernel | Controls live voice model id for kernel. |
 | `OMNIX_LIVE_VOICE_PROVIDER_ID` | string | — | kernel | Controls live voice provider id for kernel. |
 | `OMNIX_LOG_FORMAT` | string | `text` | observability | Controls log format for observability. |
 | `OMNIX_LOG_LEVEL` | string | — | observability, worker | Controls log level for observability, worker. |
 | `OMNIX_LOG_LEVELS` | string | — | observability | Controls log levels for observability. |
+| `OMNIX_MAX_UPLOAD_BYTES` | string | — | security | Controls max upload bytes for security. |
 | `OMNIX_MEMORY_EMBEDDINGS` | string | `1` | assistant-memory | Controls memory embeddings for assistant-memory. |
 | `OMNIX_MEMORY_EMBEDDING_MODEL_DIR` | string | — | assistant-memory | Controls memory embedding model dir for assistant-memory. |
 | `OMNIX_MEMORY_READING_MODEL` | string | — | assistant-memory | Controls memory reading model for assistant-memory. |
@@ -240,7 +287,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_OIDC_WORKSPACE_ID` | string | `workspace:local` | security | Controls oidc workspace id for security. |
 | `OMNIX_OTEL_ENABLED` | boolean | `false` | observability | Controls otel enabled for observability. |
 | `OMNIX_PACKS_DIR` | string | — | models | Controls packs dir for models. |
-| `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
+| `OMNIX_PERSISTENCE_MODE` | string | — | kernel | Controls persistence mode for kernel. |
+| `OMNIX_PI_PATH` | string | `pi` | agent-runtime | Controls pi path for agent-runtime. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
 | `OMNIX_PORTRAIT_ENABLED` | boolean | `1` | launcher | Controls portrait enabled for launcher. |
 | `OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS` | integer | `600` | tooling | Controls portrait idle unload seconds for tooling. |
@@ -248,24 +296,29 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_PORTRAIT_PORT` | integer | `5501` | tooling | Controls portrait port for tooling. |
 | `OMNIX_PORTRAIT_PRELOAD` | boolean | `false` | tooling | Controls portrait preload for tooling. |
 | `OMNIX_PORTRAIT_URL` | string | — | launcher, live-voice, voice | Controls portrait url for launcher, live-voice, voice. |
-| `OMNIX_PORTRAIT_VRAM_CAP_MB` | integer | `4096` | tooling | Controls portrait vram cap mb for tooling. |
+| `OMNIX_PORTRAIT_VRAM_CAP_MB` | integer | — | tooling | Controls portrait vram cap mb for tooling. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
 | `OMNIX_PRODUCT_NAME` | string | — | kernel | Controls product name for kernel. |
 | `OMNIX_PROVIDER_SECRETS_PATH` | string | — | security | Controls provider secrets path for security. |
-| `OMNIX_REQUIRE_ROLE_SEPARATION` | boolean | `false` | kernel | Controls require role separation for kernel. |
+| `OMNIX_QWEN3_TTS_MODEL_DIR` | string | — | providers | Controls qwen3 tts model dir for providers. |
 | `OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED` | string | `1` | conversation | Controls research legacy aliases enabled for conversation. |
 | `OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET` | string | — | conversation | Controls research legacy alias sunset for conversation. |
+| `OMNIX_RESEARCH_SOURCE_STORE_PATH` | string | — | research | Controls research source store path for research. |
 | `OMNIX_RESOURCES_DIR` | string | — | kernel | Controls resources dir for kernel. |
 | `OMNIX_ROLE_PERMISSIONS` | string | — | security | Controls role permissions for security. |
+| `OMNIX_RPG_AUTHORSHIP_KEY_FILE` | string | — | rpg | Controls rpg authorship key file for rpg. |
+| `OMNIX_RPG_AUTHORSHIP_SIGNING_KEY` | string | — | rpg | Controls rpg authorship signing key for rpg. |
 | `OMNIX_RPG_DEBUG_LOGS` | string | `1` | rpg | Controls rpg debug logs for rpg. |
 | `OMNIX_RPG_LOG_DIR` | string | — | rpg | Controls rpg log dir for rpg. |
 | `OMNIX_RPG_LOG_MAX_FIELD_CHARS` | string | — | rpg | Controls rpg log max field chars for rpg. |
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
+| `OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE` | string | `0` | rpg | Controls rpg narrative shadow sample rate for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
 | `OMNIX_RPG_SNAPSHOT_EVERY` | integer | `20` | rpg | Controls rpg snapshot every for rpg. |
 | `OMNIX_RPG_TURNS_PER_HOUR` | integer | `600` | rpg | Controls rpg turns per hour for rpg. |
 | `OMNIX_RPG_TURN_WAIT_SECONDS` | integer | `120` | rpg | Controls rpg turn wait seconds for rpg. |
 | `OMNIX_RPG_WORLD_CATALOG_REPO` | string | — | rpg | Controls rpg world catalog repo for rpg. |
+| `OMNIX_RPG_WORLD_GENERATION_SPOOL_DIR` | string | — | rpg | Controls rpg world generation spool dir for rpg. |
 | `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |
 | `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |
 | `OMNIX_S3_BUCKET` | string | — | kernel | Controls s3 bucket for kernel. |
@@ -281,13 +334,14 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_SEC_USER_AGENT` | string | — | trading | Controls sec user agent for trading. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
 | `OMNIX_SMART_TURN_MODEL` | string | — | providers | Controls smart turn model for providers. |
-| `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
+| `OMNIX_SOFTWARE_REVISION` | string | `fresh-install-unversioned` | kernel | Controls software revision for kernel. |
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
 | `OMNIX_START_HERMES` | boolean | — | launcher | Controls start hermes for launcher. |
 | `OMNIX_START_IMAGE_SERVICE` | string | — | launcher | Controls start image service for launcher. |
 | `OMNIX_STT_CONTEXT_BOOST_ALPHA` | string | `0.5` | providers | Controls stt context boost alpha for providers. |
 | `OMNIX_STT_DEVICE` | string | `auto` | providers | Controls stt device for providers. |
 | `OMNIX_STT_PORT` | integer | `5201` | tooling | Controls stt port for tooling. |
+| `OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD` | string | `0.012` | providers | Controls stt preview tail rms threshold for providers. |
 | `OMNIX_STT_STREAM_CHUNK_MS` | integer | `160` | providers | Controls stt stream chunk ms for providers. |
 | `OMNIX_STT_URL` | string | `http://127.0.0.1:5201` | launcher | Controls stt url for launcher. |
 | `OMNIX_TIMEZONE` | string | `UTC` | assistant-tools | Controls timezone for assistant-tools. |
@@ -295,21 +349,28 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADE_LOG_DIR` | string | — | trading | Controls trade log dir for trading. |
 | `OMNIX_TRADING_AI_DAILY_CALL_BUDGET` | string | `400` | trading | Controls trading ai daily call budget for trading. |
 | `OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE` | string | `1` | trading | Controls trading ai shadow circuit persistence for trading. |
+| `OMNIX_TRADING_AI_SHADOW_INTERVAL_SECONDS` | string | `15` | trading | Controls trading ai shadow interval seconds for trading. |
 | `OMNIX_TRADING_AI_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading ai shadow monitor for trading. |
 | `OMNIX_TRADING_AI_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading ai shadow monitor in tests for trading. |
+| `OMNIX_TRADING_AI_SHADOW_V2_INTERVAL_SECONDS` | string | `15` | trading | Controls trading ai shadow v2 interval seconds for trading. |
 | `OMNIX_TRADING_AI_SHADOW_V2_MONITOR` | boolean | `1` | trading | Controls trading ai shadow v2 monitor for trading. |
 | `OMNIX_TRADING_AI_SHADOW_V2_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading ai shadow v2 monitor in tests for trading. |
+| `OMNIX_TRADING_AI_SHADOW_V3_INTERVAL_SECONDS` | string | `15` | trading | Controls trading ai shadow v3 interval seconds for trading. |
 | `OMNIX_TRADING_AI_SHADOW_V3_MONITOR` | boolean | `1` | trading | Controls trading ai shadow v3 monitor for trading. |
 | `OMNIX_TRADING_AI_SHADOW_V3_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading ai shadow v3 monitor in tests for trading. |
 | `OMNIX_TRADING_ALERT_INTERVAL_SECONDS` | string | `30` | trading | Controls trading alert interval seconds for trading. |
 | `OMNIX_TRADING_ALERT_MONITOR` | boolean | `1` | trading | Controls trading alert monitor for trading. |
 | `OMNIX_TRADING_ALERT_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading alert monitor in tests for trading. |
 | `OMNIX_TRADING_BREADTH_FEED` | string | `sip` | trading | Controls trading breadth feed for trading. |
+| `OMNIX_TRADING_BREADTH_MONITOR` | boolean | `1` | trading | Controls trading breadth monitor for trading. |
+| `OMNIX_TRADING_BREADTH_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading breadth monitor in tests for trading. |
+| `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_INTERVAL_SECONDS` | string | `30` | trading | Controls trading deep recovery shadow interval seconds for trading. |
 | `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading deep recovery shadow monitor for trading. |
 | `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading deep recovery shadow monitor in tests for trading. |
 | `OMNIX_TRADING_DESKTOP_NOTIFY_SECRET` | string | — | trading | Controls trading desktop notify secret for trading. |
 | `OMNIX_TRADING_DESKTOP_NOTIFY_URL` | string | — | trading | Controls trading desktop notify url for trading. |
 | `OMNIX_TRADING_DYNAMIC_DISCOVERY` | boolean | `1` | trading | Controls trading dynamic discovery for trading. |
+| `OMNIX_TRADING_DYNAMIC_DISCOVERY_INTERVAL_SECONDS` | string | `300` | trading | Controls trading dynamic discovery interval seconds for trading. |
 | `OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS` | boolean | `0` | trading | Controls trading dynamic discovery in tests for trading. |
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS` | string | `3` | trading | Controls trading execution observation interval seconds for trading. |
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR` | boolean | `1` | trading | Controls trading execution observation monitor for trading. |
@@ -319,8 +380,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION` | boolean | `1` | trading | Controls trading finviz shadow autoprovision for trading. |
 | `OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION_IN_TESTS` | boolean | `0` | trading | Controls trading finviz shadow autoprovision in tests for trading. |
 | `OMNIX_TRADING_FINVIZ_SHADOW_INITIAL_CASH` | string | `1000` | trading | Controls trading finviz shadow initial cash for trading. |
+| `OMNIX_TRADING_FUNDAMENTALS_MONITOR` | boolean | `1` | trading | Controls trading fundamentals monitor for trading. |
+| `OMNIX_TRADING_FUNDAMENTALS_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading fundamentals monitor in tests for trading. |
 | `OMNIX_TRADING_HERMES_RESEARCH_ENABLED` | string | — | launcher | Controls trading hermes research enabled for launcher. |
 | `OMNIX_TRADING_INTERDAY_LEARNING` | boolean | `1` | trading | Controls trading interday learning for trading. |
+| `OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS` | string | `300` | trading | Controls trading interday learning interval seconds for trading. |
 | `OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS` | boolean | `0` | trading | Controls trading interday learning in tests for trading. |
 | `OMNIX_TRADING_LIQUIDATION_COLLECTOR` | boolean | `1` | trading | Controls trading liquidation collector for trading. |
 | `OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS` | boolean | `0` | trading | Controls trading liquidation collector in tests for trading. |
@@ -334,6 +398,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_PAPER_INTERVAL_SECONDS` | string | `15` | trading | Controls trading paper interval seconds for trading. |
 | `OMNIX_TRADING_PAPER_MONITOR` | boolean | `1` | trading | Controls trading paper monitor for trading. |
 | `OMNIX_TRADING_PAPER_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading paper monitor in tests for trading. |
+| `OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS` | string | `30` | trading | Controls trading prospective economic interval seconds for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR` | boolean | `1` | trading | Controls trading prospective economic monitor for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading prospective economic monitor in tests for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF` | string | `main` | trading | Controls trading prospective gap github ref for trading. |
@@ -345,30 +410,39 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_RESEARCH_MONITOR` | boolean | `1` | trading | Controls trading research monitor for trading. |
 | `OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS` | string | `60` | trading | Controls trading research monitor interval seconds for trading. |
 | `OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading research monitor in tests for trading. |
+| `OMNIX_TRADING_RESEARCH_OUTCOME_INTERVAL_SECONDS` | string | `30` | trading | Controls trading research outcome interval seconds for trading. |
 | `OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR` | boolean | `1` | trading | Controls trading research outcome monitor for trading. |
 | `OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading research outcome monitor in tests for trading. |
 | `OMNIX_TRADING_RESEARCH_UNRESOLVED_RETRY_SECONDS` | integer | `300` | trading | Controls trading research unresolved retry seconds for trading. |
+| `OMNIX_TRADING_SESSION_RECONCILIATION_INTERVAL_SECONDS` | string | `300` | trading | Controls trading session reconciliation interval seconds for trading. |
+| `OMNIX_TRADING_SESSION_RECONCILIATION_MAX_AGE_DAYS` | string | `7` | trading | Controls trading session reconciliation max age days for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR` | boolean | `1` | trading | Controls trading session reconciliation monitor for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading session reconciliation monitor in tests for trading. |
+| `OMNIX_TRADING_SESSION_RECONCILIATION_RETRY_MINUTES` | string | `15` | trading | Controls trading session reconciliation retry minutes for trading. |
 | `OMNIX_TRADING_STOCH_SWEEP` | boolean | `1` | trading | Controls trading stoch sweep for trading. |
+| `OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS` | string | `30` | trading | Controls trading strategy interval seconds for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR` | boolean | `1` | trading | Controls trading strategy monitor for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading strategy monitor in tests for trading. |
+| `OMNIX_TRADING_TREND_CONTINUATION_SHADOW` | string | `1` | trading | Controls trading trend continuation shadow for trading. |
 | `OMNIX_TRADING_UNIVERSE_ARCHIVER` | boolean | `1` | trading | Controls trading universe archiver for trading. |
 | `OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS` | string | `30` | trading | Controls trading universe archiver interval seconds for trading. |
 | `OMNIX_TRADING_UNIVERSE_ARCHIVER_IN_TESTS` | boolean | `0` | trading | Controls trading universe archiver in tests for trading. |
 | `OMNIX_TRADING_V2_QUALIFICATION` | boolean | `1` | trading | Controls trading v2 qualification for trading. |
+| `OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS` | string | `300` | trading | Controls trading v2 qualification interval seconds for trading. |
 | `OMNIX_TRADING_V2_QUALIFICATION_IN_TESTS` | boolean | `0` | trading | Controls trading v2 qualification in tests for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION` | boolean | `1` | trading | Controls trading yahoo acquisition for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS` | string | `30` | trading | Controls trading yahoo acquisition interval seconds for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS` | boolean | `0` | trading | Controls trading yahoo acquisition in tests for trading. |
 | `OMNIX_TTS_DEVICE` | string | — | providers | Controls tts device for providers. |
-| `OMNIX_TTS_MODEL_DIR` | string | — | launcher | Controls tts model dir for launcher. |
+| `OMNIX_TTS_MODEL_DIR` | string | — | launcher, providers | Controls tts model dir for launcher, providers. |
 | `OMNIX_TTS_PORT` | integer | `5101` | tooling | Controls tts port for tooling. |
 | `OMNIX_TTS_STARTUP_WARMUP` | string | — | voice | Controls tts startup warmup for voice. |
 | `OMNIX_TTS_SWITCH_DRAIN_SECONDS` | integer | `120` | tooling | Controls tts switch drain seconds for tooling. |
 | `OMNIX_TTS_SYNTHESIS_WORKERS` | integer | `8` | tooling | Controls tts synthesis workers for tooling. |
 | `OMNIX_TTS_URL` | string | `http://127.0.0.1:5101` | launcher | Controls tts url for launcher. |
 | `OMNIX_TTS_WARMUP_SPEAKER` | string | — | voice | Controls tts warmup speaker for voice. |
+| `OMNIX_USER_LOCALE` | string | — | assistant-memory | Controls user locale for assistant-memory. |
+| `OMNIX_USER_TIMEZONE` | string | — | assistant-memory, live-voice | Controls user timezone for assistant-memory, live-voice. |
 | `OMNIX_VAPID_SUBJECT` | string | — | trading | Controls vapid subject for trading. |
 | `OMNIX_VISION_API_KEY` | string | — | providers | Controls vision api key for providers. |
 | `OMNIX_VISION_BASE_URL` | string | — | providers | Controls vision base url for providers. |
@@ -391,11 +465,12 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `PARAKEET_LIVE_TRIM_DBFS` | number | — | providers | Controls parakeet live trim dbfs for providers. |
 | `PARAKEET_WARMUP_SECONDS` | number | `0.75` | providers | Controls parakeet warmup seconds for providers. |
 | `PATH` | string | — | agent-runtime | Controls path for agent-runtime. |
-| `PROGRAMFILES` | string | — | launcher | Controls programfiles for launcher. |
+| `PROGRAMFILES` | string | — | assistant-tools, launcher | Controls programfiles for assistant-tools, launcher. |
 | `PYTEST_CURRENT_TEST` | string | — | kernel | Controls pytest current test for kernel. |
 | `PYTHONPATH` | string | — | rpg | Controls pythonpath for rpg. |
 | `RPG_TRACE_PROVIDER_CALLS` | string | — | providers | Controls rpg trace provider calls for providers. |
 | `SYSTEMROOT` | string | — | agent-runtime | Controls systemroot for agent-runtime. |
+| `TRANSFORMERS_OFFLINE` | string | — | providers | Controls transformers offline for providers. |
 | `VITE_ASSISTANT_STT_URL` | string | `/api/stt?language=en&authority=auto&endpoint_threshold=0.5` | launcher | Controls vite assistant stt url for launcher. |
 | `VITE_LIVE_SPECULATION_ENABLED` | string | `true` | launcher | Controls vite live speculation enabled for launcher. |
 | `VITE_LIVE_TTS_ADAPTIVE_BUFFER` | string | `true` | launcher | Controls vite live tts adaptive buffer for launcher. |

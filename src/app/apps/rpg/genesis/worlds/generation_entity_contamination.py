@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, mapping as _mapping, rows as _rows
 
 _IDENTITY_FIELDS = {
     "id",
@@ -174,40 +176,11 @@ class EntityIdentityContaminationIssue:
         }
 
 
-class EntityIdentityContaminationCompilationError(ValueError):
-    def __init__(self, issues: Sequence[EntityIdentityContaminationIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.code}:{issue.topic_id}:{issue.entity_id}:{issue.path}:"
-            f"{issue.foreign_entity_id or issue.observed_pronoun}"
-            for issue in self.issues
-        )
-        super().__init__("entity_identity_contamination_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "entity_identity_contamination_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
+class EntityIdentityContaminationCompilationError(GraphAuditError):
+    code = "entity_identity_contamination_failed"
+    @classmethod
+    def render(cls, issue: Any) -> str:
+        return f"{issue.code}:{issue.topic_id}:{issue.entity_id}:{issue.path}:{issue.foreign_entity_id or issue.observed_pronoun}"
 
 
 def _normalise_name(value: Any) -> str:

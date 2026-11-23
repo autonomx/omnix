@@ -89,3 +89,16 @@ def is_disposable_test_database(url: str) -> bool:
 
     name = urlsplit(url).path.lstrip("/")
     return any(re.fullmatch(rf"{base}(?:_gw\d+)?", name) for base in _DISPOSABLE_NAMES)
+
+
+def require_disposable_test_database(url: str) -> None:
+    """Fail a test that would reset a database not named as disposable, saying which names are."""
+    if not is_disposable_test_database(url):
+        import pytest
+
+        name = urlsplit(url).path.lstrip("/")
+        pytest.fail(
+            f"refusing to reset database {name!r}: these tests truncate shared tables, so they run only on a "
+            f"database named {' or '.join(_DISPOSABLE_NAMES)} (or a per-worker copy such as omnix_test_gw0)",
+            pytrace=False,
+        )

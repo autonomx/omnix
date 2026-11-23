@@ -19,13 +19,14 @@ from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
 from app.observability.logging import log_context
 from app.observability.tracing import span
-from app.persistence.device_permits import device_permit_slot
+from app.providers.catalog import provider_id_of
+from app.providers.llm_admission import llm_admission
 from app.providers.base import provider_turn_owner
-from app.providers.catalog import LOCAL_DEVICE, provider_supports
 from app.runtime.cancellation import CancellationToken
 
 from .generative_ui import attach_reply_ui
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
+from .turn_routing import patch_user_message_metadata, persist_routing_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +389,7 @@ def mark_chat_acceptance_failed(
 ) -> None:
     message = " ".join(str(error).split()).strip() or type(error).__name__
     try:
-        _patch_user_message_metadata(
+        patch_user_message_metadata(
             chat_store,
             session_id=session_id,
             message_id=message_id,
@@ -616,22 +617,11 @@ def _chat_provider_id(
     metadata = getattr(user_message, "metadata", None)
     route = metadata.get("omnix_provider_route") if isinstance(metadata, dict) else None
     routed_provider = route.get("provider_id") if isinstance(route, dict) else None
-    return str(
-        routed_provider
-        or request.provider_id
-        or getattr(session, "provider_id", None)
-        or ""
-    ).strip().casefold().removeprefix("llm:")
+    return provider_id_of(routed_provider or request.provider_id or getattr(session, "provider_id", None))
 
 
 def _chat_provider_slot(provider_id: str):
-    if provider_supports(provider_id, LOCAL_DEVICE):
-        return device_permit_slot(
-            "llm-local",
-            priority="interactive",
-            timeout_seconds=5.0,
-        )
-    return nullcontext()
+    return llm_admission(provider_id, priority="interactive", timeout_seconds=5.0)
 
 
 def _generate_reply_with_interrupt(
@@ -712,7 +702,7 @@ def _run_chat_generation_job(
         context_diagnostics: dict[str, Any] = {}
         if context_builder is not None:
             context_items, context_diagnostics = context_builder()
-            _patch_user_message_metadata(
+            patch_user_message_metadata(
                 chat_store,
                 session_id=session_id,
                 message_id=message_id,
@@ -739,12 +729,7 @@ def _run_chat_generation_job(
             return
 
         # Only the newest part of the transcript a prompt can read (WP-5.7).
-        load_window = getattr(chat_store, "get_session_window", None)
-        session = (
-            load_window(session_id, through_message_id=message_id)
-            if callable(load_window)
-            else chat_store.get_session(session_id)
-        )
+        session = chat_store.get_session_window(session_id, through_message_id=message_id)
         if session is None:
             raise RuntimeError("Chat session not found while generation was starting.")
         user_index = next(
@@ -798,7 +783,7 @@ def _run_chat_generation_job(
         attach_reply_ui(content, metadata, context_items=context_items)
 
         def before_commit() -> None:
-            _persist_routing_metadata(chat_store, session, user_message)
+            persist_routing_metadata(chat_store, session, user_message)
             if context_items:
                 metadata["context_sources"] = _context_source_summaries(context_items)
                 metadata["context_diagnostics"] = context_diagnostics
@@ -916,7 +901,7 @@ def _fail_job(
         return
     if session_id and message_id:
         try:
-            _patch_user_message_metadata(
+            patch_user_message_metadata(
                 chat_store,
                 session_id=session_id,
                 message_id=message_id,
@@ -957,7 +942,7 @@ def _cancel_chat_turn(
     if current is None or current.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.STALE}:
         return
     try:
-        _patch_user_message_metadata(
+        patch_user_message_metadata(
             chat_store,
             session_id=session_id,
             message_id=message_id,
@@ -1124,61 +1109,6 @@ def _generate_reply(
         request=request,
         context_items=context_items,
     )
-
-
-def _persist_routing_metadata(
-    chat_store: Any,
-    session: ChatSession,
-    user_message: ChatMessage,
-) -> None:
-    keys = (
-        "omnix_chat_routed",
-        "omnix_route",
-        "semantic_intent",
-        "semantic_task",
-        "semantic_compilation",
-        "routing_decision",
-        "request_mode",
-        "turn_plan",
-        "active_objective",
-        "routing_environment",
-    )
-    patch = {key: user_message.metadata[key] for key in keys if key in user_message.metadata}
-    if not patch:
-        return
-    _patch_user_message_metadata(
-        chat_store,
-        session_id=session.id,
-        message_id=user_message.id,
-        metadata=patch,
-    )
-
-
-def _patch_user_message_metadata(
-    chat_store: Any,
-    *,
-    session_id: str,
-    message_id: str,
-    metadata: dict[str, Any],
-) -> None:
-    if chat_store is None:
-        return
-    update = getattr(chat_store, "update_user_message_metadata", None)
-    if callable(update):
-        update(session_id=session_id, message_id=message_id, metadata=metadata)
-        return
-    update = getattr(chat_store, "update_message_metadata", None)
-    if callable(update):
-        update(session_id=session_id, message_id=message_id, metadata=metadata)
-        return
-    session = chat_store.get_session(session_id)
-    if session is None:
-        return
-    message = next((item for item in session.messages if item.id == message_id), None)
-    if message is None:
-        return
-    message.metadata.update(metadata)
-    chat_store._save_session(session)
 
 
 def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[str, str]]:

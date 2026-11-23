@@ -6,15 +6,9 @@ from typing import Any
 from fastapi import APIRouter, Body
 from pydantic import BaseModel, ConfigDict
 
-from app.apps.rpg.edge.hermes.approved_config import (
-    hermes_rpg_approved_flow_config_payload,
-    hermes_rpg_approved_flow_feature_enabled,
-)
-from app.apps.rpg.edge.hermes.approved_flow import hermes_rpg_approved_flow
-from app.apps.rpg.edge.hermes.canonical_submitter import hermes_rpg_canonical_submitter
-from app.apps.rpg.edge.hermes.execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
-from app.apps.rpg.edge.hermes.flow_readout import hermes_rpg_flow_readout
-from app.apps.rpg.edge.hermes.submit_bridge import RpgSubmitter
+from app.apps.rpg.edge.hermes.approved_command import RpgSubmitter, run_approved_command
+from app.apps.rpg.edge.hermes.approved_config import hermes_rpg_approved_flow_config_payload
+from app.apps.rpg.edge.hermes.execution_ledger import hermes_rpg_execution_ledger_recent
 from app.apps.rpg.edge.hermes.assist_mode import hermes_assist_mode_policy
 from app.apps.rpg.edge.hermes.context_pack import build_hermes_rpg_context_pack
 from app.apps.rpg.edge.hermes.narrative_research import hermes_rpg_narrative_research_payload
@@ -43,53 +37,13 @@ from app.apps.rpg.edge.api.route_contracts import (
 hermes_rpg_approved_bp = APIRouter()
 
 
-def hermes_rpg_approved_flow_enabled(
-    payload: dict[str, Any],
-    *,
-    environ: Mapping[str, str] | None = None,
-) -> bool:
-    return payload.get("enabled") is True and hermes_rpg_approved_flow_feature_enabled(environ)
-
-
 def hermes_rpg_approved_flow_route_payload(
     payload: dict[str, Any] | None,
     *,
     submitter: RpgSubmitter | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    data = payload if isinstance(payload, dict) else {}
-    config = hermes_rpg_approved_flow_config_payload(environ)
-    if not hermes_rpg_approved_flow_enabled(data, environ=environ):
-        return {
-            "ok": False,
-            "source": "hermes_rpg_approved_flow_route",
-            "error": "hermes_rpg_approved_flow_disabled",
-            "enabled": False,
-            "config": config,
-            "state_changed": False,
-        }
-
-    user_step = raw_user_step if isinstance(raw_user_step := data.get("user_step"), dict) else {}
-    replay_entry = raw_replay_entry if isinstance(raw_replay_entry := data.get("replay_entry"), dict) else {}
-    context = raw_context if isinstance(raw_context := data.get("context"), dict) else {}
-    flow = hermes_rpg_approved_flow(
-        user_step,
-        replay_entry,
-        context,
-        submitter or hermes_rpg_canonical_submitter,
-    )
-    readout = hermes_rpg_flow_readout(flow)
-    ledger_entry = hermes_rpg_execution_ledger_record(payload=data, config=config, flow=flow, readout=readout)
-    return {
-        "ok": flow.get("ok") is True,
-        "source": "hermes_rpg_approved_flow_route",
-        "enabled": True,
-        "config": config,
-        "flow": flow,
-        "readout": readout,
-        "ledger_entry": ledger_entry,
-        "state_changed": flow.get("state_changed") is True,
-    }
+    return run_approved_command(payload, submitter=submitter, environ=environ)
 
 
 def hermes_rpg_sequence_review_payload(payload: dict[str, Any] | None) -> dict[str, Any]:

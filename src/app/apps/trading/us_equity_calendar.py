@@ -71,6 +71,11 @@ def regular_holidays(year: int) -> set[date]:
     return holidays
 
 
+def is_trading_day(day: date) -> bool:
+    """Whether the regular U.S. equity session trades on ``day`` (weekday, not a listed holiday)."""
+    return day.weekday() < 5 and day not in regular_holidays(day.year)
+
+
 def early_close_time(session_date: date) -> time | None:
     """Return the standard 13:00 ET early close when rule-based and scheduled."""
     month, day = session_date.month, session_date.day
@@ -79,7 +84,7 @@ def early_close_time(session_date: date) -> time | None:
     # answer before the year's holidays are computed.
     if not ((month == 7 and day <= 3) or (month == 11 and day >= 23) or (month == 12 and day == 24)):
         return None
-    if session_date.weekday() >= 5 or session_date in regular_holidays(session_date.year):
+    if not is_trading_day(session_date):
         return None
     thanksgiving = _nth_weekday(session_date.year, 11, 3, 4)
     if session_date == thanksgiving + timedelta(days=1):
@@ -88,7 +93,7 @@ def early_close_time(session_date: date) -> time | None:
     independence = date(session_date.year, 7, 4)
     if independence.weekday() in {1, 2, 3, 4}:  # Tue-Fri: prior trading day closes early.
         candidate = independence - timedelta(days=1)
-        while candidate.weekday() >= 5 or candidate in regular_holidays(candidate.year):
+        while not is_trading_day(candidate):
             candidate -= timedelta(days=1)
         if session_date == candidate:
             return time(13, 0)
@@ -100,13 +105,24 @@ def early_close_time(session_date: date) -> time | None:
     return None
 
 
+# Session boundaries (ET). Import these rather than writing the clock times again.
+PREMARKET_OPEN = time(4, 0)
 REGULAR_OPEN = time(9, 30)
 REGULAR_CLOSE = time(16, 0)
+EXTENDED_CLOSE = time(20, 0)
+# Nasdaq extended trading ends at 17:00 ET on standard 13:00 early-close
+# sessions rather than the normal 20:00 ET.
+EARLY_CLOSE_EXTENDED_CLOSE = time(17, 0)
 
 
 def regular_close_time(session_date: date) -> time:
     """The regular session's close: 13:00 ET on a scheduled early close, else 16:00."""
     return early_close_time(session_date) or REGULAR_CLOSE
+
+
+def extended_close_time(session_date: date) -> time:
+    """When extended-hours trading ends: 17:00 ET on a scheduled early close, else 20:00."""
+    return EARLY_CLOSE_EXTENDED_CLOSE if early_close_time(session_date) is not None else EXTENDED_CLOSE
 
 
 def after_regular_close(moment: datetime) -> bool:
@@ -141,15 +157,13 @@ def us_equity_session(source_time: datetime) -> str:
     if local.weekday() >= 5 or session_date in regular_holidays(session_date.year):
         return "closed"
     clock = local.timetz().replace(tzinfo=None)
-    early_close = early_close_time(session_date)
-    regular_close = early_close or REGULAR_CLOSE
-    # Nasdaq extended trading ends at 17:00 ET on standard 13:00 early-close
-    # sessions rather than the normal 20:00 ET. Keep this explicit so a fresh
-    # quote after that cutoff cannot be mislabeled as executable extended-post.
-    extended_close = time(17, 0) if early_close is not None else time(20, 0)
-    if time(4, 0) <= clock < time(9, 30):
+    regular_close = regular_close_time(session_date)
+    # A fresh quote after the early-close extended cutoff must not be
+    # mislabeled as executable extended-post.
+    extended_close = extended_close_time(session_date)
+    if PREMARKET_OPEN <= clock < REGULAR_OPEN:
         return "extended_pre"
-    if time(9, 30) <= clock < regular_close:
+    if REGULAR_OPEN <= clock < regular_close:
         return "regular"
     if regular_close <= clock < extended_close:
         return "extended_post"

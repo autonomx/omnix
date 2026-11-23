@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from .concurrency import serialized_chat_mutation
-from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
+from app.providers.model_route import model_name_of
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports, provider_id_of
 
 from .models import (
     ChatMessage,
@@ -30,20 +31,8 @@ def _utcnow() -> str:
 
 
 def _provider_key(value: str | None) -> str | None:
-    text = (value or "").strip()
-    if not text:
-        return None
-    return text.split(":", 1)[1] if text.startswith("llm:") else text
-
-
-def _model_key(value: str | None) -> str | None:
-    text = (value or "").strip()
-    if not text:
-        return None
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
-    return text
+    """The catalog provider id, or None when no provider is named (the default one serves)."""
+    return provider_id_of(value) or None
 
 
 def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -164,6 +153,12 @@ class ChatSessionStore:
             if session.id == session_id:
                 return session
         return None
+
+    def get_session_window(self, session_id: str, *, through_message_id: str | None = None) -> ChatSession | None:
+        """The transcript a prompt can read. A file store keeps whole sessions, so this is the whole session;
+        the PostgreSQL store loads only its newest part (WP-5.7)."""
+        del through_message_id
+        return self.get_session(session_id)
 
     @serialized_chat_mutation
     def delete_session(self, session_id: str) -> bool:
@@ -371,7 +366,7 @@ class ChatSessionStore:
                 raise RuntimeError("Chat provider is not available")
 
             messages = self._provider_messages(session, user_message, context_items or [])
-            model_name = _model_key(model_id)
+            model_name = model_name_of(model_id) or None
             completion_kwargs: dict[str, Any] = (
                 {"conversation_id": session.id}
                 if provider_supports(provider_name, CONVERSATION_SESSIONS)
@@ -623,13 +618,14 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from app.platform.chat.contracts import route_typed_turn as route_typed_chat_turn
+        from app.platform.chat.turn_routing import route_typed_turn
 
         routing_deadline_at = provider_turn_deadline(
             provider_id,
             session_provider_id=getattr(session, "provider_id", None),
         )
-        generalized = route_typed_chat_turn(
+        generalized = route_typed_turn(
+            self,
             session,
             user_message,
             provider_id=provider_id,
@@ -717,7 +713,7 @@ class ChatSessionStore:
 
             messages = self._provider_messages(session, user_message, context_items)
 
-            model_name = _model_key(model_id)
+            model_name = model_name_of(model_id) or None
             completion_kwargs: dict[str, Any] = (
                 {"conversation_id": session.id}
                 if provider_supports(provider_name, CONVERSATION_SESSIONS)

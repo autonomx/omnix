@@ -9,6 +9,8 @@ from .exception_logging import log_recovered_exception
 from app.persistence.unit_of_work import unit_of_work
 from .contracts import AgentRunCommand
 from .task_graph import (
+    TERMINAL_GRAPH_RUN_STATUSES,
+    TERMINAL_NODE_RUN_STATUSES,
     TaskGraph,
     TaskGraphRunSnapshot,
     TaskNodeRunState,
@@ -155,7 +157,7 @@ def cancel(
     snapshot = graph_runtime.get_status(run_id)
     if snapshot is None:
         raise KeyError(run_id)
-    if snapshot.status in {"completed", "failed", "cancelled"}:
+    if snapshot.status in TERMINAL_GRAPH_RUN_STATUSES:
         return snapshot
     for state in snapshot.node_states:
         if (
@@ -163,7 +165,7 @@ def cancel(
             and state.child_run_id
         ):
             graph_runtime._cancel_child(state.child_run_id)
-        if state.status not in {"completed", "failed", "cancelled", "skipped"}:
+        if state.status not in TERMINAL_NODE_RUN_STATUSES:
             graph_runtime._store_node(
                 run_id,
                 state.node_id,
@@ -189,7 +191,7 @@ def revise(
     snapshot = graph_runtime.get_status(run_id)
     if snapshot is None:
         raise KeyError(run_id)
-    if snapshot.status in {"completed", "failed", "cancelled"}:
+    if snapshot.status in TERMINAL_GRAPH_RUN_STATUSES:
         raise TaskGraphRuntimeError(
             f"cannot revise terminal task graph:{snapshot.status}"
         )
@@ -250,7 +252,7 @@ def recover(graph_runtime: PostgresTaskGraphRuntime, run_id: str) -> TaskGraphRu
     snapshot = graph_runtime.get_status(run_id)
     if snapshot is None:
         raise KeyError(run_id)
-    if snapshot.status in {"completed", "failed", "cancelled"}:
+    if snapshot.status in TERMINAL_GRAPH_RUN_STATUSES:
         return snapshot
     node_map = graph_runtime._node_map(snapshot.graph)
     states = graph_runtime._state_map(snapshot.node_states)

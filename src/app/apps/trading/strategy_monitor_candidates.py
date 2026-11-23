@@ -17,6 +17,7 @@ from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackResult
 from .strategy_evaluability import assess_session_evaluability
+from .us_equity_calendar import REGULAR_OPEN
 from .strategy_intraday_learning import (
     IntradayLearningSnapshot,
     build_intraday_learning_snapshot,
@@ -24,7 +25,6 @@ from .strategy_intraday_learning import (
 
 # The monitor imports this module lazily, so importing it here makes no cycle.
 from .strategy_monitor import (
-    _REGULAR_OPEN,
     StrategyRunHost,
     _bar_audit_payload,
     _candidate_lifecycle_stage,
@@ -113,29 +113,18 @@ async def load_candidate_session_bars(
     primary_error: Exception | None = None
     shared_recovery = None
     try:
-        recovery_method = getattr(market_service, "recovered_bars", None)
-        if callable(recovery_method):
-            shared_recovery = await asyncio.to_thread(
-                recovery_method,
-                candidate.instrument_id,
-                "1m",
-                500,
-                candidate.binding_id,
-                session_date=universe.session_date,
-                as_of=now_utc,
-            )
-            if shared_recovery.report.primary_error:
-                primary_error = RuntimeError(shared_recovery.report.primary_error)
-            raw_bars = list(shared_recovery.bars)
-        else:
-            response = await asyncio.to_thread(
-                market_service.bars,
-                candidate.instrument_id,
-                "1m",
-                500,
-                candidate.binding_id,
-            )
-            raw_bars = list(response.bars)
+        shared_recovery = await asyncio.to_thread(
+            market_service.recovered_bars,
+            candidate.instrument_id,
+            "1m",
+            500,
+            candidate.binding_id,
+            session_date=universe.session_date,
+            as_of=now_utc,
+        )
+        if shared_recovery.report.primary_error:
+            primary_error = RuntimeError(shared_recovery.report.primary_error)
+        raw_bars = list(shared_recovery.bars)
         if legacy_candidate_contract:
             base_bars = [bar for bar in raw_bars if bar.is_final]
         else:
@@ -157,7 +146,7 @@ async def load_candidate_session_bars(
         )
     elif now_utc.astimezone(_ET).date() < universe.session_date or (
         now_utc.astimezone(_ET).date() == universe.session_date
-        and now_utc.astimezone(_ET).time() < _REGULAR_OPEN
+        and now_utc.astimezone(_ET).time() < REGULAR_OPEN
     ):
         current_ready = False
         integrity_reason = "CURRENT_SESSION_NOT_STARTED"
@@ -428,7 +417,7 @@ async def evaluate_candidates(
                 and integrity_reason != "CURRENT_SESSION_NOT_STARTED"
                 and yahoo_recovery_report.unresolved_gaps
             ):
-                monitor.yahoo_unresolved_candidate_evaluation_count += 1
+                monitor.metrics.yahoo_unresolved_candidate_evaluation_count += 1
                 evidence_store = getattr(
                     market_service,
                     "yahoo_evidence_store",
@@ -546,14 +535,14 @@ async def evaluate_candidates(
         result = evaluate_gap_pullback(candidate, structure_bars, config.config)
         observed_at = structure_bars[-1].end_time
         evaluated_any = True
-        monitor.evaluation_count += 1
+        monitor.metrics.evaluation_count += 1
         yahoo_recovered_evaluation = bool(
             shared_recovery is not None
             and shared_recovery.report.primary_provider == "yahoo"
             and shared_recovery.report.recovered_bar_count > 0
         )
         if yahoo_recovered_evaluation:
-            monitor.yahoo_recovered_candidate_evaluation_count += 1
+            monitor.metrics.yahoo_recovered_candidate_evaluation_count += 1
         if (
             shared_recovery is not None
             and shared_recovery.report.primary_provider == "yahoo"
@@ -849,7 +838,7 @@ async def evaluate_candidates(
             else:
                 learning_rows.append((candidate, result, base_bars[-1].end_time, learning))
         if result.state == "entry_ready" and result.signal is not None:
-            monitor.signal_count += 1
+            monitor.metrics.signal_count += 1
             if config.config.strategy_version == "1.2.0":
                 try:
                     research_decision = await asyncio.to_thread(
@@ -922,7 +911,7 @@ async def evaluate_candidates(
                     reason_code=reason_code,
                 )
                 if not allowed:
-                    monitor.rejection_count += 1
+                    monitor.metrics.rejection_count += 1
                     continue
             proposals.append(
                 _EntryProposal(
@@ -964,7 +953,7 @@ async def evaluate_candidates(
                     "execution_authority": False,
                 },
             )
-            monitor.intraday_learning_snapshot_count += int(persisted)
+            monitor.metrics.intraday_learning_snapshot_count += int(persisted)
         trade_log(
             "auto_trading",
             "intraday_learning_ranked",

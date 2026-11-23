@@ -20,7 +20,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
     drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicatorOutputs, indicatorPaneGeometry, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
-    onActivate, onChangeChartType, onToggleIndicator, openContextMenu, paperAccountId, priceScaleMultiplier,
+    onActivate, onChangeChartType, onToggleIndicator, contextMenuActions, paperAccountId, priceScaleMultiplier,
     provenance, replayMode, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
     setSettingsVisible, setTableVisible, settingsVisible, tableVisible,
   } = ws;
@@ -63,7 +63,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
             ...(indicator?.period !== undefined ? { indicatorPeriod: indicator.period } : {}),
           });
         } : undefined}
-        onContextMenu={active ? openContextMenu : undefined}
+        onContextMenu={active ? contextMenuActions.open : undefined}
       />
       <TradingChartAlertOverlay
         adapter={adapter}
@@ -124,8 +124,8 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
 /** The chart's context menu. */
 export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    adapterRef, applyChartTemplate, chartId, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
-    cursorLocked, drawings, indicators, instrumentId, onClearIndicators, pasteContextPrice, resetIndicatorPaneView,
+    adapterRef, chartId, chartQuery, contextIndicator, contextMenu, contextMenuActions, cursorLocked, drawings,
+    indicators, instrumentId, onClearIndicators, panes,
     selectedRangeRef, setContextMenu, setCursorLocked, setObjectTreeVisible, setPriceScaleSettings,
     setSelectedRangeLabel, setSettingsIndicator, setSettingsVisible, setTableVisible, tableVisible,
   } = ws;
@@ -159,7 +159,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
             onClose={() => setContextMenu(null)}
             onReset={() => {
               if (contextIndicator) {
-                resetIndicatorPaneView(contextIndicator.id);
+                panes.resetView(contextIndicator.id);
                 return;
               }
               selectedRangeRef.current = null;
@@ -167,13 +167,13 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
               setPriceScaleSettings((current) => ({ ...current, autoScale: true }));
               setSelectedRangeLabel('All');
             }}
-            onCopyPrice={copyContextPrice}
-            onPastePrice={pasteContextPrice}
-            onAddAlert={contextMenuAlert}
+            onCopyPrice={contextMenuActions.copyPrice}
+            onPastePrice={contextMenuActions.pastePrice}
+            onAddAlert={contextMenuActions.addAlert}
             onToggleCursor={() => setCursorLocked((value) => !value)}
             onToggleTable={() => setTableVisible((value) => !value)}
             onObjectTree={() => setObjectTreeVisible(true)}
-            onApplyTemplate={applyChartTemplate}
+            onApplyTemplate={contextMenuActions.applyTemplate}
             onRemoveDrawings={() => drawings.removeAll()}
             onRemoveIndicators={onClearIndicators}
             onSettings={() => contextIndicator ? setSettingsIndicator(contextIndicator) : setSettingsVisible(true)}

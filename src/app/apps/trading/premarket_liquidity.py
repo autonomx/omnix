@@ -19,11 +19,9 @@ from .market_evidence import (
 )
 from .providers.alpaca_iex import alpaca_iex_auth_headers
 from .providers.http_runtime import ProviderHttpRuntime
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 
 
-_PREMARKET_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 _BASELINE_LOOKBACK_DAYS = 21
 
 
@@ -50,12 +48,12 @@ def _timestamp(value: Any) -> datetime | None:
 
 
 def _latest_completed_start_clock(evaluation_et: datetime) -> time | None:
-    opening = datetime.combine(evaluation_et.date(), _PREMARKET_OPEN, tzinfo=_ET)
+    opening = datetime.combine(evaluation_et.date(), PREMARKET_OPEN, tzinfo=_ET)
     if evaluation_et < opening + timedelta(minutes=1):
         return None
     latest_start = (evaluation_et - timedelta(minutes=1)).replace(second=0, microsecond=0)
-    if latest_start.time() >= _REGULAR_OPEN:
-        latest_start = datetime.combine(evaluation_et.date(), _REGULAR_OPEN, tzinfo=_ET) - timedelta(minutes=1)
+    if latest_start.time() >= REGULAR_OPEN:
+        latest_start = datetime.combine(evaluation_et.date(), REGULAR_OPEN, tzinfo=_ET) - timedelta(minutes=1)
     return latest_start.time()
 
 
@@ -63,7 +61,7 @@ def _expected_elapsed_minutes(evaluation_et: datetime) -> int:
     cutoff = _latest_completed_start_clock(evaluation_et)
     if cutoff is None:
         return 0
-    start_minutes = _PREMARKET_OPEN.hour * 60 + _PREMARKET_OPEN.minute
+    start_minutes = PREMARKET_OPEN.hour * 60 + PREMARKET_OPEN.minute
     cutoff_minutes = cutoff.hour * 60 + cutoff.minute
     return max(0, cutoff_minutes - start_minutes + 1)
 
@@ -87,7 +85,7 @@ def alpaca_premarket_liquidity_evidence(
         raise ValueError("evaluation_time must be timezone-aware")
     evaluation = evaluation_time.astimezone(timezone.utc)
     evaluation_et = evaluation.astimezone(_ET)
-    if evaluation_et.time() >= _REGULAR_OPEN:
+    if evaluation_et.time() >= REGULAR_OPEN:
         raise ValueError("premarket liquidity evidence must be frozen before 09:30 ET")
 
     active_runtime = runtime or ProviderHttpRuntime(
@@ -97,7 +95,7 @@ def alpaca_premarket_liquidity_evidence(
     headers = alpaca_iex_auth_headers()
     start_local = datetime.combine(
         evaluation_et.date() - timedelta(days=_BASELINE_LOOKBACK_DAYS),
-        _PREMARKET_OPEN,
+        PREMARKET_OPEN,
         tzinfo=_ET,
     )
     raw = _alpaca_bars(
@@ -124,7 +122,7 @@ def alpaca_premarket_liquidity_evidence(
             continue
         local = observed.astimezone(_ET)
         clock = local.timetz().replace(tzinfo=None)
-        if not (_PREMARKET_OPEN <= clock < _REGULAR_OPEN):
+        if not (PREMARKET_OPEN <= clock < REGULAR_OPEN):
             continue
         if cutoff_clock is None or clock > cutoff_clock:
             continue

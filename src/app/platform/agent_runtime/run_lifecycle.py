@@ -5,17 +5,17 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
-from .budget import apply_default_run_limits
+from .run_settlement import fail_run
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentRunSnapshot,
     AgentRunSpec,
+    IssuedRunSpec,
 )
+from .run_issuance import bind_run_workspace, issue_child_spec, issue_run_spec
 from app.observability.agent_logging import log_agent_activity
 from .repository import PostgresAgentRunRepository
-from typing import TYPE_CHECKING, cast
-from .service_core import (
-    _LeaseBoundRunRepository,
-)
+from typing import TYPE_CHECKING
 from .run_repository_queries import PostgresAgentRunQueries
 
 if TYPE_CHECKING:
@@ -62,8 +62,6 @@ def start_with_context(
     remain owned by the Chat subsystem.
     """
 
-    spec = apply_default_run_limits(service._prepare_start_spec(spec))
-
     log_agent_activity(
         "service.start.requested",
         category="service",
@@ -80,8 +78,7 @@ def start_with_context(
         },
     )
     try:
-        service._validate_run_spec_authority(spec)
-        service._validate_evidence_authority(spec)
+        checked = issue_run_spec(service, spec)
     except Exception as exc:
         log_agent_activity(
             "service.start.validation_failed",
@@ -94,7 +91,7 @@ def start_with_context(
         )
         raise
     try:
-        issued = service._prepare_workspace(service._bind_github_repository_authority(spec))
+        issued = bind_run_workspace(service, checked)
     except Exception as exc:
         log_agent_activity(
             "service.start.workspace_failed",
@@ -158,9 +155,7 @@ def submit_start(
     """Persist a queued run and ask the durable worker to prepare it."""
     from .jobs import create_agent_workspace_prepare_request, enqueue_agent_job
 
-    issued = apply_default_run_limits(service._prepare_start_spec(spec))
-    service._validate_run_spec_authority(issued)
-    service._validate_evidence_authority(issued)
+    issued = issue_run_spec(service, spec)
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
         snapshot = repository.create_run(issued)
@@ -183,12 +178,11 @@ def submit_start(
             repository = service.repository_factory(work.connection, service.context)
             current = repository.get_run(issued.run_id)
             if current is not None and current.status == "queued":
-                repository.update_state(
+                fail_run(
+                    repository,
                     issued.run_id,
                     expected_revision=current.revision,
-                    status="failed",
-                    desired_state="cancelled",
-                    last_error=f"agent_start_enqueue_failed:{type(exc).__name__}: {exc}"[:2000],
+                    error=f"agent_start_enqueue_failed:{type(exc).__name__}: {exc}",
                 )
             work.commit()
         raise
@@ -212,17 +206,16 @@ def prepare_workspace_job(
     snapshot = service.get(run_id)
     if snapshot is None:
         raise KeyError(run_id)
-    if snapshot.status in {"completed", "failed", "cancelled"}:
+    if snapshot.status in TERMINAL_RUN_STATUSES:
         return snapshot
-    prepared = service._prepare_workspace(
-        service._bind_github_repository_authority(snapshot.spec)
-    )
+    # A durable spec was issued when its run was created.
+    prepared = bind_run_workspace(service, IssuedRunSpec(snapshot.spec))
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
         current = repository.get_run(run_id)
         if current is None:
             raise KeyError(run_id)
-        if current.status in {"completed", "failed", "cancelled"}:
+        if current.status in TERMINAL_RUN_STATUSES:
             work.rollback()
             return current
         if current.spec != prepared:
@@ -259,7 +252,7 @@ def start_prepared_run(
     snapshot = service.get(run_id)
     if snapshot is None:
         raise KeyError(run_id)
-    if snapshot.status in {"completed", "failed", "cancelled"}:
+    if snapshot.status in TERMINAL_RUN_STATUSES:
         return snapshot
     if service._runtime_owns_run(run_id):
         return snapshot
@@ -277,7 +270,7 @@ def start_prepared_run(
         current = repository.get_run(run_id)
         if current is None:
             raise KeyError(run_id)
-        if current.status in {"completed", "failed", "cancelled"}:
+        if current.status in TERMINAL_RUN_STATUSES:
             work.rollback()
             return current
         lease = repository.acquire_lease(run_id, worker_id=service.worker_id, ttl_seconds=90)
@@ -298,27 +291,6 @@ def start_prepared_run(
     )
 
 
-def start_child(service: AgentRunService, parent_run_id: str, request) -> AgentRunSnapshot:
-    child_spec, _ = service._create_child_start(parent_run_id, request)
-    prepared = service._prepare_workspace(
-        service._bind_github_repository_authority(child_spec)
-    )
-    with service.unit_of_work(service.database) as work:
-        repository = service.repository_factory(work.connection, service.context)
-        current = repository.get_run(child_spec.run_id)
-        if current is None:
-            raise KeyError(child_spec.run_id)
-        if current.spec != prepared:
-            repository.update_spec(
-                child_spec.run_id,
-                expected_revision=current.revision,
-                spec=prepared,
-            )
-        snapshot = service._persist_starting_run(repository, prepared)
-        work.commit()
-    return service._launch_runtime(prepared, snapshot)
-
-
 def submit_child_start(service: AgentRunService, parent_run_id: str, request, *, job_store) -> AgentRunSnapshot:
     """Reserve a child under its parent lock, then defer workspace work."""
     from .jobs import create_agent_workspace_prepare_request, enqueue_agent_job
@@ -335,12 +307,11 @@ def submit_child_start(service: AgentRunService, parent_run_id: str, request, *,
             repository = service.repository_factory(work.connection, service.context)
             current = repository.get_run(child_spec.run_id)
             if current is not None and current.status == "queued":
-                repository.update_state(
+                fail_run(
+                    repository,
                     child_spec.run_id,
                     expected_revision=current.revision,
-                    status="failed",
-                    desired_state="cancelled",
-                    last_error=f"agent_child_enqueue_failed:{type(exc).__name__}: {exc}"[:2000],
+                    error=f"agent_child_enqueue_failed:{type(exc).__name__}: {exc}",
                 )
             work.commit()
         raise
@@ -365,7 +336,7 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
     current = service.get(run_id)
     if current is None:
         raise KeyError(run_id)
-    if current.status in {"completed", "failed", "cancelled"}:
+    if current.status in TERMINAL_RUN_STATUSES:
         return current
     action = None
     with service.unit_of_work(service.database) as work:
@@ -373,7 +344,7 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
         current = raw_repository.get_run(run_id)
         if current is None:
             raise KeyError(run_id)
-        if current.status in {"completed", "failed", "cancelled"}:
+        if current.status in TERMINAL_RUN_STATUSES:
             work.rollback()
             return current
         lease = raw_repository.get_active_lease(run_id)
@@ -384,12 +355,11 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
                 ttl_seconds=90,
             )
             service._remember_lease(lease)
-        repository = _LeaseBoundRunRepository(
-            raw_repository,
+        repository = raw_repository.bound_to_lease(
             worker_id=lease.worker_id,
             lease_token=lease.lease_token,
         )
-        children_terminal, _ = service._children_terminal_state(cast(PostgresAgentRunRepository, repository), run_id)
+        children_terminal, _ = service._children_terminal_state(repository, run_id)
         if not children_terminal:
             work.rollback()
             raise RuntimeError("agent promotion is waiting for child runs to finish")
@@ -397,7 +367,7 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
         if callable(advance_quality):
             action = advance_quality(repository, current)
         else:
-            service._finalize_acceptance(cast(PostgresAgentRunRepository, repository), current)
+            service._finalize_acceptance(repository, current)
         work.commit()
     execute_action = getattr(service, "_execute_quality_action", None)
     if action and callable(execute_action):
@@ -408,14 +378,12 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
     latest = service.get(run_id)
     if latest is None:
         raise KeyError(run_id)
-    if latest.status in {"completed", "failed", "cancelled"}:
+    if latest.status in TERMINAL_RUN_STATUSES:
         service._close_terminal_runtime(run_id)
     return latest
 
 
-def _create_child_start(service: AgentRunService, parent_run_id: str, request):
-    from .subagents import derive_child_spec
-
+def _create_child_start(service: AgentRunService, parent_run_id: str, request) -> tuple[IssuedRunSpec, AgentRunSnapshot]:
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
         locked = PostgresAgentRunQueries(work.connection, service.context).lock_run(parent_run_id).fetchone()
@@ -424,11 +392,9 @@ def _create_child_start(service: AgentRunService, parent_run_id: str, request):
         parent = repository.get_run(parent_run_id)
         if parent is None:
             raise KeyError(parent_run_id)
-        if parent.status in {"completed", "failed", "cancelled"}:
+        if parent.status in TERMINAL_RUN_STATUSES:
             raise ValueError("cannot start child from terminal parent")
-        child_spec = derive_child_spec(parent, request)
-        service._validate_run_spec_authority(child_spec)
-        service._validate_evidence_authority(child_spec)
+        child_spec = issue_child_spec(service, parent, request)
         service._reserve_child_start(repository, parent, child_spec)
         snapshot = repository.create_run(child_spec)
         # The grant row references the child run, so it follows create_run.
@@ -451,7 +417,7 @@ def _reserve_child_start(service: AgentRunService, repository, parent, child_spe
 def _persist_starting_run(
     service: AgentRunService,
     repository: PostgresAgentRunRepository,
-    issued: AgentRunSpec,
+    issued: IssuedRunSpec,
 ) -> AgentRunSnapshot:
     log_agent_activity(
         "service.start.persisting_run",
@@ -518,12 +484,11 @@ def _launch_runtime(
             repository = service.repository_factory(work.connection, service.context)
             current = repository.get_run(issued.run_id)
             if current is not None:
-                repository.update_state(
+                fail_run(
+                    repository,
                     issued.run_id,
                     expected_revision=current.revision,
-                    status="failed",
-                    desired_state="cancelled",
-                    last_error=f"{type(exc).__name__}: {exc}"[:2000],
+                    error=f"{type(exc).__name__}: {exc}",
                 )
             service._maybe_finalize_parent_in_repository(repository, issued.run_id)
             work.commit()

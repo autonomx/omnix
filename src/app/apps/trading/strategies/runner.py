@@ -104,7 +104,7 @@ class StrategyRunner:
 
     @property
     def paper_order_count(self) -> int:
-        return self.owned_configs.host.paper_order_count if self.owned_configs is not None else 0
+        return self.owned_configs.host.metrics.paper_order_count if self.owned_configs is not None else 0
 
     @property
     def owned_config_count(self) -> int:

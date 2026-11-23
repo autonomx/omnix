@@ -23,6 +23,7 @@ import { useTradingAlertMutations } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
 import './TradingAlertsPanel.css';
 import './TradingAlertTooltip.css';
+import { isConflict } from '../../api/errors';
 
 type AlertsTab = 'alerts' | 'log';
 
@@ -242,7 +243,7 @@ export function TradingAlertsPanel({
       setEditor(null);
       setRowMenuId(null);
     } catch (error) {
-      setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
+      setStatus(isConflict(error) ? 'conflict' : 'error');
     }
   };
 

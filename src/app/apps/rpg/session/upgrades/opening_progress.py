@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -14,39 +15,35 @@ def _list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, (list, tuple)) else []
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""
-
-
 def _scenario_entity(session: Mapping[str, Any]) -> dict[str, Any]:
     manifest = _dict(session.get("manifest"))
     state = _dict(session.get("state"))
     published = _dict(state.get("published_world"))
     projection = _dict(session.get("campaign_bible_projection"))
     entities = _dict(projection.get("entities"))
-    scenario_id = _text(manifest.get("scenario_id"))
+    scenario_id = stripped_text(manifest.get("scenario_id"))
     scenario_slug = scenario_id.rsplit(":", 1)[-1]
-    starting_location_id = _text(published.get("starting_location_id"))
+    starting_location_id = stripped_text(published.get("starting_location_id"))
     candidates: list[dict[str, Any]] = []
     for entity_id, raw in entities.items():
         entity = _dict(raw)
-        if _text(entity.get("kind")) != "opening_scenario":
+        if stripped_text(entity.get("kind")) != "opening_scenario":
             continue
-        if scenario_slug and _text(entity_id).rsplit(":", 1)[-1] == scenario_slug:
+        if scenario_slug and stripped_text(entity_id).rsplit(":", 1)[-1] == scenario_slug:
             return entity
-        if _text(entity.get("starting_place_id")) == starting_location_id:
+        if stripped_text(entity.get("starting_place_id")) == starting_location_id:
             candidates.append(entity)
     return candidates[0] if candidates else {}
 
 
 def _opening_quest(scenario: Mapping[str, Any], scenario_id: str) -> dict[str, Any]:
-    title = _text(scenario.get("name")) or "Opening Objective"
-    premise = _text(
+    title = stripped_text(scenario.get("name")) or "Opening Objective"
+    premise = stripped_text(
         scenario.get("premise")
         or scenario.get("short_summary")
         or scenario.get("description")
     )
-    beats = [_text(item) for item in _list(scenario.get("beats")) if _text(item)]
+    beats = [stripped_text(item) for item in _list(scenario.get("beats")) if stripped_text(item)]
     if not beats and premise:
         beats = [premise]
     objectives = [
@@ -82,7 +79,7 @@ def _opening_actions(
     entities: Mapping[str, Any],
 ) -> list[dict[str, str]]:
     actions: list[dict[str, str]] = []
-    beats = [_text(item) for item in _list(scenario.get("beats")) if _text(item)]
+    beats = [stripped_text(item) for item in _list(scenario.get("beats")) if stripped_text(item)]
     for beat in beats[:2]:
         actions.append(
             {
@@ -95,8 +92,8 @@ def _opening_actions(
         scenario.get("initial_actor_ids") or scenario.get("initial_npc_ids")
     )
     for actor_id in actor_ids[:1]:
-        actor = _dict(entities.get(_text(actor_id)))
-        actor_name = _text(actor.get("name"))
+        actor = _dict(entities.get(stripped_text(actor_id)))
+        actor_name = stripped_text(actor.get("name"))
         if actor_name:
             actions.append(
                 {
@@ -129,7 +126,7 @@ def ensure_published_opening_progress(
         return session
 
     manifest = _dict(session.get("manifest"))
-    scenario_id = _text(manifest.get("scenario_id"))
+    scenario_id = stripped_text(manifest.get("scenario_id"))
     if not _list(state.get("quests")):
         state["quests"] = [_opening_quest(scenario, scenario_id)]
 
@@ -144,7 +141,7 @@ def ensure_published_opening_progress(
     if not current_actions or placeholder_actions:
         projection = _dict(session.get("campaign_bible_projection"))
         entities = _dict(projection.get("entities"))
-        location_name = _text(
+        location_name = stripped_text(
             state.get("current_location_name")
             or state.get("current_location")
             or state.get("location")

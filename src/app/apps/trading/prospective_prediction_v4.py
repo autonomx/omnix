@@ -14,19 +14,18 @@ actually knew before its cutoff. Recovered data may repair historical analysis,
 but cannot retroactively enter a frozen live forecast.
 """
 
-import hashlib
-import json
 import math
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256, require_utc
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import FrozenForecast
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 
 
 V4_PREDICTOR_VERSION: Final = "prospective-gap-v4-shadow"
@@ -65,18 +64,6 @@ ConfirmationState = Literal[
 TradeDecision = Literal["LONG", "WATCH", "NO_TRADE"]
 
 
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
-
-
 def _clamp01(value: Decimal) -> Decimal:
     return min(Decimal("1"), max(Decimal("0"), value))
 
@@ -94,7 +81,7 @@ class FinvizFrozenCohort(BaseModel):
     @field_validator("discovery_cutoff_at", "frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def frozen_before_cutoff(self):
@@ -108,7 +95,7 @@ class FinvizFrozenCohort(BaseModel):
 
     @property
     def cohort_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 def finviz_cohort_from_universe(
@@ -123,7 +110,7 @@ def finviz_cohort_from_universe(
         raise ValueError("v4_requires_finviz_universe")
     if limit < 1:
         raise ValueError("cohort_limit_must_be_positive")
-    cutoff = _utc(prediction_cutoff_at)
+    cutoff = require_utc(prediction_cutoff_at)
     if universe.evaluation_time > cutoff:
         raise ValueError("finviz_universe_observed_after_prediction_cutoff")
     symbols = tuple(universe.source_candidate_symbols[:limit])
@@ -161,7 +148,7 @@ class PremarketFeature(BaseModel):
     @field_validator("event_at", "observed_at", "ingested_at", "recovered_at")
     @classmethod
     def aware(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
+        return None if value is None else require_utc(value)
 
     @model_validator(mode="after")
     def consistency(self):
@@ -191,7 +178,7 @@ class PremarketMarketStateSnapshot(BaseModel):
     @field_validator("prediction_cutoff_at", "frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def causal_live_gate(self):
@@ -210,7 +197,7 @@ class PremarketMarketStateSnapshot(BaseModel):
 
     @property
     def snapshot_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
     @property
     def live_feature_fingerprint(self) -> str:
@@ -219,7 +206,7 @@ class PremarketMarketStateSnapshot(BaseModel):
             for feature in self.features
             if feature.available_to_live_forecaster
         ]
-        return _hash(payload)
+        return canonical_sha256(payload)
 
     def live_value(self, name: str) -> Decimal | None:
         for feature in self.features:
@@ -249,10 +236,10 @@ def build_premarket_market_state(
     from the live vector rather than retroactively repairing the forecast.
     """
 
-    cutoff = _utc(prediction_cutoff_at)
-    frozen = _utc(frozen_at)
-    start_et = datetime.combine(cohort.session_date, time(4, 0), tzinfo=_ET).astimezone(timezone.utc)
-    open_et = datetime.combine(cohort.session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    cutoff = require_utc(prediction_cutoff_at)
+    frozen = require_utc(frozen_at)
+    start_et = datetime.combine(cohort.session_date, PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
+    open_et = datetime.combine(cohort.session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     if cutoff > open_et:
         raise ValueError("premarket_snapshot_cutoff_after_regular_open")
     if frozen > cutoff:
@@ -311,7 +298,7 @@ def build_premarket_market_state(
     vwap = cumulative_pv / total_volume if total_volume > 0 else None
     range_size = session_high - session_low
 
-    live_bar_fingerprint = _hash([
+    live_bar_fingerprint = canonical_sha256([
         (
             bar.provider_event_id,
             bar.provider_sequence,
@@ -354,7 +341,7 @@ def build_premarket_market_state(
             quality=quality if available else "MISSING",
             available=available,
             available_to_live_forecaster=available and available_to_live_forecaster,
-            provenance_fingerprint=_hash((live_bar_fingerprint, name, provenance_suffix)),
+            provenance_fingerprint=canonical_sha256((live_bar_fingerprint, name, provenance_suffix)),
         )
 
     gap_pct = (
@@ -385,7 +372,7 @@ def build_premarket_market_state(
 
     catalyst_move: Decimal | None = None
     if first_catalyst_at is not None:
-        catalyst_at = _utc(first_catalyst_at)
+        catalyst_at = require_utc(first_catalyst_at)
         post_catalyst = [bar for bar in live if bar.end_time >= catalyst_at]
         if post_catalyst and post_catalyst[0].open > 0:
             catalyst_move = (
@@ -425,7 +412,7 @@ def build_premarket_market_state(
         quality="RECOVERED" if recovered_bars else "GOOD",
         available=True,
         available_to_live_forecaster=False,
-        provenance_fingerprint=_hash((live_bar_fingerprint, "recovered_after_cutoff", str(recovered_count))),
+        provenance_fingerprint=canonical_sha256((live_bar_fingerprint, "recovered_after_cutoff", str(recovered_count))),
     )
 
     features = (
@@ -494,7 +481,7 @@ class V4ForecastAttempt(BaseModel):
     @field_validator("attempted_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def consistency(self):
@@ -573,11 +560,11 @@ def market_state_from_candidate(
     is unavailable. It never fabricates VWAP/range/acceleration fields.
     """
 
-    cutoff = _utc(prediction_cutoff_at)
-    frozen = _utc(frozen_at)
+    cutoff = require_utc(prediction_cutoff_at)
+    frozen = require_utc(frozen_at)
     if candidate.observed_at is None:
         raise ValueError("candidate_market_state_requires_observed_at")
-    observed = _utc(candidate.observed_at)
+    observed = require_utc(candidate.observed_at)
     if observed > cutoff:
         raise ValueError("candidate_observed_after_prediction_cutoff")
     if frozen > cutoff:
@@ -595,7 +582,7 @@ def market_state_from_candidate(
         evidence_key: str | None = None,
     ) -> PremarketFeature:
         evidence_time = candidate.evidence_observed_at.get(evidence_key or name, observed)
-        evidence_time = _utc(evidence_time)
+        evidence_time = require_utc(evidence_time)
         live = evidence_time <= cutoff
         if value is None:
             quality: FeatureQuality = "MISSING"
@@ -617,7 +604,7 @@ def market_state_from_candidate(
             quality=quality,
             available=value is not None,
             available_to_live_forecaster=value is not None and live,
-            provenance_fingerprint=_hash((
+            provenance_fingerprint=canonical_sha256((
                 candidate.instrument_id,
                 name,
                 str(value),
@@ -825,7 +812,7 @@ class V4ModelSpec(BaseModel):
 
     @property
     def implementation_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 DEFAULT_V4_MODEL_SPEC = V4ModelSpec()
@@ -877,7 +864,7 @@ class CalibratorArtifact(BaseModel):
     @field_validator("training_cutoff_at", "created_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def parameters(self):
@@ -888,7 +875,7 @@ class CalibratorArtifact(BaseModel):
 
     @property
     def calibrator_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 def apply_calibrator(
@@ -897,7 +884,7 @@ def apply_calibrator(
     *,
     forecast_session_date: date,
 ) -> Decimal:
-    session_start = datetime.combine(forecast_session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    session_start = datetime.combine(forecast_session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     if calibrator.training_cutoff_at >= session_start:
         raise ValueError("calibrator_training_cutoff_must_precede_forecast_session")
     raw_probability = _clamp01(raw_probability)
@@ -948,7 +935,7 @@ class FrozenForecastV4(BaseModel):
     @field_validator("frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def ordering(self):
@@ -961,7 +948,7 @@ class FrozenForecastV4(BaseModel):
 
     @property
     def immutable_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 def freeze_v4_forecast(
@@ -991,7 +978,7 @@ def freeze_v4_forecast(
     mae_bucket: Literal["low", "moderate", "high"] | None = None,
     mfe_bucket: Literal["low", "moderate", "high"] | None = None,
 ) -> FrozenForecastV4:
-    frozen_at = _utc(frozen_at)
+    frozen_at = require_utc(frozen_at)
     if frozen_at > market_state.prediction_cutoff_at:
         raise ValueError("v4_forecast_frozen_after_prediction_cutoff")
     if cohort.cohort_id != market_state.cohort_id or cohort.cohort_fingerprint != market_state.cohort_fingerprint:
@@ -1052,7 +1039,7 @@ class ActionabilityDecision(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
@@ -1084,7 +1071,7 @@ class ConfirmationTransitionReceipt(BaseModel):
     @field_validator("transition_at", "latest_finalized_bar_at")
     @classmethod
     def aware(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
+        return None if value is None else require_utc(value)
 
 
 def transition_confirmation(
@@ -1101,9 +1088,9 @@ def transition_confirmation(
 ) -> ConfirmationTransitionReceipt:
     if new_state not in _ALLOWED_TRANSITIONS[previous_state]:
         raise ValueError(f"invalid_confirmation_transition:{previous_state}->{new_state}")
-    transition_at = _utc(transition_at)
+    transition_at = require_utc(transition_at)
     if latest_finalized_bar_at is not None:
-        latest_finalized_bar_at = _utc(latest_finalized_bar_at)
+        latest_finalized_bar_at = require_utc(latest_finalized_bar_at)
         if latest_finalized_bar_at > transition_at:
             raise ValueError("finalized_bar_cannot_be_after_transition")
     if new_state == "CONFIRMED_LONG":
@@ -1196,7 +1183,7 @@ def evaluate_post_open_confirmation(
     if previous_state in {"CONFIRMED_LONG", "INVALIDATED", "EXPIRED"}:
         return None
     cfg = config or PostOpenConfirmationConfig()
-    transition_at = _utc(transition_at)
+    transition_at = require_utc(transition_at)
 
     if not data_quality_ok:
         if previous_state == "SUSPENDED_DATA_QUALITY":
@@ -1367,7 +1354,7 @@ class ExecutionCostInput(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def valid_market(self):
@@ -1492,7 +1479,7 @@ class TradeAuthorizationReceipt(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 def authorize_trade(
@@ -1514,7 +1501,7 @@ def authorize_trade(
 
     if actionability.instrument_id != forecast.instrument_id or confirmation.instrument_id != forecast.instrument_id:
         raise ValueError("authorization_instrument_mismatch")
-    confirmation_fingerprint = _hash(confirmation.model_dump(mode="json"))
+    confirmation_fingerprint = canonical_sha256(confirmation.model_dump(mode="json"))
 
     base: dict[str, Any] = {
         "instrument_id": forecast.instrument_id,

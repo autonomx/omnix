@@ -15,7 +15,6 @@ import httpx  # noqa: E402
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor  # noqa: E402
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
 
-from app.platform.live_speech.metrics import LiveSpeechMetrics  # noqa: E402
 from app.observability import tracing  # noqa: E402
 from app.observability.logging import RequestContextMiddleware, configure_logging  # noqa: E402
 from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span, rpg_pipeline_trace  # noqa: E402
@@ -130,19 +129,6 @@ def test_psycopg_is_instrumented_while_tracing_is_on(exporter):
     assert PsycopgInstrumentor().is_instrumented_by_opentelemetry
     tracing.shutdown_tracing()
     assert not PsycopgInstrumentor().is_instrumented_by_opentelemetry
-
-
-def test_live_speech_stages_become_spans(exporter):
-    metrics = LiveSpeechMetrics()
-    metrics.speech_started_ms = 1_000
-    metrics.mark("speech_stopped")
-    metrics.speech_stopped_ms = 2_000
-    metrics.mark("final_transcript")
-    spans = {span.name: span for span in exporter.get_finished_spans()}
-    assert "live_speech.utterance" in spans
-    transcript = spans["live_speech.transcript"]
-    assert transcript.start_time == 2_000 * 1_000_000
-    assert transcript.end_time >= transcript.start_time
 
 
 def test_gateway_middleware_installs_server_spans(exporter):

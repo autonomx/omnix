@@ -66,6 +66,34 @@ def test_agent_run_state_commands_events_and_leases_are_durable() -> None:
         database.close()
 
 
+def test_a_lease_bound_repository_fences_every_state_change_with_that_lease() -> None:
+    """A job acting for the lease holder writes under its lease; a stale token is refused."""
+    from app.platform.agent_runtime.run_settlement import complete_run
+
+    database = _database()
+    try:
+        context = ensure_local_identity(database)
+        run_id = f"agent-{uuid.uuid4().hex}"
+        spec = AgentRunSpec(run_id=run_id, task="Promote", model=ModelRef(provider_id="test", model_id="model"))
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            created = repository.create_run(spec)
+            lease = repository.acquire_lease(run_id, worker_id="worker-a")
+
+            stale = repository.bound_to_lease(worker_id="worker-a", lease_token="not-the-lease")
+            with pytest.raises(AgentLeaseConflict):
+                stale.update_state(run_id, expected_revision=created.revision, status="running")
+
+            bound = repository.bound_to_lease(worker_id=lease.worker_id, lease_token=lease.lease_token)
+            running = bound.update_state(run_id, expected_revision=created.revision, status="running")
+            completed = complete_run(bound, run_id, expected_revision=running.revision)
+            assert completed.status == "completed"
+            assert completed.worker_id == "worker-a"
+            work.rollback()
+    finally:
+        database.close()
+
+
 def test_recovery_start_failure_fails_run_instead_of_renewing_zombie_lease(monkeypatch) -> None:
     database = _database()
     try:

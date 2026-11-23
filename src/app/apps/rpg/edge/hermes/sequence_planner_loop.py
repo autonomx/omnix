@@ -6,13 +6,10 @@ from typing import Any
 from app.apps.rpg.edge.hermes.sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
 from app.apps.rpg.edge.hermes.sequence_contract import hermes_sequence_contract_validate
 from app.apps.rpg.edge.hermes.sequence_loop_guard import hermes_sequence_loop_guard
+from app.apps.rpg.foundation.safe_values import folded_text
 
 SOURCE = "hermes_sequence_planner_loop"
 UNSUPPORTED_ACTIONS = {"delete", "teleport", "rewrite", "spawn", "grant"}
-
-
-def _text(value: Any) -> str:
-    return value.strip().lower() if isinstance(value, str) else ""
 
 
 def _items(sequence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -38,7 +35,7 @@ def hermes_sequence_planner_loop(raw_sequence: dict[str, Any] | None, context_pa
     refined_items: list[dict[str, Any]] = []
     seen_commands: set[str] = set()
     for item in _items(sequence):
-        statement = _text(item.get("statement"))
+        statement = folded_text(item.get("statement"))
         unsupported = _unsupported(statement)
         if unsupported:
             critique.append({"kind": "unsupported_action", "item_id": item.get("item_id"), "detail": unsupported})

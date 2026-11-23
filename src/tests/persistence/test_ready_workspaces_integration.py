@@ -17,7 +17,7 @@ from app.persistence.identity_service import (
 )
 from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.runtime.tenant_context import pop_tenant, push_tenant
-from tests.conftest_databases import is_disposable_test_database
+from tests.conftest_databases import require_disposable_test_database
 
 pytestmark = [
     pytest.mark.postgres,
@@ -31,7 +31,7 @@ pytestmark = [
 @pytest.fixture
 def database():
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
-    assert is_disposable_test_database(url)
+    require_disposable_test_database(url)
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
     try:
         yield database

@@ -14,6 +14,7 @@ from app.apps.rpg.world.causal_runtime import bootstrap_causal_runtime
 
 from .lore_sections import lore_rows
 from .world_play_sections import PressureLever, WorldPressure, parse_play_sections
+from app.apps.rpg.foundation.safe_values import clean_text
 
 # The bestiary rates threat; the most dangerous creature sets how dangerous a region's roads start.
 _THREAT_SEVERITY = {"low": 25.0, "minor": 25.0, "medium": 40.0, "moderate": 40.0, "high": 55.0, "severe": 55.0,
@@ -22,20 +23,16 @@ _THREAT_SEVERITY = {"low": 25.0, "minor": 25.0, "medium": 40.0, "moderate": 40.0
 _REGION_EFFECT_PER_TICK = 1.0
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def derived_pressures(canon: Mapping[str, Any]) -> tuple[WorldPressure, ...]:
     """Road danger in every region of a world whose bestiary is not empty; nothing for a world without creatures."""
-    creatures = [row for row in lore_rows(canon, "bestiary") if _text(row.get("id"))]
+    creatures = [row for row in lore_rows(canon, "bestiary") if clean_text(row.get("id"))]
     if not creatures:
         return ()
-    severity = max(_THREAT_SEVERITY.get(_text(row.get("threat")).casefold(), 40.0) for row in creatures)
-    names = ", ".join(_text(row.get("name")) or _text(row.get("id")) for row in creatures[:3])
+    severity = max(_THREAT_SEVERITY.get(clean_text(row.get("threat")).casefold(), 40.0) for row in creatures)
+    names = ", ".join(clean_text(row.get("name")) or clean_text(row.get("id")) for row in creatures[:3])
     pressures = []
     for region in lore_rows(canon, "regions"):
-        region_id, name = _text(region.get("id")), _text(region.get("name"))
+        region_id, name = clean_text(region.get("id")), clean_text(region.get("name"))
         if not region_id:
             continue
         pressures.append(
@@ -48,7 +45,7 @@ def derived_pressures(canon: Mapping[str, Any]) -> tuple[WorldPressure, ...]:
                 severity=severity,
                 trend="volatile",
                 levers=tuple(
-                    PressureLever(action=f"defeat:{_text(row.get('id'))}", effect="lower", amount=8.0)
+                    PressureLever(action=f"defeat:{clean_text(row.get('id'))}", effect="lower", amount=8.0)
                     for row in creatures
                 ),
             )

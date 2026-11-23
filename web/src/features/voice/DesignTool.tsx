@@ -5,7 +5,9 @@ import { omnixApiClient } from '../../api/client';
 import { voiceApiClient } from './api/voiceClient';
 import { BlendPanel } from './BlendPanel';
 import { MODELS_QUERY_KEY } from './SpeechModelsPanel';
-import { firstOutput, jobSettled, useJobResult } from './useJobResult';
+import { firstOutput } from './jobOutput';
+import { useJob } from '../../shared/useJob';
+import { isJobSettled } from '../../api/jobs';
 
 const DESIGN_MODEL = 'qwen3-tts-1.7b-voicedesign';
 const MAX_SEED = 2 ** 31 - 1;
@@ -65,8 +67,8 @@ export function DesignTool({ onSaved }: { onSaved: (name: string) => void }) {
   const [saveJob, setSaveJob] = useState('');
   const [names, setNames] = useState<Record<string, string>>({});
   const models = useQuery({ queryKey: MODELS_QUERY_KEY, queryFn: () => voiceApiClient.listSpeechModels(), retry: false });
-  const design = useJobResult(designJob);
-  const saving = useJobResult(saveJob);
+  const design = useJob(designJob);
+  const saving = useJob(saveJob);
   const description = composeDescription(chips, text);
   const model = models.data?.models.find((entry) => entry.id === DESIGN_MODEL);
   const installed = model?.status === 'installed';
@@ -95,11 +97,11 @@ export function DesignTool({ onSaved }: { onSaved: (name: string) => void }) {
     onSuccess: (job) => setSaveJob(job.id),
   });
 
-  const designing = Boolean(designJob) && !jobSettled(design.data);
+  const designing = Boolean(designJob) && !isJobSettled(design.data?.status);
   const candidates = design.data?.status === 'completed'
     ? ((design.data.output_refs ?? []) as unknown as Candidate[]).filter((ref) => typeof ref.audio_url === 'string')
     : [];
-  const savingNow = Boolean(saveJob) && !jobSettled(saving.data);
+  const savingNow = Boolean(saveJob) && !isJobSettled(saving.data?.status);
   const savedName = saving.data?.status === 'completed' ? String(firstOutput(saving.data)?.title ?? '') : '';
   const failure = [design.data, saving.data].find((job) => job?.status === 'failed');
   const failureMessage = failure ? (typeof failure.error?.message === 'string' ? failure.error.message : 'Voice design failed.') : '';

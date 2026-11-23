@@ -25,6 +25,7 @@ from app.platform.voice.export import ExportRequestError, render_export
 from app.platform.voice.loudness import integrated_loudness
 from app.platform.voice.sample_cleanup import clean_sample, shorten_pauses, strictness_for
 from app.providers.exceptions import TtsEngineNotLoaded
+from tests.support.voice_jobs import execute_voice_studio_job
 
 RATE = 24_000
 
@@ -172,7 +173,7 @@ def test_an_engine_mismatch_fails_the_job_without_retries(monkeypatch, stores) -
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", refuse)
     store = _JobStore()
     job = _job("tts.synthesize", {"text": "dave: hi", "provider_id": "tts:fish-s2-pro"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     failure = store.failed[job.id]
     assert failure.code == "engine_not_loaded" and failure.retryable is False
     assert "select it in Voice Studio" in failure.message
@@ -195,7 +196,7 @@ def test_a_render_uses_pauses_delivery_and_effects_on_the_whole_take(monkeypatch
         "audio_effects": ["eq", "reverb", "Noise Reduction"],
         "output_settings": {"volume": -3.0},
     })
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
 
     # Delivery reaches the engine only for the speaker who has one; style stays a label.
@@ -224,7 +225,7 @@ def test_a_render_reports_progress_line_by_line_then_assembly(monkeypatch, store
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
     store = _ProgressStore()
     job = _job("tts.multi_speaker_synthesize", {"text": "dave: one\nbob: two"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert store.progress == [
         (0, 3, "Line 1 of 2 (dave)"),
@@ -242,7 +243,7 @@ def test_a_failing_progress_report_never_fails_the_render(monkeypatch, stores) -
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
     store = _BrokenProgressStore()
     job = _job("tts.synthesize", {"text": "hi"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
 
 
@@ -255,7 +256,7 @@ def test_qwen_never_receives_a_delivery_instruction(monkeypatch, stores) -> None
         "provider_id": "faster-qwen3-tts",
         "character_voice_assignments": [{"speaker": "dave", "delivery_instruction": "shouting"}],
     })
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed
     assert "instruct" not in qwen.calls[0]
 
@@ -265,7 +266,7 @@ def test_old_effect_labels_leave_a_render_unprocessed(monkeypatch, stores) -> No
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
     store = _JobStore()
     job = _job("tts.synthesize", {"text": "hi", "audio_effects": ["Compression", "De-esser"]})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     asset = next(asset for asset in stores.assets.values() if asset.type == AssetType.AUDIO)
     assert asset.metadata["audio_effects"] == []
 
@@ -329,7 +330,7 @@ def test_the_export_job_writes_a_child_asset(stores, tmp_path: Path) -> None:
                                     created_at="2026-10-19T00:00:00+00:00"))
     store = _JobStore()
     job = _job("voice.export", {"asset_id": "audio:take", "format": "mp3", "sample_rate": 44_100})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     exported = next(asset for asset in stores.assets.values() if asset.type == AssetType.EXPORT)
     assert exported.parent_asset_ids == ["audio:take"] and exported.mime_type == "audio/mpeg"
@@ -338,7 +339,7 @@ def test_the_export_job_writes_a_child_asset(stores, tmp_path: Path) -> None:
 def test_a_bad_export_request_is_not_retried(stores) -> None:
     store = _JobStore()
     job = _job("voice.export", {"asset_id": "audio:missing", "format": "mp3"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].retryable is False
 
 
@@ -348,7 +349,7 @@ def test_a_bad_export_request_is_not_retried(stores) -> None:
 def test_transcription_takes_stored_assets_never_server_paths(stores) -> None:
     store = _JobStore()
     job = _job("stt.transcribe", {"source_path": "C:/Windows/win.ini"}, module="stt")
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request"
     assert store.failed[job.id].retryable is False
 
@@ -370,7 +371,7 @@ def test_transcription_saves_a_transcript_only_when_asked(monkeypatch, stores, t
     monkeypatch.setattr("app.providers.service.get_stt_provider", lambda name=None: _Stt())
     store = _JobStore()
     job = _job("stt.transcribe", {"save_transcript": save}, module="stt", input_ref={"asset_id": "audio:clip"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     transcripts = [asset for asset in stores.assets.values() if asset.type == AssetType.TRANSCRIPT]
     assert len(transcripts) == (1 if save else 0)

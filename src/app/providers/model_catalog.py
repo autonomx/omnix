@@ -98,12 +98,10 @@ RICH_UI_CAPABILITIES: dict[tuple[str, str], RichUiLevel] = {
 
 def rich_ui_capability(provider_id: str | None, model_id: str | None) -> RichUiLevel:
     """The model's evaluated generative UI level; "none" for every model not in the table."""
-    provider = (provider_id or "").strip().removeprefix("llm:").casefold()
-    model = (model_id or "").strip()
-    parts = model.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        model = parts[2]
-    return RICH_UI_CAPABILITIES.get((provider, model.casefold()), "none")
+    from app.providers.model_route import ModelRoute
+
+    route = ModelRoute.parse(provider_id, model_id)
+    return RICH_UI_CAPABILITIES.get((route.provider, route.model.casefold()), "none")
 
 
 def clear_model_catalog() -> None:

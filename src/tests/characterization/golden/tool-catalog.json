@@ -7,7 +7,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "818d92cc864605335722050c8f774d040153012e26efbb5b8d539baf6013843f",
+      "definition_hash": "4bedddca178af8b2bbcc6a87002edf1d607e4124faa04f5eb21d60436d3c984d",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -26,7 +26,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -35,7 +36,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "1598863dc0f6f9904a7f8114e10c25d54291f48da62b2949795eebb6c34f400b",
+      "definition_hash": "2ab40bc3e63a2aeb56895f0ec128ff318d80a7d6323038272846ee08bbb3b4d8",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -53,7 +54,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -62,7 +64,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "7c896de05d035f79862635e62e66ead63473dd8d310370f4479619b42bbb40b7",
+      "definition_hash": "3dd44670984ce784372fbde9ff19b7301cac51d9742e6f90fae2ff77797f5468",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -80,7 +82,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -89,7 +92,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "3d0ab5439e6456f1685764ca0afb9461a6a8ce80637a2d7532a6437b1a985e0b",
+      "definition_hash": "39f74f7a9d9fd3aa2a2650982b048f67db9698853361b0ac0210c947060d20e5",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -106,7 +109,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -115,7 +119,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "9b37ff1784b283a0d26f55fe29e2bdd6db506384823292270188cddf7797e816",
+      "definition_hash": "09615485453a7fde05e6f7778c5fbab5a5d91208b0987e4811f9b42512cda865",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -132,7 +136,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -141,7 +146,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "0a0f5340821d5b34b6aced06e29855271df1f1e4329373a2bd686e796752b5e0",
+      "definition_hash": "f26f414c33454920d8d2f7a132cab2071ddbcaeeb652c22d3e425dcd39f7189f",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -156,7 +161,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -165,7 +171,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "e851ca458c4c909f33ecdc4f75d355b6a0f79219328829e2d69b738812b02060",
+      "definition_hash": "fe6629e86d9faf2cb8a5764761ee415a1c293b3cfd22eb61c0bb7ab6e3cbf4db",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -183,7 +189,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -192,7 +199,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "e139a19a703a5f99a4d59e842dd0a88cd3bf832148b62ecc1f4590e63961d9b2",
+      "definition_hash": "f6e009eee54a42aa09b20a44c2d984560a72daaa4faa8f4c31814b4ec6032b79",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -210,7 +217,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -219,7 +227,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "374bd699df95aada5f773ca683d4c3c0f21180d368620c655be64e705d820ae1",
+      "definition_hash": "764f8b16d38baabc6cd7a3cc85892b12944e03d64bb8db36ae2776356e59d972",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -236,7 +244,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -245,7 +254,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "86651fc14b44310e8c7cafdd5a059350b2235b514aa635a54cebf1668e1c0d2d",
+      "definition_hash": "7dab9cff232768819cb0bc92c72a1d3f6a947a3de754635672bff37d595bcfbf",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -260,7 +269,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -269,7 +279,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "163047a5dec892c27c8ef6740091dbd467deebb04dcedefa24ae27bdd2c63ffa",
+      "definition_hash": "bf3452d11e18e0adc896a92c05d7999ecc6ae10f878def2c4b035990fd89aac6",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -286,7 +296,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -295,7 +306,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "e9aec4769a65beae441a6f68b690d4924e88932393647269abcd2370e485931b",
+      "definition_hash": "0de29bdde5086e963968ec44278372d907362aa7d7641b375a1507a66971faaa",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -312,7 +323,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -321,7 +333,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "37eacd455482f51bd982b9c086f14d601678607b01e6cc5ecc31fffe95b219ed",
+      "definition_hash": "0db33192e3e0a68beaf2721f1029da41310d845aff6cc5c38b98a88701e4e13e",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -338,7 +350,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -347,7 +360,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "271e02a6f7f484cfb369944d1ca76e52aab12e03fb21edb79ac3f99532390ad6",
+      "definition_hash": "8a80ed4c2069916908f2023fb728ca0a999236ecfa24035889e612af6a5624be",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -364,7 +377,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -373,7 +387,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "9c2d72de1441bdadf0fce8f62de080d2fd3bdf2aa0858cc16245ff7d9f9abf09",
+      "definition_hash": "e8923a087583afac97e798cface8a38520ed2d09de1d7779256bc557b06fb019",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -391,7 +405,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -400,7 +415,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "75230eb2af5e85a814001360a257310279d9635fef68e5d58a5435400ad248cb",
+      "definition_hash": "9cce951e4e3ed4755858ff57c883154487999876de443a7385ee2c9aaf555b5d",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -418,7 +433,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -427,7 +443,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "123ef6def0704af0b5a7d351c952394506f8a4c9ca835b00a7373483fc3d91ce",
+      "definition_hash": "9d11fa3780b7ac6f04ee334fe3ba5ecd74eec6a36d948090ac49a62595464fe1",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -442,7 +458,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -451,7 +468,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "1db08b47a1ab817c133d04ddfab339d4b6de41b4dbe9d6dcc8d5b4e63bc06688",
+      "definition_hash": "eb385e75f60da6574660a615ee3708e67d3dbc2a7244f12a4e720d0c6b2ca9c5",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -466,7 +483,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": true
     },
     {
       "aliases": [],
@@ -475,7 +493,7 @@
       "audited": true,
       "category": "productivity",
       "credential_required": true,
-      "definition_hash": "d8d00fc1e3bda36725aaeb3614959086ffd02f8bc0c4bcdcd36ba17f5f418231",
+      "definition_hash": "3a060225d25b0d12a3d5e6b7b9ebed7cc3bcb794d2e7bcb514486a57e41871a3",
       "destructive": false,
       "effect": "create",
       "enabled": true,
@@ -499,7 +517,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -508,7 +527,7 @@
       "audited": true,
       "category": "productivity",
       "credential_required": true,
-      "definition_hash": "09a711ae74f6a19d10cdfeb97fc26e13647a2a70e630c4c5a52d0f912fd7024e",
+      "definition_hash": "573c0256f0f4333cfe65bd66d88db001b47f58ec2c3f5853d6d51a99fbfea651",
       "destructive": true,
       "effect": "delete",
       "enabled": true,
@@ -523,7 +542,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "high",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -532,7 +552,7 @@
       "audited": true,
       "category": "productivity",
       "credential_required": true,
-      "definition_hash": "a21d9a45f00fbaefee2a4b2b49104af4e6d8d7be79bab878ff20fb0e95735dde",
+      "definition_hash": "1a2a5e3943e4ef9feb8c01e0a4632d705a63f06638db6ceac62298ca0ef3ed9e",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -551,7 +571,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -560,7 +581,7 @@
       "audited": true,
       "category": "productivity",
       "credential_required": true,
-      "definition_hash": "5d3224016291459cab2f25b98bfc5e0ec55b75796475757c8845b4224c230599",
+      "definition_hash": "7501f4f95068bcabad6d56badb8d0a1c53dc8d80929f253ca2e8fdc3dd6d924d",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -575,7 +596,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -584,7 +606,7 @@
       "audited": true,
       "category": "productivity",
       "credential_required": true,
-      "definition_hash": "ca8956d734d9028499cb3e98ec235906beed30fb5bbadd923bf830b3af8c1a4e",
+      "definition_hash": "ba9251f8869fe99f3930f0cac3dae5bae7213729bdab8d3354bf76108a5857d3",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -599,7 +621,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -608,7 +631,7 @@
       "audited": true,
       "category": "development",
       "credential_required": true,
-      "definition_hash": "d83c20efc029b70e0ce46c45dc1b45ab6ab28d8c3bf53e7b17ecabd25bed1c5e",
+      "definition_hash": "0c86b51629e845c4fbbfeb824d309e0200d340d4d71e3ab2e00bdd1fa219dbb7",
       "destructive": false,
       "effect": "create",
       "enabled": true,
@@ -623,7 +646,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -632,7 +656,7 @@
       "audited": true,
       "category": "development",
       "credential_required": true,
-      "definition_hash": "d5e674956dc64ba4fd1c2deba8a758eb2cbd1d65b89bbf44c08b7e5bde6c51ca",
+      "definition_hash": "720320233744d4a03e341a6fd80cab5d9473aeee0cd88f611c9c2fd3a94270bf",
       "destructive": false,
       "effect": "create",
       "enabled": true,
@@ -647,7 +671,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -656,7 +681,7 @@
       "audited": true,
       "category": "development",
       "credential_required": true,
-      "definition_hash": "be5304f4cd3106e0a68a329c9f6d3123225e28d6bca7c7d79de1de3c2520bb93",
+      "definition_hash": "d7aef32bb8c510d86bbdb9d826da5a389b07ea6b88d9f9eea09bae37b6bd525e",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -671,7 +696,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -680,7 +706,7 @@
       "audited": true,
       "category": "development",
       "credential_required": true,
-      "definition_hash": "cfffbc32e15a7c630550071b7a71cef714072be18f81200fba61d5b41572d3c9",
+      "definition_hash": "02bf164b64e9b93a9f793f70545e7791dfe65cd4b613c2b29874a19e15a5a749",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -695,7 +721,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "high",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -704,7 +731,7 @@
       "audited": true,
       "category": "development",
       "credential_required": true,
-      "definition_hash": "d611a848a168184fec4a222125a6eb3ee063144cfb555adf8bef4b8cd493bd9e",
+      "definition_hash": "9c7e4fdb4430136445a309ab2c88d2527a4912964d37931eaf0cf8d7113da106",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -719,7 +746,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -728,7 +756,7 @@
       "audited": true,
       "category": "development",
       "credential_required": true,
-      "definition_hash": "3898c25b0aed08250e4b47cf114ae1040870bf6346e5f4ece23476cb09bf21f3",
+      "definition_hash": "08e9bfd8d4deed9d39f92e5151261308c0d76567fa8ab541b05b83a38d967974",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -743,7 +771,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -752,7 +781,7 @@
       "audited": true,
       "category": "communication",
       "credential_required": true,
-      "definition_hash": "c3436c32130033c34966f3a0e7833484ea08133c0b8b2e8453d7eed9a50a4cec",
+      "definition_hash": "74d77f2fbd75c05fcdd5f9d3df4ba99c1b996f2b6c2607839441270672ecb737",
       "destructive": false,
       "effect": "create",
       "enabled": true,
@@ -767,7 +796,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -776,7 +806,7 @@
       "audited": true,
       "category": "communication",
       "credential_required": true,
-      "definition_hash": "cebe103aa0666512c8d18c71a68e822991500f5eda8418ba0121ddadd3782e5d",
+      "definition_hash": "c0c99bbe2d89feb95031a3df3af793136fd0ef7bf7186e1249034ffb5c004916",
       "destructive": true,
       "effect": "delete",
       "enabled": false,
@@ -791,7 +821,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "high",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -800,7 +831,7 @@
       "audited": true,
       "category": "communication",
       "credential_required": true,
-      "definition_hash": "7a90fb79b429be0724566ef8587dcb40eba644aff406bf29bfa08810f2129600",
+      "definition_hash": "e32eadfb5055a0f6f6692f97f6ded5e79a6f035c2963793c3a081110e7b8871a",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -815,7 +846,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -824,7 +856,7 @@
       "audited": true,
       "category": "communication",
       "credential_required": true,
-      "definition_hash": "42dbb0cdae238746139839055460f961a12736f11766117213451328fa1e6893",
+      "definition_hash": "401107bfe104a982cc82cc44acc3e1fd55ce171a0cf548324d3fd35a06dbb7f0",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -839,7 +871,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "high",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -850,7 +883,7 @@
       "audited": true,
       "category": "platform",
       "credential_required": false,
-      "definition_hash": "346095170cefc328dbaa98d2a15672fdfc629a6c5a0d2e7318ecd4a0fc45d9ff",
+      "definition_hash": "bc38ba9b7366f5e01c3b8d594278fea2097065ec498cdc45be2f50dcec920d2c",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -865,7 +898,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -876,7 +910,7 @@
       "audited": true,
       "category": "platform",
       "credential_required": false,
-      "definition_hash": "4a70de825ec8d5d153698736dc2ee8dd752e2ca1fa396cf21055e6f5564f31fa",
+      "definition_hash": "3d2a34990aef28ecc76c85b0838bd6c297b3968ff5a83faf2931cf56ef5f9f6e",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -891,7 +925,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -900,7 +935,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "cd3b17e9d978a69bfb55403867df01fe4aa4c14328f3261391938012262992bb",
+      "definition_hash": "2df96e309ddeab8efb4ad63650a0d2e396d01a8b6c914636fe667a5632016492",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -917,7 +952,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "high",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -926,7 +962,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "5bbc2d44c3d862047ac9b3cd834ec171f335e0a5c20471daa1b95652fc43ebd9",
+      "definition_hash": "39abea457a26a77fdfa0191aa75b1193960146b051b34b55e01da25f04dab653",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -943,7 +979,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -952,7 +989,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "1c92ec49391ce19e531de8ba866732c1496988205499c350e75ba78bba488754",
+      "definition_hash": "a10d3e7c4022aa176e8ffccee79d9c502888052c507414323a3f0a602a2e373d",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -969,7 +1006,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -978,7 +1016,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "29809d3a4273083ccc246cd0332869d7db814f0f7959e6c50d8ee8881af9c22e",
+      "definition_hash": "e169eeed541cb49949b4d8498da5b373e3dd865f35ab9d73c3c43ca1043a2b80",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -993,7 +1031,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1002,7 +1041,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "dee2994c618c7b62273f880ef17debeafa752e5edcabe48352cbedeffa130d4a",
+      "definition_hash": "d017ebed53e2dace5b8987eed7a9591530a063d37b2b91f6b3636703dfc8a334",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -1020,7 +1059,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -1031,7 +1071,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "e8cf279f3752cef92ba194ddedefb83feca44dc84ce879853b9bd6aea700c2dc",
+      "definition_hash": "c355bd0ca26059a3ef9dfc42c60f9c5a0727a65ee6848cdeb100555e68d72f2a",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1046,7 +1086,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -1057,7 +1098,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "5882e58cf16e07773445161ba4403923b71b05631580eb405e2575c2481f7825",
+      "definition_hash": "6b3bb0ee394c9e9a421614621261745db63cdb603c469a1e70edd8717af1ba2d",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1072,7 +1113,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -1083,7 +1125,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "6912c6bc28298d166924c6498a7d54719be0c973573863d4941e153620f21f61",
+      "definition_hash": "97c5c050c7801533554c942ad5874defb47f68198c3ef0306f5199ccdbec6ae2",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1100,7 +1142,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -1111,7 +1154,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "9abdf1a4bb6bda5ed00f8316741d69004b70d2d6da87aeb1433e03f02d5f0cbb",
+      "definition_hash": "101ac8e28a33acdbfca9f0dffb4754aeb044f586b1c2d476d113615d12ba6e5a",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -1128,7 +1171,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [
@@ -1139,7 +1183,7 @@
       "audited": true,
       "category": "smart-home",
       "credential_required": false,
-      "definition_hash": "f2ed21d708fd4d397c5052b309d8f4f4c76c21c9a2bedd19279c3ca8823da9b0",
+      "definition_hash": "4bba1ef4cac9872358b87efe0f93dede4fedf0e098a8ea324b4c6b55dd1dee1b",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -1156,7 +1200,8 @@
       "requires_confirmation": true,
       "requires_connection": true,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1165,7 +1210,7 @@
       "audited": true,
       "category": "trading",
       "credential_required": true,
-      "definition_hash": "085fabf467d78630540c8d831cf9ec9ca4a5a07e51b49101a037fd869d51f163",
+      "definition_hash": "ada287737471fd9e224e2212398be6b14db95e058b8cbd1c751348b82ed3ea99",
       "destructive": false,
       "effect": "read",
       "enabled": false,
@@ -1180,7 +1225,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1189,7 +1235,7 @@
       "audited": true,
       "category": "research",
       "credential_required": false,
-      "definition_hash": "18188b69c83d5d48682994db79db9bd53eb3ec225b3426286a54b63f6d99b824",
+      "definition_hash": "4027099677cf463b9cc0494495ebedbb889defba82124540e6d0be6d6c3db269",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1208,7 +1254,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1217,7 +1264,7 @@
       "audited": true,
       "category": "trading",
       "credential_required": true,
-      "definition_hash": "8f0e539518f8e6a321655ea9f64eb77aee2938ec7e36947b09f11d5da01382e0",
+      "definition_hash": "6bd820044ffde5559eb2fe5d9ea74511a4cbb449d1072b043c412afe3935b4f8",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1234,7 +1281,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1243,7 +1291,7 @@
       "audited": true,
       "category": "research",
       "credential_required": false,
-      "definition_hash": "358fc7a5f1e3db63ea11c7c75dd088311be3d0e25e9cea40a2463e29ee9ec988",
+      "definition_hash": "fda975d09ecf34f394fbb0a1c09433f2b8f93ba4f990b999d9579d4091aaf2ac",
       "destructive": false,
       "effect": "read",
       "enabled": false,
@@ -1260,7 +1308,8 @@
       "requires_confirmation": false,
       "requires_connection": true,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1269,7 +1318,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "ed4526ae9a922b40263fed29565e83006a4577bda960098a6e74bef4779d828e",
+      "definition_hash": "098ecf57412b39b8be81036f59097921f14e189052207276a6fc262bb22f05c0",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -1286,7 +1335,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "high",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1295,7 +1345,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "e166f75703335d14a8d06633b813e396075dcb5fb4aa8e27b7c06d2b946f6b0e",
+      "definition_hash": "2c71a3efb6a889348b955d12bd79c187fa6f820b08c03772bc17ddfc55258365",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -1312,7 +1362,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1321,7 +1372,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "033214d85c9a412ddd5bfeca5b57fd9e23a941fe58a2456ece5a96c6633ff90f",
+      "definition_hash": "a39f0cfd762e2752dc930fc78f1f95ceb84633cfe62dea76e91c03429c5ea29b",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1336,7 +1387,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1345,7 +1397,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "44c7f054ed1d30905cec2a20aae75dd1bd09b8f463d445ef5554abd21546f957",
+      "definition_hash": "327b5d605a2ff1a7496ea15ae432469af68a5ec2a7903f41a791aa9297019bbf",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1360,7 +1412,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1369,7 +1422,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "21dd9ca6a773ea86f1352e3cc03c5ddf8549d50490a6d996c18bf9e38b97b542",
+      "definition_hash": "4e0de7f37d607f760ff8c46eb28fe65a96d98951f932d40b370cc0d01b8e06a0",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1386,7 +1439,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1395,7 +1449,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "947020f38926704e97ab795a7fa60b8ae0494a07da3837229d8120c6742d4287",
+      "definition_hash": "d2c5d7c74eb8cd8323bb558c97c51c770c427ac20c8b050f741a5a058acd1772",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1412,7 +1466,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1421,7 +1476,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "7115172538c645d1f73234c045c3aca08695e4504beb7586fcf267e83106b4c4",
+      "definition_hash": "918bc6bb079dece386638c9c4b810d866e75e63bfc8edff69d284665d3f20dce",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1436,7 +1491,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1445,7 +1501,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "94237ab1e83204e3faeef833a59ede7a0ebc79aace9641f3f8d312f5387e2920",
+      "definition_hash": "1651bad2033a5f17977e3129df434f187167fad480f27821e0f68cd401095267",
       "destructive": false,
       "effect": "read",
       "enabled": true,
@@ -1463,7 +1519,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "low",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1472,7 +1529,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "10a4ad085464b6665b33b762af4e66dda9db49d344f1c1107be92db593de0b4a",
+      "definition_hash": "60cae4c206039fe48622d6308fbffee38622ec594e927b2cc02d8802571da94e",
       "destructive": false,
       "effect": "execute",
       "enabled": true,
@@ -1489,7 +1546,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     },
     {
       "aliases": [],
@@ -1498,7 +1556,7 @@
       "audited": true,
       "category": "development",
       "credential_required": false,
-      "definition_hash": "654998ac2855285911dd97df8590871898886dfec0f277705ec8cff389e9626c",
+      "definition_hash": "f0ee129c9494cbcd6c58930cc62d70324b24724bedd6588fee1dd95748a83804",
       "destructive": false,
       "effect": "mutate",
       "enabled": true,
@@ -1515,7 +1573,8 @@
       "requires_confirmation": false,
       "requires_connection": false,
       "risk": "medium",
-      "scope_type": "workspace"
+      "scope_type": "workspace",
+      "session_scoped": false
     }
   ],
   "trading_disabled": [

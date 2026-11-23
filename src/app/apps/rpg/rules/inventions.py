@@ -261,7 +261,7 @@ def _invent(document: Mapping[str, Any], payload: Mapping[str, Any], *, limited:
             simulation, entry_id, _l(site.get("rooms")), boss_id=_s(site.get("boss_id")),
             reward_item_id=_reward(simulation, entry_id))}}
     provenance = {"campaign_id": _campaign(document), "source": "game_master",
-                  "turn": int(_d(document.get("state")).get("turn_count") or 0), "reason": _s(payload.get("reason"))[:500]}
+                  "turn": _sections.turn_count_of(document), "reason": _s(payload.get("reason"))[:500]}
     changes: list[StateChange] = [InventionAdded(entry_id=entry_id, family=family, name=name, row=row, play=played,  # type: ignore[arg-type]
                                                  provenance=provenance)]
     changes += [FactSet(fact_id=_s(row.get("fact")), value=row.get("value", True), source=entry_id, known=False)

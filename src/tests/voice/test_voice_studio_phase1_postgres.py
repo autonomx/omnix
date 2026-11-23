@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
+from tests.support.voice_jobs import execute_voice_studio_job
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -456,7 +457,7 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
             "id": job_id, "module": "voice", "type": job_type, "status": "running", "resource_class": "gpu:tts",
             "input_payload": payload, "created_at": "2026-10-20T00:00:00+00:00", "updated_at": "2026-10-20T00:00:00+00:00",
         })
-        voice_jobs.execute_voice_studio_job(store, job)
+        execute_voice_studio_job(store, job)
         assert job_id in store.completed
 
     script = scripts.save_script(title="Takes", text="dave: one\nbob: two")

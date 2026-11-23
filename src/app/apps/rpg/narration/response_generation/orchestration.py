@@ -19,6 +19,7 @@ from .contracts import (
 from .eligibility import EligibilityPolicy, eligibility_reasons
 from .quality_gate import QualityGate, QualityReport
 from .renderer import ResponseRenderer
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 class CandidateAdapter(Protocol):
@@ -321,12 +322,12 @@ def semantic_plan_from_legacy_payload(
     mode: ResponseMode,
 ) -> SemanticResponsePlan:
     sections: list[SemanticSection] = []
-    narration = _text(payload.get("narration"))
-    action = _text(payload.get("action"))
-    result = _text(payload.get("result_text") or payload.get("result"))
+    narration = clean_text(payload.get("narration"))
+    action = clean_text(payload.get("action"))
+    result = clean_text(payload.get("result_text") or payload.get("result"))
     npc = _mapping(payload.get("npc"))
-    npc_line = _text(npc.get("line") or payload.get("npc_line"))
-    speaker = _text(npc.get("speaker") or payload.get("speaker"))
+    npc_line = clean_text(npc.get("line") or payload.get("npc_line"))
+    speaker = clean_text(npc.get("speaker") or payload.get("speaker"))
 
     if narration:
         sections.append(
@@ -366,7 +367,7 @@ def semantic_plan_from_legacy_payload(
             )
         )
 
-    forward_strategy = _text(payload.get("forward_strategy")) or "answer_directly"
+    forward_strategy = clean_text(payload.get("forward_strategy")) or "answer_directly"
     agency_effect = _coerce_agency(payload.get("agency_effect"))
     reversibility = _coerce_reversibility(payload.get("reversibility"))
     return SemanticResponsePlan(
@@ -452,5 +453,3 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()

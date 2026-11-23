@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from app.config.env import env_str as _env_str
+from app.persistence.runtime import is_legacy_test_persistence
 
 logger = logging.getLogger(__name__)
 
@@ -1249,7 +1250,7 @@ class IbkrRuntime:
 
     @staticmethod
     def _historical_min_interval_seconds() -> float:
-        if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+        if is_legacy_test_persistence():
             return 0.0
         return max(0.0, float(_env_str("OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS", "0.25")))
 

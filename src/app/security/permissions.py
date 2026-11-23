@@ -170,7 +170,6 @@ _KERNEL_FEATURE_DEFAULTS: dict[str, tuple[str, str]] = {
     "desktop_companion": ("companion:read", "companion:write"),
     "hermes": ("assistant:read", "assistant:write"),
     "image": ("image:read", "image:generate"),
-    "live_speech": ("voice:read", "voice:write"),
     "live_voice": ("voice:read", "voice:write"),
     "research": ("research:read", "research:run"),
     "rpg": ("rpg:read", "rpg:play"),

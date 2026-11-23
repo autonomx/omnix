@@ -16,17 +16,11 @@ _DISABLED = {"", "none", "off", "disabled"}
 
 def _provider_reasoning_effort(provider_id: str) -> str | None:
     try:
+        from app.providers.base import configured_reasoning_effort
+        from app.providers.catalog import provider_id_of
         from app.providers.service import get_provider
 
-        provider = get_provider(str(provider_id or "").removeprefix("llm:"))
-        config = getattr(provider, "config", None)
-        extra = getattr(config, "extra_params", None)
-        if isinstance(extra, dict):
-            value = str(extra.get("reasoning_effort") or "").strip()
-            if value:
-                return value
-        value = str(getattr(provider, "reasoning_effort", "") or "").strip()
-        return value or None
+        return configured_reasoning_effort(get_provider(provider_id_of(provider_id))) or None
     except Exception as exc:
         log_recovered_exception("provider reasoning capability lookup", exc, level="DEBUG")
         return None

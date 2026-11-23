@@ -5,6 +5,8 @@ import math
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, mapping as _mapping, rows as _rows
 
 _DEFAULT_POLICY = {
     "dominant_term_ratio": 0.5,
@@ -132,39 +134,9 @@ class NamingPortfolioIssue:
         }
 
 
-class NamingPortfolioCompilationError(ValueError):
-    def __init__(self, issues: Sequence[NamingPortfolioIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.code}:{issue.token}:{issue.count}:{issue.entity_ratio:.4f}"
-            for issue in self.issues
-        )
-        super().__init__("naming_portfolio_integrity_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "naming_portfolio_integrity_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
+class NamingPortfolioCompilationError(GraphAuditError):
+    code = "naming_portfolio_integrity_failed"
+    fields = ("code", "token", "count", "entity_ratio:.4f")
 
 
 def _policy(topic_graph: Mapping[str, Any] | None) -> dict[str, Any]:

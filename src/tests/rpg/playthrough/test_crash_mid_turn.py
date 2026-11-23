@@ -55,7 +55,7 @@ def test_a_crash_at_any_step_leaves_the_turn_or_none_and_a_retry_commits_it_once
     from app.apps.rpg.foundation.persistence.foreground_submission_repository import (
         PostgresForegroundSubmissionRepository,
     )
-    from app.apps.rpg.session import interaction_stages
+    from app.apps.rpg.session import committed_narration, interaction_stages
 
     play = launch("aurelia")
     play.turn("look around")
@@ -65,7 +65,7 @@ def test_a_crash_at_any_step_leaves_the_turn_or_none_and_a_retry_commits_it_once
         if stop == "inside the transaction":
             crashing.setattr(PostgresForegroundSubmissionRepository, "complete", _crash_in_the_transaction)
         else:
-            for module in (turn_pipeline, interaction_stages):
+            for module in (turn_pipeline, interaction_stages, committed_narration):
                 crashing.setattr(module, "rpg_pipeline_span", _crashing_at(stop, module.rpg_pipeline_span))
         with pytest.raises(_Crash):
             play.post_turn("wait", submission_id="crash-1")

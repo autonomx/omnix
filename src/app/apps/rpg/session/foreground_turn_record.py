@@ -9,6 +9,7 @@ from app.apps.rpg.narration.presentation.turn_response_budget import (
     encoded_size_bytes,
     enforce_turn_response_budget,
 )
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 FOREGROUND_TURN_RECORD_VERSION = "rpg_foreground_turn_record_v1"
 FOREGROUND_TURN_RECORD_MAX_BYTES = 20_000
@@ -124,8 +125,8 @@ def _failed_record(
         "record_version": FOREGROUND_TURN_RECORD_VERSION,
         "session_id": session_id,
         "submission_id": submission_id,
-        "interaction_id": _text(result.get("interaction_id")) or None,
-        "turn_id": _text(result.get("turn_id")) or None,
+        "interaction_id": stripped_text(result.get("interaction_id")) or None,
+        "turn_id": stripped_text(result.get("turn_id")) or None,
         "error": error,
         "visible_response": {
             "format_version": "rpg_visible_response_v1",
@@ -138,5 +139,3 @@ def _failed_record(
     }
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""

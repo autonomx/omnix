@@ -57,4 +57,4 @@ An interrupted concurrent build leaves an INVALID index; drop it with `DROP INDE
 
 ## Database roles
 
-`OMNIX_DATABASE_URL` is the runtime DML role. `OMNIX_MIGRATION_DATABASE_URL` is the DDL/migration role. Local single-role development remains supported. Production deployments can require separation with `OMNIX_REQUIRE_ROLE_SEPARATION=true`.
+`OMNIX_DATABASE_URL` is the runtime DML role. `OMNIX_MIGRATION_DATABASE_URL` is the DDL/migration role. Local single-role development remains supported. Nothing enforces the separation at startup: an earlier `OMNIX_REQUIRE_ROLE_SEPARATION` setting was never read by any check and has been removed (2026-11-22). A deployment that needs separation must configure the two roles itself.

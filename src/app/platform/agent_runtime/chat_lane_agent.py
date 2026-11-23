@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str
+from app.providers.base import configured_reasoning_effort
+from app.providers.catalog import provider_id_of
+from app.providers.model_route import ModelRoute
 from dataclasses import dataclass
 import hashlib
 import os
@@ -17,6 +20,7 @@ from .active_objective import (
     objective_continuity_candidate,
 )
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentApprovalPolicy,
     AgentRunCommand,
     AgentRunSpec,
@@ -48,7 +52,6 @@ from .turn_plan import (
 from .service import AgentRunService
 from .chat_lane_common import (
     GeneralizedChatResult,
-    _TERMINAL_AGENT,
 )
 
 
@@ -255,14 +258,8 @@ def _resolve_agent_model_route(
     configured default model.
     """
 
-    provider = str(provider_id or "").strip().removeprefix("llm:")
-    model = str(model_id or "").strip()
-    if model.startswith("llm:"):
-        parts = model.split(":", 2)
-        if len(parts) == 3 and parts[1] and parts[2]:
-            _, model_provider, selected_model = parts
-            provider = model_provider
-            model = selected_model
+    route = ModelRoute.parse(provider_id, model_id).model_led()
+    provider, model = route.provider, route.model
     if provider and not model:
         try:
             configured_provider = get_provider(provider)
@@ -283,16 +280,10 @@ def _agent_reasoning_effort(provider_id: str | None = None) -> str:
     configured = env_str("OMNIX_AGENT_REASONING_EFFORT", "").strip()
     if configured:
         return _DEFAULT_AGENT_REASONING_EFFORT if configured.casefold() in {"off", "disabled"} else configured
-    provider_key = str(provider_id or "").strip().removeprefix("llm:")
+    provider_key = provider_id_of(provider_id)
     if provider_key:
         try:
-            provider = get_provider(provider_key)
-            value = str(getattr(provider, "reasoning_effort", "") or "").strip()
-            if not value:
-                config = getattr(provider, "config", None)
-                extra = getattr(config, "extra_params", None)
-                if isinstance(extra, dict):
-                    value = str(extra.get("reasoning_effort") or "").strip()
+            value = configured_reasoning_effort(get_provider(provider_key))
             if value:
                 return value
         except Exception as exc:
@@ -351,7 +342,7 @@ def _agent_result(
             error=exc,
         )
     latest = _latest_agent_run(service, session)
-    active = latest if latest is not None and latest.status not in _TERMINAL_AGENT else None
+    active = latest if latest is not None and latest.status not in TERMINAL_RUN_STATUSES else None
     force_new_agent = _replaces_active_run(turn_plan)
     if active is not None and not force_new_agent:
         return _steer_active_agent(
@@ -1114,7 +1105,7 @@ def _agent_request_rejection(
 
 def _latest_active_agent_run(service: Any, session: Any):
     snapshot = _latest_agent_run(service, session)
-    if snapshot is not None and snapshot.status not in _TERMINAL_AGENT:
+    if snapshot is not None and snapshot.status not in TERMINAL_RUN_STATUSES:
         return snapshot
     return None
 

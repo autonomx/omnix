@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { audiobookApi } from './audiobookApi';
 import type { AudiobookJobView, BookPerformance, ProjectDetail } from './audiobookTypes';
+import { isJobActive } from '../../api/jobs';
 
 const DEFAULT_LEVELS = { stability: 0.75, style: 0.35 };
-const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 type Level = keyof typeof DEFAULT_LEVELS;
 
 const LEVEL_LABELS: Record<Level, { label: string; hint: string }> = {
@@ -31,7 +31,7 @@ export function AudiobookPerformancePanel({ project, busy, action }: {
   useEffect(() => setDraft(JSON.parse(savedKey) as BookPerformance), [savedKey, project.id]);
   const dirty = JSON.stringify(draft) !== savedKey;
   const directionJob = project.pipeline_jobs?.find((job) => job.type === 'audiobook.direct-performance');
-  const directing = Boolean(directionJob && ACTIVE_STATUSES.has(directionJob.status));
+  const directing = Boolean(directionJob && isJobActive(directionJob.status));
   const castSpeakers = project.speakers.filter((speaker) => speaker.status === 'active');
 
   function setBookLevel(level: Level, value: number) {
@@ -104,7 +104,7 @@ function DirectionStatus({ job }: { job: AudiobookJobView | undefined }) {
   if (!job) return null;
   const progress = job.progress ?? {};
   if (job.status === 'failed') return <p className="audiobook-hint" role="alert">Directing failed: {job.error?.message ?? 'unknown error'}</p>;
-  if (ACTIVE_STATUSES.has(job.status)) {
+  if (isJobActive(job.status)) {
     return <p className="audiobook-hint" role="status">{progress.message ?? 'Waiting to start'}{progress.total ? ` · chapter ${Math.min((progress.current ?? 0) + 1, progress.total)} of ${progress.total}` : ''}</p>;
   }
   if (job.status !== 'completed') return null;

@@ -19,7 +19,7 @@ from app.platform.agent_runtime.isolation import (
 )
 from app.platform.agent_runtime.local_workspace import LocalWorkspaceSelectionError, validate_local_workspace_root
 from app.platform.agent_runtime.pi_runtime import PiRpcSession
-from app.platform.agent_runtime.pi_runtime_core import build_agent_environment
+from app.platform.agent_runtime.pi_runtime import build_agent_environment
 from tests.agent_runtime.test_pi_runtime import _IdleProcess
 
 

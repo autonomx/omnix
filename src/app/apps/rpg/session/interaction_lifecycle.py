@@ -6,6 +6,7 @@ from app.runtime.clock import utc_now
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 INTERACTION_LIFECYCLE_VERSION = "rpg_interaction_lifecycle_v1"
 
@@ -16,7 +17,7 @@ def initialize_interaction_lifecycle(
 ) -> dict[str, Any]:
     """Attach one lifecycle record to an already committed interaction."""
 
-    interaction_id = _text(result.get("interaction_id"))
+    interaction_id = stripped_text(result.get("interaction_id"))
     if not interaction_id:
         return {}
     turn_id = _first_text(result, "turn_id")
@@ -25,7 +26,7 @@ def initialize_interaction_lifecycle(
         "format_version": INTERACTION_LIFECYCLE_VERSION,
         "interaction_id": interaction_id,
         "turn_id": turn_id,
-        "submission_id": _text(result.get("submission_id")),
+        "submission_id": stripped_text(result.get("submission_id")),
         "stateful": stateful,
         "status": "runtime_resolved",
         "accepted_at": _utc_now(),
@@ -60,7 +61,7 @@ def _compact_authoritative_response(result: dict[str, Any]) -> dict[str, Any]:
 
 def _first_text(result: dict[str, Any], *keys: str) -> str:
     value = _first_value(result, *keys)
-    return _text(value)
+    return stripped_text(value)
 
 
 def _first_value(result: dict[str, Any], *keys: str) -> Any:
@@ -79,10 +80,6 @@ def _first_bool(result: dict[str, Any], key: str) -> bool | None:
 
 def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
-
-
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""
 
 
 def _utc_now() -> str:

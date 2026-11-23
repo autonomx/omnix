@@ -19,6 +19,7 @@ from statistics import mean, stdev
 from types import SimpleNamespace
 from typing import Any, Iterable, Mapping, Sequence, cast
 
+from .canonical import require_utc
 from . import strategy_dynamic_discovery as dd
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
@@ -42,12 +43,6 @@ _MARKET_TRIGGERS = {
     dd.DiscoveryTriggerType.UNEXPLAINED_ATTENTION_SPIKE,
 }
 _ARM_TOP_K = 10
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -137,7 +132,7 @@ def _update_experiment_state(
     admitted: bool = False,
     retained: bool = False,
 ) -> dd.ExperimentCandidateState:
-    now = _utc(observed_at)
+    now = require_utc(observed_at)
     priority = _clip(current_priority)
     if state is None:
         return dd.ExperimentCandidateState(
@@ -404,7 +399,7 @@ def _decayed_catalyst(
         return 0.0
     elapsed = max(
         0.0,
-        (_utc(at) - candidate.catalyst_last_seen_at).total_seconds() / 60.0,
+        (require_utc(at) - candidate.catalyst_last_seen_at).total_seconds() / 60.0,
     )
     multiplier = dd.catalyst_decay_multiplier(
         candidate.catalyst_expected_attention_duration,
@@ -423,7 +418,7 @@ def _advance_complete_candidate(
     config: dd.DynamicDiscoveryConfig,
     on_leaderboard: bool = False,
 ) -> dd.DynamicCandidate:
-    now = _utc(observed_at)
+    now = require_utc(observed_at)
     current_market = (
         candidate.attention_score
         if current_market_priority is None
@@ -675,7 +670,7 @@ def apply_discovery_scan(
 ) -> dd.DiscoveryScanResult:
     """One deterministic state transition used by live discovery and replay."""
 
-    now = _utc(watermark)
+    now = require_utc(watermark)
     state = {
         symbol: _current_candidate(candidate)
         for symbol, candidate in previous_state.items()
@@ -1145,7 +1140,7 @@ def _persist_observation(
 ) -> bool:
     payload = {
         "observation": observation.model_dump(mode="json"),
-        "scan_watermark": _utc(watermark).isoformat(),
+        "scan_watermark": require_utc(watermark).isoformat(),
     }
     fingerprint = _key(
         observation.instrument_id,
@@ -1157,7 +1152,7 @@ def _persist_observation(
         repository,
         event_type=EVENT_OBSERVATION,
         session_date=observation.session_date,
-        observed_at=min(observation.observed_at, _utc(watermark)),
+        observed_at=min(observation.observed_at, require_utc(watermark)),
         instrument_id=observation.instrument_id,
         state="captured",
         payload=payload,
@@ -1238,7 +1233,7 @@ async def _run_dynamic_discovery_once_complete(
     from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
     from .service import default_market_data_service
 
-    scan_started = _utc(now or datetime.now(timezone.utc))
+    scan_started = require_utc(now or datetime.now(timezone.utc))
     repo = repository or default_strategy_repository()
     try:
         parent = await asyncio.to_thread(
@@ -2006,7 +2001,7 @@ async def _run_interday_learning_once_complete(
         repository=repository,
         market_service=market_service,
     )
-    observed_at = _utc(now or datetime.now(timezone.utc))
+    observed_at = require_utc(now or datetime.now(timezone.utc))
     if observed_at.astimezone(_ET).time().replace(tzinfo=None) < time(16, 10):
         return result
     # Database reads and market data fetches: on the event loop they freeze everything this gateway process serves.

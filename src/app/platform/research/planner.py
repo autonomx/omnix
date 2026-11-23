@@ -1,6 +1,9 @@
 """Dedicated declarative planning for Deep Research."""
 from __future__ import annotations
 
+from app.providers.model_route import model_name_of
+from app.providers.catalog import provider_id_of
+
 from app.config.env import environment
 
 import json
@@ -191,7 +194,7 @@ class ResearchPlanner:
             return StructuredOutputGateway(provider).generate(
                 messages,
                 contract=_PROVIDER_PLAN_CONTRACT,
-                model=_model_key(self.model_id),
+                model=model_name_of(self.model_id) or None,
                 retry_budget=_PROVIDER_PLAN_BUDGET,
                 provider_options={"request_timeout_seconds": 30},
             )
@@ -287,17 +290,8 @@ def _plan_subject(value: str) -> str:
     return subject[:1].upper() + subject[1:]
 
 
-def _model_key(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
-    return text or None
-
-
 def _provider_key(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    return text.split(":", 1)[1] if text.startswith("llm:") else text or None
+    return provider_id_of(value) or None
 
 
 def _require_search_operation(plan: ResearchPlan) -> None:

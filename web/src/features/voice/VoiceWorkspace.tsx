@@ -41,10 +41,11 @@ import { useSavedScript } from './useSavedScript';
 import { useTakePlayback } from './useTakePlayback';
 import { CapabilityNotice } from '../setup';
 import './VoiceStudioWorkspace.css';
+import { jobKeys } from '../../api/jobs';
+import { useJob } from '../../shared/useJob';
 
 const DEFAULT_SCRIPT = 'dave: hello there\nbob: how do you do\nmarry: i am doing fine\ndave: now lets get to the topic\nmarry: agreed.';
 const SCRIPT_STORAGE_KEY = 'omnix.voice.lastScript';
-const ACTIVE_STATUSES = new Set(['queued', 'running', 'leased']);
 
 /**
  * Voice Studio: a tool rail on the left, the active tool's canvas in the centre, the
@@ -86,12 +87,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [selectedOutputKey, setSelectedOutputKey] = useState('');
   const [pendingPlaybackJobId, setPendingPlaybackJobId] = useState('');
   const [completedPlaybackJob, setCompletedPlaybackJob] = useState<JobRecord | null>(null);
-  const pendingPlaybackJobQuery = useQuery({
-    queryKey: ['platform', 'jobs', pendingPlaybackJobId],
-    queryFn: () => omnixApiClient.getJob(pendingPlaybackJobId),
-    enabled: Boolean(pendingPlaybackJobId),
-    refetchInterval: (query) => (ACTIVE_STATUSES.has(query.state.data?.status ?? '') ? 1000 : false),
-  });
+  const pendingPlaybackJobQuery = useJob(pendingPlaybackJobId);
 
   // Central settings apply until the user changes the studio's own copy.
   useEffect(() => {
@@ -296,12 +292,12 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
   const cancelMutation = useMutation({
     mutationFn: (jobId: string) => omnixApiClient.cancelJob(jobId, 'Cancelled in Voice Studio'),
-    onSettled: async () => { await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }); },
+    onSettled: async () => { await queryClient.invalidateQueries({ queryKey: jobKeys.all }); },
   });
 
   async function refreshJobsAndAssets() {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+      queryClient.invalidateQueries({ queryKey: jobKeys.all }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
     ]);
   }

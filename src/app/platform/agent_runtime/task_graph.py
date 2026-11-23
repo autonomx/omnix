@@ -64,6 +64,8 @@ TaskGraphRunStatus = Literal[
     "failed",
     "cancelled",
 ]
+TERMINAL_NODE_RUN_STATUSES: frozenset[TaskNodeRunStatus] = frozenset({"completed", "failed", "cancelled", "skipped"})
+TERMINAL_GRAPH_RUN_STATUSES: frozenset[TaskGraphRunStatus] = frozenset({"completed", "failed", "cancelled"})
 
 
 _TARGET_PROFILE: dict[str, str] = {

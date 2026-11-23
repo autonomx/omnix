@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Shared causal-data readiness and final trade-authorization assessment."""
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, cast
 
@@ -15,11 +15,10 @@ from .market_evidence import (
     TradeAuthorizationAssessment,
     premarket_evidence_feature_compatible,
 )
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
-_REGULAR_OPEN = time(9, 30)
 _MAX_LATEST_BAR_LATENCY_SECONDS = Decimal("90")
 
 
@@ -38,7 +37,7 @@ def _minute_floor(value: datetime) -> datetime:
 
 def _expected_latest_start(observed_at: datetime, session_date: date) -> datetime | None:
     observed_et = observed_at.astimezone(_ET)
-    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
+    opening = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     if observed_et.date() != session_date or observed_et < opening + timedelta(minutes=1):
         return None
     floor = _minute_floor(observed_et)
@@ -63,7 +62,7 @@ def assess_bar_coverage(
             for bar in bars
             if getattr(bar, "is_final", False)
             and bar.start_time.astimezone(_ET).date() == session_date
-            and _REGULAR_OPEN
+            and REGULAR_OPEN
             <= bar.start_time.astimezone(_ET).timetz().replace(tzinfo=None)
             < regular_close_time(session_date)
             and bar.end_time <= observed_at.astimezone(timezone.utc)
@@ -87,7 +86,7 @@ def assess_bar_coverage(
 
     instrument_id = str(getattr(finalized[0], "instrument_id", "") or "") or None
     starts = {bar.start_time.astimezone(timezone.utc) for bar in finalized}
-    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
+    opening = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     opening_present = opening in starts
     actual_latest = finalized[-1].start_time.astimezone(timezone.utc)
     latest_present = expected_latest is None or actual_latest >= expected_latest
@@ -141,37 +140,35 @@ def resolve_causal_equity_bars(
 ) -> tuple[list[Any], BarCoverageAssessment, str | None]:
     """Resolve current-session causal bars through the shared recovery boundary."""
 
-    recovery = getattr(market_service, "recovered_bars", None)
-    if callable(recovery):
-        try:
-            recovered = recovery(
-                candidate.instrument_id,
-                "1m",
-                limit,
-                candidate.binding_id,
-                session_date=session_date,
-                as_of=observed_at,
-            )
-        except Exception as exc:
-            primary = []
-            primary_error: str | None = f"{type(exc).__name__}: {exc}"
-        else:
-            primary = list(recovered.bars)
-            primary_error = recovered.report.primary_error
-            assessment = assess_bar_coverage(
-                primary,
-                session_date=session_date,
-                observed_at=observed_at,
-                provider="shared_recovery",
-                fallback_provider=(
-                    recovered.report.fallback_provider
-                    if recovered.report.fallback_attempted
-                    else None
-                ),
-            )
-            # Shared recovery has already exhausted the permitted Yahoo/local/
-            # IEX ladder. Never issue a second hidden fallback request here.
-            return primary, assessment, primary_error
+    try:
+        recovered = market_service.recovered_bars(
+            candidate.instrument_id,
+            "1m",
+            limit,
+            candidate.binding_id,
+            session_date=session_date,
+            as_of=observed_at,
+        )
+    except Exception as exc:
+        primary = []
+        primary_error: str | None = f"{type(exc).__name__}: {exc}"
+    else:
+        primary = list(recovered.bars)
+        primary_error = recovered.report.primary_error
+        assessment = assess_bar_coverage(
+            primary,
+            session_date=session_date,
+            observed_at=observed_at,
+            provider="shared_recovery",
+            fallback_provider=(
+                recovered.report.fallback_provider
+                if recovered.report.fallback_attempted
+                else None
+            ),
+        )
+        # Shared recovery has already exhausted the permitted Yahoo/local/
+        # IEX ladder. Never issue a second hidden fallback request here.
+        return primary, assessment, primary_error
 
     primary_error = None
     try:

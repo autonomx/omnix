@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from app.apps.rpg.world.map_contracts import MapContractError
 from app.apps.rpg.world.map_serialization import canonical_map_json, map_content_revision
 from typing import Any
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,7 @@ def validate_map_content(
             _positive_integer(sprite, "width", f"{path}.sprite.width", issues)
             _positive_integer(sprite, "height", f"{path}.sprite.height", issues)
             _asset_allowed(asset_id, allowed_asset_ids, f"{path}.sprite.asset_id", issues)
-        child_map_id = _text(item.get("child_map_id"))
+        child_map_id = stripped_text(item.get("child_map_id"))
         if child_map_id and known_map_ids and child_map_id not in known_map_ids:
             issues.append(MapContentIssue("error", "unknown_child_map_id", f"{path}.child_map_id", child_map_id))
 
@@ -81,7 +82,7 @@ def validate_map_content(
             issues.append(MapContentIssue("error", "route_geometry_too_short", f"{path}.points"))
         for point_index, point in enumerate(points):
             _point(point, f"{path}.points[{point_index}]", issues)
-        route_id = _text(route.get("route_id"))
+        route_id = stripped_text(route.get("route_id"))
         if route_id and canonical_route_ids and route_id not in canonical_route_ids:
             issues.append(MapContentIssue("error", "unknown_canonical_route_id", f"{path}.route_id", route_id))
 
@@ -98,7 +99,7 @@ def validate_map_content(
     if not labels:
         issues.append(MapContentIssue("warning", "map_has_no_labels", "definition.labels"))
 
-    parent_map_id = _text(raw.get("parent_map_id"))
+    parent_map_id = stripped_text(raw.get("parent_map_id"))
     if parent_map_id and known_map_ids and parent_map_id not in known_map_ids:
         issues.append(MapContentIssue("error", "unknown_parent_map_id", "definition.parent_map_id", parent_map_id))
     if len(object_ids) != len(objects) or len(route_ids) != len(routes):
@@ -158,7 +159,7 @@ def _asset_allowed(value: str, allowed: Sequence[str], path: str, issues: list[M
 
 
 def _required_text(raw: Mapping[str, Any], key: str, path: str, issues: list[MapContentIssue]) -> str:
-    value = _text(raw.get(key))
+    value = stripped_text(raw.get(key))
     if not value:
         issues.append(MapContentIssue("error", "required", path))
     return value
@@ -192,5 +193,3 @@ def _rows_or_points(value: object) -> tuple[object, ...]:
     return tuple(value)
 
 
-def _text(value: object) -> str:
-    return str(value).strip() if value is not None else ""

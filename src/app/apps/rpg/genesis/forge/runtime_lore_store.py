@@ -12,7 +12,7 @@ from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
-from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.safe_values import copy_state, clean_text
 
 from .campaign_lore_store import (
     _campaign_id,
@@ -22,7 +22,6 @@ from .campaign_lore_store import (
     _merge_published_world_canon,
     _portable_bible,
     _save_portable_projection,
-    _text,
 )
 from .runtime_lore_materialization import (
     SceneLoreTarget,
@@ -56,8 +55,8 @@ def _campaign_exists(
         title=_campaign_title(session, campaign_id),
         state=deepcopy(_mapping(session.get("state"))),
         engine_version="rpg-runtime-lore-materialization-v1",
-        schema_version=_text(manifest.get("schema_version")) or "rpg-session-v1",
-        seed=_text(manifest.get("seed") or setup.get("seed")) or "0",
+        schema_version=clean_text(manifest.get("schema_version")) or "rpg-session-v1",
+        seed=clean_text(manifest.get("seed") or setup.get("seed")) or "0",
         metadata={"source": "runtime_scene_materialization_v1"},
     )
 
@@ -78,7 +77,7 @@ def _pinned_world_canon(
     binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
     if binding is None:
         return {}
-    world_id = _text(binding.get("world_id"))
+    world_id = clean_text(binding.get("world_id"))
     world_revision = int(binding.get("world_revision") or 0)
     key = (str(getattr(context, "workspace_id", "")), campaign_id, world_id, world_revision)
     with _PINNED_LOCK:
@@ -113,7 +112,7 @@ def _has_dossier_and_document(
     documented = any(
         target
         in {
-            _text(value).casefold()
+            clean_text(value).casefold()
             for value in (
                 *list(row.get("entity_refs") or ()),
                 *list(row.get("entities") or ()),
@@ -496,7 +495,7 @@ def ensure_turn_scene_lore(
             if version is not None and version[1] == str(stored["content_hash"]):
                 _remember_covered(str(context.workspace_id), campaign_id, _Covered(
                     int(stored["revision"]), version[1], version[2], resolved, stored["document"], stored))
-        previous_hash = _text(
+        previous_hash = clean_text(
             _mapping(session.get("campaign_bible_projection")).get("content_hash")
         )
         if (

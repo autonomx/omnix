@@ -11,6 +11,7 @@ import pytest
 from app.platform.voice import model_install
 from app.platform.voice.model_catalog import SPEECH_MODELS, speech_model
 from tests.support.waiting import wait_until
+from tests.support.voice_jobs import execute_voice_studio_job
 
 
 @pytest.fixture
@@ -58,7 +59,9 @@ def test_voice_studio_lists_the_same_models_as_before_the_catalogs_merged() -> N
         "htdemucs-ft",
         # The live portrait's models (docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md, Phase 1).
         "float", "float-code", "wav2vec2-base-960h", "wav2vec-english-speech-emotion-recognition",
-        "s3fd-face-detector"]
+        "s3fd-face-detector",
+        # The second live engine (FlashHead Lite) and LivePortrait's idle loops.
+        "flashhead-lite", "flashhead-code", "liveportrait-code", "liveportrait-weights"]
     # The old app.models id still finds the model.
     assert speech_model("qwen3-tts-12hz-0.6b-base").id == "qwen3-tts-0.6b-base"
 
@@ -384,7 +387,6 @@ def test_a_render_asked_for_during_a_switch_hears_engine_loading(tts_service, mo
 
 def test_a_job_for_an_unloaded_engine_asks_for_a_swap_and_waits(monkeypatch) -> None:
     from app.jobs.models import JobRecord
-    from app.platform.voice import jobs as voice_jobs
     from app.providers.exceptions import TtsEngineNotLoaded
 
     requested: list[tuple[str, str]] = []
@@ -418,14 +420,13 @@ def test_a_job_for_an_unloaded_engine_asks_for_a_swap_and_waits(monkeypatch) -> 
         "created_at": "2026-10-20T00:00:00+00:00", "updated_at": "2026-10-20T00:00:00+00:00",
     })
     store = _Store()
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert requested == [("fish-s2-pro", "job:fish")]
     assert store.deferred[0]["job_id"] == "job:fish" and "fish-s2-pro" in store.deferred[0]["reason"]
 
 
 def test_a_failed_swap_request_fails_the_job_with_its_reason(monkeypatch) -> None:
     from app.jobs.models import JobRecord
-    from app.platform.voice import jobs as voice_jobs
     from app.providers.exceptions import TtsEngineNotLoaded
 
     monkeypatch.setattr("app.platform.voice.swap_controller.swaps_enabled", lambda: True)
@@ -451,7 +452,7 @@ def test_a_failed_swap_request_fails_the_job_with_its_reason(monkeypatch) -> Non
         "input_payload": {"text": "hi", "provider_id": "fish-s2-pro"},
         "created_at": "2026-10-20T00:00:00+00:00", "updated_at": "2026-10-20T00:00:00+00:00",
     })
-    voice_jobs.execute_voice_studio_job(_Store(), job)
+    execute_voice_studio_job(_Store(), job)
     assert failures[0].code == "engine_not_loaded" and not failures[0].retryable
     assert "needs 12 GB" in failures[0].message
 

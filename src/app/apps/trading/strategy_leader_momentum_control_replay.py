@@ -15,11 +15,12 @@ feed the resulting traces into ``build_leader_momentum_cohort_report``.
 import hashlib
 import json
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .canonical import require_utc
 from .strategy_discovery_replay import DiscoveryReplayObservation, DiscoveryReplayResult
 from .strategy_leader_momentum_diagnostics import (
     LeaderMomentumCohortObservation,
@@ -58,12 +59,6 @@ class LeaderMomentumControlPlan(BaseModel):
     fingerprint: str
     winner_exclusion_applied_after_causal_universe: Literal[True] = True
     execution_authority: Literal[False] = False
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("control_replay_timestamp_requires_timezone")
-    return value.astimezone(timezone.utc)
 
 
 def _fingerprint(
@@ -110,7 +105,7 @@ def build_leader_momentum_control_plan(
 
     grouped: dict[str, list[DiscoveryReplayObservation]] = defaultdict(list)
     for row in observations:
-        observed_at = _utc(row.observed_at)
+        observed_at = require_utc(row.observed_at, error="control_replay_timestamp_requires_timezone")
         if observed_at.astimezone(_ET).date() != session_date:
             raise ValueError("control_replay_observation_outside_exchange_session")
         grouped[row.instrument_id].append(row)
@@ -154,8 +149,8 @@ def build_leader_momentum_control_plan(
             LeaderMomentumControlSpec(
                 session_date=session_date,
                 instrument_id=instrument_id,
-                first_observed_at=_utc(rows[0].observed_at),
-                last_observed_at=_utc(rows[-1].observed_at),
+                first_observed_at=require_utc(rows[0].observed_at, error="control_replay_timestamp_requires_timezone"),
+                last_observed_at=require_utc(rows[-1].observed_at, error="control_replay_timestamp_requires_timezone"),
                 observation_count=len(rows),
                 sources=tuple(sorted({row.source for row in rows})),
                 discovered_at=discovered_at.get(instrument_id),

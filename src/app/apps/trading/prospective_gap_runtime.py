@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from app.config.env import environment
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +14,7 @@ outcome, or portfolio state in Markdown.
 """
 
 import concurrent.futures
-import hashlib
 import json
-import os
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -25,6 +22,7 @@ from typing import Any, Callable, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256, require_utc
 from .gapper_dataset import GapperCandidate
 from .prospective_gap_repository import (
     ProspectiveGapRepository,
@@ -46,14 +44,13 @@ from .prospective_prediction_evidence import (
 from .prospective_prediction_operational import (
     CashPreservingShadowPortfolio,
     FormalOutcomeBundle,
-    OperationalConfirmationEvaluation,
     OperationalPremarketState,
     build_cash_preserving_shadow_portfolio,
     evaluate_operational_confirmation,
     load_operational_formal_outcome,
     load_operational_premarket_state,
 )
-from .prospective_prediction_v41 import DEFAULT_V41_SPEC
+from .prospective_prediction_versions import spec_records
 from .prospective_prediction_v42 import (
     DEFAULT_V42_SPEC,
     V42Forecast,
@@ -78,7 +75,6 @@ from .prospective_prediction_v42_action import (
 )
 from .prospective_prediction_v43 import (
     DEFAULT_V43_SPEC,
-    V43CohortRegime,
     V43ExtensionExhaustionOverlay,
     V43Forecast,
     V43ForecastAttempt,
@@ -90,7 +86,6 @@ from .prospective_prediction_v43 import (
 from .prospective_prediction_v43_action import (
     DEFAULT_V43_ACTION_POLICY,
     PortfolioG,
-    V43ActionPolicy,
     V43ActionSnapshot,
     V43AuthorizationReceipt,
     V43WatchDecision,
@@ -126,23 +121,11 @@ from .prospective_prediction_v4 import (
 )
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies.models import GapPullbackConfig
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN
 
 
 RUNTIME_VERSION: Final = "prospective-gap-runtime-v1"
 PORTFOLIO_E_POLICY_VERSION: Final = "prospective-gap-portfolio-e-v1"
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("prospective runtime timestamps must be timezone-aware")
-    return value.astimezone(timezone.utc)
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 class PortfolioEPolicy(BaseModel):
@@ -215,7 +198,7 @@ class SchedulerPremarketInstrumentInput(BaseModel):
     @field_validator("first_catalyst_at")
     @classmethod
     def catalyst_time_aware(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
+        return None if value is None else require_utc(value, error="prospective runtime timestamps must be timezone-aware")
 
     @model_validator(mode="after")
     def regime_alignment(self):
@@ -244,7 +227,7 @@ class SchedulerPremarketHandoff(BaseModel):
     @field_validator("discovered_at", "research_frozen_at", "prediction_cutoff_at")
     @classmethod
     def timestamp_aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="prospective runtime timestamps must be timezone-aware")
 
     @model_validator(mode="after")
     def causal_and_cohort_alignment(self):
@@ -301,7 +284,7 @@ class PremarketInstrumentInput(BaseModel):
     @field_validator("first_catalyst_at")
     @classmethod
     def aware(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
+        return None if value is None else require_utc(value, error="prospective runtime timestamps must be timezone-aware")
 
     @model_validator(mode="after")
     def instrument_alignment(self):
@@ -332,7 +315,7 @@ class PremarketFreezeRequest(BaseModel):
     @field_validator("frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="prospective runtime timestamps must be timezone-aware")
 
     @model_validator(mode="after")
     def causal_and_cohort_alignment(self):
@@ -527,6 +510,11 @@ class PostcloseRunResult(BaseModel):
     scorecard: DailyProspectiveScorecard
 
 
+def _matched_delta(candidate: Decimal | None, baseline: Decimal | None) -> Decimal | None:
+    """A version's matched metric less v3's on the same instruments, when both were measured."""
+    return candidate - baseline if candidate is not None and baseline is not None else None
+
+
 class ProspectiveGapRuntime:
     def __init__(
         self,
@@ -561,7 +549,7 @@ class ProspectiveGapRuntime:
         instrument_id = f"equity:US:{row.symbol.upper()}"
         premarket_start = datetime.combine(
             handoff.session_date,
-            time(4, 0),
+            PREMARKET_OPEN,
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         recovered = self.market_service.recovered_window_bars(
@@ -626,8 +614,8 @@ class ProspectiveGapRuntime:
             *(bar.received_at for bar in bars),
         ]
         if isinstance(daily_received, datetime):
-            known_times.append(_utc(daily_received))
-        candidate_observed_at = max(_utc(value) for value in known_times)
+            known_times.append(require_utc(daily_received, error="prospective runtime timestamps must be timezone-aware"))
+        candidate_observed_at = max(require_utc(value, error="prospective runtime timestamps must be timezone-aware") for value in known_times)
         if candidate_observed_at > knowledge_cutoff:
             raise ValueError(
                 f"scheduler_runtime_evidence_after_prediction_cutoff:{row.symbol}"
@@ -662,7 +650,7 @@ class ProspectiveGapRuntime:
         observed_at: datetime,
         climatology_state: ProspectiveClimatologyState | None = None,
     ) -> PremarketFreezeResult:
-        ingestion_started_at = _utc(observed_at)
+        ingestion_started_at = require_utc(observed_at, error="prospective runtime timestamps must be timezone-aware")
         if ingestion_started_at > handoff.prediction_cutoff_at:
             raise ValueError("scheduler_handoff_ingested_after_prediction_cutoff")
 
@@ -704,8 +692,8 @@ class ProspectiveGapRuntime:
                 time(23, 59, 59),
                 tzinfo=_ET,
             ).astimezone(timezone.utc),
-            training_population_fingerprint=_hash("prospective-gap-v4-identity-population"),
-            training_dataset_fingerprint=_hash("prospective-gap-v4-identity-dataset"),
+            training_population_fingerprint=canonical_sha256("prospective-gap-v4-identity-population"),
+            training_dataset_fingerprint=canonical_sha256("prospective-gap-v4-identity-dataset"),
             sample_count=0,
             population_definition="identity calibrator; no fitted population",
             created_at=handoff.research_frozen_at,
@@ -741,7 +729,7 @@ class ProspectiveGapRuntime:
             v3 = FrozenForecast(
                 instrument_id=candidate.instrument_id,
                 evidence_snapshot_id=snapshot_id,
-                feature_vector_fingerprint=_hash(
+                feature_vector_fingerprint=canonical_sha256(
                     {
                         "v3_p_close_above_open": row.v3_p_close_above_open,
                         "v3_p_persistent_uptrend": row.v3_p_persistent_uptrend,
@@ -790,7 +778,7 @@ class ProspectiveGapRuntime:
                 evidence_snapshot_id=snapshot_id,
                 market_state_snapshot_id=f"{snapshot_id}:v4",
                 model_spec_fingerprint=DEFAULT_V4_MODEL_SPEC.implementation_fingerprint,
-                feature_vector_fingerprint=_hash(
+                feature_vector_fingerprint=canonical_sha256(
                     {
                         "v4_raw_p_close_above_open": row.v4_raw_p_close_above_open,
                         "v4_calibrated_p_close_above_open": row.v4_calibrated_p_close_above_open,
@@ -820,7 +808,7 @@ class ProspectiveGapRuntime:
                 calibrator=calibrator,
             )
 
-        completed_at = _utc(self.now_factory())
+        completed_at = require_utc(self.now_factory(), error="prospective runtime timestamps must be timezone-aware")
         if completed_at < ingestion_started_at:
             raise ValueError("scheduler_handoff_completion_precedes_ingestion")
         if completed_at > handoff.prediction_cutoff_at:
@@ -912,65 +900,18 @@ class ProspectiveGapRuntime:
             payload=manifest,
             run_id=request.run_id,
         )
-        self.repository.append(
-            session_date=session_date,
-            cohort_id=request.cohort.cohort_id,
-            instrument_id="__research_spec__",
-            kind="v41_shadow_spec",
-            observed_at=request.frozen_at,
-            payload=DEFAULT_V41_SPEC,
-            state=DEFAULT_V41_SPEC.activation_state,
-            run_id=request.run_id,
-            idempotency_suffix=DEFAULT_V41_SPEC.implementation_fingerprint,
-        )
-        self.repository.append(
-            session_date=session_date,
-            cohort_id=request.cohort.cohort_id,
-            instrument_id="__research_spec_v42__",
-            kind="v42_shadow_spec",
-            observed_at=request.frozen_at,
-            payload=DEFAULT_V42_SPEC,
-            state=DEFAULT_V42_SPEC.activation_state,
-            run_id=request.run_id,
-            idempotency_suffix=DEFAULT_V42_SPEC.implementation_fingerprint,
-        )
-        self.repository.append(
-            session_date=session_date,
-            cohort_id=request.cohort.cohort_id,
-            instrument_id="__action_spec_v42__",
-            kind="v42_action_spec",
-            observed_at=request.frozen_at,
-            payload=DEFAULT_V42_ACTION_POLICY,
-            state="FORWARD_SHADOW_ACTIVE",
-            run_id=request.run_id,
-            idempotency_suffix=_hash(
-                DEFAULT_V42_ACTION_POLICY.model_dump(mode="json")
-            ),
-        )
-        self.repository.append(
-            session_date=session_date,
-            cohort_id=request.cohort.cohort_id,
-            instrument_id="__research_spec_v43__",
-            kind="v43_shadow_spec",
-            observed_at=request.frozen_at,
-            payload=DEFAULT_V43_SPEC,
-            state=DEFAULT_V43_SPEC.activation_state,
-            run_id=request.run_id,
-            idempotency_suffix=DEFAULT_V43_SPEC.implementation_fingerprint,
-        )
-        self.repository.append(
-            session_date=session_date,
-            cohort_id=request.cohort.cohort_id,
-            instrument_id="__action_spec_v43__",
-            kind="v43_action_spec",
-            observed_at=request.frozen_at,
-            payload=DEFAULT_V43_ACTION_POLICY,
-            state="FORWARD_SHADOW_ACTIVE",
-            run_id=request.run_id,
-            idempotency_suffix=_hash(
-                DEFAULT_V43_ACTION_POLICY.model_dump(mode="json")
-            ),
-        )
+        for spec in spec_records():
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id=spec.instrument_id,
+                kind=spec.kind,
+                observed_at=request.frozen_at,
+                payload=spec.payload,
+                state=spec.state,
+                run_id=request.run_id,
+                idempotency_suffix=spec.idempotency_suffix,
+            )
 
         results: list[PremarketInstrumentResult] = []
         v3_forecasts: list[FrozenForecast] = []
@@ -1060,7 +1001,7 @@ class ProspectiveGapRuntime:
                     extension = derive_extension_exhaustion_risk(
                         extension_components_from_market_state(state.market_state)
                     )
-                    feature_fingerprint = _hash(
+                    feature_fingerprint = canonical_sha256(
                         {
                             "market_state": state.market_state.live_feature_fingerprint,
                             "catalyst": row.catalyst.model_dump(mode="json"),
@@ -1498,46 +1439,6 @@ class ProspectiveGapRuntime:
             raise ValueError("prospective_session_not_frozen")
         return ProspectiveSessionManifest.model_validate(record.payload)
 
-    def _v4_record(
-        self,
-        ledger: ProspectiveGapSessionLedger,
-        instrument_id: str,
-    ) -> V4ForecastRecord | None:
-        record = ledger.latest(kind="v4_forecast", instrument_id=instrument_id)
-        return V4ForecastRecord.model_validate(record.payload) if record is not None else None
-
-    def _v42_record(
-        self,
-        ledger: ProspectiveGapSessionLedger,
-        instrument_id: str,
-    ) -> V42ForecastRecord | None:
-        record = ledger.latest(kind="v42_forecast", instrument_id=instrument_id)
-        return V42ForecastRecord.model_validate(record.payload) if record is not None else None
-
-    def _v42_watch(
-        self,
-        ledger: ProspectiveGapSessionLedger,
-        instrument_id: str,
-    ) -> V42WatchDecision | None:
-        record = ledger.latest(kind="v42_watch", instrument_id=instrument_id)
-        return V42WatchDecision.model_validate(record.payload) if record is not None else None
-
-    def _v43_record(
-        self,
-        ledger: ProspectiveGapSessionLedger,
-        instrument_id: str,
-    ) -> V43ForecastRecord | None:
-        record = ledger.latest(kind="v43_forecast", instrument_id=instrument_id)
-        return V43ForecastRecord.model_validate(record.payload) if record is not None else None
-
-    def _v43_watch(
-        self,
-        ledger: ProspectiveGapSessionLedger,
-        instrument_id: str,
-    ) -> V43WatchDecision | None:
-        record = ledger.latest(kind="v43_watch", instrument_id=instrument_id)
-        return V43WatchDecision.model_validate(record.payload) if record is not None else None
-
     def _latest_confirmation_state(
         self,
         ledger: ProspectiveGapSessionLedger,
@@ -1611,7 +1512,7 @@ class ProspectiveGapRuntime:
         session_date: date,
         evaluated_at: datetime,
     ) -> ConfirmationRunResult:
-        evaluated_at = _utc(evaluated_at)
+        evaluated_at = require_utc(evaluated_at, error="prospective runtime timestamps must be timezone-aware")
         manifest = self._manifest(session_date)
         ledger = self.repository.session(session_date)
         new_receipts = 0
@@ -1619,7 +1520,7 @@ class ProspectiveGapRuntime:
         terminal = 0
 
         for candidate in manifest.candidates:
-            v4_record = self._v4_record(ledger, candidate.instrument_id)
+            v4_record = ledger.latest_model(V4ForecastRecord, kind="v4_forecast", instrument_id=candidate.instrument_id)
             previous = self._latest_confirmation_state(ledger, candidate.instrument_id)
             if previous == "CONFIRMED_LONG":
                 terminal += 1
@@ -1635,7 +1536,7 @@ class ProspectiveGapRuntime:
                             actionability="ABSTAIN",
                             reasons=("AUTHORIZATION_WINDOW_MISSED_AFTER_CONFIRMATION",),
                         )
-                        evidence_fingerprint = _hash(
+                        evidence_fingerprint = canonical_sha256(
                             {
                                 "confirmation": confirmation.model_dump(mode="json"),
                                 "recovery": "fail_closed_no_late_market_evidence",
@@ -1673,34 +1574,21 @@ class ProspectiveGapRuntime:
             bars: Sequence[Any] = ()
             data_quality_ok = False
             data_quality_reason: str | None = None
-            recovered = getattr(self.market_service, "recovered_bars", None)
             try:
-                if callable(recovered):
-                    recovered_result = recovered(
-                        candidate.instrument_id,
-                        "1m",
-                        500,
-                        candidate.binding_id,
-                        session_date=session_date,
-                        as_of=evaluated_at,
-                        knowledge_mode="live",
-                        knowledge_cutoff=evaluated_at,
-                    )
-                    bars = recovered_result.bars
-                    data_quality_ok = not recovered_result.report.unresolved_gaps
-                    if not data_quality_ok:
-                        data_quality_reason = "CURRENT_SESSION_DEPENDENCY_GAP"
-                else:
-                    response = self.market_service.bars(
-                        candidate.instrument_id,
-                        "1m",
-                        500,
-                        candidate.binding_id,
-                    )
-                    bars = tuple(getattr(response, "bars", ()) or ())
-                    data_quality_ok = bool(bars)
-                    if not data_quality_ok:
-                        data_quality_reason = "CURRENT_TAPE_UNAVAILABLE"
+                recovered_result = self.market_service.recovered_bars(
+                    candidate.instrument_id,
+                    "1m",
+                    500,
+                    candidate.binding_id,
+                    session_date=session_date,
+                    as_of=evaluated_at,
+                    knowledge_mode="live",
+                    knowledge_cutoff=evaluated_at,
+                )
+                bars = recovered_result.bars
+                data_quality_ok = not recovered_result.report.unresolved_gaps
+                if not data_quality_ok:
+                    data_quality_reason = "CURRENT_SESSION_DEPENDENCY_GAP"
             except Exception as exc:
                 data_quality_reason = f"CURRENT_TAPE_FETCH_FAILED:{type(exc).__name__}"
 
@@ -1724,7 +1612,7 @@ class ProspectiveGapRuntime:
                     state=transition_receipt.new_state,
                     reason_code=transition_receipt.trigger,
                     run_id=manifest.run_id,
-                    idempotency_suffix=_hash(transition_receipt.model_dump(mode="json")),
+                    idempotency_suffix=canonical_sha256(transition_receipt.model_dump(mode="json")),
                 )
                 new_receipts += int(inserted)
 
@@ -1757,7 +1645,7 @@ class ProspectiveGapRuntime:
                 policy=manifest.portfolio_e_policy,
                 decision_at=evaluated_at,
             )
-            evidence_fingerprint = _hash(
+            evidence_fingerprint = canonical_sha256(
                 {
                     "confirmation": confirmation.model_dump(mode="json"),
                     "cost": cost.model_dump(mode="json") if cost is not None else None,
@@ -1813,7 +1701,7 @@ class ProspectiveGapRuntime:
             payload=portfolio_e,
             state="frozen",
             run_id=manifest.run_id,
-            idempotency_suffix=_hash(portfolio_e.model_dump(mode="json")),
+            idempotency_suffix=canonical_sha256(portfolio_e.model_dump(mode="json")),
         )
         terminal_count = sum(
             self._latest_confirmation_state(refreshed, candidate.instrument_id)
@@ -1825,8 +1713,8 @@ class ProspectiveGapRuntime:
         # alter Portfolio E or the legacy v4 confirmation authority.
         v42_ledger = self.repository.session(session_date)
         for candidate in manifest.candidates:
-            v42_record = self._v42_record(v42_ledger, candidate.instrument_id)
-            watch = self._v42_watch(v42_ledger, candidate.instrument_id)
+            v42_record = v42_ledger.latest_model(V42ForecastRecord, kind="v42_forecast", instrument_id=candidate.instrument_id)
+            watch = v42_ledger.latest_model(V42WatchDecision, kind="v42_watch", instrument_id=candidate.instrument_id)
             if v42_record is None or watch is None:
                 continue
 
@@ -1849,34 +1737,21 @@ class ProspectiveGapRuntime:
             v42_bars: Sequence[Any] = ()
             v42_data_quality_ok = False
             v42_data_quality_reasons: list[str] = []
-            recovered = getattr(self.market_service, "recovered_bars", None)
             try:
-                if callable(recovered):
-                    recovered_result = recovered(
-                        candidate.instrument_id,
-                        "1m",
-                        500,
-                        candidate.binding_id,
-                        session_date=session_date,
-                        as_of=evaluated_at,
-                        knowledge_mode="live",
-                        knowledge_cutoff=evaluated_at,
-                    )
-                    v42_bars = recovered_result.bars
-                    v42_data_quality_ok = not recovered_result.report.unresolved_gaps
-                    if not v42_data_quality_ok:
-                        v42_data_quality_reasons.append("CURRENT_SESSION_DEPENDENCY_GAP")
-                else:
-                    response = self.market_service.bars(
-                        candidate.instrument_id,
-                        "1m",
-                        500,
-                        candidate.binding_id,
-                    )
-                    v42_bars = tuple(getattr(response, "bars", ()) or ())
-                    v42_data_quality_ok = bool(v42_bars)
-                    if not v42_data_quality_ok:
-                        v42_data_quality_reasons.append("CURRENT_TAPE_UNAVAILABLE")
+                recovered_result = self.market_service.recovered_bars(
+                    candidate.instrument_id,
+                    "1m",
+                    500,
+                    candidate.binding_id,
+                    session_date=session_date,
+                    as_of=evaluated_at,
+                    knowledge_mode="live",
+                    knowledge_cutoff=evaluated_at,
+                )
+                v42_bars = recovered_result.bars
+                v42_data_quality_ok = not recovered_result.report.unresolved_gaps
+                if not v42_data_quality_ok:
+                    v42_data_quality_reasons.append("CURRENT_SESSION_DEPENDENCY_GAP")
             except Exception as exc:
                 v42_data_quality_reasons.append(
                     f"CURRENT_TAPE_FETCH_FAILED:{type(exc).__name__}"
@@ -1911,7 +1786,7 @@ class ProspectiveGapRuntime:
                 state=snapshot.state,
                 reason_code=snapshot.reasons[0] if snapshot.reasons else None,
                 run_id=manifest.run_id,
-                idempotency_suffix=_hash(snapshot.model_dump(mode="json")),
+                idempotency_suffix=canonical_sha256(snapshot.model_dump(mode="json")),
             )
 
             if snapshot.state in {"STRUCTURE_CONFIRMED", "INVALIDATED", "EXPIRED"}:
@@ -1936,7 +1811,7 @@ class ProspectiveGapRuntime:
                     state=v42_authorization.decision,
                     reason_code=v42_authorization.reasons[0] if v42_authorization.reasons else None,
                     run_id=manifest.run_id,
-                    idempotency_suffix=_hash(
+                    idempotency_suffix=canonical_sha256(
                         {
                             "snapshot": snapshot.model_dump(mode="json"),
                             "authorization": v42_authorization.model_dump(mode="json"),
@@ -1960,16 +1835,16 @@ class ProspectiveGapRuntime:
             payload=portfolio_f,
             state="frozen",
             run_id=manifest.run_id,
-            idempotency_suffix=_hash(portfolio_f.model_dump(mode="json")),
+            idempotency_suffix=canonical_sha256(portfolio_f.model_dump(mode="json")),
         )
 
         # v4.3 consumes the frozen v4.3 premarket forecast and the causal v4.2
         # action snapshot. It never recomputes the base forecast or market tape.
         v43_ledger = self.repository.session(session_date)
         for candidate in manifest.candidates:
-            v43_record = self._v43_record(v43_ledger, candidate.instrument_id)
-            v43_watch = self._v43_watch(v43_ledger, candidate.instrument_id)
-            base_v42_record = self._v42_record(v43_ledger, candidate.instrument_id)
+            v43_record = v43_ledger.latest_model(V43ForecastRecord, kind="v43_forecast", instrument_id=candidate.instrument_id)
+            v43_watch = v43_ledger.latest_model(V43WatchDecision, kind="v43_watch", instrument_id=candidate.instrument_id)
+            base_v42_record = v43_ledger.latest_model(V42ForecastRecord, kind="v42_forecast", instrument_id=candidate.instrument_id)
             base_action_record = v43_ledger.latest(
                 kind="v42_action",
                 instrument_id=candidate.instrument_id,
@@ -2019,7 +1894,7 @@ class ProspectiveGapRuntime:
                 state=v43_action.state,
                 reason_code=v43_action.reasons[0] if v43_action.reasons else None,
                 run_id=manifest.run_id,
-                idempotency_suffix=_hash(v43_action.model_dump(mode="json")),
+                idempotency_suffix=canonical_sha256(v43_action.model_dump(mode="json")),
             )
 
             if v43_action.state in {
@@ -2059,7 +1934,7 @@ class ProspectiveGapRuntime:
                         else None
                     ),
                     run_id=manifest.run_id,
-                    idempotency_suffix=_hash(
+                    idempotency_suffix=canonical_sha256(
                         {
                             "action": v43_action.model_dump(mode="json"),
                             "authorization": v43_authorization.model_dump(
@@ -2086,7 +1961,7 @@ class ProspectiveGapRuntime:
             payload=portfolio_g,
             state="frozen",
             run_id=manifest.run_id,
-            idempotency_suffix=_hash(portfolio_g.model_dump(mode="json")),
+            idempotency_suffix=canonical_sha256(portfolio_g.model_dump(mode="json")),
         )
         return ConfirmationRunResult(
             session_date=session_date,
@@ -2250,7 +2125,7 @@ class ProspectiveGapRuntime:
         session_date: date,
         evaluated_at: datetime,
     ) -> PostcloseRunResult:
-        evaluated_at = _utc(evaluated_at)
+        evaluated_at = require_utc(evaluated_at, error="prospective runtime timestamps must be timezone-aware")
         manifest = self._manifest(session_date)
         ledger = self.repository.session(session_date)
         outcomes: list[FormalOutcomeBundle] = []
@@ -2302,26 +2177,14 @@ class ProspectiveGapRuntime:
                 else:
                     insufficient += 1
 
-            v3_record = refreshed.latest(kind="v3_forecast", instrument_id=candidate.instrument_id)
-            v4_record = refreshed.latest(kind="v4_forecast", instrument_id=candidate.instrument_id)
-            v3 = FrozenForecast.model_validate(v3_record.payload) if v3_record is not None else None
-            v4 = (
-                V4ForecastRecord.model_validate(v4_record.payload).forecast
-                if v4_record is not None
-                else None
-            )
-            v42_record = refreshed.latest(kind="v42_forecast", instrument_id=candidate.instrument_id)
-            v42 = (
-                V42ForecastRecord.model_validate(v42_record.payload).forecast
-                if v42_record is not None
-                else None
-            )
-            v43_record = refreshed.latest(kind="v43_forecast", instrument_id=candidate.instrument_id)
-            v43 = (
-                V43ForecastRecord.model_validate(v43_record.payload).forecast
-                if v43_record is not None
-                else None
-            )
+            instrument_id = candidate.instrument_id
+            v3 = refreshed.latest_model(FrozenForecast, kind="v3_forecast", instrument_id=instrument_id)
+            v4_record = refreshed.latest_model(V4ForecastRecord, kind="v4_forecast", instrument_id=instrument_id)
+            v42_record = refreshed.latest_model(V42ForecastRecord, kind="v42_forecast", instrument_id=instrument_id)
+            v43_record = refreshed.latest_model(V43ForecastRecord, kind="v43_forecast", instrument_id=instrument_id)
+            v4 = v4_record.forecast if v4_record is not None else None
+            v42 = v42_record.forecast if v42_record is not None else None
+            v43 = v43_record.forecast if v43_record is not None else None
             if v3 is not None:
                 v3_obs.append(
                     BinaryForecastObservation(
@@ -2445,7 +2308,7 @@ class ProspectiveGapRuntime:
                 payload=portfolio_f_performance,
                 state="FINAL",
                 run_id=manifest.run_id,
-                idempotency_suffix=_hash(
+                idempotency_suffix=canonical_sha256(
                     portfolio_f_performance.model_dump(mode="json")
                 ),
             )
@@ -2463,7 +2326,7 @@ class ProspectiveGapRuntime:
                 payload=portfolio_g_performance,
                 state="FINAL",
                 run_id=manifest.run_id,
-                idempotency_suffix=_hash(
+                idempotency_suffix=canonical_sha256(
                     portfolio_g_performance.model_dump(mode="json")
                 ),
             )
@@ -2485,60 +2348,15 @@ class ProspectiveGapRuntime:
         matched_v43_metrics = evaluate_binary_forecasts(v43_matched_obs)
         v42_comparison = V42ComparisonMetrics(
             n=matched_v42_metrics.n,
-            brier_delta_v42_minus_v3=(
-                matched_v42_metrics.brier_score - matched_v3_metrics.brier_score
-                if (
-                    matched_v42_metrics.brier_score is not None
-                    and matched_v3_metrics.brier_score is not None
-                )
-                else None
-            ),
-            log_loss_delta_v42_minus_v3=(
-                matched_v42_metrics.log_loss - matched_v3_metrics.log_loss
-                if (
-                    matched_v42_metrics.log_loss is not None
-                    and matched_v3_metrics.log_loss is not None
-                )
-                else None
-            ),
-            accuracy_delta_v42_minus_v3=(
-                matched_v42_metrics.accuracy - matched_v3_metrics.accuracy
-                if (
-                    matched_v42_metrics.accuracy is not None
-                    and matched_v3_metrics.accuracy is not None
-                )
-                else None
-            ),
+            brier_delta_v42_minus_v3=_matched_delta(matched_v42_metrics.brier_score, matched_v3_metrics.brier_score),
+            log_loss_delta_v42_minus_v3=_matched_delta(matched_v42_metrics.log_loss, matched_v3_metrics.log_loss),
+            accuracy_delta_v42_minus_v3=_matched_delta(matched_v42_metrics.accuracy, matched_v3_metrics.accuracy),
         )
         v43_comparison = V43ComparisonMetrics(
             n=matched_v43_metrics.n,
-            brier_delta_v43_minus_v3=(
-                matched_v43_metrics.brier_score
-                - matched_v43_v3_metrics.brier_score
-                if (
-                    matched_v43_metrics.brier_score is not None
-                    and matched_v43_v3_metrics.brier_score is not None
-                )
-                else None
-            ),
-            log_loss_delta_v43_minus_v3=(
-                matched_v43_metrics.log_loss
-                - matched_v43_v3_metrics.log_loss
-                if (
-                    matched_v43_metrics.log_loss is not None
-                    and matched_v43_v3_metrics.log_loss is not None
-                )
-                else None
-            ),
-            accuracy_delta_v43_minus_v3=(
-                matched_v43_metrics.accuracy
-                - matched_v43_v3_metrics.accuracy
-                if (
-                    matched_v43_metrics.accuracy is not None
-                    and matched_v43_v3_metrics.accuracy is not None
-                )
-                else None
-            ),
+            brier_delta_v43_minus_v3=_matched_delta(matched_v43_metrics.brier_score, matched_v43_v3_metrics.brier_score),
+            log_loss_delta_v43_minus_v3=_matched_delta(matched_v43_metrics.log_loss, matched_v43_v3_metrics.log_loss),
+            accuracy_delta_v43_minus_v3=_matched_delta(matched_v43_metrics.accuracy, matched_v43_v3_metrics.accuracy),
         )
         scorecard = DailyProspectiveScorecard(
             session_date=session_date,

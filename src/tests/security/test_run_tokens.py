@@ -152,7 +152,7 @@ def test_docker_receives_the_token_by_name_only(tmp_path, monkeypatch) -> None:
 
 def test_credentials_are_never_forwarded_to_child_processes(tmp_path) -> None:
     from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
-    from app.platform.agent_runtime.pi_runtime_core import build_agent_environment
+    from app.platform.agent_runtime.pi_runtime import build_agent_environment
     from app.runtime.process_environment import bounded_process_environment
 
     parent = {"PATH": "/bin", "OMNIX_SERVICE_TOKEN": "s", "OMNIX_RUN_TOKEN_KEY": "k" * 40, "OMNIX_AGENT_RUN_TOKEN": "t"}

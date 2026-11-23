@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from app.apps.rpg.world.map_contracts import MapDefinition
 from typing import Any, cast
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 _ALLOWED_KINDS = {"npc", "danger", "resource", "quest", "event"}
 _MAX_MARKERS = 256
@@ -29,20 +30,20 @@ def project_living_map_markers(
     by_location = {item.location_id: item for item in definition.objects if item.location_id}
     rows: dict[str, dict[str, Any]] = {}
     for raw in _records(state.get("map_presence")):
-        if _text(raw.get("map_id")) != definition.map_id:
+        if stripped_text(raw.get("map_id")) != definition.map_id:
             continue
         if raw.get("visible_to_player") is not True or raw.get("discovered") is False:
             continue
-        kind = _text(raw.get("kind")).lower()
+        kind = stripped_text(raw.get("kind")).lower()
         if kind not in _ALLOWED_KINDS:
             continue
         marker_id = _first(raw.get("marker_id"), raw.get("id"))
         if not marker_id:
             continue
-        object_id = _text(raw.get("object_id"))
-        location_id = _text(raw.get("location_id"))
+        object_id = stripped_text(raw.get("object_id"))
+        location_id = stripped_text(raw.get("location_id"))
         item = by_id.get(object_id) or by_location.get(location_id)
-        resolved_id = _text(getattr(item, "id", "")) or object_id
+        resolved_id = stripped_text(getattr(item, "id", "")) or object_id
         if resolved_id and (resolved_id not in discovered or resolved_id not in visible):
             continue
         point = _point(raw, item)
@@ -54,7 +55,7 @@ def project_living_map_markers(
             "x": point[0],
             "y": point[1],
             "object_id": resolved_id or None,
-            "label": _text(raw.get("label"))[:80],
+            "label": stripped_text(raw.get("label"))[:80],
         }
         if len(rows) >= _MAX_MARKERS:
             break
@@ -96,10 +97,6 @@ def _strings(value: object) -> set[str]:
 
 def _first(*values: object) -> str:
     return next((str(value).strip() for value in values if value is not None and str(value).strip()), "")
-
-
-def _text(value: object) -> str:
-    return str(value).strip() if value is not None else ""
 
 
 def _integer(value: object) -> bool:

@@ -12,6 +12,8 @@ from app.persistence.tenant import TenantContext
 from .contracts import AgentEvent
 from .repository import PostgresAgentRunRepository
 from .task_graph import (
+    TERMINAL_GRAPH_RUN_STATUSES,
+    TERMINAL_NODE_RUN_STATUSES,
     TaskGraph,
     TaskGraphEvent,
     TaskGraphRunSnapshot,
@@ -361,7 +363,7 @@ class PostgresTaskGraphRepository:
         """Update one node only if its durable execution identity still matches."""
 
         now = datetime.now(timezone.utc)
-        terminal = status in {"completed", "failed", "cancelled", "skipped"}
+        terminal = status in TERMINAL_NODE_RUN_STATUSES
         conditions = [
             "workspace_id = %s",
             "run_id = %s",
@@ -491,7 +493,7 @@ class PostgresTaskGraphRepository:
     ) -> TaskGraphRunSnapshot | None:
         """CAS one run-level lifecycle transition without resurrecting terminals."""
 
-        terminal = status in {"completed", "failed", "cancelled"}
+        terminal = status in TERMINAL_GRAPH_RUN_STATUSES
         conditions = [
             "workspace_id = %s",
             "run_id = %s",
@@ -680,7 +682,7 @@ class PostgresTaskGraphRepository:
         if locked is None:
             raise KeyError(run_id)
         current_status = str(locked[1])
-        if current_status in {"completed", "failed", "cancelled"}:
+        if current_status in TERMINAL_GRAPH_RUN_STATUSES:
             raise TaskGraphConcurrencyError(
                 f"cannot revise terminal task graph:{current_status}"
             )

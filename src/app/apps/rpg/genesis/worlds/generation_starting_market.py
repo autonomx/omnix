@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import mapping as _map, rows as _rows, topic_entities as _entities
 
 _PRICE_LEVEL_BPS = {
     "discounted": 8000,
@@ -74,28 +76,9 @@ class StartingMarketIssue:
         }
 
 
-class StartingMarketCompilationError(ValueError):
-    def __init__(self, issues: Sequence[StartingMarketIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.entity_id}:{row.path}" for row in self.issues)
-        super().__init__("starting_market_integrity_failed:" + rendered)
-
-
-def _map(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(row) for row in value if isinstance(row, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        if isinstance(row.get(key), Mapping):
-            return dict(row[key])
-    return dict(row)
+class StartingMarketCompilationError(GraphAuditError):
+    code = "starting_market_integrity_failed"
+    fields = ("code", "entity_id", "path")
 
 
 def _contract_enabled(topic_graph: Mapping[str, Any] | None) -> bool:
@@ -111,16 +94,6 @@ def _contract_enabled(topic_graph: Mapping[str, Any] | None) -> bool:
         if "vendor_inventory_item_ids" in fields:
             return True
     return False
-
-
-def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values: list[tuple[str, int, dict[str, Any]]] = []
-    for topic_index, raw in enumerate(topic_rows, 1):
-        topic = _map(raw)
-        candidate = _candidate(topic)
-        topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
-        values.extend((topic_id, index, row) for index, row in enumerate(_rows(candidate.get("entities"))))
-    return tuple(values)
 
 
 def _normalise(value: Any) -> str:

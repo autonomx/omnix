@@ -4,14 +4,16 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from app.caching.bounded_cache import bounded_lru_cache
+from app.providers.catalog import provider_id_of
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
+from .run_settlement import fail_run
 from .profiles import profile_produces_diff
-from .contracts import AgentEvent, AgentRunSnapshot
+from .contracts import AgentEvent, AgentRunSnapshot, TERMINAL_RUN_STATUSES
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
 from .run_repository_queries import PostgresAgentRunQueries
@@ -30,7 +32,7 @@ def _agent_run_settings():
 
 def provider_price(provider_id: str | None):
     """The configured price of a provider, or ``None`` when its cost cannot be metered."""
-    provider = normalize_budget_provider_id(provider_id or "")
+    provider = provider_id_of(provider_id)
     try:
         return _agent_run_settings().provider_prices.get(provider)
     except Exception:  # settings unreadable: treat the provider as unpriced
@@ -53,16 +55,10 @@ def apply_default_run_limits(spec):
     if not updates:
         return spec
     return spec.model_copy(update={"limits": spec.limits.model_copy(update=updates)})
-_TERMINAL = {"completed", "failed", "cancelled"}
 
 
 class AgentBudgetError(RuntimeError):
     pass
-
-
-def normalize_budget_provider_id(provider_id: str) -> str:
-    value = str(provider_id or "").strip().casefold()
-    return value.removeprefix("llm:")
 
 
 class AgentBudgetManager:
@@ -121,7 +117,7 @@ class AgentBudgetManager:
                 self._fail_locked(repository, snapshot, reason)
                 work.commit()
                 raise AgentBudgetError(reason)
-            provider = normalize_budget_provider_id(provider_id)
+            provider = provider_id_of(provider_id)
             if (
                 snapshot.spec.limits.max_cost is not None
                 and provider not in _ZERO_COST_PROVIDERS
@@ -241,7 +237,7 @@ class AgentBudgetManager:
             if snapshot is None:
                 work.rollback()
                 raise KeyError(run_id)
-            if snapshot.status in _TERMINAL:
+            if snapshot.status in TERMINAL_RUN_STATUSES:
                 work.rollback()
                 return
             if self._wall_time_exceeded(snapshot):
@@ -358,7 +354,7 @@ class AgentBudgetManager:
         legacy_tokens = 0
         legacy_cost = 0.0
         for child in legacy_children:
-            if child.status in _TERMINAL:
+            if child.status in TERMINAL_RUN_STATUSES:
                 usage = grants.subtree_usage(child.run_id)
                 legacy_steps += int(usage["steps"])
                 legacy_tools += int(usage["tool_calls"])
@@ -389,7 +385,7 @@ class AgentBudgetManager:
         snapshot = repository.get_run(run_id)
         if snapshot is None:
             raise KeyError(run_id)
-        if snapshot.status in _TERMINAL or snapshot.desired_state != "running":
+        if snapshot.status in TERMINAL_RUN_STATUSES or snapshot.desired_state != "running":
             raise AgentBudgetError(f"agent_run_not_runnable:{snapshot.status}")
         return snapshot
 
@@ -408,10 +404,10 @@ class AgentBudgetManager:
         snapshot: AgentRunSnapshot,
         reason: str,
     ) -> None:
-        if snapshot.status in _TERMINAL:
+        if snapshot.status in TERMINAL_RUN_STATUSES:
             return
         current = repository.get_run(snapshot.run_id) or snapshot
-        if current.status in _TERMINAL:
+        if current.status in TERMINAL_RUN_STATUSES:
             return
         repository.append_event(
             AgentEvent(
@@ -426,13 +422,7 @@ class AgentBudgetManager:
                 },
             )
         )
-        repository.update_state(
-            snapshot.run_id,
-            expected_revision=current.revision,
-            status="failed",
-            desired_state="cancelled",
-            last_error=reason[:2000],
-        )
+        fail_run(repository, snapshot.run_id, expected_revision=current.revision, error=reason)
 
 
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)

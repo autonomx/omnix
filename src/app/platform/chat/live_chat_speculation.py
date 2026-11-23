@@ -18,6 +18,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.providers.model_route import model_name_of
+from app.conversation.contracts import VOICE_SEGMENT_PREFIX, VOICE_USER_TURN_PREFIX
 from app.conversation.sound_tags import split_sound_tags
 from app.providers.service import provider_lease
 from app.platform.chat import (
@@ -30,7 +32,7 @@ from app.platform.chat.camera_glance import LIVE_TURN_WAIT_SECONDS, camera_share
 from app.platform.chat.live_agent_store import has_pending_proposal, is_proposal_answer
 from app.platform.chat.live_call_camera import record_camera_snapshot
 from app.platform.chat.scene import has_scene_guests, scenes_available, seats_taken
-from app.platform.chat.store import _model_key, _provider_key
+from app.platform.chat.store import _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.catalog import CANCELLATION, LIVE_TURNS, RUNTIME_STATS, THINKING_TOGGLE, provider_supports
 
@@ -454,8 +456,8 @@ def _generate_side_effect_free(
                 "side_effects_allowed": False,
                 "tools_allowed": False,
                 "memory_writes_allowed": False,
-                "user_turn_id": f"voice-user-turn:{speculation.generation_id}"[:160],
-                "speech_segment_id": f"voice-segment:{speculation.segment_id}"[:160],
+                "user_turn_id": f"{VOICE_USER_TURN_PREFIX}{speculation.generation_id}"[:160],
+                "speech_segment_id": f"{VOICE_SEGMENT_PREFIX}{speculation.segment_id}"[:160],
                 "live_execution_lane": speculation.execution_lane,
             },
         )
@@ -483,7 +485,7 @@ def _generate_side_effect_free(
             provider_kwargs["include_metrics"] = True
         raw_response = provider.chat_completion(
             messages=messages,
-            model=_model_key(speculation.model_id),
+            model=model_name_of(speculation.model_id) or None,
             stream=True,
             **provider_kwargs,
         )

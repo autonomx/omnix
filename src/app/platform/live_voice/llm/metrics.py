@@ -4,9 +4,9 @@ from __future__ import annotations
 import time
 from typing import Any, Iterator
 
+from app.providers.model_route import model_name_of
 from app.platform.chat.contracts import (
     merge_provider_response_metrics,
-    model_key,
     provider_key,
     provider_turn_deadline,
     remaining_turn_seconds,
@@ -85,7 +85,7 @@ def generate_lmstudio_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    model_name = model_key(model_id)
+    model_name = model_name_of(model_id) or None
     from app.providers.structured.errors import ProviderTimeout
 
     deadline = provider_turn_deadline(
@@ -166,7 +166,7 @@ def stream_lmstudio_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    model_name = model_key(model_id)
+    model_name = model_name_of(model_id) or None
     deadline = provider_turn_deadline(
         provider_id,
         session_provider_id=getattr(session, "provider_id", None),

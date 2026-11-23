@@ -1,7 +1,7 @@
 """Image FeatureModule declaration."""
 from __future__ import annotations
 
-from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
+from app.jobs.handlers import JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.settings.effective_defaults import apply_job_defaults
 from app.assets.store import LEGACY_IMAGE_MANIFEST
@@ -9,16 +9,12 @@ from app.providers.facade import PROVIDER_CATALOGS
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
 
-from .jobs import execute_image_job
+from .jobs import run_image_job
 from .contracts import ImageGenerateInput
 from .routes.assets import create_image_asset_file_router
 from .routes.models import create_image_model_router
 from .routes.references import create_image_reference_router
 from .routes.workspace import create_image_workspace_router
-
-
-def _execute(context: JobExecutionContext, job):
-    return execute_image_job(context.job_store, job)
 
 
 def _submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
@@ -76,7 +72,8 @@ FEATURE = FeatureModule(
     job_handlers=(
         JobHandlerSpec(
             type="image.generate",
-            handler=_execute,
+            run=run_image_job,
+            failure_code="image_generation_failed",
             input_model=ImageGenerateInput,
             resource_class=ResourceClass.GPU_IMAGE,
             timeout_seconds=600,

@@ -182,7 +182,7 @@ Ideas we keep from it:
 - **Binary frames are bare PCM.** The ids travel on the JSON `start`, `format` and `done` messages around them. A `format` message can change the sample rate mid-stream; the default is `DEFAULT_SAMPLE_RATE = 24_000`.
 - **Cancellation is explicit.** The client sends `cancel` with the exact `(output_id, generation_epoch)`. The server does not cancel older audio just because a newer epoch appears.
 - **The TTS lane** (`speech/tts_lane.py`, `PriorityTtsScheduler`) orders TTS generation and gives accepted turns priority. It does not send audio.
-- **Speculative TTS** (`speech/speculative_tts.py`, plus `chat_speculative_tts.py` for chat) makes audio before a turn is accepted.
+- **Speculative TTS** (`speech/speculative_tts.py`; the unused chat copy `chat_speculative_tts.py` was deleted 2026-11-22) makes audio before a turn is accepted.
     - Entries are keyed by `generation_id` and claimed by text-prefix match (`_claim_entry`).
     - A claim can replay a cached prefix and then synthesize the remainder fresh.
     - Replayed chunks carry `speculation_generation_id` in their timing.
@@ -791,7 +791,7 @@ During any of them the renderer holds the last speaking frame. If the gap passes
 | Catalog and install | `app/models/catalog.json`, `app/models/catalog.py` (`direct` source, `pinned`, `portrait` kind), `platform/voice/model_catalog.py` (`requires_acceptance`), `platform/voice/model_install.py`, `platform/voice/model_packs.py` (bundle, `_pack_status`), runtime pack lock files |
 | Service | `src/services/portrait/` (new), `app/composition/launcher/service_manager.py`, `app/config/launcher.py`, setup scripts and lock files |
 | Avatar contract | `platform/characters/avatar_models.py`, `persistence/avatar_store.py`, `live_call.py`, generated web API types |
-| Gateway | `platform/live_voice/transport/websocket.py` (`hello`, call key, avatar token, `_stream_phrase` copy hook, `output_end` and `play_position` forwarding, binding and prefix suppression), `transport/capabilities.py` (protocol version), a new `transport/avatar_websocket.py` (and its permission entry if the feature guard needs one), `speech/speculative_tts.py` (call key on the prefetch request and in `_claim_entry`, the copy hook in `_start_prefetch` under `entry.condition`, drop hooks), `speech/chat_speculative_tts.py` |
+| Gateway | `platform/live_voice/transport/websocket.py` (`hello`, call key, avatar token, `_stream_phrase` copy hook, `output_end` and `play_position` forwarding, binding and prefix suppression), `transport/capabilities.py` (protocol version), a new `transport/avatar_websocket.py` (and its permission entry if the feature guard needs one), `speech/speculative_tts.py` (call key on the prefetch request and in `_claim_entry`, the copy hook in `_start_prefetch` under `entry.condition`, drop hooks) |
 | Web | `LiveCallVisual.tsx`, a new `livePortraitRenderer.ts`, `live-voice-pcm-stream.worklet.ts` (`portrait_clock`, start hold), `live-voice-pcm-session.ts` (`hello` and its timeout, `output_end`), `live-voice-unified-audio-controller.ts` (`output_end`), `live-voice-delivery-ledger.ts`, `live-voice-release-observer.ts`, the speculation transports (`live-speculation-direct-gateway-transport.ts`: the call key), `AvatarPacksPanel.tsx` |
 | Gate | `platform/live_voice/release_gate.py` (paired comparison, new metrics), `scripts/run_live_voice_performance_benchmark.py` |
 | Docs | this file, `VOICE_MODEL_SERVICES.md` (the new service), `OPERATIONS.md` |

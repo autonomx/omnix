@@ -22,7 +22,8 @@ from decimal import Decimal
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .canonical import optional_decimal
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
@@ -55,14 +56,7 @@ _SIGNAL_EVENT_TYPE = "prospective_economic_signal"
 _OUTCOME_EVENT_TYPE = "prospective_economic_outcome"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def strategy_prospective_economic_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR", "1")
+strategy_prospective_economic_monitor_enabled = monitor_switch("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR")
 
 
 def _interval_seconds() -> float:
@@ -75,16 +69,6 @@ def _interval_seconds() -> float:
 
 def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
-
-
-def _decimal(value: object) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
 
 
 def _datetime(value: object, fallback: datetime) -> datetime:
@@ -100,6 +84,11 @@ def _datetime(value: object, fallback: datetime) -> datetime:
     if parsed.tzinfo is None:
         return fallback.astimezone(timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _minute_ceiling(value: datetime) -> datetime:
+    floored = value.replace(second=0, microsecond=0)
+    return floored if floored == value else floored + timedelta(minutes=1)
 
 
 def _eligible(config: TradingStrategyConfigDocument) -> bool:
@@ -335,8 +324,8 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
             execution_dict = execution if isinstance(execution, dict) else {}
             evaluation = source.payload.get("evaluation")
             evaluation_dict = evaluation if isinstance(evaluation, dict) else {}
-            entry = _decimal(execution_dict.get("ask")) or _decimal(execution_dict.get("last"))
-            stop = _decimal(evaluation_dict.get("research_stop_price"))
+            entry = optional_decimal(execution_dict.get("ask")) or optional_decimal(execution_dict.get("last"))
+            stop = optional_decimal(evaluation_dict.get("research_stop_price"))
             risk = entry - stop if entry is not None and stop is not None else None
             execution_eligible = bool(execution_dict.get("execution_eligible"))
             entry_time = _datetime(execution_dict.get("source_time"), source.observed_at)
@@ -406,8 +395,8 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
             if now < horizon_end:
                 continue
             matched = signal.payload.get("matched_signal") is True
-            entry = _decimal(signal.payload.get("entry_price"))
-            risk = _decimal(signal.payload.get("risk_per_share"))
+            entry = optional_decimal(signal.payload.get("entry_price"))
+            risk = optional_decimal(signal.payload.get("risk_per_share"))
             if not matched or entry is None or risk is None or risk <= 0:
                 payload = {
                     "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
@@ -439,28 +428,20 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
             binding_raw = signal.payload.get("binding_id")
             binding_id = str(binding_raw) if binding_raw else None
             try:
-                recovery_method = getattr(market_service, "recovered_bars", None)
-                if callable(recovery_method):
-                    response = await asyncio.to_thread(
-                        recovery_method,
-                        signal.instrument_id,
-                        "1m",
-                        500,
-                        binding_id,
-                        session_date=entry_time.astimezone(_ET).date(),
-                        as_of=horizon_end,
-                        knowledge_mode="retroactive_research",
-                    )
-                    outcome_bars = list(response.bars)
-                else:
-                    legacy_response = await asyncio.to_thread(
-                        market_service.bars,
-                        signal.instrument_id,
-                        "1m",
-                        500,
-                        binding_id,
-                    )
-                    outcome_bars = list(legacy_response.bars)
+                response = await asyncio.to_thread(
+                    market_service.recovered_bars,
+                    signal.instrument_id,
+                    "1m",
+                    500,
+                    binding_id,
+                    session_date=entry_time.astimezone(_ET).date(),
+                    # The horizon's last full bar ends on the minute after a mid-minute
+                    # horizon end; asking as of the horizon end itself dropped it, so
+                    # such an outcome could never be complete.
+                    as_of=_minute_ceiling(horizon_end),
+                    knowledge_mode="retroactive_research",
+                )
+                outcome_bars = list(response.bars)
                 full_bars = sorted(
                     [
                         bar for bar in outcome_bars

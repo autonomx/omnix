@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { isJobSettled } from '../../api/jobs';
 import { isFallbackOutputRef, jobOutputRefs } from '../../api/schemas/streams';
 import { storyAudioStreamControlMessageSchema } from './storyAudioMessages';
 import { parseJson } from '../../api/schemas/streams';
@@ -665,7 +666,7 @@ function playableAudioSource(job: JobRecord): string {
   return '';
 }
 
-function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
+function isTerminalJob(job: JobRecord): boolean { return isJobSettled(job.status); }
 function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
 // A voice is named by its asset id, which the TTS provider resolves (WP-4.10).
 function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return asset.id; }

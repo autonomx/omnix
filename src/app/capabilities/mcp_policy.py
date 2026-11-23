@@ -18,11 +18,12 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.caching.bounded_cache import bounded_lru_cache
+from app.capabilities.approval_policy import ApprovalPolicy
 
 McpTransport = Literal["http", "stdio"]
 McpEffect = Literal["read", "create", "mutate", "delete", "execute"]
 McpRisk = Literal["low", "medium", "high"]
-McpApproval = Literal["allow_automatic", "ask_sensitive", "always_ask", "disabled"]
+McpApproval = ApprovalPolicy
 
 DEFAULT_MCP_POLICY_PATH = Path("resources/config/agent_mcp_policy.json")
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")

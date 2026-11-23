@@ -22,6 +22,8 @@ from .generation_recovery_evidence import (
     EvidenceBackedRecoveringWorldForgeTopicGenerator,
 )
 from .generation_test_mode import deterministic_world_forge_test_mode
+from app.providers.catalog import provider_id_of
+from app.providers.model_route import model_name_of
 
 logger = logging.getLogger(__name__)
 
@@ -46,31 +48,13 @@ class WorldForgeRouteUnavailableError(ValueError):
     pass
 
 
-def _provider_key(value: Any) -> str:
-    provider = str(value or "").strip()
-    if provider.startswith("llm:"):
-        provider = provider.split(":", 1)[1]
-    return provider.casefold()
-
-
-def _model_key(value: Any) -> str:
-    model = str(value or "").strip()
-    parts = model.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        model = parts[2]
-    return model
-
-
 def _settings_route() -> tuple[str, str]:
     try:
-        from app.settings.effective_defaults import effective_llm_route, load_effective_profile
+        from app.providers.model_route import effective_model_route
+        from app.settings.effective_defaults import load_effective_profile
 
-        provider_id, model_id = effective_llm_route(
-            load_effective_profile(),
-            "rpg",
-            "rpg.world_forge.generate",
-        )
-        return _provider_key(provider_id), _model_key(model_id)
+        route = effective_model_route(load_effective_profile(), "rpg", "rpg.world_forge.generate")
+        return route.provider, route.model
     except Exception:
         return "", ""
 
@@ -116,8 +100,8 @@ def resolve_world_forge_route(
 
     env = environ if environ is not None else _environment()
     test_mode = deterministic_world_forge_test_mode(env)
-    requested_provider = _provider_key(provider_route)
-    requested_model = _model_key(model)
+    requested_provider = provider_id_of(provider_route)
+    requested_model = model_name_of(model)
     explicit_provider = requested_provider not in _CONFIGURED_VALUES
     explicit_model = requested_model.casefold() not in _CONFIGURED_VALUES
 
@@ -134,8 +118,8 @@ def resolve_world_forge_route(
             requested_model,
         )
 
-    env_provider = _provider_key(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER"))
-    env_model = _model_key(env.get("OMNIX_RPG_WORLD_FORGE_MODEL"))
+    env_provider = provider_id_of(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER"))
+    env_model = model_name_of(env.get("OMNIX_RPG_WORLD_FORGE_MODEL"))
     settings_provider, settings_model = _settings_route()
 
     if explicit_provider:
@@ -217,8 +201,8 @@ def build_world_forge_generator_from_settings(
 ) -> WorldForgeTopicGenerator:
     """Build the recorded provider with bounded same-model structural recovery."""
 
-    provider_id = _provider_key(settings.get("provider_route"))
-    model_id = _model_key(settings.get("model"))
+    provider_id = provider_id_of(settings.get("provider_route"))
+    model_id = model_name_of(settings.get("model"))
     if provider_id in _CONFIGURED_VALUES or not provider_id or not model_id:
         return UnavailableWorldForgeTopicGenerator(
             "durable World Forge job has no concrete provider and model"
@@ -275,7 +259,7 @@ def build_world_forge_generator_for_run(
     run: Mapping[str, Any] | None,
 ) -> WorldForgeTopicGenerator:
     settings = dict((run or {}).get("settings") or {})
-    provider_id = _provider_key(settings.get("provider_route"))
+    provider_id = provider_id_of(settings.get("provider_route"))
     if provider_id and provider_id not in _CONFIGURED_VALUES:
         return build_world_forge_generator_from_settings(settings)
     try:

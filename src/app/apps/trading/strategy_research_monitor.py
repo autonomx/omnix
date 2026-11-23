@@ -10,7 +10,7 @@ from app.runtime.features import FeatureContext
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import default_research_repository
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
@@ -20,16 +20,12 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 _STATE_KEY="_omnix_trading_strategy_research_monitor"
 
 
-def _flag(name: str,default: str="1") -> bool: return environment().get(name,default).strip().lower() in {"1","true","yes","on"}
-
 def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
     try: value=int(environment().get(name,str(default)))
     except ValueError: value=default
     return max(minimum,min(maximum,value))
 
-def strategy_research_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
-    return _flag("OMNIX_TRADING_RESEARCH_MONITOR","1")
+strategy_research_monitor_enabled = monitor_switch("OMNIX_TRADING_RESEARCH_MONITOR")
 
 def _interval_seconds() -> float:
     try:value=float(environment().get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))

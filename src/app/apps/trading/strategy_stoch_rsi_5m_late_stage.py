@@ -18,7 +18,7 @@ from .strategy_stoch_rsi_5m import (
     StochRsi5mState,
     evaluate_stoch_rsi_5m,
 )
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
@@ -35,7 +35,7 @@ def _current_regular_bars(
             for bar in bars
             if bar.is_final
             and bar.session == "regular"
-            and time(9, 30)
+            and REGULAR_OPEN
             <= bar.start_time.astimezone(_ET).time()
             < regular_close_time(bar.start_time.astimezone(_ET).date())
         ),

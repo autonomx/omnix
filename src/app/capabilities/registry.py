@@ -16,10 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.caching.bounded_cache import bounded_lru_cache
 from app.runtime.ports import Port, implementations, installed_port_bindings
 
+from .approval_policy import ApprovalPolicy, default_approval_policy
+
 CapabilityExecutionZone = Literal["worker", "broker", "model", "context"]
 CapabilityEffect = Literal["read", "create", "mutate", "delete", "execute"]
 CapabilityRisk = Literal["low", "medium", "high"]
-CapabilityApproval = Literal["allow_automatic", "ask_sensitive", "always_ask", "disabled"]
+CapabilityApproval = ApprovalPolicy
 
 
 class Capability(BaseModel):
@@ -41,6 +43,10 @@ class Capability(BaseModel):
     requires_connection: bool = False
     requires_confirmation: bool = False
     destructive: bool = False
+    # Runs inside a task-scoped, origin-restricted session adapter (the governed browser). Its own approval policy
+    # already decides when to ask, so an agent run's default ``ask_sensitive`` adds no wait on top
+    # (``approval_policy.run_approval_floor``); a stricter run policy still applies.
+    session_scoped: bool = False
     provider: str | None = None
     category: str = "general"
     assistant_visible: bool = False
@@ -102,6 +108,7 @@ def _cap(
     connection: bool = False,
     confirmation: bool = False,
     destructive: bool = False,
+    session_scoped: bool = False,
     provider: str | None = None,
     category: str = "general",
     assistant: bool = False,
@@ -111,12 +118,7 @@ def _cap(
 ) -> Capability:
     ns = namespace or capability_id.split(".", 1)[0]
     if approval is None:
-        if destructive or confirmation or risk == "high":
-            approval = "always_ask"
-        elif effect in {"create", "mutate", "delete", "execute"} or risk == "medium":
-            approval = "ask_sensitive"
-        else:
-            approval = "allow_automatic"
+        approval = default_approval_policy(effect=effect, risk=risk, needs_confirmation=confirmation, destructive=destructive)
     return Capability(
         id=capability_id,
         name=name,
@@ -133,6 +135,7 @@ def _cap(
         requires_connection=connection,
         requires_confirmation=confirmation,
         destructive=destructive,
+        session_scoped=session_scoped,
         provider=provider,
         category=category,
         assistant_visible=assistant,
@@ -143,24 +146,24 @@ def _cap(
 
 
 _BROWSER_CAPABILITIES = (
-    _cap("browser.open", "Open browser page", "Open an allowed browser origin in an isolated agent-browser session.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"url": "http(s) URL on the Omnix browser allowlist"}),
-    _cap("browser.snapshot", "Snapshot browser page", "Read the current page accessibility snapshot with stable element references.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
-    _cap("browser.click", "Click browser element", "Click one selector/reference in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
-    _cap("browser.fill", "Fill browser field", "Fill one field in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "text": "bounded text"}),
-    _cap("browser.press", "Press browser key", "Press one bounded key chord in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"key": "Enter, Tab, Control+a, etc."}),
-    _cap("browser.hover", "Hover browser element", "Hover one selector/reference in the governed browser session.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
-    _cap("browser.select", "Select browser option", "Select one option in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "value": "option value"}),
-    _cap("browser.scroll", "Scroll browser page", "Scroll the governed browser page without arbitrary JavaScript.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"direction": "up/down/left/right", "pixels": "optional integer"}),
-    _cap("browser.wait", "Wait for browser state", "Wait for a bounded selector, text, URL, load-state, or duration condition.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
-    _cap("browser.get_text", "Read browser text", "Read text from one selector/reference in the current page.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
-    _cap("browser.get_attribute", "Read browser attribute", "Read one DOM attribute without arbitrary JavaScript.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "attribute": "attribute name"}),
-    _cap("browser.get_url", "Read browser URL", "Read the active governed browser URL.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
-    _cap("browser.screenshot", "Capture browser screenshot", "Capture screenshot evidence from the governed browser session.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"full_page": "optional boolean"}),
-    _cap("browser.assert_text_contains", "Assert browser text", "Deterministically require an element's text to contain an expected value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "expected": "required text substring"}),
-    _cap("browser.assert_text_not_contains", "Assert browser text absent", "Deterministically require an element's text not to contain a forbidden value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "expected": "forbidden text substring"}),
-    _cap("browser.assert_attribute_contains", "Assert browser attribute", "Deterministically require one DOM attribute to contain an expected value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "attribute": "attribute name", "expected": "required substring"}),
-    _cap("browser.assert_url_contains", "Assert browser URL", "Deterministically require the active browser URL to contain an expected value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"expected": "required URL substring"}),
-    _cap("browser.close", "Close browser session", "Close the isolated governed browser session.", zone="broker", effect="execute", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.open", "Open browser page", "Open an allowed browser origin in an isolated agent-browser session.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"url": "http(s) URL on the Omnix browser allowlist"}),
+    _cap("browser.snapshot", "Snapshot browser page", "Read the current page accessibility snapshot with stable element references.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.click", "Click browser element", "Click one selector/reference in the governed browser session.", zone="broker", session_scoped=True, effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
+    _cap("browser.fill", "Fill browser field", "Fill one field in the governed browser session.", zone="broker", session_scoped=True, effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "text": "bounded text"}),
+    _cap("browser.press", "Press browser key", "Press one bounded key chord in the governed browser session.", zone="broker", session_scoped=True, effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"key": "Enter, Tab, Control+a, etc."}),
+    _cap("browser.hover", "Hover browser element", "Hover one selector/reference in the governed browser session.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
+    _cap("browser.select", "Select browser option", "Select one option in the governed browser session.", zone="broker", session_scoped=True, effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "value": "option value"}),
+    _cap("browser.scroll", "Scroll browser page", "Scroll the governed browser page without arbitrary JavaScript.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"direction": "up/down/left/right", "pixels": "optional integer"}),
+    _cap("browser.wait", "Wait for browser state", "Wait for a bounded selector, text, URL, load-state, or duration condition.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.get_text", "Read browser text", "Read text from one selector/reference in the current page.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
+    _cap("browser.get_attribute", "Read browser attribute", "Read one DOM attribute without arbitrary JavaScript.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "attribute": "attribute name"}),
+    _cap("browser.get_url", "Read browser URL", "Read the active governed browser URL.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.screenshot", "Capture browser screenshot", "Capture screenshot evidence from the governed browser session.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"full_page": "optional boolean"}),
+    _cap("browser.assert_text_contains", "Assert browser text", "Deterministically require an element's text to contain an expected value.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "expected": "required text substring"}),
+    _cap("browser.assert_text_not_contains", "Assert browser text absent", "Deterministically require an element's text not to contain a forbidden value.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "expected": "forbidden text substring"}),
+    _cap("browser.assert_attribute_contains", "Assert browser attribute", "Deterministically require one DOM attribute to contain an expected value.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "attribute": "attribute name", "expected": "required substring"}),
+    _cap("browser.assert_url_contains", "Assert browser URL", "Deterministically require the active browser URL to contain an expected value.", zone="broker", session_scoped=True, effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"expected": "required URL substring"}),
+    _cap("browser.close", "Close browser session", "Close the isolated governed browser session.", zone="broker", session_scoped=True, effect="execute", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
 )
 
 

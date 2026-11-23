@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError } from './errors';
-import { createGatewayClient, unwrap } from './http';
+import { ApiError, errorStatus, isConflict } from './errors';
+import { createGatewayClient, unwrap, unwrapLabelled } from './http';
 
 function client(response: Response) {
   const fetchImpl = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => response);
@@ -36,6 +36,17 @@ describe('typed gateway client', () => {
 
     await expect(failure).rejects.toBeInstanceOf(ApiError);
     await expect(failure).rejects.toMatchObject({ status: 400, requestId: 'req-7', message: expect.stringContaining('invalid_cursor') });
+  });
+
+  it('keeps the status when a labelled call fails, so callers need not read the message', async () => {
+    const { api } = client(Response.json({ detail: 'revision' }, { status: 409 }));
+
+    const error = await unwrapLabelled(api.GET('/api/jobs', {}), 'Trading').catch((caught: unknown) => caught);
+
+    expect((error as Error).message).toBe('Trading request failed (409): revision');
+    expect(errorStatus(error)).toBe(409);
+    expect(isConflict(error)).toBe(true);
+    expect(isConflict(new Error('Trading request failed (409): revision'))).toBe(false);
   });
 
   it('resolves fetch when called, so the fetch pipeline installed later still applies', async () => {

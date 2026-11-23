@@ -24,6 +24,7 @@ import type { TradingAlert } from './tradingTypes';
 import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
 import { chartPalette } from './chartPalette';
+import { isConflict } from '../../api/errors';
 
 type DragState = { alert: TradingAlert; threshold: number };
 type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
@@ -224,7 +225,7 @@ export function TradingChartAlertOverlay({
       setEditor(null);
       setStatus('ready');
     } catch (error) {
-      setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
+      setStatus(isConflict(error) ? 'conflict' : 'error');
       await alertMutations.refresh();
     }
   };

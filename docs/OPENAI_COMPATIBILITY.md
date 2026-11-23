@@ -134,19 +134,6 @@ Azure-style deployments, and other services that preserve the chat-completion
 request/response shape. Capability and parameter support still varies by
 provider; expose only the options the target can honor.
 
-## Realtime boundary
-
-Omnix also exposes `WS /v1/realtime` for its live-speech service when the
-realtime routes are mounted. Its event names intentionally resemble an
-OpenAI/Hugging Face realtime subset, but it is an Omnix protocol with Omnix
-session, transcript, STT, TTS, interruption, and policy semantics. It is not a
-drop-in implementation of the full OpenAI Realtime API.
-
-Use the Live Chat feature and the live-speech compatibility/status contracts to
-discover the current event flow. Do not assume that an HTTP `/v1` client can
-switch to this WebSocket without implementing the Omnix realtime handshake and
-event types.
-
 ## Troubleshooting checklist
 
 1. Confirm the main gateway is running on port `8000`.
@@ -161,6 +148,5 @@ event types.
 
 - Agent model gateway: `src/app/platform/agent_runtime/model_gateway.py`
 - Shared upstream provider: `src/app/providers/openai_compatible_provider.py`
-- Realtime compatibility metadata: `src/app/platform/live_speech/compat.py`
 - Provider architecture and authority rules: [ARCHITECTURE.md](ARCHITECTURE.md)
 - Local service setup: [SETUP.md](SETUP.md)

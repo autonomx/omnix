@@ -13,7 +13,8 @@ from __future__ import annotations
 from typing import Any
 
 from app.apps.rpg.session.jobs.handlers import RpgNarrationJobInput
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
+from app.jobs.handlers import JobResult, JobRun, RetryableJobError
+from app.jobs.models import CreateJobRequest, ResourceClass
 
 JOB_TYPE = "rpg.narration"
 MAX_ATTEMPTS = 3
@@ -62,19 +63,16 @@ class NarrationGenerationError(RuntimeError):
     """Generation failed in a way another attempt may not."""
 
 
-def execute_rpg_narration_job(job_store: Any, job: JobRecord) -> JobRecord:
+def run_rpg_narration_job(run: JobRun[RpgNarrationJobInput]) -> JobResult:
     """Run one narration request. A player turn's is retired: a turn is narrated by the narrative engine with its
-    commit or beside it (RQ-6.2), and a job left from a save before WP-5.6 completes without narrating or saving."""
+    commit or beside it (RQ-6.2), and a job left from a save before WP-5.6 completes without narrating or saving.
+    The last failed attempt publishes the failure to the session before the job fails."""
     from app.apps.rpg.session.narration_jobs import publish_narration_failure, run_narration_request
 
-    request = RpgNarrationJobInput.model_validate(job.input_payload or {})
-    attempt = max(1, int(getattr(job, "_attempt_count", 0) or 1))
-    job_store.mark_running(job.id)
+    request = run.input
+    ref = {"type": "rpg_narration", "module": "rpg", "session_id": request.session_id, "turn_id": request.turn_id}
     if request.job_kind == "player_turn":
-        retired = job_store.complete_job(job.id, CompleteJobRequest(output_refs=[{
-            "type": "rpg_narration", "module": "rpg", "session_id": request.session_id, "turn_id": request.turn_id,
-            "status": "retired"}]))
-        return retired or job
+        return JobResult(output_refs=({**ref, "status": "retired"},))
     try:
         outcome = run_narration_request(
             request.session_id,
@@ -82,37 +80,16 @@ def execute_rpg_narration_job(job_store: Any, job: JobRecord) -> JobRecord:
             request.narration_request,
             job_kind=request.job_kind,
             tick=request.tick,
-            attempt=attempt,
-            max_attempts=MAX_ATTEMPTS,
+            attempt=run.attempt,
+            max_attempts=run.max_attempts,
         )
     except Exception as exc:
-        final = attempt >= MAX_ATTEMPTS
-        if final:
-            error = str(exc) or type(exc).__name__
-            publish_narration_failure(request.session_id, request.turn_id, error, attempt, MAX_ATTEMPTS)
-        failed = job_store.fail_job(
-            job.id,
-            FailJobRequest(
-                code="rpg_narration_failed",
-                message=str(exc) or "RPG narration failed",
-                retryable=not final,
-                details={"session_id": request.session_id, "turn_id": request.turn_id, "attempt": attempt},
-            ),
-        )
-        return failed or job
-    completed = job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[{
-                "type": "rpg_narration",
-                "module": "rpg",
-                "session_id": request.session_id,
-                "turn_id": request.turn_id,
-                "status": str(outcome.get("status") or ""),
-            }],
-        ),
-    )
-    return completed or job
+        error = str(exc) or type(exc).__name__
+        if run.final_attempt:
+            publish_narration_failure(request.session_id, request.turn_id, error, run.attempt, run.max_attempts)
+        raise RetryableJobError("rpg_narration_failed", error, details={
+            "session_id": request.session_id, "turn_id": request.turn_id, "attempt": run.attempt}) from exc
+    return JobResult(output_refs=({**ref, "status": str(outcome.get("status") or "")},))
 
 
 __all__ = [
@@ -121,5 +98,5 @@ __all__ = [
     "NarrationGenerationError",
     "RpgNarrationJobInput",
     "enqueue_rpg_narration",
-    "execute_rpg_narration_job",
+    "run_rpg_narration_job",
 ]

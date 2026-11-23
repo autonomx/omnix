@@ -22,6 +22,7 @@ from typing import Any, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import require_utc
 from .models import MarketBar
 from .prospective_prediction_v4 import (
     ConfirmationState,
@@ -31,7 +32,7 @@ from .prospective_prediction_v4 import (
     apply_execution_costs,
 )
 from .prospective_prediction_v42 import V42Forecast
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 
 
 V42_ACTION_VERSION: Final = "prospective-gap-v4.2-action-v1"
@@ -50,12 +51,6 @@ V42DecisionWindow = Literal["OBSERVE", "EARLY", "PRIMARY", "SECONDARY", "EXPIRED
 V42TradeDecision = Literal["LONG", "NO_TRADE", "WATCH"]
 
 
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("v42_action_timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
-
-
 def _clamp01(value: Decimal) -> Decimal:
     return min(Decimal("1"), max(Decimal("0"), value))
 
@@ -68,7 +63,7 @@ def _bar_id(bar: MarketBar) -> str:
 
 
 def _session_time(value: datetime) -> time:
-    return _utc(value).astimezone(_ET).time().replace(tzinfo=None)
+    return require_utc(value, error="v42_action_timestamp_must_be_timezone_aware").astimezone(_ET).time().replace(tzinfo=None)
 
 
 class V42ActionPolicy(BaseModel):
@@ -206,7 +201,7 @@ class V42ActionSnapshot(BaseModel):
     @field_validator("evaluated_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="v42_action_timestamp_must_be_timezone_aware")
 
 
 def _decision_window(
@@ -329,7 +324,7 @@ def evaluate_v42_post_open_action(
     policy: V42ActionPolicy = DEFAULT_V42_ACTION_POLICY,
     data_quality_reasons: Sequence[str] = (),
 ) -> V42ActionSnapshot:
-    evaluated_at = _utc(evaluated_at)
+    evaluated_at = require_utc(evaluated_at, error="v42_action_timestamp_must_be_timezone_aware")
     if watch.instrument_id != forecast.instrument_id:
         raise ValueError("v42_action_watch_instrument_mismatch")
     if watch.forecast_fingerprint != forecast.immutable_fingerprint:
@@ -337,7 +332,7 @@ def evaluate_v42_post_open_action(
     local_session_date = evaluated_at.astimezone(_ET).date()
     if local_session_date != forecast.session_date:
         raise ValueError("v42_action_session_date_mismatch")
-    if execution_cost is not None and _utc(execution_cost.decision_at) != evaluated_at:
+    if execution_cost is not None and require_utc(execution_cost.decision_at, error="v42_action_timestamp_must_be_timezone_aware") != evaluated_at:
         raise ValueError("v42_action_execution_cost_time_mismatch")
     window = _decision_window(evaluated_at, policy)
     if shared_confirmation_state == "INVALIDATED":
@@ -399,7 +394,7 @@ def evaluate_v42_post_open_action(
             reasons=tuple(data_quality_reasons) or ("CURRENT_CONFIRMATION_DATA_INVALID",),
         )
 
-    session_open = datetime.combine(local_session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    session_open = datetime.combine(local_session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     finalized = tuple(
         sorted(
             (
@@ -613,7 +608,7 @@ class V42AuthorizationReceipt(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="v42_action_timestamp_must_be_timezone_aware")
 
 
 def authorize_v42_action(
@@ -723,7 +718,7 @@ class PortfolioFPosition(BaseModel):
     @field_validator("authorization_decision_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value, error="v42_action_timestamp_must_be_timezone_aware")
 
 
 class PortfolioF(BaseModel):

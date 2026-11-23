@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .canonical import require_utc
+
 """Causal dynamic discovery for ``interday-trading-strategy-shadow``.
 
 The frozen morning universe remains the immutable benchmark.  This module owns a
@@ -10,7 +12,7 @@ strategy qualification and execution remain separate authorities.
 import hashlib
 import math
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Mapping, Sequence
 
@@ -74,12 +76,6 @@ class AttributionStage(StrEnum):
 _STAGE_ORDER = {stage: index for index, stage in enumerate(AttributionStage)}
 
 
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
-
-
 def _float(value: Any, default: float = 0.0) -> float:
     if value is None:
         return default
@@ -118,7 +114,7 @@ class MarketAnomalyFeatures(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def normalize_observed_at(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class DiscoveryEvent(BaseModel):
@@ -143,7 +139,7 @@ class DiscoveryEvent(BaseModel):
     @field_validator("discovered_at", "causal_as_of")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def enforce_causality_and_authority(self):
@@ -169,7 +165,7 @@ class RelationshipExposure(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class MarketContext(BaseModel):
@@ -188,7 +184,7 @@ class MarketContext(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class OpportunityCharacterization(BaseModel):
@@ -219,7 +215,7 @@ class OpportunityCharacterization(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class ExperimentCandidateState(BaseModel):
@@ -240,7 +236,7 @@ class ExperimentCandidateState(BaseModel):
     @field_validator("first_seen_at", "last_observed_at", "below_retention_since", "expired_at")
     @classmethod
     def normalize_times(cls, value: datetime | None) -> datetime | None:
-        return _utc(value) if value is not None else None
+        return require_utc(value) if value is not None else None
 
 
 class DynamicCandidate(BaseModel):
@@ -287,7 +283,7 @@ class DynamicCandidate(BaseModel):
     )
     @classmethod
     def normalize_times(cls, value: datetime | None) -> datetime | None:
-        return _utc(value) if value is not None else None
+        return require_utc(value) if value is not None else None
 
     @model_validator(mode="after")
     def validate_candidate(self):
@@ -314,7 +310,7 @@ class AttributionEvent(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class TrendDurabilityOutcome(BaseModel):
@@ -349,7 +345,7 @@ class TrendDurabilityOutcome(BaseModel):
     @field_validator("discovered_at", "discovery_at", "tradeable_reference_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class ShadowQualificationEvidence(BaseModel):
@@ -452,7 +448,7 @@ def market_attention_score(features: MarketAnomalyFeatures) -> float:
 
 
 def _event_id(instrument_id: str, trigger: DiscoveryTriggerType, causal_as_of: datetime, source: str) -> str:
-    raw = "|".join((instrument_id, trigger.value, _utc(causal_as_of).isoformat(), source))
+    raw = "|".join((instrument_id, trigger.value, require_utc(causal_as_of).isoformat(), source))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
@@ -547,7 +543,7 @@ def catalyst_discovery_event(
     catalyst_score = round(sum(components) / len(components), 4)
     if catalyst_score < config.catalyst_admission_score:
         return None
-    observed = _utc(observed_at)
+    observed = require_utc(observed_at)
     trigger = DiscoveryTriggerType.CATALYST_DISCOVERY_EVENT
     evidence_ids = tuple(getattr(intelligence, "evidence_ids", ()) or ())
     if hasattr(intelligence, "model_dump"):
@@ -636,7 +632,7 @@ def advance_candidate_lifecycle(
     current_priority: float | None = None,
     config: DynamicDiscoveryConfig = DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
 ) -> DynamicCandidate:
-    now = _utc(observed_at)
+    now = require_utc(observed_at)
     if now < candidate.last_observed_at:
         raise ValueError("candidate_lifecycle_cannot_move_backwards")
     priority = candidate.common_priority if current_priority is None else _clip(current_priority)
@@ -799,13 +795,13 @@ def trend_durability_from_prices(
     samples: Sequence[tuple[datetime, float]],
     stop_fraction: float = 0.05,
 ) -> TrendDurabilityOutcome:
-    ordered = sorted((_utc(ts), float(price)) for ts, price in samples if _utc(ts) >= _utc(discovered_at))
+    ordered = sorted((require_utc(ts), float(price)) for ts, price in samples if require_utc(ts) >= require_utc(discovered_at))
     if not ordered:
         return TrendDurabilityOutcome(instrument_id=instrument_id, discovered_at=discovered_at, reference_price=reference_price)
     returns = [(ts, (price / reference_price - 1.0) * 100.0) for ts, price in ordered]
 
     def horizon(minutes: int) -> float | None:
-        target = _utc(discovered_at) + timedelta(minutes=minutes)
+        target = require_utc(discovered_at) + timedelta(minutes=minutes)
         values = [ret for ts, ret in returns if ts <= target]
         return values[-1] if values else None
 

@@ -10,6 +10,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from app.conversation.contracts import (
+    VOICE_SEGMENT_PREFIX,
+    VOICE_USER_TURN_PREFIX,
     DEFAULT_PROFILE_ID,  # noqa: F401 - compatibility re-export
     DEFAULT_WORKSPACE_ID,  # noqa: F401 - compatibility re-export
     ChatMessage,
@@ -364,8 +366,8 @@ class SendChatMessageRequest(BaseModel):
             or _LIVE_VOICE_TURN_ID_PATTERN.fullmatch(live_turn_id) is None
         ):
             return payload
-        payload.setdefault("user_turn_id", f"voice-user-turn:{live_turn_id}")
-        payload.setdefault("speech_segment_id", f"voice-segment:{live_turn_id}")
+        payload.setdefault("user_turn_id", f"{VOICE_USER_TURN_PREFIX}{live_turn_id}")
+        payload.setdefault("speech_segment_id", f"{VOICE_SEGMENT_PREFIX}{live_turn_id}")
         return payload
 
 

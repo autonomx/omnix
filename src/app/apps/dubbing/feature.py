@@ -8,7 +8,7 @@ from app.platform.voice.contracts import VOICE_CLIENT_TOOLS
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
 
-from .jobs import JOB_TYPES, RESOURCE_CLASSES, DubStepInput, execute_dub_step
+from .jobs import JOB_TYPES, RESOURCE_CLASSES, DubStepInput, run_dub_step
 from .routes import router
 
 # Long recordings make separation, transcription and synthesis the slow steps.
@@ -38,7 +38,8 @@ FEATURE = FeatureModule(
     job_handlers=tuple(
         JobHandlerSpec(
             type=job_type,
-            handler=execute_dub_step,
+            run=run_dub_step,
+            failure_code="dubbing_step_failed",
             input_model=DubStepInput,
             resource_class=RESOURCE_CLASSES[step],
             timeout_seconds=_TIMEOUTS[step],

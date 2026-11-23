@@ -11,6 +11,7 @@ import { useTradingStore } from './tradingStore';
 import { PaperAccountActivity, PaperAdvancedOrderFields, PaperOrderMetrics, displaySymbol, number } from './TradingPaperTicketParts';
 import './TradingPaper.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { isConflict } from '../../api/errors';
 
 type PaperTicketTab = 'order' | 'dom';
 type PaperNotice = { kind: 'success' | 'error'; message: string };
@@ -248,7 +249,7 @@ export function TradingPaperPanel({
       await operation();
       await refresh(preferredId);
     } catch (error) {
-      setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
+      setStatus(isConflict(error) ? 'conflict' : 'error');
       setNotice({ kind: 'error', message: paperErrorMessage(error, 'Account update') });
     }
   };
@@ -399,7 +400,7 @@ export function TradingPaperPanel({
         price: orderPrice === null || orderPrice === undefined ? '—' : number(String(orderPrice), 2),
       });
     } catch (error) {
-      setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
+      setStatus(isConflict(error) ? 'conflict' : 'error');
       setNotice({ kind: 'error', message: paperErrorMessage(error) });
     }
   };

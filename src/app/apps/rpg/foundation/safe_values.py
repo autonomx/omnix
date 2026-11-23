@@ -37,6 +37,36 @@ def safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def clean_text(value: Any, fallback: str = "") -> str:
+    """The value as stripped text, or ``fallback`` when blank; None and every falsy value (0, False) read as blank."""
+    return str(value or "").strip() or fallback
+
+
+def stripped_text(value: Any, fallback: str = "") -> str:
+    """The value as stripped text, or ``fallback`` when blank; only None reads as blank, so 0 reads as ``'0'``."""
+    return ("" if value is None else str(value).strip()) or fallback
+
+
+def string_text(value: Any) -> str:
+    """A string value stripped; any other value, even a number, reads as ``''``."""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def folded_text(value: Any) -> str:
+    """A string value stripped and lower-cased; any other value reads as ``''``."""
+    return string_text(value).lower()
+
+
+def optional_text(value: Any) -> str | None:
+    """A string value stripped, or None when it is blank or not a string."""
+    return string_text(value) or None
+
+
+def collapsed_text(value: Any) -> str:
+    """The value as text with every run of whitespace collapsed to one space; falsy values read as ``''``."""
+    return " ".join(str(value or "").split())
+
+
 def mapping_copy(value: Any) -> dict[str, Any]:
     """A plain dict copy of the value if it is any Mapping, else an empty dict."""
     return dict(value) if isinstance(value, Mapping) else {}

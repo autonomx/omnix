@@ -16,6 +16,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.apps.rpg.foundation.state.access import turn_count_of
+
 Path = tuple[str, ...]
 
 
@@ -233,7 +235,7 @@ class TimeSection(Section):
         calendar = _mapping(read_path(document, ("runtime_state", "campaign_calendar")))
         return cls(
             tick=_int(read_path(document, ("simulation_state", "tick"))),
-            turn_count=_int(read_path(document, ("manifest", "turn_count"))),
+            turn_count=turn_count_of(document),
             calendar=_mapping(calendar.get("current")),
             extensions=_split(calendar, {"current"}),
         )

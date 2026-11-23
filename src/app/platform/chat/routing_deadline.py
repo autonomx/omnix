@@ -1,6 +1,8 @@
 """Request-scoped deadlines shared by Chat routing entry points."""
 from __future__ import annotations
 
+from app.providers.catalog import provider_id_of
+
 import logging
 
 import math
@@ -8,11 +10,6 @@ from time import monotonic
 from typing import Any
 
 logger = logging.getLogger(__name__)
-
-
-def _provider_key(value: str | None) -> str:
-    text = str(value or "").strip()
-    return text.split(":", 1)[1] if text.startswith("llm:") else text
 
 
 def provider_turn_deadline(
@@ -37,7 +34,7 @@ def provider_turn_deadline(
         if math.isfinite(deadline):
             return deadline
 
-    resolved_id = _provider_key(provider_id or session_provider_id)
+    resolved_id = provider_id_of(provider_id or session_provider_id)
     if not resolved_id:
         return None
     try:

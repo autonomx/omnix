@@ -17,19 +17,18 @@ import logging
 
 import re
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from html import unescape
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from .catalog import register_instrument
-from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
+from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe
 from .instrument_catalog_service import _dynamic_bindings, _equity_instrument
 from .models import AssetClass, CanonicalInstrument, InstrumentType
 from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
-    MARKET_EVIDENCE_POLICY_VERSION,
     YAHOO_HARDENED_EVIDENCE_POLICY_VERSION,
     YAHOO_RELATIVE_VOLUME,
     PremarketLiquidityEvidence,
@@ -46,7 +45,7 @@ from .strategy_data_integrity import (
     FINVIZ_ATOMIC_FIRST_PAGE_MAX,
     finviz_atomic_source_locator,
 )
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
@@ -59,8 +58,6 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION = YAHOO_HARDENED_EVIDENCE_POLICY_VERSION
 
-_PREMARKET_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 _ALLOWED_DISCOVERY_SKEW_SECONDS = 120
 _TICKER_PATHS = {"/quote", "/quote.ashx", "/stock"}
 _HREF_RE = re.compile(r"href\s*=\s*([\"'])(.*?)\1", re.IGNORECASE | re.DOTALL)
@@ -244,7 +241,7 @@ def _yahoo_chart_snapshot(
         clock = observed.timetz().replace(tzinfo=None)
         if observed + timedelta(minutes=1) > evaluation_et:
             continue
-        if _PREMARKET_OPEN <= clock < _REGULAR_OPEN and clock < same_clock:
+        if PREMARKET_OPEN <= clock < REGULAR_OPEN and clock < same_clock:
             premarket_bar_count_by_date[observed.date()] += 1
             if volume is None:
                 if observed.date() == current_date:
@@ -254,9 +251,9 @@ def _yahoo_chart_snapshot(
                 dollar_volume_by_date[observed.date()] += volume * close
                 if volume > 0:
                     nonzero_count_by_date[observed.date()] += 1
-        if observed.date() == current_date and _PREMARKET_OPEN <= clock <= same_clock:
+        if observed.date() == current_date and PREMARKET_OPEN <= clock <= same_clock:
             latest_current = (observed, close)
-        if observed.date() < current_date and _REGULAR_OPEN <= clock < regular_close_time(observed.date()):
+        if observed.date() < current_date and REGULAR_OPEN <= clock < regular_close_time(observed.date()):
             regular_closes_by_date[observed.date()].append((observed, close))
 
     if latest_current is None:

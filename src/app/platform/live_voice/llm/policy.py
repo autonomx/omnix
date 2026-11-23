@@ -1,16 +1,8 @@
 """Provider options selected for a live voice turn."""
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_message
 from typing import Any
-
-
-def is_live_voice_message(user_message: Any) -> bool:
-    metadata = getattr(user_message, "metadata", None)
-    if not isinstance(metadata, dict):
-        return False
-    speech_segment_id = str(metadata.get("speech_segment_id") or "").strip()
-    user_turn_id = str(metadata.get("user_turn_id") or "").strip()
-    return bool(speech_segment_id or user_turn_id.startswith("voice-user-turn:"))
 
 
 def lmstudio_live_voice_options(user_message: Any) -> dict[str, Any]:

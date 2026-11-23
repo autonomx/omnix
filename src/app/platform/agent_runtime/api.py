@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentApproval,
     AgentArtifact,
     AgentEvent,
@@ -380,7 +381,7 @@ def stream_agent_events(run_id: str, after_sequence: int = 0) -> StreamingRespon
                         sequence = max(sequence, int(event.sequence or 0))
                         yield f"id: {sequence}\nevent: {event.event_type}\ndata: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
                     snapshot = await asyncio.to_thread(_service().get, run_id)
-                    if snapshot and snapshot.status in {"completed", "failed", "cancelled"}:
+                    if snapshot and snapshot.status in TERMINAL_RUN_STATUSES:
                         return
                 elif not await wakeups.wait():
                     yield ": heartbeat\n\n"

@@ -5,8 +5,8 @@ import { OmnixStatusPill } from '../../design/primitives';
 import { imageAssetUrl } from './imageWorkspaceModel';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { isJobActive } from '../../api/jobs';
 
-const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 const RETRYABLE_STATUSES = new Set(['failed', 'canceled', 'stale']);
 const COLLAPSED_JOB_LIMIT = 4;
 
@@ -105,7 +105,7 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
 }
 
 export function canCancelImageJob(job: JobRecord): boolean {
-  return ACTIVE_STATUSES.has(job.status);
+  return isJobActive(job.status);
 }
 
 export function canRetryImageJob(job: JobRecord): boolean {
@@ -157,7 +157,7 @@ export function imageJobDurationLabel(job: JobRecord, now = Date.now()): string 
     return completedAt ? `Generated in ${formatDuration(completedAt - startedAt)}` : undefined;
   }
 
-  return ACTIVE_STATUSES.has(job.status) ? `Generating for ${formatDuration(now - startedAt)}` : undefined;
+  return isJobActive(job.status) ? `Generating for ${formatDuration(now - startedAt)}` : undefined;
 }
 
 function timestamp(value: string | null | undefined): number | undefined {

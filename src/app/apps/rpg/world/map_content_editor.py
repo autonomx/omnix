@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 
 from app.apps.rpg.world.map_content_validation import MapContentReport, validate_map_content
 from typing import Any
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 _ALLOWED_OPERATIONS = {
     "move_object",
@@ -103,7 +104,7 @@ def _apply(draft: dict[str, Any], operation: Mapping[str, Any], path: str) -> No
         return
     if kind == "set_child_map":
         item = _object(draft, operation, path)
-        child_map_id = _text(operation.get("child_map_id"))
+        child_map_id = stripped_text(operation.get("child_map_id"))
         item["child_map_id"] = child_map_id or None
         return
     if kind == "upsert_route":
@@ -111,19 +112,19 @@ def _apply(draft: dict[str, Any], operation: Mapping[str, Any], path: str) -> No
         route = {
             "route_id": route_id,
             "points": _points(operation.get("points"), f"{path}.points"),
-            "style": _text(operation.get("style")) or "road",
+            "style": stripped_text(operation.get("style")) or "road",
         }
         routes = _mutable_rows(draft, "route_geometry")
-        routes = [item for item in routes if _text(item.get("route_id")) != route_id]
+        routes = [item for item in routes if stripped_text(item.get("route_id")) != route_id]
         routes.append(route)
-        draft["route_geometry"] = sorted(routes, key=lambda item: _text(item.get("route_id")))
+        draft["route_geometry"] = sorted(routes, key=lambda item: stripped_text(item.get("route_id")))
         return
     if kind == "remove_route":
         route_id = _required_text(operation.get("route_id"), f"{path}.route_id")
         routes = _mutable_rows(draft, "route_geometry")
-        if not any(_text(item.get("route_id")) == route_id for item in routes):
+        if not any(stripped_text(item.get("route_id")) == route_id for item in routes):
             raise MapContentEditError("route_not_found", f"{path}.route_id", route_id)
-        draft["route_geometry"] = [item for item in routes if _text(item.get("route_id")) != route_id]
+        draft["route_geometry"] = [item for item in routes if stripped_text(item.get("route_id")) != route_id]
         return
     if kind == "set_background_asset":
         bounds = raw_bounds if isinstance(raw_bounds := draft.get("bounds"), Mapping) else {}
@@ -138,7 +139,7 @@ def _object(draft: dict[str, Any], operation: Mapping[str, Any], path: str) -> d
     object_id = _required_text(operation.get("object_id"), f"{path}.object_id")
     objects = _mutable_rows(draft, "objects")
     for item in objects:
-        if _text(item.get("id")) == object_id:
+        if stripped_text(item.get("id")) == object_id:
             return item
     raise MapContentEditError("object_not_found", f"{path}.object_id", object_id)
 
@@ -175,7 +176,7 @@ def _points(value: object, path: str) -> list[list[int]]:
 
 
 def _required_text(value: object, path: str) -> str:
-    text = _text(value)
+    text = stripped_text(value)
     if not text:
         raise MapContentEditError("required", path)
     return text
@@ -194,5 +195,3 @@ def _positive_integer(value: object, path: str) -> int:
     return integer
 
 
-def _text(value: object) -> str:
-    return str(value).strip() if value is not None else ""

@@ -136,7 +136,7 @@ class RunnerOwnedConfigs:
         paper_repository = self.paper_repository_factory()
         market_service = self.market_service_factory()
         host = self.host
-        before = host.paper_order_count
+        before = host.metrics.paper_order_count
         host.current_run_id = _run_id("runner", self.clock())
         try:
             for config in configs:
@@ -170,6 +170,6 @@ class RunnerOwnedConfigs:
                         error_type=type(exc).__name__,
                         detail=str(exc),
                     )
-            return host.paper_order_count - before
+            return host.metrics.paper_order_count - before
         finally:
             host.current_run_id = None

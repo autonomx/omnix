@@ -26,7 +26,9 @@ class JobHandlerSpec(Protocol):
     @property
     def type(self) -> str: ...
     @property
-    def handler(self) -> Callable[..., object]: ...
+    def handler(self) -> Callable[..., object] | None: ...  # the older form; a spec has this or ``run``
+    @property
+    def run(self) -> Callable[..., object] | None: ...
     @property
     def input_model(self) -> builtins.type[BaseModel]: ...  # ``type`` is the property above
     @property

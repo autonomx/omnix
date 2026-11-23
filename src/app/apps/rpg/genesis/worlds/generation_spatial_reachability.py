@@ -9,6 +9,8 @@ from app.apps.rpg.genesis.forge.world_forge_spatial_routes import (
     minimum_route_count,
     spatial_route_components,
 )
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, mapping as _mapping, rows as _rows
 
 _CATEGORY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _FORBIDDEN_VALUES = {
@@ -67,39 +69,9 @@ class SpatialReachabilityIssue:
         }
 
 
-class SpatialReachabilityCompilationError(ValueError):
-    def __init__(self, issues: Sequence[SpatialReachabilityIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.code}:{issue.topic_id}:{issue.place_id}:{issue.path}"
-            for issue in self.issues
-        )
-        super().__init__("spatial_reachability_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "spatial_reachability_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
+class SpatialReachabilityCompilationError(GraphAuditError):
+    code = "spatial_reachability_failed"
+    fields = ("code", "topic_id", "place_id", "path")
 
 
 def _spatial_domains(topic_graph: Mapping[str, Any] | None) -> set[str]:

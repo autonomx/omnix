@@ -15,9 +15,8 @@ from typing import Any, cast
 
 from app.persistence.tenant import TenantContext
 
-from .contracts import AgentRunSnapshot, ResourceGrant, RunLimits, utc_now
+from .contracts import AgentRunSnapshot, ResourceGrant, RunLimits, utc_now, TERMINAL_RUN_STATUSES
 
-_TERMINAL = {"completed", "failed", "cancelled"}
 
 
 class ResourceGrantError(ValueError):
@@ -174,7 +173,7 @@ class PostgresResourceGrantRepository:
     def reconcile_terminal_grants(self, parent_run_id: str) -> None:
         for grant in self.list_direct(parent_run_id):
             status = self._run_status(grant.child_run_id)
-            if status not in _TERMINAL or grant.state != "active":
+            if status not in TERMINAL_RUN_STATUSES or grant.state != "active":
                 continue
             usage = self.subtree_usage(grant.child_run_id)
             exhausted = (
@@ -221,7 +220,7 @@ class PostgresResourceGrantRepository:
         }
         for grant in self.list_direct(parent_run_id):
             status = self._run_status(grant.child_run_id)
-            if status not in _TERMINAL and grant.state == "active":
+            if status not in TERMINAL_RUN_STATUSES and grant.state == "active":
                 totals["steps"] += grant.limits.max_steps
                 totals["tool_calls"] += grant.limits.max_tool_calls
                 totals["output_tokens"] += grant.limits.max_tokens or 0

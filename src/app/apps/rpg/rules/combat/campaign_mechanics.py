@@ -6,14 +6,11 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _text(value: Any) -> str:
-    return str(value or "").strip()
 
 
 def _slug(value: str) -> str:
@@ -31,15 +28,15 @@ def campaign_creature_definition(
     creatures = _mapping(
         campaign_mechanics_catalog(simulation_state).get("creatures")
     )
-    wanted = _text(creature_ref)
+    wanted = clean_text(creature_ref)
     wanted_slug = _slug(wanted.removeprefix("creature:"))
     for definition_id, raw in creatures.items():
         definition = _mapping(raw)
         names = {
-            _text(definition_id).casefold(),
-            _text(definition.get("definition_id")).casefold(),
-            _text(definition.get("name")).casefold(),
-            _slug(_text(definition.get("name"))),
+            clean_text(definition_id).casefold(),
+            clean_text(definition.get("definition_id")).casefold(),
+            clean_text(definition.get("name")).casefold(),
+            _slug(clean_text(definition.get("name"))),
         }
         if wanted.casefold() in names or wanted_slug in names:
             return definition
@@ -48,9 +45,9 @@ def campaign_creature_definition(
     named = [
         _mapping(raw)
         for raw in creatures.values()
-        if _slug(_text(_mapping(raw).get("name"))) and f" {_slug(_text(_mapping(raw).get('name'))).replace('-', ' ')} " in words
+        if _slug(clean_text(_mapping(raw).get("name"))) and f" {_slug(clean_text(_mapping(raw).get('name'))).replace('-', ' ')} " in words
     ]
-    return max(named, key=lambda row: len(_text(row.get("name")))) if named else None
+    return max(named, key=lambda row: len(clean_text(row.get("name")))) if named else None
 
 
 def instantiate_campaign_creature(
@@ -62,7 +59,7 @@ def instantiate_campaign_creature(
     definition = campaign_creature_definition(simulation_state, creature_ref)
     if definition is None:
         return None
-    definition_id = _text(definition.get("definition_id"))
+    definition_id = clean_text(definition.get("definition_id"))
     actor_id = f"enemy:{_slug(definition_id)}:{max(1, int(instance_index))}"
     hp = max(1, int(definition.get("hp") or 1))
     return {
@@ -70,7 +67,7 @@ def instantiate_campaign_creature(
         "enemy_id": actor_id,
         "definition_id": definition_id,
         "definition_revision": int(definition.get("definition_revision") or 1),
-        "name": _text(definition.get("name")) or definition_id,
+        "name": clean_text(definition.get("name")) or definition_id,
         "side": "enemy",
         "level": int(definition.get("level") or 1),
         "hp": hp,
@@ -83,7 +80,7 @@ def instantiate_campaign_creature(
         "initiative_bonus": int(definition.get("initiative_bonus") or 0),
         "morale_threshold": int(definition.get("morale_threshold") or 35),
         "tags": list(definition.get("tags") or ()),
-        "loot_table_id": _text(definition.get("loot_table_id")),
+        "loot_table_id": clean_text(definition.get("loot_table_id")),
         "xp_value": int(definition.get("xp_value") or 0),
         "budget_cost": int(definition.get("budget_cost") or 1),
         "condition_immunities": list(
@@ -91,11 +88,11 @@ def instantiate_campaign_creature(
         ),
         "vulnerabilities": deepcopy(list(definition.get("vulnerabilities") or ())),
         # EV-2: copied into the fight when the creature joins it, as its behaviour is.
-        "resists": [_text(tag).casefold() for tag in definition.get("resists") or () if _text(tag)],
+        "resists": [clean_text(tag).casefold() for tag in definition.get("resists") or () if clean_text(tag)],
         "phases": deepcopy(list(definition.get("phases") or ())),
         "no_escape": definition.get("no_escape") is True,
         "recovers": float(raw_recovers if (raw_recovers := definition.get("recovers")) is not None else 1.0),
-        "behaviour": _text(definition.get("behaviour")) or "fights",
+        "behaviour": clean_text(definition.get("behaviour")) or "fights",
         "speaks": definition.get("speaks") is True,
         "status": "active",
         "status_effects": [],

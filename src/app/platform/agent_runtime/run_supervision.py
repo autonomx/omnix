@@ -5,12 +5,14 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .run_settlement import cancel_run, fail_run
 from .profiles import profile_produces_diff
 from .event_queries import latest_event
 from datetime import datetime, timedelta, timezone
 import threading
 from .budget import AgentBudgetError
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentEvent,
     AgentRunCommand,
     AgentRunSnapshot,
@@ -89,11 +91,10 @@ def recover_orphaned_runs(service: AgentRunService) -> list[str]:
                     # The dead owner never delivered this cancel. Honour it
                     # instead of restarting a runtime only to stop it.
                     if repository.claim_command(run_id, queued_cancel.command_id):
-                        current = repository.update_state(
+                        current = cancel_run(
+                            repository,
                             run_id,
                             expected_revision=current.revision,
-                            status="cancelled",
-                            desired_state="cancelled",
                             worker_id=service.worker_id,
                             lease_token=lease.lease_token,
                         )
@@ -120,12 +121,12 @@ def recover_orphaned_runs(service: AgentRunService) -> list[str]:
                 work.rollback()
             for pending_command in pending:
                 current = service.command(pending_command)
-                if current.status in {"completed", "failed", "cancelled"} or current.desired_state != "running":
+                if current.status in TERMINAL_RUN_STATUSES or current.desired_state != "running":
                     break
             current = service.get(run_id)
             if current is None:
                 raise RuntimeError("recovered run disappeared")
-            if current.status in {"completed", "failed", "cancelled"} or current.desired_state != "running":
+            if current.status in TERMINAL_RUN_STATUSES or current.desired_state != "running":
                 recovered.append(run_id)
                 continue
             recovery_payload: dict[str, Any] = {
@@ -160,14 +161,13 @@ def _fail_recovery(service: AgentRunService, run_id: str, exc: Exception) -> Non
             return
         repository = service.repository_factory(work.connection, service.context)
         current = repository.get_run(run_id)
-        if current is not None and current.status not in {"completed", "failed", "cancelled"}:
-            repository.update_state(
+        if current is not None and current.status not in TERMINAL_RUN_STATUSES:
+            fail_run(
+                repository,
                 run_id,
                 expected_revision=current.revision,
-                status="failed",
-                desired_state="cancelled",
+                error=f"recovery_failed:{type(exc).__name__}: {exc}",
                 worker_id=service.worker_id,
-                last_error=f"recovery_failed:{type(exc).__name__}: {exc}"[:2000],
             )
             service._maybe_finalize_parent_in_repository(repository, run_id)
         work.commit()
@@ -524,13 +524,12 @@ def _request_stall_recovery(attempt, run_id, reason, quality_stage, repository, 
                 "recovery_limit": _stalled_recovery_limit(),
             },
         ))
-        repository.update_state(
+        fail_run(
+            repository,
             run_id,
             expected_revision=current.revision,
-            status="failed",
-            desired_state="cancelled",
+            error=f"stalled_run:{reason}; recovery limit exhausted",
             worker_id=service.worker_id,
-            last_error=f"stalled_run:{reason}; recovery limit exhausted"[:2000],
         )
     else:
         log_agent_activity(
@@ -604,7 +603,7 @@ def _dispatch_stall_recovery(quality_stage, attempt, service, run_id, current):
         with service.unit_of_work(service.database) as work:
             repository = service.repository_factory(work.connection, service.context)
             persisted = repository.get_run(run_id)
-            if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
+            if persisted is not None and persisted.status not in TERMINAL_RUN_STATUSES:
                 repository.update_state(
                     run_id,
                     expected_revision=persisted.revision,
@@ -640,19 +639,18 @@ def _dispatch_stall_recovery(quality_stage, attempt, service, run_id, current):
         with service.unit_of_work(service.database) as work:
             repository = service.repository_factory(work.connection, service.context)
             persisted = repository.get_run(run_id)
-            if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
+            if persisted is not None and persisted.status not in TERMINAL_RUN_STATUSES:
                 repository.append_event(AgentEvent(
                     run_id=run_id,
                     event_type="run.recovery_failed",
                     payload={"attempt": attempt, "reason": f"{type(exc).__name__}: {exc}"[:2000]},
                 ))
-                repository.update_state(
+                fail_run(
+                    repository,
                     run_id,
                     expected_revision=persisted.revision,
-                    status="failed",
-                    desired_state="cancelled",
+                    error=f"stalled_recovery_failed:{type(exc).__name__}: {exc}",
                     worker_id=service.worker_id,
-                    last_error=f"stalled_recovery_failed:{type(exc).__name__}: {exc}"[:2000],
                 )
             work.commit()
         service._cancel_descendants(run_id)

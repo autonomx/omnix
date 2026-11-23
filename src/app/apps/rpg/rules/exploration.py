@@ -80,7 +80,7 @@ def explore(document: Mapping[str, Any]) -> Explored:
     if not hidden:
         return Explored(lines=["You search the area but find nothing this time."])
     seed = int(_sections.rng_seed_of(simulation) or 0) % 2**64
-    turn = int(_d(document.get("state")).get("turn_count") or 0)
+    turn = _sections.turn_count_of(document)
     changes: list[StateChange] = []
     lines: list[str] = []
     for place in hidden:

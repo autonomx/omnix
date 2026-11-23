@@ -27,7 +27,11 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
     monkeypatch.setenv("OMNIX_ALPACA_API_SECRET_KEY", "test-secret")
 
     app = FastAPI()
-    app.state._omnix_trading_strategy_monitor = TradingStrategyMonitor(interval_seconds=17)
+    strategy_monitor = TradingStrategyMonitor(interval_seconds=17)
+    # The status reads the monitor's pass metrics, not attributes of the monitor itself.
+    strategy_monitor.metrics.signal_count = 3
+    strategy_monitor.metrics.trend_t1_event_count = 5
+    app.state._omnix_trading_strategy_monitor = strategy_monitor
     app.state._omnix_trading_strategy_deep_recovery_shadow_monitor = TradingStrategyDeepRecoveryShadowMonitor(interval_seconds=23)
     app.state._omnix_trading_strategy_universe_archive_monitor = TradingStrategyUniverseArchiveMonitor(interval_seconds=19)
     app.state._omnix_trading_strategy_v2_qualification_monitor = TradingStrategyV2QualificationMonitor(interval_seconds=61)
@@ -48,7 +52,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
         "last_error": None,
         "counters": {
             "evaluation_count": 0,
-            "signal_count": 0,
+            "signal_count": 3,
             "paper_order_count": 0,
             "intraday_learning_snapshot_count": 0,
             "intraday_llm_call_count": 0,
@@ -62,7 +66,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "intraday_llm_shared_assessment_count": 0,
             "intraday_llm_budget_skip_count": 0,
             "leader_momentum_event_count": 0,
-            "trend_t1_event_count": 0,
+            "trend_t1_event_count": 5,
             "auto_paper_ready_strategy_count": 0,
             "auto_paper_blocked_strategy_count": 0,
             "auto_paper_archive_not_ready_strategy_count": 0,

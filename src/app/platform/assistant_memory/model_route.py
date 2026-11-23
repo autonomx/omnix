@@ -25,15 +25,14 @@ class MemoryModel:
 def memory_model() -> MemoryModel:
     """The Memory model setting; the default provider when it is unset or cannot be read."""
     try:
-        from app.settings.effective_defaults import load_effective_profile, route_model_name, setting_text
+        from app.providers.model_route import task_override_route
+        from app.settings.effective_defaults import load_effective_profile
 
-        row = load_effective_profile().global_settings.routing.task_overrides.get(MEMORY_ROUTE_KEY) or {}
-        provider = setting_text(row.get("providerId") or row.get("provider_id")).removeprefix("llm:")
-        model = route_model_name(row.get("modelId") or row.get("model_id"))
+        route = task_override_route(load_effective_profile(), MEMORY_ROUTE_KEY)
     except Exception:  # noqa: BLE001 - memory keeps working on the default provider
         logger.warning("memory_model_setting_unreadable", exc_info=True)
         return MemoryModel()
-    return MemoryModel(provider or None, model or None)
+    return MemoryModel(route.provider or None, route.model or None)
 
 
 def memory_route(environment_provider: str) -> tuple[str | None, str | None]:

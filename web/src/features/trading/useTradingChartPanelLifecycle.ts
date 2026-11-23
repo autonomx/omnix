@@ -27,10 +27,10 @@ function isChartClick(pan: ChartPan, event: PointerEvent): boolean {
 /** The chart adapter: creation, streaming, appearance and viewport. */
 export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData>) {
   const {
-    active, adapter, adapterRef, chartId, chartQuery, chartType, customRangeOpen, customRangeRef, drawingTool,
+    active, adapter, adapterRef, chartId, chartQuery, chartType, drawingTool,
     drawings, fittedBarsKeyRef, fullscreenIndicatorRef, fullscreenMainPaneRef, hostRef, indicatorSchedulerRef,
     indicatorTimerRef, interval, pendingIntervalScrollRef, pendingRangeIntervalRef, previousIntervalRef, replayMode,
-    selectedRangeRef, setAdapter, setChartPanning, setContextMenu, setCustomRangeOpen, setFullscreenIndicator,
+    selectedRangeRef, setAdapter, setChartPanning, setContextMenu, setFullscreenIndicator,
     setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPanningIndicatorPane,
     setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedIndicator, setSelectedRangeLabel, setTimezoneId,
     setTimezoneMenuOpen, showExtendedHours, streamDataKeyRef, streamRevisionRef, synchronization, timezoneId, timezoneMenuOpen,
@@ -193,16 +193,14 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
   }, [adapter, chartQuery.data?.instrument.exchange_timezone, timezoneId]);
 
   useEffect(() => {
-    if (!customRangeOpen && !timezoneMenuOpen) return;
-    const closeMenus = (event: PointerEvent) => {
+    if (!timezoneMenuOpen) return;
+    const closeMenu = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (customRangeOpen && !customRangeRef.current?.contains(target)) setCustomRangeOpen(false);
-      if (timezoneMenuOpen && !timezoneMenuRef.current?.contains(target)) setTimezoneMenuOpen(false);
+      if (target instanceof Node && !timezoneMenuRef.current?.contains(target)) setTimezoneMenuOpen(false);
     };
-    document.addEventListener('pointerdown', closeMenus, true);
-    return () => document.removeEventListener('pointerdown', closeMenus, true);
-  }, [customRangeOpen, timezoneMenuOpen, customRangeRef, setCustomRangeOpen, setTimezoneMenuOpen, timezoneMenuRef]);
+    document.addEventListener('pointerdown', closeMenu, true);
+    return () => document.removeEventListener('pointerdown', closeMenu, true);
+  }, [timezoneMenuOpen, setTimezoneMenuOpen, timezoneMenuRef]);
 
   useEffect(() => onOmnixEvent(TRADING_CHART_TIMEZONE_CHANGE_EVENT, (timezone) => {
     if (TRADING_TIMEZONE_OPTIONS.some((option) => option.id === timezone)) setTimezoneId(timezone);

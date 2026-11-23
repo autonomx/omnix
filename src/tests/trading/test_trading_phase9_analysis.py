@@ -14,8 +14,9 @@ from app.apps.trading.indicators.engine import (
 )
 
 
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = json.loads(
-    Path("web/src/features/trading/indicators/fixtures/advancedIndicators.json").read_text()
+    (ROOT / "web/src/features/trading/indicators/fixtures/advancedIndicators.json").read_text()
 )
 
 

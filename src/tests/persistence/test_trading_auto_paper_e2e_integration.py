@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
@@ -248,7 +249,7 @@ def _seed_qualification(repository: TradingStrategyRepository, config: TradingSt
     )
 
 
-class ReplayMarketService:
+class ReplayMarketService(RecoveringMarketService):
     def __init__(self, *, instrument_id: str, binding_id: str, bars: list[MarketBar], assumptions: dict[str, object]) -> None:
         self.instrument_id = instrument_id
         self.binding_id = binding_id

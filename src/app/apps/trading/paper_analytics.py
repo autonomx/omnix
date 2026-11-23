@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
+from .canonical import optional_decimal
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
 from .strategy_v2_qualification import (
     V2_PROSPECTIVE_START,
@@ -211,16 +212,6 @@ class PaperAnalyticsOverview(BaseModel):
     factors: list[PaperFactorStudy] = Field(default_factory=list)
     recent_trades: list[PaperAnalyticsTrade] = Field(default_factory=list)
     archived_strategy_count: int = 0
-
-
-def _decimal(value: object) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
 
 
 def _aware_datetime(value: object) -> datetime | None:
@@ -494,7 +485,7 @@ _FACTOR_DEFINITIONS: dict[str, tuple[str, tuple[Decimal, ...]]] = {
 
 
 def _feature_value(features: dict[str, Any], key: str) -> Decimal | None:
-    direct = _decimal(features.get(key))
+    direct = optional_decimal(features.get(key))
     if direct is not None:
         return direct
     aliases = {
@@ -503,7 +494,7 @@ def _feature_value(features: dict[str, Any], key: str) -> Decimal | None:
         "tod_rvol": ("rvol",),
     }
     for alias in aliases.get(key, ()):
-        value = _decimal(features.get(alias))
+        value = optional_decimal(features.get(alias))
         if value is not None:
             return value
     return None
@@ -745,7 +736,7 @@ class TradingPaperAnalytics:
             payload = row[2] if isinstance(row[2], dict) else {}
             entry_time = _aware_datetime(payload.get("entry_time"))
             exit_time = _aware_datetime(payload.get("exit_time"))
-            r_result = _decimal(payload.get("r_result"))
+            r_result = optional_decimal(payload.get("r_result"))
             raw_session = payload.get("session_date")
             if entry_time is None or exit_time is None or r_result is None or raw_session is None:
                 continue
@@ -767,8 +758,8 @@ class TradingPaperAnalytics:
                     exit_time=exit_time,
                     exit_reason=str(payload.get("exit_reason") or "") or None,
                     r_result=r_result,
-                    mae_r=_decimal(payload.get("mae_r")),
-                    mfe_r=_decimal(payload.get("mfe_r")),
+                    mae_r=optional_decimal(payload.get("mae_r")),
+                    mfe_r=optional_decimal(payload.get("mfe_r")),
                 )
             )
         return trades

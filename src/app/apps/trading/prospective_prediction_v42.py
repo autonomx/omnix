@@ -9,14 +9,13 @@ The model is deliberately transparent and deterministic. It requires complete
 causal premarket demand evidence before it can produce a forecast.
 """
 
-import hashlib
-import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Final, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256
 from .gapper_dataset import GapperCandidate
 from .prospective_prediction_v4 import (
     CatalystDecomposition,
@@ -50,12 +49,6 @@ V42_REQUIRED_DEMAND_FEATURES = (
 )
 
 ModelState = Literal["PRODUCED", "FAILED", "NOT_APPLICABLE"]
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 def _clamp01(value: Decimal) -> Decimal:
@@ -160,7 +153,7 @@ class V42ModelSpec(BaseModel):
 
     @property
     def implementation_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 DEFAULT_V42_SPEC = V42ModelSpec()
@@ -201,7 +194,7 @@ class V42Forecast(BaseModel):
 
     @property
     def immutable_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class V42ForecastAttempt(BaseModel):
@@ -372,7 +365,7 @@ def build_v42_feature_bundle(
         opening_exhaustion_score=_clamp01(opening_exhaustion),
         supply_fade_score=supply_fade,
     )
-    fingerprint = _hash(
+    fingerprint = canonical_sha256(
         {
             "candidate": {
                 "instrument_id": candidate.instrument_id,

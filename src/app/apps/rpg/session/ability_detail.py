@@ -7,6 +7,7 @@ from typing import Any, cast
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.session.item_detail import _session_genre, _setting_context
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.safe_values import clean_text
 
 _PROMPT_1 = prompt_template('rpg.session_ability_detail.prompt', "1", (
     "Write a lore-grounded tooltip description for this RPG ability in exactly two sentences, roughly 30 to 55 words. "
@@ -26,25 +27,21 @@ def _list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _find_ability(state: dict[str, Any], requested: str) -> dict[str, Any] | None:
     wanted = requested.casefold().strip()
     abilities = _list(_dict(state.get("ability_tree")).get("abilities"))
     for value in abilities:
         ability = _dict(value)
         if wanted in {
-            _text(ability.get("ability_id") or ability.get("id")).casefold(),
-            _text(ability.get("name") or ability.get("label")).casefold(),
+            clean_text(ability.get("ability_id") or ability.get("id")).casefold(),
+            clean_text(ability.get("name") or ability.get("label")).casefold(),
         }:
             return ability
     return None
 
 
 def _rank(state: dict[str, Any], ability: dict[str, Any]) -> int:
-    ability_id = _text(ability.get("ability_id") or ability.get("id"))
+    ability_id = clean_text(ability.get("ability_id") or ability.get("id"))
     ranks = _dict(_dict(state.get("ability_state")).get("ranks"))
     return int(ranks.get(ability_id) or ability.get("rank") or 1)
 
@@ -65,10 +62,10 @@ def _detail(
             "source": source,
         }
     return {
-        "ability_id": _text(ability.get("ability_id") or ability.get("id")),
-        "name": _text(ability.get("name") or ability.get("label")) or requested,
+        "ability_id": clean_text(ability.get("ability_id") or ability.get("id")),
+        "name": clean_text(ability.get("name") or ability.get("label")) or requested,
         "summary": summary,
-        "kind": _text(ability.get("kind")) or "active",
+        "kind": clean_text(ability.get("kind")) or "active",
         "rank": _rank(state, ability),
         "max_rank": int(ability.get("max_rank") or 1),
         "resource_cost": deepcopy(_dict(ability.get("resource_cost"))),
@@ -105,13 +102,13 @@ def generate_ability_detail(
     resolved_genre = _session_genre(state, genre)
     setting = _setting_context(state, resolved_genre)
     facts = {
-        "name": _text(ability.get("name")),
-        "kind": _text(ability.get("kind")),
-        "existing_description": _text(ability.get("description")),
-        "capability": _text(ability.get("capability")),
-        "power_source": _text(ability.get("power_source")),
-        "purpose": _text(ability.get("purpose")),
-        "dimensions": [_text(value) for value in _list(ability.get("dimensions")) if _text(value)],
+        "name": clean_text(ability.get("name")),
+        "kind": clean_text(ability.get("kind")),
+        "existing_description": clean_text(ability.get("description")),
+        "capability": clean_text(ability.get("capability")),
+        "power_source": clean_text(ability.get("power_source")),
+        "purpose": clean_text(ability.get("purpose")),
+        "dimensions": [clean_text(value) for value in _list(ability.get("dimensions")) if clean_text(value)],
         "rank": _rank(state, ability),
         "max_rank": int(ability.get("max_rank") or 1),
         "resource_cost": deepcopy(_dict(ability.get("resource_cost"))),
@@ -138,7 +135,7 @@ def generate_ability_detail(
         _PROMPT_1.text
     )
     try:
-        summary = _text(gateway.generate(prompt, context={"ability": facts, "setting": setting}, timeout_s=20.0))
+        summary = clean_text(gateway.generate(prompt, context={"ability": facts, "setting": setting}, timeout_s=20.0))
     except Exception:
         summary = ""
     if not summary:

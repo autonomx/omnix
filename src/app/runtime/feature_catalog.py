@@ -15,7 +15,6 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
     "assistant-tools": "app.platform.assistant_tools.feature:FEATURE",
     "agent-runtime": "app.platform.agent_runtime.feature:FEATURE",
     "chat": "app.platform.chat.feature:FEATURE",
-    "live-speech": "app.platform.live_speech.feature:FEATURE",
     "assistant-memory": "app.platform.assistant_memory.feature:FEATURE",
     "companion-activity": "app.platform.companion_activity.feature:FEATURE",
     "characters": "app.platform.characters.feature:FEATURE",
@@ -34,12 +33,6 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
 
 
 _TOMBSTONE_ID = re.compile(r'^MODULE_ID\s*=\s*"([^"]+)"', re.M)
-
-# Not part of "all": enabled only when named. live-speech serves the
-# /v1/realtime protocol stub with offline echo engines (WP-7.3); it stays out of
-# production until it has real STT/TTS behind it.
-OPT_IN_FEATURES = frozenset({"live-speech"})
-
 
 def load_feature(feature_id: str) -> FeatureModule:
     target = FEATURE_CATALOG[feature_id]
@@ -70,7 +63,7 @@ def enabled_feature_ids(config: RuntimeConfig) -> tuple[str, ...]:
     if unknown:
         raise ValueError(f"Unknown feature ids: {sorted(unknown)}")
     if "all" in requested:
-        selected = (set(FEATURE_CATALOG) - OPT_IN_FEATURES) | (requested & OPT_IN_FEATURES)
+        selected = set(FEATURE_CATALOG)
     else:
         selected = set(requested)
     selected -= disabled

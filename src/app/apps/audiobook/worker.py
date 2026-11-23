@@ -28,12 +28,11 @@ from .assembly_service import run_assemble_once
 from .export_service import run_export_once
 from .annotation import (
     Speaker, SpeakerAlias, SpanAnnotation, annotate_span_batches, narrator_id,
-    normalize_speaker_name, proposed_speaker_id,
 )
 from .classifier import local_classifier, with_classification_rules
 from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
-from .leases import JOB_LEASE_SECONDS, lease_heartbeat
+from .leases import JOB_LEASE_SECONDS, claimed_job
 
 
 _LOG = logging.getLogger(__name__)
@@ -141,20 +140,10 @@ def run_ingest_once(
     database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
-    with unit_of_work(database) as work:
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.ingest"], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.ingest",
+                     resource_class="cpu") as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         return _ingest_claimed(database, blobs, context, job, worker_id=worker_id)
 
 
@@ -304,20 +293,10 @@ def _ingest_claimed(
 def run_analyze_once(
     database: PostgresDatabase, context: TenantContext, *, worker_id: str,
 ) -> bool:
-    with unit_of_work(database) as work:
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.analyze"], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.analyze",
+                     resource_class="cpu") as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         return _analyze_claimed(database, context, job, worker_id=worker_id)
 
 

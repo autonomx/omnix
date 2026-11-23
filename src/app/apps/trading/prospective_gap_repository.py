@@ -12,19 +12,19 @@ bound to a session/cohort/instrument. Markdown activity logs are projections of
 this ledger, never execution authority.
 """
 
-import hashlib
-import json
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Final, Literal, Sequence
+from typing import Any, Final, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
+from .canonical import canonical_sha256
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 PROSPECTIVE_GAP_STRATEGY_ID = "prospective-gap-experiment"
 PROSPECTIVE_GAP_LEDGER_VERSION: Final = "prospective-gap-ledger-v1"
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 ProspectiveRecordKind = Literal[
     "session_manifest",
@@ -62,12 +62,6 @@ ProspectiveRecordKind = Literal[
     "portfolio_g",
     "portfolio_g_score",
 ]
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
 
 
 def prospective_session_id(session_date: date) -> str:
@@ -115,6 +109,17 @@ class ProspectiveGapSessionLedger(BaseModel):
         ]
         return max(rows, key=lambda row: row.observed_at) if rows else None
 
+    def latest_model(
+        self,
+        model: type[ModelT],
+        *,
+        kind: ProspectiveRecordKind,
+        instrument_id: str | None = None,
+    ) -> ModelT | None:
+        """The latest record of a kind, read as its model, or ``None`` when the session has none."""
+        record = self.latest(kind=kind, instrument_id=instrument_id)
+        return model.model_validate(record.payload) if record is not None else None
+
 
 class ProspectiveGapRepository:
     def __init__(self, repository: TradingStrategyRepository | None = None) -> None:
@@ -141,7 +146,7 @@ class ProspectiveGapRepository:
             if isinstance(payload, BaseModel)
             else dict(payload)
         )
-        fingerprint = _hash(body)
+        fingerprint = canonical_sha256(body)
         suffix = idempotency_suffix or fingerprint
         key = (
             f"{PROSPECTIVE_GAP_LEDGER_VERSION}:{session_date.isoformat()}:"
@@ -149,7 +154,7 @@ class ProspectiveGapRepository:
         )
         event = StrategyEvent(
             strategy_id=PROSPECTIVE_GAP_STRATEGY_ID,
-            event_id=f"pge-{_hash(key)[:24]}",
+            event_id=f"pge-{canonical_sha256(key)[:24]}",
             run_id=run_id,
             instrument_id=instrument_id,
             event_type=f"prospective_gap_{kind}",
@@ -199,7 +204,7 @@ class ProspectiveGapRepository:
                         kind=raw_kind,  # type: ignore[arg-type]
                         observed_at=row.observed_at,
                         payload=data,
-                        payload_fingerprint=str(payload.get("payload_fingerprint") or _hash(data)),
+                        payload_fingerprint=str(payload.get("payload_fingerprint") or canonical_sha256(data)),
                     )
                 )
             except Exception:
@@ -210,18 +215,6 @@ class ProspectiveGapRepository:
             session_id=prospective_session_id(session_date),
             records=tuple(records),
         )
-
-    def latest_model(
-        self,
-        session_date: date,
-        *,
-        kind: ProspectiveRecordKind,
-        model: type[BaseModel],
-        instrument_id: str | None = None,
-    ) -> BaseModel | None:
-        record = self.session(session_date).latest(kind=kind, instrument_id=instrument_id)
-        return model.model_validate(record.payload) if record is not None else None
-
 
 def default_prospective_gap_repository() -> ProspectiveGapRepository:
     return ProspectiveGapRepository()

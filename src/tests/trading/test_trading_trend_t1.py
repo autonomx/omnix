@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from app.apps.trading import strategy_monitor_trend_t1 as t1_monitor
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategy_managed_finviz_shadow import INTERDAY_TRADING_STRATEGY_ID
+from app.apps.trading.strategy_monitor import PassMetrics
 from app.apps.trading.strategy_trend_continuation import evaluate_trend_t1
 from app.apps.trading.us_equity_calendar import EASTERN
 
@@ -87,7 +88,7 @@ class _Monitor:
         self.trend_t1_last: dict = {}
         self.trend_t1_evaluated_through: dict = {}
         self.trend_t1_entries_captured: set = set()
-        self.trend_t1_event_count = 0
+        self.metrics = PassMetrics()
         self.events: list[dict] = []
 
     async def _event(self, repository, config, **event):
@@ -131,4 +132,4 @@ def test_the_monitor_records_t1_state_changes_and_the_entry_quote_once() -> None
     entry = monitor.events[1]["payload"]
     assert entry["execution"]["provider"] == "ibkr" and entry["execution"]["spread_bps"] == "82"
     assert entry["catalyst_evidence_count"] == 1 and entry["arm"] == "trend-continuation-t1"
-    assert monitor.trend_t1_event_count == 3
+    assert monitor.metrics.trend_t1_event_count == 3

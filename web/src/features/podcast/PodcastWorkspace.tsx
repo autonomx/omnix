@@ -18,6 +18,7 @@ import { fetchBytes } from '../../api/transport';
 import { jobOutputRefs } from '../../api/schemas/streams';
 import { downloadUrl } from '../../shared/download';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
+import { jobKeys } from '../../api/jobs';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
@@ -308,7 +309,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const stitchRunRef = useRef(0);
   const liveBlobUrlsRef = useRef<string[]>([]);
 
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
+  const jobsQuery = useQuery({ queryKey: jobKeys.all, queryFn: () => omnixApiClient.listJobs(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
 
   const [title, setTitle] = useState(defaultTitle);
@@ -432,7 +433,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
       const output = outputsFrom([job])[0];
       setDirectorNote(output ? 'Final podcast audio is ready. The stitched live preview stays active until you select the final render.' : 'Podcast render completed but no playable audio output was attached.');
       setMessage(output ? `Podcast audio ready: ${job.id}` : `Podcast production completed without playable audio: ${job.id}`);
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }), queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] })]);
+      await Promise.all([queryClient.invalidateQueries({ queryKey: jobKeys.all }), queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] })]);
     },
     onError: (error) => {
       setDirectorNote(error instanceof Error ? error.message : 'Podcast request failed.');

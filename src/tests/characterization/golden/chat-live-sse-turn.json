@@ -173,6 +173,7 @@
           "provider_id": "fixture",
           "request": {
             "agent_mode": false,
+            "camera_shared": false,
             "coding_approval_policy": "ask_sensitive",
             "content": "Summarize the current request.",
             "dry_run": false,

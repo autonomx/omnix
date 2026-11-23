@@ -8,6 +8,7 @@ from .active_objective import (
     ActiveObjective,
 )
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentRunCommand,
     ModelRef,
     RequestModeSelection,
@@ -35,7 +36,6 @@ from .task_graph_revision import (
 )
 from .chat_lane_common import (
     GeneralizedChatResult,
-    _TERMINAL_AGENT,
 )
 from .chat_lane_agent import (
     _agent_model_route,
@@ -380,7 +380,7 @@ def _retire_superseded_run(runtime: Any, turn_plan: TurnPlan) -> None:
     if turn_plan.run_action == "replace_agent_with_task_graph":
         service = default_agent_run_service()
         old_run = service.get(old_run_id)
-        if old_run is not None and old_run.status not in _TERMINAL_AGENT:
+        if old_run is not None and old_run.status not in TERMINAL_RUN_STATUSES:
             service.command(
                 AgentRunCommand(
                     run_id=old_run_id,

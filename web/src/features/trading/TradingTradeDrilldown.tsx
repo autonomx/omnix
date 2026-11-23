@@ -7,32 +7,14 @@ import {
   type PaperTradeJournalEntry,
 } from './tradingPaperAnalyticsApi';
 import './TradingTradeDrilldown.css';
+import { formatMoney, formatSigned, numericValue } from './format';
 
 function symbol(instrumentId: string): string {
   return instrumentId.split(':').at(-1)?.replace('-', '/') ?? instrumentId;
 }
 
-function numeric(value: AnalyticsNumeric | null | undefined): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function signed(value: AnalyticsNumeric | null | undefined, digits = 2, suffix = ''): string {
-  const parsed = numeric(value);
-  if (parsed === null) return '—';
-  return `${parsed > 0 ? '+' : ''}${parsed.toFixed(digits)}${suffix}`;
-}
-
-function money(value: AnalyticsNumeric | null | undefined, currency: string): string {
-  const parsed = numeric(value);
-  if (parsed === null) return '—';
-  const absolute = Math.abs(parsed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${parsed > 0 ? '+' : parsed < 0 ? '-' : ''}${absolute} ${currency}`;
-}
-
 function price(value: AnalyticsNumeric | null | undefined): string {
-  const parsed = numeric(value);
+  const parsed = numericValue(value);
   return parsed === null ? '—' : parsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
@@ -162,11 +144,11 @@ export function TradingTradeDrilldown({
         </header>
 
         <section className="paper-trade-drilldown-summary">
-          <div><small>Result</small><strong className={positive ? 'positive' : 'negative'}>{signed(trade.r_result, 3, 'R')}</strong></div>
-          <div><small>P&amp;L</small><strong className={Number(trade.realized_pnl ?? 0) >= 0 ? 'positive' : 'negative'}>{trade.realized_pnl == null ? '—' : money(trade.realized_pnl, currency)}</strong></div>
+          <div><small>Result</small><strong className={positive ? 'positive' : 'negative'}>{formatSigned(trade.r_result, 3, 'R')}</strong></div>
+          <div><small>P&amp;L</small><strong className={Number(trade.realized_pnl ?? 0) >= 0 ? 'positive' : 'negative'}>{trade.realized_pnl == null ? '—' : formatMoney(trade.realized_pnl, currency, { signed: true })}</strong></div>
           <div><small>Quantity</small><strong>{trade.quantity ?? '—'}</strong></div>
           <div><small>Duration</small><strong>{duration(trade.entry_time, trade.exit_time)}</strong></div>
-          <div><small>MAE / MFE</small><strong>{signed(trade.mae_r, 2, 'R')} / {signed(trade.mfe_r, 2, 'R')}</strong></div>
+          <div><small>MAE / MFE</small><strong>{formatSigned(trade.mae_r, 2, 'R')} / {formatSigned(trade.mfe_r, 2, 'R')}</strong></div>
           <div><small>Exit</small><strong>{label(trade.exit_reason)}</strong></div>
         </section>
 
@@ -175,9 +157,9 @@ export function TradingTradeDrilldown({
           <div className="paper-trade-drilldown-kpis">
             <span><small>Initial stop</small><strong>{price(trade.initial_stop)}</strong></span>
             <span><small>Initial target</small><strong>{price(trade.initial_target)}</strong></span>
-            <span><small>Signal → executable</small><strong>{signed(trade.signal_to_executable_bps, 2, ' bps')}</strong></span>
-            <span><small>Fill slippage</small><strong>{signed(trade.fill_slippage_bps, 2, ' bps')}</strong></span>
-            <span><small>Total shortfall</small><strong>{signed(trade.implementation_shortfall_bps, 2, ' bps')}</strong></span>
+            <span><small>Signal → executable</small><strong>{formatSigned(trade.signal_to_executable_bps, 2, ' bps')}</strong></span>
+            <span><small>Fill slippage</small><strong>{formatSigned(trade.fill_slippage_bps, 2, ' bps')}</strong></span>
+            <span><small>Total shortfall</small><strong>{formatSigned(trade.implementation_shortfall_bps, 2, ' bps')}</strong></span>
           </div>
         </section>
 
@@ -215,7 +197,7 @@ export function TradingTradeDrilldown({
               <div className="paper-trade-drilldown-kpis">
                 <span><small>Entry</small><strong>{price(entry.average_entry_price)}</strong></span>
                 <span><small>Exit</small><strong>{price(entry.average_exit_price)}</strong></span>
-                <span><small>Initial risk</small><strong>{money(entry.initial_risk_dollars, currency)}</strong></span>
+                <span><small>Initial risk</small><strong>{formatMoney(entry.initial_risk_dollars, currency)}</strong></span>
                 <span><small>Lifecycle</small><strong>{label(entry.lifecycle_state)}</strong></span>
                 <span><small>Outcome</small><strong>{entry.outcome.toUpperCase()}</strong></span>
               </div>

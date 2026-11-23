@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import env_str
 
 import asyncio
 import json
 import math
-import os
 import threading
 import time
 from collections import defaultdict, deque

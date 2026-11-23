@@ -11,7 +11,7 @@ import hashlib
 from collections.abc import Callable
 from datetime import datetime, time, timezone
 
-from app.config.env import env_str as _env_str
+from app.persistence.runtime import is_legacy_test_persistence
 from app.runtime.features import FeatureContext
 
 from .model_route import LocalModelReadiness, local_model_readiness
@@ -95,7 +95,7 @@ class TradingLocalModelMonitor(ScheduledTradingMonitor):
 
 
 def _enabled() -> bool:
-    return _env_str("OMNIX_PERSISTENCE_MODE", "").strip() != "legacy_test"
+    return not is_legacy_test_persistence()
 
 
 def create_trading_local_model_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:

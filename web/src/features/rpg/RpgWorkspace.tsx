@@ -31,8 +31,10 @@ import { RpgWorldRail } from './RpgWorldRail';
 import { buildRpgFight } from './rpgCombatState';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
-import { ACTIVE_JOB_STATUSES, RPG_TURN_QUEUE_TIMEOUT_MS, RPG_TURN_RECOVERY_WINDOW_MS, buildSubmittedTurnStoryMessages, isRpgTurnJobType, readStoredDeveloperTools, rpgTurnJobRequest, readStoredRpgSessionId, timestampMs, writeStoredDeveloperTools, writeStoredRpgSessionId } from './rpgWorkspaceSupport';
+import { RPG_TURN_QUEUE_TIMEOUT_MS, RPG_TURN_RECOVERY_WINDOW_MS, buildSubmittedTurnStoryMessages, isRpgTurnJobType, readStoredDeveloperTools, rpgTurnJobRequest, readStoredRpgSessionId, timestampMs, writeStoredDeveloperTools, writeStoredRpgSessionId } from './rpgWorkspaceSupport';
 import type { PendingRpgTurnSubmission, RpgFormValues } from './rpgWorkspaceSupport';
+import { isJobActive, jobKeys } from '../../api/jobs';
+import { useJob } from '../../shared/useJob';
 
 const RPG_WORKSPACE_QUERY_KEYS = [
   ['feature', 'rpg', 'replay-inventory'],
@@ -45,7 +47,7 @@ const RPG_WORKSPACE_QUERY_KEYS = [
   ['feature', 'rpg', 'hermes-turn-readout'],
   ['feature', 'rpg', 'hermes-execution-ledger'],
   ['feature', 'rpg', 'hermes-sequence-state'],
-  ['platform', 'jobs'],
+  jobKeys.all,
   ['platform', 'assets'],
   ['platform', 'reports'],
 ];
@@ -73,7 +75,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     queryFn: () => rpgSessionClient.listRpgSessionSummaries(),
   });
   const jobsQuery = useQuery({
-    queryKey: ['platform', 'jobs'],
+    queryKey: jobKeys.all,
     queryFn: () => omnixApiClient.listJobs(),
     refetchInterval: 3000,
   });
@@ -208,7 +210,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout', selectedLiveSessionId] }),
     ]);
   }, [latestCompletedTurnJobId, queryClient, refetchInventory, refetchSelectedSession, selectedLiveSessionId]);
-  const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
+  const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && isJobActive(job.status));
   const liveDataStatusCards = buildRpgLiveDataCards({
     inventory: inventoryQuery, sessionCount: inventoryQuery.data?.sessions?.length ?? 0,
     jobs: jobsQuery, jobCount: rpgJobs.length,
@@ -268,12 +270,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     },
   });
   const activeSubmittedTurnJobId = createJobMutation.data?.id ?? null;
-  const submittedTurnJobQuery = useQuery({
-    queryKey: ['platform', 'jobs', 'submitted-rpg-turn', activeSubmittedTurnJobId],
-    queryFn: () => omnixApiClient.getJob(activeSubmittedTurnJobId ?? ''),
-    enabled: Boolean(activeSubmittedTurnJobId),
-    refetchInterval: activeSubmittedTurnJobId ? 1500 : false,
-  });
+  // Polled until the turn's job settles; a finished turn is not fetched again.
+  const submittedTurnJobQuery = useJob(activeSubmittedTurnJobId, { intervalMs: 1500 });
   const submittedTurnJobFromQuery = submittedTurnJobQuery.data;
   useEffect(() => {
     if (

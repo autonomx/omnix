@@ -247,6 +247,7 @@ def test_preview_processes_all_segments_and_combines_cached_and_generated_audio(
         yield SimpleNamespace(jobs=jobs, connection=connection, commit=lambda: None, rollback=lambda: None)
 
     monkeypatch.setattr("app.apps.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.leases.unit_of_work", work)  # the claim
     monkeypatch.setattr("app.apps.audiobook.render_service.assert_model_revision", lambda *args: None)
     monkeypatch.setattr("app.apps.audiobook.render_service.load_chapter_units", lambda *args, **kwargs: [first, second])
     monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets", lambda: [

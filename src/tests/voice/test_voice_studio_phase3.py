@@ -20,6 +20,7 @@ import pytest
 from app.assets.models import AssetRecord, AssetType
 from app.jobs.models import JobRecord
 from app.platform.voice import design, jobs as voice_jobs
+from tests.support.voice_jobs import execute_voice_studio_job
 
 RATE = 24_000
 
@@ -169,7 +170,7 @@ def test_generate_renders_one_candidate_per_seed_on_the_design_engine(stores, en
     store = _JobStore()
     job = _job("voice.design", {"description": "a calm woman in her sixties, slight Irish accent",
                                 "preview_text": "Good evening.", "language": "en", "seeds": [11, 22, 33]})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert [call["seed"] for call in engine.calls] == [11, 22, 33]
     assert all(call["instruct"].startswith("a calm woman") and call["text"] == "Good evening." for call in engine.calls)
@@ -182,7 +183,7 @@ def test_generate_renders_one_candidate_per_seed_on_the_design_engine(stores, en
 
 def test_without_seeds_three_random_candidates_are_made(stores, engine) -> None:
     store = _JobStore()
-    voice_jobs.execute_voice_studio_job(store, _job("voice.design", {"description": "a robot butler"}))
+    execute_voice_studio_job(store, _job("voice.design", {"description": "a robot butler"}))
     seeds = [call["seed"] for call in engine.calls]
     assert len(seeds) == 3 and len(set(seeds)) == 3
     assert engine.calls[0]["text"] == design.REFERENCE_PASSAGES["en"]   # the passage a saved voice clones from
@@ -197,7 +198,7 @@ def test_without_seeds_three_random_candidates_are_made(stores, engine) -> None:
 def test_bad_design_requests_fail_without_retry(stores, engine, payload: dict[str, Any]) -> None:
     store = _JobStore()
     job = _job("voice.design", payload)
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request" and store.failed[job.id].retryable is False
     assert engine.calls == []
 
@@ -217,7 +218,7 @@ def test_design_waits_for_the_swap_controller_to_load_the_engine(monkeypatch, st
     monkeypatch.setattr("app.persistence.tts_swap.request_swap", lambda engine, job_id: requested.append((engine, job_id)))
     store = _JobStore()
     job = _job("voice.design", {"description": "a gravelly pirate"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert requested == [(design.DESIGN_ENGINE, job.id)]
     assert store.deferred and not store.failed and not store.completed
 
@@ -226,7 +227,7 @@ def test_design_needs_the_tts_service(monkeypatch, stores) -> None:
     monkeypatch.setattr("app.platform.voice.swap_controller.swaps_enabled", lambda: False)
     store = _JobStore()
     job = _job("voice.design", {"description": "a gravelly pirate"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert "TTS service" in store.failed[job.id].message
 
 
@@ -235,7 +236,7 @@ def test_save_renders_the_reference_passage_and_stores_a_designed_voice(stores, 
     store = _JobStore()
     job = _job("voice.design.save", {"description": "a warm baritone narrator", "seed": 22, "language": "en",
                                      "profile_name": "Narrator Bob"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert engine.calls[0]["text"] == design.REFERENCE_PASSAGES["en"] and engine.calls[0]["seed"] == 22
     voice = next(asset for asset in stores.assets.values() if asset.type == AssetType.VOICE_PROFILE)
@@ -258,13 +259,13 @@ def test_save_keeps_the_candidate_the_person_heard(stores, engine) -> None:
     store = _JobStore()
     designed = _job("voice.design", {"description": "a warm baritone narrator", "preview_text": "Hello there, friend.",
                                      "seeds": [5]})
-    voice_jobs.execute_voice_studio_job(store, designed)
+    execute_voice_studio_job(store, designed)
     candidate = store.completed[designed.id].output_refs[0]["asset_id"]
     rendered = len(engine.calls)
     # The form has moved on (another language, no seed): the voice still records the candidate's.
     job = _job("voice.design.save", {"description": "a warm baritone narrator", "language": "de",
                                      "profile_name": "Narrator Bob", "candidate_asset_id": candidate})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert len(engine.calls) == rendered   # nothing rendered again
     voice = next(asset for asset in stores.assets.values() if asset.type == AssetType.VOICE_PROFILE)
@@ -272,17 +273,17 @@ def test_save_keeps_the_candidate_the_person_heard(stores, engine) -> None:
     assert voice.metadata["design"]["seed"] == 5 and voice.metadata["design"]["language"] == "en"
     other = _job("voice.design.save", {"description": "x", "seed": 5, "language": "en", "profile_name": "Nope",
                                        "candidate_asset_id": voice.id})
-    voice_jobs.execute_voice_studio_job(store, other)
+    execute_voice_studio_job(store, other)
     assert "design candidates" in store.failed[other.id].message   # only a design candidate can be saved
 
 
 def test_save_needs_a_name_and_a_language_with_a_passage(stores, engine) -> None:
     store = _JobStore()
     job = _job("voice.design.save", {"description": "a voice", "seed": 1, "language": "en"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request"
     job = _job("voice.design.save", {"description": "a voice", "seed": 1, "language": "ja", "profile_name": "Aiko"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert "No reference passage" in store.failed[job.id].message
 
 
@@ -304,7 +305,7 @@ def test_design_jobs_are_registered_with_the_voice_feature() -> None:
 def test_candidates_read_the_reference_passage_without_a_sentence_of_their_own(stores, engine) -> None:
     store = _JobStore()
     job = _job("voice.design", {"description": "a calm narrator", "language": "de", "seeds": [3]})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert engine.calls[0]["text"] == design.REFERENCE_PASSAGES["de"]
 
@@ -339,7 +340,7 @@ def test_blend_saves_a_voice_between_two_library_voices(stores, monkeypatch) -> 
     job = _job("voice.blend", {"voices": [{"voice": "voice-cloning:Anaka", "weight": 0.7},
                                           {"voice": "voice-cloning:Morgan", "weight": 0.3}],
                                "profile_name": "Anaka x Morgan", "language": "en"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert pinned == ["faster-qwen3-tts"]
     assert fake.calls[0]["text"] == design.REFERENCE_PASSAGES["en"]
@@ -360,7 +361,7 @@ def test_a_blend_names_two_to_four_different_library_voices(stores, monkeypatch,
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda engine: _DesignEngine())
     store = _JobStore()
     job = _job("voice.blend", {"voices": voices, "profile_name": "X", "language": "en"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request" and message in store.failed[job.id].message
 
 

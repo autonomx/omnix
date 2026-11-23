@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from app.runtime.paths import test_results_root
+from app.apps.rpg.foundation.safe_values import optional_text
 
 
 def write_rpg_last10_report(payload: dict[str, Any], *, output_root: Path | None = None) -> dict[str, Any]:
     payload = dict(payload)
     root = output_root or (test_results_root() / "rpg-last10-turn-report")
-    session_slug = _safe_slug(_text(payload.get("session_id")) or "no-session")
+    session_slug = _safe_slug(optional_text(payload.get("session_id")) or "no-session")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = root / f"{timestamp}-{session_slug}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -204,7 +205,3 @@ def _list_value(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _text(value: Any) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None

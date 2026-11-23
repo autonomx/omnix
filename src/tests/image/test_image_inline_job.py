@@ -3,10 +3,13 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from app.platform.image.models import ImageGenerationResponse
 from app.jobs import CreateJobRequest, ResourceClass
 from app.jobs.models import JobStage
-from app.platform.image.jobs import execute_image_job
+from tests.support.image_jobs import execute_image_job
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 
@@ -196,7 +199,7 @@ def test_image_job_reports_provider_steps_without_a_poller_thread(monkeypatch, t
     assert steps == [(0, "Generating image - 0%"), (11, "Generating image - 11%"), (48, "Generating image - 48%"), (95, "Finalizing image...")]
 
 
-def test_invalid_image_job_fails_without_generation(monkeypatch, tmp_path) -> None:
+def test_invalid_image_job_is_refused_without_generation(monkeypatch, tmp_path) -> None:
     store = InMemoryJobStore(tmp_path / "jobs")
     job = store.create_job(
         CreateJobRequest(
@@ -207,11 +210,13 @@ def test_invalid_image_job_fails_without_generation(monkeypatch, tmp_path) -> No
         )
     )
 
-    failed = execute_image_job(store, job, generate_fn=lambda _payload: None)
+    generated = []
 
-    assert failed.status.value == "failed"
-    assert failed.error is not None
-    assert failed.error.code == "image_invalid_request"
+    # Submission validates the payload; one stored invalid all the same is refused before the run.
+    with pytest.raises(ValidationError):
+        execute_image_job(store, job, generate_fn=generated.append)
+
+    assert generated == []
 
 
 def test_image_generation_failure_preserves_progress_and_marks_stage_failed(monkeypatch, tmp_path) -> None:

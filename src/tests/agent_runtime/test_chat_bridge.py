@@ -1233,13 +1233,6 @@ def test_read_only_run_rejects_publication_without_github_capability() -> None:
     assert rejection["reason"] == "github_publication_capability_not_issued"
 
 
-def test_live_voice_metadata_can_be_detected_without_session_state() -> None:
-    from app.platform.agent_runtime.chat_bridge import _is_live_voice
-    message = SimpleNamespace(metadata={"speech_segment_id": "voice-segment:abc"})
-    assert _is_live_voice(message) is True
-
-
-
 def test_attached_local_folder_overrides_default_coding_workspace(monkeypatch, tmp_path) -> None:
     selected = tmp_path / "selected"
     default = tmp_path / "default"

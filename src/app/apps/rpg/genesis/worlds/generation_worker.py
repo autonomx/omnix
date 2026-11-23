@@ -34,6 +34,7 @@ from .profile_generation_jobs import (
     WORLD_PROFILE_JOB_TYPE,
     execute_claimed_world_profile_job,
 )
+from app.providers.catalog import provider_id_of
 
 _DEFAULT_LEASE_SECONDS = 3600
 _DEFAULT_MAX_WORLD_GENERATION_WORKERS = 2
@@ -64,18 +65,11 @@ def _database(value: Any | None) -> Any:
     return default_database()
 
 
-def _provider_key(value: Any) -> str:
-    provider = str(value or "").strip().casefold()
-    if provider.startswith("llm:"):
-        provider = provider.split(":", 1)[1]
-    return provider
-
-
 def _configured_world_forge_provider(
     environ: Mapping[str, str] | None = None,
 ) -> str:
     env = environ or _environment()
-    dedicated = _provider_key(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER"))
+    dedicated = provider_id_of(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER"))
     if dedicated:
         return dedicated
     try:
@@ -89,7 +83,7 @@ def _configured_world_forge_provider(
             "rpg",
             "rpg.world_forge.generate",
         )
-        return _provider_key(provider_id)
+        return provider_id_of(provider_id)
     except Exception:
         return ""
 
@@ -111,7 +105,7 @@ def world_generation_worker_limit(
                 "Ignoring invalid OMNIX_RPG_WORLD_GENERATION_WORKERS=%r",
                 override,
             )
-    provider = _provider_key(provider_route) or _configured_world_forge_provider(env)
+    provider = provider_id_of(provider_route) or _configured_world_forge_provider(env)
     if provider == "lmstudio":
         return _LMSTUDIO_MAX_WORLD_GENERATION_WORKERS
     return _DEFAULT_MAX_WORLD_GENERATION_WORKERS

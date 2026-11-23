@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Callable
-import uuid
 
 from app.config.env import env_str as _env_str
 from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span
@@ -24,6 +23,7 @@ from app.apps.rpg.session.jobs.foreground_context import (
     DIRECT_RPG_SUBMISSION_ID,
     ForegroundClaim,
     foreground_claim,
+    new_submission_id,
 )
 
 
@@ -52,7 +52,7 @@ def execute_foreground_turn(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Run ``apply_turn`` once for this submission, or replay the response its claim recorded."""
-    resolved = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
+    resolved = str(submission_id or new_submission_id()).strip()
     store = submissions if submissions is not None else default_submission_store()
     submission_token = DIRECT_RPG_SUBMISSION_ID.set(resolved)
     try:

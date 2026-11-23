@@ -3,7 +3,8 @@
 The stored campaign holds the world model (each person's secrets, the economy, the pressures), the campaign bible,
 creation prompts, NPC memories and the runtime's internals. A route that returns a campaign to the browser returns
 this view: the manifest, the public sheet (``state``), and the parts of the simulation and runtime state the play
-screen reads (the hero, their needs, the fight, quests, recent events, the journal, the scene).
+screen reads (the hero, their needs, the fight, quests, recent events, the journal, the scene). Beside them it
+carries what the screen shows that the rules decide: who is ``here`` and how pressing the hero's ``needs`` are.
 """
 from __future__ import annotations
 
@@ -41,6 +42,7 @@ def player_session_view(session: Any) -> Any:
         view["simulation_state"]["player_state"] = {k: v for k, v in player.items() if k not in _PLAYER_PRIVATE}
     view["runtime_state"] = {key: value for key, value in runtime.items() if key in RUNTIME_VIEW}
     view["here"] = _here(simulation)
+    view["needs"] = _needs(simulation)
     return view
 
 
@@ -59,6 +61,17 @@ def _here(simulation: Mapping[str, Any]) -> dict[str, list[str]]:
     named = [str(person.get("name") or "") for person in (people.get(npc_id) for npc_id in present)
              if isinstance(person, Mapping)]
     return {"people": [name for name in dict.fromkeys(named) if name], "exits": routines.paths_from(world, location_id)}
+
+
+def _needs(simulation: Mapping[str, Any]) -> dict[str, Any]:
+    """Hunger, thirst and fatigue as the survival rules keep them, each with its level, and the most pressing level."""
+    from app.apps.rpg.rules.survival import need_level
+    from app.apps.rpg.session.survival_persistence import current_survival
+
+    survival = current_survival(simulation)
+    values = {need: int(survival[need]) for need in ("hunger", "thirst", "fatigue")}
+    return {**{need: {"value": value, "level": need_level(value)} for need, value in values.items()},
+            "level": need_level(max(values.values()))}
 
 
 def _with_pack_actions(state: Mapping[str, Any], simulation: Mapping[str, Any]) -> dict[str, Any]:

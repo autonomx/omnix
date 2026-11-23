@@ -17,8 +17,9 @@ from collections.abc import Iterable
 from contextlib import suppress
 from typing import Any
 
+from app.providers.model_route import model_name_of
 from app.observability.tts_stream_diagnostics import stream_log
-from app.platform.chat.store import _model_key, _provider_key
+from app.platform.chat.store import _provider_key
 from app.prompts import prompt_template
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import service as provider_service
@@ -97,7 +98,7 @@ def warm_overlap_judge(provider_id: str | None, model_id: str | None) -> None:
     try:
         provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is not None and provider_supports(provider, LIVE_TURNS):
-            provider.warm_live_turn(_messages("", ""), model=_model_key(model_id))
+            provider.warm_live_turn(_messages("", ""), model=model_name_of(model_id) or None)
     except Exception:  # noqa: BLE001 - warm-up must never block live calls.
         logger.debug("the overlap judge could not be warmed", exc_info=True)
 
@@ -121,7 +122,7 @@ async def judge_overlap(
         try:
             # A late answer is abandoned here, and its thread ends with the request's own timeout.
             decision = await asyncio.wait_for(
-                asyncio.to_thread(_ask_model, provider, _model_key(model_id), assistant_text, transcript),
+                asyncio.to_thread(_ask_model, provider, (model_name_of(model_id) or None), assistant_text, transcript),
                 MODEL_DEADLINE_SECONDS,
             )
             reason = None if decision else "unclear_answer"

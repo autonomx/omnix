@@ -17,6 +17,7 @@ from .starter_bubble import (
     build_starter_map_definitions,
     starter_bubble_certification,
 )
+from .graph_audit import GraphAuditError
 
 
 @dataclass(frozen=True)
@@ -37,11 +38,8 @@ class StarterBubbleReleaseIssue:
         }
 
 
-class StarterBubbleReleaseCompilationError(ValueError):
-    def __init__(self, issues: Sequence[StarterBubbleReleaseIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.path}" for row in self.issues)
-        super().__init__("starter_bubble_release_integrity_failed:" + rendered)
+class StarterBubbleReleaseCompilationError(GraphAuditError):
+    code = "starter_bubble_release_integrity_failed"
 
 
 def _component_reports(

@@ -25,7 +25,7 @@ from app.persistence.identity_service import PostgresIdentityRepository
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from tests.support.routers import include_router_registrar
-from tests.conftest_databases import is_disposable_test_database
+from tests.conftest_databases import require_disposable_test_database
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -36,7 +36,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def client(monkeypatch):
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
-    assert is_disposable_test_database(url)
+    require_disposable_test_database(url)
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
     local_context = ensure_local_identity(database)
     store = PostgresJobStoreAdapter(database)

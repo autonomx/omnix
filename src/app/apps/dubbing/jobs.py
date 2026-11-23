@@ -1,12 +1,12 @@
-"""Dubbing's durable jobs: one per pipeline step (``dub.<step>``), all through ``execute_dub_step``."""
+"""Dubbing's durable jobs: one per pipeline step (``dub.<step>``), all through ``run_dub_step``."""
 from __future__ import annotations
 
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.jobs.handlers import JobExecutionContext
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
+from app.jobs.handlers import JobFailure, JobResult, JobRun
+from app.jobs.models import CreateJobRequest, JobRecord, ResourceClass
 from app.persistence.database import default_database
 from app.runtime.tenant_context import current_tenant
 
@@ -74,11 +74,10 @@ def _run(step: str, run: StepRun, database: Any, tenant: Any) -> dict[str, Any]:
     return getattr(steps, step)(run)
 
 
-def execute_dub_step(context: JobExecutionContext, job: JobRecord) -> JobRecord:
-    store = context.job_store
-    store.mark_running(job.id)
+def run_dub_step(run: JobRun[DubStepInput]) -> JobResult | JobRecord:
+    """Run one step of a project; a step waiting on the TTS engine returns its deferred job."""
+    job, store, request = run.job, run.store, run.input
     step = JOB_TYPES[job.type]
-    request = DubStepInput.model_validate(job.input_payload or {})
     database, tenant = default_database(), current_tenant()
     try:
         project, segments = service.load_for_step(database, tenant, request.project_id)
@@ -99,10 +98,8 @@ def execute_dub_step(context: JobExecutionContext, job: JobRecord) -> JobRecord:
             service.mark_step(database, tenant, request.project_id, step, "failed", job_id=job.id, error=str(exc))
         except service.DubbingNotFound:
             pass  # the project was deleted while the step ran
-        failed = store.fail_job(job.id, FailJobRequest(code=code, message=str(exc) or "The dubbing step failed",
-                                                       retryable=retryable,
-                                                       details={"step": step, "project_id": request.project_id}))
-        return failed or job
+        raise JobFailure(code, str(exc) or "The dubbing step failed", retryable=retryable,
+                         details={"step": step, "project_id": request.project_id}) from exc
     if request.chain and step in CHAINED:
         following = CHAINED[step]
         # Once per finishing step: a step that runs again after a lost lease does not queue its follow-up twice.
@@ -111,10 +108,9 @@ def execute_dub_step(context: JobExecutionContext, job: JobRecord) -> JobRecord:
             input_payload={"project_id": request.project_id, "chain": True},
         ), idempotency_key=f"dub-chain:{job.id}")
         service.mark_step(database, tenant, request.project_id, following, "queued", job_id=follow_up.id)
-    completed = store.complete_job(job.id, CompleteJobRequest(output_refs=[
+    return JobResult(output_refs=(
         {"type": "dub_step", "module": "dubbing", "project_id": request.project_id, "step": step, **summary},
-    ]))
-    return completed or job
+    ))
 
 
-__all__ = ["DubStepInput", "JOB_TYPES", "RESOURCE_CLASSES", "execute_dub_step"]
+__all__ = ["DubStepInput", "JOB_TYPES", "RESOURCE_CLASSES", "run_dub_step"]

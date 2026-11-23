@@ -17,10 +17,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, get_args
 
+from .approval_policy import ApprovalPolicy
+
 from app.runtime.ports import Port, optional
 
 GrantSource = Literal["agent_run", "task_graph", "workflow", "chat", "live_agent", "tool_proposal"]
-ApprovalFloor = Literal["allow_automatic", "ask_sensitive", "always_ask", "disabled"]
+ApprovalFloor = ApprovalPolicy
 
 class CapabilityRuntimeUnavailable(RuntimeError):
     """No capability runtime is installed (the assistant-tools feature is off)."""

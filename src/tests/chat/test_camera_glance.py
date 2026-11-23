@@ -120,6 +120,18 @@ def test_a_failed_glance_counts_as_unseen():
     assert camera_share_look("s1", wait_seconds=2, clock=lambda: 101.0).snapshot is None
 
 
+def test_only_the_newest_chats_keep_a_glance(monkeypatch):
+    # Both maps are capped as well as expiring, so many chats within the fresh window cannot grow them.
+    monkeypatch.setattr(camera_glance, "_MAX_CHATS", 3)
+    for index in range(5):
+        _begin(f"s{index}", FakeVision(reply=f"Glance {index}."), clock=lambda index=index: 100.0 + index)
+        camera_share_look(f"s{index}", wait_seconds=2, clock=lambda: 105.0)
+
+    assert sorted(camera_glance._glances) == sorted(camera_glance._seen) == ["s2", "s3", "s4"]
+    assert camera_share_look("s0", wait_seconds=2, clock=lambda: 105.0).snapshot is None
+    assert camera_share_look("s4", wait_seconds=2, clock=lambda: 105.0).items[0]["content"] == "Glance 4."
+
+
 def test_a_remote_vision_model_needs_the_owners_consent_before_any_glance():
     remote = FakeVision(base_url="https://vision.example.com/v1")
 

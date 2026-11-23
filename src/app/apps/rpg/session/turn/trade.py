@@ -30,8 +30,7 @@ def resolve_trade(document: Mapping[str, Any], target_id: str, party_id: str = "
     outcome = sell(simulation, target_id, party_id) if selling else buy(simulation, target_id, party_id, quantity)
     if outcome is None:
         return None
-    state, manifest = _d(document.get("state")), _d(document.get("manifest"))
-    counted = TurnCounted(turn_count=int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1)
+    counted = TurnCounted(turn_count=_sections.turn_count_of(document) + 1)
     return TradeResolution([counted, TimeAdvanced(ticks=1, minutes=MINUTES_PER_TICK), *outcome.changes],
                            outcome.lines, refused=outcome.refused, kind=outcome.kind)
 

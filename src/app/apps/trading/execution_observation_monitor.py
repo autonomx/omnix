@@ -12,7 +12,7 @@ from app.runtime.model_executor import ModelExecutor
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .binding_authority import binding_can_execute
 from .execution_observation_plane import (
     ExecutionObservationPlane,
@@ -32,14 +32,7 @@ from .us_equity_calendar import regular_session_settled
 _STATE_KEY = "_omnix_trading_execution_observation_monitor"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def execution_observation_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR", "1")
+execution_observation_monitor_enabled = monitor_switch("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR")
 
 
 def _observation_workers() -> int:

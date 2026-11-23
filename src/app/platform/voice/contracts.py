@@ -1,6 +1,6 @@
 """The speech capability's contract (ADR-0016, PA-3.3): STT and TTS session ports.
 
-Voice, live voice and live speech build on these. A module imports speech
+Voice and live voice build on these. A module imports speech
 types from here, never from another speech module's internals. The wire
 format of TTS streaming (request policy, PCM framing) is transport-neutral
 and lives in the kernel, ``app.conversation.tts_stream_contract``.

@@ -14,7 +14,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
 from app.prompts import prompt_template
-from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.safe_values import copy_state, clean_text
 from app.apps.rpg.foundation.state import access as _sections
 
 if TYPE_CHECKING:
@@ -58,10 +58,6 @@ def _rows(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in value or () if isinstance(row, Mapping)]
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _slug(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
     return normalized or "unknown-location"
@@ -69,14 +65,14 @@ def _slug(value: str) -> str:
 
 def _campaign_id(session_id: str, session: Mapping[str, Any]) -> str:
     manifest = _mapping(session.get("manifest"))
-    return _text(session_id or manifest.get("session_id") or manifest.get("id"))
+    return clean_text(session_id or manifest.get("session_id") or manifest.get("id"))
 
 
 def _campaign_title(session: Mapping[str, Any], campaign_id: str) -> str:
     state = _mapping(session.get("state"))
     metadata = _mapping(state.get("metadata"))
     manifest = _mapping(session.get("manifest"))
-    return _text(
+    return clean_text(
         state.get("title")
         or metadata.get("campaign_name")
         or metadata.get("title")
@@ -88,13 +84,13 @@ def _campaign_title(session: Mapping[str, Any], campaign_id: str) -> str:
 
 def _location_from_value(value: Any) -> tuple[str, str] | None:
     if isinstance(value, Mapping):
-        location_id = _text(
+        location_id = clean_text(
             value.get("id")
             or value.get("location_id")
             or value.get("node_id")
             or value.get("area_id")
         )
-        name = _text(
+        name = clean_text(
             value.get("name")
             or value.get("title")
             or value.get("label")
@@ -103,7 +99,7 @@ def _location_from_value(value: Any) -> tuple[str, str] | None:
         if location_id or name:
             return location_id, name
         return None
-    text = _text(value)
+    text = clean_text(value)
     if not text:
         return None
     if text.casefold().startswith("location:"):
@@ -121,7 +117,7 @@ def current_location_identity(session: Mapping[str, Any]) -> dict[str, str] | No
     runtime = _mapping(_sections.runtime_state_of(session))
     map_state = _mapping(state.get("map") or session.get("map_state"))
 
-    explicit_id = _text(
+    explicit_id = clean_text(
         state.get("current_location_id")
         or player.get("current_location_id")
         or world.get("current_location_id")
@@ -129,7 +125,7 @@ def current_location_identity(session: Mapping[str, Any]) -> dict[str, str] | No
         or runtime.get("current_location_id")
         or map_state.get("current_location_id")
     )
-    explicit_name = _text(
+    explicit_name = clean_text(
         state.get("current_location_name")
         or player.get("current_location_name")
         or world.get("current_location_name")
@@ -202,7 +198,7 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
     discovery.setdefault("discoveries", [])
 
     bible: dict[str, Any] = {
-        "schema_version": _text(
+        "schema_version": clean_text(
             projection.get("schema_version")
             or state_bible.get("schema_version")
             or manifest.get("schema_version")
@@ -230,18 +226,18 @@ def _portable_bible(session: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _document_matches_location(document: Mapping[str, Any], location: Mapping[str, str]) -> bool:
-    document_id = _text(document.get("document_id")).casefold()
-    title = _text(document.get("title")).casefold()
-    location_id = _text(location.get("id")).casefold()
-    location_name = _text(location.get("name")).casefold()
-    refs = {_text(value).casefold() for value in document.get("entity_refs") or ()}
-    keywords = {_text(value).casefold() for value in document.get("keywords") or ()}
+    document_id = clean_text(document.get("document_id")).casefold()
+    title = clean_text(document.get("title")).casefold()
+    location_id = clean_text(location.get("id")).casefold()
+    location_name = clean_text(location.get("name")).casefold()
+    refs = {clean_text(value).casefold() for value in document.get("entity_refs") or ()}
+    keywords = {clean_text(value).casefold() for value in document.get("keywords") or ()}
     return bool(
         document_id == f"lore:location:{_slug(location_name)}"
         or location_id in refs
         or location_id in keywords
         or (
-            _text(document.get("topic_id")).casefold() in {"location", "locations"}
+            clean_text(document.get("topic_id")).casefold() in {"location", "locations"}
             and title == location_name
         )
     )
@@ -250,9 +246,9 @@ def _document_matches_location(document: Mapping[str, Any], location: Mapping[st
 def _public_world_context(bible: Mapping[str, Any]) -> list[str]:
     context: list[str] = []
     for document in _rows(bible.get("documents")):
-        if _text(document.get("visibility")) not in _PLAYER_VISIBLE_VISIBILITY:
+        if clean_text(document.get("visibility")) not in _PLAYER_VISIBLE_VISIBILITY:
             continue
-        summary = _text(document.get("summary_500") or document.get("summary_120"))
+        summary = clean_text(document.get("summary_500") or document.get("summary_120"))
         if summary:
             context.append(summary)
         if len(context) >= 12:
@@ -280,7 +276,7 @@ def _merge_published_world_canon(
 
     documents: dict[str, dict[str, Any]] = {}
     for row in [*_rows(world_canon.get("documents")), *_rows(current.get("documents"))]:
-        document_id = _text(row.get("document_id") or row.get("id"))
+        document_id = clean_text(row.get("document_id") or row.get("id"))
         if document_id:
             documents[document_id] = row
     merged["documents"] = list(documents.values())
@@ -338,15 +334,15 @@ def _generate_location_text(
             _PROMPT_2.text
         )
         try:
-            generated = _text(
+            generated = clean_text(
                 gateway.generate(
                     prompt,
                     context={
                         "location": dict(location),
                         "campaign": {
                             "title": _campaign_title(session, "campaign"),
-                            "genre": _text(metadata.get("genre") or metadata.get("campaign_template")),
-                            "tone": _text(metadata.get("tone")),
+                            "genre": clean_text(metadata.get("genre") or metadata.get("campaign_template")),
+                            "tone": clean_text(metadata.get("tone")),
                         },
                         "known_world_lore": _public_world_context(bible),
                     },
@@ -357,7 +353,7 @@ def _generate_location_text(
                 return generated
         except Exception:
             logger.debug("suppressed error in %s", "_generate_location_text", exc_info=True)
-    return _fallback_location_text(_text(location.get("name")) or "Current Location")
+    return _fallback_location_text(clean_text(location.get("name")) or "Current Location")
 
 
 def ensure_current_location_document(
@@ -377,7 +373,7 @@ def ensure_current_location_document(
         return candidate, None, False
     for document in documents:
         if _document_matches_location(document, location):
-            return candidate, _text(document.get("document_id")) or None, False
+            return candidate, clean_text(document.get("document_id")) or None, False
 
     full_text = _generate_location_text(
         candidate,
@@ -417,8 +413,8 @@ def ensure_current_location_document(
         {
             "kind": "location",
             "name": location["name"],
-            "visibility": _text(entity.get("visibility")) or "public",
-            "description": _text(entity.get("description")) or summary_500,
+            "visibility": clean_text(entity.get("visibility")) or "public",
+            "description": clean_text(entity.get("description")) or summary_500,
         }
     )
     entities[location["id"]] = entity
@@ -475,10 +471,10 @@ def _hydrate_session(
             "manifest": deepcopy(_mapping(bible.get("manifest"))),
             "discovery_state": deepcopy(_mapping(bible.get("discovery_state"))),
             "lore_pages": {
-                _text(row.get("document_id")): deepcopy(row)
+                clean_text(row.get("document_id")): deepcopy(row)
                 for row in documents
-                if _text(row.get("document_id"))
-                and _text(row.get("visibility")) in _PLAYER_VISIBLE_VISIBILITY
+                if clean_text(row.get("document_id"))
+                and clean_text(row.get("visibility")) in _PLAYER_VISIBLE_VISIBILITY
             },
         }
     )
@@ -488,17 +484,17 @@ def _hydrate_session(
     sheet["npc_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
-        if isinstance(row, Mapping) and _text(row.get("kind")) == "npc"
+        if isinstance(row, Mapping) and clean_text(row.get("kind")) == "npc"
     }
     sheet["location_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
-        if isinstance(row, Mapping) and _text(row.get("kind")) == "location"
+        if isinstance(row, Mapping) and clean_text(row.get("kind")) == "location"
     }
     sheet["faction_dossiers"] = {
         entity_id: deepcopy(row)
         for entity_id, row in entities.items()
-        if isinstance(row, Mapping) and _text(row.get("kind")) == "faction"
+        if isinstance(row, Mapping) and clean_text(row.get("kind")) == "faction"
     }
     hydrated["state"] = sheet
 
@@ -556,8 +552,8 @@ def load_campaign_lore(
                     title=_campaign_title(session, campaign_id),
                     state=deepcopy(_mapping(session.get("state"))),
                     engine_version="rpg-campaign-lore-v1",
-                    schema_version=_text(manifest.get("schema_version")) or "rpg-session-v1",
-                    seed=_text(manifest.get("seed") or setup.get("seed")) or "0",
+                    schema_version=clean_text(manifest.get("schema_version")) or "rpg-session-v1",
+                    seed=clean_text(manifest.get("seed") or setup.get("seed")) or "0",
                     metadata={"source": "campaign_lore_api", "portable_backfill": True},
                 )
             stored = work.campaign_bibles.get(context, campaign_id, for_update=True)
@@ -566,7 +562,7 @@ def load_campaign_lore(
             if binding is not None:
                 world_revision = work.world_scenarios.get_world_revision(
                     context,
-                    _text(binding.get("world_id")),
+                    clean_text(binding.get("world_id")),
                     int(binding.get("world_revision") or 0),
                 )
                 revision_document = (
@@ -627,7 +623,7 @@ def load_campaign_lore(
             revision=int(stored["revision"]),
             content_hash=str(stored["content_hash"]),
         )
-        existing_hash = _text(
+        existing_hash = clean_text(
             _mapping(session.get("campaign_bible_projection")).get("content_hash")
         )
         if generated or existing_hash != str(stored["content_hash"]):
@@ -697,8 +693,8 @@ def persist_campaign_lore(
                     title=_campaign_title(session, campaign_id),
                     state=deepcopy(_mapping(session.get("state"))),
                     engine_version="rpg-campaign-lore-v1",
-                    schema_version=_text(manifest.get("schema_version")) or "rpg-session-v1",
-                    seed=_text(manifest.get("seed")) or "0",
+                    schema_version=clean_text(manifest.get("schema_version")) or "rpg-session-v1",
+                    seed=clean_text(manifest.get("seed")) or "0",
                     metadata={"source": "campaign_lore_discovery"},
                 )
             current = work.campaign_bibles.get(context, campaign_id, for_update=True)
@@ -760,13 +756,13 @@ def _regeneration_context(
     canonical_source: Mapping[str, Any],
 ) -> dict[str, Any]:
     known_pages = []
-    target_id = _text(target.get("document_id"))
+    target_id = clean_text(target.get("document_id"))
     target_terms = {
         word
         for word in re.findall(
             r"[a-z0-9]+",
             (
-                _text(canonical_source.get("title"))
+                clean_text(canonical_source.get("title"))
                 + " "
                 + " ".join(str(value) for value in canonical_source.get("keywords") or ())
             ).casefold(),
@@ -776,9 +772,9 @@ def _regeneration_context(
     discovery = _mapping(bible.get("discovery_state"))
     page_statuses = _mapping(discovery.get("pages"))
     for document in _rows(bible.get("documents")):
-        document_id = _text(document.get("document_id"))
-        visibility = _text(document.get("visibility"))
-        status = _text(page_statuses.get(document_id))
+        document_id = clean_text(document.get("document_id"))
+        visibility = clean_text(document.get("visibility"))
+        status = clean_text(page_statuses.get(document_id))
         if document_id == target_id or visibility not in _PLAYER_VISIBLE_VISIBILITY:
             continue
         if status and status not in {
@@ -793,14 +789,14 @@ def _regeneration_context(
             for word in re.findall(
                 r"[a-z0-9]+",
                 (
-                    _text(document.get("title"))
+                    clean_text(document.get("title"))
                     + " "
                     + " ".join(str(value) for value in document.get("keywords") or ())
                 ).casefold(),
             )
             if len(word) >= 4
         }
-        foundational = _text(document.get("topic_id")) in {
+        foundational = clean_text(document.get("topic_id")) in {
             "realm",
             "cosmology",
             "magic_technology",
@@ -808,13 +804,13 @@ def _regeneration_context(
         }
         if not foundational and not target_terms.intersection(document_terms):
             continue
-        summary = _text(document.get("summary_500") or document.get("summary_120"))
+        summary = clean_text(document.get("summary_500") or document.get("summary_120"))
         if summary:
             known_pages.append(
                 {
                     "document_id": document_id,
-                    "title": _text(document.get("title")),
-                    "topic_id": _text(document.get("topic_id")),
+                    "title": clean_text(document.get("title")),
+                    "topic_id": clean_text(document.get("topic_id")),
                     "summary": summary,
                 }
             )
@@ -825,14 +821,14 @@ def _regeneration_context(
     mechanic_group = _mapping(
         mechanics.get(
             "creatures"
-            if _text(target.get("topic_id")) == "monsters"
+            if clean_text(target.get("topic_id")) == "monsters"
             else "locations"
         )
     )
     mechanics_definition: dict[str, Any] = {}
     for entity_ref in target.get("entity_refs") or ():
         mechanics_definition = deepcopy(
-            _mapping(mechanic_group.get(_text(entity_ref)))
+            _mapping(mechanic_group.get(clean_text(entity_ref)))
         )
         if mechanics_definition:
             break
@@ -843,10 +839,10 @@ def _regeneration_context(
         },
         "authoritative_target": {
             "document_id": target_id,
-            "title": _text(target.get("title")),
-            "topic_id": _text(target.get("topic_id")),
-            "canonical_source_text": _text(canonical_source.get("full_text")),
-            "current_page_text": _text(target.get("full_text")),
+            "title": clean_text(target.get("title")),
+            "topic_id": clean_text(target.get("topic_id")),
+            "canonical_source_text": clean_text(canonical_source.get("full_text")),
+            "current_page_text": clean_text(target.get("full_text")),
             "keywords": list(target.get("keywords") or ()),
             "mechanics_definition": mechanics_definition,
         },
@@ -855,7 +851,7 @@ def _regeneration_context(
 
 
 def _generated_lore_text(value: Any, *, target: Mapping[str, Any]) -> str:
-    text = _text(value)
+    text = clean_text(value)
     if text.startswith("```") and text.endswith("```"):
         lines = text.splitlines()
         text = "\n".join(lines[1:-1]).strip()
@@ -865,8 +861,8 @@ def _generated_lore_text(value: Any, *, target: Mapping[str, Any]) -> str:
         raise LoreRegenerationUnavailable(
             "The lore provider returned prose that was too short; the existing canon was left unchanged."
         )
-    topic_id = _text(target.get("topic_id"))
-    title = _text(target.get("title"))
+    topic_id = clean_text(target.get("topic_id"))
+    title = clean_text(target.get("title"))
     if topic_id in {
         "regions",
         "factions",
@@ -894,7 +890,7 @@ def _apply_regenerated_lore(
     documents = _rows(candidate.get("documents"))
     replaced = False
     for index, document in enumerate(documents):
-        if _text(document.get("document_id")) != document_id:
+        if clean_text(document.get("document_id")) != document_id:
             continue
         provenance = deepcopy(_mapping(document.get("provenance")))
         provenance["last_regeneration"] = {
@@ -916,17 +912,17 @@ def _apply_regenerated_lore(
     candidate["documents"] = documents
 
     cards = _rows(candidate.get("retrieval_cards"))
-    target = next(row for row in documents if _text(row.get("document_id")) == document_id)
+    target = next(row for row in documents if clean_text(row.get("document_id")) == document_id)
     for card in cards:
-        if _text(card.get("document_id")) != document_id:
+        if clean_text(card.get("document_id")) != document_id:
             continue
-        size = _text(card.get("summary_size"))
+        size = clean_text(card.get("summary_size"))
         card["content"] = (
-            _text(target.get("summary_120"))
+            clean_text(target.get("summary_120"))
             if size == "short"
-            else _text(target.get("summary_500"))
+            else clean_text(target.get("summary_500"))
         )
-        card["title"] = _text(target.get("title"))
+        card["title"] = clean_text(target.get("title"))
         card["canon_revision"] = canon_revision
     candidate["retrieval_cards"] = cards
     candidate["canon_revision"] = canon_revision
@@ -963,7 +959,7 @@ def regenerate_campaign_lore_document(
         (
             row
             for row in _rows(portable.get("documents"))
-            if _text(row.get("document_id")) == document_id
+            if clean_text(row.get("document_id")) == document_id
         ),
         None,
     )
@@ -983,7 +979,7 @@ def regenerate_campaign_lore_document(
             (
                 row
                 for row in _rows(authoritative_bible.get("documents"))
-                if _text(row.get("document_id")) == document_id
+                if clean_text(row.get("document_id")) == document_id
             ),
             None,
         )
@@ -994,7 +990,7 @@ def regenerate_campaign_lore_document(
         if binding is not None:
             world_revision = work.world_scenarios.get_world_revision(
                 context,
-                _text(binding.get("world_id")),
+                clean_text(binding.get("world_id")),
                 int(binding.get("world_revision") or 0),
             )
             revision_document = (
@@ -1014,7 +1010,7 @@ def regenerate_campaign_lore_document(
                     (
                         row
                         for row in _rows(published_bible.get("documents"))
-                        if _text(row.get("document_id")) == document_id
+                        if clean_text(row.get("document_id")) == document_id
                     ),
                     authoritative_target,
                 )
@@ -1024,9 +1020,9 @@ def regenerate_campaign_lore_document(
         raise LoreRegenerationUnavailable(
             "No lore generation provider is configured; the existing canon was left unchanged."
         )
-    normalized_direction = _text(direction)[:1000]
-    target_title = _text(authoritative_target.get("title"))
-    target_topic = _text(authoritative_target.get("topic_id"))
+    normalized_direction = clean_text(direction)[:1000]
+    target_title = clean_text(authoritative_target.get("title"))
+    target_topic = clean_text(authoritative_target.get("topic_id"))
     prompt = (
         _PROMPT_1.format(v0=(target_title), v1=(target_topic), v2=(target_title))
     )
@@ -1056,13 +1052,13 @@ def regenerate_campaign_lore_document(
             (
                 row
                 for row in _rows(current["document"].get("documents"))
-                if _text(row.get("document_id")) == document_id
+                if clean_text(row.get("document_id")) == document_id
             ),
             None,
         )
         if current_target is None:
             raise KeyError(document_id)
-        if _text(current_target.get("full_text")) != _text(authoritative_target.get("full_text")):
+        if clean_text(current_target.get("full_text")) != clean_text(authoritative_target.get("full_text")):
             raise LoreRegenerationUnavailable(
                 "This lore page changed while it was being regenerated; please try again."
             )

@@ -24,7 +24,6 @@ from app.security import audit
 from .assistant_turns import default_assistant_turn_coordinator
 from app.capabilities.executor import live_agent_tools
 from .models import ChatMessage, ChatSession
-from .routing_deadline import provider_turn_deadline
 from .store import _pop_ready_sentences
 from app.prompts import prompt_template
 
@@ -139,33 +138,18 @@ def stream_live_agent_turn(
                 yield from _governed_rejection_events(user_message, request)
                 return
 
-        from app.platform.chat.contracts import route_typed_turn as route_typed_chat_turn
+        from app.platform.chat.turn_routing import route_typed_turn
 
-        generalized = route_typed_chat_turn(
+        generalized = route_typed_turn(
+            self,
             session,
             user_message,
             provider_id=provider_id,
             model_id=model_id,
             context_items=context_items,
-            routing_deadline_at=(
-                routing_deadline_at
-                if routing_deadline_at is not None
-                else provider_turn_deadline(
-                    provider_id,
-                    session_provider_id=getattr(session, "provider_id", None),
-                )
-            ),
-            routing_context_factory=lambda: _canonical_routing_context(
-                self,
-                session,
-                user_message,
-                context_items or [],
-            ),
+            routing_deadline_at=routing_deadline_at,
         )
         if generalized is not None:
-            discard_context = getattr(self, "discard_prompt_context", None)
-            if callable(discard_context):
-                discard_context(session, user_message)
             _persist_omnix_route(
                 self,
                 session.id,
@@ -325,20 +309,6 @@ def stream_live_agent_turn(
         context_items=context_items,
         routing_deadline_at=routing_deadline_at,
     )
-
-
-def _canonical_routing_context(
-    store: Any,
-    session: ChatSession,
-    user_message: ChatMessage,
-    context_items: list[dict[str, Any]],
-):
-    """Build Agent routing context through the canonical Chat prompt pipeline."""
-
-    builder = getattr(store, "build_routing_context", None)
-    if not callable(builder):
-        return None
-    return builder(session, user_message, context_items)
 
 
 def _decision(user_message: ChatMessage) -> LiveAgentRouteDecision:
@@ -508,13 +478,10 @@ def _persist_omnix_route(
 ) -> None:
     if not isinstance(route, dict):
         return
-    patch: dict[str, object] = {"omnix_route": route}
-    user_message.metadata.update(patch)
-    targeted_update = getattr(store, "update_user_message_metadata", None)
-    if callable(targeted_update):
-        targeted_update(session_id=session_id, message_id=user_message.id, metadata=patch)
-        return
-    _patch_message_metadata(store, session_id, user_message.id, patch, role="user")
+    from app.platform.chat.turn_routing import patch_user_message_metadata
+
+    user_message.metadata["omnix_route"] = route
+    patch_user_message_metadata(store, session_id=session_id, message_id=user_message.id, metadata={"omnix_route": route})
 
 
 def _patch_message_metadata(

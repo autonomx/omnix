@@ -27,6 +27,17 @@ READER_TYPES = {
 SENSITIVE = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
 
 
+def _reader_aliases(tree: ast.AST) -> dict[str, str]:
+    """Local names bound to a reader by ``from ... import env_str as _env_str``."""
+    return {
+        alias.asname: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.asname and alias.name in READER_TYPES
+    }
+
+
 def _literal(node: ast.AST | None, constants: dict[str, object]) -> object | None:
     if node is None:
         return None
@@ -95,17 +106,27 @@ def discover_variables() -> list[dict[str, str | None]]:
         except (OSError, SyntaxError):
             continue
         constants = _constants(tree)
+        aliases = _reader_aliases(tree)
         for node in ast.walk(tree):
             name: object | None = None
             default: object | None = None
             reader_type = "string"
             if isinstance(node, ast.Call):
                 function = node.func
-                if isinstance(function, ast.Name) and function.id in READER_TYPES:
-                    reader_type = READER_TYPES[function.id]
+                reader = aliases.get(function.id, function.id) if isinstance(function, ast.Name) else None
+                if reader == "monitor_switch" and node.args:
+                    # A trading monitor's switch reads its name (on by default) and <name>_IN_TESTS (off).
+                    switch = _literal(node.args[0], constants)
+                    if isinstance(switch, str) and NAME_PATTERN.fullmatch(switch):
+                        owner = _owner(path.relative_to(ROOT))
+                        found.setdefault(switch, []).append(("boolean", "1", owner))
+                        found.setdefault(f"{switch}_IN_TESTS", []).append(("boolean", "0", owner))
+                    continue
+                if reader in READER_TYPES:
+                    reader_type = READER_TYPES[reader]
                     if node.args:
                         name = _literal(node.args[0], constants)
-                    default_index = 1 if function.id != "env_int" else 1
+                    default_index = 1
                     default = _literal(node.args[default_index], constants) if len(node.args) > default_index else None
                 elif isinstance(function, ast.Attribute) and function.attr == "get" and _environment_view(function.value):
                     if node.args:

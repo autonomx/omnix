@@ -1,14 +1,25 @@
 """Local narrative-opportunity certification for assembled worlds."""
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.apps.rpg.genesis.forge.world_forge_local_narrative import local_narrative_components
+from .graph_audit import GraphAuditError
+from .topic_graph import (
+    fingerprint as _fingerprint,
+)
+from .topic_graph import (
+    mapping as _map,
+)
+from .topic_graph import (
+    rows as _rows,
+)
+from .topic_graph import (
+    topic_entities as _entities,
+)
 
 _DIVERSITY = ("discovery_channel", "entry_mode", "consequence_scope")
 _CATEGORY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -45,38 +56,9 @@ class LocalNarrativeIssue:
         }
 
 
-class LocalNarrativeCompilationError(ValueError):
-    def __init__(self, issues: Sequence[LocalNarrativeIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.opportunity_id}:{row.path}" for row in self.issues)
-        super().__init__("local_narrative_integrity_failed:" + rendered)
-
-
-def _map(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(row) for row in value if isinstance(row, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        if isinstance(row.get(key), Mapping):
-            return dict(row[key])
-    return dict(row)
-
-
-def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values: list[tuple[str, int, dict[str, Any]]] = []
-    for topic_index, raw in enumerate(topic_rows, 1):
-        topic = _map(raw)
-        candidate = _candidate(topic)
-        topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
-        values.extend((topic_id, index, row) for index, row in enumerate(_rows(candidate.get("entities"))))
-    return tuple(values)
+class LocalNarrativeCompilationError(GraphAuditError):
+    code = "local_narrative_integrity_failed"
+    fields = ("code", "opportunity_id", "path")
 
 
 def _domains(graph: Mapping[str, Any] | None) -> set[str]:
@@ -118,11 +100,6 @@ def _ids(value: Any) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
     return tuple(str(item).strip() for item in value if str(item).strip())
-
-
-def _fingerprint(value: Mapping[str, Any]) -> str:
-    encoded = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def local_narrative_issues(

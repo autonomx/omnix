@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass
+from app.jobs.handlers import JobHandlerSpec, JobResult, JobRun
+from app.jobs.models import CreateJobRequest, ResourceClass
 
 from .strategy_range_backtest import StrategyRangeBacktestRequest
 
@@ -40,12 +39,10 @@ def create_strategy_range_backtest_request(
     )
 
 
-def _execute_range_backtest_job(
-    context: JobExecutionContext,
-    job: JobRecord,
-) -> JobRecord:
-    payload = StrategyRangeBacktestJobInput.model_validate(job.input_payload or {})
-    if context.cancelled():
+def run_range_backtest_job(run: JobRun[StrategyRangeBacktestJobInput]) -> JobResult:
+    """Replay the strategy over the range, reporting each session as progress; a cancel fails the attempt."""
+    job, payload = run.job, run.input
+    if run.cancelled():
         raise RuntimeError("strategy range backtest was cancelled before execution")
 
     from .strategy_api import (
@@ -55,9 +52,9 @@ def _execute_range_backtest_job(
     )
 
     def report_progress(completed: int, total: int, session_date) -> None:
-        if context.cancelled():
+        if run.cancelled():
             raise RuntimeError("strategy range backtest was cancelled")
-        context.job_store.update_progress(
+        run.store.update_progress(
             job.id,
             current=completed,
             total=total,
@@ -74,24 +71,17 @@ def _execute_range_backtest_job(
             report_progress,
         )
     )
-    completed = context.job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[
-                {
-                    "kind": "strategy_range_backtest_result",
-                    "strategy_id": payload.strategy_id,
-                    "result": result.model_dump(mode="json"),
-                }
-            ]
-        ),
-    )
-    return completed or job
+    return JobResult(output_refs=({
+        "kind": "strategy_range_backtest_result",
+        "strategy_id": payload.strategy_id,
+        "result": result.model_dump(mode="json"),
+    },))
 
 
 STRATEGY_RANGE_BACKTEST_JOB = JobHandlerSpec(
     type="trading.strategy.range-backtest",
-    handler=_execute_range_backtest_job,
+    run=run_range_backtest_job,
+    failure_code="strategy_range_backtest_failed",
     input_model=StrategyRangeBacktestJobInput,
     resource_class=ResourceClass.CPU,
     timeout_seconds=3600,

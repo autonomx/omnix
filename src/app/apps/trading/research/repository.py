@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 
 from app.security.tenant_context import RequestTenant, TenantContext

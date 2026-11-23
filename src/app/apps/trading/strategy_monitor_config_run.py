@@ -236,7 +236,7 @@ async def run_config(
         )
         rejection_time = day_start_et.astimezone(timezone.utc)
         for candidate in universe.candidates:
-            monitor.rejection_count += 1
+            monitor.metrics.rejection_count += 1
             await monitor._event(
                 strategy_repository,
                 config,

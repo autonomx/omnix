@@ -115,12 +115,10 @@ export function ChartPanelLegend({ ws }: { ws: TradingChartPanelModel }) {
 /** Indicator pane controls, the selected-indicator toolbar and indicator settings. */
 export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    closeIndicator, fullscreenIndicator, fullscreenMainPane, hoveredIndicatorPane, indicatorPaneGeometry,
+    fullscreenIndicator, fullscreenMainPane, hoveredIndicatorPane, indicatorPaneGeometry, instrumentId,
     minimizedIndicators, onMoveIndicator, onOpenPineScript, onToggleIndicator, onToggleIndicatorVisibility,
-    onUpdateIndicator, paneIndicators, resetIndicatorPaneView, selectedIndicator, selectedIndicatorConfig,
-    setSelectedIndicator, setSettingsIndicator, settingsIndicator, toggleFullscreenIndicator,
-    toggleMinimizedIndicator,
-    instrumentId,
+    onUpdateIndicator, paneIndicators, panes, selectedIndicator, selectedIndicatorConfig, setSelectedIndicator,
+    setSettingsIndicator, settingsIndicator,
   } = ws;
   return (
     <>
@@ -137,13 +135,13 @@ export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
             hovered={hoveredIndicatorPane === indicator.id}
             canMoveUp={index > 0}
             canMoveDown={index < paneIndicators.length - 1}
-            onToggleMinimized={() => toggleMinimizedIndicator(indicator.id)}
-            onToggleFullscreen={() => void toggleFullscreenIndicator(indicator.id)}
-            onResetView={() => resetIndicatorPaneView(indicator.id)}
+            onToggleMinimized={() => panes.toggleMinimized(indicator.id)}
+            onToggleFullscreen={() => void panes.toggleIndicatorFullscreen(indicator.id)}
+            onResetView={() => panes.resetView(indicator.id)}
             onSettings={() => setSettingsIndicator(indicator)}
             onSourceCode={() => onOpenPineScript(indicator.id)}
             onMove={(direction) => onMoveIndicator(indicator.id, direction)}
-            onClose={() => closeIndicator(indicator.id)}
+            onClose={() => panes.close(indicator.id)}
           />
         );
       })}
@@ -156,7 +154,7 @@ export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
           onToggleVisibility={() => onToggleIndicatorVisibility(selectedIndicatorConfig.id)}
           onSettings={() => setSettingsIndicator(selectedIndicatorConfig)}
           onSourceCode={() => onOpenPineScript(selectedIndicatorConfig.id)}
-          onResetView={() => resetIndicatorPaneView(selectedIndicatorConfig.id)}
+          onResetView={() => panes.resetView(selectedIndicatorConfig.id)}
           onRemove={() => {
             setSelectedIndicator(null);
             onToggleIndicator(selectedIndicatorConfig.id);

@@ -8,7 +8,7 @@ from decimal import Decimal
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .paper import PaperOrder
 from .paper_runtime_repository import default_runtime_paper_repository
 from .research.fact_repository import TradingFactRepository, default_fact_repository
@@ -26,14 +26,7 @@ from typing import Any, cast
 _STATE_KEY = "_omnix_trading_strategy_research_outcome_monitor"
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def strategy_research_outcome_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR", "1")
+strategy_research_outcome_monitor_enabled = monitor_switch("OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR")
 
 
 def _interval_seconds() -> float:

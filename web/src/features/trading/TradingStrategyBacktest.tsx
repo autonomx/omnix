@@ -12,6 +12,7 @@ import type {
 } from './tradingStrategyTypes';
 import { startTicker } from '../../shared/timers';
 import { PRODUCT_NAME } from '../../shared/productIdentity';
+import { numericValue } from './format';
 
 function isoDate(offsetDays = 0): string {
   const value = new Date();
@@ -19,21 +20,15 @@ function isoDate(offsetDays = 0): string {
   return value.toISOString().slice(0, 10);
 }
 
-function numeric(value: string | number | null | undefined): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function money(value: string | number | null | undefined): string {
-  const parsed = numeric(value);
+  const parsed = numericValue(value);
   return parsed === null
     ? 'N/A'
     : parsed.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 }
 
 function ratio(value: string | number | null | undefined, digits = 2): string {
-  const parsed = numeric(value);
+  const parsed = numericValue(value);
   return parsed === null ? 'N/A' : parsed.toFixed(digits);
 }
 

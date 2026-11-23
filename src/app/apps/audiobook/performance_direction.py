@@ -21,7 +21,7 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 from app.prompts import prompt_template
 
-from .leases import JOB_LEASE_SECONDS, lease_heartbeat
+from .leases import claimed_job
 
 logger = logging.getLogger(__name__)
 
@@ -267,20 +267,10 @@ def run_direction_once(
     database: PostgresDatabase, blobs: Any, context: TenantContext, *, worker_id: str,
     director_factory: Callable[[], tuple[Callable[[dict[str, Any]], dict[str, Any]], dict[str, Any]]] = llm_director,
 ) -> bool:
-    with unit_of_work(database) as work:
-        job = work.jobs.claim_next(
-            context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=[JOB_TYPE], lease_seconds=JOB_LEASE_SECONDS,
-        )
+    with claimed_job(database, context, worker_id=worker_id, job_type=JOB_TYPE,
+                     resource_class="cpu") as job:
         if job is None:
-            work.rollback()
             return False
-        job = work.jobs.mark_running(
-            context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
-        )
-        work.commit()
-    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
-                         lease_token=job["lease_token"]):
         _direct_claimed(database, blobs, context, job, worker_id=worker_id, director_factory=director_factory)
     return True
 

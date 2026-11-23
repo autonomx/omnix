@@ -10,12 +10,14 @@ from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.tenant import TenantContext
 
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentApproval,
     AgentArtifact,
     AgentEvent,
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    IssuedRunSpec,
     AgentRunUsage,
     EvidenceDecision,
     EvidenceReceipt,
@@ -63,9 +65,25 @@ class PostgresAgentRunRepository:
         self.connection = connection
         self.context = context
         self.lease_token_provider = lease_token_provider
+        self._bound_lease: tuple[str, str] | None = None
         self.outbox = PostgresOutboxRepository(connection)
 
-    def create_run(self, spec: AgentRunSpec) -> AgentRunSnapshot:
+    def bound_to_lease(self, *, worker_id: str, lease_token: str) -> PostgresAgentRunRepository:
+        """This repository with every state change stamped with one lease's credentials.
+
+        A job that acts for a run's current lease holder uses it, so each state
+        change it makes is fenced by that lease instead of by this worker's own.
+        """
+        bound = PostgresAgentRunRepository(
+            self.connection,
+            self.context,
+            lease_token_provider=self.lease_token_provider,
+        )
+        bound._bound_lease = (worker_id, lease_token)
+        return bound
+
+    def create_run(self, spec: IssuedRunSpec) -> AgentRunSnapshot:
+        """Create a run; only an issued spec (``run_issuance``) may become one."""
         row = self.connection.execute(
             """
             INSERT INTO omnix_agent_runs (
@@ -253,7 +271,9 @@ class PostgresAgentRunRepository:
         lease_token: str | None = None,
         last_error: str | None = None,
     ) -> AgentRunSnapshot:
-        if worker_id is not None and lease_token is None and callable(self.lease_token_provider):
+        if self._bound_lease is not None:
+            worker_id, lease_token = self._bound_lease
+        elif worker_id is not None and lease_token is None and callable(self.lease_token_provider):
             lease_token = self.lease_token_provider(run_id)
         if bool(worker_id) != bool(lease_token):
             raise AgentLeaseConflict("worker state updates require matching lease credentials")
@@ -267,7 +287,7 @@ class PostgresAgentRunRepository:
         now = datetime.now(timezone.utc)
         if next_status in {"starting", "running"} and started is None:
             started = now
-        if next_status in {"completed", "failed", "cancelled"} and completed is None:
+        if next_status in TERMINAL_RUN_STATUSES and completed is None:
             completed = now
         row = self.connection.execute(
             """

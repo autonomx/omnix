@@ -17,7 +17,6 @@ import pytest
 
 from app.assets.models import AssetRecord, AssetType
 from app.jobs.models import JobRecord
-from app.platform.voice import jobs as voice_jobs
 from app.platform.voice.transcripts import (
     MAX_CUE_SECONDS,
     MAX_LINE_CHARS,
@@ -29,6 +28,7 @@ from app.platform.voice.transcripts import (
     subtitle_cues,
 )
 from services.stt import timed_transcription as timed
+from tests.support.voice_jobs import execute_voice_studio_job
 
 RATE = 16_000
 
@@ -515,7 +515,7 @@ def test_a_timed_job_saves_a_versioned_transcript_with_speakers(monkeypatch, sto
                         lambda name=None: _stt({"success": True, "document": document}, seen))
     store = _JobStore()
     job = _transcribe_job({"timed": True, "diarize": True, "speakers": 2, "language": "en"})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert seen == {"language": "en", "diarize": True, "speakers": 2}
     transcript = next(asset for asset in stores.assets.values() if asset.type == AssetType.TRANSCRIPT)
@@ -532,7 +532,7 @@ def test_a_missing_timed_model_fails_without_retry(monkeypatch, stores, code: st
                         lambda name=None: _stt({"success": False, "code": code, "error": "nope"}, {}))
     store = _JobStore()
     job = _transcribe_job({"timed": True})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].retryable is retryable
 
 
@@ -540,7 +540,7 @@ def test_a_speaker_count_out_of_range_is_refused(monkeypatch, stores) -> None:
     monkeypatch.setattr("app.providers.service.get_stt_provider", lambda name=None: _stt({}, {}))
     store = _JobStore()
     job = _transcribe_job({"timed": True, "speakers": 12})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request"
 
 
@@ -632,7 +632,7 @@ def test_a_render_check_scores_each_line_by_its_place_in_the_render(monkeypatch,
     store = _JobStore()
     job = _transcribe_job({"check_render": True})
     job = job.model_copy(update={"input_ref": {"asset_id": "audio:render"}})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert seen["diarize"] is False
     output = store.completed[job.id].output_refs[0]
@@ -648,7 +648,7 @@ def test_a_render_check_needs_a_render_with_a_script(monkeypatch, stores) -> Non
     monkeypatch.setattr("app.providers.service.get_stt_provider", lambda name=None: _stt({}, {}))
     store = _JobStore()
     job = _transcribe_job({"check_render": True})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert store.failed[job.id].code == "invalid_request"
 
 
@@ -711,6 +711,6 @@ def test_the_stt_service_gets_16_khz_mono_whatever_the_recording(monkeypatch, st
                         lambda name=None: _stt({"success": True, "document": document}, {}, uploads))
     store = _JobStore()
     job = _transcribe_job({"timed": True})
-    voice_jobs.execute_voice_studio_job(store, job)
+    execute_voice_studio_job(store, job)
     assert job.id in store.completed, store.failed.get(job.id)
     assert uploads == [(16_000, 1)]

@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from app.apps.rpg.rules.contracts import public_canon
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 # Entities the world's author wrote: runtime lore never generates over them.
@@ -18,10 +19,6 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 def _rows(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in value or () if isinstance(row, Mapping)]
-
-
-def _text(value: Any) -> str:
-    return str(value or "").strip()
 
 
 def _slug(value: str) -> str:
@@ -50,7 +47,7 @@ def _render_value(value: Any, *, depth: int = 0) -> str:
         return "\n".join(f"• {item}" for item in parts)
     if isinstance(value, bool):
         return "Yes" if value else "No"
-    return _text(value)
+    return clean_text(value)
 
 
 def _page(
@@ -107,8 +104,8 @@ def project_published_canon(
         if document is not None:
             pages.append(document)
 
-    summary = _text(bible.get("summary"))
-    themes = [_text(item) for item in bible.get("themes") or () if _text(item)]
+    summary = clean_text(bible.get("summary"))
+    themes = [clean_text(item) for item in bible.get("themes") or () if clean_text(item)]
     overview = summary
     if themes:
         overview += ("\n\nThemes:\n" if overview else "Themes:\n") + "\n".join(
@@ -126,7 +123,7 @@ def project_published_canon(
     for key, topic_id, title in (
         ("isekai_premise", "realm", "Earthborn and the Meridian Gates"),
         ("cosmology", "cosmology", "Cosmology"),
-        ("magic", "magic_technology", _text(_mapping(bible.get("magic")).get("name")) or "Magic"),
+        ("magic", "magic_technology", clean_text(_mapping(bible.get("magic")).get("name")) or "Magic"),
         ("economy", "economy", "Economy and Trade"),
     ):
         add(
@@ -157,8 +154,8 @@ def project_published_canon(
         ("bestiary", "monsters", "monster", "name"),
     ):
         for index, row in enumerate(_rows(bible.get(key)), start=1):
-            entry_id = _text(row.get("id")) or f"{kind}:{index}"
-            title = _text(row.get(title_field)) or _label(entry_id.split(":")[-1])
+            entry_id = clean_text(row.get("id")) or f"{kind}:{index}"
+            title = clean_text(row.get(title_field)) or _label(entry_id.split(":")[-1])
             safe_row = {field: value for field, value in row.items() if field != "secrets"}
             add(
                 _page(
@@ -173,18 +170,18 @@ def project_published_canon(
                 entities[entry_id] = {
                     "kind": "faction",
                     "name": title,
-                    "public_goal": _text(row.get("agenda")),
-                    "description": _text(row.get("stance_to_earthborn")),
+                    "public_goal": clean_text(row.get("agenda")),
+                    "description": clean_text(row.get("stance_to_earthborn")),
                     "visibility": "public",
                 }
 
     # The world's people, places, quests and items, so narration and lore read the published entries instead
     # of inventing new ones for them.
     for row in _rows(bible.get("characters")):
-        entity_id = _text(row.get("id"))
+        entity_id = clean_text(row.get("id"))
         if not entity_id:
             continue
-        title = _text(row.get("name")) or _label(entity_id.split(":")[-1])
+        title = clean_text(row.get("name")) or _label(entity_id.split(":")[-1])
         safe_row = {field: value for field, value in row.items() if field != "secrets"}
         page = _page(document_id=f"lore:published:{_slug(entity_id)}", topic_id="characters", title=title,
                      value=safe_row, canon_revision=revision)
@@ -195,13 +192,13 @@ def project_published_canon(
         entities[entity_id] = {
             "kind": "npc",
             "name": title,
-            "role": _text(row.get("role")),
-            "description": _text(row.get("biography") or row.get("description")),
-            "backstory": _text(row.get("biography")),
-            "personality": ", ".join(_text(item) for item in personality) if isinstance(personality, list) else _text(personality),
-            "goals": [_text(goal) for goal in row.get("goals") or () if _text(goal)],
-            "motives": [_text(goal) for goal in row.get("goals") or () if _text(goal)],
-            "speech_style": _text(row.get("speech_style")),
+            "role": clean_text(row.get("role")),
+            "description": clean_text(row.get("biography") or row.get("description")),
+            "backstory": clean_text(row.get("biography")),
+            "personality": ", ".join(clean_text(item) for item in personality) if isinstance(personality, list) else clean_text(personality),
+            "goals": [clean_text(goal) for goal in row.get("goals") or () if clean_text(goal)],
+            "motives": [clean_text(goal) for goal in row.get("goals") or () if clean_text(goal)],
+            "speech_style": clean_text(row.get("speech_style")),
             "visibility": "public",
             "canon_source": AUTHORED_CANON,
         }
@@ -225,14 +222,14 @@ def project_published_canon(
         }
     for key, kind, topic_id in (("quests", "quest", "quests"), ("items", "item", "items")):
         for row in _rows(bible.get(key)):
-            entity_id = _text(row.get("id"))
+            entity_id = clean_text(row.get("id"))
             if not entity_id:
                 continue
-            title = _text(row.get("title") or row.get("name")) or _label(entity_id.split(":")[-1])
+            title = clean_text(row.get("title") or row.get("name")) or _label(entity_id.split(":")[-1])
             entities[entity_id] = {
                 "kind": kind,
                 "name": title,
-                "description": _text(row.get("objective") or row.get("effect") or row.get("description")),
+                "description": clean_text(row.get("objective") or row.get("effect") or row.get("description")),
                 "visibility": "public",
             }
             if kind == "quest":
@@ -248,7 +245,7 @@ def project_published_canon(
         page_status[str(document["document_id"])] = "public_at_campaign_start"
     entity_status = deepcopy(_mapping(discovery.get("entities")))
     for entity_id, entity in entities.items():
-        if _text(_mapping(entity).get("visibility")) == "public":
+        if clean_text(_mapping(entity).get("visibility")) == "public":
             entity_status[str(entity_id)] = "public_at_campaign_start"
     discovery.update(
         {
@@ -259,7 +256,7 @@ def project_published_canon(
     )
     bible.update(
         {
-            "schema_version": _text(bible.get("schema_version")) or "rpg_campaign_bible_v2",
+            "schema_version": clean_text(bible.get("schema_version")) or "rpg_campaign_bible_v2",
             "documents": pages,
             "entities": entities,
             "discovery_state": discovery,

@@ -11,7 +11,7 @@ from app.platform.chat.contracts import (
     provider_key,
     resolve_effective_provider_id,
 )
-from app.conversation.contracts import LIVE_VOICE_ROUTE_METADATA_KEY
+from app.conversation.contracts import LIVE_VOICE_ROUTE_METADATA_KEY, is_live_voice_turn
 from app.providers.catalog import RUNTIME_STATS, provider_supports
 from app.observability.tts_stream_diagnostics import stream_log
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
@@ -43,11 +43,8 @@ def _normalized(value: str | None) -> str | None:
 
 
 def _is_live_voice_request(request: SendChatMessageRequest) -> bool:
-    user_turn_id = _normalized(request.user_turn_id)
-    speech_segment_id = _normalized(request.speech_segment_id)
-    return bool(
-        speech_segment_id
-        or (user_turn_id and user_turn_id.startswith("voice-user-turn:"))
+    return is_live_voice_turn(
+        {"user_turn_id": request.user_turn_id, "speech_segment_id": request.speech_segment_id}
     )
 
 
@@ -167,20 +164,17 @@ def begin_routed_user_message(
     if _route_from_message(user_message) is not None:
         return appended
 
+    # The store's own persist normally writes the route with the turn; this covers one that did not, through the
+    # targeted update every chat store has, never by rewriting the session.
     user_message.metadata[ROUTE_METADATA_KEY] = route_metadata
     session.provider_id = route.provider_id
     session.model_id = route.model_id
-    update_metadata = getattr(store, "update_user_message_metadata", None)
-    if callable(update_metadata):
-        persisted = update_metadata(
-            session_id=session.id,
-            message_id=user_message.id,
-            metadata={ROUTE_METADATA_KEY: route_metadata},
-        )
-        if not persisted:
-            raise RuntimeError("provider route metadata could not be persisted")
-    else:
-        store._save_session(session)
+    if not store.update_user_message_metadata(
+        session_id=session.id,
+        message_id=user_message.id,
+        metadata={ROUTE_METADATA_KEY: route_metadata},
+    ):
+        raise RuntimeError("provider route metadata could not be persisted")
     return session, user_message
 
 

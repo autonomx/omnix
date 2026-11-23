@@ -9,13 +9,13 @@ import ssl
 import threading
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, time, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import certifi
 from app.runtime.features import FeatureContext
 from app.apps.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN
 
 
 ALPACA_IEX_STREAM_URL = "wss://stream.data.alpaca.markets/v2/iex"
@@ -23,7 +23,6 @@ _STATE_KEY = "_omnix_alpaca_iex_status_monitor"
 _HALT_CODES = {"2", "H", "P"}
 _RESUME_CODES = {"3", "Q", "T"}
 _HISTORY_LIMIT_PER_SYMBOL = 256
-_EXTENDED_SESSION_OPEN = time(4, 0)
 
 
 def _stored_credentials() -> dict[str, str]:
@@ -158,7 +157,7 @@ class AlpacaIexStatusCache:
         local = start_utc.astimezone(_ET)
         session_start = datetime.combine(
             local.date(),
-            _EXTENDED_SESSION_OPEN,
+            PREMARKET_OPEN,
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         key = symbol.upper()
@@ -191,7 +190,7 @@ class AlpacaIexStatusCache:
         local_cutoff = cutoff.astimezone(_ET)
         session_start = datetime.combine(
             local_cutoff.date(),
-            _EXTENDED_SESSION_OPEN,
+            PREMARKET_OPEN,
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         key = symbol.upper()

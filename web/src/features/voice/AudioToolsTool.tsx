@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { omnixApiClient, type AssetListResponse } from '../../api/client';
 import { voiceApiClient } from './api/voiceClient';
-import { jobSettled, useJobResult } from './useJobResult';
+import { useJob } from '../../shared/useJob';
+import { isJobSettled } from '../../api/jobs';
 
 type Asset = AssetListResponse['assets'][number];
 
@@ -51,7 +52,7 @@ export function AudioToolsTool({ assets }: { assets: Asset[] }) {
   const [model, setModel] = useState('roformer');
   const [jobId, setJobId] = useState('');
   const status = useAudioToolsStatus();
-  const job = useJobResult(jobId);
+  const job = useJob(jobId);
   const available = Boolean(status.data?.available);
 
   const run = useMutation({
@@ -71,7 +72,7 @@ export function AudioToolsTool({ assets }: { assets: Asset[] }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: AUDIO_TOOLS_QUERY_KEY }),
   });
 
-  const running = Boolean(jobId) && !jobSettled(job.data);
+  const running = Boolean(jobId) && !isJobSettled(job.data?.status);
   const outputs = job.data?.status === 'completed' ? (job.data.output_refs ?? []) as unknown as ToolOutput[] : [];
   const failure = job.data?.status === 'failed' ? (typeof job.data.error?.message === 'string' ? job.data.error.message : 'The tool failed.') : '';
   const madeAssets = job.data?.status === 'completed' && outputs.some((output) => output.audio_url);

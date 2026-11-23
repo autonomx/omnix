@@ -10,7 +10,7 @@ from typing import Any, Callable
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
@@ -33,7 +33,7 @@ from .strategy_v2_qualification import (
     v2_qualification_profile_fingerprint,
 )
 from .trade_logging import trade_log
-from .us_equity_calendar import regular_holidays
+from .us_equity_calendar import is_trading_day
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import regular_close_time
 
@@ -46,14 +46,7 @@ _REPLAY_CLOSE_GRACE_MINUTES = 10
 BarLoader = Callable[..., dict[str, list[Any]]]
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def strategy_v2_qualification_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_V2_QUALIFICATION_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_V2_QUALIFICATION", "1")
+strategy_v2_qualification_monitor_enabled = monitor_switch("OMNIX_TRADING_V2_QUALIFICATION")
 
 
 def _interval_seconds() -> float:
@@ -74,7 +67,7 @@ def _eligible_strategy(config: TradingStrategyConfigDocument) -> bool:
 
 
 def _trading_session(session_date: date) -> bool:
-    return session_date >= V2_PROSPECTIVE_START and session_date.weekday() < 5 and session_date not in regular_holidays(session_date.year)
+    return session_date >= V2_PROSPECTIVE_START and is_trading_day(session_date)
 
 
 def _session_finalized(session_date: date, now: datetime) -> bool:

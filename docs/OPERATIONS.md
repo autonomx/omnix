@@ -221,8 +221,6 @@ What is traced:
   the job worker and the Chat dispatcher;
 - RPG turn stages (`rpg.turn.pipeline` and its `rpg.turn.*` stages, with their
   scalar measurements);
-- live speech stages (`live_speech.utterance`, `.transcript`, `.first_audio`,
-  `.response`), recorded from the turn's timestamps;
 - agent steps: the model-call and capability request spans name the run
   (`omnix.agent_run_id`, `omnix.agent_step`), and capability adapters run in a
   `capability.execute` span.

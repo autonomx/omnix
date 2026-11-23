@@ -10,14 +10,11 @@ from .generation_jobs import canonical_hash
 from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 from . import world_images as _base
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _text(value: Any, fallback: str = "") -> str:
-    return str(value).strip() if value is not None and str(value).strip() else fallback
 
 
 def _profile_domains(detail: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -26,11 +23,11 @@ def _profile_domains(detail: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     binding = _record(metadata.get("genre_profile_binding"))
     profile = _record(binding.get("profile"))
     return {
-        _text(domain.get("domain_id")): domain
+        stripped_text(domain.get("domain_id")): domain
         for domain in (
             _record(value) for value in profile.get("domains") or ()
         )
-        if _text(domain.get("domain_id"))
+        if stripped_text(domain.get("domain_id"))
     }
 
 
@@ -45,19 +42,19 @@ def _profile_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
     for topic_value in detail.get("topics") or ():
         topic = _record(topic_value)
-        topic_id = _text(topic.get("topic_id"))
+        topic_id = stripped_text(topic.get("topic_id"))
         domain = domains.get(topic_id)
         if not domain:
             continue
         presentation = _presentation(domain)
-        role = _text(presentation.get("image_role"), "none")
+        role = stripped_text(presentation.get("image_role"), "none")
         if role == "none":
             continue
         for entity in _base._entity_rows(_record(topic.get("content"))):
-            entity_id = _text(entity.get("id") or entity.get("entity_id"))
+            entity_id = stripped_text(entity.get("id") or entity.get("entity_id"))
             if not entity_id:
                 continue
-            entity_type = _text(entity.get("kind"), _text(domain.get("entity_kind"), topic_id.rstrip("s")))
+            entity_type = stripped_text(entity.get("kind"), stripped_text(domain.get("entity_kind"), topic_id.rstrip("s")))
             targets.append(
                 {
                     "target_id": f"entity:{entity_id}:{role}",
@@ -73,7 +70,7 @@ def _profile_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     ),
                     "metadata": {
                         "topic_id": topic_id,
-                        "entity_name": _text(entity.get("name") or entity.get("title"), entity_id),
+                        "entity_name": stripped_text(entity.get("name") or entity.get("title"), entity_id),
                         "profile_image_role": role,
                     },
                 }
@@ -96,7 +93,7 @@ def _profile_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                             "topic_id": "map",
                             "map_level": "location",
                             "parent_target_id": "world:map",
-                            "entity_name": _text(entity.get("name") or entity.get("title"), entity_id),
+                            "entity_name": stripped_text(entity.get("name") or entity.get("title"), entity_id),
                         },
                     }
                 )

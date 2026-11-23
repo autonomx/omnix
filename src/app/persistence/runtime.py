@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from app.caching.bounded_cache import bounded_lru_cache
@@ -66,6 +67,14 @@ def persistence_mode() -> PersistenceMode:
                 "legacy_import persistence requires OMNIX_ALLOW_LEGACY_IMPORT=1"
             )
     return mode
+
+
+def is_legacy_test_persistence(env: Mapping[str, str] | None = None) -> bool:
+    """Whether this process was started on the legacy test store (pytest), where background monitors stay off.
+
+    Reads the setting without validating it; ``persistence_mode`` owns validation and refusal.
+    """
+    return env_str("OMNIX_PERSISTENCE_MODE", "", env=env).strip() == PersistenceMode.LEGACY_TEST.value
 
 
 _PERSISTENCE_MODE_CACHE_CLEAR = persistence_mode.cache_clear

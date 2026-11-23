@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.assets import SharedAssetStore
 from app.composition.gateway.main import create_gateway_app
 from app.platform.image.models import ImageGenerationResponse
-from app.platform.image.jobs import execute_image_job
+from tests.support.image_jobs import execute_image_job
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 

@@ -10,12 +10,11 @@ import { downloadBlob } from '../../../shared/download';
 import { emitOmnixEvent } from '../../../events/bus';
 import { POLL_INTERVALS_MS, startPolling } from '../../../shared/timers';
 import { assistantApiClient } from '../api/assistantClient';
+import { isJobActive, isJobSettled } from '../../../api/jobs';
 
 let researchProgressControllerInstalled = false;
 
 const RESEARCH_JOB_TYPE = 'assistant.deep_research';
-const ACTIVE_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
 
 type ChatMessage = components['schemas']['ChatMessage'];
 let activeSession: ChatSession | null = null;
@@ -195,7 +194,7 @@ async function pollResearchJob(jobId: string): Promise<void> {
     if (pollingJobId !== jobId) return;
     activeJob = job;
     publish();
-    if (!TERMINAL_STATUSES.has(String(job.status))) return;
+    if (!isJobSettled(String(job.status))) return;
     if (currentSessionId && await recoverLatestResearchJob(currentSessionId, job.id)) return;
     stopWatchingResearchJob();
     if (currentSessionId) {
@@ -242,7 +241,7 @@ export function latestResearchJobId(messages: ChatMessage[]): string | null {
 }
 
 export function isActiveResearchJob(job: JobRecord | null | undefined): boolean {
-  return Boolean(job?.type === RESEARCH_JOB_TYPE && ACTIVE_STATUSES.has(String(job.status)));
+  return Boolean(job?.type === RESEARCH_JOB_TYPE && isJobActive(String(job.status)));
 }
 
 export function researchStageLabel(job: JobRecord): string {

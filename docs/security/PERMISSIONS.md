@@ -99,7 +99,6 @@ role to permission list; `owner` cannot be changed).
 | dubbing | `dubbing:read` | `dubbing:write` |
 | hermes | `assistant:read` | `assistant:write` |
 | image | `image:read` | `image:generate` |
-| live_speech | `voice:read` | `voice:write` |
 | live_voice | `voice:read` | `voice:write` |
 | research | `research:read` | `research:run` |
 | rpg | `rpg:read` | `rpg:play` |

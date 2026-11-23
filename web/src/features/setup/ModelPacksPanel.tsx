@@ -10,9 +10,9 @@ import {
   type AvatarModel, type ModelPacksStatus, type PackModelStatus, type PackOption, type PackRuntimeStatus, type PackVerdict,
 } from './api/modelPacksClient';
 import './setup.css';
+import { isJobActive } from '../../api/jobs';
 
 type Preset = 'recommended' | 'minimal' | 'custom';
-const ACTIVE_JOB = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 
 function errorText(error: unknown): string {
   if (error instanceof ApiError) return error.detail || error.message;
@@ -138,7 +138,7 @@ function BundleRow({ verdict, models, runtimes, selected, onToggle, job, busy, o
   onVerify: () => void;
   onCancel: () => void;
 }) {
-  const running = job && ACTIVE_JOB.has(job.status);
+  const running = job && isJobActive(job.status);
   const progress = job?.progress;
   const share = progress && progress.total ? Math.min(100, (Number(progress.current) / progress.total) * 100) : 0;
   const size = verdict.model_bytes + verdict.runtime_bytes;
@@ -407,12 +407,12 @@ function usePackJobs() {
     queries: Object.values(jobs).map((jobId) => ({
       queryKey: ['setup', 'job', jobId],
       queryFn: () => modelPacksClient.job(jobId),
-      refetchInterval: (query: { state: { data?: JobRecord } }) => (query.state.data && !ACTIVE_JOB.has(query.state.data.status) ? false : 1500),
+      refetchInterval: (query: { state: { data?: JobRecord } }) => (query.state.data && !isJobActive(query.state.data.status) ? false : 1500),
     })),
   });
   const jobByBundle = useMemo(() => Object.fromEntries(Object.keys(jobs).map((bundle, index) => [bundle, jobQueries[index]?.data])),
     [jobs, jobQueries]);
-  const finishedCount = jobQueries.filter((query) => query.data && !ACTIVE_JOB.has(query.data.status)).length;
+  const finishedCount = jobQueries.filter((query) => query.data && !isJobActive(query.data.status)).length;
   useEffect(() => {
     if (!finishedCount) return;
     // A finished download: the packs changed, so ask the shell to start (or stop) the model services now.

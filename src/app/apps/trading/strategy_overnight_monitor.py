@@ -17,10 +17,11 @@ from decimal import Decimal
 from typing import Any, Callable
 
 from app.config.env import environment
+from app.persistence.runtime import is_legacy_test_persistence
 from app.config.product import product_name
 from app.runtime.features import FeatureContext
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .paper import PaperAccountCreate
 from .paper_repository import TradingPaperRepository
 from .strategies.models import OvernightShadowConfig, StrategyRiskProfile
@@ -43,7 +44,7 @@ from .strategy_overnight_shadow import (
 )
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
-from .us_equity_calendar import REGULAR_CLOSE, regular_close_time, regular_holidays
+from .us_equity_calendar import PREMARKET_OPEN, REGULAR_CLOSE, is_trading_day, regular_close_time
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
@@ -70,21 +71,18 @@ def _flag(name: str, default: str) -> bool:
     return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def overnight_shadow_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR", "1")
+overnight_shadow_monitor_enabled = monitor_switch("OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR")
 
 
 def overnight_shadow_autoprovision_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if is_legacy_test_persistence():
         return _flag("OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION", "1")
 
 
 # ---------------------------------------------------------------- calendar
 def is_session(day: date) -> bool:
-    return day.weekday() < 5 and day not in regular_holidays(day.year)
+    return is_trading_day(day)
 
 
 def previous_session(day: date) -> date:
@@ -491,7 +489,7 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
         data = self.market_data_factory()
         late = data.minute_bars(symbols, datetime.combine(entry_day, time(15, 25), tzinfo=_ET),
                                 datetime.combine(entry_day, _close(entry_day), tzinfo=_ET))
-        morning = data.minute_bars(symbols, datetime.combine(exit_day, time(4, 0), tzinfo=_ET),
+        morning = data.minute_bars(symbols, datetime.combine(exit_day, PREMARKET_OPEN, tzinfo=_ET),
                                    datetime.combine(exit_day, time(9, 46), tzinfo=_ET))
         # Bars are unadjusted: a split taking effect overnight must not read as a gap. A failed
         # lookup fails the cycle, so the session is labelled on a later tick rather than wrongly.

@@ -274,17 +274,13 @@ describe('rpg UI state', () => {
             party: [{ name: 'Bran', role: 'Innkeeper', level: 2, hp: 18, max_hp: 22 }],
             quests: [{ title: 'Find the Quarry Trail', objective: 'Ask Bran about the old quarry road.', status: 'active' }],
           },
-          simulation_state: {
-            climate_survival: {
-              format_version: 'n1231_climate_survival_state_v1',
-              runtime_enforced: true,
-              survival: {
-                hunger: 72,
-                thirst: 41,
-                fatigue: 86,
-                warnings: ['hunger_high', 'fatigue_high'],
-              },
-            },
+          // The needs as the view carries them; an older climate copy beside them is not read.
+          simulation_state: { climate_survival: { survival: { hunger: 5, thirst: 5, fatigue: 5 } } },
+          needs: {
+            hunger: { value: 72, level: 'warning' },
+            thirst: { value: 41, level: 'stable' },
+            fatigue: { value: 86, level: 'critical' },
+            level: 'critical',
           },
         },
       ],
@@ -301,7 +297,7 @@ describe('rpg UI state', () => {
     expect(state.partyMembers[0]).toMatchObject({ avatar: 'B', name: 'Bran', role: 'Lv. 2 Innkeeper', hp: '18 / 22', percent: 82 });
     expect(state.activeQuests[0]).toMatchObject({ title: 'Find the Quarry Trail', detail: 'Ask Bran about the old quarry road.' });
     expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
-    expect(state.survival).toMatchObject({ source: 'live', status: 'Critical', warnings: ['Hunger High', 'Fatigue High'] });
+    expect(state.survival).toMatchObject({ source: 'live', status: 'Critical', warnings: [] });
     expect(state.survival.needs).toEqual([
       { id: 'hunger', label: 'Hunger', percent: 72, severity: 'warning', value: '72 / 100' },
       { id: 'thirst', label: 'Thirst', percent: 41, severity: 'stable', value: '41 / 100' },

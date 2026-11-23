@@ -11,6 +11,7 @@ import httpx
 from app.conversation.contracts import AssistantContextItem
 
 from app.prompts import prompt_template
+from app.providers.model_route import ModelRoute, model_name_of
 
 DesktopCaptureMode = Literal["single", "temporal"]
 
@@ -79,14 +80,10 @@ _LOCAL_CHAT_PROVIDERS = {"lmstudio": "http://localhost:1234", "llamacpp": "http:
 
 def _model_key(value: str | None) -> str | None:
     text = (value or "").strip()
-    if not text:
-        return None
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
+    parts = text.split(":")
     if len(parts) == 2 and parts[0].casefold() in _CODEX_REFERENCE_NAMES | _CLAUDE_REFERENCE_NAMES:
         return parts[1] or None
-    return text
+    return model_name_of(text) or None
 
 
 def _is_claude_model_ref(value: str | None) -> bool:
@@ -661,7 +658,9 @@ def _chat_model_vision_client() -> DesktopVisionClient | ProviderVisionClient:
     config = _provider_config(chat_provider)
     base = str(config.get("baseUrl") or config.get("base_url") or default_base).strip().rstrip("/")
     chat_model = _configured_chat_model()
-    model = chat_model if chat_model.startswith(f"llm:{chat_provider}:") else str(config.get("model") or "")
+    chat_route = ModelRoute.parse(chat_provider, chat_model)
+    # Only a chat model chosen for this provider is followed; a bare or foreign one leaves the configured model.
+    model = chat_route.model if chat_route.model_provider == chat_route.provider else str(config.get("model") or "")
     client = DesktopVisionClient(
         base_url=base if base.endswith("/v1") else f"{base}/v1",
         default_model=_model_key(model) or None,

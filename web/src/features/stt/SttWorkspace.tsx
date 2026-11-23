@@ -13,6 +13,7 @@ import { TRANSCRIPT_LANGUAGES, transcriptLanguage } from '../voice';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 import { CapabilityNotice } from '../setup';
+import { jobKeys } from '../../api/jobs';
 
 export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -21,7 +22,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
     queryFn: () => omnixApiClient.listProviders(),
   });
   const jobsQuery = useQuery({
-    queryKey: ['platform', 'jobs'],
+    queryKey: jobKeys.all,
     queryFn: () => omnixApiClient.listJobs(),
   });
   const assetsQuery = useQuery({
@@ -64,7 +65,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
       }),
     onSuccess: async (_job, values) => {
       reset({ providerId: values.providerId, audioAssetId: values.audioAssetId, language: values.language });
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      await queryClient.invalidateQueries({ queryKey: jobKeys.all });
     },
   });
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';

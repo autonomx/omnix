@@ -8,17 +8,16 @@ freezes portfolio baselines, evaluates forecasts, and governs hypothesis promoti
 It never places orders or changes predictor coefficients.
 """
 
-import hashlib
-import json
 import math
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Final, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256, require_utc
 from .models import AdjustmentMode, MarketBar
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
@@ -50,25 +49,13 @@ HypothesisStatus = Literal[
 OutcomeState = Literal["PROVISIONAL", "FINAL"]
 
 
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
-
-
 def _regular_session_end(session_date: date) -> datetime:
     close = regular_close_time(session_date)
     return datetime.combine(session_date, close, tzinfo=_ET).astimezone(timezone.utc)
 
 
 def _regular_session_minutes(session_date: date) -> Decimal:
-    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     close = datetime.combine(
         session_date,
         regular_close_time(session_date),
@@ -89,7 +76,7 @@ class EvidenceTimestamps(BaseModel):
     @field_validator("published_at", "effective_at", "observed_at", "ingested_at", "frozen_at")
     @classmethod
     def aware(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
+        return None if value is None else require_utc(value)
 
     @model_validator(mode="after")
     def ordering(self):
@@ -113,7 +100,7 @@ class PremarketEvidenceItem(BaseModel):
 
     @property
     def immutable_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class PremarketEvidenceSnapshot(BaseModel):
@@ -132,7 +119,7 @@ class PremarketEvidenceSnapshot(BaseModel):
     @field_validator("prediction_cutoff_at", "frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def causal_gate(self):
@@ -149,7 +136,7 @@ class PremarketEvidenceSnapshot(BaseModel):
 
     @property
     def snapshot_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class FrozenForecast(BaseModel):
@@ -172,7 +159,7 @@ class FrozenForecast(BaseModel):
     @field_validator("frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def quantile_order(self):
@@ -205,7 +192,7 @@ class PredictionRunIdentity(BaseModel):
 
     @property
     def immutable_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class SIPTradeEligibilityPolicyV1(BaseModel):
@@ -247,7 +234,7 @@ class SIPTradeEvent(BaseModel):
     @field_validator("event_timestamp", "received_timestamp")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class SelectedPriceEvent(BaseModel):
@@ -334,7 +321,7 @@ def select_analysis_session_prices(
     instruments = {event.instrument_id for event in events}
     if len(instruments) != 1:
         raise ValueError("session_price_events_must_share_instrument")
-    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     end = _regular_session_end(session_date)
     in_session = [event for event in events if start <= event.event_timestamp < end]
     eligible = [event for event in in_session if sip_trade_eligible(event, policy)]
@@ -357,7 +344,7 @@ def select_analysis_session_prices(
         outcome_state=outcome_state,
         eligible_trade_count=len(eligible),
         discarded_trade_count=len(in_session) - len(eligible),
-        reconciliation_fingerprint=_hash(payload),
+        reconciliation_fingerprint=canonical_sha256(payload),
     )
 
 
@@ -388,7 +375,7 @@ class OutcomeMeasurementsV1(BaseModel):
 
 
 def _regular_bars(bars: Sequence[MarketBar], prices: AnalysisSessionPrices) -> list[MarketBar]:
-    start = datetime.combine(prices.session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    start = datetime.combine(prices.session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     end = _regular_session_end(prices.session_date)
     selected = [
         bar for bar in bars
@@ -605,7 +592,7 @@ class FrozenPortfolio(BaseModel):
     @field_validator("frozen_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @model_validator(mode="after")
     def conserve(self):
@@ -644,7 +631,7 @@ def freeze_research_portfolios(
 ) -> tuple[FrozenPortfolio, FrozenPortfolio, FrozenPortfolio, FrozenPortfolio]:
     """Freeze A equal, B confidence/risk, C excess-probability, D cash portfolios."""
 
-    frozen_at = _utc(frozen_at)
+    frozen_at = require_utc(frozen_at)
     factors_by_symbol = risk_factors or {}
     eligible = sorted(
         [forecast for forecast in forecasts if forecast.p_close_above_open > Decimal("0.50")],
@@ -829,11 +816,11 @@ class HypothesisDefinition(BaseModel):
     @field_validator("proposed_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
     @property
     def definition_fingerprint(self) -> str:
-        return _hash(self.model_dump(mode="json"))
+        return canonical_sha256(self.model_dump(mode="json"))
 
 
 class HypothesisEvidenceSummary(BaseModel):
@@ -865,7 +852,7 @@ class HypothesisRecord(BaseModel):
     @field_validator("definition_frozen_at", "last_transition_at")
     @classmethod
     def aware(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
+        return None if value is None else require_utc(value)
 
 
 _HYPOTHESIS_TRANSITIONS: dict[HypothesisStatus, HypothesisStatus] = {
@@ -889,12 +876,12 @@ def transition_hypothesis(
         raise ValueError(f"invalid_hypothesis_transition:{record.status}->{new_status}")
     frozen_at = record.definition_frozen_at
     if new_status == "FROZEN_CANDIDATE" and frozen_at is None:
-        frozen_at = _utc(transitioned_at)
+        frozen_at = require_utc(transitioned_at)
     return record.model_copy(update={
         "status": new_status,
         "definition_frozen_at": frozen_at,
         "evidence": evidence or record.evidence,
-        "last_transition_at": _utc(transitioned_at),
+        "last_transition_at": require_utc(transitioned_at),
     })
 
 
@@ -920,7 +907,7 @@ class ChallengerComparison(BaseModel):
 def frozen_climatology_baseline(*, prior_valid_outcomes: Sequence[bool], frozen_at: datetime) -> dict[str, Any]:
     return {
         "version": CLIMATOLOGY_BASELINE_VERSION,
-        "frozen_at": _utc(frozen_at).isoformat(),
+        "frozen_at": require_utc(frozen_at).isoformat(),
         "valid_prior_observation_count": len(prior_valid_outcomes),
         "p_close_above_open": str(climatology_probability(prior_valid_outcomes)) if prior_valid_outcomes else None,
     }

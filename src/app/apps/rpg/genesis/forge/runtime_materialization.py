@@ -24,10 +24,10 @@ from .campaign_lore_store import (
     _mapping,
     _rows,
     _save_portable_projection,
-    _text,
     load_campaign_lore,
 )
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.safe_values import clean_text
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -195,11 +195,11 @@ def _matching_document(
 ) -> dict[str, Any] | None:
     topic = "monsters" if kind == "creature" else "locations"
     for row in _rows(bible.get("documents")):
-        if document_id and _text(row.get("document_id")) == document_id:
+        if document_id and clean_text(row.get("document_id")) == document_id:
             return row
         if (
-            _text(row.get("topic_id")) == topic
-            and _text(row.get("title")).casefold() == name.casefold()
+            clean_text(row.get("topic_id")) == topic
+            and clean_text(row.get("title")).casefold() == name.casefold()
         ):
             return row
     return None
@@ -217,8 +217,8 @@ def _existing_definition(
     for definition_id, value in group.items():
         row = _mapping(value)
         if (
-            _text(definition_id) == wanted_id
-            or _text(row.get("name")).casefold() == name.casefold()
+            clean_text(definition_id) == wanted_id
+            or clean_text(row.get("name")).casefold() == name.casefold()
         ):
             return row
     return None
@@ -235,11 +235,11 @@ def _generation_context(
 ) -> dict[str, Any]:
     related = []
     for row in _rows(bible.get("documents")):
-        if document and _text(row.get("document_id")) == _text(
+        if document and clean_text(row.get("document_id")) == clean_text(
             document.get("document_id")
         ):
             continue
-        if _text(row.get("visibility")) not in {
+        if clean_text(row.get("visibility")) not in {
             "public",
             "player_known",
             "learned",
@@ -249,9 +249,9 @@ def _generation_context(
             continue
         related.append(
             {
-                "title": _text(row.get("title")),
-                "topic_id": _text(row.get("topic_id")),
-                "summary": _text(row.get("summary_500") or row.get("summary_120")),
+                "title": clean_text(row.get("title")),
+                "topic_id": clean_text(row.get("topic_id")),
+                "summary": clean_text(row.get("summary_500") or row.get("summary_120")),
             }
         )
         if len(related) >= 12:
@@ -259,7 +259,7 @@ def _generation_context(
     return {
         "target": {"kind": kind, "name": name},
         "user_direction": direction[:1000],
-        "existing_lore": _text(_mapping(document).get("full_text")),
+        "existing_lore": clean_text(_mapping(document).get("full_text")),
         "existing_definition": dict(existing_definition or {}),
         "related_player_known_canon": related,
     }
@@ -318,7 +318,7 @@ def _legacy_validated_proposal(
 ) -> RuntimeMaterializationProposal:
     """Compatibility for injected legacy test gateways without typed support."""
 
-    text = _text(raw).strip()
+    text = clean_text(raw).strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE)
     try:
@@ -342,14 +342,14 @@ def _retrieval_cards(
     document: Mapping[str, Any],
     revision: int,
 ) -> list[dict[str, Any]]:
-    document_id = _text(document.get("document_id"))
+    document_id = clean_text(document.get("document_id"))
     by_size = {
-        _text(row.get("summary_size")): row
+        clean_text(row.get("summary_size")): row
         for row in cards
-        if _text(row.get("document_id")) == document_id
+        if clean_text(row.get("document_id")) == document_id
     }
     for size, summary_key in (("short", "summary_120"), ("medium", "summary_500")):
-        content = _text(document.get(summary_key))
+        content = clean_text(document.get(summary_key))
         row = by_size.get(size)
         if row is None:
             cards.append(
@@ -357,16 +357,16 @@ def _retrieval_cards(
                     "id": f"card:{document_id}:{size}",
                     "document_id": document_id,
                     "summary_size": size,
-                    "title": _text(document.get("title")),
+                    "title": clean_text(document.get("title")),
                     "content": content,
-                    "visibility": _text(document.get("visibility")) or "public",
+                    "visibility": clean_text(document.get("visibility")) or "public",
                     "canon_revision": revision,
                 }
             )
         else:
             row.update(
                 {
-                    "title": _text(document.get("title")),
+                    "title": clean_text(document.get("title")),
                     "content": content,
                     "canon_revision": revision,
                 }
@@ -390,7 +390,7 @@ def apply_runtime_materialization(
         name=proposal.name,
         document_id=requested_document_id,
     )
-    document_id = _text(_mapping(existing_document).get("document_id")) or (
+    document_id = clean_text(_mapping(existing_document).get("document_id")) or (
         f"lore:runtime:{proposal.kind}:{_slug(proposal.name)}"
     )
     topic_id = "monsters" if proposal.kind == "creature" else "locations"
@@ -420,14 +420,14 @@ def apply_runtime_materialization(
             dict.fromkeys(
                 [
                     proposal.name,
-                    _text(definition.get("definition_id")),
+                    clean_text(definition.get("definition_id")),
                     topic_id,
                     *[str(value) for value in definition.get("tags") or ()],
                 ]
             )
         ),
-        "entity_refs": [_text(definition.get("definition_id"))],
-        "visibility": _text(_mapping(existing_document).get("visibility")) or "public",
+        "entity_refs": [clean_text(definition.get("definition_id"))],
+        "visibility": clean_text(_mapping(existing_document).get("visibility")) or "public",
         "canon_revision": canon_revision,
         "provenance": {
             **_mapping(_mapping(existing_document).get("provenance")),
@@ -439,7 +439,7 @@ def apply_runtime_materialization(
     documents = _rows(candidate.get("documents"))
     replaced = False
     for index, row in enumerate(documents):
-        if _text(row.get("document_id")) == document_id:
+        if clean_text(row.get("document_id")) == document_id:
             documents[index] = document
             replaced = True
             break
@@ -455,13 +455,13 @@ def apply_runtime_materialization(
     )
     group_key = "creatures" if proposal.kind == "creature" else "locations"
     group = deepcopy(_mapping(catalog.get(group_key)))
-    group[_text(definition.get("definition_id"))] = definition
+    group[clean_text(definition.get("definition_id"))] = definition
     catalog[group_key] = group
     catalog.setdefault("creatures", {})
     catalog.setdefault("locations", {})
     candidate["mechanics_catalog"] = catalog
     entities = deepcopy(_mapping(candidate.get("entities")))
-    definition_id = _text(definition.get("definition_id"))
+    definition_id = clean_text(definition.get("definition_id"))
     entities[definition_id] = {
         **_mapping(entities.get(definition_id)),
         "kind": "monster" if proposal.kind == "creature" else "location",
@@ -513,7 +513,7 @@ def materialize_runtime_lore(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Generate, validate, compile, and atomically persist a runtime definition."""
 
-    normalized_name = _text(name)[:120]
+    normalized_name = clean_text(name)[:120]
     if not normalized_name:
         raise RuntimeMaterializationUnavailable("A materialization name is required.")
     hydrated, _storage = load_campaign_lore(
@@ -556,7 +556,7 @@ def materialize_runtime_lore(
         source_bible,
         kind=kind,
         name=normalized_name,
-        direction=_text(direction),
+        direction=clean_text(direction),
         document=current_document,
         existing_definition=current_definition,
     )

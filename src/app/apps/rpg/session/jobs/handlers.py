@@ -5,8 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs.models import JobRecord
-
 
 class RpgTurnJobInput(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -29,15 +27,3 @@ class RpgNarrationJobInput(BaseModel):
     tick: int = 0
     job_kind: str = "player_turn"
     narration_request: dict[str, Any] = Field(default_factory=dict)
-
-
-def execute_rpg_report_job(job_store: Any, job: JobRecord) -> JobRecord:
-    from app.apps.rpg.session.jobs.last10_report import execute_rpg_last10_report_job
-
-    return execute_rpg_last10_report_job(job_store, job)
-
-
-def execute_rpg_narration_job(job_store: Any, job: JobRecord) -> JobRecord:
-    from app.apps.rpg.session.jobs.narration_job import execute_rpg_narration_job as execute
-
-    return execute(job_store, job)

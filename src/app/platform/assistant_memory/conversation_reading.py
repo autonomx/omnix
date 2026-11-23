@@ -14,7 +14,6 @@ import logging
 import re
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
@@ -25,10 +24,10 @@ from app.config.env import environment
 from app.conversation.scene import SUSPECTED_ECHO_KEY
 from app.jobs import CompleteJobRequest, CreateJobRequest
 from app.jobs.models import JobRecord, ResourceClass
-from app.persistence.device_permits import device_permit_slot
+from app.providers.llm_admission import llm_admission
 from app.prompts import prompt_template
 from app.providers.base import BaseProvider, ChatMessage
-from app.providers.catalog import LIVE_TURNS, LOCAL_DEVICE, provider_supports
+from app.providers.catalog import LIVE_TURNS, provider_supports
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputError,
@@ -327,11 +326,7 @@ class ProviderConversationReader:
         self.gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(provider)
 
     def _call(self, document: dict[str, Any]) -> ConversationReadingResponse:
-        admission = (
-            device_permit_slot("llm-local", priority="batch", timeout_seconds=self.timeout_seconds)
-            if provider_supports(self.provider, LOCAL_DEVICE)
-            else nullcontext()
-        )
+        admission = llm_admission(self.provider, timeout_seconds=self.timeout_seconds)
         with admission:
             try:
                 return self.gateway.generate(

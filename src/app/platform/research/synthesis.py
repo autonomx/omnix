@@ -1,6 +1,9 @@
 """Structured, evidence-bound synthesis for Deep Research."""
 from __future__ import annotations
 
+from app.providers.catalog import provider_id_of
+from app.providers.model_route import model_name_of
+
 import json
 from collections.abc import Callable
 from typing import Any, Literal
@@ -346,7 +349,7 @@ def _provider_completion(
         raise RuntimeError("research synthesis provider is unavailable")
     response = provider.chat_completion(
         messages=[ChatMessage(role=item["role"], content=item["content"]) for item in messages],
-        model=_model_key(model_id),
+        model=model_name_of(model_id) or None,
         stream=False,
     )
     content = str(getattr(response, "content", "") or "").strip()
@@ -355,7 +358,7 @@ def _provider_completion(
     metadata: dict[str, Any] = {
         "provider_id": provider_id,
         "model_id": model_id,
-        "resolved_model": getattr(response, "model", None) or _model_key(model_id),
+        "resolved_model": getattr(response, "model", None) or model_name_of(model_id) or None,
     }
     usage = getattr(response, "usage", None)
     if usage:
@@ -364,13 +367,4 @@ def _provider_completion(
 
 
 def _provider_key(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    return text.split(":", 1)[1] if text.startswith("llm:") else text or None
-
-
-def _model_key(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
-    return text or None
+    return provider_id_of(value) or None

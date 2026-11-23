@@ -7,23 +7,17 @@ import {
 } from './tradingStrategyOperationsApi';
 import type { TradingStrategyConfig } from './tradingStrategyTypes';
 import './TradingCommandCenter.css';
+import { MISSING, formatMoney, numericValue } from './format';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 function number(value: string | number | null | undefined, digits = 2): string {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
-}
-
-function money(value: string | number | null | undefined, currency: string, signed = false): string {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return '—';
-  const sign = signed && parsed > 0 ? '+' : parsed < 0 ? '-' : '';
-  return `${sign}${Math.abs(parsed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  const parsed = numericValue(value);
+  return parsed === null ? MISSING : parsed.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
 function pct(value: string | number | null | undefined, digits = 2): string {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? `${parsed.toFixed(digits)}%` : '—';
+  const parsed = numericValue(value);
+  return parsed === null ? MISSING : `${parsed.toFixed(digits)}%`;
 }
 
 function time(value: string | null | undefined): string {
@@ -135,20 +129,20 @@ export function TradingCommandCenter({
       <div className="command-center-grid">
         <Card
           label="Today realized P&L"
-          value={money(risk?.daily_realized_pnl, currency, true)}
-          detail={`Loss headroom ${money(risk?.daily_loss_remaining, currency)}`}
+          value={formatMoney(risk?.daily_realized_pnl, currency, { signed: true })}
+          detail={`Loss headroom ${formatMoney(risk?.daily_loss_remaining, currency)}`}
           state={risk?.state ?? 'unknown'}
         />
         <Card
           label="Open risk at stop"
-          value={`${money(risk?.open_risk_dollars, currency)} · ${pct(risk?.open_risk_pct)}`}
+          value={`${formatMoney(risk?.open_risk_dollars, currency)} · ${pct(risk?.open_risk_pct)}`}
           detail={`Server limit ${pct(risk?.max_open_risk_pct)} · ${risk?.policy_source === 'active_strategy' ? 'strategy policy' : 'paper policy'}`}
           state={risk?.state ?? 'unknown'}
         />
         <Card
           label="Buying power"
-          value={money(risk?.buying_power, currency)}
-          detail={`Equity ${money(risk?.equity, currency)}`}
+          value={formatMoney(risk?.buying_power, currency)}
+          detail={`Equity ${formatMoney(risk?.equity, currency)}`}
         />
         <Card
           label="Exposure"

@@ -13,19 +13,16 @@ from .evidence import EvidenceBroker, InMemoryEvidenceSource
 from .renderer import CanonicalNarrativeRenderer
 from .service import NarrativeEngineService
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _first_text(*values: Any) -> str:
     for value in values:
-        text = _text(value)
+        text = clean_text(value)
         if text:
             return text
     return ""

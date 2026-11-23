@@ -7,6 +7,7 @@ vi.mock('./tradingPaperApi', () => ({ tradingPaperApi: paperApi }));
 import { PaperMarginCallNotifyField, PaperShortingField } from './PaperShortingField';
 import { isRiskEntry } from './paperTicketRequests';
 import type { PaperAccount } from './paperTypes';
+import { gatewayCallError } from '../../test/gatewayErrors';
 
 afterEach(() => {
   cleanup();
@@ -33,7 +34,7 @@ describe('paper shorting (TVP-7.2a)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Allow short positions' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(paperApi.updateAccountSettings).toHaveBeenCalledWith(account, { allow_short: true });
-    paperApi.updateAccountSettings.mockRejectedValueOnce(new Error('Paper Trading request failed (409): revision'));
+    paperApi.updateAccountSettings.mockRejectedValueOnce(gatewayCallError('Paper Trading request failed (409): revision'));
     view.rerender(<PaperShortingField mode="settings" draftValue={false} onDraftChange={vi.fn()} account={account} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Allow short positions' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('changed elsewhere');

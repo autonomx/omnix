@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -10,13 +10,11 @@ from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapp
 from .instrument_catalog_service import _dynamic_bindings, _equity_instrument
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 
 
 YAHOO_GAINERS_URL = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-_PREMARKET_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 _ALLOWED_DISCOVERY_SKEW_SECONDS = 120
 
 
@@ -97,10 +95,10 @@ def _yahoo_chart_volume_evidence(
             continue
         observed = datetime.fromtimestamp(int(raw_timestamp), tz=timezone.utc).astimezone(_ET)
         clock = observed.timetz().replace(tzinfo=None)
-        if observed.date() > current_date or clock < _PREMARKET_OPEN or clock > same_clock:
+        if observed.date() > current_date or clock < PREMARKET_OPEN or clock > same_clock:
             continue
         cumulative_by_date[observed.date()] += volume
-        if observed.date() == current_date and clock < _REGULAR_OPEN:
+        if observed.date() == current_date and clock < REGULAR_OPEN:
             premarket_volume += volume
 
     current = cumulative_by_date.get(current_date, Decimal("0"))

@@ -8,8 +8,8 @@ from app.platform.agent_runtime.broker_api import (
     _command_authorization_rejection,
     _path_is_within,
     _approved_execution_key,
-    _revision_scoped_evidence_execution_key,
 )
+from app.platform.agent_runtime.capability_call import CapabilityCall
 from app.platform.agent_runtime.contracts import AgentApproval
 
 
@@ -93,9 +93,13 @@ def test_authoritative_market_subject_overrides_missing_ticker_and_rejects_confl
 
 def test_evidence_execution_identity_is_scoped_to_task_revision() -> None:
     base = "agent:run-1:tool-call-1"
-    first = _revision_scoped_evidence_execution_key(base, "revision-1")
-    replay = _revision_scoped_evidence_execution_key(base, "revision-1")
-    second = _revision_scoped_evidence_execution_key(base, "revision-2")
+
+    def key(revision: str) -> str:
+        return CapabilityCall.open("run-1", "research.web_search", base, task_revision_id=revision).execution_key
+
+    first = key("revision-1")
+    replay = key("revision-1")
+    second = key("revision-2")
     assert first == replay
     assert first != second
     assert first.startswith(base + ":evidence-revision:")

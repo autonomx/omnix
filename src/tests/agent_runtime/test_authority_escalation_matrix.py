@@ -97,6 +97,27 @@ def test_child_cannot_add_external_authority_parent_does_not_have() -> None:
         )
 
 
+def test_child_does_not_inherit_operator_mcp_tools_its_parent_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Owner decision 2026-11-23: a child's external ceiling is its profile's declared and optional
+    # capabilities; the operator MCP tools a top-level coding run may hold do not pass to a child.
+    tool = "mcp.example.tool"
+    monkeypatch.setattr(
+        "app.capabilities.mcp_policy.configured_mcp_capability_ids",
+        lambda: {tool},
+    )
+    coding = get_agent_profile("coding")
+    assert coding.operator_mcp_tools
+    assert tool in profile_external_ceiling(coding)
+    parent = _parent(profile="coding", external_capabilities=[tool])
+    with pytest.raises(ValueError, match="exceed child profile ceiling"):
+        derive_child_spec(
+            parent,
+            ChildRunRequest(task="call the tool", external_capabilities=[tool]),
+        )
+
+
 def test_child_cannot_remove_parent_resource_scope_restrictions() -> None:
     scope = ResourceScope(
         capability="github.read_repo",

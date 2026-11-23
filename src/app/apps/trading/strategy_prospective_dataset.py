@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from .canonical import optional_decimal
 from .strategy_repository import StrategyEvent
 from .strategy_v2_qualification import (
     FROZEN_V2_PROFILE_FINGERPRINT,
@@ -41,16 +42,6 @@ class ProspectiveSignalOutcomeRow(BaseModel):
         return self.r_result > 0
 
 
-def _decimal(value: object) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
-
-
 def _entry_time(event: StrategyEvent) -> datetime | None:
     raw = event.payload.get("entry_time")
     if not raw:
@@ -83,7 +74,7 @@ def _canonical_replay(event: StrategyEvent, expected_profile: str) -> bool:
         and event.payload.get("universe_source") == "auto_archive_shadow"
         and _session_date(event) >= V2_PROSPECTIVE_START
         and _entry_time(event) is not None
-        and _decimal(event.payload.get("r_result")) is not None
+        and optional_decimal(event.payload.get("r_result")) is not None
     )
 
 
@@ -152,7 +143,7 @@ def matched_prospective_signal_outcomes(
         features = execution["prospective_signal_features"]
         assert isinstance(features, dict)
         entry = _entry_time(replay)
-        r_result = _decimal(replay.payload.get("r_result"))
+        r_result = optional_decimal(replay.payload.get("r_result"))
         assert entry is not None and r_result is not None
         rows.append(
             ProspectiveSignalOutcomeRow(
@@ -164,8 +155,8 @@ def matched_prospective_signal_outcomes(
                 signal_observed_at=live.observed_at,
                 replay_entry_time=entry,
                 r_result=r_result,
-                mfe_r=_decimal(replay.payload.get("mfe_r")),
-                mae_r=_decimal(replay.payload.get("mae_r")),
+                mfe_r=optional_decimal(replay.payload.get("mfe_r")),
+                mae_r=optional_decimal(replay.payload.get("mae_r")),
                 feature_fingerprint=str(features["immutable_fingerprint"]),
                 features=features,
             )

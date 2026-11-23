@@ -11,12 +11,10 @@ from .models import MarketBar
 from .providers.alpaca_iex_status import AlpacaIexStatusCache, default_alpaca_iex_status_cache
 from .research.fact_repository import TradingFactRepository, default_fact_repository
 from .research.repository import TradingResearchRepository, default_research_repository
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 
 
 _SCHEMA_VERSION = "v2-prospective-signal-features-2"
-_PREMARKET_OPEN = time(4, 0)
-_REGULAR_OPEN = time(9, 30)
 _LAST_30M_START = time(9, 0)
 
 
@@ -46,7 +44,7 @@ def _premarket_bars(
             continue
         if local.date() != decision_date:
             continue
-        if _PREMARKET_OPEN <= local.time() < _REGULAR_OPEN:
+        if PREMARKET_OPEN <= local.time() < REGULAR_OPEN:
             output.append(bar)
     return sorted(output, key=lambda item: item.start_time)
 

@@ -10,8 +10,8 @@ import time
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .handlers import JobExecutionContext, JobHandlerSpec
-from .models import CompleteJobRequest, JobRecord, ResourceClass
+from .handlers import JobHandlerSpec, JobResult, JobRun
+from .models import ResourceClass
 
 PLATFORM_PROBE_JOB_TYPE = "platform.probe"
 
@@ -23,31 +23,20 @@ class PlatformProbeInput(BaseModel):
     label: str = Field(default="probe", min_length=1, max_length=64)
 
 
-def _execute_probe(context: JobExecutionContext, job: JobRecord) -> JobRecord:
-    payload = PlatformProbeInput.model_validate(job.input_payload or {})
+def _run_probe(run: JobRun[PlatformProbeInput]) -> JobResult:
+    payload = run.input
     deadline = time.monotonic() + payload.duration_ms / 1000
     while time.monotonic() < deadline:
-        if context.cancelled():
+        if run.cancelled():
             raise RuntimeError("platform probe cancelled")
         time.sleep(min(0.02, max(0.0, deadline - time.monotonic())))
-    completed = context.job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[
-                {
-                    "kind": "platform_probe",
-                    "label": payload.label,
-                    "duration_ms": payload.duration_ms,
-                }
-            ]
-        ),
-    )
-    return completed or job
+    return JobResult(output_refs=({"kind": "platform_probe", "label": payload.label, "duration_ms": payload.duration_ms},))
 
 
 PLATFORM_PROBE_JOB = JobHandlerSpec(
     type=PLATFORM_PROBE_JOB_TYPE,
-    handler=_execute_probe,
+    run=_run_probe,
+    failure_code="platform_probe_failed",
     input_model=PlatformProbeInput,
     resource_class=ResourceClass.CPU,
     timeout_seconds=30,

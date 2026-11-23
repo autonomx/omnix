@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from app.config.env import env_str as _env_str
+from app.persistence.runtime import is_legacy_test_persistence
 
 import asyncio
 from datetime import datetime, timezone
@@ -52,7 +53,7 @@ def _flag(name: str, default: str = "1") -> bool:
 
 
 def ibkr_market_data_monitor_enabled() -> bool:
-    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if is_legacy_test_persistence():
         return _flag("OMNIX_IBKR_MONITOR_IN_TESTS", "0")
     return load_ibkr_settings()[0].monitor_enabled
 

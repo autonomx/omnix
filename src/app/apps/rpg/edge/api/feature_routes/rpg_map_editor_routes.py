@@ -13,6 +13,7 @@ from app.apps.rpg.world.map_content_editor import MapContentEditError, apply_map
 from app.apps.rpg.world.map_content_validation import validate_map_content
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -133,7 +134,7 @@ def register_rpg_map_editor_routes(router: APIRouter, state) -> None:
         report = validate_map_content(payload.get("definition"), **_context(payload.get("context")))
         if not report.ok:
             return JSONResponse({"ok": False, "report": report.as_dict()}, status_code=422)
-        name = _safe_filename(_text(payload.get("filename")) or "rpg-map-definition.json")
+        name = _safe_filename(stripped_text(payload.get("filename")) or "rpg-map-definition.json")
         body = json.dumps(json.loads(report.canonical_json), ensure_ascii=False, indent=2, sort_keys=True)
         return Response(
             content=f"{body}\n",
@@ -174,5 +175,3 @@ def _safe_filename(value: str) -> str:
     return cleaned[:120] or "rpg-map-definition.json"
 
 
-def _text(value: object) -> str:
-    return str(value).strip() if value is not None else ""

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from app.apps.rpg.world.map_contracts import MapDefinition
 from typing import Any
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 _OBJECT_STATUSES = {"normal", "open", "closed", "damaged", "burned", "occupied"}
 _ROUTE_STATUSES = {"open", "blocked", "locked", "unknown"}
@@ -58,8 +59,8 @@ def _object_states(
     visible = _strings(map_state.get("visible_object_ids"))
     rows: dict[str, dict[str, Any]] = {}
     for raw in _records(state.get("map_object_states")):
-        object_id = _text(raw.get("object_id"))
-        if _text(raw.get("map_id")) != definition.map_id:
+        object_id = stripped_text(raw.get("object_id"))
+        if stripped_text(raw.get("map_id")) != definition.map_id:
             continue
         if object_id not in allowed or object_id not in discovered:
             continue
@@ -71,7 +72,7 @@ def _object_states(
             "discovered": True,
             "visible": object_id in visible and raw.get("visible_to_player", True) is not False,
             "status": status,
-            "presentation_hint": _text(raw.get("presentation_hint"))[:160],
+            "presentation_hint": stripped_text(raw.get("presentation_hint"))[:160],
         }
     return tuple(rows[key] for key in sorted(rows))
 
@@ -96,7 +97,7 @@ def _route_states(
             "status": status,
             "known": known,
             "safe": bool(raw.get("safe", True)),
-            "reason": _text(raw.get("reason"))[:160] if known else "",
+            "reason": stripped_text(raw.get("reason"))[:160] if known else "",
         }
     return tuple(rows[key] for key in sorted(rows))
 
@@ -122,7 +123,7 @@ def _environment(state: Mapping[str, Any]) -> dict[str, str]:
 def _merge(base: object, additions: Sequence[Mapping[str, Any]], key_name: str) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for raw in (*_records(base), *tuple(additions)):
-        key = _text(raw.get(key_name))
+        key = stripped_text(raw.get(key_name))
         if key:
             rows[key] = dict(raw)
     return [rows[key] for key in sorted(rows)]
@@ -154,5 +155,3 @@ def _first(*values: object) -> str:
     return next((str(value).strip() for value in values if value is not None and str(value).strip()), "")
 
 
-def _text(value: object) -> str:
-    return str(value).strip() if value is not None else ""

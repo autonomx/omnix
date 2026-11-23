@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from .graph_audit import GraphAuditError
+from .topic_graph import candidate as _candidate, mapping as _mapping, rows as _rows
 
 
 @dataclass(frozen=True)
@@ -28,40 +30,9 @@ class ProfileReferenceIssue:
         }
 
 
-class ProfileReferenceCompilationError(ValueError):
-    def __init__(self, issues: Sequence[ProfileReferenceIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(
-            f"{issue.code}:{issue.source_domain}:{issue.entity_id}:"
-            f"{issue.field_id}:{issue.target_id}"
-            for issue in self.issues
-        )
-        super().__init__("profile_reference_integrity_failed:" + rendered)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "ok": False,
-            "code": "profile_reference_integrity_failed",
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _rows(value: Any) -> tuple[dict[str, Any], ...]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return ()
-    return tuple(dict(item) for item in value if isinstance(item, Mapping))
-
-
-def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-    for key in ("candidate", "content"):
-        value = row.get(key)
-        if isinstance(value, Mapping):
-            return dict(value)
-    return dict(row)
+class ProfileReferenceCompilationError(GraphAuditError):
+    code = "profile_reference_integrity_failed"
+    fields = ("code", "source_domain", "entity_id", "field_id", "target_id")
 
 
 def _profile(topic_graph: Mapping[str, Any] | None) -> dict[str, Any]:

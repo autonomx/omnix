@@ -11,19 +11,13 @@ function footerModel(overrides: Record<string, unknown> = {}) {
   return fixture<TradingChartPanelModel>({
     active: true,
     allBarsRef: { current: new Array(40) },
-    applyCustomRange: vi.fn(),
     chartId: 'chart-1',
     chartQuery: { data: undefined },
-    customRangeEnd: '',
-    customRangeError: null,
-    customRangeOpen: false,
-    customRangeRef: { current: null },
-    customRangeStart: '',
+    customRange: {
+      open: false, start: '', end: '', error: null, ref: { current: null },
+      setStart: vi.fn(), setEnd: vi.fn(), toggle: vi.fn(), close: vi.fn(), apply: vi.fn(),
+    },
     drawings: { status: 'saved' },
-    exitReplay: vi.fn(),
-    nextReplayBar: vi.fn(),
-    openCustomRange: vi.fn(),
-    previousReplayBar: vi.fn(),
     provenance: undefined,
     replayChoosingStart: false,
     replayCurrentBar: { end_time: '2026-08-05T12:15:00Z' },
@@ -33,14 +27,13 @@ function footerModel(overrides: Record<string, unknown> = {}) {
     replayPlaying: false,
     replayStartTime: Date.parse('2026-08-05T12:10:00Z'),
     replayVisibleBarCount: 12,
-    resetReplay: vi.fn(),
-    selectReplayStart: vi.fn(),
+    replay: {
+      handleStageClick: vi.fn(), selectStart: vi.fn(), reset: vi.fn(), previousBar: vi.fn(), nextBar: vi.fn(),
+      togglePlaying: vi.fn(), exit: vi.fn(),
+    },
     selectedRangeLabel: 'All',
     selectedTimezone: 'UTC',
     selectedTimezoneOption: TRADING_TIMEZONE_OPTIONS[0],
-    setCustomRangeEnd: vi.fn(),
-    setCustomRangeOpen: vi.fn(),
-    setCustomRangeStart: vi.fn(),
     setTimezoneId: vi.fn(),
     setTimezoneMenuOpen: vi.fn(),
     showRange: vi.fn(),
@@ -48,7 +41,6 @@ function footerModel(overrides: Record<string, unknown> = {}) {
     timezoneId: TRADING_TIMEZONE_OPTIONS[0].id,
     timezoneMenuOpen: false,
     timezoneMenuRef: { current: null },
-    toggleReplayPlaying: vi.fn(),
     ...overrides,
   });
 }
@@ -80,12 +72,12 @@ describe('chart footer replay controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Choose replay start' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reset replay' }));
     fireEvent.click(screen.getByRole('button', { name: 'Exit replay and return to real time' }));
-    expect(ws.nextReplayBar).toHaveBeenCalledOnce();
-    expect(ws.previousReplayBar).toHaveBeenCalledOnce();
-    expect(ws.toggleReplayPlaying).toHaveBeenCalledOnce();
-    expect(ws.selectReplayStart).toHaveBeenCalledOnce();
-    expect(ws.resetReplay).toHaveBeenCalledOnce();
-    expect(ws.exitReplay).toHaveBeenCalledOnce();
+    expect(ws.replay.nextBar).toHaveBeenCalledOnce();
+    expect(ws.replay.previousBar).toHaveBeenCalledOnce();
+    expect(ws.replay.togglePlaying).toHaveBeenCalledOnce();
+    expect(ws.replay.selectStart).toHaveBeenCalledOnce();
+    expect(ws.replay.reset).toHaveBeenCalledOnce();
+    expect(ws.replay.exit).toHaveBeenCalledOnce();
   });
 
   it('has one control that leaves replay', () => {

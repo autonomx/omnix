@@ -1,6 +1,7 @@
 """The live agent: route a live turn to direct chat or the agent, and plan its proposal."""
 from __future__ import annotations
 
+from app.conversation.contracts import is_live_voice_turn
 import re
 from dataclasses import asdict
 from typing import Literal, Any
@@ -123,7 +124,7 @@ def resolve_live_agent_route(
 ) -> LiveAgentRouteDecision:
     runtime = config or live_agent_runtime_config()
     explicit = agent_mode or requested_mode == "agent"
-    is_live_voice = _is_live_voice_turn(user_turn_id, speech_segment_id)
+    is_live_voice = is_live_voice_turn({"user_turn_id": user_turn_id, "speech_segment_id": speech_segment_id})
 
     if explicit:
         return LiveAgentRouteDecision(
@@ -175,12 +176,6 @@ def _direct(
         executes=False,
         hermes_required=hermes_required,
     )
-
-
-def _is_live_voice_turn(user_turn_id: str | None, speech_segment_id: str | None) -> bool:
-    return str(user_turn_id or "").startswith("voice-user-turn:") or str(
-        speech_segment_id or ""
-    ).startswith("voice-segment:")
 
 
 def _flag(name: str, default: bool = False) -> bool:

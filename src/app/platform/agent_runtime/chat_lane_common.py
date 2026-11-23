@@ -12,4 +12,3 @@ class GeneralizedChatResult:
     metadata: dict[str, Any]
 
 
-_TERMINAL_AGENT = {"completed", "failed", "cancelled"}

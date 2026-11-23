@@ -31,6 +31,32 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A failed gateway call reworded for its caller (`unwrapAs`, `unwrapLabelled`). It keeps the HTTP
+ * status, so callers branch on `errorStatus`/`isConflict` rather than on the message text.
+ */
+export class GatewayCallError extends Error {
+  readonly status: number;
+  readonly detail: string;
+
+  constructor(message: string, cause: ApiError) {
+    super(message, { cause });
+    this.name = 'GatewayCallError';
+    this.status = cause.status;
+    this.detail = cause.detail;
+  }
+}
+
+/** The HTTP status of a failed gateway call, or undefined for any other error. */
+export function errorStatus(error: unknown): number | undefined {
+  return error instanceof ApiError || error instanceof GatewayCallError ? error.status : undefined;
+}
+
+/** True when the gateway refused the call with 409: a revision conflict, or work already running. */
+export function isConflict(error: unknown): boolean {
+  return errorStatus(error) === 409;
+}
+
 export class ApiTimeoutError extends Error {
   readonly timeoutMs: number;
 

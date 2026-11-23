@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .run_settlement import cancel_run, fail_run
 from .profiles import profile_produces_diff
 from .exception_logging import log_recovered_exception
 import hashlib
@@ -19,8 +20,8 @@ from .evidence import (
     validate_required_evidence_capabilities,
 )
 from .profiles import get_agent_profile, resolve_profile_capabilities
-from .budget import apply_default_run_limits
 from .contracts import (
+    TERMINAL_RUN_STATUSES,
     AgentEvent,
     ArtifactKind,
     AgentRunCommand,
@@ -37,6 +38,7 @@ from .semantic_task_parser import (
 from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from typing import TYPE_CHECKING
 from .run_repository_queries import PostgresAgentRunQueries
+from .run_issuance import bind_run_workspace, issue_run_spec
 
 if TYPE_CHECKING:
     from app.platform.agent_runtime.service_core import AgentRunService
@@ -113,7 +115,7 @@ def command_with_context(
         current = repository.get_run(command.run_id)
         if current is None:
             raise KeyError(command.run_id)
-        if current.status in {"completed", "failed", "cancelled"}:
+        if current.status in TERMINAL_RUN_STATUSES:
             if status != "consumed" and repository.claim_command(
                 command.run_id,
                 stored.command_id,
@@ -191,7 +193,7 @@ def _run_claimed_command(service, stored, reference_context, reference_images):
 
     if stored.command_type == "cancel":
         service._cancel_descendants(stored.run_id)
-    if current.status in {"completed", "failed", "cancelled"}:
+    if current.status in TERMINAL_RUN_STATUSES:
         with service.unit_of_work(service.database) as work:
             repository = service.repository_factory(work.connection, service.context)
             service._maybe_finalize_parent_in_repository(repository, stored.run_id)
@@ -555,11 +557,7 @@ def _start_superseding_revision(
             revision,
             replacement_spec,
         )
-    service._validate_run_spec_authority(replacement_spec)
-    service._validate_evidence_authority(replacement_spec)
-    issued = service._prepare_workspace(
-        service._bind_github_repository_authority(replacement_spec)
-    )
+    issued = bind_run_workspace(service, issue_run_spec(service, replacement_spec))
 
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
@@ -619,9 +617,7 @@ def _submit_superseding_revision(
     """Persist the replacement and hand workspace/runtime work to jobs."""
     from .jobs import create_agent_workspace_prepare_request, enqueue_agent_job
 
-    issued = apply_default_run_limits(service._prepare_start_spec(replacement_spec))
-    service._validate_run_spec_authority(issued)
-    service._validate_evidence_authority(issued)
+    issued = issue_run_spec(service, replacement_spec)
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
         locked = PostgresAgentRunQueries(work.connection, service.context).lock_superseding_run_id(current.run_id).fetchone()
@@ -680,19 +676,17 @@ def _mark_command_failed(service: AgentRunService, command: AgentRunCommand, err
         error=error,
     )
     service.runtime.close_run(command.run_id)
-    terminal_status = "cancelled" if command.command_type == "cancel" else "failed"
-    desired_state = "cancelled"
+    end_run = cancel_run if command.command_type == "cancel" else fail_run
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
         current = repository.get_run(command.run_id)
-        if current is not None and current.status not in {"completed", "failed", "cancelled"}:
-            repository.update_state(
+        if current is not None and current.status not in TERMINAL_RUN_STATUSES:
+            end_run(
+                repository,
                 command.run_id,
                 expected_revision=current.revision,
-                status=terminal_status,
-                desired_state=desired_state,
                 worker_id=service.worker_id,
-                last_error=f"command_failed:{type(error).__name__}: {error}"[:2000],
+                error=f"command_failed:{type(error).__name__}: {error}",
             )
         repository.complete_command(command.run_id, command.command_id)
         work.commit()
@@ -828,12 +822,7 @@ def _apply_claimed_command(
             repository = service.repository_factory(work.connection, service.context)
             persisted = repository.get_run(stored.run_id)
             if persisted is not None and persisted.status != "cancelled":
-                current = repository.update_state(
-                    stored.run_id,
-                    expected_revision=persisted.revision,
-                    status="cancelled",
-                    desired_state="cancelled",
-                )
+                current = cancel_run(repository, stored.run_id, expected_revision=persisted.revision)
             work.commit()
     return current
 
@@ -844,7 +833,7 @@ def _cancel_descendants(service: AgentRunService, run_id: str) -> None:
         children = repository.list_children(run_id)
         work.rollback()
     for child in children:
-        if child.status in {"completed", "failed", "cancelled"}:
+        if child.status in TERMINAL_RUN_STATUSES:
             continue
         service.command(
             AgentRunCommand(

@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from .generation_starter_bubble_support import derive_starter_bubble
 from .starter_bubble import StarterBubblePlan
+from .graph_audit import GraphAuditError
 
 
 @dataclass(frozen=True)
@@ -26,11 +27,8 @@ class StarterRegionIssue:
         }
 
 
-class StarterRegionCompilationError(ValueError):
-    def __init__(self, issues: Sequence[StarterRegionIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.path}" for row in self.issues)
-        super().__init__("starter_region_integrity_failed:" + rendered)
+class StarterRegionCompilationError(GraphAuditError):
+    code = "starter_region_integrity_failed"
 
 
 def starter_region_issues(

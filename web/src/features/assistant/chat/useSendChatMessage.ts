@@ -16,6 +16,7 @@ import {
   type PastedChatTextFile,
 } from './chatbotWorkspaceModel';
 import { assistantApiClient, type AssistantContextChatRequest } from '../api/assistantClient';
+import { jobKeys } from '../../../api/jobs';
 
 type SendChatMessageOptions = {
   runtimeConfig: AssistantWorkspaceRuntimeConfig;
@@ -139,7 +140,7 @@ export function useSendChatMessage({
       }
       onSent();
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
-      void queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      void queryClient.invalidateQueries({ queryKey: jobKeys.all });
     },
     onError: (error, values) => {
       setQuickSearchProgress(null);

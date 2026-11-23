@@ -23,6 +23,7 @@ from app.providers import ChatMessage
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
 
+from .canonical import optional_decimal
 from .feature_qualification import (
     CoverageCertificate,
     FeatureRequirement,
@@ -408,16 +409,6 @@ class AIShadowV3Analyzer:
         )
 
 
-def _decimal(value: object) -> Decimal | None:
-    if value in {None, ""}:
-        return None
-    try:
-        return Decimal(str(value))
-    except Exception:
-        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
-        return None
-
-
 def _atr_proxy(bars: list[MarketBar], count: int = 14) -> Decimal:
     recent = bars[-count:]
     if not recent:
@@ -456,7 +447,7 @@ def build_authoritative_runner_geometry(
     cost = entry * estimated_cost_bps / Decimal("10000")
 
     extrema = feature_snapshot.certificate("session_extrema")
-    session_high = _decimal(feature_snapshot.market.get("session_high"))
+    session_high = optional_decimal(feature_snapshot.market.get("session_high"))
     if (
         extrema is not None
         and extrema.status != "INVALID"
@@ -515,8 +506,8 @@ def _champion_geometry(
     minimum_net_r: Decimal,
     maximum_structural_risk_pct: Decimal,
 ) -> tuple[bool, str, Decimal | None]:
-    invalidation = _decimal(decision.get("invalidation_price"))
-    target = _decimal(decision.get("target_1"))
+    invalidation = optional_decimal(decision.get("invalidation_price"))
+    target = optional_decimal(decision.get("target_1"))
     if invalidation is None or target is None:
         return False, "geometry_incomplete", None
     risk = entry_reference - invalidation
@@ -568,9 +559,9 @@ def compare_runner_geometry_challenger(
         maximum_structural_risk_pct=maximum_structural_risk_pct,
     )
     suggestion = GeometrySuggestion(
-        invalidation_price=_decimal(v2_decision.get("invalidation_price")),
-        target_1=_decimal(v2_decision.get("target_1")),
-        target_2=_decimal(v2_decision.get("target_2")),
+        invalidation_price=optional_decimal(v2_decision.get("invalidation_price")),
+        target_1=optional_decimal(v2_decision.get("target_1")),
+        target_2=optional_decimal(v2_decision.get("target_2")),
     )
     if setup_typed not in _RUNNER_FAMILIES:
         return GeometryChallengerRecord(

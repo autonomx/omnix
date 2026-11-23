@@ -153,6 +153,7 @@ def _monitor_status(
     configured_enabled: bool,
     counter_names: tuple[str, ...],
     interval_attribute: str = "interval_seconds",
+    counters_attribute: str | None = None,
 ) -> StrategyRuntimeMonitorStatus:
     registered = isinstance(monitor, expected_type)
     if not registered:
@@ -163,8 +164,10 @@ def _monitor_status(
         )
     task = getattr(monitor, "_task", None)
     running = bool(task is not None and not task.done())
+    # A monitor that keeps its counters in one value names it; the others hold them as attributes.
+    source = getattr(monitor, counters_attribute) if counters_attribute else monitor
     counters = {
-        name: int(getattr(monitor, name, 0) or 0)
+        name: int(getattr(source, name, 0) or 0)
         for name in counter_names
     }
     raw_interval = getattr(monitor, interval_attribute, None)
@@ -297,6 +300,7 @@ def create_trading_strategy_operations_router(
                 getattr(state, "_omnix_trading_strategy_monitor", None),
                 expected_type=TradingStrategyMonitor,
                 configured_enabled=trading_strategy_monitor_enabled(),
+                counters_attribute="metrics",
                 counter_names=(
                     "evaluation_count",
                     "signal_count",

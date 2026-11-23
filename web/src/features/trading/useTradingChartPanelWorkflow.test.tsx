@@ -81,9 +81,7 @@ function workflowInput(overrides: Partial<Record<string, unknown>> = {}) {
     setHistoryLimitOverride: vi.fn(),
     setSelectedRangeLabel: vi.fn(),
     showExtendedHours: true,
-    toggleFullscreen: vi.fn(),
-    toggleFullscreenIndicator: vi.fn(),
-    toggleMinimizedIndicator: vi.fn(),
+    panes: { toggleFullscreen: vi.fn(), toggleIndicatorFullscreen: vi.fn(), toggleMinimized: vi.fn() },
     ...overrides,
   };
   return { input: input as unknown as WorkflowInput, raw: input, timeScale, adapter, host };
@@ -218,12 +216,12 @@ describe('chart workflow hook (TVP-2.5)', () => {
       target: host, clientX: 100, clientY: 200, ctrlKey, metaKey: false, preventDefault: vi.fn(),
     }) as unknown as React.MouseEvent<HTMLDivElement>;
     result.current.handleStageDoubleClick(event(false));
-    expect(raw.toggleFullscreenIndicator).toHaveBeenCalledWith('rsi');
+    expect(raw.panes.toggleIndicatorFullscreen).toHaveBeenCalledWith('rsi');
     result.current.handleStageDoubleClick(event(true));
-    expect(raw.toggleMinimizedIndicator).toHaveBeenCalledWith('rsi');
+    expect(raw.panes.toggleMinimized).toHaveBeenCalledWith('rsi');
     (raw.adapter as ReturnType<typeof fakeAdapter>['adapter']).paneAtClientY.mockReturnValue({ kind: 'main' } as never);
     result.current.handleStageDoubleClick(event(false));
-    expect(raw.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(raw.panes.toggleFullscreen).toHaveBeenCalledTimes(1);
   });
 
   it('ignores double-clicks on the price scale and while a drawing tool is active', () => {
@@ -232,11 +230,11 @@ describe('chart workflow hook (TVP-2.5)', () => {
     const { result } = renderHook(() => useChartWorkflow(scale.input), { wrapper });
     const event = { target: scale.host, clientX: 1, clientY: 1, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.MouseEvent<HTMLDivElement>;
     result.current.handleStageDoubleClick(event);
-    expect(scale.raw.toggleFullscreenIndicator).not.toHaveBeenCalled();
+    expect(scale.raw.panes.toggleIndicatorFullscreen).not.toHaveBeenCalled();
     const drawing = workflowInput({ drawingTool: 'trend-line' });
     const { result: drawingResult } = renderHook(() => useChartWorkflow(drawing.input), { wrapper });
     drawingResult.current.handleStageDoubleClick({ ...event, target: drawing.host } as unknown as React.MouseEvent<HTMLDivElement>);
-    expect(drawing.raw.toggleFullscreenIndicator).not.toHaveBeenCalled();
+    expect(drawing.raw.panes.toggleIndicatorFullscreen).not.toHaveBeenCalled();
   });
 
   it('draws the post-market price line and reports market status and delay', async () => {

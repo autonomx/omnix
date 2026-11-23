@@ -16,6 +16,7 @@ from .contracts import (
     TurnPresentationRequest,
 )
 from .planner import NarrativePlan
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 _PRECOMPUTED_PROSE_KEYS = {
@@ -181,10 +182,6 @@ def writer_payload(
     return payload
 
 
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -201,7 +198,7 @@ def _claims(
             raise ValueError(f"claim entry must be an object: {beat.beat_id}:{index}")
         try:
             authority = AuthorityClass(
-                _text(item.get("authority")) or AuthorityClass.PUBLIC_KNOWLEDGE.value
+                clean_text(item.get("authority")) or AuthorityClass.PUBLIC_KNOWLEDGE.value
             )
         except ValueError as exc:
             raise ValueError(f"invalid claim authority: {beat.beat_id}:{index}") from exc
@@ -210,21 +207,21 @@ def _claims(
             for value in item.get("evidence_refs") or beat.evidence_refs
             if str(value).strip()
         )
-        claim_id = _text(item.get("claim_id")) or f"claim:{beat.beat_id}:{index}"
+        claim_id = clean_text(item.get("claim_id")) or f"claim:{beat.beat_id}:{index}"
         # A required claim's subject, predicate and value are its ledger entry's unless the writer gave its own,
         # which the validator then holds to the ledger.
         expected = ledger.get(claim_id) or {}
-        subject_id = _text(item.get("subject_id")) or _text(expected.get("subject_id")) or beat.speaker_id
+        subject_id = clean_text(item.get("subject_id")) or clean_text(expected.get("subject_id")) or beat.speaker_id
         claims.append(
             ClaimAssertion(
                 claim_id=claim_id,
-                text=_text(item.get("text")) or _text(row.get("text")),
+                text=clean_text(item.get("text")) or clean_text(row.get("text")),
                 authority=authority,
                 evidence_refs=evidence_refs,
                 # A claim is in its beat's scope: the writer's own label for it (a turn id, "world") is no grant.
                 scope=str(beat.metadata.get("evidence_scope") or "player"),
                 subject_id=subject_id,
-                predicate=_text(item.get("predicate")) or _text(expected.get("predicate")),
+                predicate=clean_text(item.get("predicate")) or clean_text(expected.get("predicate")),
                 value=item["value"] if "value" in item else expected.get("value"),
                 metadata=dict(item.get("metadata") or {}),
             )
@@ -248,18 +245,18 @@ def parse_structured_blocks(
     for row in rows:
         if not isinstance(row, Mapping):
             raise ValueError("structured narrative block must be an object")
-        beat_id = _text(row.get("beat_id"))
+        beat_id = clean_text(row.get("beat_id"))
         beat = expected.get(beat_id)
         if beat is None or beat_id in seen:
             raise ValueError(f"unplanned or duplicate narrative beat: {beat_id}")
         seen.add(beat_id)
-        text = _text(row.get("text"))
+        text = clean_text(row.get("text"))
         if not text:
             raise ValueError(f"narrative beat has empty text: {beat_id}")
         sequence = int(row.get("sequence") or beat.sequence)
-        kind = _text(row.get("kind") or beat.kind.value)
-        purpose = _text(row.get("purpose") or beat.purpose.value)
-        speaker_id = _text(row.get("speaker_id")) or beat.speaker_id
+        kind = clean_text(row.get("kind") or beat.kind.value)
+        purpose = clean_text(row.get("purpose") or beat.purpose.value)
+        speaker_id = clean_text(row.get("speaker_id")) or beat.speaker_id
         if sequence != beat.sequence:
             raise ValueError(f"narrative beat sequence changed: {beat_id}")
         if kind != beat.kind.value or purpose != beat.purpose.value:
@@ -269,7 +266,7 @@ def parse_structured_blocks(
         claims = _claims(row, beat, ledger or {}, ids)
         blocks.append(
             NarrativeBlock(
-                block_id=_text(row.get("block_id")) or f"block:{beat_id}",
+                block_id=clean_text(row.get("block_id")) or f"block:{beat_id}",
                 beat_id=beat_id,
                 sequence=beat.sequence,
                 kind=beat.kind,

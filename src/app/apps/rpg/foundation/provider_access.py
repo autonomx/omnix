@@ -24,21 +24,14 @@ def rpg_llm_route() -> tuple[str, str] | None:
         from app.settings.effective_defaults import effective_llm_route
         from app.settings.profile_repository import load_settings_profile
 
-        provider_id, model_id = effective_llm_route(load_settings_profile(load_settings()), "rpg", "turn")
+        from app.providers.model_route import ModelRoute
+
+        route = ModelRoute.parse(*effective_llm_route(load_settings_profile(load_settings()), "rpg", "turn"))
     except Exception:
         # Unreadable settings leave RPG on the provider's own default route.
         logger.debug("rpg_llm_route_unavailable", exc_info=True)
         return None
-    provider = str(provider_id or "").strip().removeprefix("llm:")
-    if not provider:
-        return None
-    model = str(model_id or "").strip()
-    prefix = f"llm:{provider}:"
-    if model.startswith(prefix):
-        model = model[len(prefix):]
-    elif model.startswith("llm:"):
-        model = ""
-    return provider, model
+    return (route.provider, route.own_model) if route.provider else None
 
 
 def routed_provider(*, counted: bool = True) -> Any:

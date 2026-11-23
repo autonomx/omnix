@@ -5,7 +5,9 @@ import { omnixApiClient, type AssetListResponse } from '../../api/client';
 import type { CloneSeed } from './CloneVoicePanel';
 import { TRANSCRIPT_LANGUAGES } from './transcriptLanguages';
 import { TranscriptEditor } from './TranscriptEditor';
-import { firstOutput, jobSettled, useJobResult } from './useJobResult';
+import { firstOutput } from './jobOutput';
+import { useJob } from '../../shared/useJob';
+import { isJobSettled } from '../../api/jobs';
 
 type Asset = AssetListResponse['assets'][number];
 
@@ -28,7 +30,7 @@ export function TranscribeTool({ assets, onMakeVoice }: { assets: Asset[]; onMak
   const [language, setLanguage] = useState('');
   const [openId, setOpenId] = useState('');
   const [jobId, setJobId] = useState('');
-  const job = useJobResult(jobId);
+  const job = useJob(jobId);
 
   const queue = useMutation({
     mutationFn: () => omnixApiClient.createJob({
@@ -61,7 +63,7 @@ export function TranscribeTool({ assets, onMakeVoice }: { assets: Asset[]; onMak
     setOpenId(finishedTranscript);
   }, [finishedTranscript, queryClient]);
 
-  const running = Boolean(jobId) && !jobSettled(job.data);
+  const running = Boolean(jobId) && !isJobSettled(job.data?.status);
   const failure = job.data?.status === 'failed' ? (typeof job.data.error?.message === 'string' ? job.data.error.message : 'Transcription failed.') : '';
 
   return (

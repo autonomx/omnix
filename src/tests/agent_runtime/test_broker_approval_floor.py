@@ -10,6 +10,7 @@ from app.platform.agent_runtime.broker_api import (
     _normalize_capability_input,
     _review_with_run_policy,
 )
+from app.capabilities.approval_policy import run_approval_floor
 from app.platform.assistant_tools.models import (
     AssistantToolRequest,
     AssistantToolReviewDecision,
@@ -93,7 +94,7 @@ def test_sensitive_run_policy_preserves_governed_browser_automatic_policy() -> N
     ) as review:
         effective, decision = _review_with_run_policy(
             request,
-            "ask_sensitive",
+            run_approval_floor("ask_sensitive", session_scoped=True),
         )
 
     assert effective is request

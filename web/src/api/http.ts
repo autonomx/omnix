@@ -1,5 +1,5 @@
 import createClient, { type Client } from 'openapi-fetch';
-import { ApiError, ApiTimeoutError } from './errors';
+import { ApiError, ApiTimeoutError, GatewayCallError } from './errors';
 import { pipelineFetch } from './fetchPipeline';
 import type { paths as CorePaths } from './generated/core';
 
@@ -97,7 +97,7 @@ export async function unwrapAs<T>(call: Promise<GatewayResult<T>>, message: (err
   try {
     return await unwrap(call);
   } catch (error) {
-    if (error instanceof ApiError) throw new Error(message(error));
+    if (error instanceof ApiError) throw new GatewayCallError(message(error), error);
     throw error;
   }
 }
@@ -110,7 +110,7 @@ export async function unwrapLabelled<T>(call: Promise<GatewayResult<T>>, label: 
   try {
     return await unwrap(call);
   } catch (error) {
-    if (error instanceof ApiError) throw new Error(`${label} request failed (${error.status}): ${error.detail}`);
+    if (error instanceof ApiError) throw new GatewayCallError(`${label} request failed (${error.status}): ${error.detail}`, error);
     throw error;
   }
 }

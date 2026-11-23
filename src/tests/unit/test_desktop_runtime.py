@@ -14,7 +14,7 @@ import pytest
 from app.desktop import env as desktop_env
 from app.desktop import service_boot
 from app.desktop.env import LaunchConfig, child_environment, service_environment
-from app.desktop.services import HEADROOM_BASE_BYTES, ModelServices, plans
+from app.desktop.services import HEADROOM_BASE_BYTES, HEADROOM_FACTOR, ModelServices, plans
 from app.models import catalog as model_catalog
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -565,8 +565,11 @@ def test_the_live_portrait_service_runs_from_its_pack_and_the_gateway_finds_it(t
     runtimes = SimpleNamespace(current=lambda rid: True, runnable=lambda rid: True, site=lambda rid: config.packs / rid)
     models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
     plan = plans(config, catalog, runtimes, models)["portrait"]
-    assert plan.runtime == "portrait-windows-x64" and plan.bundles == ["live-portrait"]
+    assert plan.runtime == "portrait-windows-x64" and plan.bundles == ["live-portrait", "live-portrait-flashhead"]
     assert plan.site_dirs == [config.packs / "portrait-windows-x64", config.packs / "torch-windows-x64"]
-    # Its load needs 8 GiB, but the service starts (and restarts after an idle unload) without its model: only the
-    # base headroom is asked before a start (review finding, 2026-10-31).
-    assert plan.load_bytes == 8192 * 2**20 and plan.needed_bytes == HEADROOM_BASE_BYTES
+    # Its load is FlashHead's measured 12 GiB plus FLOAT's own models (the larger engine's need, with the other's
+    # weights on top). The service starts (and restarts after an idle unload) without its model: only the base
+    # headroom is asked before a start (review finding, 2026-10-31).
+    float_only = {"float", "float-code"}
+    assert plan.load_bytes == 12288 * 2**20 + int(sum(catalog.model(mid).size for mid in float_only) * HEADROOM_FACTOR)
+    assert plan.needed_bytes == HEADROOM_BASE_BYTES

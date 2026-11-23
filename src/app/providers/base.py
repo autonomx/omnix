@@ -173,6 +173,18 @@ class ProviderConfig:
         return result
 
 
+def configured_reasoning_effort(provider: Any) -> str:
+    """The reasoning level a provider is configured with; "" when it names none.
+
+    A provider's own ``reasoning_effort`` (Codex fills in its default) wins over ``extra_params``.
+    """
+    value = str(getattr(provider, "reasoning_effort", "") or "").strip()
+    if value:
+        return value
+    extra = getattr(getattr(provider, "config", None), "extra_params", None)
+    return str(extra.get("reasoning_effort") or "").strip() if isinstance(extra, dict) else ""
+
+
 class ProviderError(Exception):
     """Base exception for provider-related errors."""
     pass

@@ -252,8 +252,6 @@
 <p>the job worker and the Chat dispatcher;</p>
 <li>RPG turn stages (<code>rpg.turn.pipeline</code> and its <code>rpg.turn.*</code> stages, with their</li>
 <p>scalar measurements);</p>
-<li>live speech stages (<code>live_speech.utterance</code>, <code>.transcript</code>, <code>.first_audio</code>,</li>
-<p><code>.response</code>), recorded from the turn&#x27;s timestamps;</p>
 <li>agent steps: the model-call and capability request spans name the run</li>
 <p>(<code>omnix.agent_run_id</code>, <code>omnix.agent_step</code>), and capability adapters run in a <code>capability.execute</code> span.</p>
 </ul>
@@ -452,15 +450,19 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 </ul>
 <p>For a live call&#x27;s portrait (<code>docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md</code>):</p>
 <ul>
+<li>a call is voice only until &quot;Load live video&quot; is pressed in that chat (on the call card or in the full-screen call);</li>
+<p>pressed during a call, the video starts with the next reply. The choice lasts until the page reloads. A call that shows no portrait for this reason logs nothing: it is not a failure. Pressed again once it says &quot;Live video ready&quot;, the button unloads the portrait model (<code>DELETE /api/tts/live-call/portrait-load</code>, the service&#x27;s <code>POST /portrait/unload</code>, which restarts it light) and turns that chat back to voice only. The service refuses while a call streams video (<code>model_busy</code>) or the model is still loading (<code>warming</code>);</p>
 <li>a call with a portrait character shows the pack&#x27;s fallback (its image, its Live2D rig or the orb) whenever the</li>
-<p>portrait cannot serve; the call itself goes on. The browser&#x27;s live-call diagnostics name the reason (<code>portrait_not_configured</code>, <code>portrait_busy</code>, <code>warming</code>, <code>portrait_lost</code>, <code>frames_late</code>, ...);</p>
+<p>portrait cannot serve; the call itself goes on. When that fallback is only the picture (a sprite with no mouth frames) and the character&#x27;s idle loop is already known, the tile idles on the loop instead, so it keeps its size and its cropping. The browser&#x27;s live-call diagnostics name the reason (<code>portrait_not_configured</code>, <code>portrait_busy</code>, <code>warming</code>, <code>portrait_lost</code>, <code>frames_late</code>, ...);</p>
 <li>check <code>GET 127.0.0.1:5501/health</code>: <code>status</code> is <code>missing</code> (install the live-portrait bundle in Settings, Models),</li>
 <p><code>short</code> (less than 2.5 GB of free VRAM or 6 GB of commit headroom: close something), <code>warming</code> (cuDNN builds its plans; about a minute after start), <code>ready</code>, or <code>failed</code> (its <code>message</code> says why);</p>
 <li><code>streams.active</code> against <code>streams.max</code>: one call&#x27;s portrait per GPU. Another call is refused with <code>portrait_busy</code>;</li>
 <p>the same user and session reloading replaces its own stream. A stream whose heartbeats stop is closed after 6 s;</p>
 <li>the model unloads after 30 idle minutes with no stream open (<code>OMNIX_PORTRAIT_IDLE_UNLOAD_SECONDS</code>) and loads again</li>
 <p>on the next call&#x27;s prepare, which then reports <code>warming</code>;</p>
-<li>the diagnostics page lists the service with the other model services when <code>OMNIX_PORTRAIT_URL</code> is set.</li>
+<li>the diagnostics page lists the service with the other model services when <code>OMNIX_PORTRAIT_URL</code> is set;</li>
+<li>FlashHead Lite&#x27;s idle loop moves the head when the bundle&#x27;s <code>liveportrait-code</code> and <code>liveportrait-weights</code> models</li>
+<p>are installed. The motion ships with the service (<code>src/services/portrait/assets/idle-motion.npz</code>); your own replaces it from <code>resources/models/portrait/idle-motion.npz</code>, or from any file named by <code>OMNIX_PORTRAIT_IDLE_MOTION</code>. To make your own from a 10-15 s recording of someone sitting still, looking at the camera and not talking, run with the portrait service&#x27;s interpreter while no call runs: <code>python scripts/portrait_idle_motion.py clip.mp4 [--start S] [--end S]</code>, then restart the portrait service. The log says <code>flashhead idle loops: LivePortrait, idle motion of N frames (path)</code>; without the models (or if loading fails) it says why and the loop is FlashHead&#x27;s own nearly still one.</p>
 </ul>
 <h3 id="8-an-agent-proposes-but-does-not-execute">8. An agent proposes but does not execute</h3>
 <p>This can be an expected governance result. Inspect:</p>

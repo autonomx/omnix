@@ -6,6 +6,7 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.tests.trading.recovering_market_service import RecoveringMarketService
 from app.apps.trading.gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategies.models import GapPullbackConfig
@@ -142,7 +143,7 @@ class FakeRepository:
         return True
 
 
-class FakeMarketService:
+class FakeMarketService(RecoveringMarketService):
     def bars(self, instrument_id: str, interval: str, limit: int, binding_id: str | None):
         assert instrument_id == INSTRUMENT
         assert interval == "1m"

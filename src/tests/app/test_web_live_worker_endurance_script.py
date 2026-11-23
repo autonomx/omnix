@@ -6,12 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# From the repository root, whichever directory pytest runs from.
+ROOT = Path(__file__).resolve().parents[3]
+SCRIPT = str(ROOT / "scripts" / "live_worker_endurance.py")
 
 def test_live_worker_endurance_script_requires_explicit_opt_in(tmp_path) -> None:
     result = subprocess.run(
         [
             sys.executable,
-            "scripts/live_worker_endurance.py",
+            SCRIPT,
             "--iterations",
             "1",
             "--interval-seconds",
@@ -32,13 +35,13 @@ def test_live_worker_endurance_script_requires_explicit_opt_in(tmp_path) -> None
 
 def test_live_worker_endurance_script_writes_mock_worker_artifact(tmp_path) -> None:
     env = dict(os.environ)
-    env["PYTHONPATH"] = "src"
+    env["PYTHONPATH"] = str(ROOT / "src")
     env["OMNIX_GATEWAY_MOCK_WORKERS"] = "1"
     env["OMNIX_GATEWAY_MOCK_WORKERS_LIST"] = "tts,stt,image"
     result = subprocess.run(
         [
             sys.executable,
-            "scripts/live_worker_endurance.py",
+            SCRIPT,
             "--allow-live",
             "--allow-mock",
             "--iterations",

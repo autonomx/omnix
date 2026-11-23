@@ -12,7 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
+from app.jobs.handlers import JobResult, JobRun, RetryableJobError
+from app.jobs.models import CreateJobRequest, ResourceClass
 
 JOB_TYPE = "rpg.scene_lore"
 MAX_ATTEMPTS = 3
@@ -53,37 +54,21 @@ def enqueue_scene_lore_enrichment(
     return {"job_id": job.id, "status": str(getattr(job.status, "value", job.status))}
 
 
-def execute_scene_lore_job(job_store: Any, job: JobRecord) -> JobRecord:
+def run_scene_lore_job(run: JobRun[RpgSceneLoreJobInput]) -> JobResult:
     from .runtime_lore_store import enrich_scene_lore
 
-    request = RpgSceneLoreJobInput.model_validate(job.input_payload or {})
-    attempt = max(1, int(getattr(job, "_attempt_count", 0) or 1))
-    job_store.mark_running(job.id)
+    request = run.input
     try:
         report = enrich_scene_lore(request.campaign_id, request.targets)
     except Exception as exc:
-        failed = job_store.fail_job(
-            job.id,
-            FailJobRequest(
-                code="rpg_scene_lore_failed",
-                message=str(exc) or "RPG scene lore enrichment failed",
-                retryable=attempt < MAX_ATTEMPTS,
-                details={"campaign_id": request.campaign_id, "attempt": attempt},
-            ),
-        )
-        return failed or job
-    completed = job_store.complete_job(
-        job.id,
-        CompleteJobRequest(
-            output_refs=[{
-                "type": "rpg_scene_lore",
-                "module": "rpg",
-                "campaign_id": request.campaign_id,
-                "enriched_entity_ids": list(report.get("enriched_entity_ids") or ()),
-            }],
-        ),
-    )
-    return completed or job
+        raise RetryableJobError("rpg_scene_lore_failed", str(exc) or "RPG scene lore enrichment failed",
+                                details={"campaign_id": request.campaign_id, "attempt": run.attempt}) from exc
+    return JobResult(output_refs=({
+        "type": "rpg_scene_lore",
+        "module": "rpg",
+        "campaign_id": request.campaign_id,
+        "enriched_entity_ids": list(report.get("enriched_entity_ids") or ()),
+    },))
 
 
 __all__ = [
@@ -91,5 +76,5 @@ __all__ = [
     "MAX_ATTEMPTS",
     "RpgSceneLoreJobInput",
     "enqueue_scene_lore_enrichment",
-    "execute_scene_lore_job",
+    "run_scene_lore_job",
 ]

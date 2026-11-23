@@ -37,6 +37,7 @@ import type { DrawingEditPatch } from './tools/types';
 import type { DrawingVisibility } from './drawingVisibility';
 import { rememberToolDefaults } from './drawingTemplates';
 import { drawingDocumentPayload, mergePreserved, upgradeDrawingDocument, type DrawingDocument } from './drawingDocument';
+import { isConflict } from '../../../api/errors';
 
 /** `read-only`: the stored document is from a newer schema; edits stay local and are never saved over it. */
 export type DrawingPersistenceStatus = 'loading' | 'saved' | 'saving' | 'conflict' | 'error' | 'read-only';
@@ -179,7 +180,7 @@ async function saveEntry(entry: DrawingEntry): Promise<void> {
     entry.status = 'saved';
     entry.loaded = true;
   } catch (error) {
-    const conflict = error instanceof Error && error.message.includes('(409)');
+    const conflict = isConflict(error);
     if (conflict) {
       const records = await tradingApi.documents('drawings').catch(() => []);
       const latest = records.find((item) => item.record_id === tradingDrawingRecordId(entry.instrumentId, entry.scopeId)) ?? null;

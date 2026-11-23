@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from typing import Any, cast
+from typing import Any
 
-from app.apps.rpg.edge.hermes.approved_config import hermes_rpg_approved_flow_config_payload
-from app.apps.rpg.edge.hermes.approved_flow import hermes_rpg_approved_flow
-from app.apps.rpg.edge.hermes.canonical_submitter import hermes_rpg_canonical_submitter
-from app.apps.rpg.edge.hermes.execution_ledger import hermes_rpg_execution_ledger_record
-from app.apps.rpg.edge.hermes.flow_readout import hermes_rpg_flow_readout
-from app.apps.rpg.edge.hermes.submit_bridge import RpgSubmitter
+from app.apps.rpg.edge.hermes.approved_command import RpgSubmitter, run_approved_command
 from app.apps.rpg.edge.hermes.assist_mode import hermes_assist_mode_policy
 from app.apps.rpg.edge.hermes.sequence_state import (
     apply_hermes_sequence_item_result,
@@ -17,13 +12,10 @@ from app.apps.rpg.edge.hermes.sequence_state import (
     write_hermes_sequence_state,
 )
 from app.apps.rpg.edge.hermes.sequence_loop_guard import hermes_sequence_loop_guard
+from app.apps.rpg.foundation.safe_values import string_text
 
 StateLoader = Callable[[str], dict[str, Any]]
 StateWriter = Callable[[dict[str, Any]], dict[str, Any]]
-
-
-def _text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -56,16 +48,6 @@ def _approved_flow_payload(
     submitter: RpgSubmitter | None,
     environ: Mapping[str, str] | None,
 ) -> dict[str, Any]:
-    config = hermes_rpg_approved_flow_config_payload(environ)
-    if config.get("enabled") is not True:
-        return {
-            "ok": False,
-            "source": "hermes_rpg_approved_flow_route",
-            "error": "hermes_rpg_approved_flow_disabled",
-            "enabled": False,
-            "config": config,
-            "state_changed": False,
-        }
     payload = {
         "enabled": True,
         "user_step": {"ready": True, "command_text": command_text},
@@ -78,24 +60,7 @@ def _approved_flow_payload(
             "item_id": context_hash.split(":")[2] if context_hash.startswith("sequence:") and len(context_hash.split(":")) > 2 else None,
         },
     }
-    flow = hermes_rpg_approved_flow(
-        cast(Any, payload["user_step"]),
-        cast(Any, payload["replay_entry"]),
-        cast(Any, payload["context"]),
-        submitter or hermes_rpg_canonical_submitter,
-    )
-    readout = hermes_rpg_flow_readout(flow)
-    ledger_entry = hermes_rpg_execution_ledger_record(payload=payload, config=config, flow=flow, readout=readout)
-    return {
-        "ok": flow.get("ok") is True,
-        "source": "hermes_rpg_approved_flow_route",
-        "enabled": True,
-        "config": config,
-        "flow": flow,
-        "readout": readout,
-        "ledger_entry": ledger_entry,
-        "state_changed": flow.get("state_changed") is True,
-    }
+    return run_approved_command(payload, submitter=submitter, environ=environ)
 
 
 def hermes_rpg_sequence_execute_step_payload(
@@ -107,7 +72,7 @@ def hermes_rpg_sequence_execute_step_payload(
     state_writer: StateWriter = _default_writer,
 ) -> dict[str, Any]:
     data = payload if isinstance(payload, dict) else {}
-    session_id = _text(data.get("session_id"))
+    session_id = string_text(data.get("session_id"))
     if not session_id:
         return {"ok": False, "source": "hermes_sequence_approved_executor", "error": "missing_session_id", "state_changed": False}
     mode = hermes_assist_mode_policy(data.get("assist_mode"))
@@ -154,7 +119,7 @@ def hermes_rpg_sequence_execute_step_payload(
         }
 
     item = items[item_index]
-    command_text = _text(item.get("statement"))
+    command_text = string_text(item.get("statement"))
     if not command_text:
         return {"ok": False, "source": "hermes_sequence_approved_executor", "error": "missing_command_text", "item_index": item_index, "state_changed": False}
 

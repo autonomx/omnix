@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 from typing import Any, Iterable
+from app.apps.rpg.foundation.safe_values import stripped_text
 
 _FORMAT_VERSION = "rpg_visible_response_v1"
 _NON_NPC_SPEAKERS = {
@@ -29,20 +30,20 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
     """Return one bounded narration/dialogue contract from a nested turn result."""
 
     sources = list(_iter_sources(result))
-    player_input = _player_input(sources) or _text(fallback_command)
+    player_input = _player_input(sources) or stripped_text(fallback_command)
     canonical = _canonical_visible_response(sources, player_input)
     if canonical:
         return canonical
     narration, npc = _select_structured_response(sources, player_input)
-    speaker = _display_speaker(_text(npc.get("speaker") or npc.get("name")))
-    line = _text(npc.get("line") or npc.get("text") or npc.get("content"))
+    speaker = _display_speaker(stripped_text(npc.get("speaker") or npc.get("name")))
+    line = stripped_text(npc.get("line") or npc.get("text") or npc.get("content"))
     line = _dialogue_only(line, speaker)
     quest_evidence = _quest_evidence(sources)
-    clue_summary = _text(quest_evidence.get("clue_summary"))
+    clue_summary = stripped_text(quest_evidence.get("clue_summary"))
     if clue_summary and (not line or not _line_grounded_in_clue(line, clue_summary)):
         line = clue_summary
         speaker = _display_speaker(
-            _text(quest_evidence.get("actor_ref")) or speaker
+            stripped_text(quest_evidence.get("actor_ref")) or speaker
         ) or "NPC"
         npc = {**npc, "speaker": speaker, "line": line}
     if _normalize(speaker) in _NON_NPC_SPEAKERS:
@@ -61,7 +62,7 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
         messages.append(
             {
                 "kind": "npc_dialogue",
-                "speaker_id": _text(npc.get("speaker_id") or npc.get("npc_id") or npc.get("id")) or None,
+                "speaker_id": stripped_text(npc.get("speaker_id") or npc.get("npc_id") or npc.get("id")) or None,
                 "speaker": speaker or "NPC",
                 "text": _normalize_dialogue_quotes(line),
             }
@@ -83,12 +84,12 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
             if fallback_contract:
                 narration = fallback_contract["narration"]
                 npc = fallback_contract["npc"]
-                speaker = _text(npc.get("speaker")) or "NPC"
-                line = _text(npc.get("line"))
+                speaker = stripped_text(npc.get("speaker")) or "NPC"
+                line = stripped_text(npc.get("line"))
                 messages = [
                     {
                         "kind": "npc_dialogue",
-                        "speaker_id": _text(npc.get("speaker_id")) or None,
+                        "speaker_id": stripped_text(npc.get("speaker_id")) or None,
                         "speaker": speaker,
                         "text": line,
                     }
@@ -115,7 +116,7 @@ def _canonical_visible_response(
         canonical = _dict(source.get("canonical_visible_response"))
         if not canonical:
             continue
-        narration = _text(canonical.get("narration"))
+        narration = stripped_text(canonical.get("narration"))
         if narration and _is_player_restatement(narration, player_input):
             narration = ""
         messages: list[dict[str, Any]] = []
@@ -123,10 +124,10 @@ def _canonical_visible_response(
             if not isinstance(item, dict):
                 continue
             speaker = _display_speaker(
-                _text(item.get("speaker") or item.get("speaker_id"))
+                stripped_text(item.get("speaker") or item.get("speaker_id"))
             )
             line = _dialogue_only(
-                _text(item.get("text") or item.get("line")),
+                stripped_text(item.get("text") or item.get("line")),
                 speaker,
             )
             if _normalize(speaker) in _NON_NPC_SPEAKERS:
@@ -138,7 +139,7 @@ def _canonical_visible_response(
             messages.append(
                 {
                     "kind": "npc_dialogue",
-                    "speaker_id": _text(
+                    "speaker_id": stripped_text(
                         item.get("speaker_id") or item.get("npc_id") or item.get("id")
                     )
                     or None,
@@ -172,7 +173,7 @@ def _canonical_visible_response(
 
 
 def visible_response_text(result: Any, fallback_command: str = "") -> str | None:
-    return _text(build_visible_response(result, fallback_command).get("plain_text")) or None
+    return stripped_text(build_visible_response(result, fallback_command).get("plain_text")) or None
 
 
 def _select_structured_response(
@@ -188,15 +189,15 @@ def _select_structured_response(
                 kind = _normalize(message.get("kind"))
                 if kind not in {"npc", "npc dialogue"}:
                     continue
-                speaker_id = _text(message.get("speaker_id"))
+                speaker_id = stripped_text(message.get("speaker_id"))
                 speaker = _display_speaker(
-                    _text(message.get("speaker") or speaker_id)
+                    stripped_text(message.get("speaker") or speaker_id)
                 )
                 line = _dialogue_only(
-                    _text(message.get("text") or message.get("line")),
+                    stripped_text(message.get("text") or message.get("line")),
                     speaker,
                 )
-                narration = _text(source.get("narration"))
+                narration = stripped_text(source.get("narration"))
                 if _normalize(speaker) in _NON_NPC_SPEAKERS:
                     continue
                 if line and _is_player_restatement(line, player_input):
@@ -210,10 +211,10 @@ def _select_structured_response(
                         "line": line,
                     }
         npc = _dict(source.get("npc"))
-        speaker = _text(npc.get("speaker") or npc.get("name"))
-        line = _text(npc.get("line") or npc.get("text") or npc.get("content"))
+        speaker = stripped_text(npc.get("speaker") or npc.get("name"))
+        line = stripped_text(npc.get("line") or npc.get("text") or npc.get("content"))
         line = _dialogue_only(line, speaker)
-        narration = _text(
+        narration = stripped_text(
             source.get("narration")
             or source.get("final_narration")
             or source.get("summary")
@@ -240,14 +241,14 @@ def _select_structured_response(
 def _dialogue_only(line: str, speaker: str) -> str:
     """Strip duplicated attribution/narration from an NPC speech field."""
 
-    text = _text(line).strip()
+    text = stripped_text(line).strip()
     if not text:
         return ""
-    prefix = f"{_text(speaker).strip()}:"
+    prefix = f"{stripped_text(speaker).strip()}:"
     if prefix != ":" and text.casefold().startswith(prefix.casefold()):
         text = text[len(prefix):].strip()
     normalized = text.replace("“", '"').replace("”", '"')
-    if speaker and normalized.casefold().startswith(_text(speaker).strip().casefold()):
+    if speaker and normalized.casefold().startswith(stripped_text(speaker).strip().casefold()):
         quoted = re.search(r'"([^"\r\n]+)"\s*$', normalized)
         if quoted:
             text = quoted.group(1).strip()
@@ -257,7 +258,7 @@ def _dialogue_only(line: str, speaker: str) -> str:
 
 
 def _display_speaker(value: str) -> str:
-    speaker = _text(value).strip()
+    speaker = stripped_text(value).strip()
     from_id = False
     while speaker.casefold().startswith("npc:"):
         speaker = speaker.split(":", 1)[1]
@@ -275,7 +276,7 @@ def _quest_evidence(sources: list[dict[str, Any]]) -> dict[str, Any]:
         if not transition:
             transition = _dict(_dict(source.get("service_application")).get("quest_transition"))
         evidence = _dict(transition.get("evidence"))
-        if _text(evidence.get("clue_summary")):
+        if stripped_text(evidence.get("clue_summary")):
             return evidence
     return {}
 
@@ -290,7 +291,7 @@ _GROUNDING_STOPWORDS = {
 def _grounding_tokens(value: str) -> set[str]:
     return {
         token
-        for token in re.findall(r"[a-z0-9]+", _text(value).casefold())
+        for token in re.findall(r"[a-z0-9]+", stripped_text(value).casefold())
         if len(token) > 2 and token not in _GROUNDING_STOPWORDS
     }
 
@@ -335,7 +336,7 @@ def _iter_sources(value: Any) -> Iterable[dict[str, Any]]:
 def _first_safe_text(sources: list[dict[str, Any]], player_input: str, *keys: str) -> str:
     for source in sources:
         for key in keys:
-            value = _text(source.get(key))
+            value = stripped_text(source.get(key))
             if value and not _is_player_restatement(value, player_input):
                 return value
     return ""
@@ -343,25 +344,25 @@ def _first_safe_text(sources: list[dict[str, Any]], player_input: str, *keys: st
 
 def _player_input(sources: Iterable[dict[str, Any]]) -> str:
     for source in sources:
-        direct = _text(source.get("player_input"))
+        direct = stripped_text(source.get("player_input"))
         if direct:
             return direct
         payload = _dict(source.get("input_payload"))
-        direct = _text(payload.get("player_input") or payload.get("command") or payload.get("content"))
+        direct = stripped_text(payload.get("player_input") or payload.get("command") or payload.get("content"))
         if direct:
             return direct
         context = _dict(source.get("narration_context"))
-        direct = _text(context.get("player_input"))
+        direct = stripped_text(context.get("player_input"))
         if direct:
             return direct
         request = _dict(source.get("narration_request"))
         request_context = _dict(request.get("narration_context"))
-        direct = _text(request_context.get("player_input"))
+        direct = stripped_text(request_context.get("player_input"))
         if direct:
             return direct
         diagnostics = _dict(source.get("first_call_grounding_diagnostics"))
         packet = _dict(diagnostics.get("turn_grounding_packet"))
-        direct = _text(packet.get("player_input"))
+        direct = stripped_text(packet.get("player_input"))
         if direct:
             return direct
     return ""
@@ -408,7 +409,7 @@ def _dedupe_paragraphs(paragraphs: Iterable[str]) -> str:
     out: list[str] = []
     seen: set[str] = set()
     for raw in paragraphs:
-        paragraph = _text(raw)
+        paragraph = stripped_text(raw)
         if not paragraph:
             continue
         key = _normalize(paragraph)
@@ -420,7 +421,7 @@ def _dedupe_paragraphs(paragraphs: Iterable[str]) -> str:
 
 
 def _normalize_dialogue_quotes(text: str) -> str:
-    value = _text(text).strip('"').strip()
+    value = stripped_text(text).strip('"').strip()
     value = value.replace("“", '"').replace("”", '"')
     value = re.sub(r",['’](?=\s)", ',"', value)
     value = re.sub(r"(?<=[.!?])['’](?=\s+[A-Z])", '"', value)
@@ -433,12 +434,10 @@ def _equivalent(left: str, right: str) -> bool:
 
 
 def _normalize(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", _text(value).casefold()).strip()
+    return re.sub(r"[^a-z0-9]+", " ", stripped_text(value).casefold()).strip()
 
 
 def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""

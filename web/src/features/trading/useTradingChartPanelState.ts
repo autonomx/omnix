@@ -135,19 +135,9 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
 
-  const [customRangeOpen, setCustomRangeOpen] = useState(false);
-
-  const [customRangeStart, setCustomRangeStart] = useState('');
-
-  const [customRangeEnd, setCustomRangeEnd] = useState('');
-
-  const [customRangeError, setCustomRangeError] = useState<string | null>(null);
-
   const [timezoneId, setTimezoneId] = useState(readTradingTimezoneId);
 
   const [timezoneMenuOpen, setTimezoneMenuOpen] = useState(false);
-
-  const customRangeRef = useRef<HTMLDivElement | null>(null);
 
   const timezoneMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -193,9 +183,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
     setIndicatorLegendCollapsed, compareDialogOpen, setCompareDialogOpen, hoveredIndicatorPane,
     setHoveredIndicatorPane, resizingIndicatorPane, setResizingIndicatorPane, settingsIndicator,
     setSettingsIndicator, selectedIndicator, setSelectedIndicator, selectedRangeLabel, setSelectedRangeLabel,
-    customRangeOpen, setCustomRangeOpen, customRangeStart, setCustomRangeStart, customRangeEnd, setCustomRangeEnd,
-    customRangeError, setCustomRangeError, timezoneId, setTimezoneId, timezoneMenuOpen, setTimezoneMenuOpen,
-    customRangeRef, timezoneMenuRef, rightOffset, setRightOffset, replayMarkerX, setReplayMarkerX,
+    timezoneId, setTimezoneId, timezoneMenuOpen, setTimezoneMenuOpen, timezoneMenuRef, rightOffset, setRightOffset, replayMarkerX, setReplayMarkerX,
     replaySelectionIndex, setReplaySelectionIndex, replaySelectionX,
     setReplaySelectionX, minimizedIndicators, setMinimizedIndicators, minimizedIndicatorsRef, fullscreenIndicator,
     setFullscreenIndicator, fullscreenIndicatorRef, fullscreenMainPane, setFullscreenMainPane, fullscreenMainPaneRef,

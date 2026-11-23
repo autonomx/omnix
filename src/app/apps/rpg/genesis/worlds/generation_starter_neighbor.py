@@ -10,6 +10,7 @@ from .starter_bubble import (
     build_starter_map_definitions,
     predictive_materialization_queue,
 )
+from .graph_audit import GraphAuditError
 
 
 @dataclass(frozen=True)
@@ -30,11 +31,8 @@ class StarterNeighborIssue:
         }
 
 
-class StarterNeighborCompilationError(ValueError):
-    def __init__(self, issues: Sequence[StarterNeighborIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.path}" for row in self.issues)
-        super().__init__("starter_neighbor_integrity_failed:" + rendered)
+class StarterNeighborCompilationError(GraphAuditError):
+    code = "starter_neighbor_integrity_failed"
 
 
 def _portal_targets(definition: Any) -> set[str]:

@@ -263,24 +263,11 @@ async def stoch_session_events(
     )
     session_end_et = session_start_et + timedelta(days=1)
     event_types = ("stoch_trend_capture_entry", "stoch_trend_execution")
-    if hasattr(strategy_repository, "events_by_types_between"):
-        return await asyncio.to_thread(
-            strategy_repository.events_by_types_between,
-            config.strategy_id,
-            event_types=event_types,
-            start_time=session_start_et.astimezone(timezone.utc),
-            end_time=session_end_et.astimezone(timezone.utc),
-            limit=2_000,
-        )
-    return [
-        event
-        for event in await asyncio.to_thread(
-            strategy_repository.recent_events,
-            config.strategy_id,
-            4_000,
-        )
-        if event.event_type in event_types
-        and session_start_et.astimezone(timezone.utc)
-        <= event.observed_at.astimezone(timezone.utc)
-        < session_end_et.astimezone(timezone.utc)
-    ]
+    return await asyncio.to_thread(
+        strategy_repository.events_by_types_between,
+        config.strategy_id,
+        event_types=event_types,
+        start_time=session_start_et.astimezone(timezone.utc),
+        end_time=session_end_et.astimezone(timezone.utc),
+        limit=2_000,
+    )

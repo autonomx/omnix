@@ -366,3 +366,18 @@ def test_latest_clean_bars_can_step_over_a_single_missing_bar():
     assert [item.start_time for item in latest_clean_bars(bars, **kwargs)] == [bar(8).start_time, bar(9).start_time]
     bridged = latest_clean_bars(bars, bridge_single_missing=True, **kwargs)
     assert [item.start_time for item in bridged] == [bar(index).start_time for index in (5, 6, 8, 9)]
+
+
+def test_trading_code_calls_the_shared_recovery_without_probing_for_it():
+    """Every market service has `recovered_bars`; a caller that probes for it grows a second, unreviewed fallback."""
+    from pathlib import Path
+    import re
+
+    root = Path(__file__).resolve().parents[2] / "app"
+    probe = re.compile(r"""(?:getattr|hasattr)\([^)]*["'](?:prefetch_)?recovered_bars["']""")
+    offenders = [
+        str(path.relative_to(root))
+        for path in root.rglob("*.py")
+        if probe.search(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []

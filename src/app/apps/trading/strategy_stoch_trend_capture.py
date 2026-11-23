@@ -34,7 +34,7 @@ from .indicators.engine import average_true_range
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, REGULAR_OPEN
 
 
 OVERSOLD = Decimal("20")
@@ -174,7 +174,7 @@ def _first_regular_data_gap(
 
     gaps: list[tuple[datetime, datetime]] = []
     if require_opening_bucket:
-        expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+        expected_open = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
         if regular[0].start_time != expected_open:
             gaps.append((expected_open, regular[0].start_time))
 
@@ -203,7 +203,7 @@ def _regular_data_gaps(
 
     gaps: list[tuple[datetime, datetime]] = []
     if require_opening_bucket:
-        expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+        expected_open = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
         if regular[0].start_time != expected_open:
             gaps.append((expected_open, regular[0].start_time))
     for previous, current in zip(regular, regular[1:]):
@@ -243,7 +243,7 @@ def _resolve_data_recovery(
         return [], source_gaps[0]
 
     source_gap = source_gaps[0]
-    expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    expected_open = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET)
     if source_gap[0] == expected_open:
         return [], source_gap
     if source_gap[1] - source_gap[0] != TREND_MAX_RECOVERABLE_SOURCE_GAP:

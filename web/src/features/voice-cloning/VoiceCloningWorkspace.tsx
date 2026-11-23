@@ -8,6 +8,7 @@ import { loadSettingsProfile, voiceStudioDefaults } from '../settings';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 import { CloneVoicePanel, VoiceLibraryGrid, voiceAssetId, voiceAssetName, type VoiceAsset } from '../voice';
+import { jobKeys } from '../../api/jobs';
 
 /**
  * The Voice Cloning sidebar module: the same clone panel and library as Voice Studio's
@@ -15,7 +16,7 @@ import { CloneVoicePanel, VoiceLibraryGrid, voiceAssetId, voiceAssetName, type V
  */
 export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
+  const jobsQuery = useQuery({ queryKey: jobKeys.all, queryFn: () => omnixApiClient.listJobs() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: () => loadSettingsProfile() });
   const defaults = useMemo(() => voiceStudioDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
@@ -28,7 +29,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
 
   async function refresh() {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+      queryClient.invalidateQueries({ queryKey: jobKeys.all }),
       queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
     ]);
   }

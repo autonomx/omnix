@@ -9,7 +9,7 @@ methods and its catalog bindings are LIVE_DATA purpose, never EXECUTION purpose.
 
 import hashlib
 from collections.abc import Callable
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -28,7 +28,7 @@ from app.apps.trading.models import (
     MarketBar,
     ProviderBinding,
 )
-from app.apps.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.us_equity_calendar import PREMARKET_OPEN, us_equity_session
 
 from .base import ProviderAdapter
 from .errors import ProviderContractError, ProviderDataUnavailableError
@@ -45,7 +45,6 @@ from .ibkr_runtime import (
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-_EXTENDED_OPEN = time(4, 0)
 _MAX_HISTORICAL_CHUNK = timedelta(days=1)
 
 
@@ -565,7 +564,7 @@ class IbkrEquityProvider(ProviderAdapter):
         if as_of.tzinfo is None:
             raise ValueError("IBKR indicator as_of must be timezone-aware")
         local = as_of.astimezone(_ET)
-        start = datetime.combine(local.date(), _EXTENDED_OPEN, tzinfo=_ET)
+        start = datetime.combine(local.date(), PREMARKET_OPEN, tzinfo=_ET)
         if as_of <= start:
             return []
         response = self.get_intraday_bars_range(

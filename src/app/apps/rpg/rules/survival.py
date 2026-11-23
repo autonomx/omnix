@@ -34,6 +34,14 @@ DEFAULT_SURVIVAL_TICK_RATES: Dict[str, int] = {
 
 
 _NEED_KEYS = ("hunger", "thirst", "fatigue")
+# A need presses from here, and is critical from here; the play screen shows these levels and holds no numbers.
+NEED_WARNING_AT = 60
+NEED_CRITICAL_AT = 85
+
+
+def need_level(value: int) -> str:
+    """How pressing a need of ``value`` is: ``critical``, ``warning`` or ``stable``."""
+    return "critical" if value >= NEED_CRITICAL_AT else "warning" if value >= NEED_WARNING_AT else "stable"
 
 
 def _safe_bool(value: Any, default: bool = True) -> bool:

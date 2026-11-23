@@ -7,12 +7,13 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
 
+from app.providers.model_route import model_name_of
 from app.providers import service as provider_service
 from app.providers import ChatMessage as ProviderMessage
 
 from .camera_glance import CameraShareLook, proactive_camera_note
 from .models import ChatMessage, ChatSession
-from .store import _model_key, _provider_key, _pop_ready_sentences
+from .store import _provider_key, _pop_ready_sentences
 from app.prompts import prompt_template
 
 
@@ -97,7 +98,7 @@ def stream_live_call_greeting_chunks(
         ProviderMessage(role=message.role, content=message.content)
         for message in provider_messages
     ]
-    model_name = _model_key(resolved_model_id)
+    model_name = model_name_of(resolved_model_id) or None
     response = provider.chat_completion(messages=messages, model=model_name, stream=True)
 
     pending = ""

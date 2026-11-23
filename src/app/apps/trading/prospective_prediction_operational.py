@@ -14,14 +14,13 @@ Authority boundaries remain explicit:
 - post-close recovered truth never rewrites prior live knowledge.
 """
 
-import hashlib
-import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .canonical import canonical_sha256, require_utc
 from .gapper_dataset import GapperCandidate
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import (
@@ -51,7 +50,7 @@ from .prospective_prediction_v4 import (
 from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
-from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET, PREMARKET_OPEN, REGULAR_OPEN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
@@ -71,18 +70,6 @@ IMPORTANT_PREMARKET_FEATURES = (
     "late_premarket_acceleration",
     "late_premarket_volume_share",
 )
-
-
-def _hash(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
-
-
-def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("timestamp_must_be_timezone_aware")
-    return value.astimezone(timezone.utc)
 
 
 class OperationalPremarketState(BaseModel):
@@ -123,7 +110,7 @@ def load_operational_premarket_state(
 
     warnings: list[str] = []
     bars: Sequence[MarketBar] = ()
-    knowledge_cutoff = min(_utc(prediction_cutoff_at), _utc(frozen_at))
+    knowledge_cutoff = min(require_utc(prediction_cutoff_at), require_utc(frozen_at))
     coverage_ratio: Decimal | None = None
     unresolved_gap_count = 0
     latest_bar_lag_seconds: int | None = None
@@ -133,7 +120,7 @@ def load_operational_premarket_state(
     if callable(recovered_window):
         premarket_start = datetime.combine(
             cohort.session_date,
-            time(4, 0),
+            PREMARKET_OPEN,
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         try:
@@ -298,7 +285,7 @@ def raw_5m_fallback_analysis_prices(
     if len(instrument_ids) != 1:
         raise ValueError("raw_5m_fallback_requires_single_instrument")
 
-    session_start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    session_start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     session_end = datetime.combine(
         session_date,
         regular_close_time(session_date),
@@ -323,7 +310,7 @@ def raw_5m_fallback_analysis_prices(
     first = regular[0]
     last = regular[-1]
     policy_version = RAW_5M_FALLBACK_PRICE_VERSION
-    reconciliation = _hash(
+    reconciliation = canonical_sha256(
         [
             (
                 bar.provider,
@@ -385,7 +372,7 @@ def build_operational_formal_outcome(
         authority = "DIRECT_SIP_TRADES"
 
     measurements, labels = build_formal_outcome_labels(prices=prices, bars=canonical)
-    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    start = datetime.combine(session_date, REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
     end = datetime.combine(
         session_date,
         regular_close_time(session_date),
@@ -418,27 +405,25 @@ def load_operational_formal_outcome(
     prices: AnalysisSessionPrices | None = None,
 ) -> FormalOutcomeBundle:
     bars: tuple[MarketBar, ...] = ()
-    recovered = getattr(market_service, "recovered_bars", None)
-    if callable(recovered):
-        close_at = datetime.combine(
-            session_date,
-            regular_close_time(session_date),
-            tzinfo=_ET,
-        ).astimezone(timezone.utc)
-        try:
-            result = recovered(
-                candidate.instrument_id,
-                "5m",
-                500,
-                candidate.binding_id,
-                session_date=session_date,
-                as_of=close_at,
-                knowledge_mode="retroactive_research",
-                knowledge_cutoff=close_at,
-            )
-            bars = tuple(result.bars)
-        except Exception:
-            bars = ()
+    close_at = datetime.combine(
+        session_date,
+        regular_close_time(session_date),
+        tzinfo=_ET,
+    ).astimezone(timezone.utc)
+    try:
+        result = market_service.recovered_bars(
+            candidate.instrument_id,
+            "5m",
+            500,
+            candidate.binding_id,
+            session_date=session_date,
+            as_of=close_at,
+            knowledge_mode="retroactive_research",
+            knowledge_cutoff=close_at,
+        )
+        bars = tuple(result.bars)
+    except Exception:
+        bars = ()
     if not bars:
         response = market_service.bars(
             candidate.instrument_id,
@@ -473,7 +458,7 @@ class OperationalConfirmationEvaluation(BaseModel):
     @field_validator("observed_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 _STRUCTURE_STATES = {"discovered", "qualified_gap", "opening_impulse"}
@@ -538,7 +523,7 @@ def evaluate_operational_confirmation(
 ) -> OperationalConfirmationEvaluation:
     """Map the existing deterministic failed-selloff evaluator into v4 actionability."""
 
-    observed_at = _utc(observed_at)
+    observed_at = require_utc(observed_at)
     finalized = tuple(
         sorted(
             (bar for bar in bars if bar.is_final and bar.end_time <= observed_at),
@@ -680,7 +665,7 @@ class ShadowPortfolioPosition(BaseModel):
     @field_validator("authorization_decision_at")
     @classmethod
     def aware(cls, value: datetime) -> datetime:
-        return _utc(value)
+        return require_utc(value)
 
 
 class CashPreservingShadowPortfolio(BaseModel):

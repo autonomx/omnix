@@ -59,7 +59,7 @@ def test_production_gateway_boots_with_only_trading(trading_only_environment):
 OTHER_FEATURES = (
     "app.apps.rpg", "app.apps.story", "app.apps.audiobook", "app.apps.desktop_companion",
     "app.apps.character_interactions", "app.platform.image", "app.platform.research", "app.platform.characters",
-    "app.platform.live_speech", "app.platform.companion_activity", "app.providers.vendor",
+    "app.platform.companion_activity", "app.providers.vendor",
 )
 DECLARATIONS = {"app.apps.rpg", "app.apps.rpg.declarations", "app.apps.story", "app.apps.story.declarations"}
 _BOOT = """

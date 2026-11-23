@@ -13,7 +13,7 @@ from typing import Any, cast
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .execution import ExecutionObservation
 from .order_gateway import OrderGateway
 from .providers.request_budget import in_provider_lane
@@ -52,14 +52,7 @@ def _uses_margin(snapshot: PaperAccountSnapshot) -> bool:
     return leveraged or any(position.quantity < 0 for position in snapshot.positions)
 
 
-def _env_flag(name: str, default: str = "1") -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def trading_paper_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _env_flag("OMNIX_TRADING_PAPER_MONITOR_IN_TESTS", "0")
-    return _env_flag("OMNIX_TRADING_PAPER_MONITOR", "1")
+trading_paper_monitor_enabled = monitor_switch("OMNIX_TRADING_PAPER_MONITOR")
 
 
 def _interval_seconds() -> float:

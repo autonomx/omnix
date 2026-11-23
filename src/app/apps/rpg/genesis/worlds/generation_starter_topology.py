@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from .generation_starter_bubble_support import derive_starter_bubble
 from .starter_bubble import StarterBubblePlan
+from .graph_audit import GraphAuditError
 
 
 @dataclass(frozen=True)
@@ -26,11 +27,8 @@ class StarterTopologyIssue:
         }
 
 
-class StarterTopologyCompilationError(ValueError):
-    def __init__(self, issues: Sequence[StarterTopologyIssue]) -> None:
-        self.issues = tuple(issues)
-        rendered = ";".join(f"{row.code}:{row.path}" for row in self.issues)
-        super().__init__("starter_topology_integrity_failed:" + rendered)
+class StarterTopologyCompilationError(GraphAuditError):
+    code = "starter_topology_integrity_failed"
 
 
 def _plan_issues(plan: StarterBubblePlan) -> tuple[StarterTopologyIssue, ...]:

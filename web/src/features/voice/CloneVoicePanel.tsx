@@ -5,10 +5,11 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type JobRecord } from '../../api/client';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { useAudioToolsStatus } from './AudioToolsTool';
-import { jobSettled, useJobResult } from './useJobResult';
 import { blobToDataUrl, formatBytes } from './voiceAssets';
 import { sampleCheckWarnings, transcriptFromJob, voiceJobErrorMessage } from './voiceOutputs';
 import './VoiceStudioWorkspace.css';
+import { useJob } from '../../shared/useJob';
+import { isJobSettled } from '../../api/jobs';
 
 interface VoiceCloneFormValues {
   providerId: string;
@@ -131,8 +132,8 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
     onSuccess: setCloneRun,
   });
 
-  const cloneJob = useJobResult(cloneRun?.jobId ?? '');
-  const settledClone = jobSettled(cloneJob.data) ? cloneJob.data : undefined;
+  const cloneJob = useJob(cloneRun?.jobId ?? '');
+  const settledClone = isJobSettled(cloneJob.data?.status) ? cloneJob.data : undefined;
   const cloning = cloneMutation.isPending || (Boolean(cloneRun) && !settledClone);
   const cloneFailure = settledClone && settledClone.status !== 'completed' ? cloneFailureMessage(settledClone) : '';
 
@@ -179,8 +180,8 @@ export function CloneVoicePanel({ defaults, onFinished, seed }: { defaults: Clon
   });
 
   // The job answers for the sample it was queued with; a different sample drops it.
-  const transcribeJob = useJobResult(transcription?.sample === selectedSample ? transcription.jobId : '');
-  const settledJob = jobSettled(transcribeJob.data) ? transcribeJob.data : undefined;
+  const transcribeJob = useJob(transcription?.sample === selectedSample ? transcription.jobId : '');
+  const settledJob = isJobSettled(transcribeJob.data?.status) ? transcribeJob.data : undefined;
   const transcript = settledJob?.status === 'completed' ? transcriptFromJob(settledJob) : '';
   const transcribing = transcribeMutation.isPending || (transcription?.sample === selectedSample && !settledJob);
   const transcribeFailure = !settledJob || transcript ? '' : transcribeFailureMessage(settledJob);

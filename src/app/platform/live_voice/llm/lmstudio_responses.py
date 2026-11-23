@@ -9,6 +9,8 @@ without bound. Turns carrying ephemeral external/retrieved context are never
 remembered for a later continuation.
 """
 from __future__ import annotations
+from app.providers.model_route import model_name_of
+from app.conversation.contracts import is_live_voice_message
 from app.config.env import env_str as _env_str
 
 import hashlib
@@ -23,7 +25,6 @@ from typing import Any
 from app.conversation.sound_tags import strip_sound_tags
 from app.platform.chat.contracts import (
     merge_provider_response_metrics,
-    model_key,
     provider_turn_deadline,
     remaining_turn_seconds,
 )
@@ -70,17 +71,6 @@ def stateful_responses_enabled() -> bool:
         "yes",
         "on",
     }
-
-
-def _is_live_voice_user_message(user_message: Any) -> bool:
-    metadata = getattr(user_message, "metadata", None)
-    if not isinstance(metadata, dict):
-        return False
-    user_turn_id = str(metadata.get("user_turn_id") or "").strip()
-    speech_segment_id = str(metadata.get("speech_segment_id") or "").strip()
-    return user_turn_id.startswith("voice-user-turn:") or speech_segment_id.startswith(
-        "voice-segment:"
-    )
 
 
 def _state_ttl_seconds() -> float:
@@ -504,7 +494,7 @@ def _stream_stateful_lmstudio_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    requested_model = model_key(model_id)
+    requested_model = model_name_of(model_id) or None
     resolved_model, _ = _resolve_current_model(provider, requested_model)
     session_id = str(getattr(session, "id", "") or "").strip()
     previous_response_id, state_reason, prior_continuation_count, rolled_off = (
@@ -712,7 +702,7 @@ def stream_lmstudio_reply(
     }
     if (
         not stateful_responses_enabled()
-        or not _is_live_voice_user_message(user_message)
+        or not is_live_voice_message(user_message)
         or not isinstance(provider, LMStudioProvider)
     ):
         yield from fallback_stream(self, session, user_message, **fallback_kwargs)

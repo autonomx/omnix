@@ -2,12 +2,12 @@ from __future__ import annotations
 
 """Post-close learning and qualification for dynamic discovery."""
 
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, datetime
 from statistics import median
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from .strategy_dynamic_discovery import (
     AttributionEvent,

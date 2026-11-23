@@ -21,8 +21,9 @@ from typing import Any, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.providers.model_route import model_name_of, model_provider_of
 from app.providers.base import BaseProvider, ChatMessage
-from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports, provider_id_of
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputGateway,
@@ -214,20 +215,8 @@ class PlanSemanticReviewer(Protocol):
 
 
 def _provider_key(value: str | None) -> str:
-    text = str(value or "").strip()
-    if text.startswith("llm:"):
-        return text.split(":", 1)[1].split(":", 1)[0]
-    return text
-
-
-def _model_key(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    parts = text.split(":", 2)
-    if len(parts) == 3 and parts[0] == "llm":
-        return parts[2] or None
-    return text
+    """The provider of an id or of an ``llm:<provider>:<model>`` route."""
+    return model_provider_of(value) or provider_id_of(value)
 
 
 def _usage_token(usage: Any, *names: str) -> int | None:
@@ -565,7 +554,7 @@ class ProviderPlanSemanticReviewer:
         self.provider = provider
         self.provider_id = provider_id
         self.provider_name = _provider_key(provider_id)
-        self.model_id = _model_key(model_id) or str(getattr(getattr(provider, "config", None), "model", "") or "")
+        self.model_id = model_name_of(model_id) or str(getattr(getattr(provider, "config", None), "model", "") or "")
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = max(1.0, min(float(timeout_seconds), 300.0))
 

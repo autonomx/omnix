@@ -197,7 +197,6 @@ src/app/
 ├─ gateway/             browser-facing FastAPI gateway
 ├─ image/               image provider/API domain
 ├─ jobs/                shared job/run infrastructure
-├─ live_speech/         live-speech support
 ├─ persistence/         PostgreSQL adapters/transaction policy
 ├─ platform/            settings, diagnostics, reports, compatibility projections
 ├─ providers/           provider/model abstractions and adapters

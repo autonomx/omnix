@@ -352,3 +352,33 @@ test('chart layout picker applies TradingView-style templates', async ({ page })
   await expect(page.locator('.trading-chart-grid')).toHaveClass(/layout-main-left-3/);
   await expect(page.locator('.trading-chart-grid-cell')).toHaveCount(3);
 });
+
+test('custom date range refuses dates outside the loaded history and closes on an outside press', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  const trigger = page.getByRole('button', { name: 'Select custom date range' }).first();
+  const popover = page.locator('.trading-custom-range-popover');
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  await popover.getByLabel('From').fill('2025-12-01');
+  await popover.getByLabel('To').fill('2026-01-03');
+  // A click, not Enter: the footer's popover must sit above an open indicator pane's resize handle.
+  await popover.getByRole('button', { name: 'Apply' }).click();
+  await expect(popover.getByRole('alert')).toContainText('Requested dates are outside loaded history');
+
+  await popover.getByLabel('From').fill('2026-01-02');
+  await popover.getByLabel('From').press('Enter');
+  await expect(popover).toHaveCount(0);
+  await expect(trigger).toHaveAttribute('aria-pressed', 'true');
+
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  await page.mouse.click(2, 2);
+  await expect(popover).toHaveCount(0);
+
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  await page.locator('.trading-timezone-trigger').first().click();
+  await expect(popover).toHaveCount(0);
+});

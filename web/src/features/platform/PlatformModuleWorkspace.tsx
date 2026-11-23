@@ -17,9 +17,10 @@ import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel }
 import type { OmnixEventConnectionStatus } from '../../events/eventClient';
 import { useEventConnectionStatus, useJobEventRefresh } from '../../events/useJobEvents';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { jobKeys } from '../../api/jobs';
 
-const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
-const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
+const jobsEventQueryKeys: QueryKey[] = [jobKeys.all, ['platform', 'diagnostics']];
+const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], jobKeys.all];
 const artifactEventQueryKeys: QueryKey[] = [['platform', 'assets'], ['platform', 'reports']];
 // Platform lists load one cursor page at a time (WP-5.5) instead of every row.
 const JOB_PAGE_SIZE = 50;
@@ -28,7 +29,7 @@ const ASSET_PAGE_SIZE = 60;
 const providerModelEventQueryKeys: QueryKey[] = [
   ['platform', 'providers'],
   ['platform', 'models'],
-  ['platform', 'jobs'],
+  jobKeys.all,
   ['platform', 'diagnostics'],
 ];
 
@@ -174,7 +175,7 @@ function JobsView() {
   const eventStatus = useEventConnectionStatus();
   useJobEventRefresh(jobsEventQueryKeys);
   const query = useInfiniteQuery({
-    // Other workspaces cache the plain jobs list under ['platform', 'jobs']; invalidating that prefix refreshes these pages too.
+    // Other workspaces cache the plain jobs list under jobKeys.all; invalidating that prefix refreshes these pages too.
     queryKey: ['platform', 'jobs', 'pages'],
     queryFn: ({ pageParam }) => omnixApiClient.listJobs({ limit: JOB_PAGE_SIZE, cursor: pageParam }),
     initialPageParam: null as string | null,
@@ -183,7 +184,7 @@ function JobsView() {
   const jobs = query.data?.pages.flatMap((page) => page.jobs) ?? [];
   const cancelMutation = useMutation({
     mutationFn: (jobId: string) => omnixApiClient.cancelJob(jobId, 'Canceled from Omnix web Jobs module'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: jobKeys.all }),
   });
 
   return (

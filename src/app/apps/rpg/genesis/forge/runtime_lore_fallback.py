@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from .campaign_lore_store import _text
 from .runtime_lore_materialization import SceneLoreTarget, _name_from_id, _slug, canonical_lore_topic_id
 from .world_forge_dossiers import project_entity_dossier, validate_entity_dossier
+from app.apps.rpg.foundation.safe_values import clean_text
 
 
 def _stable_choices(
@@ -246,7 +246,7 @@ def fallback_entity_bundle(target: SceneLoreTarget, location_name: str = "") -> 
         card_type=canonical_lore_topic_id(kind),
         entity_id=target.entity_id,
     )
-    entity["short_summary"] = _text(entity.get("short_summary")) or short_summary
+    entity["short_summary"] = clean_text(entity.get("short_summary")) or short_summary
     if validate_entity_dossier(entity.get("dossier")):
         entity["dossier"] = dossier
     return {

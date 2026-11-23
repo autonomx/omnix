@@ -16,9 +16,9 @@ from .campaign_lore_store import (
     _mapping,
     _portable_bible,
     _save_portable_projection,
-    _text,
 )
 from .npc_lore_projection import encountered_npc_ids, ensure_encountered_npc_lore
+from app.apps.rpg.foundation.safe_values import clean_text
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -57,7 +57,7 @@ def sync_encountered_npc_lore(
             "persisted": True,
             "campaign_id": campaign_id,
             "revision": int(projection.get("canon_revision") or 0),
-            "content_hash": _text(projection.get("content_hash")),
+            "content_hash": clean_text(projection.get("content_hash")),
             "encountered_npc_ids": list(ensured),
             "created_npc_ids": [],
             "changed": False,
@@ -76,8 +76,8 @@ def sync_encountered_npc_lore(
                     title=_campaign_title(session, campaign_id),
                     state=deepcopy(_mapping(session.get("state"))),
                     engine_version="rpg-npc-lore-sync-v1",
-                    schema_version=_text(manifest.get("schema_version")) or "rpg-session-v1",
-                    seed=_text(manifest.get("seed") or setup.get("seed")) or "0",
+                    schema_version=clean_text(manifest.get("schema_version")) or "rpg-session-v1",
+                    seed=clean_text(manifest.get("seed") or setup.get("seed")) or "0",
                     metadata={"source": "encountered_npc_profile_sync_v1"},
                 )
             current = work.campaign_bibles.get(context, campaign_id, for_update=True)

@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
+from app.jobs.handlers import JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.settings.effective_defaults import apply_job_defaults
 from app.runtime.features import FeatureContext, FeatureModule
 
-from .jobs import PodcastGenerateInput, StoryGenerateInput, execute_story_job
+from .jobs import PodcastGenerateInput, StoryGenerateInput, run_story_job
 from .asset_save import (
     SaveStoryAssetRequest,
     SavedStoryAssetResponse,
@@ -31,10 +31,6 @@ def _story_asset_router(context: FeatureContext) -> APIRouter:
     return router
 
 
-def _execute(context: JobExecutionContext, job):
-    return execute_story_job(context.job_store, job)
-
-
 def _submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
     return CreateJobRequest.model_validate(
         apply_job_defaults(request.model_dump(mode="python"))
@@ -49,7 +45,8 @@ FEATURE = FeatureModule(
     job_handlers=(
         JobHandlerSpec(
             type="story.generate",
-            handler=_execute,
+            run=run_story_job,
+            failure_code="story_job_failed",
             input_model=StoryGenerateInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=900,
@@ -57,7 +54,8 @@ FEATURE = FeatureModule(
         ),
         JobHandlerSpec(
             type="podcast.generate",
-            handler=_execute,
+            run=run_story_job,
+            failure_code="story_job_failed",
             input_model=PodcastGenerateInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=900,

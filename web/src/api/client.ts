@@ -3,7 +3,7 @@ import { ApiError, ApiTimeoutError } from './errors';
 import { createGatewayClient, sendGatewayCall, type GatewayClient } from './http';
 import { pipelineFetch } from './fetchPipeline';
 
-export { ApiError, ApiTimeoutError } from './errors';
+export { ApiError, ApiTimeoutError, GatewayCallError, errorStatus, isConflict } from './errors';
 
 export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;

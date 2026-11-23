@@ -8,7 +8,6 @@ from .catalyst_discovery import discover_yahoo_catalyst_headlines
 from .catalyst_repository import TradingCatalystRepository
 from .gapper_dataset import GapperUniverseSnapshot, freeze_gapper_universe
 from .finviz_gapper_discovery import (
-    FINVIZ_ATOMIC_SOURCE_LOCATOR,
     discover_finviz_gappers,
 )
 from .gapper_discovery import discover_yahoo_gappers
@@ -17,7 +16,7 @@ from .strategy_data_integrity import assess_universe_integrity
 from .strategy_evaluability import assess_session_evaluability
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
-from .us_equity_calendar import regular_holidays
+from .us_equity_calendar import is_trading_day
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import regular_close_time
 
@@ -164,7 +163,7 @@ def archive_daily_universe_if_due(
     if observed.tzinfo is None:
         raise ValueError("strategy universe archive clock must be timezone-aware")
     now_et = observed.astimezone(_ET)
-    if now_et.weekday() >= 5 or now_et.date() in regular_holidays(now_et.year):
+    if not is_trading_day(now_et.date()):
         return None
     scan_start = datetime.combine(
         now_et.date(),

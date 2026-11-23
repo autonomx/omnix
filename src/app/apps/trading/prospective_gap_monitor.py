@@ -6,7 +6,6 @@ post-open confirmation and deterministic post-close finalization.
 
 from __future__ import annotations
 
-from app.config.env import environment
 
 import asyncio
 from datetime import date, datetime, time, timedelta, timezone
@@ -14,9 +13,9 @@ from datetime import date, datetime, time, timedelta, timezone
 from app.runtime.features import FeatureContext
 
 
-from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask, monitor_switch
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
-from .us_equity_calendar import regular_holidays
+from .us_equity_calendar import REGULAR_OPEN, is_trading_day
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import regular_close_time
 
@@ -26,14 +25,7 @@ _PREMARKET_HANDOFF_INGEST_START = time(9, 24)
 _PREMARKET_HANDOFF_INGEST_END = time(9, 27, 59)
 
 
-def _flag(name: str, default: str) -> bool:
-    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def prospective_gap_monitor_enabled() -> bool:
-    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR", "1")
+prospective_gap_monitor_enabled = monitor_switch("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR")
 
 
 class ProspectiveGapMonitor(ScheduledTradingMonitor):
@@ -63,7 +55,7 @@ class ProspectiveGapMonitor(ScheduledTradingMonitor):
         observed = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         local = observed.astimezone(_ET)
         self.last_run_at = observed
-        if local.weekday() >= 5 or local.date() in regular_holidays(local.year):
+        if not is_trading_day(local.date()):
             return 0
 
         runtime: ProspectiveGapRuntime = self.runtime_factory()
@@ -92,7 +84,7 @@ class ProspectiveGapMonitor(ScheduledTradingMonitor):
                     self._no_session_reported_dates.add(local.date())
                 return 0
 
-        if time(9, 30) <= clock <= time(11, 35):
+        if REGULAR_OPEN <= clock <= time(11, 35):
             await asyncio.to_thread(
                 runtime.run_confirmation,
                 session_date=local.date(),
