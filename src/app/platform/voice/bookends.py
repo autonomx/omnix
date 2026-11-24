@@ -26,6 +26,8 @@ _LEVEL_FLOOR_DBFS = -45.0
 # Room tone is barely there: it fills the digital silence between lines so pauses sound like a room.
 ROOM_TONE_RMS_DBFS = -60.0
 ROOM_TONE_SEED = 20261124
+# The room tone is one tile of noise repeated (see ``room_tone``).
+ROOM_TONE_TILE_SECONDS = 30.0
 # Silence between the sting and the first line, and between the last line and the closing sting.
 INTRO_GAP_SECONDS = 0.4
 OUTRO_GAP_SECONDS = 0.8
@@ -95,16 +97,22 @@ def sting(rate: int, *, rising: bool = True, peak_dbfs: float = STING_PEAK_DBFS)
 
 
 def room_tone(length: int, rate: int) -> np.ndarray:
-    """Seeded, darkened noise at ``ROOM_TONE_RMS_DBFS`` RMS (energy mostly under ~1 kHz, like a quiet room)."""
+    """Seeded, darkened noise at ``ROOM_TONE_RMS_DBFS`` RMS (energy mostly under ~1 kHz, like a quiet room).
+
+    It is made once as a tile of at most ``ROOM_TONE_TILE_SECONDS`` and repeated: filtering in the frequency domain
+    is circular, so the tile loops without a seam, and an hour-long episode no longer transforms an hour of noise
+    (gigabytes of spectra)."""
     if length <= 0:
         return np.zeros(0, dtype=np.float64)
-    noise = np.random.default_rng(ROOM_TONE_SEED).standard_normal(length)
+    tile_length = min(length, max(1, int(rate * ROOM_TONE_TILE_SECONDS)))
+    noise = np.random.default_rng(ROOM_TONE_SEED).standard_normal(tile_length)
     spectrum = np.fft.rfft(noise)
-    frequencies = np.fft.rfftfreq(length, 1.0 / rate)
+    frequencies = np.fft.rfftfreq(tile_length, 1.0 / rate)
     spectrum *= 1.0 / (1.0 + (frequencies / 900.0) ** 2)
-    tone = np.fft.irfft(spectrum, n=length)
-    rms = float(np.sqrt(np.mean(tone ** 2))) or 1.0
-    return tone * (_db_to_amplitude(ROOM_TONE_RMS_DBFS) / rms)
+    tile = np.fft.irfft(spectrum, n=tile_length)
+    rms = float(np.sqrt(np.mean(tile ** 2))) or 1.0
+    tile *= _db_to_amplitude(ROOM_TONE_RMS_DBFS) / rms
+    return tile if tile_length == length else np.resize(tile, length)
 
 
 def add_bookends(wav_bytes: bytes, *, stings: bool, tone: bool) -> Bookended:

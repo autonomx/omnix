@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../../events/bus';
 import {
   initializeLiveCallRecap,
   LIVE_CALL_RECAP_DELAY_MS,
@@ -52,6 +52,7 @@ function startCall(queryClient: QueryClient): void {
   dispose = initializeLiveCallRecap(queryClient);
   emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, { token: 1, timestamp: STARTED_AT });
   liveConversationStore.dispatch({ type: 'session', sessionId: 's1' });
+  emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, { token: 1, timestamp: STARTED_AT, chatSessionId: 's1' });
 }
 
 describe('call recap', () => {
@@ -88,5 +89,22 @@ describe('call recap', () => {
     emitOmnixEvent(ASSISTANT_LIVE_VOICE_STOP_EVENT);
     await vi.advanceTimersByTimeAsync(LIVE_CALL_RECAP_DELAY_MS);
     expect(calls).toHaveLength(1);
+  });
+
+  it("recaps into the call's chat when selecting another chat is what ended it", async () => {
+    startCall(new QueryClient());
+    liveConversationStore.dispatch({ type: 'session', sessionId: 's2' });
+    emitOmnixEvent(ASSISTANT_LIVE_VOICE_STOP_EVENT);  // the controller ends the call after the selection moved
+    await vi.advanceTimersByTimeAsync(LIVE_CALL_RECAP_DELAY_MS);
+    expect(calls.map((call) => call.path)).toEqual([RECAP_PATH]);
+  });
+
+  it('asks nothing for a start that never connected', async () => {
+    dispose = initializeLiveCallRecap(new QueryClient());
+    liveConversationStore.dispatch({ type: 'session', sessionId: 's1' });
+    emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, { token: 1, timestamp: STARTED_AT });
+    emitOmnixEvent(ASSISTANT_LIVE_VOICE_STOP_EVENT);  // e.g. leaving Chat after the microphone was refused
+    await vi.advanceTimersByTimeAsync(LIVE_CALL_RECAP_DELAY_MS);
+    expect(calls).toHaveLength(0);
   });
 });

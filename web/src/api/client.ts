@@ -6,6 +6,19 @@ import { pipelineFetch } from './fetchPipeline';
 export { ApiError, ApiTimeoutError, GatewayCallError, errorStatus, isConflict } from './errors';
 
 export type GatewayApiPaths = paths;
+
+/**
+ * Marks a sent message that reads a shared camera's or screen's glance. The glance is held by the gateway process
+ * that described it, so the proxies send such a message where the glance went (`shared_picture_header` in
+ * deploy/gateway-route-policy.json).
+ */
+export const SHARED_PICTURE_HEADER = 'X-Omnix-Shared-Picture';
+
+export function sharedPictureHeaders(
+  request: { camera_shared?: boolean | null; screen_shared?: boolean | null },
+): Record<string, string> | undefined {
+  return request.camera_shared === true || request.screen_shared === true ? { [SHARED_PICTURE_HEADER]: '1' } : undefined;
+}
 export type GatewayApiPath = keyof GatewayApiPaths & string;
 export type AssetLegacyImportDryRun = components['schemas']['PublicAssetLegacyImportDryRun'];
 export type AssetListResponse = components['schemas']['PublicAssetListResponse'];
@@ -125,7 +138,9 @@ export class OmnixApiClient {
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
     return this.call(
-      (signal) => this.api.POST('/api/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
+      (signal) => this.api.POST('/api/chat/sessions/{session_id}/messages', {
+        params: { path: { session_id: sessionId } }, body: request, headers: sharedPictureHeaders(request), signal,
+      }),
       { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
     );
   }

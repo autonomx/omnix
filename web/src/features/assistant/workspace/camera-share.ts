@@ -143,8 +143,9 @@ function glanceAsPersonBegins(sessionId: string, minGapMs: number): void {
 
 /** Sends one frame for this chat's next turn. Returns whether it is being described. */
 export async function glanceCameraShare(sessionId: string): Promise<boolean> {
-  if (!cameraShared() || !video) return false;
-  const image = cameraFrameFrom(video, CAMERA_SHARE_LONGEST_SIDE);
+  const shared = video;
+  if (!cameraShared() || !shared) return false;
+  const image = cameraFrameFrom(shared, CAMERA_SHARE_LONGEST_SIDE);
   if (!image) return false;
   lastGlance = { sessionId, at: Date.now() };
   let status: GlanceStatus;
@@ -161,6 +162,8 @@ export async function glanceCameraShare(sessionId: string): Promise<boolean> {
   }
   const unavailable = UNAVAILABLE[status];
   if (unavailable) {
+    // A camera turned on again while this answer was on its way is another share; this answer is not about it.
+    if (video !== shared) return false;
     // The assistant cannot see the camera: it is turned off rather than left on unseen.
     stopCameraShare();
     setState({ phase: 'error', error: unavailable });

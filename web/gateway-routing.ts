@@ -9,6 +9,9 @@ import routingPolicy from '../deploy/gateway-route-policy.json';
 const PREFIX = '/__omnix_gateway_replica_';
 const CHAT = new RegExp(routingPolicy.chat_pattern, 'u');
 const LIVE_CHAT = new RegExp(routingPolicy.live_chat_pattern, 'u');
+// A sent message carrying a shared camera or screen reads its glance, so it goes where the glance went.
+const PICTURE_TURN = new RegExp(routingPolicy.picture_turn_pattern, 'u');
+const SHARED_PICTURE_HEADER = routingPolicy.shared_picture_header;
 const SPEECH = new Set(routingPolicy.speech_paths);
 const LIVE_CALL_WEBSOCKET = routingPolicy.live_call_websocket_path;
 // Held per gateway process by the call's TTS websocket, so these must reach the same replica.
@@ -62,6 +65,9 @@ export function canUseApi(
   const path = (req.url ?? '').split('?')[0];
   const callAffinity = callAffinityKey(req.headers);
   if ((req.method ?? 'GET') === 'POST' && LIVE_CHAT.test(path)) return speechOnApi && Boolean(callAffinity);
+  if ((req.method ?? 'GET') === 'POST' && PICTURE_TURN.test(path) && req.headers[SHARED_PICTURE_HEADER] === '1') {
+    return speechOnApi && Boolean(callAffinity);
+  }
   if (path === LIVE_CALL_WEBSOCKET || LIVE_CALL_BOUND.test(path)) return speechOnApi && Boolean(callAffinity);
   return CHAT.test(path) || (speechOnApi && SPEECH.has(path))
     || (routingPolicy.read_methods.includes(req.method ?? 'GET') && READS.test(path));

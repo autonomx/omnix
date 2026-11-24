@@ -1,9 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { unwrap } from '../../../api/http';
-import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT } from '../../../events/bus';
+import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT } from '../../../events/bus';
 import { api } from '../api/gateway';
-import { liveConversationStore } from './live-conversation-store';
 
 /**
  * Call recap (D3): when a call stops, ask the server for its recap. The server decides whether the call was long
@@ -59,13 +58,13 @@ export function initializeLiveCallRecap(queryClient: QueryClient): () => void {
     callStartedAt = typeof detail?.timestamp === 'string' ? detail.timestamp : new Date().toISOString();
     callSessionId = null;
   };
-  const handleSession = () => {
-    // The call's chat is the one it talks to; read while the call is open.
-    if (callStartedAt) callSessionId = liveConversationStore.getState().sessionId ?? callSessionId;
+  const handleConnected = (event: Event) => {
+    // The call's chat is the one the controller bound it to, not whichever chat is selected when it ends: selecting
+    // another chat is what ends it. A start that never connects has no chat, so it never asks for a recap.
+    const chatSessionId = (event as CustomEvent<{ chatSessionId?: unknown }>).detail?.chatSessionId;
+    if (callStartedAt && typeof chatSessionId === 'string' && chatSessionId) callSessionId = chatSessionId;
   };
-  const unsubscribe = liveConversationStore.subscribe(handleSession);
   const handleStop = () => {
-    handleSession();
     const startedAt = callStartedAt;
     const sessionId = callSessionId;
     callStartedAt = null;
@@ -76,10 +75,11 @@ export function initializeLiveCallRecap(queryClient: QueryClient): () => void {
     }, LIVE_CALL_RECAP_DELAY_MS);
   };
   window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleStart);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleConnected);
   window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
   return () => {
-    unsubscribe();
     window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleStart);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleConnected);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
     timers.forEach((timer) => clearTimeout(timer));
     timers = new Set();

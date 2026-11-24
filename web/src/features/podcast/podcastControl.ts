@@ -32,6 +32,11 @@ export function cancelOnStop(job: JobRecord, signal?: AbortSignal): () => void {
   return () => signal.removeEventListener('abort', cancel);
 }
 
+/** Cancels a job the run gave up waiting for (it would only hold the GPU, and Stop no longer reaches it). */
+export function abandonJob(job: JobRecord, reason: string): void {
+  void omnixApiClient.cancelJob(job.id, reason).catch(() => undefined);
+}
+
 /** Waits `ms`, or less when `signal` aborts first (a stopped run does not sit out a poll). */
 export function sleepUnlessStopped(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {

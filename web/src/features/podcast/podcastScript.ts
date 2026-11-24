@@ -1,7 +1,7 @@
 import { omnixApiClient, type JobRecord } from '../../api/client';
 import { jobOutputRefs } from '../../api/schemas/streams';
 import { loadSettingsProfile, podcastDefaults } from '../settings';
-import { cancelOnStop, sleepUnlessStopped, throwIfStopped } from './podcastControl';
+import { abandonJob, cancelOnStop, sleepUnlessStopped, throwIfStopped } from './podcastControl';
 
 // `pause_before_ms` is the script's pacing (a quick reaction comes in sooner); `delivery_instruction` is how the
 // line is said, which only engines that take delivery notes (Fish S2 Pro) hear.
@@ -102,7 +102,10 @@ export async function requestPodcastScript(
   throwIfStopped(signal);
   const status = String(settled.status || '').toLowerCase();
   if (status !== 'completed') {
-    if (!SETTLED.has(status)) throw new Error('The podcast script is still being written. It took longer than expected; try again shortly.');
+    if (!SETTLED.has(status)) {
+      abandonJob(job, 'The studio stopped waiting for this script.');
+      throw new Error('The podcast script took longer than expected and was stopped. Try again shortly.');
+    }
     const reason = settled.error?.message || settled.error?.code || status;
     throw new Error(`The podcast script could not be written: ${reason}`);
   }

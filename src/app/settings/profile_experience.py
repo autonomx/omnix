@@ -90,6 +90,12 @@ class AssistantSettingsProfile(BaseModel):
         default=False,
         alias="desktopCompanionRemoteVisionAllowed",
     )
+    # A screen shared in a call may go to a remote vision model only with its own consent: a screen holds far more
+    # private text than a camera picture (owner 2026-11-24).
+    live_call_screen_remote_vision_allowed: bool = Field(
+        default=False,
+        alias="liveCallScreenRemoteVisionAllowed",
+    )
     desktop_companion_show_diagnostics: bool = Field(
         default=False,
         alias="desktopCompanionShowDiagnostics",

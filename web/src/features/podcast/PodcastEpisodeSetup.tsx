@@ -39,16 +39,18 @@ export const formats: Array<{ id: PodcastFormat; label: string; description: str
   { id: 'speech', label: 'Speech', description: 'Solo host presentation' },
 ];
 
-export function PodcastEpisodeSetup({ episode, setEpisode, onNewPodcast }: {
+export function PodcastEpisodeSetup({ episode, setEpisode, onNewPodcast, running = false }: {
   episode: EpisodeSettings;
   setEpisode: Dispatch<SetStateAction<EpisodeSettings>>;
   onNewPodcast: () => void;
+  /** A run is going: a new podcast would clear what it is still filling in (Stop first). */
+  running?: boolean;
 }) {
   const { title, brief, audience, duration, tone, language, format, generationStyle, sources, bookends, roomTone } = episode;
   const set = <K extends keyof EpisodeSettings>(key: K, value: EpisodeSettings[K]) => setEpisode((current) => ({ ...current, [key]: value }));
   return (
     <article className="podcast-card episode-setup-card">
-      <div className="card-heading-row"><h3>1. Episode setup</h3><button className="ghost-button compact" type="button" onClick={onNewPodcast}>New podcast</button></div>
+      <div className="card-heading-row"><h3>1. Episode setup</h3><button className="ghost-button compact" type="button" onClick={onNewPodcast} disabled={running} title={running ? 'Stop the run first' : undefined}>New podcast</button></div>
       <div className="episode-setup-grid">
         <div className="podcast-field-stack">
           <label>Topic / Episode title<input value={title} onChange={(event) => set('title', event.target.value)} /></label>

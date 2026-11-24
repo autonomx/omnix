@@ -85,6 +85,13 @@ def test_research_says_why_there_are_no_notes():
     failed = research_podcast_topic(PodcastResearchRequest(title="T"), search_factory=lambda: Search([], "failed"))
     assert failed.status == "failed" and "did not answer" in failed.message
 
+    class Raising:
+        def search(self, query: str, max_results: int, *, identity: str):
+            raise TimeoutError("provider timed out")
+
+    raised = research_podcast_topic(PodcastResearchRequest(title="T"), search_factory=Raising)
+    assert (raised.status, raised.query) == ("failed", "T") and "did not answer" in raised.message
+
 
 def test_without_the_research_feature_nothing_is_searched(monkeypatch):
     monkeypatch.setattr(podcast_research, "_research_enabled", lambda: False)

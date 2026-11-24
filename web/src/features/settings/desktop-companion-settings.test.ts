@@ -10,6 +10,8 @@ describe('desktop companion central settings', () => {
     expect(value.desktopCompanionEnabled).toBe(false);
     expect(value.desktopCompanionRolloutStage).toBe('disabled');
     expect(value.desktopCompanionRemoteVisionAllowed).toBe(false);
+    // A screen shared in a call has its own remote consent, off by default (owner 2026-11-24).
+    expect(value.liveCallScreenRemoteVisionAllowed).toBe(false);
     expect(value.desktopCompanionShowDiagnostics).toBe(false);
     expect(value.desktopCompanionBackgroundCallsPerMinute).toBe(6);
     expect(value.desktopCompanionMinimumObservationIntervalMs).toBe(8_000);

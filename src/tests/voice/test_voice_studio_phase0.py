@@ -10,6 +10,7 @@ import base64
 import io
 import json
 import sys
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -301,6 +302,26 @@ def test_a_line_that_stays_silent_keeps_a_take_after_two_retries(monkeypatch, st
     assert asset.metadata["segment_outputs"][0]["speech_retries"] == voice_jobs.SPEECH_RETRIES
 
 
+def test_a_cancel_stops_a_render_between_lines_and_is_not_retried(monkeypatch, stores) -> None:
+    from threading import Event
+
+    cancel = Event()
+
+    class _CancelledAfterOneLine(_Engine):
+        def generate_audio(self, text: str, **kwargs: Any) -> dict[str, Any]:
+            cancel.set()  # the producer pressed Stop while the first line was spoken
+            return super().generate_audio(text, **kwargs)
+
+    engine = _CancelledAfterOneLine("faster-qwen3-tts")
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    store = _JobStore()
+    job = _job("tts.multi_speaker_synthesize", {"text": "Ann: one\nBob: two\nAnn: three"})
+    execute_voice_studio_job(store, job, cancellation=cancel)
+    assert len(engine.calls) == 1
+    assert job.id not in store.completed
+    assert not any(asset.type == AssetType.AUDIO for asset in stores.assets.values())
+
+
 def test_a_spoken_line_renders_once(monkeypatch, stores) -> None:
     engine = _Engine("faster-qwen3-tts")
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
@@ -344,6 +365,19 @@ def test_bookends_are_deterministic_and_quiet() -> None:
     assert toned.size == RATE and rate == RATE
 
 
+def test_long_room_tone_repeats_one_tile_at_the_same_level(monkeypatch) -> None:
+    from app.platform.voice import bookends
+
+    # A 0.5 s tile stands in for the 30 s one: a long bed is that tile repeated, so an hour costs one tile's FFT.
+    monkeypatch.setattr(bookends, "ROOM_TONE_TILE_SECONDS", 0.5)
+    tile = RATE // 2
+    bed = bookends.room_tone(RATE * 3 + 7, RATE)
+    assert bed.size == RATE * 3 + 7
+    assert np.array_equal(bed[:tile], bookends.room_tone(tile, RATE))
+    assert np.array_equal(bed[tile:2 * tile], bed[:tile])
+    assert 20 * np.log10(np.sqrt(np.mean(bed ** 2))) == pytest.approx(bookends.ROOM_TONE_RMS_DBFS, abs=0.05)
+
+
 def test_the_sting_follows_the_voices_level() -> None:
     from app.platform.voice.bookends import (
         STING_MAX_PEAK_DBFS, STING_PEAK_DBFS, STING_UNDER_SPEECH_DB, active_level_dbfs, add_bookends, sting,
@@ -376,6 +410,14 @@ def test_the_speech_check_measures_voiced_time() -> None:
     assert not lacks_speech(_wav(_tone(seconds=1.0)), text, speed=2.5)
     assert not lacks_speech(b"not a wav", text)
     assert not lacks_speech(_wav(_tone(seconds=0.1, amplitude=0.0)), "")
+    # A 24-bit take is not measured, so it is not taken for silence: the render's own checks decide.
+    wide = io.BytesIO()
+    with wave.open(wide, "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(3)
+        target.setframerate(RATE)
+        target.writeframes(b"\x00\x00\x40" * RATE)
+    assert not lacks_speech(wide.getvalue(), text)
 
 
 def test_old_effect_labels_leave_a_render_unprocessed(monkeypatch, stores) -> None:

@@ -5,6 +5,7 @@ import { sendChatWithAssistantContext, type AssistantChatRoute } from './assista
 import { assistantContextStore, type DesktopShareSession } from './assistant-context-store';
 import { liveConversationStore } from './live-conversation-store';
 import {
+  glanceScreenShare,
   initializeLiveCallScreenShare,
   resetLiveCallScreenShareForTests,
   screenShareTurnFields,
@@ -113,5 +114,16 @@ describe('the shared screen in a call (D2)', () => {
     const state = assistantContextStore.getState();
     expect(state.desktopShare).toBeNull();
     expect(state.desktopStatus).toContain('allow remote vision');
+  });
+
+  it('leaves a newer share alone when an older share\'s glance answers that it cannot be seen', async () => {
+    glanceStatus = 'vision_unavailable';
+    shareScreen();
+    const glance = glanceScreenShare('s1');
+    shareScreen();  // shared again while the first answer is on its way
+    const newer = assistantContextStore.getState().desktopShare;
+
+    await expect(glance).resolves.toBe(false);
+    expect(assistantContextStore.getState().desktopShare).toBe(newer);
   });
 });

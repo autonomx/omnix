@@ -7,7 +7,8 @@ The authoritative allowlist is [gateway-route-policy.json](../../deploy/gateway-
 | Route class | Target |
 | --- | --- |
 | Chat session create/read/update/delete, attachments, and non-streaming messages | API pool; PostgreSQL protects admission and transcript ownership |
-| Message stream and `/api/tts/live-call/websocket` | Worker unless shared remote TTS and a call-affinity key are present; then consistent hash to the same API replica |
+| Message stream (chat and assistant-context routes), `/api/tts/live-call/websocket`, call-bound routes (`live_call_bound_pattern`: camera/screen glances, greeting, speculation, avatar websocket) | Worker unless shared remote TTS and a call-affinity key are present; then consistent hash to the same API replica |
+| Non-streaming message carrying a shared camera or screen (`X-Omnix-Shared-Picture: 1`, `picture_turn_pattern`) | Routed like the message stream, so the turn reaches the process holding the glance it reads (glances are process-local, never persisted) |
 | GET/HEAD job list/detail, `/events`, trading bars/quotes | API pool |
 | Speech WebSocket/SSE | Worker by default; API pool only when every API uses the shared remote TTS endpoint |
 | All unclassified API routes and writes, trading control, RPG control | Worker/control process |

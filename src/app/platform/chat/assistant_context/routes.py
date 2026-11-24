@@ -15,8 +15,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.platform.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
-from app.platform.chat.camera_glance import camera_share_context
-from app.platform.chat.screen_glance import screen_share_context
+from app.platform.chat.screen_glance import shared_picture_context
 from app.platform.chat.contracts import CHAT_RESEARCH, ResearchTurn
 from app.platform.chat.generation_jobs import start_chat_generation_job
 from app.platform.chat.research_citations import validate_completed_research_reply
@@ -171,10 +170,9 @@ def register_assistant_context_routes(
         def build_context() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             context = context_service_factory().build(request)
             context_items = [item.model_dump(mode="json") for item in context.items]
-            if request.camera_shared:
-                context_items.extend(camera_share_context(chat_store, session_id, user_message))
-            if request.screen_shared:
-                context_items.extend(screen_share_context(chat_store, session_id, user_message))
+            if request.camera_shared or request.screen_shared:
+                context_items.extend(shared_picture_context(chat_store, session_id, user_message,
+                                                            camera=request.camera_shared, screen=request.screen_shared))
             return context_items, {**context.diagnostics, **_release_diagnostics(turn)}
 
         def finalize_context_chat(
@@ -304,14 +302,14 @@ def register_assistant_context_routes(
                 yield _sse({"type": "done"})
                 return
             turn_items = context_items
-            if request.camera_shared:
-                # The glance was sent as the person began; it has had the context's time to be described. Waited for
-                # here (up to TYPED_TURN_WAIT_SECONDS), after the turn is shown, never before the stream starts
-                # (review 2026-11-22: the person's message appeared only once the picture was described).
-                turn_items = [*context_items, *camera_share_context(chat_store, session_id, admission.user_message)]
-            if request.screen_shared:
-                # A shared screen in a call (D2): its glance, the same way.
-                turn_items = [*turn_items, *screen_share_context(chat_store, session_id, admission.user_message)]
+            if request.camera_shared or request.screen_shared:
+                # The glances were sent as the person began; they have had the context's time to be described. Waited
+                # for here (one wait for both, up to TYPED_TURN_WAIT_SECONDS), after the turn is shown, never before
+                # the stream starts (review 2026-11-22: the person's message appeared only once the picture was
+                # described). A shared screen in a call (D2) is looked at the same way.
+                turn_items = [*context_items, *shared_picture_context(
+                    chat_store, session_id, admission.user_message,
+                    camera=request.camera_shared, screen=request.screen_shared)]
             try:
                 for event in stream_chat_turn(
                     chat_store,

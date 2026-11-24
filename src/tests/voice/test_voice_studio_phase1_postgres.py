@@ -349,8 +349,11 @@ def test_a_saved_script_keeps_line_identity_and_every_take(workspace) -> None:
     first = scripts.record_take(script_id=saved["id"], line_id=dave["id"], asset_id="audio:t1", job_id="job:1",
                                 engine="fish-s2-pro", text="one", duration=1.0)
     second = scripts.record_take(script_id=saved["id"], line_id=dave["id"], asset_id="audio:t2", job_id="job:2",
-                                 engine="fish-s2-pro", text="one", duration=1.1)
+                                 engine="fish-s2-pro", text="one", duration=1.1, near_silent=True)
     loaded = scripts.get_script(saved["id"])
+    # The render's speech check round-trips; a take recorded without one has no answer.
+    assert {take["asset_id"]: take["near_silent"] for take in loaded["lines"][0]["takes"]} == {
+        "audio:t1": None, "audio:t2": True}
     assert loaded["lines"][0]["selected_take_id"] == second["id"]
     assert {take["asset_id"] for take in loaded["lines"][0]["takes"]} == {"audio:t1", "audio:t2"}
     scripts.select_take(script_id=saved["id"], line_id=dave["id"], take_id=first["id"])
@@ -397,61 +400,66 @@ def test_scripts_are_invisible_to_other_workspaces(workspace) -> None:
             assert rows == [], table
 
 
-def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(workspace, tmp_path, monkeypatch) -> None:
-    import base64
+class _Studio:
+    """Voice Studio renders against a fake engine and asset store: ``rendered`` lists the texts spoken, a text in
+    ``silent`` comes back as silence, and ``run`` executes one job and returns its completion."""
 
-    import numpy as np
+    def __init__(self, tmp_path: Any, monkeypatch: Any) -> None:
+        import base64
 
-    import app.assets as assets_module
-    from app.assets.models import AssetType
-    from app.jobs.models import JobRecord
-    from app.platform.voice import effects
-    from app.platform.voice import jobs as voice_jobs
-    from app.platform.voice import scripts_repository as scripts
+        import numpy as np
 
-    class _Assets:
-        def __init__(self) -> None:
-            self.assets: dict[str, Any] = {}
+        import app.assets as assets_module
+        from app.platform.voice import effects
+        from app.platform.voice import jobs as voice_jobs
 
-        def get_asset(self, asset_id: str) -> Any:
-            return self.assets.get(asset_id)
+        studio = self
+        self.assets: dict[str, Any] = {}
+        self.rendered: list[str] = []
+        self.silent: set[str] = set()
 
-        def upsert_asset(self, asset: Any) -> Any:
-            self.assets[asset.id] = asset
-            return asset
+        class _Assets:
+            def get_asset(self, asset_id: str) -> Any:
+                return studio.assets.get(asset_id)
 
-    asset_store = _Assets()
-    monkeypatch.setattr(assets_module, "default_asset_store", lambda: asset_store)
-    monkeypatch.setattr(voice_jobs, "default_asset_store", lambda: asset_store)
-    monkeypatch.setattr(voice_jobs, "resources_data_root", lambda: tmp_path)
+            def upsert_asset(self, asset: Any) -> Any:
+                studio.assets[asset.id] = asset
+                return asset
 
-    rendered: list[str] = []
+        asset_store = _Assets()
+        monkeypatch.setattr(assets_module, "default_asset_store", lambda: asset_store)
+        monkeypatch.setattr(voice_jobs, "default_asset_store", lambda: asset_store)
+        monkeypatch.setattr(voice_jobs, "resources_data_root", lambda: tmp_path)
 
-    class _Engine:
-        provider_name = "faster-qwen3-tts"
+        class _Engine:
+            provider_name = "faster-qwen3-tts"
 
-        def generate_audio(self, text: str, **kwargs: Any) -> dict[str, Any]:
-            rendered.append(text)
-            tone = 0.3 * np.sin(2 * np.pi * 220 * np.arange(12_000) / 24_000)
-            return {"success": True, "audio": base64.b64encode(effects.write_mono(tone, 24_000)).decode("ascii"),
-                    "sample_rate": 24_000, "duration": 0.5}
+            def generate_audio(self, text: str, **kwargs: Any) -> dict[str, Any]:
+                studio.rendered.append(text)
+                # Near-silent, not digital zero: under the speech check's floor, yet audio the assembler can level.
+                level = 0.01 if text in studio.silent else 0.3
+                tone = level * np.sin(2 * np.pi * 220 * np.arange(12_000) / 24_000)
+                return {"success": True, "audio": base64.b64encode(effects.write_mono(tone, 24_000)).decode("ascii"),
+                        "sample_rate": 24_000, "duration": 0.5}
 
-    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: _Engine())
+        monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: _Engine())
 
-    class _JobStore:
-        def __init__(self) -> None:
-            self.completed: dict[str, Any] = {}
+    def run(self, job_type: str, payload: dict[str, Any], job_id: str) -> Any:
+        from app.jobs.models import JobRecord
 
-        def mark_running(self, job_id: str) -> None:
-            pass
+        class _JobStore:
+            def __init__(self) -> None:
+                self.completed: dict[str, Any] = {}
 
-        def complete_job(self, job_id: str, request: Any) -> None:
-            self.completed[job_id] = request
+            def mark_running(self, job_id: str) -> None:
+                pass
 
-        def fail_job(self, job_id: str, request: Any) -> None:
-            pytest.fail(request.message)
+            def complete_job(self, job_id: str, request: Any) -> None:
+                self.completed[job_id] = request
 
-    def run(job_type: str, payload: dict[str, Any], job_id: str) -> Any:
+            def fail_job(self, job_id: str, request: Any) -> None:
+                pytest.fail(request.message)
+
         store = _JobStore()
         job = JobRecord.model_validate({
             "id": job_id, "module": "voice", "type": job_type, "status": "running", "resource_class": "gpu:tts",
@@ -461,10 +469,21 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
         assert job_id in store.completed
         return store.completed[job_id]
 
+
+def _segments(script: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"index": line["position"], "speaker": line["speaker"], "text": line["text"], "line_id": line["id"]}
+            for line in script["lines"]]
+
+
+def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(workspace, tmp_path, monkeypatch) -> None:
+    from app.assets.models import AssetType
+    from app.platform.voice import scripts_repository as scripts
+
+    studio = _Studio(tmp_path, monkeypatch)
+    run, rendered, assets = studio.run, studio.rendered, studio.assets
+
     script = scripts.save_script(title="Takes", text="dave: one\nbob: two")
-    segments = [{"index": line["position"], "speaker": line["speaker"], "text": line["text"], "line_id": line["id"]}
-                for line in script["lines"]]
-    payload = {"text": script["text"], "script_id": script["id"], "script_segments": segments}
+    payload = {"text": script["text"], "script_id": script["id"], "script_segments": _segments(script)}
     run("tts.multi_speaker_synthesize", payload, "job:full")
     assert rendered == ["one", "two"]
     lines = scripts.get_script(script["id"])["lines"]
@@ -481,15 +500,14 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
     scripts.select_take(script_id=script["id"], line_id=lines[1]["id"], take_id=first_bob)
     run("voice.restitch", {"script_id": script["id"]}, "job:restitch")
     assert rendered == ["one", "two", "two"]
-    render = asset_store.assets["audio:voice-studio-job-restitch"]
+    render = assets["audio:voice-studio-job-restitch"]
     assert [entry["reused_take_id"] for entry in render.metadata["segment_outputs"]][1] == first_bob
-    assert sum(1 for asset in asset_store.assets.values() if asset.type == AssetType.VOICE_TAKE) == 3
+    assert sum(1 for asset in assets.values() if asset.type == AssetType.VOICE_TAKE) == 3
 
     # The podcast's pattern: each preview speaks one line of a saved script and keeps it as a take; the final
     # render (no line asked again) reuses every take and speaks only a line the preview never made.
     podcast = scripts.save_script(title="Podcast", text="ann: three\ncat: four", settings={"source": "podcast"})
-    ann, cat = [{"index": line["position"], "speaker": line["speaker"], "text": line["text"], "line_id": line["id"]}
-                for line in podcast["lines"]]
+    ann, cat = _segments(podcast)
     run("tts.synthesize", {"text": "three", "script_id": podcast["id"], "script_segments": [ann]}, "job:preview-ann")
     assert rendered[-1] == "three"
     final = run("tts.multi_speaker_synthesize", {"text": "ann: three\ncat: four", "script_id": podcast["id"],
@@ -500,6 +518,59 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
     # The output names where each line plays, for the transcript to follow.
     assert [entry["segment"] for entry in output_ref["timeline"]] == [0, 1]
     assert output_ref["timeline"][1]["start"] > output_ref["timeline"][0]["start"]
+
+
+def test_the_final_render_speaks_again_a_take_that_no_longer_says_its_line(workspace, tmp_path, monkeypatch) -> None:
+    """A preview's take stands in for its line only while it says the line: one rendered near-silent (the preview
+    kept its loudest try) or of text changed since is spoken again; a script deleted mid-run renders every line."""
+    from app.platform.voice import scripts_repository as scripts
+
+    studio = _Studio(tmp_path, monkeypatch)
+    podcast = scripts.save_script(title="Podcast", text="ann: one\ncat: two\nann: three", settings={"source": "podcast"})
+    one, two, three = _segments(podcast)
+    studio.silent.add("two")
+    for segment in (one, two, three):
+        studio.run("tts.synthesize", {"text": segment["text"], "script_id": podcast["id"], "script_segments": [segment]},
+                   f"job:preview-{segment['index']}")
+    assert studio.rendered == ["one", "two", "two", "two", "three"]  # "two" tried three times, its loudest kept
+    # Each take keeps its render's own speech check (migration 0202).
+    flags = {line["text"]: line["takes"][0]["near_silent"] for line in scripts.get_script(podcast["id"])["lines"]}
+    assert flags == {"one": False, "two": True, "three": False}
+
+    from app.platform.voice import speech_presence
+
+    measured: list[str] = []
+    real_lacks_speech = speech_presence.lacks_speech
+
+    def _measuring(wav_bytes: bytes, text: str, **kwargs: Any) -> bool:
+        measured.append(text)
+        return real_lacks_speech(wav_bytes, text, **kwargs)
+
+    monkeypatch.setattr(speech_presence, "lacks_speech", _measuring)
+    studio.silent.clear()
+    studio.rendered.clear()
+    final_payload = {"text": "ann: one\ncat: two\nann: three more", "script_id": podcast["id"],
+                     "script_segments": [one, two, {**three, "text": "three more"}], "render_line_ids": []}
+    final = studio.run("tts.multi_speaker_synthesize", final_payload, "job:final")
+    assert studio.rendered == ["two", "three more"]
+    assert [entry["reused_take_id"] != "" for entry in final.output_refs[0]["segments"]] == [True, False, False]
+    # The flags decide reuse: no stored take was read back and measured, only the two fresh renders were.
+    assert measured == ["two", "three more"]
+
+    # A take stored before the flag existed has no answer: it is measured again before it is reused (every line
+    # now has a voiced take, the final render having stored "two" and "three more").
+    database, _store = workspace
+    with database.transaction() as connection:
+        connection.execute("UPDATE omnix_voice_takes SET near_silent = NULL WHERE script_id = %s", (podcast["id"],))
+    measured.clear()
+    studio.rendered.clear()
+    studio.run("tts.multi_speaker_synthesize", final_payload, "job:final-legacy")
+    assert studio.rendered == [] and measured == ["one", "two", "three more"]
+
+    scripts.delete_script(podcast["id"])
+    studio.rendered.clear()
+    studio.run("tts.multi_speaker_synthesize", final_payload, "job:final-after-delete")
+    assert studio.rendered == ["one", "two", "three more"]
 
 
 def test_a_design_session_stays_loaded_between_previews_unless_another_engine_waits(workspace) -> None:

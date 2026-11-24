@@ -86,9 +86,31 @@ def test_live_call_ingress_uses_consistent_replica_affinity():
     rendered = (ROOT / 'deploy/nginx/omnix.conf').read_text(encoding='utf-8')
     assert 'hash $omnix_call_affinity_key consistent;' in rendered
     assert '~^1:.+:/api/tts/live\\-call/websocket$ omnix_live_api;' in rendered
-    assert '~^1:.+:POST:/api/chat/sessions/[^/]+/messages/stream$ omnix_live_api;' in rendered
-    assert '~^1::POST:/api/chat/sessions/[^/]+/messages/stream$ omnix_worker;' in rendered
-    assert '$omnix_call_affinity_key:$request_method:$uri' in rendered
+    assert '~^[^:]*:POST:/api/(?:assistant/context/)?chat/sessions/[^/]+/messages/stream$ 1;' in rendered
+    assert '~^1:.+:1$ omnix_live_api;' in rendered
+    assert '~^1::1$ omnix_worker;' in rendered
+    assert '$omnix_speech_on_api:$omnix_call_affinity_key:$omnix_glance_turn' in rendered
+
+
+def test_a_turn_that_reads_a_glance_goes_where_the_glance_went():
+    # A glance is held in the process that described it (camera_glance.GlanceBoard), so every turn that reads one
+    # routes like the glance: the call's replica with a key and shared TTS, otherwise the worker (owner 2026-11-24).
+    live_chat, picture_turn = re.compile(POLICY['live_chat_pattern']), re.compile(POLICY['picture_turn_pattern'])
+    for path in ('/api/chat/sessions/chat%3Aabc/messages/stream',
+                 # A call's spoken turn in agent mode goes through the context route and reads the glance too.
+                 '/api/assistant/context/chat/sessions/chat%3Aabc/messages/stream'):
+        assert live_chat.fullmatch(path)
+    for path in ('/api/chat/sessions/chat%3Aabc/messages', '/api/assistant/context/chat/sessions/chat%3Aabc/messages'):
+        assert picture_turn.fullmatch(path) and not live_chat.fullmatch(path)
+    assert not picture_turn.fullmatch('/api/chat/sessions/chat%3Aabc/messages/stream')
+    rendered = _renderer().render(POLICY, speech_on_api=True)
+    header = '$http_' + POLICY['shared_picture_header'].replace('-', '_')
+    assert f'map "{header}:$request_method:$uri" $omnix_glance_turn' in rendered
+    assert f"~^1:POST:{POLICY['picture_turn_pattern'][1:-1]}$ 1;" in rendered
+    # The web marks such a message with the header the policy names.
+    source = (ROOT / 'web/src/api/client.ts').read_text(encoding='utf-8')
+    match = re.search(r"SHARED_PICTURE_HEADER = '([^']+)';", source)
+    assert match is not None and match.group(1).lower() == POLICY['shared_picture_header']
 
 
 def test_what_a_live_call_holds_per_process_follows_its_replica():

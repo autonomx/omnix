@@ -48,18 +48,16 @@ def _admit(chat_store, job_store, session_id: str, request: SendChatMessageReque
     )
 
 
-def _shared_picture_context(chat_store, session_id: str, user_message, request: SendChatMessageRequest) -> list[dict[str, Any]]:
-    """The context a turn takes from a shared camera and a shared screen: their newest glances' descriptions."""
-    items: list[dict[str, Any]] = []
-    if request.camera_shared:
-        from app.platform.chat.camera_glance import camera_share_context
+def _shared_picture_context(chat_store, session_id: str, user_message, request: SendChatMessageRequest, *,
+                            camera: bool = True) -> list[dict[str, Any]]:
+    """The context a turn takes from a shared camera and a shared screen (one wait for both). ``camera=False`` is a
+    turn that looked through the camera itself (``CameraTurn``)."""
+    if not request.camera_shared and not request.screen_shared:
+        return []
+    from app.platform.chat.screen_glance import shared_picture_context
 
-        items.extend(camera_share_context(chat_store, session_id, user_message))
-    if request.screen_shared:
-        from app.platform.chat.screen_glance import screen_share_context
-
-        items.extend(screen_share_context(chat_store, session_id, user_message))
-    return items
+    return shared_picture_context(chat_store, session_id, user_message,
+                                  camera=camera and request.camera_shared, screen=request.screen_shared)
 
 
 def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_store):
@@ -229,6 +227,12 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
                     for event in looking:
                         yield event_line(event)
                     turn_options = looking.options
+                    if request.screen_shared:
+                        # A look through the camera does not hide the shared screen from the reply.
+                        screen = _shared_picture_context(chat_store, admission.session.id, user_message, request,
+                                                         camera=False)
+                        turn_options = {**turn_options, "context_items": [
+                            *turn_options.get("context_items", []), *screen]}
                 elif request.camera_shared or request.screen_shared:
                     # A shared camera or screen (camera share; D2): the glance sent as the person began.
                     turn_options = {"context_items": _shared_picture_context(

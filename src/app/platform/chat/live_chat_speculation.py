@@ -473,17 +473,19 @@ def _generate_side_effect_free(
             },
         )
         context_items: list[dict[str, Any]] = []
+        # Camera and screen glances are described at once: one deadline for both, not a wait for each.
+        deadline = time.monotonic() + LIVE_TURN_WAIT_SECONDS
         if speculation.camera_shared:
             # A shared camera: the newest description, or the previous one while a glance is still described. The
             # person is usually still speaking, so waiting as long as the turn would costs the reply nothing.
-            look = camera_share_look(speculation.session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS)
+            look = camera_share_look(speculation.session_id, wait_seconds=max(0.0, deadline - time.monotonic()))
             context_items, speculation.camera_snapshot = look.items, look.snapshot
             # Before any text: a reply written while the picture was still being described is not reused, so the
             # final turn, a moment later, can see what this one could not.
             yield _sse({"type": "camera", "generation_id": speculation.generation_id, "looking": look.looking})
         if speculation.screen_shared:
             # A shared screen in the call (D2): the same glance rule as the camera, never a vision call here.
-            screen = screen_share_look(speculation.session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS)
+            screen = screen_share_look(speculation.session_id, wait_seconds=max(0.0, deadline - time.monotonic()))
             context_items, speculation.screen_snapshot = [*context_items, *screen.items], screen.snapshot
             yield _sse({"type": "screen", "generation_id": speculation.generation_id, "looking": screen.looking})
         assembly, rendered = store.build_provider_prompt(session, user_message, context_items)

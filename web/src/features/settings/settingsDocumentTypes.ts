@@ -48,6 +48,7 @@ export type AssistantSettings = {
   desktopCompanionRolloutStage: DesktopCompanionRolloutStage;
   desktopCompanionVisionModelId: string;
   desktopCompanionRemoteVisionAllowed: boolean;
+  liveCallScreenRemoteVisionAllowed: boolean;
   desktopCompanionShowDiagnostics: boolean;
   desktopCompanionBackgroundCallsPerMinute: number;
   desktopCompanionMinimumObservationIntervalMs: number;

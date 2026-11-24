@@ -65,7 +65,7 @@ export function CastPortraitLoadControl({ runKey, members, disabled = false }: {
           await new Promise((resolve) => { setTimeout(resolve, LOADING_POLL_MS); });
           const status = await characterAvatarClient.portraitModelStatus().catch(() => null);
           if (status?.status === 'loading') continue;
-          if (status?.status === 'ready') advance(stepId('guest', face.id));
+          if (status?.status === 'ready') advance(stepId('model'));
           // Asked again once the model is up: that ask prepares the face and renders its idle loop.
           answer = await characterAvatarClient.loadPortrait(face.assetId);
         }
@@ -92,7 +92,9 @@ export function CastPortraitLoadControl({ runKey, members, disabled = false }: {
 
   if (!shown || model.data?.status === 'unavailable') return null;
   const modelReady = model.data?.status === 'ready';
-  const ready = modelReady && !load.isPending && known === faces.length;
+  // Ready once every face is prepared; a loop the gateway did not hand back is not a failed load (the member's own
+  // turn brings it), so the button can still unload.
+  const ready = modelReady && !load.isPending && (known === faces.length || load.data?.status === 'ready');
   const loading = load.isPending || model.data?.status === 'loading';
   const unloading = unload.isPending;
   const refused = !ready && !loading && load.data?.status === 'unavailable'
@@ -102,7 +104,10 @@ export function CastPortraitLoadControl({ runKey, members, disabled = false }: {
   const kept = ready && !unloading && (unload.isError || unload.data?.ok === false)
     ? unload.data?.message || 'The live avatars could not be unloaded.'
     : null;
-  const notice = refused ?? failed ?? kept;
+  const partial = ready && !unloading && known < faces.length
+    ? 'Some idle loops are not ready yet; those tiles show a picture until the member speaks.'
+    : null;
+  const notice = refused ?? failed ?? kept ?? partial;
 
   return (
     <div className="assistant-live-portrait-load character-stage-load">

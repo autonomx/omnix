@@ -66,3 +66,19 @@ test('a failed call keeps the gateway request id for error reports', async () =>
     'Omnix API request failed with status 503: model_unavailable (request id gateway-req-0001)',
   );
 });
+
+test('a sent message carrying a shared picture is marked so the proxies route it with its glance', async () => {
+  const marks: (string | null)[] = [];
+  const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = input instanceof Request ? input.headers : new Headers(init?.headers);
+    marks.push(headers.get('x-omnix-shared-picture'));
+    return Response.json({ job_id: 'job-1', status: 'queued' });
+  });
+  const client = new OmnixApiClient({ fetchImpl: fetchImpl as typeof fetch });
+
+  await client.sendChatMessage('chat:a', { content: 'hi', camera_shared: true });
+  await client.sendChatMessage('chat:a', { content: 'hi', screen_shared: true });
+  await client.sendChatMessage('chat:a', { content: 'hi' });
+
+  expect(marks).toEqual(['1', '1', null]);
+});

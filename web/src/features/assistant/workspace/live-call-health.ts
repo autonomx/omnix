@@ -1,4 +1,4 @@
-import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
 import { registerFetchMiddleware, type FetchMiddleware } from '../../../api/fetchPipeline';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 
@@ -40,7 +40,14 @@ type FailureEntry = { count: number; lastStatus: number | null };
 
 let failures: Partial<Record<LiveCallFailureKind, FailureEntry>> = {};
 let callOpen = false;
+let callRan = false;
 let callNode: string | null = null;
+
+/**
+ * The kinds that still belong to the call once it ended (its evaluation is saved after the stop). Any other kind
+ * outside a call is not the call's: the podcast's portrait stream, a camera glance while typing.
+ */
+const AFTER_CALL_KINDS: ReadonlySet<LiveCallFailureKind> = new Set(['evaluation_save']);
 
 /**
  * The routes whose state lives in one gateway process for the whole call (deploy/gateway-route-policy.json's
@@ -50,8 +57,9 @@ export const LIVE_CALL_BOUND_PATTERN = '^(?:/api/tts/live-call/avatar-websocket|
 const CALL_BOUND = new RegExp(LIVE_CALL_BOUND_PATTERN);
 const NODE_HEADER = 'x-omnix-node';
 
-/** Counts one failure; outside a call it still counts toward the post-call line of the call that just ended. */
+/** Counts one failure of the running call, or a late one (its evaluation's save) of the call that just ended. */
 export function reportLiveCallFailure(kind: LiveCallFailureKind, { status = null }: { status?: number | null } = {}): void {
+  if (!callOpen && !(callRan && AFTER_CALL_KINDS.has(kind))) return;
   const entry = failures[kind] ?? { count: 0, lastStatus: null };
   entry.count += 1;
   if (typeof status === 'number' && Number.isFinite(status)) entry.lastStatus = status;
@@ -137,6 +145,7 @@ export function initializeLiveCallHealth(): () => void {
     failures = {};
     callNode = null;
     callOpen = true;
+    callRan = true;
     liveCallPresentationStore.update({ callHealth: null });
   };
   const handleStop = () => {
@@ -146,10 +155,12 @@ export function initializeLiveCallHealth(): () => void {
   };
   window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleStart);
   window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT, handleStop);  // no call runs
   return () => {
     removeRouteCheck();
     window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleStart);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT, handleStop);
     resetLiveCallHealthForTests();
   };
 }
@@ -158,6 +169,7 @@ export function resetLiveCallHealthForTests(): void {
   failures = {};
   callNode = null;
   callOpen = false;
+  callRan = false;
 }
 
 function statusSuffix(status: number | null): string {

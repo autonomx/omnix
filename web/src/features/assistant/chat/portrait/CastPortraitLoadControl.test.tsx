@@ -76,6 +76,18 @@ describe('"Load live avatars" for a podcast cast', () => {
     expect(memberLoop('char:bea', packRevision(CAST[1].pack))).toBeNull();
   });
 
+  it('is ready, and can unload, when a face is prepared but its loop is not handed back yet', async () => {
+    vi.spyOn(characterAvatarClient, 'portraitModelStatus').mockResolvedValue({ status: 'ready' });
+    vi.spyOn(characterAvatarClient, 'loadPortrait').mockResolvedValue({ status: 'ready', code: '', message: '' });
+    vi.spyOn(characterAvatarClient, 'unloadPortrait').mockResolvedValue({ ok: true, code: '', message: '' });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ok: false, code: 'not_rendered', message: '' })));
+    show();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load live avatars' }));
+    expect(await screen.findByRole('button', { name: 'Live avatars ready' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('status')).toHaveTextContent('Some idle loops are not ready yet');
+  });
+
   it('says why when the service refuses, and is not pressable while the podcast generates', async () => {
     vi.spyOn(characterAvatarClient, 'portraitModelStatus').mockResolvedValue({ status: 'unloaded' });
     vi.spyOn(characterAvatarClient, 'loadPortrait').mockResolvedValue({ status: 'unavailable', code: 'model_busy', message: '' });

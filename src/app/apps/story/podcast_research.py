@@ -10,6 +10,7 @@ says why.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from functools import partial
 from typing import Any, Literal
@@ -17,6 +18,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from .podcast_script import SOURCE_LIMIT
+
+logger = logging.getLogger(__name__)
 
 # The search query: the title and the start of the brief, cut at a word.
 QUERY_CHARS = 200
@@ -53,6 +56,9 @@ class PodcastResearchResponse(BaseModel):
 SearchFactory = Callable[[], Any]
 
 
+SEARCH_FAILED = "The web search did not answer. Try again, or check the research provider in Settings."
+
+
 def research_podcast_topic(
     request: PodcastResearchRequest, *, search_factory: SearchFactory | None = None,
 ) -> PodcastResearchResponse:
@@ -68,14 +74,15 @@ def research_podcast_topic(
             return PodcastResearchResponse(status="unavailable", message=unavailable, query=query)
         max_results = settings.max_results
         search_factory = partial(_quick_search, settings)
-    execution = search_factory().search(query, max_results, identity=RESEARCH_IDENTITY)
+    try:
+        execution = search_factory().search(query, max_results, identity=RESEARCH_IDENTITY)
+    except Exception:  # a provider error is a search that did not answer, not a server error
+        logger.warning("podcast research: the web search raised", exc_info=True)
+        return PodcastResearchResponse(status="failed", query=query, message=SEARCH_FAILED)
     diagnostics = getattr(execution, "diagnostics", {}) or {}
     provider = str(diagnostics.get("provider") or "") or None
     if diagnostics.get("status") == "failed":
-        return PodcastResearchResponse(
-            status="failed", query=query, provider=provider,
-            message="The web search did not answer. Try again, or check the research provider in Settings.",
-        )
+        return PodcastResearchResponse(status="failed", query=query, provider=provider, message=SEARCH_FAILED)
     notes, sources = source_notes(getattr(execution, "items", []) or [])
     if not sources:
         return PodcastResearchResponse(

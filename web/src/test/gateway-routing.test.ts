@@ -61,6 +61,23 @@ describe('gateway routing policy', () => {
       expect(canUseApi({ url, method: 'POST', headers: {} }, true)).toBe(false);
     }
   });
+  it('sends every turn that reads a shared picture\'s glance where the glance went', () => {
+    const cookie = 'omnix_call_affinity=session-a';
+    // A call's spoken turn through the context route reads the glance like the chat route's.
+    const contextStream = { url: '/api/assistant/context/chat/sessions/a/messages/stream', method: 'POST', headers: { cookie } };
+    expect(canUseApi(contextStream, true)).toBe(true);
+    expect(canUseApi(contextStream)).toBe(false);
+    expect(canUseApi({ ...contextStream, headers: {} }, true)).toBe(false);
+    for (const url of ['/api/chat/sessions/a/messages', '/api/assistant/context/chat/sessions/a/messages']) {
+      // A sent message marked as carrying a shared picture follows the glance: the call's replica, else the worker.
+      const picture = { url, method: 'POST', headers: { cookie, 'x-omnix-shared-picture': '1' } };
+      expect(canUseApi(picture, true)).toBe(true);
+      expect(canUseApi(picture)).toBe(false);
+      expect(canUseApi({ url, method: 'POST', headers: { 'x-omnix-shared-picture': '1' } }, true)).toBe(false);
+    }
+    // An unmarked message keeps the API pool.
+    expect(canUseApi({ url: '/api/chat/sessions/a/messages', method: 'POST', headers: { cookie } })).toBe(true);
+  });
   it('balances only read operations for jobs and market data', () => {
     for (const url of ['/api/jobs', '/api/jobs/a', '/events?after_id=10', '/api/trading/bars']) {
       expect(canUseApi({ url, method: 'GET', headers: {} })).toBe(true);

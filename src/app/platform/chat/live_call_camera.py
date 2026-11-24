@@ -102,8 +102,19 @@ def _vision_model(assistant: dict[str, Any]) -> str:
     ).strip()
 
 
-def _remote_allowed(assistant: dict[str, Any]) -> bool:
-    value = assistant.get("desktopCompanionRemoteVisionAllowed", assistant.get("desktop_companion_remote_vision_allowed"))
+VisionConsent = Literal["camera", "screen"]
+
+# Each shared picture's own remote-vision consent: the camera uses the Desktop Companion's, a screen shared in a call
+# has its own (owner 2026-11-24).
+_CONSENT_KEYS: dict[str, tuple[str, str]] = {
+    "camera": ("desktopCompanionRemoteVisionAllowed", "desktop_companion_remote_vision_allowed"),
+    "screen": ("liveCallScreenRemoteVisionAllowed", "live_call_screen_remote_vision_allowed"),
+}
+
+
+def _remote_allowed(assistant: dict[str, Any], consent: VisionConsent = "camera") -> bool:
+    alias, name = _CONSENT_KEYS[consent]
+    value = assistant.get(alias, assistant.get(name))
     return value is True
 
 
@@ -117,8 +128,10 @@ def camera_vision(
     *,
     client_factory: Callable[[], Any] | None = None,
     assistant_settings: Callable[[], dict[str, Any]] | None = None,
+    consent: VisionConsent = "camera",
 ) -> CameraVision:
-    """Whether the call may offer Show, and why not. Nothing is sent to a model here."""
+    """Whether the call may offer Show (or look at a shared ``consent`` source), and why not. Nothing is sent to a
+    model here."""
     client_factory = client_factory or _default_client
     assistant_settings = assistant_settings or _assistant_settings
     from app.providers.desktop_vision import (
@@ -147,7 +160,7 @@ def camera_vision(
     # from a local client (review 2026-11-22: a local endpoint with such a model id sent it without consent).
     remote = (is_remote_vision_endpoint(str(getattr(client, "base_url", "") or ""))
               or is_provider_vision_model_ref(_vision_model(assistant)))
-    if remote and not _remote_allowed(assistant):
+    if remote and not _remote_allowed(assistant, consent):
         return CameraVision(False, True, "remote_vision_not_allowed")
     return CameraVision(True, remote, "ready")
 
@@ -257,6 +270,6 @@ def look_at_camera_image(
 
 __all__ = [
     "CAMERA_FILLER", "CAMERA_IMAGE_MAX_CHARS", "CAMERA_QUESTION_TEMPLATE", "CAMERA_SOURCE_ID", "CAMERA_UNSEEN_LINE",
-    "CameraLook", "CameraVision", "DESCRIBE_TIMEOUT_SECONDS", "CameraTurn", "camera_vision", "look_at_camera_image",
-    "plain_description", "record_camera_snapshot",
+    "CameraLook", "CameraVision", "DESCRIBE_TIMEOUT_SECONDS", "CameraTurn", "VisionConsent", "camera_vision",
+    "look_at_camera_image", "plain_description", "record_camera_snapshot",
 ]

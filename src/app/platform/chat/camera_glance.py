@@ -26,7 +26,13 @@ from typing import Any
 from app.prompts import prompt_template
 
 from . import live_call_camera as _camera
-from .live_call_camera import CAMERA_SOURCE_ID, DESCRIBE_TIMEOUT_SECONDS, camera_vision, record_camera_snapshot
+from .live_call_camera import (
+    CAMERA_SOURCE_ID,
+    DESCRIBE_TIMEOUT_SECONDS,
+    VisionConsent,
+    camera_vision,
+    record_camera_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +146,11 @@ class GlanceBoard:
         looking_item: dict[str, str],
         seen_title: str,
         label: str,
+        consent: VisionConsent,
     ) -> None:
         self._source_id = source_id
+        # Whose remote-vision consent a glance needs: the camera's, or the shared screen's own (owner 2026-11-24).
+        self._consent: VisionConsent = consent
         self._question = question
         self._unseen_item = unseen_item
         self._looking_item = looking_item
@@ -169,7 +178,8 @@ class GlanceBoard:
         # Read from the Show module when called: one vision configuration for every shared picture.
         client_factory = client_factory or _camera._default_client
         assistant_settings = assistant_settings or _camera._assistant_settings
-        status = camera_vision(client_factory=client_factory, assistant_settings=assistant_settings)
+        status = camera_vision(client_factory=client_factory, assistant_settings=assistant_settings,
+                               consent=self._consent)
         if not status.available:
             return status.reason
         started = clock()
@@ -247,7 +257,7 @@ class GlanceBoard:
 
 _CAMERA = GlanceBoard(
     source_id=CAMERA_SOURCE_ID, question=GLANCE_QUESTION.text, unseen_item=_UNSEEN_ITEM, looking_item=_LOOKING_ITEM,
-    seen_title=_SEEN_TITLE, label="camera",
+    seen_title=_SEEN_TITLE, label="camera", consent="camera",
 )
 
 
@@ -278,17 +288,26 @@ def proactive_camera_note(look: CameraShareLook) -> str:
     return PROACTIVE_SEEN.format(description=description)
 
 
+def share_wait_seconds(chat_store: Any, user_message: Any) -> float:
+    """How long a turn waits for a shared picture's glance: briefly in a call, as long as a description takes when
+    typed. A turn sharing both the camera and the screen waits this long in all, not once for each."""
+    live_voice = getattr(chat_store, "live_voice_chat_port", None)
+    live = live_voice is not None and is_live_voice_message(user_message)
+    return LIVE_TURN_WAIT_SECONDS if live else TYPED_TURN_WAIT_SECONDS
+
+
 def camera_share_context(
     chat_store: Any,
     session_id: str,
     user_message: Any,
     *,
     look: Callable[..., CameraShareLook] = camera_share_look,
+    wait_seconds: float | None = None,
 ) -> list[dict[str, Any]]:
-    """The camera context for a turn that shares the camera; the description is kept on the person's message."""
-    live_voice = getattr(chat_store, "live_voice_chat_port", None)
-    live = live_voice is not None and is_live_voice_message(user_message)
-    seen = look(session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS if live else TYPED_TURN_WAIT_SECONDS)
+    """The camera context for a turn that shares the camera; the description is kept on the person's message.
+    ``wait_seconds`` defaults to the turn's own wait (``share_wait_seconds``)."""
+    wait = share_wait_seconds(chat_store, user_message) if wait_seconds is None else wait_seconds
+    seen = look(session_id, wait_seconds=max(0.0, wait))
     if seen.snapshot is not None:
         record_camera_snapshot(chat_store, session_id, user_message, seen.snapshot)
     return seen.items

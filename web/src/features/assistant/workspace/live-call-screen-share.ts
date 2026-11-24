@@ -23,7 +23,7 @@ export const SCREEN_SHARE_MIN_GLANCE_MS = 4_000;
 
 const UNAVAILABLE: Record<string, string> = {
   vision_not_configured: 'No vision model is set up, so the call cannot see the shared screen.',
-  remote_vision_not_allowed: 'The screen picture would go to a remote model; allow remote vision in Settings → Assistant & Chat → Desktop Companion to share it in a call.',
+  remote_vision_not_allowed: 'The screen picture would go to a remote model; allow remote vision for a shared screen in Settings → Assistant & Chat → Desktop Companion ("Allow a remote vision provider to see a screen shared in a call") to share it in a call.',
   vision_unavailable: 'The vision model is unavailable, so the call cannot see the shared screen.',
 };
 
@@ -61,6 +61,8 @@ export async function glanceScreenShare(sessionId: string): Promise<boolean> {
   }
   const unavailable = UNAVAILABLE[status];
   if (unavailable) {
+    // A share started while this answer was on its way is another share; this answer is not about it.
+    if (assistantContextStore.getState().desktopShare !== share) return false;
     // The call cannot see the screen: sharing stops rather than going on unseen, and says why.
     stopDesktopShare({ resetStatus: false });
     assistantContextStore.update({ desktopStatus: unavailable });

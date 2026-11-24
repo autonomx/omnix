@@ -35,6 +35,8 @@ export const ASSISTANT_AUDIO_DUCK_EVENT = 'omnix:assistant-audio-duck';
 export const ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 export const ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
 export const ASSISTANT_LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
+/** A call start that failed before it connected: no call runs, though no stop followed. */
+export const ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT = 'omnix:assistant-live-voice-call-start-failed';
 export const ASSISTANT_LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 export const ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 export const ASSISTANT_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';

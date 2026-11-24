@@ -9,6 +9,7 @@ import mimetypes
 import re
 import tempfile
 import wave
+from collections.abc import Callable
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -60,6 +61,8 @@ def _failure_code(exc: Exception) -> tuple[str, bool]:
     from .transcription import TranscriptionRequestError
     from .watermarking import WatermarkUnavailable
 
+    if isinstance(exc, RenderCancelled):
+        return "cancelled", False
     if isinstance(exc, TtsEngineNotLoaded):
         # Retrying would only find the same engine loaded; the user selects it.
         return "engine_not_loaded", False
@@ -148,7 +151,7 @@ def run_voice_studio_job(run: JobRun[Any]) -> JobResult | JobRecord:
         elif job.type == "voice-cloning.transcribe-sample":
             result = _execute_transcribe_sample_job(job)
         elif job.type in {"tts.synthesize", "tts.multi_speaker_synthesize", "voice.restitch"}:
-            result = _execute_tts_job(job, job_store=job_store)
+            result = _execute_tts_job(job, job_store=job_store, cancelled=run.cancelled)
         elif job.type in {"models.install", "models.remove", "models.verify"}:
             from .model_install import execute_model_job
 
@@ -503,6 +506,32 @@ def _script_takes(script_id: str) -> tuple[list[dict[str, Any]], dict[str, dict[
     return segments, selected
 
 
+def _reused_audio(take: dict[str, Any], *, text: str, speed: float, as_is: bool) -> bytes | None:
+    """A kept take's audio for its line, or None to speak the line again: the line's text changed since the take,
+    its audio is gone, or the take came out near-silent (the preview kept its loudest try). A restitch takes the
+    selected take as it is: picking it was the producer's call.
+
+    A take says whether its render came out near-silent (``near_silent``, migration 0202); only a take stored before
+    that is measured again here."""
+    if as_is:
+        return _take_audio(take)
+    from .scripts_repository import text_hash
+    from .speech_presence import lacks_speech
+
+    if take.get("text_hash") and take["text_hash"] != text_hash(text):
+        return None
+    if take.get("near_silent") is True:
+        return None
+    try:
+        wav_bytes = _take_audio(take)
+    except (RuntimeError, OSError):
+        logger.warning("voice: take %s lost its audio; its line is spoken again", take.get("id"))
+        return None
+    if take.get("near_silent") is False:
+        return wav_bytes
+    return None if lacks_speech(wav_bytes, text, speed=speed) else wav_bytes
+
+
 def _take_audio(take: dict[str, Any]) -> bytes:
     from app.assets.content import read_asset_bytes
 
@@ -513,9 +542,9 @@ def _take_audio(take: dict[str, Any]) -> bytes:
 
 
 def _store_take(job: JobRecord, job_store: Any, *, script_id: str, line_id: str, engine: str, text: str,
-                wav_bytes: bytes, duration: float) -> None:
-    """Keep one rendered line as a selectable take (asset type ``voice_take``)."""
-    from .scripts_repository import record_take
+                wav_bytes: bytes, duration: float, near_silent: bool) -> bool:
+    """Keep one rendered line as a selectable take (asset type ``voice_take``); False when the script is gone."""
+    from .scripts_repository import ScriptNotFound, record_take
     from .watermarking import mark
 
     wav_bytes, watermark = mark(wav_bytes)
@@ -532,11 +561,18 @@ def _store_take(job: JobRecord, job_store: Any, *, script_id: str, line_id: str,
                   **({"watermark": watermark} if watermark else {})},
         source_job_id=job.id, created_at=_utcnow(), compat={"contract": "voice_studio_take_v1"},
     ))
-    record_take(script_id=script_id, line_id=line_id, asset_id=asset_id, job_id=job.id, engine=engine,
-                text=text, duration=duration)
+    try:
+        record_take(script_id=script_id, line_id=line_id, asset_id=asset_id, job_id=job.id, engine=engine,
+                    text=text, duration=duration, near_silent=near_silent)
+    except ScriptNotFound:
+        logger.warning("voice: script %s was deleted during %s; the lines left are not kept as takes", script_id, job.id)
+        return False
+    return True
 
 
-def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]:
+def _execute_tts_job(job: JobRecord, *, job_store: Any = None,
+                     cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
+    """Render a text or a saved script, a line at a time; a cancel (or a lost lease) stops it between lines."""
     from app.providers.catalog import DELIVERY_INSTRUCTION, provider_supports
     from app.providers.service import pinned_tts_provider
     from app.providers.tts_priority import generation_class
@@ -550,8 +586,18 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     restitch = job.type == "voice.restitch"
     script_id = _text(payload.get("script_id"))
     selected_takes: dict[str, dict[str, Any]] = {}
+    # Rendered lines are kept as the script's takes; a script deleted meanwhile renders on without them.
+    keep_takes = bool(script_id)
     if script_id:
-        script_segments, selected_takes = _script_takes(script_id)
+        from .scripts_repository import ScriptNotFound
+
+        try:
+            script_segments, selected_takes = _script_takes(script_id)
+        except ScriptNotFound:
+            if restitch:
+                raise
+            logger.warning("voice: script %s is gone; %s renders every line without keeping takes", script_id, job.id)
+            keep_takes = False
     if restitch:
         if not script_id:
             raise ValueError("voice.restitch needs a saved script")
@@ -594,6 +640,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     # One step per line, then one for assembling and saving the take.
     steps = len(segments) + 1
     for position, segment in enumerate(segments):
+        _stop_if_cancelled(cancelled)
         speaker_name = _text(segment.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
         _report_tts_progress(job_store, job, position, steps,
                              f"Line {position + 1} of {len(segments)} ({speaker_name})")
@@ -605,8 +652,9 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
         reuse = selected_takes.get(line_id) if line_id and (restitch or (render_only is not None and line_id not in render_only)) else None
         if restitch and reuse is None:
             raise ValueError(f"line {position + 1} ({speaker_name}) has no take yet; render it first")
-        if reuse is not None:
-            wav_bytes = _take_audio(reuse)
+        reused = _reused_audio(reuse, text=_text(segment.get("text")), speed=speed, as_is=restitch) if reuse else None
+        if reuse is not None and reused is not None:
+            wav_bytes = reused
             metadata = {**_wav_metadata(wav_bytes), "provider_success": True, "provider_fallback": False,
                         "provider_error": "", "voice_controls": {}, "reused_take_id": reuse["id"]}
             sent_instruction = ""
@@ -619,10 +667,11 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
                     _text(segment.get("text")), speaker=generated_speaker, payload=payload,
                     provider=provider, instruct=sent_instruction or None, speed=speed,
                 )
-            if script_id and line_id:
-                _store_take(job, job_store, script_id=script_id, line_id=line_id, engine=resolved["engine"],
-                            text=_text(segment.get("text")), wav_bytes=wav_bytes,
-                            duration=float(metadata.get("duration") or 0.0))
+            if keep_takes and line_id:
+                keep_takes = _store_take(job, job_store, script_id=script_id, line_id=line_id,
+                                         engine=resolved["engine"], text=_text(segment.get("text")),
+                                         wav_bytes=wav_bytes, duration=float(metadata.get("duration") or 0.0),
+                                         near_silent=metadata.get("speech_check") == NEAR_SILENT_CHECK)
         pause_before = segment.get("pause_before_ms")
         spans.append(AudioSpan(
             render_id=f"segment-{position}",
@@ -655,6 +704,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
 
     if not spans:
         raise ValueError("No TTS audio segments were generated")
+    _stop_if_cancelled(cancelled)
     _report_tts_progress(job_store, job, len(segments), steps, "Assembling the take")
     # Pauses and per-speaker loudness, the same assembly audiobook chapters use.
     assembled = assemble_chapter(spans, policy=PausePolicy())
@@ -737,6 +787,15 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     }
 
 
+class RenderCancelled(RuntimeError):
+    """The render was asked to stop (or lost its lease) between lines."""
+
+
+def _stop_if_cancelled(cancelled: Callable[[], bool] | None) -> None:
+    if cancelled is not None and cancelled():
+        raise RenderCancelled("the render was cancelled")
+
+
 def _report_tts_progress(job_store: Any, job: JobRecord, done: int, total: int, message: str) -> None:
     """How far a render is, for Voice Studio's progress bar; best effort, never fails the render."""
     update = getattr(job_store, "update_progress", None)
@@ -756,6 +815,8 @@ def _volume_db(output_settings: dict[str, Any], neutral: float) -> float:
 
 # Renders of a line that came back near-silent before the best take is kept (engines sample, so a retry differs).
 SPEECH_RETRIES = 2
+# The render's word for a line whose every try came out near-silent: it kept the loudest one.
+NEAR_SILENT_CHECK = "kept_loudest_take"
 
 
 def _render_with_speech(
@@ -780,7 +841,7 @@ def _render_with_speech(
         logger.warning("voice: line rendered near-silent (attempt %d of %d, %.2f s voiced for %d characters)",
                        attempt + 1, SPEECH_RETRIES + 1, voiced, len(text))
     assert best is not None
-    return best[1], {**best[2], "speech_retries": SPEECH_RETRIES, "speech_check": "kept_loudest_take"}
+    return best[1], {**best[2], "speech_retries": SPEECH_RETRIES, "speech_check": NEAR_SILENT_CHECK}
 
 
 def _generate_audio_bytes(

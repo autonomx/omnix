@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT } from '../../../events/bus';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT } from '../../../events/bus';
 import { resetFetchPipelineForTests } from '../../../api/fetchPipeline';
 import {
   failureStatus,
@@ -49,6 +49,28 @@ describe('live call health', () => {
     // A failure after the call (its evaluation's save) joins the post-call line.
     reportLiveCallFailure('evaluation_save', { status: 422 });
     expect(liveCallHealthSummary()).toContain('Saving the call evaluation failed once (422)');
+    // Anything else outside a call is not the call's (the podcast's portrait stream, a glance while typing).
+    reportLiveCallFailure('avatar');
+    reportLiveCallFailure('camera_glance', { status: 503 });
+    expect(liveCallFailureMetrics().failure_avatar_count).toBe(0);
+    expect(liveCallFailureMetrics().failure_camera_glance_count).toBe(0);
+  });
+
+  it('closes the call when its start failed, so later failures are not the call’s', () => {
+    window.dispatchEvent(new Event(ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT));
+    reportLiveCallFailure('screen_glance', { status: 503 });
+    expect(liveCallPresentationStore.getState().callHealth).toBeNull();
+    expect(liveCallFailureMetrics().failure_count).toBe(0);
+  });
+
+  it('shows no call problems when no call has run', () => {
+    dispose();
+    liveCallPresentationStore.resetForTests();
+    dispose = initializeLiveCallHealth();
+    reportLiveCallFailure('avatar');
+    reportLiveCallFailure('evaluation_save', { status: 500 });
+    expect(liveCallPresentationStore.getState().callHealth).toBeNull();
+    expect(liveCallFailureMetrics().failure_count).toBe(0);
   });
 
   it('counts every kind for the evaluation and starts each call clean', () => {

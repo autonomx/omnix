@@ -39,7 +39,10 @@ declare module '../../events/bus' {
   interface OmnixEventMap {
     // Live voice call.
     'omnix:assistant-live-voice-call-start': { token: number; timestamp: string };
-    'omnix:assistant-live-voice-call-connected': { token: number; timestamp: string };
+    // The chat the call was placed in, so what follows the call (its recap) lands there.
+    'omnix:assistant-live-voice-call-connected': { token: number; timestamp: string; chatSessionId?: string | null };
+    // A start that never connected: the call is closed without a stop (no evaluation for it).
+    'omnix:assistant-live-voice-call-start-failed': { token: number };
     'omnix:assistant-live-voice-stop': null;
     'omnix:assistant-live-voice-user-speech': { timestamp: string; rms: number; assistantSpeaking: boolean; assistantOwnsFloor: boolean };
     'omnix:assistant-voice-interrupt': {

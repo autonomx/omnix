@@ -66,6 +66,21 @@ def test_a_screen_glance_needs_the_owners_consent_for_a_remote_vision_model():
     assert remote.calls == []
 
 
+def test_a_shared_screen_has_its_own_remote_consent_apart_from_the_camera():
+    # Owner 2026-11-24: the camera's consent does not let a screen go to a remote model, nor the other way round.
+    remote = FakeVision(base_url="https://vision.example.com/v1")
+    camera_consent = {**LOCAL, "desktopCompanionRemoteVisionAllowed": True}
+    screen_consent = {**LOCAL, "liveCallScreenRemoteVisionAllowed": True}
+
+    assert _begin("s1", remote, settings=camera_consent) == "remote_vision_not_allowed"
+    assert remote.calls == []
+    assert begin_glance("s1", IMAGE, client_factory=lambda: remote, assistant_settings=lambda: screen_consent,
+                        clock=lambda: 100.0, now=lambda: NOW) == "remote_vision_not_allowed"
+    assert remote.calls == []
+
+    assert _begin("s1", remote, settings=screen_consent) == "started"
+
+
 @pytest.mark.postgres
 @pytest.mark.usefixtures("local_identity")
 def test_a_streamed_call_turn_takes_the_screen_and_camera_glances(tmp_path, monkeypatch):
@@ -91,3 +106,55 @@ def test_a_streamed_call_turn_takes_the_screen_and_camera_glances(tmp_path, monk
     messages = chat_store.get_session(session.id).messages
     assert messages[-2].metadata["screen_snapshot"]["description"] == "A spreadsheet with a chart of monthly sales."
     assert "camera_snapshot" not in messages[-2].metadata
+
+
+def test_the_camera_and_the_screen_share_one_wait(monkeypatch):
+    # Review 2026-11-24: each glance waited the turn's full wait, so a call turn with both shared could stall 4 s.
+    from app.platform.chat import screen_glance
+
+    now = [10.0]
+    waits: list[tuple[str, float]] = []
+
+    def looking(name: str, took: float):
+        def context(store, session_id, user_message, *, wait_seconds):
+            waits.append((name, wait_seconds))
+            now[0] += took
+            return [{"source_id": name}]
+        return context
+
+    monkeypatch.setattr(screen_glance, "share_wait_seconds", lambda store, message: 2.0)
+    monkeypatch.setattr(screen_glance, "camera_share_context", looking("camera", 1.5))
+    monkeypatch.setattr(screen_glance, "screen_share_context", looking("screen", 0.5))
+
+    items = screen_glance.shared_picture_context(None, "s1", None, camera=True, screen=True, clock=lambda: now[0])
+
+    assert [item["source_id"] for item in items] == ["camera", "screen"]
+    assert waits == [("camera", 2.0), ("screen", 0.5)]
+    waits.clear()
+    assert screen_glance.shared_picture_context(None, "s1", None, camera=False, screen=True,
+                                                clock=lambda: now[0]) == [{"source_id": "screen"}]
+    assert waits == [("screen", 2.0)]
+
+
+@pytest.mark.postgres
+@pytest.mark.usefixtures("local_identity")
+def test_a_call_turn_that_shows_the_camera_still_sees_the_shared_screen(tmp_path, monkeypatch):
+    # Review 2026-11-24: a turn with its own camera picture dropped the shared screen's glance.
+    from app.platform.chat.live_call_camera import CAMERA_SOURCE_ID
+
+    chat_store = ScriptedStore(tmp_path / "chat.json")
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    session = _session(chat_store)
+    vision = FakeVision(reply="A spreadsheet with a chart of monthly sales.")
+    client = _gateway(chat_store, job_store, monkeypatch, vision)
+
+    client.post(f"/api/chat/sessions/{session.id}/screen/glance", json={"image": IMAGE})
+    response = client.post(
+        f"/api/chat/sessions/{session.id}/messages/stream",
+        json={"content": "what is this?", "user_turn_id": "voice-user-turn:5", "speech_segment_id": "seg-5",
+              "camera_image": IMAGE, "camera_shared": True, "screen_shared": True},
+    )
+
+    assert response.status_code == 200
+    sources = [item["source_id"] for item in chat_store.context_items]
+    assert sources == [CAMERA_SOURCE_ID, SCREEN_SOURCE_ID]

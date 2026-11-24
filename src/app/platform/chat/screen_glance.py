@@ -4,7 +4,8 @@ Plan item D2 (``docs/roadmap/LIVE_CALL_IMPROVEMENTS_2026-11-23.md``): a live cal
 shares the camera. Typed chat still sends the shared screen's frames with the message (the context route); a call's
 spoken turn must not wait on a picture, so the web sends one frame of the shared screen when the person starts
 speaking (``POST …/screen/glance``) and the configured vision model describes it in the background, under the same
-availability and remote consent as the camera (``live_call_camera.camera_vision``). The turn says ``screen_shared``
+availability as the camera (``live_call_camera.camera_vision``) but its own remote consent
+(``liveCallScreenRemoteVisionAllowed``, owner 2026-11-24). The turn says ``screen_shared``
 and takes the newest description as untrusted observed context (source ``screen``).
 
 As with the camera, the image is dropped once the vision call returns; only the description is kept, on the person's
@@ -12,13 +13,13 @@ message (``screen_snapshot``). Nothing here opens a screen share: only the perso
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any
 
-from app.conversation.contracts import is_live_voice_message
 from app.prompts import prompt_template
 
-from .camera_glance import LIVE_TURN_WAIT_SECONDS, TYPED_TURN_WAIT_SECONDS, CameraShareLook, GlanceBoard
+from .camera_glance import CameraShareLook, GlanceBoard, camera_share_context, share_wait_seconds
 from .live_call_camera import record_camera_snapshot
 
 SCREEN_SOURCE_ID = "screen"
@@ -59,7 +60,7 @@ _SEEN_TITLE = (
 
 _SCREEN = GlanceBoard(
     source_id=SCREEN_SOURCE_ID, question=SCREEN_GLANCE_QUESTION.text, unseen_item=_UNSEEN_ITEM,
-    looking_item=_LOOKING_ITEM, seen_title=_SEEN_TITLE, label="screen",
+    looking_item=_LOOKING_ITEM, seen_title=_SEEN_TITLE, label="screen", consent="screen",
 )
 
 
@@ -79,14 +80,37 @@ def screen_share_context(
     user_message: Any,
     *,
     look: Callable[..., CameraShareLook] = screen_share_look,
+    wait_seconds: float | None = None,
 ) -> list[dict[str, Any]]:
-    """The screen context for a turn that shares the screen; the description is kept on the person's message."""
-    live_voice = getattr(chat_store, "live_voice_chat_port", None)
-    live = live_voice is not None and is_live_voice_message(user_message)
-    seen = look(session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS if live else TYPED_TURN_WAIT_SECONDS)
+    """The screen context for a turn that shares the screen; the description is kept on the person's message.
+    ``wait_seconds`` defaults to the turn's own wait (``share_wait_seconds``)."""
+    wait = share_wait_seconds(chat_store, user_message) if wait_seconds is None else wait_seconds
+    seen = look(session_id, wait_seconds=max(0.0, wait))
     if seen.snapshot is not None:
         record_camera_snapshot(chat_store, session_id, user_message, seen.snapshot, key=SCREEN_SNAPSHOT_KEY)
     return seen.items
+
+
+def shared_picture_context(
+    chat_store: Any,
+    session_id: str,
+    user_message: Any,
+    *,
+    camera: bool,
+    screen: bool,
+    clock: Callable[[], float] = time.monotonic,
+) -> list[dict[str, Any]]:
+    """The context a turn takes from a shared camera and a shared screen: their newest glances' descriptions.
+
+    Both glances are described at once, so the turn waits for them against one deadline (``share_wait_seconds``):
+    the screen gets what the camera's wait left, not a wait of its own (review 2026-11-24)."""
+    deadline = clock() + share_wait_seconds(chat_store, user_message)
+    items: list[dict[str, Any]] = []
+    if camera:
+        items.extend(camera_share_context(chat_store, session_id, user_message, wait_seconds=deadline - clock()))
+    if screen:
+        items.extend(screen_share_context(chat_store, session_id, user_message, wait_seconds=deadline - clock()))
+    return items
 
 
 def reset_screen_glances_for_tests() -> None:
@@ -95,5 +119,5 @@ def reset_screen_glances_for_tests() -> None:
 
 __all__ = [
     "SCREEN_GLANCE_QUESTION", "SCREEN_SNAPSHOT_KEY", "SCREEN_SOURCE_ID", "begin_screen_glance",
-    "reset_screen_glances_for_tests", "screen_share_context", "screen_share_look",
+    "reset_screen_glances_for_tests", "screen_share_context", "screen_share_look", "shared_picture_context",
 ]

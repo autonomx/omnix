@@ -16,14 +16,16 @@ FASTEST_VOICED_CHARS_PER_SECOND = 29.0
 
 
 def voiced_seconds(wav_bytes: bytes) -> float:
-    """Seconds of 80 ms frames loud enough to be speech, in a 16-bit PCM WAV (channels averaged)."""
+    """Seconds of 80 ms frames loud enough to be speech, in a 16-bit PCM WAV (channels averaged).
+
+    Another sample width raises ``ValueError``: it is not measured, rather than counted as silence."""
     import numpy as np
 
     with wave.open(io.BytesIO(wav_bytes), "rb") as source:
         channels, width, rate = source.getnchannels(), source.getsampwidth(), source.getframerate()
         frames = source.readframes(source.getnframes())
     if width != 2 or not rate:
-        return 0.0
+        raise ValueError(f"not measured: {width * 8}-bit audio at {rate} Hz")
     samples = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
     if channels > 1:
         samples = samples[: samples.size - samples.size % channels].reshape(-1, channels).mean(axis=1)

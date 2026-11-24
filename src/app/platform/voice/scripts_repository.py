@@ -57,12 +57,14 @@ def _take_row(row: Any) -> dict[str, Any]:
         "id": row[0], "line_id": row[1], "asset_id": row[2], "job_id": row[3] or "", "engine": row[4] or "",
         "text_hash": row[5], "duration": float(row[6] or 0.0), "pinned": bool(row[7]),
         "created_at": row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8]),
+        # Whether the render kept a near-silent try (migration 0202); None for a take stored before it.
+        "near_silent": None if row[9] is None else bool(row[9]),
     }
 
 
 _SCRIPT_COLUMNS = "id, title, text, engine, settings, revision, created_at, updated_at"
 _LINE_COLUMNS = "id, position, speaker, text, pause_before_ms, delivery_instruction, voice_id, selected_take_id"
-_TAKE_COLUMNS = "id, line_id, asset_id, job_id, engine, text_hash, duration_seconds, pinned, created_at"
+_TAKE_COLUMNS = "id, line_id, asset_id, job_id, engine, text_hash, duration_seconds, pinned, created_at, near_silent"
 
 
 def _sync_lines(connection: Any, workspace: str, script_id: str, text: str, casting: dict[str, Any]) -> None:
@@ -196,8 +198,8 @@ def delete_script(script_id: str) -> bool:
 
 
 def record_take(*, script_id: str, line_id: str, asset_id: str, job_id: str, engine: str, text: str,
-                duration: float, select: bool = True) -> dict[str, Any]:
-    """Keep a new take for a line and, by default, select it."""
+                duration: float, near_silent: bool | None = None, select: bool = True) -> dict[str, Any]:
+    """Keep a new take for a line and, by default, select it. ``near_silent`` is the render's own speech check."""
     workspace = _workspace()
     take_id = f"vtake:{uuid.uuid4().hex}"
     with unit_of_work() as work:
@@ -210,9 +212,11 @@ def record_take(*, script_id: str, line_id: str, asset_id: str, job_id: str, eng
             raise ScriptNotFound(line_id)
         connection.execute(
             """INSERT INTO omnix_voice_takes
-                   (id, workspace_id, script_id, line_id, asset_id, job_id, engine, text_hash, duration_seconds)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (take_id, workspace, script_id, line_id, asset_id, job_id, engine, text_hash(text), duration),
+                   (id, workspace_id, script_id, line_id, asset_id, job_id, engine, text_hash, duration_seconds,
+                    near_silent)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (take_id, workspace, script_id, line_id, asset_id, job_id, engine, text_hash(text), duration,
+             near_silent),
         )
         if select:
             connection.execute(

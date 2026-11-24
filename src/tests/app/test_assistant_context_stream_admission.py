@@ -133,11 +133,12 @@ def test_a_shared_camera_is_looked_at_inside_the_stream_after_the_turn_is_shown(
     events: list[dict] = []
     looks: list[list[str]] = []  # the events the person had been sent when the camera was looked at
 
-    def camera_share_context(store, session_id, user_message):
+    def shared_picture_context(store, session_id, user_message, *, camera, screen):
+        assert (camera, screen) == (True, False)
         looks.append([event["type"] for event in events])
         return [{"source_id": "camera", "title": "Camera", "content": "A mug on a desk."}]
 
-    monkeypatch.setattr(routes, "camera_share_context", camera_share_context)
+    monkeypatch.setattr(routes, "shared_picture_context", shared_picture_context)
     client = _client(chat_store, job_store, context)
     router = APIRouter()  # the test client buffers a stream, so its body is stepped here
     register_assistant_context_routes(router, chat_store_factory=lambda: chat_store,

@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
     desktopCompanionRolloutStage: 'disabled',
     desktopCompanionVisionModelId: '',
     desktopCompanionRemoteVisionAllowed: false,
+    liveCallScreenRemoteVisionAllowed: false,
     desktopCompanionShowDiagnostics: false,
     desktopCompanionBackgroundCallsPerMinute: 6,
     desktopCompanionMinimumObservationIntervalMs: 8_000,

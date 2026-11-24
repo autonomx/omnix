@@ -108,9 +108,15 @@ describe('requestPodcastScript', () => {
     expect(script).toMatchObject({ model: '', quality: null });
   });
 
-  it('gives up waiting with a message rather than a stand-in script', async () => {
-    stubGateway({ 'POST /api/jobs': () => job({}), 'GET /api/jobs/job%3Ascript': () => job({ status: 'running' }) });
-    await expect(requestPodcastScript(request, { waitMs: 5, pollMs: 1 })).rejects.toThrow(/still being written/);
+  it('gives up waiting with a message rather than a stand-in script, and stops the job it gave up on', async () => {
+    const canceled: unknown[] = [];
+    stubGateway({
+      'POST /api/jobs': () => job({}),
+      'GET /api/jobs/job%3Ascript': () => job({ status: 'running' }),
+      'POST /api/jobs/job%3Ascript/cancel': ({ body }) => { canceled.push(body); return job({ status: 'canceled' }); },
+    });
+    await expect(requestPodcastScript(request, { waitMs: 5, pollMs: 1 })).rejects.toThrow(/took longer than expected/);
+    await vi.waitFor(() => expect(canceled).toEqual([{ reason: 'The studio stopped waiting for this script.' }]));
   });
 });
 

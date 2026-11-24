@@ -10,7 +10,7 @@ import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { requestPodcastScript, scriptSummary, type ScriptSegment } from './podcastScript';
 import { PodcastEpisodeSetup, defaultEpisode, formats, type EpisodeSettings } from './PodcastEpisodeSetup';
-import { STOPPED_MESSAGE, cancelOnStop, isStopped, sleepUnlessStopped, throwIfStopped } from './podcastControl';
+import { STOPPED_MESSAGE, abandonJob, cancelOnStop, isStopped, sleepUnlessStopped, throwIfStopped } from './podcastControl';
 import { PodcastParticipants, defaultSpeakers, type SpeakerDraft } from './PodcastParticipants';
 import { PodcastRunControls } from './PodcastRunControls';
 import { PodcastOutputs, PodcastRunProgress, PodcastStudioHeader, PodcastTranscript, type TranscriptRow } from './PodcastStudioParts';
@@ -18,10 +18,9 @@ import { PodcastLibrary } from './PodcastLibrary';
 import { clock, transcriptRows, type PodcastEpisode } from './podcastEpisodes';
 import { activeStageIndex, jobSteps, type RunProgress } from './podcastProgress';
 import { saveRunScript } from './podcastTakes';
-import { lineAt, stitchedTimeline, timelineFrom, type LineStart } from './podcastTimeline';
+import { PreviewStitcher, stitchedKey } from './podcastStitch';
+import { lineAt, timelineFrom, type LineStart } from './podcastTimeline';
 import './PodcastWorkspace.css';
-import { ApiError } from '../../api/errors';
-import { fetchBytes } from '../../api/transport';
 import { jobOutputRefs } from '../../api/schemas/streams';
 import { downloadUrl } from '../../shared/download';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
@@ -32,7 +31,7 @@ import { CastPortraitLoadControl, CharacterStage, listCastableCharacters, speakA
 type VoiceAsset = AssetListResponse['assets'][number];
 /** A script line; `line_id` names it in the run's saved script (`podcastTakes.ts`). */
 type Segment = ScriptSegment & { line_id?: string };
-type Output = {
+export type Output = {
   dataUrl: string;
   duration: number;
   jobId: string;
@@ -45,14 +44,6 @@ type Output = {
   timeline?: LineStart[];
 };
 
-type WavChunk = {
-  data: Uint8Array;
-  sampleRate: number;
-  channels: number;
-  bitsPerSample: number;
-};
-
-const stitchedKey = 'live:stitched-preview';
 // The player's phases while nothing plays: the cast speaking live (D4), then the final render.
 const liveCastKey = '__live_cast__';
 const finalRenderKey = '__final_render__';
@@ -200,109 +191,6 @@ function finalPayload(args: any) {
   };
 }
 
-function readAscii(view: DataView, offset: number, length: number) {
-  let value = '';
-  for (let index = 0; index < length && offset + index < view.byteLength; index += 1) value += String.fromCharCode(view.getUint8(offset + index));
-  return value;
-}
-
-function writeAscii(bytes: Uint8Array, offset: number, value: string) {
-  for (let index = 0; index < value.length; index += 1) bytes[offset + index] = value.charCodeAt(index);
-}
-
-function parseWavChunk(bytes: Uint8Array): WavChunk {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.byteLength >= 44 && readAscii(view, 0, 4) === 'RIFF' && readAscii(view, 8, 4) === 'WAVE') {
-    let cursor = 12;
-    let sampleRate = 24000;
-    let channels = 1;
-    let bitsPerSample = 16;
-    let data: Uint8Array | null = null;
-
-    while (cursor + 8 <= view.byteLength) {
-      const id = readAscii(view, cursor, 4);
-      const size = view.getUint32(cursor + 4, true);
-      const start = cursor + 8;
-      const end = Math.min(start + size, bytes.byteLength);
-
-      if (id === 'fmt ' && size >= 16 && start + 16 <= view.byteLength) {
-        channels = view.getUint16(start + 2, true) || 1;
-        sampleRate = view.getUint32(start + 4, true) || 24000;
-        bitsPerSample = view.getUint16(start + 14, true) || 16;
-      }
-      if (id === 'data' && end > start) data = bytes.slice(start, end);
-      cursor = end + (size % 2);
-    }
-
-    if (data) return { data, sampleRate, channels, bitsPerSample };
-  }
-
-  return { data: bytes, sampleRate: 24000, channels: 1, bitsPerSample: 16 };
-}
-
-function createWavBytes(chunks: WavChunk[]) {
-  const first = chunks[0] ?? { sampleRate: 24000, channels: 1, bitsPerSample: 16, data: new Uint8Array() };
-  const sampleRate = first.sampleRate || 24000;
-  const channels = first.channels || 1;
-  const bitsPerSample = first.bitsPerSample || 16;
-  const blockAlign = Math.max(1, Math.floor((channels * bitsPerSample) / 8));
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = chunks.reduce((sum, chunk) => sum + chunk.data.byteLength, 0);
-  const bytes = new Uint8Array(44 + dataSize);
-  const view = new DataView(bytes.buffer);
-
-  writeAscii(bytes, 0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeAscii(bytes, 8, 'WAVE');
-  writeAscii(bytes, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
-  writeAscii(bytes, 36, 'data');
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-  for (const chunk of chunks) {
-    bytes.set(chunk.data, offset);
-    offset += chunk.data.byteLength;
-  }
-
-  const computedDuration = dataSize / Math.max(1, byteRate);
-  return { bytes, duration: computedDuration };
-}
-
-async function loadAudioBytes(url: string) {
-  const response = await fetchBytes(url).catch((error: unknown) => {
-    throw error instanceof ApiError ? new Error(`Audio fetch failed: ${error.status}`) : error;
-  });
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-async function stitchOutputs(outputs: Output[]) {
-  if (!outputs.length) return null;
-  const chunks: WavChunk[] = [];
-  for (const output of outputs) chunks.push(parseWavChunk(await loadAudioBytes(output.dataUrl)));
-  const wav = createWavBytes(chunks);
-  const blobUrl = URL.createObjectURL(new Blob([wav.bytes], { type: 'audio/wav' }));
-  const dataBytes = Math.max(1, chunks.reduce((sum, chunk) => sum + chunk.data.byteLength, 0));
-  const timeline = stitchedTimeline(outputs.map((output, index) => output.line ?? index), chunks.map((chunk) => (chunk.data.byteLength / dataBytes) * wav.duration));
-  const last = outputs[outputs.length - 1];
-  const summedDuration = outputs.reduce((sum, output) => sum + Number(output.duration || 0), 0);
-  return {
-    ...last,
-    dataUrl: blobUrl,
-    key: `${stitchedKey}:${outputs.length}:${last.key}`,
-    title: `Live preview stitched ${outputs.length} / ${outputs.length}`,
-    live: true,
-    duration: wav.duration || summedDuration || last.duration,
-    timeline,
-  };
-}
-
 /** What one run reads from the studio and how it reports back (the workspace's state setters and player refs). */
 type ProductionRun = {
   episode: EpisodeSettings;
@@ -399,7 +287,10 @@ async function producePodcast(run: ProductionRun): Promise<JobRecord> {
         input_payload: previewPayload({ title, language, segment, voices, assignments: asg, scriptId: saved?.scriptId }),
         stages: stages().slice(0, 3),
       }, { timeoutMs: 120000, timeoutMessage: 'Podcast live preview turn is still running.' });
-      const output = outputsFrom([await waitJob(job, 120000, undefined, 1250, signal)])[0];
+      const waited = await waitJob(job, 120000, undefined, 1250, signal);
+      const output = outputsFrom([waited])[0];
+      // A line still rendering after the wait is left out of the preview (the final render speaks it), so it stops.
+      if (!output && !isTerminal(waited.status)) abandonJob(job, 'The preview went on without this line.');
       if (output) {
         await run.queue({ ...output, key: `live:${segment.index}:${output.key}`, title: `${segment.speaker}: voice mapped`, live: true, line: position });
         run.say(`Stitched live preview ${segment.index + 1}/${segments.length}: ${segment.speaker}`);
@@ -437,8 +328,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const autoStartedRef = useRef(false);
   const restoreRef = useRef({ time: 0, play: false });
   const piecesRef = useRef<Output[]>([]);
-  const stitchRunRef = useRef(0);
-  const liveBlobUrlsRef = useRef<string[]>([]);
+  const stitcherRef = useRef(new PreviewStitcher());
   const speechRunRef = useRef<CharacterSpeechRun | null>(null);
   // The producer's Stop and Pause for the run in progress (owner request 2026-11-24).
   const stopRef = useRef<AbortController | null>(null);
@@ -496,21 +386,18 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setPieces(nextPieces);
     setSelectedOutputKey(stitchedKey);
 
-    const stitchRun = ++stitchRunRef.current;
-    const joined = await stitchOutputs(nextPieces).catch((error) => {
+    const stitcher = stitcherRef.current;
+    const joined = await stitcher.stitch(nextPieces).catch((error) => {
       console.warn('[PODCAST] Failed to stitch live preview audio:', error);
       return null;
     });
-    if (!joined || stitchRun !== stitchRunRef.current) {
-      if (joined?.dataUrl?.startsWith('blob:')) URL.revokeObjectURL(joined.dataUrl);
-      return;
-    }
+    if (!joined) return;
 
-    liveBlobUrlsRef.current.push(joined.dataUrl);
     const audio = audioRef.current;
     const restoreTime = currentRef.current?.duration || audio?.currentTime || 0;
     if (currentRef.current?.live && audio && !audio.paused && !audio.ended) {
       pendingRef.current = joined;
+      stitcher.keepOnly(currentRef.current.dataUrl, joined.dataUrl);  // the line playing, and the one waiting
       return;
     }
 
@@ -518,19 +405,18 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     resumeNextRef.current = false;
     pendingRef.current = null;
     install(joined, restoreTime, play);
+    stitcher.keepOnly(joined.dataUrl);
   }
 
   function resetPreview() {
     try { if (audioRef.current?.getAttribute('src')) audioRef.current.pause(); } catch {}
-    stitchRunRef.current += 1;
+    stitcherRef.current.reset();
     pendingRef.current = null;
     resumeNextRef.current = false;
     userPausedRef.current = false;
     autoStartedRef.current = false;
     currentRef.current = null;
     piecesRef.current = [];
-    for (const url of liveBlobUrlsRef.current) URL.revokeObjectURL(url);
-    liveBlobUrlsRef.current = [];
     setCurrent(null);
     setPieces([]);
   }
@@ -604,7 +490,12 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const visibleStages = createJobMutation.isPending ? stages().map((stage, index) => ({ ...stage, state: index < runningStage ? 'done' : index === runningStage ? 'active' : 'pending' })) : stages().map((stage) => ({ ...stage, state: 'pending' }));
 
   useEffect(() => { currentRef.current = current; }, [current]);
-  useEffect(() => () => { for (const url of liveBlobUrlsRef.current) URL.revokeObjectURL(url); }, []);
+  // Leaving the studio lets the preview go; a run still going finishes on the server and shows in the library.
+  useEffect(() => {
+    const stitcher = new PreviewStitcher();
+    stitcherRef.current = stitcher;
+    return () => stitcher.close();
+  }, []);
   useEffect(() => () => speechRunRef.current?.stop(), []);
   useEffect(() => { if (voices.length) setSpeakers((currentSpeakers) => currentSpeakers.map((speaker, index) => speaker.voice && voices.some((voice) => voice.id === speaker.voice) ? speaker : { ...speaker, voice: voices[index % voices.length].id })); }, [voices.map((voice) => voice.id).join('|')]);
   useEffect(() => {
@@ -649,7 +540,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setMessage('Waiting for the next stitched preview chunk...');
       return;
     }
-    const finalOutput = outputsFrom([createJobMutation.data, ...podcastJobs]).find((output) => !output.live);
+    // Only the stitched preview hands over, to this run's final render; a library episode or the final just ends.
+    const finalOutput = currentRef.current?.live ? outputsFrom([createJobMutation.data]).find((output) => !output.live) : undefined;
     if (finalOutput) install(finalOutput);
   }
 
@@ -712,7 +604,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
-            <PodcastEpisodeSetup episode={episode} setEpisode={setEpisode} onNewPodcast={resetPodcast} />
+            <PodcastEpisodeSetup episode={episode} setEpisode={setEpisode} onNewPodcast={resetPodcast} running={createJobMutation.isPending} />
 
             <PodcastParticipants speakers={speakers} setSpeakers={setSpeakers} voices={voices} characters={characters} stageCastCount={stageCast.length} liveAvatars={liveAvatars} onLiveAvatars={setLiveAvatars} locked={createJobMutation.isPending} />
 

@@ -90,6 +90,8 @@ def render(
     live_bound = policy['live_call_bound_pattern'].removeprefix('^').removesuffix('$')
     live_chat_pattern = policy['live_chat_pattern']
     live_chat = live_chat_pattern.removeprefix('^').removesuffix('$')
+    picture_turn = policy['picture_turn_pattern'].removeprefix('^').removesuffix('$')
+    picture_variable = '$http_' + policy['shared_picture_header'].replace('-', '_')
     call_id_header = policy['call_id_header']
     call_affinity_cookie = policy['call_affinity_cookie']
     methods = '|'.join(policy['read_methods'])
@@ -164,11 +166,18 @@ map "$request_method:$uri" $omnix_read_target {{
     default $omnix_chat_target;
     ~^(?:{methods}):{reads} omnix_api;
 }}
-map "$omnix_speech_on_api:$omnix_call_affinity_key:$request_method:$uri" $omnix_live_chat_target {{
+# A turn that reads a shared picture's glance goes where the glance went: every streamed turn, and a sent message
+# whose client marks it as carrying a shared camera or screen (the glance is held in the process that described it).
+map "{picture_variable}:$request_method:$uri" $omnix_glance_turn {{
+    default 0;
+    ~^[^:]*:POST:{live_chat}$ 1;
+    ~^1:POST:{picture_turn}$ 1;
+}}
+map "$omnix_speech_on_api:$omnix_call_affinity_key:$omnix_glance_turn" $omnix_live_chat_target {{
     default $omnix_read_target;
-    ~^0:.*:POST:{live_chat}$ omnix_worker;
-    ~^1::POST:{live_chat}$ omnix_worker;
-    ~^1:.+:POST:{live_chat}$ omnix_live_api;
+    ~^0:.*:1$ omnix_worker;
+    ~^1::1$ omnix_worker;
+    ~^1:.+:1$ omnix_live_api;
 }}
 map "$omnix_speech_on_api:$omnix_call_affinity_key:$uri" $omnix_speech_target {{
     default $omnix_live_chat_target;

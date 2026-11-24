@@ -1,5 +1,5 @@
 import { sendGatewayCall } from '../../../api/http';
-import type { JobRecord, SendChatMessageResponse } from '../../../api/client';
+import { sharedPictureHeaders, type JobRecord, type SendChatMessageResponse } from '../../../api/client';
 import { api } from './gateway';
 import type { components } from './generated';
 
@@ -33,7 +33,9 @@ export const assistantApiClient = {
   /** Sends a chat message with the context tools' fields (research, agent mode, desktop, local folder). */
   async sendAssistantContextChatMessage(sessionId: string, request: AssistantContextChatRequest): Promise<SendChatMessageResponse> {
     return sendGatewayCall(
-      (signal) => api.POST('/api/assistant/context/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
+      (signal) => api.POST('/api/assistant/context/chat/sessions/{session_id}/messages', {
+        params: { path: { session_id: sessionId } }, body: request, headers: sharedPictureHeaders(request), signal,
+      }),
       { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
     );
   },

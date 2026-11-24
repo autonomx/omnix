@@ -6,6 +6,7 @@ import { assistantContextStore } from './assistant-context-store';
 import {
   cameraShareState,
   cameraShareTurnFields,
+  glanceCameraShare,
   glanceOnTyping,
   resetCameraShareForTests,
   startCameraShare,
@@ -151,5 +152,17 @@ describe('the shared camera', () => {
     expect(tracks[0].stop).toHaveBeenCalledTimes(1);
     expect(cameraShareState()).toMatchObject({ phase: 'error', stream: null });
     expect(cameraShareState().error).toContain('allow remote vision');
+  });
+
+  it('a late "cannot see" answer leaves a camera turned on again alone', async () => {
+    glanceStatus = 'vision_unavailable';
+    await startCameraShare();
+    const glance = glanceCameraShare('s1');
+    stopCameraShare();
+    await startCameraShare();  // turned on again while the first answer is on its way
+
+    await expect(glance).resolves.toBe(false);
+    expect(cameraShareState().phase).toBe('on');
+    expect(tracks[1].stop).not.toHaveBeenCalled();
   });
 });

@@ -18,7 +18,7 @@ import { handleAcceptedFinal } from './live-voice-final-routing';
 import { processAudioFrame } from './live-voice-finalization';
 import { handleAuthoritativePreview } from './live-voice-preview';
 import { cleanupSession, closePendingResources, handleExternalStop, stopLiveVoice } from './live-voice-session-lifecycle';
-import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
 
@@ -214,6 +214,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, {
       token,
       timestamp: new Date().toISOString(),
+      chatSessionId: sessionId,
     });
   } catch (error) {
     if (controller.activeSession?.card === card) {
@@ -222,6 +223,8 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       cleanupSession(session);
     } else closePendingResources(stream, audioContext, source, audioPipeline);
     if (controller.pendingStart?.token === token) controller.pendingStart = null;
+    // A newer start owns the call's state; this one only says it ended if it is still the current start.
+    if (token === controller.startToken) emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_START_FAILED_EVENT, { token });
     if (sessionReporter) {
       void sessionReporter.close('live_capture_start_failed', {
         error: error instanceof Error ? error.message : String(error),
