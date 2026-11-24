@@ -5732,6 +5732,12 @@ export interface components {
              */
             routines: components["schemas"]["NpcRoutine"][];
         };
+        /** PodcastResearchRequest */
+        PodcastResearchRequest: core["schemas"]["PodcastResearchRequest"];
+        /** PodcastResearchResponse */
+        PodcastResearchResponse: core["schemas"]["PodcastResearchResponse"];
+        /** PodcastResearchSource */
+        PodcastResearchSource: core["schemas"]["PodcastResearchSource"];
         /**
          * PreferenceNoted
          * @description A wish of the player's for the story (EV-0's panel): its kind and value; the latest of a kind stands.

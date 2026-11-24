@@ -1014,7 +1014,9 @@ with how often they talk.
   - Architecture lint and metrics show no new findings. AL011 (`persistence/cli.py`), AL015 ×2, 3 inline
     prompt strings, `_VOICE_SPEAKERS` and one unbounded cache are all equal to HEAD.
   - Ruff's 7 errors are also present at HEAD.
-  - The real-model check on Haiku low and the owner's two-character call are still to do.
+  - Real-model check on Haiku low done 2026-11-23 (B1 of `LIVE_CALL_IMPROVEMENTS_2026-11-23.md`): it found
+    that no quiet call ever started talk, and talk director v2 fixed it. The owner's two-character call
+    (with 5.7) is still to do.
 
 ## Owner decisions (2026-11-15)
 
@@ -1174,7 +1176,7 @@ with how often they talk.
   - focused Python suites pass (PG on the scratch DB);
   - ruff on the changed files passes;
   - architecture lint shows AL011 and AL015 ×2, as at HEAD.
-  **Still to do:** the real-model check on Haiku low, and the owner's two-character call (with 5.7).
+  **Still to do:** the owner's two-character call (with 5.7). The Haiku-low check ran 2026-11-23 (see 6.9).
 - 2026-11-19: group calls (Q15-Q19, uncommitted on main):
   - Fullscreen gives every call member a tile: host and guests, with the speaker outlined. Layouts go up to five.
   - A first-speaker director (`chat.scene.first_speaker` v1) picks who answers first.

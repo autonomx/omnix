@@ -78,3 +78,32 @@ def test_the_blink_area_follows_the_face() -> None:
 
 def test_a_render_that_did_not_change_still_gives_a_mask() -> None:
     assert eye_region_mask(np.zeros((64, 64), dtype=np.float32)).max() == pytest.approx(1.0, abs=0.05)
+
+
+def test_a_blink_eases_shut_quickly_and_opens_slowly_like_the_idle_blink() -> None:
+    from services.portrait.idle_loop import blink_closure
+
+    assert blink_closure(-0.01) == 0.0 and blink_closure(0.0) == 0.0
+    assert blink_closure(0.11) == pytest.approx(1.0)
+    assert blink_closure(0.05) < blink_closure(0.08) < 1.0
+    assert blink_closure(0.20) > blink_closure(0.27) > 0.0
+    assert blink_closure(0.30) == 0.0
+
+
+def test_a_reply_blinks_every_few_seconds_the_same_way_for_its_seed() -> None:
+    from services.portrait.idle_loop import SPEECH_BLINK_GAP_SECONDS, SPEECH_BLINK_SECONDS, speech_blink_closures
+
+    fps, frames = 25, list(range(25 * 60))
+    closures = speech_blink_closures(frames, seed=7, fps=fps)
+    blinks = [frame for frame in frames[1:] if closures[frame] > 0.0 and closures[frame - 1] == 0.0]
+
+    assert blinks[0] / fps >= SPEECH_BLINK_GAP_SECONDS[0]
+    gaps = np.diff(blinks) / fps
+    assert gaps.min() >= SPEECH_BLINK_GAP_SECONDS[0] and gaps.max() <= SPEECH_BLINK_GAP_SECONDS[1] + 0.4
+    assert sum(1 for closure in closures if closure > 0.0) <= len(blinks) * (SPEECH_BLINK_SECONDS * fps + 1)
+    assert max(closures) > 0.9  # each blink shuts the eyes
+    # The same frames blink the same way however they are asked for (every other frame, or after a rewind).
+    assert speech_blink_closures(frames[::2], seed=7, fps=fps) == closures[::2]
+    assert speech_blink_closures(frames[500:520], seed=7, fps=fps) == closures[500:520]
+    assert speech_blink_closures(frames, seed=8, fps=fps) != closures
+    assert speech_blink_closures([], seed=7, fps=fps) == []

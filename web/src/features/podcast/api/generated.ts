@@ -3,7 +3,28 @@
  */
 import type { components as core } from '../../../api/generated/core';
 
-export type paths = Record<string, never>;
+export interface paths {
+    "/api/podcast/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Podcast Research Endpoint
+         * @description Source notes for an episode from one web search; the producer edits them before the script is written.
+         */
+        post: operations["podcast_research_endpoint_api_podcast_research_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
@@ -304,6 +325,12 @@ export interface components {
         PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
+        /** PodcastResearchRequest */
+        PodcastResearchRequest: core["schemas"]["PodcastResearchRequest"];
+        /** PodcastResearchResponse */
+        PodcastResearchResponse: core["schemas"]["PodcastResearchResponse"];
+        /** PodcastResearchSource */
+        PodcastResearchSource: core["schemas"]["PodcastResearchSource"];
         /** PromptRenderRequest */
         PromptRenderRequest: core["schemas"]["PromptRenderRequest"];
         /** PromptTemplate */
@@ -456,4 +483,38 @@ export interface components {
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    podcast_research_endpoint_api_podcast_research_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PodcastResearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PodcastResearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+}

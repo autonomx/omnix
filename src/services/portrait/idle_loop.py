@@ -68,6 +68,47 @@ def eye_region_mask(change: np.ndarray) -> np.ndarray:
     return (fade * fade * (3.0 - 2.0 * fade)).astype(np.float32)
 
 
+# A reply's motion never blinks either, so its frames blink the way the browser blinks the idle face
+# (compositor.ts): every 3.5-8 s, eased shut over 110 ms and open over 190 ms, with no hold. A blinking frame is
+# rendered a second time with its eyes shut and takes that render's eye region by how shut the eyes are.
+SPEECH_BLINK_GAP_SECONDS = (3.5, 8.0)
+SPEECH_BLINK_SECONDS = 0.30
+SPEECH_BLINK_SHUT_SECONDS = 0.11
+
+
+def blink_closure(elapsed: float) -> float:
+    """How shut the eyes are ``elapsed`` seconds into a blink (0 open, 1 shut): ``blinkClosure`` in compositor.ts."""
+    if elapsed < 0.0 or elapsed >= SPEECH_BLINK_SECONDS:
+        return 0.0
+    if elapsed < SPEECH_BLINK_SHUT_SECONDS:
+        progress = elapsed / SPEECH_BLINK_SHUT_SECONDS
+    else:
+        progress = 1.0 - (elapsed - SPEECH_BLINK_SHUT_SECONDS) / (SPEECH_BLINK_SECONDS - SPEECH_BLINK_SHUT_SECONDS)
+    return float(np.sin(progress * np.pi / 2) ** 2)
+
+
+def speech_blink_closures(frames: list[int], seed: int, fps: int) -> list[float]:
+    """How shut the eyes are at each of a reply's ``frames`` (indices from its first frame, at ``fps``).
+
+    The blinks are a function of ``seed`` alone, so a frame decoded twice (after a rewind) blinks the same way.
+    """
+    if not frames:
+        return []
+    end = (max(frames) + 1) / fps
+    rng = np.random.default_rng(seed)
+    starts: list[float] = []
+    at = float(rng.uniform(*SPEECH_BLINK_GAP_SECONDS))
+    while at < end:
+        starts.append(at)
+        at += SPEECH_BLINK_SECONDS + float(rng.uniform(*SPEECH_BLINK_GAP_SECONDS))
+    closures = []
+    for frame in frames:
+        seconds = frame / fps
+        before = [start for start in starts if start <= seconds]
+        closures.append(blink_closure(seconds - before[-1]) if before else 0.0)
+    return closures
+
+
 def idle_frame_step(level: int) -> int:
     """How many rendered frames each idle frame covers: half the level's frame rate.
 

@@ -60,6 +60,17 @@ def test_a_valid_inbound_request_id_is_kept_and_an_invalid_one_replaced(captured
     assert replaced != "bad id\nwith newline" and len(replaced) >= 20
 
 
+def test_every_response_names_the_process_that_answered(captured) -> None:
+    from app.observability.logging import PROCESS_NODE
+
+    client = TestClient(_app())
+    nodes = {client.get("/work").headers["x-omnix-node"] for _ in range(2)}
+
+    # One process answers with one name; a live call compares them across its call-bound requests.
+    assert nodes == {PROCESS_NODE}
+    assert len(PROCESS_NODE) == 12
+
+
 def test_a_dispatched_chat_job_and_its_provider_call_log_the_job_id(monkeypatch, captured) -> None:
     done = threading.Event()
 

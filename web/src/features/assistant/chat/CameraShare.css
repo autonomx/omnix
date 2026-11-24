@@ -44,7 +44,8 @@
     top: 0.4rem;
   }
 
-  button.live-camera-button.on {
+  button.live-camera-button.on,
+  button.live-screen-button.on {
     background: color-mix(in srgb, var(--accent-violet-810) 45%, transparent);
     border-color: color-mix(in srgb, var(--accent-violet-810) 70%, transparent);
   }

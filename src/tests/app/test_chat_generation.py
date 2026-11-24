@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import threading
@@ -393,6 +394,7 @@ def test_story_jobs_with_empty_title_generate_title(monkeypatch, tmp_path):
 
 def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
     client, provider, _store = _gateway_client(tmp_path, monkeypatch)
+    provider.content = '```json\n{"segments": [{"speaker": "host", "text": "Welcome."}, {"speaker": "Guest", "text": "Hi."}]}\n```'
 
     response = client.post(
         "/api/jobs",
@@ -404,6 +406,14 @@ def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
                 "title": "Market Watch",
                 "brief": "Discuss local tools.",
                 "speakers": ["Host", "Guest"],
+                "format": "Interview",
+                "tone": "Playful",
+                "audience": "Builders",
+                "duration_minutes": 8,
+                "speaker_profiles": [
+                    {"name": "Guest", "personality": "Dry,\n  skeptical", "goal": "Push back on hype"},
+                    {"name": "Stranger", "role": "Not in this episode"},
+                ],
                 "provider_id": "llm:lmstudio",
                 "model_id": "llm:lmstudio:test-model",
             },
@@ -418,7 +428,23 @@ def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
     assert completed.status == JobStatus.COMPLETED
     assert completed.output_refs[0]["type"] == "podcast_script"
     assert completed.output_refs[0]["title"] == "Market Watch"
-    assert "podcast episode script" in provider.calls[0]["prompt"]
+    # Code reads the reply into the cast's lines; the saved script is those lines, not the model's raw text.
+    assert json.loads(completed.output_refs[0]["content"]) == {
+        # A quick reply follows closely (code paces the gaps between lines).
+        "segments": [{"speaker": "Host", "text": "Welcome."}, {"speaker": "Guest", "text": "Hi.", "pause_before_ms": 150}]
+    }
+    assert completed.output_refs[0]["script_quality"]["lines"] == 2
+    assert len(provider.calls) == 1
+    prompt = provider.calls[0]["prompt"]
+    assert "podcast episode script" in prompt
+    # The script is asked for as speaker-tagged JSON, at the episode's length, in the cast's own voices.
+    assert '{"segments": [{"speaker": "<speaker name>", "text": "<what they say>", "delivery": "<how it is said>"}]' in prompt
+    assert "Format: an interview: the first speaker hosts" in prompt
+    assert "Tone: Playful\nAudience: Builders" in prompt
+    assert "about 8 minutes when read aloud, so about 1200 words" in prompt
+    assert "- Host\n- Guest\n  Personality: Dry, skeptical\n  Goal in this episode: Push back on hype" in prompt
+    assert "Stranger" not in prompt
+    assert "Never repeat a line" in prompt
 
 
 def _submitted_turns(monkeypatch, answer=None, *, gate: threading.Event | None = None) -> list[dict]:

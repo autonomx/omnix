@@ -107,7 +107,41 @@ def _spoken_style_stage(
     record_spoken_style_diagnostics(context.assembly, context.rendered)
     _add_call_abilities(context)
     _add_sound_tags(context)
+    _add_cut_off_reply(context)
     return context
+
+
+def _add_cut_off_reply(context: LiveVoicePromptContext) -> None:
+    """The unheard rest of a reply the person cut into, offered to this turn once (``chat.live_call_resume``, D1).
+
+    Per turn, with the other system messages ahead of the history; the model decides whether to pick it up.
+    """
+    from app.conversation.contracts import estimate_tokens
+    from app.platform.chat.contracts import RenderedPromptMessage, cut_off_reply, cut_off_reply_prompt
+
+    rendered = context.rendered
+    if rendered is None:
+        return
+    try:
+        reply = cut_off_reply(context.session, context.user_message)
+    except Exception:  # noqa: BLE001 - the turn goes on without it
+        logger.warning("live voice: the cut-off reply could not be read", exc_info=True)
+        return
+    if reply is None:
+        return
+    instructions = cut_off_reply_prompt(reply)
+    first_turn = next(
+        (index for index, message in enumerate(rendered.messages) if message.role in {"user", "assistant"}),
+        len(rendered.messages),
+    )
+    rendered.messages.insert(first_turn, RenderedPromptMessage(role="system", content=instructions, per_turn=True))
+    tokens = estimate_tokens(instructions)
+    rendered.diagnostics.estimated_tokens += tokens
+    rendered.diagnostics.section_tokens["live_voice_cut_off_reply"] = tokens
+    if context.assembly is not None:
+        context.assembly.diagnostics["live_voice_cut_off_reply"] = {
+            "message_id": reply.message_id, "unheard_chars": len(reply.unheard), "tokens": tokens,
+        }
 
 
 def _add_sound_tags(context: LiveVoicePromptContext) -> None:

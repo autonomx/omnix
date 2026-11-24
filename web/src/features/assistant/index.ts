@@ -3,3 +3,7 @@ export { chatbotModule } from './module';
 // The read-aloud player's audio worklet: a PCM16 stream heard as it arrives (the RPG speaks its responses with it).
 export { default as PCM_STREAM_WORKLET_URL } from './workspace/worklets/assistant-pcm-stream.worklet?worker&url';
 export { ASSISTANT_PCM_STREAM_WORKLET_NAME as PCM_STREAM_WORKLET_NAME } from './workspace/worklets/names';
+// A podcast's live avatars (D4): its cast's portraits, and its lines spoken through the live voice socket.
+export { CastPortraitLoadControl } from './chat/portrait/CastPortraitLoadControl';
+export { CharacterStage, isPortraitPack, listCastableCharacters, type CastableCharacter, type StageCharacter } from './chat/portrait/CharacterStage';
+export { speakAsCharacters, type CharacterLine, type CharacterSpeechRun } from './workspace/character-speech-player';

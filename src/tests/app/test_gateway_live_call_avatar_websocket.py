@@ -374,6 +374,69 @@ def test_a_speaker_who_is_not_on_the_call_gets_no_face(monkeypatch, portrait) ->
     assert portrait.opened == []
 
 
+def test_a_podcast_shows_a_characters_portrait_without_a_chat(monkeypatch, portrait) -> None:
+    # D4: no session; the character is named, resolved in the workspace, and leased under its own label.
+    asked: list[str] = []
+    host_pack = PORTRAIT.model_copy(update={"portrait_emotion": "surprise"})
+
+    def resolve(character_id: str) -> tuple[Any, str]:
+        asked.append(character_id)
+        return host_pack, "neutral"
+
+    monkeypatch.setattr(avatar_websocket, "resolve_character_portrait", resolve)
+    monkeypatch.setattr(avatar_websocket, "load_session", lambda factory, session_id: pytest.fail("no chat is read"))
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        url = f"/api/tts/live-call/avatar-websocket?token={token}&character_id=maya"
+        with client.websocket_connect(url) as avatar:
+            assert avatar.receive_json()["type"] == "ready"
+            assert avatar.receive_bytes() == b"frame-0"
+    assert asked == ["maya"]
+    assert portrait.opened[0]["session"] == "character:maya"
+    assert portrait.opened[0]["emotion"] == "surprise"
+
+
+def test_a_podcast_runs_speakers_share_one_lease_label(monkeypatch, portrait) -> None:
+    # Owner report 2026-11-23: under a label each, the next speaker's face was refused ("another live call is using
+    # it") while the last one's stream was still closing. A run's speakers share its label, as a group call's do.
+    monkeypatch.setattr(avatar_websocket, "resolve_character_portrait", lambda character_id: (PORTRAIT, "neutral"))
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        url = f"/api/tts/live-call/avatar-websocket?token={token}&character_id=maya&run=podcast-stage:abc"
+        with client.websocket_connect(url) as avatar:
+            assert avatar.receive_json()["type"] == "ready"
+    assert portrait.opened[0]["session"] == "character-run:podcast-stage:abc"
+
+
+def test_a_character_this_workspace_cannot_read_gets_no_face(monkeypatch, portrait) -> None:
+    from app.platform.characters.contracts import CharacterNotFoundError
+
+    def resolve(character_id: str) -> tuple[Any, str]:
+        raise CharacterNotFoundError(character_id)
+
+    monkeypatch.setattr(avatar_websocket, "resolve_character_portrait", resolve)
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        url = f"/api/tts/live-call/avatar-websocket?token={token}&character_id=someone-elses"
+        with client.websocket_connect(url) as avatar:
+            reply = avatar.receive_json()
+    assert reply["type"] == "unavailable" and reply["code"] == "character_not_found"
+    assert portrait.opened == []
+
+
+def test_a_socket_naming_neither_a_chat_nor_a_character_is_refused(monkeypatch, portrait) -> None:
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+    with client.websocket_connect("/api/tts/live-call/websocket?portrait=1") as tts:
+        token = tts.receive_json()["avatar_token"]
+        with pytest.raises(WebSocketDisconnect) as closed:
+            with client.websocket_connect(f"/api/tts/live-call/avatar-websocket?token={token}") as avatar:
+                avatar.receive_json()
+    assert closed.value.code == 1008
+
+
 @pytest.fixture
 def idle_route(monkeypatch):
     """The idle-loop route's portrait service and members, replaced."""
@@ -454,6 +517,30 @@ def test_an_idle_loop_is_refused_for_a_stranger_a_picture_or_a_busy_service(monk
     idle_route["host_pack"] = PORTRAIT.model_copy(update={"renderer": "sprite"})
     assert code() == "not_a_portrait"
     assert idle_route["images"] == ["image:bea"]
+
+
+def test_a_podcast_cast_member_gets_its_idle_loop_without_a_chat(monkeypatch, idle_route) -> None:
+    # D4: "Load live avatars" renders each face's loop; the cast's tiles then ask for it by character.
+    from app.platform.characters.contracts import CharacterNotFoundError
+    from app.platform.live_voice.transport import portrait_idle
+
+    def resolve(character_id: str) -> tuple[Any, str]:
+        if character_id != "maya":
+            raise CharacterNotFoundError(character_id)
+        return PORTRAIT, "neutral"
+
+    monkeypatch.setattr(portrait_idle, "resolve_character_portrait", resolve)
+    monkeypatch.setattr(portrait_idle, "load_session", lambda factory, session_id: pytest.fail("no chat is read"))
+    client, _logs = _configure_gateway(monkeypatch, FakeTtsProvider())
+
+    cast = client.get("/api/tts/live-call/portrait-idle", params={"character_id": "maya"}).json()
+    stranger = client.get("/api/tts/live-call/portrait-idle", params={"character_id": "someone-elses"}).json()
+    nobody = client.get("/api/tts/live-call/portrait-idle").json()
+
+    assert cast["ok"] and cast["idle"] == ["latent:image:maya:idle"]
+    assert idle_route["rendered_only"] == [True]
+    assert stranger["code"] == "character_not_found"
+    assert nobody["ok"] is False and nobody["code"] == "speaker_not_on_call"
 
 
 def test_a_calls_slot_is_free_before_its_portrait_closes(monkeypatch, portrait) -> None:

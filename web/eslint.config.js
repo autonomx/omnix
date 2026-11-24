@@ -328,7 +328,7 @@ const functionLengthBaseline = {
   'src/features/assistant/chat/CharacterManagementPanel.tsx': 309,
   'src/features/assistant/chat/OmnixRunCardCore.tsx': 464,
   'src/features/image-generation/ImageGenerationWorkspaceMultiModel.tsx': 288,
-  'src/features/podcast/PodcastWorkspace.tsx': 303,
+  'src/features/podcast/PodcastWorkspace.tsx': 298,
   'src/features/rpg/RpgCampaignCharacterStep.tsx': 428,
   'src/features/rpg/RpgLorePanel.tsx': 373,
   'src/features/rpg/RpgWorkspace.tsx': 534,

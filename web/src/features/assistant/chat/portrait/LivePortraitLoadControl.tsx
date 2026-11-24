@@ -14,7 +14,9 @@ import {
   claimGuestRender, guestRenderPending, loadMemberLoop, packRevision, resetMemberLoops, useMemberLoop,
 } from './memberIdleLoops';
 
-const STATUS_KEY = ['feature', 'chatbot', 'portrait-model'];
+/** The portrait model's status query, shared by every load button on screen. */
+export const PORTRAIT_MODEL_STATUS_KEY = ['feature', 'chatbot', 'portrait-model'];
+const STATUS_KEY = PORTRAIT_MODEL_STATUS_KEY;
 const STATUS_POLL_MS = 15_000;
 const LOADING_POLL_MS = 2_000;
 const LOAD_GIVE_UP_MS = 180_000; // as long as a call waits for the model

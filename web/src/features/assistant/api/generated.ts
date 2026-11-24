@@ -1741,6 +1741,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/live-call/recap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Live Call Recap
+         * @description After a call stops: its recap is written in the background, once per call (D3).
+         */
+        post: operations["start_live_call_recap_api_chat_sessions__session_id__live_call_recap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/live-call/runtime": {
         parameters: {
             query?: never;
@@ -2105,6 +2125,26 @@ export interface paths {
         post?: never;
         /** Remove Chat Scene Guest */
         delete: operations["remove_chat_scene_guest_api_chat_sessions__session_id__scene_guests__character_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/screen/glance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Screen Glance
+         * @description A frame from the screen the person shares in a call (D2), described in the background for their next turn.
+         */
+        post: operations["post_screen_glance_api_chat_sessions__session_id__screen_glance_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3855,6 +3895,11 @@ export interface components {
             model_id?: string | null;
             /** Provider Id */
             provider_id?: string | null;
+            /**
+             * Screen Shared
+             * @default false
+             */
+            screen_shared?: boolean;
             /** Text Attachment */
             text_attachment?: {
                 [key: string]: unknown;
@@ -6994,6 +7039,27 @@ export interface components {
              */
             warm_overlap_judge?: boolean;
         };
+        /** LiveCallRecapRequest */
+        LiveCallRecapRequest: {
+            /**
+             * Call Started At
+             * Format: date-time
+             */
+            call_started_at: string;
+        };
+        /**
+         * LiveCallRecapStart
+         * @description Whether a recap is being written; ``too_short`` when the call had too few of the person's spoken turns.
+         */
+        LiveCallRecapStart: {
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "too_short";
+        };
         /**
          * LiveCallSceneGuest
          * @description A guest on the call (companion 5.5): the voice and face a turn uses when it names them as its speaker.
@@ -7761,6 +7827,11 @@ export interface components {
             model_id?: string | null;
             /** Provider Id */
             provider_id?: string | null;
+            /**
+             * Screen Shared
+             * @default false
+             */
+            screen_shared?: boolean;
             /** Segment Id */
             segment_id: string;
             /** Source Sequence */
@@ -8558,6 +8629,12 @@ export interface components {
         PlanningSubmitRequest: {
             plan: components["schemas"]["ImplementationPlanSubmission"];
         };
+        /** PodcastResearchRequest */
+        PodcastResearchRequest: core["schemas"]["PodcastResearchRequest"];
+        /** PodcastResearchResponse */
+        PodcastResearchResponse: core["schemas"]["PodcastResearchResponse"];
+        /** PodcastResearchSource */
+        PodcastResearchSource: core["schemas"]["PodcastResearchSource"];
         /** PortraitIdleResponse */
         PortraitIdleResponse: {
             /** Blink */
@@ -14604,6 +14681,7 @@ export interface operations {
                 initiative_reason?: string;
                 state_summary?: string | null;
                 scene_talk_switched_off?: boolean;
+                scene_skipped_speaker?: string | null;
                 camera_shared?: boolean;
             };
             header?: never;
@@ -14655,6 +14733,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InitiativeCandidate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_live_call_recap_api_chat_sessions__session_id__live_call_recap_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveCallRecapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveCallRecapStart"];
                 };
             };
             /** @description Validation Error */
@@ -15554,6 +15667,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SceneView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_screen_glance_api_chat_sessions__session_id__screen_glance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CameraGlanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraGlanceResult"];
                 };
             };
             /** @description Validation Error */
@@ -17182,9 +17330,10 @@ export interface operations {
     };
     portrait_idle_api_tts_live_call_portrait_idle_get: {
         parameters: {
-            query: {
-                session_id: string;
+            query?: {
+                session_id?: string;
                 speaker_id?: string;
+                character_id?: string;
             };
             header?: never;
             path?: never;

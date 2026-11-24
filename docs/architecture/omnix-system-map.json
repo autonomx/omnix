@@ -94,7 +94,7 @@
     ],
     "counts": {
       "nodes": 58,
-      "edges": 161,
+      "edges": 163,
       "flows": 11
     }
   },
@@ -181,7 +181,7 @@
       "id": "web_media",
       "label": "Media studios",
       "layer": "client",
-      "summary": "Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces. Job progress is polled (Audiobook: react-query refetchInterval 3-5 s; Image Generation: 1.5 s while a job is active). Only Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries.",
+      "summary": "Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces. Job progress is polled (Audiobook: react-query refetchInterval 3-5 s; Image Generation: 1.5 s while a job is active). Only Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries. Podcast's live avatars speak the preview through the Chat workspace's TTS socket and portrait link (assistant workspace/character-speech-player.ts, portrait/CharacterStage.tsx; avatar socket ?character_id=).",
       "paths": [
         "web/src/features/storyteller/",
         "web/src/features/audiobook/",
@@ -349,7 +349,7 @@
       "id": "chat",
       "label": "Chat",
       "layer": "platform",
-      "summary": "Sessions/messages, admission, durable generation jobs, compaction, context budget, generative UI, assist modes, live-call actions/greeting/tasks/proactive lines, overlap judge.",
+      "summary": "Sessions/messages, admission, durable generation jobs, compaction, context budget, generative UI, assist modes, live-call actions/greeting/tasks/proactive lines, the post-call recap job, camera and screen glances, overlap judge.",
       "paths": [
         "src/app/platform/chat/"
       ],
@@ -718,13 +718,19 @@
       "id": "story",
       "label": "Storyteller",
       "layer": "apps",
-      "summary": "Story jobs (outline -> draft -> store story asset).",
+      "summary": "Story jobs (outline -> draft -> store story asset), and the podcast script job (podcast.generate: plan with beats -> parts that carry the points already made -> a checking pass that rewrites flagged repeats -> pacing and a quality report). Podcast research (/api/podcast/research, research:run) is one quick web search on the episode's topic, returned as source notes the producer edits before the script is written.",
       "paths": [
         "src/app/apps/story/"
       ],
       "feature_id": "story",
+      "key_files": [
+        "src/app/apps/story/podcast_script.py",
+        "src/app/apps/story/podcast_research.py"
+      ],
       "tests": [
-        "src/tests/story/"
+        "src/tests/story/",
+        "src/tests/unit/test_podcast_script.py",
+        "src/tests/unit/test_podcast_research.py"
       ]
     },
     {
@@ -1198,6 +1204,13 @@
       "label": "feature gateway.ts"
     },
     {
+      "id": "web_media->web_chat:calls",
+      "from": "web_media",
+      "to": "web_chat",
+      "kind": "calls",
+      "label": "Podcast live avatars: speakAsCharacters, CharacterStage"
+    },
+    {
       "id": "web_platform->web_api:calls",
       "from": "web_platform",
       "to": "web_api",
@@ -1433,7 +1446,7 @@
       "from": "chat",
       "to": "prompts",
       "kind": "calls",
-      "label": "a few templates (greeting, proactive, camera); turns use chat's prompt_assembly"
+      "label": "a few templates (greeting, proactive, camera, screen); turns use chat's prompt_assembly"
     },
     {
       "id": "chat->jobs:calls",
@@ -2190,6 +2203,13 @@
       "to": "assistant_tools",
       "kind": "uses",
       "label": "uses in src/app/platform/research/feature.py"
+    },
+    {
+      "id": "story->research:uses",
+      "from": "story",
+      "to": "research",
+      "kind": "uses",
+      "label": "uses in src/app/apps/story/feature.py"
     },
     {
       "id": "rpg->chat:depends_on",

@@ -261,6 +261,123 @@ def test_qwen_never_receives_a_delivery_instruction(monkeypatch, stores) -> None
     assert "instruct" not in qwen.calls[0]
 
 
+class _SilentFirstEngine(_Engine):
+    """Renders the first ``silent`` takes near-silent, then speech."""
+
+    def __init__(self, name: str, silent: int) -> None:
+        super().__init__(name)
+        self.silent = silent
+
+    def generate_audio(self, text: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"text": text, **kwargs})
+        # A near-silent take: a breath of sound, then nothing (assembly refuses an all-silent one).
+        quiet = len(self.calls) <= self.silent
+        samples = np.concatenate([_tone(seconds=0.3), np.zeros(int(1.7 * RATE))]) if quiet else _tone(seconds=2.0)
+        return {"success": True, "audio": base64.b64encode(_wav(samples)).decode("ascii"), "sample_rate": RATE,
+                "duration": 2.0}
+
+
+def test_a_near_silent_line_is_rendered_again(monkeypatch, stores) -> None:
+    engine = _SilentFirstEngine("faster-qwen3-tts", silent=1)
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    store = _JobStore()
+    job = _job("tts.synthesize", {"text": "This line has more than a handful of words in it."})
+    execute_voice_studio_job(store, job)
+    assert job.id in store.completed, store.failed.get(job.id)
+    assert len(engine.calls) == 2
+    asset = next(asset for asset in stores.assets.values() if asset.type == AssetType.AUDIO)
+    assert asset.metadata["segment_outputs"][0]["speech_retries"] == 1
+
+
+def test_a_line_that_stays_silent_keeps_a_take_after_two_retries(monkeypatch, stores) -> None:
+    engine = _SilentFirstEngine("faster-qwen3-tts", silent=99)
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    store = _JobStore()
+    job = _job("tts.synthesize", {"text": "This line has more than a handful of words in it."})
+    execute_voice_studio_job(store, job)
+    assert job.id in store.completed, store.failed.get(job.id)
+    assert len(engine.calls) == 1 + voice_jobs.SPEECH_RETRIES
+    asset = next(asset for asset in stores.assets.values() if asset.type == AssetType.AUDIO)
+    assert asset.metadata["segment_outputs"][0]["speech_retries"] == voice_jobs.SPEECH_RETRIES
+
+
+def test_a_spoken_line_renders_once(monkeypatch, stores) -> None:
+    engine = _Engine("faster-qwen3-tts")
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    store = _JobStore()
+    execute_voice_studio_job(store, _job("tts.synthesize", {"text": "hi there"}))
+    assert len(engine.calls) == 1
+    asset = next(asset for asset in stores.assets.values() if asset.type == AssetType.AUDIO)
+    assert "speech_retries" not in asset.metadata["segment_outputs"][0]
+
+
+def test_bookends_frame_the_take_and_shift_its_timeline(monkeypatch, stores) -> None:
+    engine = _Engine("faster-qwen3-tts")
+    monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)
+    plain_store, framed_store = _JobStore(), _JobStore()
+    execute_voice_studio_job(plain_store, _job("tts.multi_speaker_synthesize", {"text": "dave: one\nbob: two"}))
+    plain = next(asset for asset in stores.assets.values() if asset.type == AssetType.AUDIO).metadata
+    stores.assets.clear()
+    execute_voice_studio_job(framed_store, _job("tts.multi_speaker_synthesize", {
+        "text": "dave: one\nbob: two", "bookends": True, "room_tone": True,
+    }))
+    framed = next(asset for asset in stores.assets.values() if asset.type == AssetType.AUDIO).metadata
+    assert framed["bookends"] is True and framed["room_tone"] is True
+    lead = framed["timeline"][0]["start"] - plain["timeline"][0]["start"]
+    assert lead > 3.0  # the opening sting and its gap
+    assert framed["timeline"][1]["start"] - plain["timeline"][1]["start"] == pytest.approx(lead)
+    assert framed["duration"] > plain["duration"] + 2 * lead
+
+
+def test_bookends_are_deterministic_and_quiet() -> None:
+    from app.platform.voice.bookends import ROOM_TONE_RMS_DBFS, STING_PEAK_DBFS, add_bookends, room_tone, sting
+
+    take = _wav(_tone(seconds=1.0))
+    assert add_bookends(take, stings=False, tone=False).wav_bytes == take
+    first, second = add_bookends(take, stings=True, tone=True), add_bookends(take, stings=True, tone=True)
+    assert first.wav_bytes == second.wav_bytes
+    assert 20 * np.log10(np.max(np.abs(sting(RATE)))) == pytest.approx(STING_PEAK_DBFS, abs=0.01)
+    bed = room_tone(RATE * 2, RATE)
+    assert 20 * np.log10(np.sqrt(np.mean(bed ** 2))) == pytest.approx(ROOM_TONE_RMS_DBFS, abs=0.01)
+    # Room tone alone adds no length and stays far under speech.
+    toned, rate = effects.read_mono(add_bookends(take, stings=False, tone=True).wav_bytes)
+    assert toned.size == RATE and rate == RATE
+
+
+def test_the_sting_follows_the_voices_level() -> None:
+    from app.platform.voice.bookends import (
+        STING_MAX_PEAK_DBFS, STING_PEAK_DBFS, STING_UNDER_SPEECH_DB, active_level_dbfs, add_bookends, sting,
+    )
+
+    # Speech at -18 dBFS RMS with a pause in it: the sting lands 6 dB under the speaking level, not the pause.
+    voice = np.concatenate([_tone(seconds=1.0, amplitude=0.178), np.zeros(RATE), _tone(seconds=1.0, amplitude=0.178)])
+    framed = add_bookends(_wav(voice), stings=True, tone=False)
+    samples, rate = effects.read_mono(framed.wav_bytes)
+    def rms_db(part: np.ndarray) -> float:
+        return float(20 * np.log10(np.sqrt(np.mean(part ** 2))))
+
+    opening, closing = samples[:sting(rate).size], samples[-sting(rate).size:]
+    assert rms_db(opening) == pytest.approx(active_level_dbfs(voice, rate) - STING_UNDER_SPEECH_DB, abs=0.1)
+    assert rms_db(closing) == pytest.approx(rms_db(opening), abs=0.1)
+    # A very loud take can't push the sting past its peak ceiling; a silent take gets the fixed level.
+    loud, _ = effects.read_mono(add_bookends(_wav(_tone(amplitude=0.99)), stings=True, tone=False).wav_bytes)
+    assert 20 * np.log10(np.max(np.abs(loud[:sting(rate).size]))) <= STING_MAX_PEAK_DBFS + 0.01
+    quiet, _ = effects.read_mono(add_bookends(_wav(np.zeros(RATE)), stings=True, tone=False).wav_bytes)
+    assert 20 * np.log10(np.max(np.abs(quiet[:sting(rate).size]))) == pytest.approx(STING_PEAK_DBFS, abs=0.05)
+
+
+def test_the_speech_check_measures_voiced_time() -> None:
+    from app.platform.voice.speech_presence import lacks_speech, voiced_seconds
+
+    assert voiced_seconds(_wav(_tone(seconds=1.0))) == pytest.approx(1.0, abs=0.09)
+    assert voiced_seconds(_wav(_tone(seconds=1.0, amplitude=0.001))) == 0.0
+    text = "x" * 58  # needs two voiced seconds
+    assert lacks_speech(_wav(_tone(seconds=1.0)), text)
+    assert not lacks_speech(_wav(_tone(seconds=1.0)), text, speed=2.5)
+    assert not lacks_speech(b"not a wav", text)
+    assert not lacks_speech(_wav(_tone(seconds=0.1, amplitude=0.0)), "")
+
+
 def test_old_effect_labels_leave_a_render_unprocessed(monkeypatch, stores) -> None:
     engine = _Engine("faster-qwen3-tts")
     monkeypatch.setattr("app.providers.service.pinned_tts_provider", lambda name=None: engine)

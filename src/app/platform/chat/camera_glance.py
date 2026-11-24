@@ -124,9 +124,131 @@ class CameraShareLook:
     looking: bool = False
 
 
-_lock = threading.Lock()
-_glances: dict[str, _Glance] = {}
-_seen: dict[str, _Seen] = {}
+class GlanceBoard:
+    """One shared picture source's glances per chat: the camera here, the shared screen in ``screen_glance``.
+
+    A board describes at most one glance per chat at a time and keeps the newest finished description, so a turn
+    whose glance is still being described can take the one before it.
+    """
+
+    def __init__(
+        self,
+        *,
+        source_id: str,
+        question: str,
+        unseen_item: dict[str, str],
+        looking_item: dict[str, str],
+        seen_title: str,
+        label: str,
+    ) -> None:
+        self._source_id = source_id
+        self._question = question
+        self._unseen_item = unseen_item
+        self._looking_item = looking_item
+        self._seen_title = seen_title
+        self._label = label
+        self._lock = threading.Lock()
+        self._glances: dict[str, _Glance] = {}
+        self._seen: dict[str, _Seen] = {}
+
+    def begin(
+        self,
+        session_id: str,
+        image_data_url: str,
+        *,
+        client_factory: Callable[[], Any] | None = None,
+        assistant_settings: Callable[[], dict[str, Any]] | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+    ) -> str:
+        """Start describing one frame for this chat; returns ``started``, ``in_progress`` or why it cannot be seen.
+
+        A glance still being described for the chat is not replaced, so one chat costs at most one vision call at a
+        time.
+        """
+        # Read from the Show module when called: one vision configuration for every shared picture.
+        client_factory = client_factory or _camera._default_client
+        assistant_settings = assistant_settings or _camera._assistant_settings
+        status = camera_vision(client_factory=client_factory, assistant_settings=assistant_settings)
+        if not status.available:
+            return status.reason
+        started = clock()
+        with self._lock:
+            self._prune(started)
+            current = self._glances.get(session_id)
+            if current is not None and not current.future.done():
+                return "in_progress"
+            future = _executor.submit(_describe, image_data_url, self._question, self._label, client_factory,
+                                      assistant_settings)
+            glance = _Glance(started, now().isoformat(), future)
+            self._glances[session_id] = glance
+            _cap(self._glances)
+        del image_data_url  # the frame is held only by the vision call
+        # Added outside the lock: a future already done runs the callback here, and the callback takes the lock.
+        future.add_done_callback(lambda done: self._remember(session_id, glance, done))
+        return "started"
+
+    def look(self, session_id: str, *, wait_seconds: float, clock: Callable[[], float] = time.monotonic) -> CameraShareLook:
+        """The newest fresh description for this chat's turn, waiting up to ``wait_seconds`` for one being described.
+
+        When the newest glance is not described in time (or fails), the turn takes the chat's previous finished
+        description if it is still fresh: a slow vision model then sees one glance behind instead of not at all.
+        """
+        with self._lock:
+            glance = self._glances.get(session_id)
+        if glance is None or clock() - glance.started > GLANCE_FRESH_SECONDS:
+            return CameraShareLook([dict(self._unseen_item)], None)
+        looking = False
+        try:
+            description = glance.future.result(timeout=max(0.0, wait_seconds))
+        except concurrent.futures.TimeoutError:
+            logger.info("%s share: the glance was not described within %.1f s", self._label, wait_seconds)
+            description, looking = None, True
+        except Exception:  # noqa: BLE001 - _describe never raises; a cancelled future is the same as unseen
+            description = None
+        if description:
+            return self._look(description, glance.described_at)
+        with self._lock:
+            previous = self._seen.get(session_id)
+        if previous is None or clock() - previous.started > GLANCE_FRESH_SECONDS:
+            return CameraShareLook([dict(self._looking_item if looking else self._unseen_item)], None, looking)
+        return self._look(previous.description, previous.described_at)
+
+    def _look(self, description: str, described_at: str) -> CameraShareLook:
+        item = {"source_id": self._source_id, "title": self._seen_title, "content": description}
+        return CameraShareLook([item], {"description": description, "described_at": described_at})
+
+    def _remember(self, session_id: str, glance: _Glance, future: concurrent.futures.Future[str | None]) -> None:
+        try:
+            description = future.result()
+        except BaseException:  # noqa: BLE001 - a cancelled glance leaves the previous description
+            return
+        if not description:
+            return
+        with self._lock:
+            previous = self._seen.get(session_id)
+            if previous is None or previous.started <= glance.started:
+                self._seen[session_id] = _Seen(glance.started, glance.described_at, description)
+                _cap(self._seen)
+
+    def _prune(self, now: float) -> None:
+        for session_id, glance in list(self._glances.items()):
+            if glance.future.done() and now - glance.started > GLANCE_FRESH_SECONDS:
+                del self._glances[session_id]
+        for session_id, seen in list(self._seen.items()):
+            if now - seen.started > GLANCE_FRESH_SECONDS:
+                del self._seen[session_id]
+
+    def reset_for_tests(self) -> None:
+        with self._lock:
+            self._glances.clear()
+            self._seen.clear()
+
+
+_CAMERA = GlanceBoard(
+    source_id=CAMERA_SOURCE_ID, question=GLANCE_QUESTION.text, unseen_item=_UNSEEN_ITEM, looking_item=_LOOKING_ITEM,
+    seen_title=_SEEN_TITLE, label="camera",
+)
 
 
 def begin_glance(
@@ -138,76 +260,14 @@ def begin_glance(
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> str:
-    """Start describing one frame for this chat; returns ``started``, ``in_progress`` or why the camera cannot be seen.
-
-    A glance still being described for the chat is not replaced, so one chat costs at most one vision call at a time.
-    """
-    # Read from the Show module when called: one vision configuration for the camera.
-    client_factory = client_factory or _camera._default_client
-    assistant_settings = assistant_settings or _camera._assistant_settings
-    status = camera_vision(client_factory=client_factory, assistant_settings=assistant_settings)
-    if not status.available:
-        return status.reason
-    started = clock()
-    with _lock:
-        _prune(started)
-        current = _glances.get(session_id)
-        if current is not None and not current.future.done():
-            return "in_progress"
-        future = _executor.submit(_describe, image_data_url, client_factory, assistant_settings)
-        glance = _Glance(started, now().isoformat(), future)
-        _glances[session_id] = glance
-        _cap(_glances)
-    del image_data_url  # the frame is held only by the vision call
-    # Added outside the lock: a future already done runs the callback here, and the callback takes the lock.
-    future.add_done_callback(lambda done: _remember(session_id, glance, done))
-    return "started"
+    """Start describing one camera frame for this chat (``GlanceBoard.begin``)."""
+    return _CAMERA.begin(session_id, image_data_url, client_factory=client_factory,
+                         assistant_settings=assistant_settings, clock=clock, now=now)
 
 
 def camera_share_look(session_id: str, *, wait_seconds: float, clock: Callable[[], float] = time.monotonic) -> CameraShareLook:
-    """The newest fresh description for this chat's turn, waiting up to ``wait_seconds`` for one being described.
-
-    When the newest glance is not described in time (or fails), the turn takes the chat's previous finished
-    description if it is still fresh: a slow vision model then sees one glance behind instead of not at all.
-    """
-    with _lock:
-        glance = _glances.get(session_id)
-    if glance is None or clock() - glance.started > GLANCE_FRESH_SECONDS:
-        return CameraShareLook([dict(_UNSEEN_ITEM)], None)
-    looking = False
-    try:
-        description = glance.future.result(timeout=max(0.0, wait_seconds))
-    except concurrent.futures.TimeoutError:
-        logger.info("camera share: the glance was not described within %.1f s", wait_seconds)
-        description, looking = None, True
-    except Exception:  # noqa: BLE001 - _describe never raises; a cancelled future is the same as unseen
-        description = None
-    if description:
-        return _look(description, glance.described_at)
-    with _lock:
-        previous = _seen.get(session_id)
-    if previous is None or clock() - previous.started > GLANCE_FRESH_SECONDS:
-        return CameraShareLook([dict(_LOOKING_ITEM if looking else _UNSEEN_ITEM)], None, looking)
-    return _look(previous.description, previous.described_at)
-
-
-def _look(description: str, described_at: str) -> CameraShareLook:
-    item = {"source_id": CAMERA_SOURCE_ID, "title": _SEEN_TITLE, "content": description}
-    return CameraShareLook([item], {"description": description, "described_at": described_at})
-
-
-def _remember(session_id: str, glance: _Glance, future: concurrent.futures.Future[str | None]) -> None:
-    try:
-        description = future.result()
-    except BaseException:  # noqa: BLE001 - a cancelled glance leaves the previous description
-        return
-    if not description:
-        return
-    with _lock:
-        previous = _seen.get(session_id)
-        if previous is None or previous.started <= glance.started:
-            _seen[session_id] = _Seen(glance.started, glance.described_at, description)
-            _cap(_seen)
+    """The newest fresh camera description for this chat's turn (``GlanceBoard.look``)."""
+    return _CAMERA.look(session_id, wait_seconds=wait_seconds, clock=clock)
 
 
 def proactive_camera_note(look: CameraShareLook) -> str:
@@ -236,25 +296,18 @@ def camera_share_context(
 
 def _describe(
     image_data_url: str,
+    question: str,
+    label: str,
     client_factory: Callable[[], Any],
     assistant_settings: Callable[[], dict[str, Any]],
 ) -> str | None:
     try:
         client = client_factory()
-        item = client.describe(image_data_url, GLANCE_QUESTION.text, _camera._vision_model(assistant_settings()) or None)
-    except Exception:  # noqa: BLE001 - the turn goes on without the camera
-        logger.warning("camera share: vision failed", exc_info=True)
+        item = client.describe(image_data_url, question, _camera._vision_model(assistant_settings()) or None)
+    except Exception:  # noqa: BLE001 - the turn goes on without the picture
+        logger.warning("%s share: vision failed", label, exc_info=True)
         return None
-    return " ".join(str(getattr(item, "content", "") or "").split())[:_camera._DESCRIPTION_CHARS] or None
-
-
-def _prune(now: float) -> None:
-    for session_id, glance in list(_glances.items()):
-        if glance.future.done() and now - glance.started > GLANCE_FRESH_SECONDS:
-            del _glances[session_id]
-    for session_id, seen in list(_seen.items()):
-        if now - seen.started > GLANCE_FRESH_SECONDS:
-            del _seen[session_id]
+    return _camera.plain_description(getattr(item, "content", "")) or None
 
 
 def _cap(entries: dict[str, _Glance] | dict[str, _Seen]) -> None:
@@ -266,13 +319,11 @@ def _cap(entries: dict[str, _Glance] | dict[str, _Seen]) -> None:
 
 
 def reset_camera_glances_for_tests() -> None:
-    with _lock:
-        _glances.clear()
-        _seen.clear()
+    _CAMERA.reset_for_tests()
 
 
 __all__ = [
     "GLANCE_FRESH_SECONDS", "GLANCE_QUESTION", "GREETING_WAIT_SECONDS", "LIVE_TURN_WAIT_SECONDS", "PROACTIVE_SEEN", "PROACTIVE_TURN_WAIT_SECONDS",
-    "PROACTIVE_UNSEEN", "TYPED_TURN_WAIT_SECONDS", "CameraShareLook", "begin_glance", "camera_share_context",
+    "PROACTIVE_UNSEEN", "TYPED_TURN_WAIT_SECONDS", "CameraShareLook", "GlanceBoard", "begin_glance", "camera_share_context",
     "camera_share_look", "proactive_camera_note", "reset_camera_glances_for_tests",
 ]

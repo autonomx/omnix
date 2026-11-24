@@ -13,13 +13,16 @@ from app.platform.chat.live_call_tasks import (
     list_call_tasks, proposal_button_allowed,
 )
 from app.platform.chat.live_call_camera import CAMERA_IMAGE_MAX_CHARS
+from app.platform.chat.live_call_recap import LiveCallRecapRequest, LiveCallRecapStart, begin_call_recap
 from app.platform.chat.models import _normalize_chat_image_data_url
 from .live_call_open_loops import open_loop_candidate
 
 LIVE_CALL_TASKS_PATH = "/api/chat/sessions/{session_id}/live-call/tasks"
 LIVE_CALL_INITIATIVE_CANDIDATE_PATH = "/api/chat/sessions/{session_id}/live-call/initiative-candidate"
-LIVE_CALL_CAMERA_PATH = "/api/chat/sessions/{session_id}/live-call/camera"
+LIVE_CALL_RECAP_PATH = "/api/chat/sessions/{session_id}/live-call/recap"
+LIVE_CALL_CAMERA_PATH ="/api/chat/sessions/{session_id}/live-call/camera"
 CAMERA_GLANCE_PATH = "/api/chat/sessions/{session_id}/camera/glance"
+SCREEN_GLANCE_PATH = "/api/chat/sessions/{session_id}/screen/glance"
 
 
 class CameraAvailability(BaseModel):
@@ -122,6 +125,17 @@ def register_live_call_task_routes(router: APIRouter, *, chat_store_factory: Cal
             raise HTTPException(status_code=404, detail="task_not_found")
         return task
 
+    @router.post(LIVE_CALL_RECAP_PATH, response_model=LiveCallRecapStart)
+    async def start_live_call_recap(session_id: str, request: LiveCallRecapRequest) -> LiveCallRecapStart:
+        """After a call stops: its recap is written in the background, once per call (D3)."""
+
+        def start() -> LiveCallRecapStart:
+            store = chat_store_factory()
+            return begin_call_recap(job_store_factory(), _session(session_id), request.call_started_at,
+                                    chat_store=store)
+
+        return await asyncio.to_thread(start)
+
     @router.post(LIVE_CALL_TASKS_PATH + "/{task_id}/decision", response_model=CallProposalDecision)
     async def decide_live_call_proposal(session_id: str, task_id: str,
                                         request: CallProposalDecisionRequest) -> CallProposalDecision:
@@ -170,9 +184,21 @@ def register_live_call_task_routes(router: APIRouter, *, chat_store_factory: Cal
 
         return await asyncio.to_thread(start)
 
+    @router.post(SCREEN_GLANCE_PATH, response_model=CameraGlanceResult)
+    async def post_screen_glance(session_id: str, request: CameraGlanceRequest) -> CameraGlanceResult:
+        """A frame from the screen the person shares in a call (D2), described in the background for their next turn."""
+        from app.platform.chat.screen_glance import begin_screen_glance
+
+        def start() -> CameraGlanceResult:
+            _session(session_id)
+            return CameraGlanceResult(status=begin_screen_glance(session_id, request.image))
+
+        return await asyncio.to_thread(start)
+
 
 __all__ = [
     "CAMERA_GLANCE_PATH",
+    "SCREEN_GLANCE_PATH",
     "CameraGlanceRequest",
     "CameraGlanceResult",
     "LIVE_CALL_CAMERA_PATH",

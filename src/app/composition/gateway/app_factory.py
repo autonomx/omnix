@@ -38,6 +38,8 @@ def _install_local_browser_cors(gateway: FastAPI) -> None:
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
+        # A direct-origin live call reads which process answered (live-call-health.ts).
+        expose_headers=["x-omnix-node"],
         max_age=86_400,
     )
 
@@ -87,6 +89,8 @@ def _install_request_middleware(gateway: FastAPI, auth_service, membership_resol
         allow_credentials=False,
         allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
+        # A direct-origin live call reads which process answered (live-call-health.ts).
+        expose_headers=["x-omnix-node"],
         max_age=86_400,
     )
     gateway.add_middleware(RequestGuardMiddleware)

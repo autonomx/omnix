@@ -5,6 +5,10 @@ JPEGs, ``frame_ms`` apart); no ``speaker_id`` is the chat's own character. The b
 the seat (``speaker_view``) and reads the portrait image itself, as the avatar websocket does. The portrait service
 renders a loop only while no call streams: during a call a member with no loop yet is refused with ``portrait_busy``,
 and the browser keeps that member's picture until its own turn brings its loop.
+
+Outside a chat, ``?character_id=`` names the character itself (a podcast's cast, D4): one this workspace can read, or
+``character_not_found``. "Load live avatars" has each face's loop rendered first (``portrait-load``), so the cast's
+tiles idle live before the podcast starts.
 """
 from __future__ import annotations
 
@@ -16,7 +20,12 @@ from typing import Any
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from app.platform.characters.contracts import default_character_avatar_service, resolve_live_call_runtime
+from app.platform.characters.contracts import (
+    CharacterNotFoundError,
+    default_character_avatar_service,
+    resolve_character_portrait,
+    resolve_live_call_runtime,
+)
 from app.platform.live_voice.portrait.link import PortraitUnavailable, idle_portrait, portrait_url, prepare_portrait
 from app.platform.live_voice.transport.avatar_websocket import MAX_PORTRAIT_BYTES
 from app.platform.live_voice.transport.call_session import load_session, speaker_session
@@ -50,19 +59,29 @@ def _member_runtime(chat_store_factory: Callable[[], Any], session_id: str, spea
 
 def register_portrait_idle_route(router: APIRouter, *, chat_store_factory: Callable[[], Any]) -> None:
     @router.get(PORTRAIT_IDLE_PATH, response_model=PortraitIdleResponse, tags=["live-voice"])
-    async def portrait_idle(session_id: str = Query(min_length=1, max_length=200),  # noqa: B008
-                            speaker_id: str = Query("", max_length=200)) -> PortraitIdleResponse:  # noqa: B008
+    async def portrait_idle(session_id: str = Query("", max_length=200),  # noqa: B008
+                            speaker_id: str = Query("", max_length=200),  # noqa: B008
+                            character_id: str = Query("", max_length=160)) -> PortraitIdleResponse:  # noqa: B008
         base_url = portrait_url()
         if not base_url:
             return _refused("portrait_not_configured", "The portrait service is not set up")
+        subject = session_id.strip() or f"character {character_id.strip()}"
         try:
-            runtime = await asyncio.to_thread(_member_runtime, chat_store_factory, session_id, speaker_id.strip())
-        except Exception:  # noqa: BLE001 - the chat store is away: the member keeps its picture
-            logger.warning("Portrait idle member could not be read for session %s", session_id, exc_info=True)
+            if session_id.strip():
+                runtime = await asyncio.to_thread(_member_runtime, chat_store_factory, session_id.strip(),
+                                                  speaker_id.strip())
+                if runtime is None:
+                    return _refused("speaker_not_on_call", "That character is not on this call")
+                pack = runtime.avatar_pack
+            elif character_id.strip():
+                pack, _emotion = await asyncio.to_thread(resolve_character_portrait, character_id.strip())
+            else:
+                return _refused("speaker_not_on_call", "Name a chat or a character")
+        except CharacterNotFoundError:
+            return _refused("character_not_found", "That character could not be found")
+        except Exception:  # noqa: BLE001 - the store is away: the member keeps its picture
+            logger.warning("Portrait idle member could not be read for %s", subject, exc_info=True)
             return _refused("portrait_failed", "The portrait could not be read")
-        if runtime is None:
-            return _refused("speaker_not_on_call", "That character is not on this call")
-        pack = runtime.avatar_pack
         if pack is None or pack.renderer != "portrait":
             return _refused("not_a_portrait", "This character's avatar is not a portrait")
         from app.runtime.tenant_context import current_tenant
@@ -78,7 +97,7 @@ def register_portrait_idle_route(router: APIRouter, *, chat_store_factory: Calla
         except PortraitUnavailable as exc:
             return _refused(exc.code, str(exc) or "The portrait is not available")
         except Exception:  # noqa: BLE001 - the member keeps its picture
-            logger.warning("Portrait idle loop could not be read for session %s", session_id, exc_info=True)
+            logger.warning("Portrait idle loop could not be read for %s", subject, exc_info=True)
             return _refused("portrait_failed", "The portrait could not be read")
         return PortraitIdleResponse(ok=True, frame_ms=loop.frame_ms, idle=loop.idle, blink=loop.blink)
 

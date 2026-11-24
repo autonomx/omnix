@@ -5,6 +5,7 @@ import {
   setLiveVoiceReleasePortrait,
 } from '../../workspace/live-voice-release-observer';
 import type { LiveVoicePcmSession, LiveVoicePortraitHooks, PortraitStartRule } from '../../workspace/live-voice-pcm-session';
+import { reportLiveCallFailure } from '../../workspace/live-call-health';
 import { PortraitPlaybackClock } from './clock';
 import { PortraitCompositor, type PortraitPicture } from './compositor';
 import { startTicker } from '../../../../shared/timers';
@@ -77,6 +78,8 @@ export class LivePortrait {
   private pack: RuntimePack = null;
   private speaker: LivePortraitSpeaker | null = null;
   private sessionId = '';
+  // Speech outside a chat (a podcast's live avatars, D4): the socket names the speaking character itself.
+  private byCharacter = false;
   // The idle loop's and blink twins' JPEGs as they arrive: the member's tile plays them once another member speaks.
   private loopBytes: { idle: Uint8Array<ArrayBuffer>[]; blink: Uint8Array<ArrayBuffer>[]; idleCount: number; blinkCount: number; frameMs: number } = EMPTY_LOOP_BYTES();
   private liveCallKey: string | null = null;
@@ -143,6 +146,7 @@ export class LivePortrait {
     const generation = ++this.generation;
     this.sessionId = sessionId;
     this.speaker = speaker;
+    this.byCharacter = false;
     setLiveVoiceReleasePortrait(true);
     this.buffer = new PortraitFrameBuffer<ImageBitmap>((image) => image.close());
     const pack = speaker ? speaker.pack : this.pack;
@@ -167,6 +171,21 @@ export class LivePortrait {
         if (generation === this.generation) this.buffer.setSourceRate(segmentId, sampleRate);
       },
     };
+  }
+
+  /** Whether a character speaking outside a chat shows its portrait (a podcast's live avatars, D4). */
+  wantedForCharacter(speaker: LivePortraitSpeaker): boolean {
+    return speaker.pack?.renderer === 'portrait' && portraitEnabled();
+  }
+
+  /**
+   * Start for speech outside a chat (a podcast's live avatars, D4): the gateway resolves the character `speaker.id`
+   * names, and `runKey` (the podcast run) keys the idle loops its tiles keep while another character speaks.
+   */
+  beginForCharacter(runKey: string, speaker: LivePortraitSpeaker): LiveVoicePortraitHooks {
+    const hooks = this.begin(runKey, speaker);
+    this.byCharacter = true;
+    return hooks;
   }
 
   /** The audio session the hooks belong to: its context is the clock's, and its worklet starts reporting. */
@@ -267,7 +286,12 @@ export class LivePortrait {
   private connect(token: string, generation: number): void {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const speaker = this.speaker ? `&speaker_id=${encodeURIComponent(this.speaker.id)}` : '';
-    const query = `token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(this.sessionId)}${speaker}`;
+    // A podcast's speakers share its run's lease, so the next face replaces the last one's stream (owner report
+    // 2026-11-23: refused as "another live call" while that stream was still closing).
+    const subject = this.byCharacter
+      ? `character_id=${encodeURIComponent(this.speaker?.id ?? '')}&run=${encodeURIComponent(this.sessionId)}`
+      : `session_id=${encodeURIComponent(this.sessionId)}${speaker}`;
+    const query = `token=${encodeURIComponent(token)}&${subject}`;
     const socket = this.openSocket(`${protocol}//${window.location.host}${AVATAR_WEBSOCKET_PATH}?${query}`);
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
@@ -291,8 +315,10 @@ export class LivePortrait {
     });
     socket.addEventListener('close', () => {
       if (generation === this.generation && (this.snapshot.status === 'ready' || this.snapshot.status === 'loading')) {
+        reportLiveCallFailure('avatar');
         this.unavailable('portrait_lost', generation);
       } else if (generation === this.generation && this.snapshot.status === 'connecting') {
+        reportLiveCallFailure('avatar');
         this.unavailable('avatar_socket_refused', generation);
       }
     });

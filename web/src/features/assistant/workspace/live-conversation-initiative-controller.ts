@@ -5,7 +5,7 @@ import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { closeProposalQuestion, markProposalQuestionAudible, noteUserSpeechOnset, openProposalQuestion } from './live-call-proposal-question';
 import { callTasksAwaitingReport } from './live-call-tasks-controller';
 import { cameraShared, glanceCameraShare } from './camera-share';
-import { callSceneHasGuests, isSceneTalkReason, isSceneTurnId, SCENE_LINE_REASON, SCENE_REACTION_REASON, SCENE_TALK_REASON, SCENE_TALK_SILENCE_MS } from './live-call-scene';
+import { callSceneHasGuests, isSceneTalkReason, isSceneTurnId, SCENE_LINE_REASON, SCENE_REACTION_REASON, SCENE_TALK_REASON, SCENE_TALK_SILENCE_MS, sceneSpeakerFrom } from './live-call-scene';
 import { decideInitiative, decideTaskReport, insideQuietHours } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
 import { controller as liveVoiceCall } from './live-voice-controller-state';
@@ -23,6 +23,8 @@ let liveConversationInitiativeInstalled = false;
 const SCHEDULER_INTERVAL_MS = 750;
 const DEFAULT_COOLDOWN_MS = 30_000;
 const AUDIO_START_TIMEOUT_MS = 5_000;
+// How long a 409 without a Retry-After holds social initiative.
+const SERVER_HOLD_FALLBACK_MS = 15_000;
 const DESKTOP_CONTEXT_REFRESH_MS = 5_000;
 const DESKTOP_CONTEXT_MAX_AGE_MS = 120_000;
 // A task's report outranks social initiative and follows another spoken turn after a short gap.
@@ -91,6 +93,9 @@ let callConnected = false;
 let lastActivityAtMs = 0;
 let lastPromptAtMs: number | null = null;
 let promptCount = 0;
+// Until when the server said no to a social remark for its spacing: no remark is asked for before then (a call on
+// 2026-11-22 asked twenty times in 14 s, each turned down with 409 initiative_spacing).
+let serverHoldUntilMs: number | null = null;
 // Reasons not to raise again this call: an opener the person ignored, or an open loop the model passed on.
 const cooledReasons = new Set<string>();
 // The last social remark, until the person answers it or its answer window runs out.
@@ -116,7 +121,8 @@ let reportCandidateCheckedAtMs = Number.NEGATIVE_INFINITY;
 const reportAttempts = new Map<string, number>();
 // A reply or a line between members just ended in a call with guests: the server may let another member react or
 // say the next line (it decides who, if anyone). After a line, only another line follows (companion 6.4).
-let sceneTurnDue: { sessionId: string; sinceMs: number; afterLine: boolean } | null = null;
+// `skippedSpeaker`: the member whose turn just said SKIP; the call asks once more without them (C1).
+let sceneTurnDue: { sessionId: string; sinceMs: number; afterLine: boolean; skippedSpeaker?: string } | null = null;
 // When the call last asked a member to start talking: a refused or skipped start waits the level's silence again.
 let sceneStartAskedAtMs = Number.NEGATIVE_INFINITY;
 
@@ -207,6 +213,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
     desktopContext = null;
     desktopContextSessionId = null;
     cooledReasons.clear();
+    serverHoldUntilMs = null;
     awaitingAnswer = null;
     sceneTurnDue = null;
     playbackReported = false;
@@ -331,6 +338,7 @@ function evaluateInitiative(): void {
     cooldownMs: timing.cooldownMs,
     promptCount,
     maxPrompts: profile.max_idle_prompts,
+    serverHoldUntilMs,
   });
   dispatchPerf('initiative_policy_decision', {
     action: decision.action,
@@ -419,7 +427,8 @@ function evaluateSceneTurn(
   sceneTurnDue = null;
   // Talk on: the next line. Switched off on this call: the single reaction, and the server is told so.
   const switchedOff = !talking && Boolean(profile.scene_talk_enabled) && !presentation.sceneTalkOn;
-  void startProactiveTurn(sessionId, talking ? SCENE_LINE_REASON : SCENE_REACTION_REASON, profile, timing, 'scene', switchedOff);
+  void startProactiveTurn(sessionId, talking ? SCENE_LINE_REASON : SCENE_REACTION_REASON, profile, timing, 'scene', switchedOff,
+    due.skippedSpeaker ?? null);
   return true;
 }
 
@@ -504,6 +513,7 @@ async function startProactiveTurn(
   timing: InitiativePolicyTiming,
   source?: CompanionInitiativeSource,
   sceneTalkSwitchedOff = false,
+  sceneSkippedSpeaker: string | null = null,
 ): Promise<void> {
   if (requestController || pending) return;
   const initiativeSource = source ?? (reason === 'ambient_visual_presence' ? 'ambient' : 'social');
@@ -538,6 +548,7 @@ async function startProactiveTurn(
     if (isReport) reportAttempts.set(reason, (reportAttempts.get(reason) ?? 0) + 1);
     else if (isScene) {
       if (sceneTalkSwitchedOff) params.set('scene_talk_switched_off', 'true');
+      if (sceneSkippedSpeaker) params.set('scene_skipped_speaker', sceneSkippedSpeaker);
     } else {
       params.set('state_summary', conversationStateSummary(profile, timing, sessionId));
       if (timing.typicalTurnWords !== null) params.set('target_words', String(timing.typicalTurnWords));
@@ -570,6 +581,13 @@ async function startProactiveTurn(
     if (isReport) reportCandidate = null;
     if (!parsed) {
       if (!isReport && !isScene) noteSkipped(turnReason, initiativeSource);
+      // A line or reaction whose member said SKIP: ask once more without them, when the floor is free (C1). The
+      // server closes the anchor on a second SKIP, and the person speaking clears the ask.
+      const skipped = isScene && !sceneSkippedSpeaker && reason !== SCENE_TALK_REASON ? sceneSpeakerFrom(response) : null;
+      if (skipped) {
+        sceneTurnDue = { sessionId, sinceMs: performance.now(), afterLine: reason === SCENE_LINE_REASON, skippedSpeaker: skipped };
+        dispatchPerf('scene_turn_retry_without_member', { session_id: sessionId, initiative_reason: reason });
+      }
       return;
     }
     const turn: PendingProactive = {
@@ -605,6 +623,14 @@ async function startProactiveTurn(
         session_id: sessionId,
         initiative_reason: reason,
         detail: error.detail || null,
+      });
+    } else if (!isReport && error instanceof ApiError && error.status === 409) {
+      // The server holds initiative (another remark's spacing, or one still active): wait as long as it says.
+      serverHoldUntilMs = performance.now() + (error.retryAfterMs ?? SERVER_HOLD_FALLBACK_MS);
+      dispatchPerf('initiative_server_held', {
+        initiative_source: initiativeSource,
+        detail: error.detail || null,
+        retry_after_ms: error.retryAfterMs ?? null,
       });
     } else if (!controller.signal.aborted) {
       if (isReport) reportCandidate = null;
@@ -748,6 +774,7 @@ function resetQuietPeriod(reason: string): void {
     sceneStartAskedAtMs = Number.NEGATIVE_INFINITY;
     reportAttempts.clear();
     cooledReasons.clear();
+    serverHoldUntilMs = null;
   }
 }
 

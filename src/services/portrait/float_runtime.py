@@ -26,6 +26,7 @@ import collections
 import importlib
 import logging
 import math
+import random
 import sys
 import threading
 from dataclasses import dataclass, field
@@ -39,7 +40,7 @@ from torch import nn
 
 from services.helper_models import HelperUnavailable
 from app.conversation.portrait_stream_contract import QUALITY_LEVELS
-from services.portrait.scheduler import SAMPLES_PER_FRAME, PassPlan
+from services.portrait.scheduler import FPS, SAMPLES_PER_FRAME, PassPlan
 
 logger = logging.getLogger(__name__)
 
@@ -479,6 +480,26 @@ class FloatRuntime:
             portrait.blink_jpegs[level] = self.encode_pixels(twins, level)
         return portrait.blink_jpegs[level]
 
+    @torch.no_grad()
+    def render_blinking(self, portrait: Portrait, latents: torch.Tensor, closures: list[float],
+                        level: int = 0) -> list[bytes]:
+        """``render`` with each frame's eyes as shut as its closure (0 to 1): a blinking frame is rendered again with
+        its eyes shut, and takes that render's eye region (``eye_region_mask``) by its closure, as the idle blink
+        does. Only blinking frames cost a second render (about 7 frames a blink)."""
+        from services.portrait.idle_loop import eye_region_mask, eyes_shut
+
+        pixels = self.render_pixels(portrait, latents)
+        blinking = [index for index, closure in enumerate(closures) if closure > 0.0]
+        if blinking:
+            rows = torch.tensor(blinking, device=latents.device)
+            opened = pixels[rows].cpu().float()
+            shut = self.render_pixels(portrait, eyes_shut(latents[rows], self.eyelid)).cpu().float()
+            mask = torch.from_numpy(eye_region_mask((shut - opened).abs().mean(dim=(0, 1)).numpy()))
+            amount = torch.tensor([closures[index] for index in blinking])[:, None, None, None] * mask
+            blended = (opened + (shut - opened) * amount).round().clamp(0, 255).to(torch.uint8)
+            pixels[rows] = blended.to(pixels.device)
+        return self.encode_pixels(pixels, level)
+
     @staticmethod
     def rendered_idle_level(portrait: Portrait) -> int | None:
         """The best quality level whose idle loop and blink twins are both rendered already, if any."""
@@ -527,12 +548,15 @@ class FloatRuntime:
 class FloatSession:
     """The scheduler's MotionSession for one portrait: committed latents and audio features, frame by frame."""
 
-    def __init__(self, runtime: FloatRuntime, portrait: Portrait, we: torch.Tensor) -> None:
+    def __init__(self, runtime: FloatRuntime, portrait: Portrait, we: torch.Tensor,
+                 blink_seed: int | None = None) -> None:
         self.runtime, self.portrait, self.we = runtime, portrait, we
         dim = runtime.opt.dim_w
         self.latents = torch.zeros(0, dim, device="cuda")
         self.feats = torch.zeros(0, dim, device="cuda")
         self.level = 0  # the call's quality level (the service's ``quality`` message sets it)
+        # When the reply's frames blink (``speech_blink_closures``); each reply after a reset blinks differently.
+        self.blink_seed = random.randrange(2**31) if blink_seed is None else blink_seed
 
     @torch.no_grad()
     def run_pass(self, audio: np.ndarray, plan: PassPlan, seed: int) -> None:
@@ -589,19 +613,23 @@ class FloatSession:
         kept = [index for index in range(start, stop) if index % step == 0]
         if not kept:
             return [None] * (stop - start)
-        jpegs = iter(self.runtime.render(self.portrait, self.latents[kept], self.level))
+        from services.portrait.idle_loop import speech_blink_closures
+
+        closures = speech_blink_closures(kept, self.blink_seed, FPS)
+        jpegs = iter(self.runtime.render_blinking(self.portrait, self.latents[kept], closures, self.level))
         return [next(jpegs) if index % step == 0 else None for index in range(start, stop)]
 
     def reset(self) -> None:
         self.latents = self.latents[:0]
         self.feats = self.feats[:0]
+        self.blink_seed += 1
 
     def rewind(self, frames: int) -> None:
         self.latents = self.latents[:frames]
         self.feats = self.feats[:frames]
 
     def spawn(self) -> FloatSession:
-        session = FloatSession(self.runtime, self.portrait, self.we)
+        session = FloatSession(self.runtime, self.portrait, self.we, self.blink_seed)
         session.level = self.level
         return session
 

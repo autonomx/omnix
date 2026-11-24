@@ -16,6 +16,7 @@ from __future__ import annotations
 from app.conversation.contracts import is_live_voice_message
 import concurrent.futures
 import logging
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -33,6 +34,18 @@ CAMERA_UNSEEN_LINE = "Sorry, I couldn't see it."
 CAMERA_IMAGE_MAX_CHARS = 3_000_000
 DESCRIBE_TIMEOUT_SECONDS = 8.0
 _DESCRIPTION_CHARS = 1500
+# Markdown a vision model puts around its "few plain sentences" (Haiku 4.5: "# Visual Description", "**What I'm
+# unsure of:**", B2 2026-11-23). On one line it reads as noise in the prompt and on the kept snapshot.
+_MARKDOWN_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+[^\n]*\n?", re.MULTILINE)
+_MARKDOWN_EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1")
+_MARKDOWN_BULLET = re.compile(r"^\s*[-*]\s+", re.MULTILINE)
+
+
+def plain_description(text: Any) -> str:
+    """A vision model's description as one plain line: headings dropped, bold and bullets unmarked, capped."""
+    plain = _MARKDOWN_HEADING.sub("", str(text or ""))
+    plain = _MARKDOWN_BULLET.sub("", _MARKDOWN_EMPHASIS.sub(r"\2", plain))
+    return " ".join(plain.split())[:_DESCRIPTION_CHARS]
 
 CAMERA_QUESTION_TEMPLATE = prompt_template(
     "chat.live_call_camera.question", "1",
@@ -139,7 +152,9 @@ def camera_vision(
     return CameraVision(True, remote, "ready")
 
 
-def record_camera_snapshot(chat_store: Any, session_id: str, user_message: Any, snapshot: dict[str, str]) -> None:
+def record_camera_snapshot(
+    chat_store: Any, session_id: str, user_message: Any, snapshot: dict[str, str], *, key: str = "camera_snapshot",
+) -> None:
     """Keep the picture's description on the person's message; a store that cannot is skipped, never fatal."""
     message_id = str(getattr(user_message, "id", "") or "")
     update = getattr(chat_store, "update_user_message_metadata", None) or getattr(
@@ -148,7 +163,7 @@ def record_camera_snapshot(chat_store: Any, session_id: str, user_message: Any, 
     if not (session_id and message_id and callable(update)):
         return
     try:
-        update(session_id=session_id, message_id=message_id, metadata={"camera_snapshot": snapshot})
+        update(session_id=session_id, message_id=message_id, metadata={key: snapshot})
     except Exception:  # noqa: BLE001 - the reply still has the description
         logger.warning("live call camera: the snapshot description could not be saved", exc_info=True)
 
@@ -228,7 +243,7 @@ def look_at_camera_image(
     except Exception:  # noqa: BLE001 - the reply says it could not see it
         logger.warning("live call camera: vision failed", exc_info=True)
         return _unseen("the picture could not be read")
-    description = " ".join(str(getattr(item, "content", "") or "").split())[:_DESCRIPTION_CHARS]
+    description = plain_description(getattr(item, "content", ""))
     if not description:
         return _unseen("nothing came back")
     context_item = {
@@ -243,5 +258,5 @@ def look_at_camera_image(
 __all__ = [
     "CAMERA_FILLER", "CAMERA_IMAGE_MAX_CHARS", "CAMERA_QUESTION_TEMPLATE", "CAMERA_SOURCE_ID", "CAMERA_UNSEEN_LINE",
     "CameraLook", "CameraVision", "DESCRIBE_TIMEOUT_SECONDS", "CameraTurn", "camera_vision", "look_at_camera_image",
-    "record_camera_snapshot",
+    "plain_description", "record_camera_snapshot",
 ]

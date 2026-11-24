@@ -104,6 +104,8 @@ def test_what_a_live_call_holds_per_process_follows_its_replica():
                  # A shared camera's glance is described and held in one process; the call's turns, its greeting
                  # and its unprompted remarks read it there.
                  '/api/chat/sessions/chat%3Aabc/camera/glance',
+                 # A shared screen's glance in a call, the same way (D2, 2026-11-23).
+                 '/api/chat/sessions/chat%3Aabc/screen/glance',
                  '/api/chat/sessions/chat%3Aabc/live-call/greeting/stream',
                  # An early reply reads the glance too, and its accept finds the reply in the process that wrote it
                  # (review 2026-11-22: on the worker, it never saw a camera the call's replica described).
@@ -121,6 +123,15 @@ def test_what_a_live_call_holds_per_process_follows_its_replica():
         assert not bound.fullmatch(path)
     rendered = _renderer().render(POLICY, speech_on_api=True)
     assert f"~^1:.+:{POLICY['live_call_bound_pattern'][1:-1]}$ omnix_live_api;" in rendered
+
+
+def test_the_browser_route_check_uses_the_policy_pattern():
+    # live-call-health.ts flags a call whose call-bound responses came from two processes; it must judge
+    # "call-bound" by the same pattern the proxies route by.
+    source = (ROOT / 'web/src/features/assistant/workspace/live-call-health.ts').read_text(encoding='utf-8')
+    match = re.search(r"LIVE_CALL_BOUND_PATTERN = '([^']+)';", source)
+    assert match is not None
+    assert match.group(1) == POLICY['live_call_bound_pattern']
 
 
 def test_every_speculation_session_route_is_call_bound():

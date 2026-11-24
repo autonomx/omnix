@@ -78,6 +78,8 @@ let reacts = true;
 // Lines the server still lets the members say; the next ask after them is refused (the thread is at its max).
 let linesLeft = 0;
 let lineCount = 0;
+// Lines whose member says SKIP before any line is said.
+let lineSkips = 0;
 // A delivery waits on this when set, so a test can see what the call does before the commit resolves.
 let deliveryGate: Promise<void> | null = null;
 // An add waits on this when set, so a test can end the call while the add is still in flight.
@@ -100,6 +102,7 @@ beforeEach(() => {
   reacts = true;
   linesLeft = 0;
   lineCount = 0;
+  lineSkips = 0;
   deliveryGate = null;
   addGate = null;
   noteProactiveDelivery('s1', null);
@@ -128,6 +131,12 @@ beforeEach(() => {
     if (url.pathname === RUNTIME_PATH) return json({ session_id: 's1', scene_guests: [guest()] });
     if (url.pathname === STREAM_PATH) {
       const reason = url.searchParams.get('initiative_reason');
+      if (reason === SCENE_LINE_REASON && lineSkips > 0) {
+        lineSkips -= 1;
+        const skipped = sse([{ type: 'complete', content: '', metadata: { generation_status: 'skipped' } }, { type: 'done' }]);
+        skipped.headers.set('X-Omnix-Scene-Speaker', url.searchParams.get('scene_skipped_speaker') ? 'theo' : 'bea');
+        return skipped;
+      }
       if (reason === SCENE_LINE_REASON || reason === SCENE_TALK_REASON) {
         if (linesLeft <= 0) return json({ detail: `${reason}_not_due` }, 409);
         linesLeft -= 1;
@@ -416,6 +425,22 @@ describe('the members talking to each other', () => {
     expect(callsTo(STREAM_PATH)).toHaveLength(3);
     expect(callsTo(DELIVERY_PATH)).toHaveLength(2);
   }, 15_000);
+
+  it('asks once more without a member whose line said SKIP, and only once', async () => {
+    lineSkips = 2;
+    await startCall(talkProfile());
+    replyPlays();
+
+    await vi.waitFor(() => expect(callsTo(STREAM_PATH)).toHaveLength(2), { timeout: 4_000 });
+    expect(callsTo(STREAM_PATH)[0].url.searchParams.has('scene_skipped_speaker')).toBe(false);
+    expect(callsTo(STREAM_PATH)[1].url.searchParams.get('scene_skipped_speaker')).toBe('bea');
+    expect(callsTo(STREAM_PATH)[1].url.searchParams.get('initiative_reason')).toBe(SCENE_LINE_REASON);
+    // The retry's own SKIP ends it: nothing more is asked and nothing is delivered.
+    await new Promise((resolve) => setTimeout(resolve, 1_600));
+    expect(callsTo(STREAM_PATH)).toHaveLength(2);
+    expect(perf.filter((stage) => stage === 'scene_turn_retry_without_member')).toHaveLength(1);
+    expect(callsTo(DELIVERY_PATH)).toHaveLength(0);
+  }, 10_000);
 
   it('asks for the single reaction, and says so, when "Let them talk" is off on this call', async () => {
     await startCall(talkProfile());

@@ -258,11 +258,27 @@ def resolve_live_call_runtime(
     return runtime
 
 
+def resolve_character_portrait(
+    character_id: str,
+    *,
+    character_service_factory: Callable[[], CharacterService] = default_character_service,
+    avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
+) -> tuple[CharacterAvatarPack | None, str]:
+    """A character's avatar pack and speech emotion, outside any chat (a podcast's live avatars, D4).
+
+    The character must be one this workspace can read (``CharacterNotFoundError`` otherwise), as for a call."""
+
+    character = character_service_factory().resolve_snapshot(character_id)
+    pack = avatar_service_factory().resolve(character.id)
+    return pack, normalize_speech_style(character.speech_style).emotion
+
+
 __all__ = [
     "CharacterLiveCallRuntime",
     "LiveCallPreloadState",
     "LiveCallSpeechStyle",
     "normalize_speech_style",
+    "resolve_character_portrait",
     "resolve_live_call_runtime",
     "resolve_live_call_voice",
 ]

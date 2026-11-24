@@ -148,8 +148,14 @@ def request_id_from_header(value: str | None) -> str:
     return uuid.uuid4().hex
 
 
+# Names this gateway process in each response (`x-omnix-node`), so a live call can tell when its call-bound
+# requests reached two processes. Random per process: it identifies nothing outside this run.
+PROCESS_NODE = uuid.uuid4().hex[:12]
+_NODE_HEADER = (b"x-omnix-node", PROCESS_NODE.encode("ascii"))
+
+
 class RequestContextMiddleware:
-    """Bind a request id for each HTTP request and WebSocket (pure ASGI, streaming-safe)."""
+    """Bind a request id for each HTTP request and WebSocket (pure ASGI, streaming-safe); name the process."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -170,8 +176,11 @@ class RequestContextMiddleware:
 
         async def send_with_id(message: dict[str, Any]) -> None:
             if message["type"] in {"http.response.start", "websocket.accept"}:
-                headers = [item for item in message.get("headers", []) if item[0].lower() != b"x-request-id"]
-                message = {**message, "headers": [*headers, header]}
+                headers = [
+                    item for item in message.get("headers", [])
+                    if item[0].lower() not in {b"x-request-id", b"x-omnix-node"}
+                ]
+                message = {**message, "headers": [*headers, header, _NODE_HEADER]}
             await send(message)
 
         with log_context(request_id=request_id):

@@ -183,6 +183,7 @@
             "model_id": "fixture-model",
             "provider_id": "fixture",
             "research_mode": null,
+            "screen_shared": false,
             "speech_segment_id": null,
             "text_attachment": null,
             "ui_action": null,

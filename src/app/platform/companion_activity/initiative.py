@@ -35,8 +35,10 @@ InitiativeDecisionReason = Literal[
 ]
 SceneTalkAttemptKind = Literal["reaction", "line", "start"]
 SceneTalkOutcome = Literal["streamed", "declined", "skipped", "failed"]
-# A declined or skipped line or reaction closes its anchor; a declined or skipped start backs off.
+# A declined line or reaction closes its anchor, and so does a second skipped one; a declined or skipped start
+# backs off.
 _CLOSING_OUTCOMES = frozenset({"declined", "skipped"})
+_SKIPS_BEFORE_CLOSED = 2
 SCENE_TALK_TEXT_CHARS = 240
 _SCENE_TALK_RETENTION = timedelta(hours=24)
 _SCENE_TALK_WINDOW = timedelta(hours=1)
@@ -649,16 +651,21 @@ def _finished_attempt(
     })
 
 
+def _anchor_closed(declined: int, skipped: int) -> bool:
+    """No more reactions or lines follow an anchor once the director chose nobody, or once a chosen member's turn
+    said SKIP twice: the first SKIP lets the call ask once more without that member (C1, 2026-11-23)."""
+    return declined > 0 or skipped >= _SKIPS_BEFORE_CLOSED
+
+
 class _MemoryAttemptLog:
     def __init__(self, attempts: dict[str, SceneTalkAttempt]) -> None:
         self.attempts = attempts
 
     def closed(self, session_id: str, anchor_message_id: str) -> bool:
-        return any(
-            item.session_id == session_id and item.anchor_message_id == anchor_message_id
-            and item.kind in {"reaction", "line"} and item.outcome in _CLOSING_OUTCOMES
-            for item in self.attempts.values()
-        )
+        outcomes = [item.outcome for item in self.attempts.values()
+                    if item.session_id == session_id and item.anchor_message_id == anchor_message_id
+                    and item.kind in {"reaction", "line"}]
+        return _anchor_closed(outcomes.count("declined"), outcomes.count("skipped"))
 
     def start_backoff_until(self, session_id: str) -> datetime | None:
         times = [item.next_start_after for item in self.attempts.values()
@@ -689,14 +696,14 @@ class _PostgresAttemptLog:
     def closed(self, session_id: str, anchor_message_id: str) -> bool:
         row = self.connection.execute(
             """
-            SELECT 1 FROM omnix_companion_scene_talk_attempts
+            SELECT count(*) FILTER (WHERE outcome = 'declined'), count(*) FILTER (WHERE outcome = 'skipped')
+              FROM omnix_companion_scene_talk_attempts
              WHERE session_id = %s AND anchor_message_id = %s
                AND kind IN ('reaction', 'line') AND outcome IN ('declined', 'skipped')
-             LIMIT 1
             """,
             (session_id, anchor_message_id),
         ).fetchone()
-        return row is not None
+        return row is not None and _anchor_closed(int(row[0] or 0), int(row[1] or 0))
 
     def start_backoff_until(self, session_id: str) -> datetime | None:
         row = self.connection.execute(

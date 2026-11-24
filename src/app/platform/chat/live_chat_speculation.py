@@ -31,6 +31,7 @@ from app.platform.chat import (
 from app.platform.chat.camera_glance import LIVE_TURN_WAIT_SECONDS, camera_share_look
 from app.platform.chat.live_agent_store import has_pending_proposal, is_proposal_answer
 from app.platform.chat.live_call_camera import record_camera_snapshot
+from app.platform.chat.screen_glance import SCREEN_SNAPSHOT_KEY, screen_share_look
 from app.platform.chat.scene import has_scene_guests, scenes_available, seats_taken
 from app.platform.chat.store import _provider_key
 from app.providers import ChatMessage as ProviderMessage
@@ -64,6 +65,8 @@ class LiveSpeculationRequest(BaseModel):
     source_sequence: int = Field(ge=0)
     # The person shares their camera (camera share): the early reply takes the glance's description like the turn.
     camera_shared: bool = False
+    # The person shares their screen in the call (D2): the early reply takes the screen glance's description too.
+    screen_shared: bool = False
 
 
 class LiveSpeculationAcceptRequest(BaseModel):
@@ -89,6 +92,8 @@ class _Speculation:
     camera_shared: bool = False
     # The camera description the reply was written with, kept on the person's message once it is accepted.
     camera_snapshot: dict[str, str] | None = None
+    screen_shared: bool = False
+    screen_snapshot: dict[str, str] | None = None
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     completed: bool = False
@@ -225,6 +230,7 @@ def register_live_chat_speculation_routes(router: APIRouter,
             execution_lane=execution_lane,
             scene_possible=scene_possible,
             camera_shared=request.camera_shared,
+            screen_shared=request.screen_shared,
         )
         with _SPECULATION_LOCK:
             _prune_speculations()
@@ -321,6 +327,11 @@ def register_live_chat_speculation_routes(router: APIRouter,
         if speculation.camera_snapshot is not None:
             await asyncio.to_thread(
                 record_camera_snapshot, store, session_id, user_message, speculation.camera_snapshot,
+            )
+        if speculation.screen_snapshot is not None:
+            await asyncio.to_thread(
+                record_camera_snapshot, store, session_id, user_message, speculation.screen_snapshot,
+                key=SCREEN_SNAPSHOT_KEY,
             )
         complete_started = time.perf_counter()
         completed = await asyncio.to_thread(
@@ -470,6 +481,11 @@ def _generate_side_effect_free(
             # Before any text: a reply written while the picture was still being described is not reused, so the
             # final turn, a moment later, can see what this one could not.
             yield _sse({"type": "camera", "generation_id": speculation.generation_id, "looking": look.looking})
+        if speculation.screen_shared:
+            # A shared screen in the call (D2): the same glance rule as the camera, never a vision call here.
+            screen = screen_share_look(speculation.session_id, wait_seconds=LIVE_TURN_WAIT_SECONDS)
+            context_items, speculation.screen_snapshot = [*context_items, *screen.items], screen.snapshot
+            yield _sse({"type": "screen", "generation_id": speculation.generation_id, "looking": screen.looking})
         assembly, rendered = store.build_provider_prompt(session, user_message, context_items)
         live_turn = provider_supports(provider, LIVE_TURNS)
         messages = [

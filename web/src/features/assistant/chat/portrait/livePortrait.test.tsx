@@ -282,6 +282,32 @@ describe('the live portrait client', () => {
     revoke.mockRestore();
   });
 
+  it("outside a chat names the character itself, wanted for a portrait pack alone (a podcast's live avatars)", () => {
+    const { portrait, sockets } = setup();
+    const speaker = {
+      id: 'char:maya',
+      pack: { renderer: 'portrait', fallback_renderer: 'orb', version: 2, base_asset_id: 'image:maya' },
+    } as const;
+    // No chat has asked for live video: a podcast's character still shows its face, unless portraits are off.
+    expect(portrait.wantedForCharacter(speaker)).toBe(true);
+    expect(portrait.wantedForCharacter({ id: 'char:bea', pack: { renderer: 'sprite' } })).toBe(false);
+    window.localStorage.setItem('omnix.livePortrait.enabled', '0');
+    expect(portrait.wantedForCharacter(speaker)).toBe(false);
+    window.localStorage.removeItem('omnix.livePortrait.enabled');
+
+    portrait.beginForCharacter('podcast:run-1', speaker).onHello({ callKey: 'call-1', avatarToken: 'token' });
+    // The run is the lease label its speakers share: the next face replaces this one's stream (2026-11-23).
+    expect(sockets[0].url).toContain('?token=token&character_id=char%3Amaya&run=podcast%3Arun-1');
+    expect(sockets[0].url).not.toContain('session_id');
+    sockets[0].message(JSON.stringify({ type: 'ready' }));
+    expect(portrait.getSnapshot().speakerId).toBe('char:maya');
+
+    // A call after it names its chat again.
+    portrait.begin('chat:maya').onHello({ callKey: 'call-2', avatarToken: 'token-2' });
+    expect(sockets[1].url).toContain('session_id=chat%3Amaya');
+    expect(sockets[1].url).not.toContain('character_id');
+  });
+
   it('shows the idle loop once all of it has arrived, and cuts back to it when a turn is interrupted', async () => {
     const { portrait, sockets, images } = setup();
     const context = { currentTime: 1 };

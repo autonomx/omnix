@@ -59,6 +59,18 @@ def test_a_glance_is_described_for_the_next_turn_and_keeps_no_image():
     assert "base64" not in json.dumps(look.items)
 
 
+def test_a_glance_description_loses_the_markdown_a_vision_model_puts_around_it():
+    # Haiku 4.5 answered "a few plain sentences" with a heading and bold labels (B2, 2026-11-23).
+    vision = FakeVision(reply="# Visual Description\nThey are smiling.\n\n**What I'm unsure of:** the room.\n"
+                              "- A mug on the desk")
+
+    _begin("s1", vision)
+    look = camera_share_look("s1", wait_seconds=2, clock=lambda: 101.0)
+
+    assert look.snapshot is not None
+    assert look.snapshot["description"] == "They are smiling. What I'm unsure of: the room. A mug on the desk"
+
+
 def test_a_turn_without_a_fresh_glance_is_told_it_cannot_see():
     vision = FakeVision()
     _begin("s1", vision, clock=lambda: 100.0)
@@ -127,7 +139,7 @@ def test_only_the_newest_chats_keep_a_glance(monkeypatch):
         _begin(f"s{index}", FakeVision(reply=f"Glance {index}."), clock=lambda index=index: 100.0 + index)
         camera_share_look(f"s{index}", wait_seconds=2, clock=lambda: 105.0)
 
-    assert sorted(camera_glance._glances) == sorted(camera_glance._seen) == ["s2", "s3", "s4"]
+    assert sorted(camera_glance._CAMERA._glances) == sorted(camera_glance._CAMERA._seen) == ["s2", "s3", "s4"]
     assert camera_share_look("s0", wait_seconds=2, clock=lambda: 105.0).snapshot is None
     assert camera_share_look("s4", wait_seconds=2, clock=lambda: 105.0).items[0]["content"] == "Glance 4."
 

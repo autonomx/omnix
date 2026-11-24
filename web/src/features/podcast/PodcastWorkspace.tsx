@@ -6,12 +6,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { mockPodcastSpeakerProfiles } from '../conversation-production';
+import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
-import { createPodcastScriptSession } from './podcastScriptSession';
-import { buildConversationalPodcastSegments } from './scriptBuilder';
-import type { PodcastFormat } from './types';
+import { requestPodcastScript, scriptSummary, type ScriptSegment } from './podcastScript';
+import { PodcastEpisodeSetup, defaultEpisode, formats, type EpisodeSettings } from './PodcastEpisodeSetup';
+import { STOPPED_MESSAGE, cancelOnStop, isStopped, sleepUnlessStopped, throwIfStopped } from './podcastControl';
+import { PodcastParticipants, defaultSpeakers, type SpeakerDraft } from './PodcastParticipants';
+import { PodcastRunControls } from './PodcastRunControls';
+import { PodcastOutputs, PodcastRunProgress, PodcastStudioHeader, PodcastTranscript, type TranscriptRow } from './PodcastStudioParts';
+import { PodcastLibrary } from './PodcastLibrary';
+import { clock, transcriptRows, type PodcastEpisode } from './podcastEpisodes';
+import { activeStageIndex, jobSteps, type RunProgress } from './podcastProgress';
+import { saveRunScript } from './podcastTakes';
+import { lineAt, stitchedTimeline, timelineFrom, type LineStart } from './podcastTimeline';
 import './PodcastWorkspace.css';
 import { ApiError } from '../../api/errors';
 import { fetchBytes } from '../../api/transport';
@@ -19,10 +26,12 @@ import { jobOutputRefs } from '../../api/schemas/streams';
 import { downloadUrl } from '../../shared/download';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 import { jobKeys } from '../../api/jobs';
+import { voiceApiClient } from '../voice';
+import { CastPortraitLoadControl, CharacterStage, listCastableCharacters, speakAsCharacters, type CastableCharacter, type CharacterSpeechRun } from '../assistant';
 
 type VoiceAsset = AssetListResponse['assets'][number];
-type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
-type Segment = { index: number; speaker: string; text: string };
+/** A script line; `line_id` names it in the run's saved script (`podcastTakes.ts`). */
+type Segment = ScriptSegment & { line_id?: string };
 type Output = {
   dataUrl: string;
   duration: number;
@@ -30,6 +39,10 @@ type Output = {
   key: string;
   title: string;
   live?: boolean;
+  /** The script line a preview piece speaks (its position in the script). */
+  line?: number;
+  /** Where each line starts in this audio, for the transcript to follow (`podcastTimeline.ts`). */
+  timeline?: LineStart[];
 };
 
 type WavChunk = {
@@ -39,42 +52,27 @@ type WavChunk = {
   bitsPerSample: number;
 };
 
-const defaultTitle = 'The Future of AI in Everyday Life';
-const defaultBrief = 'Explore how artificial intelligence is shaping our daily lives, transforming work and productivity, inspiring creativity, influencing relationships, and augmenting decision-making. We will discuss opportunities, risks, and what comes next.';
-const durations = ['2 min', '5 min', '10 min', '15 min', '20 min', '30 min', '45 min', '60 min'];
-const formats: Array<{ id: PodcastFormat; label: string; description: string }> = [
-  { id: 'debate', label: 'Debate', description: 'Two or more opposing sides' },
-  { id: 'interview', label: 'Interview', description: 'Host interviews guests' },
-  { id: 'speech', label: 'Speech', description: 'Solo host presentation' },
-];
 const stitchedKey = 'live:stitched-preview';
+// The player's phases while nothing plays: the cast speaking live (D4), then the final render.
+const liveCastKey = '__live_cast__';
+const finalRenderKey = '__final_render__';
 const outputSettings = { speed: 1, pitch: 0, stability: 0.72, similarity: 0.78 };
 const audioEffects = ['Compression', 'De-esser'];
-
-function toSpeakerDraft(profile: (typeof mockPodcastSpeakerProfiles)[number]) {
-  return {
-    id: profile.id,
-    name: profile.name,
-    role: profile.role,
-    avatar: profile.avatar,
-    identity: profile.identity,
-    beliefs: profile.beliefs.join(', '),
-    personality: profile.personality.join(', '),
-    speakingStyle: profile.speakingStyle.join(', '),
-    goal: profile.defaultGoal,
-    instructions: '',
-    voice: '',
-  };
-}
+/** The studio's lists load once; a run refreshes them when it finishes. */
+const loadOnce = { retry: false, refetchInterval: false, refetchOnWindowFocus: false } as const;
 
 const minutes = (value: string) => Math.max(1, Number.parseInt(value, 10) || 1);
-const clock = (seconds: number) => `${String(Math.floor((seconds || 0) / 60)).padStart(2, '0')}:${String(Math.floor(seconds || 0) % 60).padStart(2, '0')}`;
 const isTerminal = (status: unknown) => ['completed', 'complete', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'canceled'].includes(String(status ?? '').toLowerCase());
 // A voice is named by its asset id, which the TTS provider resolves (WP-4.10).
 const voiceName = (asset: VoiceAsset) => String((asset as any).metadata?.profile_name || (asset as any).metadata?.name || String((asset as any).file_name || '').replace(/\.[^.]+$/, '') || 'Voice');
-const voicesFrom = (assets: VoiceAsset[]) => assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: String(asset.id || ''), label: voiceName(asset) })).filter((voice) => voice.id);
+// The live voice socket speaks by the clone's speaker id, as a call does (characters/live_call._voice_speaker_id).
+const speakerIdOf = (asset: VoiceAsset) => {
+  const metadata = (asset as any).metadata || {};
+  const named = [metadata.voice_clone_id, metadata.voice_id, metadata.speaker].map((value) => String(value || '').trim()).find((value) => value && value.toLowerCase() !== 'default');
+  return named || String(asset.id || '').replace(/^voice-cloning:/, '').trim();
+};
+const voicesFrom = (assets: VoiceAsset[]) => assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: String(asset.id || ''), label: voiceName(asset), speaker: speakerIdOf(asset) })).filter((voice) => voice.id);
 const jobTitle = (job?: JobRecord) => String((job?.input_payload as any)?.title || job?.type || 'Podcast audio');
-const rowsFrom = (segments: Segment[], total: number) => segments.map((segment, index) => ({ timestamp: clock(index * Math.max(8, total / Math.max(1, segments.length))), speaker: segment.speaker, text: segment.text }));
 
 function stages() {
   return [
@@ -90,49 +88,48 @@ function outputsFrom(jobs: Array<JobRecord | undefined>): Output[] {
   return jobs.flatMap((job) => jobOutputRefs(job).map((ref, index) => {
     const url = typeof ref.data_url === 'string' ? ref.data_url : typeof ref.audio_url === 'string' ? ref.audio_url : '';
     if (!(url.startsWith('data:audio/') || url.startsWith('blob:') || url.startsWith('/api/'))) return null;
-    return { dataUrl: url, duration: Number(ref.duration || 0), jobId: job?.id || 'job', key: `${job?.id}:${ref.asset_id || index}`, title: ref.title || jobTitle(job) };
+    return { dataUrl: url, duration: Number(ref.duration || 0), jobId: job?.id || 'job', key: `${job?.id}:${ref.asset_id || index}`, title: ref.title || jobTitle(job), timeline: timelineFrom(ref.timeline) };
   }).filter(Boolean));
 }
 
-async function waitJob(job: JobRecord, timeoutMs = 120000) {
+/** Polls `job` until it has audio or settles; a stop (`signal`) cancels it and throws. */
+async function waitJob(job: JobRecord, timeoutMs = 120000, onProgress?: OnJobProgress, pollMs = 1250, signal?: AbortSignal) {
+  const forget = cancelOnStop(job, signal);
+  try {
+    return await pollJob(job, timeoutMs, onProgress, pollMs, signal);
+  } finally {
+    forget();
+  }
+}
+
+type OnJobProgress = (message: string, progress?: JobRecord['progress']) => void;
+
+async function pollJob(job: JobRecord, timeoutMs: number, onProgress: OnJobProgress | undefined, pollMs: number, signal?: AbortSignal) {
   let latest = job;
+  let shown = '';
   const started = Date.now();
   while (!outputsFrom([latest]).length && !isTerminal(latest.status) && Date.now() - started < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, 1250));
+    await sleepUnlessStopped(pollMs, signal);
+    throwIfStopped(signal);
     try { latest = await omnixApiClient.getJob(job.id); } catch {}
+    const message = String(latest.progress?.message || '').trim();
+    if (onProgress && message && message !== shown) onProgress((shown = message), latest.progress);
   }
   return latest;
 }
 
-function parseSegments(text: string): Segment[] {
-  const match = text.replace(/```(?:json)?/g, '').replace(/```/g, '').match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  if (match) {
-    try {
-      const parsed = JSON.parse(match[0]);
-      const raw = Array.isArray(parsed) ? parsed : parsed.segments || [];
-      const rows = raw.map((row: any, index: number) => ({ index, speaker: String(row.speaker || row.name || 'Speaker'), text: String(row.text || row.line || row.content || '') })).filter((row: Segment) => row.text);
-      if (rows.length) return rows;
-    } catch {}
-  }
-  return [];
-}
-
-async function generateScript(args: { title: string; brief: string; audience: string; duration: string; speakers: SpeakerDraft[] }) {
-  try {
-    const session = await createPodcastScriptSession({ title: `Podcast script: ${args.title}`.slice(0, 64), system_prompt: 'Return only valid JSON.' });
-    const response = await omnixApiClient.sendChatMessage(session.id, {
-      content: `Write a speaker-tagged podcast as JSON with segments. Topic: ${args.title}. Brief: ${args.brief}. Speakers: ${args.speakers.map((speaker) => speaker.name).join(', ')}.`,
-    });
-    const parsed = parseSegments(String(response?.content || response?.text || response?.message?.content || ''));
-    if (parsed.length) return parsed;
-  } catch {}
-  return buildConversationalPodcastSegments(args.title, args.brief, args.audience, args.speakers, args.duration).map((segment, index) => ({ index, speaker: segment.speaker, text: segment.text }));
-}
+// The final render speaks every line in turn (about ten seconds a line on a local GPU, owner report 2026-11-24: a
+// 20-minute episode outlived the old three-minute wait), so the wait grows with the script.
+const FINAL_RENDER_MS_PER_LINE = 60000;
+const FINAL_RENDER_MIN_MS = 15 * 60000;
+export const finalRenderWaitMs = (lines: number) => Math.max(FINAL_RENDER_MIN_MS, lines * FINAL_RENDER_MS_PER_LINE);
+// Tests shorten the final render's polling.
+export const finalRenderTiming = { pollMs: 1250 };
 
 function assignments(segments: Segment[], speakers: SpeakerDraft[], voices: Array<{ id: string; label: string }>) {
   return Object.fromEntries([...new Set(segments.map((segment) => segment.speaker))].map((name, index) => {
     const speaker = speakers.find((entry) => entry.name === name || entry.role === name) || speakers[index % Math.max(1, speakers.length)];
-    return [name, { voiceId: speaker?.voice || voices[index % Math.max(1, voices.length)]?.id || null, style: speaker?.speakingStyle || speaker?.role || 'Neutral' }];
+    return [name, { voiceId: speaker?.voice || voices[index % Math.max(1, voices.length)]?.id || null, style: speaker?.speakingStyle || speaker?.role || 'Neutral', speakerId: speaker?.id || null }];
   }));
 }
 
@@ -157,6 +154,8 @@ function previewPayload(args: any) {
     output_settings: outputSettings,
     audio_effects: audioEffects,
     save_output: true,
+    // Spoken under its saved line, the voice job keeps this audio as the line's take for the final render.
+    ...(args.scriptId ? { script_id: args.scriptId } : {}),
     renderer: 'podcast-live-preview',
   };
 }
@@ -185,6 +184,11 @@ function finalPayload(args: any) {
     script_mode: args.segments.length > 1 ? 'multi_speaker' : 'single_speaker',
     script_speakers: names.map((name) => ({ name, count: counts[name] })),
     script_segments: args.segments,
+    // An opening and closing sting and room tone under the voices (voice/bookends.py); off unless asked for.
+    ...(args.bookends ? { bookends: true } : {}),
+    ...(args.roomTone ? { room_tone: true } : {}),
+    // No line asked again: every take the preview kept is reused, and only lines without one are spoken.
+    ...(args.scriptId ? { script_id: args.scriptId, render_line_ids: [] } : {}),
     character_voice_assignments: names.map((name) => ({ speaker: name, voice_id: map[name] || null, style: args.assignments[name]?.style || 'Neutral', line_count: counts[name] })),
     voice_mapping: map,
     default_voices: defaultVoices(args.voices),
@@ -284,6 +288,8 @@ async function stitchOutputs(outputs: Output[]) {
   for (const output of outputs) chunks.push(parseWavChunk(await loadAudioBytes(output.dataUrl)));
   const wav = createWavBytes(chunks);
   const blobUrl = URL.createObjectURL(new Blob([wav.bytes], { type: 'audio/wav' }));
+  const dataBytes = Math.max(1, chunks.reduce((sum, chunk) => sum + chunk.data.byteLength, 0));
+  const timeline = stitchedTimeline(outputs.map((output, index) => output.line ?? index), chunks.map((chunk) => (chunk.data.byteLength / dataBytes) * wav.duration));
   const last = outputs[outputs.length - 1];
   const summedDuration = outputs.reduce((sum, output) => sum + Number(output.duration || 0), 0);
   return {
@@ -293,7 +299,132 @@ async function stitchOutputs(outputs: Output[]) {
     title: `Live preview stitched ${outputs.length} / ${outputs.length}`,
     live: true,
     duration: wav.duration || summedDuration || last.duration,
+    timeline,
   };
+}
+
+/** What one run reads from the studio and how it reports back (the workspace's state setters and player refs). */
+type ProductionRun = {
+  episode: EpisodeSettings;
+  speakers: SpeakerDraft[];
+  voices: Array<{ id: string; label: string; speaker: string }>;
+  signal?: AbortSignal;
+  /** Live avatars are on and someone is cast: the cast speaks the preview instead of stitched audio. */
+  liveCast: boolean;
+  castOf: (speaker: SpeakerDraft | undefined) => CastableCharacter | undefined;
+  ttsSpeaker: (voiceAssetId: string | null) => string | null;
+  stageKey: string;
+  pausedRef: { current: boolean };
+  speechRunRef: { current: CharacterSpeechRun | null };
+  piecesRef: { current: Output[] };
+  queue: (output: Output) => Promise<void>;
+  say: (message: string) => void;
+  direct: (note: string) => void;
+  select: (key: string) => void;
+  showScript: (rows: TranscriptRow[]) => void;
+  /** Moves the run's progress bar (`podcastProgress.ts`). */
+  advance: (progress: RunProgress) => void;
+  onSpeaking: (id: string | null) => void;
+  onLiveSpeech: (on: boolean) => void;
+  /** The line the cast is speaking, for the transcript to follow; null when it stops. */
+  onLine: (line: number | null) => void;
+};
+
+/** One podcast run: the script, the live preview (stitched audio or the cast speaking), then the final render. */
+async function producePodcast(run: ProductionRun): Promise<JobRecord> {
+  const { voices, signal, speakers } = run;
+  const { title, brief, audience, format, tone, duration, language, generationStyle, sources, bookends, roomTone } = run.episode;
+  run.advance({ stage: 'script', done: 0, total: 1, label: 'Writing the script' });
+  const script = await requestPodcastScript(
+    { title, brief, audience, format, tone, durationMinutes: minutes(duration), speakers, sources },
+    { onProgress: (step, steps) => {
+      run.say(`Writing the podcast script: ${step.toLowerCase()}...`);
+      run.advance({ stage: 'script', ...jobSteps(steps), label: `Script: ${step}` });
+    }, signal },
+  );
+  const segments = script.segments;
+  const summary = scriptSummary(script.quality, script.model);
+  const asg = assignments(segments, speakers, voices);
+  run.showScript(transcriptRows(segments, minutes(duration) * 60));
+  run.select('__streaming__');
+  // Preview lines become the saved script's takes, so the final render reuses them (`podcastTakes.ts`). The cast
+  // speaks live and keeps no takes, so a live-avatar run still has every line spoken by the final render.
+  const saved = run.liveCast ? null : await saveRunScript(title, segments);
+  throwIfStopped(signal);
+  const reuse = Boolean(saved);
+  const lined: Segment[] = saved ? segments.map((segment, position) => ({ ...segment, line_id: saved.lineIds[position] })) : segments;
+  if (run.liveCast) {
+    // D4: the cast speaks the script live, each line in its speaker's voice and with its avatar; the final render
+    // below is the same either way.
+    run.direct(`Script is ready${summary}. The cast is speaking it live with their avatars; the final render follows.`);
+    const lines = segments.map((segment) => {
+      const assignment = asg[segment.speaker] || {};
+      const character = run.castOf(speakers.find((speaker) => speaker.id === assignment.speakerId));
+      return { text: segment.text, voiceId: run.ttsSpeaker(assignment.voiceId || null), speaker: character ? { id: character.id, pack: character.pack } : null };
+    });
+    const speech = speakAsCharacters(run.stageKey, lines, (index, line) => {
+      run.onSpeaking(line.speaker?.id ?? null);
+      run.onLine(index);
+      run.say(`Live ${index + 1}/${lines.length}: ${segments[index].speaker}`);
+      run.advance({ stage: 'preview', done: index, total: lines.length, label: `Live: line ${index + 1} of ${lines.length} (${segments[index].speaker})` });
+    });
+    run.speechRunRef.current = speech;
+    if (run.pausedRef.current) speech.pause();
+    const stopSpeech = () => speech.stop();
+    signal?.addEventListener('abort', stopSpeech, { once: true });
+    run.onLiveSpeech(true);
+    // No preview audio is stitched on this path: the player says so instead of waiting for a segment.
+    run.select(liveCastKey);
+    try {
+      await speech.done;
+    } finally {
+      signal?.removeEventListener('abort', stopSpeech);
+      if (run.speechRunRef.current === speech) run.speechRunRef.current = null;
+      run.onLiveSpeech(false);
+      run.onSpeaking(null);
+      run.onLine(null);
+    }
+    throwIfStopped(signal);
+  } else {
+    run.direct(`Script is ready${summary}. Each completed preview turn is stitched into one growing WAV so the audio duration extends instead of resetting to the latest segment.`);
+    run.advance({ stage: 'preview', done: 0, total: segments.length, label: `Preview: line 1 of ${segments.length}`, reuse });
+
+    for (const [position, segment] of lined.entries()) {
+      throwIfStopped(signal);
+      const job = await omnixApiClient.createJob({
+        module: 'podcast',
+        type: 'tts.synthesize',
+        resource_class: 'gpu:tts',
+        priority: 1,
+        input_payload: previewPayload({ title, language, segment, voices, assignments: asg, scriptId: saved?.scriptId }),
+        stages: stages().slice(0, 3),
+      }, { timeoutMs: 120000, timeoutMessage: 'Podcast live preview turn is still running.' });
+      const output = outputsFrom([await waitJob(job, 120000, undefined, 1250, signal)])[0];
+      if (output) {
+        await run.queue({ ...output, key: `live:${segment.index}:${output.key}`, title: `${segment.speaker}: voice mapped`, live: true, line: position });
+        run.say(`Stitched live preview ${segment.index + 1}/${segments.length}: ${segment.speaker}`);
+      }
+      const made = position + 1;
+      run.advance({ stage: 'preview', done: made, total: segments.length, label: `Preview: line ${Math.min(made + 1, segments.length)} of ${segments.length}`, reuse });
+    }
+  }
+  throwIfStopped(signal);
+  if (!run.piecesRef.current.length) run.select(finalRenderKey);
+
+  const finalJob = await omnixApiClient.createJob({
+    module: 'podcast',
+    type: 'tts.multi_speaker_synthesize',
+    resource_class: 'gpu:tts',
+    priority: 0,
+    input_payload: finalPayload({ title, brief, format, audience, duration, tone, language, generationStyle, speakers, voices, assignments: asg, segments: lined, bookends, roomTone, scriptId: saved?.scriptId }),
+    stages: stages(),
+  }, { timeoutMs: 180000, timeoutMessage: 'Final podcast render is still running.' });
+  run.say(`Rendering the final podcast audio: ${segments.length} lines...`);
+  run.advance({ stage: 'final', done: 0, total: 1, reuse, label: reuse ? 'Final render: mixing the preview lines' : `Final render: waiting for the voice engine (${segments.length} lines)` });
+  return waitJob(finalJob, finalRenderWaitMs(segments.length), (step, steps) => {
+    run.say(`Rendering the final podcast audio: ${step.toLowerCase()}...`);
+    run.advance({ stage: 'final', ...jobSteps(steps), label: `Final render: ${step}`, reuse });
+  }, finalRenderTiming.pollMs, signal);
 }
 
 export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -308,19 +439,26 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const piecesRef = useRef<Output[]>([]);
   const stitchRunRef = useRef(0);
   const liveBlobUrlsRef = useRef<string[]>([]);
+  const speechRunRef = useRef<CharacterSpeechRun | null>(null);
+  // The producer's Stop and Pause for the run in progress (owner request 2026-11-24).
+  const stopRef = useRef<AbortController | null>(null);
+  const pausedRef = useRef(false);
+  const [paused, setPausedState] = useState(false);
+  const setPaused = (value: boolean) => { pausedRef.current = value; setPausedState(value); };
+  const [stopping, setStopping] = useState(false);
+  // The stage's run key: "Load live avatars" keeps the cast's idle loops under it, and every run speaks under it, so
+  // its speakers share one portrait lease and the loops loaded before the run are the run's.
+  const stageKeyRef = useRef(`podcast-stage:${Math.random().toString(36).slice(2, 10)}`);
 
-  const jobsQuery = useQuery({ queryKey: jobKeys.all, queryFn: () => omnixApiClient.listJobs(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
-  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
+  const jobsQuery = useQuery({ queryKey: jobKeys.all, queryFn: () => omnixApiClient.listJobs(), ...loadOnce });
+  // Every clone in the voice library, as the chat lists them: stored voice profiles miss clones that exist only on
+  // disk (owner report 2026-11-23: Ehsan, Afra and Rudeus were missing). Older gateways have only the stored list.
+  const assetsQuery = useQuery({ queryKey: ['podcast', 'voice-library'], queryFn: () => voiceApiClient.listVoiceLibrary().catch(() => omnixApiClient.listAssets({ type: 'voice_profile' })), ...loadOnce });
+  const charactersQuery = useQuery({ queryKey: ['podcast', 'characters'], queryFn: listCastableCharacters, ...loadOnce });
 
-  const [title, setTitle] = useState(defaultTitle);
-  const [brief, setBrief] = useState(defaultBrief);
-  const [audience, setAudience] = useState('Software Engineers');
-  const [duration, setDuration] = useState('20 min');
-  const [tone, setTone] = useState('Professional');
-  const [language, setLanguage] = useState('English (US)');
-  const [format, setFormat] = useState<PodcastFormat>('debate');
-  const [generationStyle, setGenerationStyle] = useState('automatic');
-  const [speakers, setSpeakers] = useState(() => mockPodcastSpeakerProfiles.map(toSpeakerDraft));
+  const [episode, setEpisode] = useState(defaultEpisode);
+  const { title, brief, duration, format } = episode;
+  const [speakers, setSpeakers] = useState(defaultSpeakers);
   const [rows, setRows] = useState<any[]>([]);
   const [directorNote, setDirectorNote] = useState('No live production is running. Configure the episode, then press Generate live podcast.');
   const [liveCommand, setLiveCommand] = useState('');
@@ -330,14 +468,25 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [current, setCurrent] = useState<Output | null>(null);
   const [autoplay, setAutoplay] = useState(false);
   const [message, setMessage] = useState('Ready for automatic production.');
+  const [liveAvatars, setLiveAvatars] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [liveSpeech, setLiveSpeech] = useState(false);
+  const [progress, setProgress] = useState<RunProgress | null>(null);
+  const [activeLine, setActiveLine] = useState<number | null>(null);
 
   const voices = useMemo(() => voicesFrom(assetsQuery.data?.assets ?? []), [assetsQuery.data?.assets]);
   const podcastJobs = jobsQuery.data?.jobs?.filter((job: JobRecord) => job.module === 'podcast') ?? [];
+  const characters: CastableCharacter[] = charactersQuery.data ?? [];
+  const castOf = (speaker: SpeakerDraft | undefined) => (speaker?.characterId ? characters.find((character) => character.id === speaker.characterId) : undefined);
+  const cast = speakers.map((speaker) => castOf(speaker)).filter(Boolean).map((character) => ({ id: character.id, name: character.name, pack: character.pack }));
+  const stageCast = cast.filter((member, index) => cast.findIndex((other) => other.id === member.id) === index);
+  const ttsSpeaker = (voiceAssetId: string | null) => (voiceAssetId ? voices.find((voice) => voice.id === voiceAssetId)?.speaker || voiceAssetId.replace(/^voice-cloning:/, '') : null);
 
   function install(output: Output, time = audioRef.current?.currentTime || 0, play = false) {
     restoreRef.current = { time, play };
     currentRef.current = output;
     setCurrent(output);
+    setActiveLine(lineAt(output.timeline, time));
     setSelectedOutputKey(output.key);
   }
 
@@ -387,68 +536,76 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   const createJobMutation = useMutation({
-    mutationFn: async () => {
-      const segments = await generateScript({ title, brief, audience, duration, speakers });
-      const asg = assignments(segments, speakers, voices);
-      setRows(rowsFrom(segments, minutes(duration) * 60));
-      setAutoplay(true);
-      setSelectedOutputKey('__streaming__');
-      setDirectorNote('Script is ready. Each completed preview turn is stitched into one growing WAV so the audio duration extends instead of resetting to the latest segment.');
-
-      for (const segment of segments) {
-        const job = await omnixApiClient.createJob({
-          module: 'podcast',
-          type: 'tts.synthesize',
-          resource_class: 'gpu:tts',
-          priority: 1,
-          input_payload: previewPayload({ title, language, segment, voices, assignments: asg }),
-          stages: stages().slice(0, 3),
-        }, { timeoutMs: 120000, timeoutMessage: 'Podcast live preview turn is still running.' });
-        const output = outputsFrom([await waitJob(job)])[0];
-        if (output) {
-          await queue({ ...output, key: `live:${segment.index}:${output.key}`, title: `${segment.speaker}: voice mapped`, live: true });
-          setMessage(`Stitched live preview ${segment.index + 1}/${segments.length}: ${segment.speaker}`);
-        }
+    mutationFn: async (): Promise<JobRecord | null> => {
+      try {
+        return await produce();
+      } catch (error) {
+        // Stop is the producer's choice, not a failure: the run ends with what it has (null, see onSuccess).
+        if (isStopped(error)) return null;
+        throw error;
       }
-
-      const finalJob = await omnixApiClient.createJob({
-        module: 'podcast',
-        type: 'tts.multi_speaker_synthesize',
-        resource_class: 'gpu:tts',
-        priority: 0,
-        input_payload: finalPayload({ title, brief, format, audience, duration, tone, language, generationStyle, speakers, voices, assignments: asg, segments }),
-        stages: stages(),
-      }, { timeoutMs: 180000, timeoutMessage: 'Final podcast render is still running.' });
-      return waitJob(finalJob, 180000);
     },
     onMutate: () => {
       resetPreview();
+      stopRef.current = new AbortController();
+      setPaused(false);
       setRows([]);
+      setActiveLine(null);
       setAutoplay(false);
       setSelectedOutputKey('__script__');
-      setDirectorNote('Generating a real speaker-tagged script with the configured chat provider.');
-      setMessage('Requesting podcast script from LLM...');
+      setDirectorNote(`Writing a ${minutes(duration)}-minute script with the podcast model. A long episode can take a few minutes.`);
+      setMessage('Writing the podcast script...');
     },
     onSuccess: async (job) => {
+      if (!job) {
+        setDirectorNote('Stopped. Nothing more is generated; any stitched preview stays in the player.');
+        setMessage(STOPPED_MESSAGE);
+        if (!currentRef.current) setSelectedOutputKey('__new__');
+        await queryClient.invalidateQueries({ queryKey: jobKeys.all });
+        return;
+      }
       const output = outputsFrom([job])[0];
-      setDirectorNote(output ? 'Final podcast audio is ready. The stitched live preview stays active until you select the final render.' : 'Podcast render completed but no playable audio output was attached.');
-      setMessage(output ? `Podcast audio ready: ${job.id}` : `Podcast production completed without playable audio: ${job.id}`);
+      // The final render takes the player unless a stitched preview is still being listened to (owner report
+      // 2026-11-23: after a live-avatar run nothing was stitched, so the player waited for a segment that never came).
+      const audio = audioRef.current;
+      const previewHeld = Boolean(currentRef.current && !(audio?.ended && !pendingRef.current));
+      if (output && !previewHeld) install(output, 0);
+      const stillRunning = !output && !isTerminal(job.status);
+      setDirectorNote(stillRunning ? 'The final render is still running. It appears in the library when it finishes.'
+        : !output ? 'Podcast render completed but no playable audio output was attached.'
+          : previewHeld ? 'Final podcast audio is ready. The stitched live preview stays active until you select the final render.'
+            : 'Final podcast audio is ready.');
+      setMessage(output ? `Podcast audio ready: ${job.id}`
+        : stillRunning ? `Final podcast render is still running: ${job.id}`
+          : `Podcast production completed without playable audio: ${job.id}`);
       await Promise.all([queryClient.invalidateQueries({ queryKey: jobKeys.all }), queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] })]);
     },
     onError: (error) => {
       setDirectorNote(error instanceof Error ? error.message : 'Podcast request failed.');
       setMessage(error instanceof Error ? error.message : 'Podcast request failed.');
     },
+    onSettled: () => {
+      stopRef.current = null;
+      setStopping(false);
+      setPaused(false);
+    },
+  });
+
+  const produce = () => producePodcast({
+    episode, speakers, voices, signal: stopRef.current?.signal, liveCast: liveAvatars && stageCast.length > 0, castOf, ttsSpeaker, stageKey: stageKeyRef.current,
+    pausedRef, speechRunRef, piecesRef, queue, say: setMessage, direct: setDirectorNote, select: setSelectedOutputKey,
+    showScript: (scriptRows) => { setRows(scriptRows); setAutoplay(true); }, onSpeaking: setSpeakingId, onLiveSpeech: setLiveSpeech, advance: setProgress, onLine: setActiveLine,
   });
 
   const connectedJob = createJobMutation.data ?? podcastJobs[0];
-  const liveStatus = createJobMutation.isPending ? (selectedOutputKey === '__script__' ? 'SCRIPTING' : 'STREAMING') : connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE';
+  const liveStatus = createJobMutation.isPending ? (selectedOutputKey === '__script__' ? 'SCRIPTING' : selectedOutputKey === finalRenderKey ? 'RENDERING' : 'STREAMING') : connectedJob ? String(connectedJob.status).toUpperCase() : 'IDLE';
   const liveActive = createJobMutation.isPending || Boolean(podcastJobs.find((job) => !isTerminal(job.status)));
-  const visibleStages = createJobMutation.isPending ? stages().map((stage, index) => ({ ...stage, state: index < 2 ? 'done' : index === 2 ? 'active' : 'pending' })) : stages().map((stage) => ({ ...stage, state: 'pending' }));
-  const recentJobs = podcastJobs.slice(0, 6).map((job) => ({ id: job.id, name: jobTitle(job), status: job.status, duration }));
+  const runningStage = activeStageIndex(progress?.stage);
+  const visibleStages = createJobMutation.isPending ? stages().map((stage, index) => ({ ...stage, state: index < runningStage ? 'done' : index === runningStage ? 'active' : 'pending' })) : stages().map((stage) => ({ ...stage, state: 'pending' }));
 
   useEffect(() => { currentRef.current = current; }, [current]);
   useEffect(() => () => { for (const url of liveBlobUrlsRef.current) URL.revokeObjectURL(url); }, []);
+  useEffect(() => () => speechRunRef.current?.stop(), []);
   useEffect(() => { if (voices.length) setSpeakers((currentSpeakers) => currentSpeakers.map((speaker, index) => speaker.voice && voices.some((voice) => voice.id === speaker.voice) ? speaker : { ...speaker, voice: voices[index % voices.length].id })); }, [voices.map((voice) => voice.id).join('|')]);
   useEffect(() => {
     const audio = audioRef.current;
@@ -464,11 +621,11 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const audio = audioRef.current;
     if (naturalEnd(audio) && createJobMutation.isPending) return;
     userPausedRef.current = true;
+    if (createJobMutation.isPending && !stopRef.current?.signal.aborted) setPaused(true);
     resumeNextRef.current = false;
     if (pendingRef.current && (!audio || audio.paused || audio.ended)) {
-      const next = pendingRef.current;
+      install(pendingRef.current, audio?.currentTime || 0, false);
       pendingRef.current = null;
-      install(next, audio?.currentTime || 0, false);
     }
   }
   function onLoaded(event: any) {
@@ -497,12 +654,44 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function startGeneration() { if (brief.trim()) createJobMutation.mutate(); }
-  function updateSpeaker(id: string, field: string, value: string) { setSpeakers((currentSpeakers) => currentSpeakers.map((speaker) => speaker.id === id ? { ...speaker, [field]: value } : speaker)); }
-  function addParticipant() {
-    const index = speakers.length + 1;
-    setSpeakers((currentSpeakers) => [...currentSpeakers, { id: `guest_${index}`, name: `Guest ${index}`, role: 'Guest Analyst', avatar: `G${index}`, identity: 'Guest Analyst', beliefs: '', personality: '', speakingStyle: '', goal: '', instructions: '', voice: voices[0]?.id ?? '' }]);
+  /** Pause what is playing: the stitched preview at once, the cast once its current line ends. Generation goes on. */
+  function pauseProduction() {
+    setPaused(true);
+    userPausedRef.current = true;
+    resumeNextRef.current = false;
+    speechRunRef.current?.pause();
+    const audio = audioRef.current;
+    if (audio && !audio.paused) audio.pause();
+    setMessage(speechRunRef.current ? 'Paused; the cast stops after this line.' : 'Paused. Generation continues in the background.');
   }
-  function resetPodcast() { resetPreview(); setTitle(''); setBrief(''); setDuration('5 min'); setRows([]); setSelectedOutputKey('__new__'); setMessage('New podcast ready.'); }
+  function resumeProduction() {
+    setPaused(false);
+    userPausedRef.current = false;
+    speechRunRef.current?.resume();
+    const audio = audioRef.current;
+    if (pendingRef.current) {
+      const next = pendingRef.current;
+      pendingRef.current = null;
+      install(next, audio?.currentTime || 0, true);
+    } else if (audio && currentRef.current && !audio.ended) {
+      audio.play()?.catch?.(() => setMessage('Audio is ready. Press play if the browser blocked autoplay.'));
+    } else {
+      // Caught up with the stitched preview: the next line plays when it arrives.
+      resumeNextRef.current = true;
+    }
+    setMessage('Resumed.');
+  }
+  /** Stop the run: cancels the job in flight and starts nothing after it, the final render included. */
+  function stopProduction() {
+    stopRef.current?.abort();
+    setStopping(true);
+    setPaused(false);
+    const audio = audioRef.current;
+    if (audio && !audio.paused) audio.pause();
+    setMessage('Stopping...');
+  }
+  function stopLiveAvatars() { speechRunRef.current?.stop(); setMessage('Live avatars stopped; the final render continues.'); }
+  function resetPodcast() { resetPreview(); setEpisode((current) => ({ ...current, title: '', brief: '', duration: '5 min' })); setRows([]); setSelectedOutputKey('__new__'); setMessage('New podcast ready.'); }
   function submitLiveCommand() {
     const text = liveCommand.trim();
     if (text) {
@@ -511,71 +700,28 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setLiveCommand('');
     }
   }
-  function selectRecentJob(id: string) { const output = outputsFrom([podcastJobs.find((job) => job.id === id)])[0]; if (output) install(output); }
+  function playEpisode(episode: PodcastEpisode, episodeRows: TranscriptRow[], timeline: LineStart[]) { install({ dataUrl: episode.audioUrl, duration: episode.durationSeconds, jobId: episode.jobId, key: `${episode.jobId}:${episode.assetId}`, title: episode.title, timeline }, 0, true); setRows(episodeRows); }
   function downloadCurrentOutput(label = 'Podcast audio') { if (!current) return; downloadUrl(current.dataUrl, `${title || 'podcast-output'}.wav`); setMessage(`${label}: download started.`); }
   async function copyEpisodeLink() { try { await navigator.clipboard?.writeText(`${location.href.split('#')[0]}#${connectedJob?.id ?? 'podcast'}`); setMessage('Podcast link copied.'); } catch {} }
 
   return (
     <WorkspacePanel labelledBy="module-title" className="podcast-workspace-panel">
       <div className="podcast-studio-shell">
-        <header className="podcast-studio-header">
-          <div>
-            <p className="eyebrow">Conversation engine</p>
-            <h2 id="module-title">{module.label}</h2>
-            <p>Create a real LLM-generated podcast script, stitch live preview turns into one growing stream, then keep one final render for playback and download.</p>
-          </div>
-          <code>/podcast-renderer</code>
-        </header>
+        <PodcastStudioHeader label={module.label} />
         <GatewayErrorNotice label="Podcast jobs and voices" errors={[jobsQuery.error, assetsQuery.error]} />
 
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
-            <article className="podcast-card episode-setup-card">
-              <div className="card-heading-row"><h3>1. Episode setup</h3><button className="ghost-button compact" type="button" onClick={resetPodcast}>New podcast</button></div>
-              <div className="episode-setup-grid">
-                <div className="podcast-field-stack">
-                  <label>Topic / Episode title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-                  <label>Episode brief<textarea rows={5} value={brief} onChange={(event) => setBrief(event.target.value)} /><small>{brief.length}/2000</small></label>
-                  <label>Audience<select value={audience} onChange={(event) => setAudience(event.target.value)}><option>Software Engineers</option><option>General Public</option><option>Executives</option><option>Students</option><option>Experts</option></select></label>
-                </div>
-                <div className="podcast-config-stack">
-                  <span className="podcast-label">Podcast format</span>
-                  <div className="format-card-grid">{formats.map((option) => <button key={option.id} type="button" className={option.id === format ? 'selected' : undefined} onClick={() => setFormat(option.id)}><strong>{option.label}</strong><small>{option.description}</small></button>)}</div>
-                  <div className="podcast-select-grid">
-                    <label>Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}>{durations.map((option) => <option key={option}>{option}</option>)}</select></label>
-                    <label>Tone<select value={tone} onChange={(event) => setTone(event.target.value)}><option>Professional</option><option>Conversational</option><option>Humorous</option></select></label>
-                    <label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English (US)</option><option>English (UK)</option></select></label>
-                  </div>
-                  <label>Generation Style<select value={generationStyle} onChange={(event) => setGenerationStyle(event.target.value)}><option value="automatic">Automatic</option><option value="guided">Guided</option></select></label>
-                </div>
-              </div>
-            </article>
+            <PodcastEpisodeSetup episode={episode} setEpisode={setEpisode} onNewPodcast={resetPodcast} />
 
-            <article className="podcast-card">
-              <div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voices.length ? `Loaded ${voices.length} Voice Library voice${voices.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div>
-              <div className="speaker-table editable-speaker-table">
-                <div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span></div>
-                {speakers.map((speaker, index) => (
-                  <div className="speaker-row editable-speaker-row" key={speaker.id}>
-                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input aria-label={`Speaker ${index + 1} name`} value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input aria-label={`Speaker ${index + 1} role`} value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span>
-                    <span><input aria-label={`Speaker ${index + 1} identity`} value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span>
-                    <span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voices.length ? <option value="">No cloned voices</option> : null}</select></span>
-                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} beliefs`} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span>
-                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} personality`} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span>
-                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} speaking style`} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span>
-                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} goal this episode`} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span>
-                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} instructions`} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} /></span>
-                  </div>
-                ))}
-              </div>
-              <button className="ghost-button" type="button" onClick={addParticipant}>+ Add participant</button>
-            </article>
+            <PodcastParticipants speakers={speakers} setSpeakers={setSpeakers} voices={voices} characters={characters} stageCastCount={stageCast.length} liveAvatars={liveAvatars} onLiveAvatars={setLiveAvatars} locked={createJobMutation.isPending} />
 
             <form onSubmit={(event) => { event.preventDefault(); startGeneration(); }}>
               <button className="podcast-generate-button" type="submit" disabled={createJobMutation.isPending}>Generate live podcast</button>
             </form>
             <FeatureValidationMessage show={brief.trim().length === 0 && !createJobMutation.isIdle} message="Enter an episode brief before generating a podcast." />
             <FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Podcast request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.id} pendingMessage="Generating script and stitching preview audio..." successPrefix="Podcast production queued" />
+            {createJobMutation.isPending && progress ? <PodcastRunProgress progress={progress} /> : null}
           </section>
 
           <section className="podcast-live-column">
@@ -583,42 +729,32 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="card-heading-row"><h3>Live production</h3><span className="auto-badge">{liveStatus}</span></div>
               <div className="stage-rail">{visibleStages.map((stage, index) => <span key={stage.id} className={stage.state}>{stage.state === 'done' ? 'OK' : index + 1}<small>{stage.label}</small></span>)}</div>
               <div className="director-note"><b>Director</b><span>{directorNote}</span></div>
+              {createJobMutation.isPending ? <PodcastRunControls paused={paused} stopping={stopping} onPause={pauseProduction} onResume={resumeProduction} onStop={stopProduction} /> : null}
+              {liveAvatars && stageCast.length ? (
+                <section className="podcast-live-avatars">
+                  <CharacterStage members={stageCast} speakingId={speakingId} />
+                  {liveSpeech ? <button className="ghost-button compact" type="button" onClick={stopLiveAvatars}>Stop live avatars</button> : <CastPortraitLoadControl runKey={stageKeyRef.current} members={stageCast} disabled={createJobMutation.isPending} />}
+                </section>
+              ) : null}
 
-              <section className="live-transcript-section">
-                <div className="card-heading-row"><h4>Transcript</h4><small>{rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : 'Waiting for script'}</small></div>
-                <div className="live-transcript">
-                  {rows.length ? rows.map((line, index) => <p key={`${line.timestamp}-${index}`}><time>{line.timestamp}</time><b title={line.speaker}>{String(line.speaker).slice(0, 18)}</b><span>{line.text}</span></p>) : <div className="live-empty-state"><strong>No live transcript yet</strong><span>Press Generate live podcast to request an LLM script and start live preview audio.</span></div>}
-                </div>
-              </section>
+              <PodcastTranscript rows={rows} activeIndex={activeLine} />
 
               <div role="group" className="podcast-audio-player" aria-label="Podcast audio player">
                 <div className="audio-player-heading">
-                  <span>{current ? current.title : selectedOutputKey === '__script__' ? 'Generating podcast script...' : selectedOutputKey === '__streaming__' || selectedOutputKey === stitchedKey ? 'Waiting for first stitched live audio segment...' : 'No podcast audio yet'}</span>
+                  <span>{current ? current.title : selectedOutputKey === '__script__' ? 'Generating podcast script...' : selectedOutputKey === liveCastKey ? 'The cast is speaking live; the final render follows.' : selectedOutputKey === finalRenderKey ? 'Rendering the final podcast audio...' : selectedOutputKey === '__streaming__' || selectedOutputKey === stitchedKey ? 'Waiting for first stitched live audio segment...' : 'No podcast audio yet'}</span>
                   <small>{current?.live ? `LIVE STITCHED ${pieces.length} / ${rows.length || pieces.length}` : current ? 'AUDIO READY' : createJobMutation.isPending ? liveStatus : 'Generate a completed podcast to enable playback'}</small>
                 </div>
-                <audio key={current?.key || selectedOutputKey || 'podcast-empty-audio'} ref={audioRef} src={current?.dataUrl || undefined} controls preload="auto" onLoadedMetadata={onLoaded} onCanPlay={() => current && setMessage(`${current.live ? 'Stitched live preview' : 'Audio available'}: ${current.title}`)} onPause={onPause} onPlay={() => { userPausedRef.current = false; }} onEnded={onEnded} />
+                <audio key={current?.key || selectedOutputKey || 'podcast-empty-audio'} ref={audioRef} src={current?.dataUrl || undefined} controls preload="auto" onLoadedMetadata={onLoaded} onCanPlay={() => current && setMessage(`${current.live ? 'Stitched live preview' : 'Audio available'}: ${current.title}`)} onPause={onPause} onTimeUpdate={(event) => setActiveLine(lineAt(current?.timeline, event.currentTarget.currentTime))} onPlay={() => { userPausedRef.current = false; if (pausedRef.current && !speechRunRef.current) setPaused(false); }} onEnded={onEnded} />
                 <div className="audio-toolbar"><label>Playback speed<select value={playbackRate} onChange={(event) => setPlaybackRate(event.target.value)}><option>0.8x</option><option>1.0x</option><option>1.25x</option></select></label><small>{current ? `${clock(current.duration)} ${current.live ? 'stitched preview' : 'rendered'}` : 'No audio loaded'}</small></div>
               </div>
 
               <form className="live-command" onSubmit={(event) => { event.preventDefault(); submitLiveCommand(); }}><input value={liveCommand} onChange={(event) => setLiveCommand(event.target.value)} placeholder="Add a production note" /><button type="submit" disabled={!liveCommand.trim()}>Apply</button></form>
             </article>
 
-            <article className="podcast-card podcast-output-panel live-output-panel">
-              <h3>Podcast outputs</h3>
-              <div className="output-layout">
-                <div className="cover-art">AI<br />EVERYDAY<br />LIFE</div>
-                <div className="output-copy"><h4>{title || 'Untitled episode'} <span>{connectedJob ? String(connectedJob.status).toUpperCase() : createJobMutation.isPending ? liveStatus : 'IDLE'}</span></h4><small>{formats.find((option) => option.id === format)?.label} - {speakers.length} voices - {duration}</small>{current ? <em>{current.title}</em> : null}</div>
-                <div className="download-grid"><button type="button" disabled={!current} onClick={() => downloadCurrentOutput('MP3')}>MP3</button><button type="button" disabled={!current} onClick={() => downloadCurrentOutput('WAV')}>WAV</button><button type="button" onClick={() => setMessage('Transcript export requested.')}>Transcript</button><button type="button" onClick={() => setMessage('Show notes export requested.')}>Show Notes</button><button type="button" onClick={() => void copyEpisodeLink()}>Copy link</button></div>
-              </div>
-            </article>
+            <PodcastOutputs title={title} status={connectedJob ? String(connectedJob.status).toUpperCase() : createJobMutation.isPending ? liveStatus : 'IDLE'} summary={`${formats.find((option) => option.id === format)?.label} - ${speakers.length} voices - ${duration}`} playing={current?.title ?? null} onDownload={downloadCurrentOutput} onNote={setMessage} onCopyLink={() => void copyEpisodeLink()} />
           </section>
 
-          <aside className="podcast-sidebar">
-            <article className="podcast-card recent-card collapsible-card">
-              <h3>Recent jobs</h3>
-              <div className="recent-job-list">{recentJobs.map((job) => <p key={job.id}><span className="recent-job-title">{job.name}</span><OmnixStatusPill>{job.status}</OmnixStatusPill><small>{job.duration}</small><button type="button" onClick={() => selectRecentJob(job.id)}>Select</button></p>)}</div>
-            </article>
-          </aside>
+          <PodcastLibrary playingJobId={current && !current.live ? current.jobId : null} disabled={createJobMutation.isPending} onPlay={playEpisode} />
         </div>
         <p className="action-toast" role="status">{message}</p>
       </div>

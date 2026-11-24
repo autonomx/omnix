@@ -71,11 +71,25 @@ def _call_action_handler() -> JobHandlerSpec:
                           resource_class=ResourceClass.NETWORK, timeout_seconds=120, max_attempts=1)
 
 
+def _execute_call_recap(context: JobExecutionContext, job):
+    from .live_call_recap import execute_call_recap_job
+
+    return execute_call_recap_job(context, job)
+
+
+def _call_recap_handler() -> JobHandlerSpec:
+    from .live_call_recap import JOB_TYPE, LiveCallRecapInput
+
+    # One attempt: a recap is written after the call or not at all; it is never worth a second model call later.
+    return JobHandlerSpec(type=JOB_TYPE, handler=_execute_call_recap, input_model=LiveCallRecapInput,
+                          resource_class=ResourceClass.NETWORK, timeout_seconds=120, max_attempts=1)
+
+
 FEATURE = FeatureModule(
     id="chat",
     title="Chat and Realtime",
     tier="platform",
     routers=(_chat_context_router, _research_mode_router, _rich_replies_router),
     repositories=CHAT_REPOSITORY_SPECS,
-    job_handlers=(_call_action_handler(),),
+    job_handlers=(_call_action_handler(), _call_recap_handler()),
 )

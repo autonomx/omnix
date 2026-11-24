@@ -300,6 +300,9 @@ class SendChatMessageRequest(BaseModel):
     # The person shares their front camera (camera share, 2026-11-21): the turn takes the newest glance's
     # description (``chat.camera_glance``). It carries no image and grants nothing.
     camera_shared: bool = False
+    # The person shares their screen in a live call (D2, 2026-11-23): the turn takes the newest screen glance's
+    # description (``chat.screen_glance``). It carries no image and grants nothing.
+    screen_shared: bool = False
     # Set by admission, never by the client (companion 6.5): the person's words mostly repeat a character's line
     # the microphone heard. The turn is still answered; memory and conversation readings skip it.
     _suspected_echo: bool = PrivateAttr(default=False)

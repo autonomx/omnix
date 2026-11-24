@@ -1,0 +1,74 @@
+@layer features {
+  /* A podcast's live avatars (D4): a row of tiles, the speaking character's outlined. */
+  .character-stage {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  }
+
+  .character-stage-tile {
+    aspect-ratio: 1;
+    background: var(--bg-neutral-0);
+    border: 2px solid transparent;
+    border-radius: 0.9rem;
+    margin: 0;
+    overflow: hidden;
+    position: relative;
+    transition: border-color 160ms ease;
+  }
+
+  .character-stage-tile[data-speaking='true'] {
+    border-color: color-mix(in srgb, var(--accent-violet-810) 80%, transparent);
+  }
+
+  .character-stage-tile img,
+  .character-stage-tile canvas {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .character-stage-initials {
+    align-items: center;
+    display: flex;
+    font-size: 1.6rem;
+    font-weight: 600;
+    height: 100%;
+    justify-content: center;
+    opacity: 0.7;
+  }
+
+  .character-stage-tile figcaption {
+    align-items: center;
+    background: color-mix(in srgb, var(--c-neutral-0) 60%, transparent);
+    bottom: 0;
+    display: flex;
+    font-size: 0.75rem;
+    gap: 0.35rem;
+    left: 0;
+    padding: 0.25rem 0.5rem;
+    position: absolute;
+    right: 0;
+  }
+
+  .character-stage-tile figcaption small {
+    color: var(--accent-violet-810);
+  }
+
+  .character-stage-note {
+    font-size: 0.65rem;
+    left: 0.4rem;
+    margin: 0;
+    opacity: 0.8;
+    position: absolute;
+    right: 0.4rem;
+    top: 0.4rem;
+  }
+
+  .character-stage-notice {
+    font-size: 0.8rem;
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+}

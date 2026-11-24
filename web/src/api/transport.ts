@@ -20,7 +20,8 @@ function withQuery(path: GatewayPath, query?: Record<string, string | number | b
 
 async function failed(response: Response): Promise<never> {
   const body = await response.text().catch(() => '');
-  throw new ApiError(response.status, body, response.headers?.get('x-request-id') ?? undefined);
+  throw new ApiError(response.status, body, response.headers?.get('x-request-id') ?? undefined,
+    response.headers?.get('retry-after'));
 }
 
 /** POSTs file bytes (or nothing) as the request body and returns the JSON response, if any. */

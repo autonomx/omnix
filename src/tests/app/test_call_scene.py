@@ -586,7 +586,9 @@ class _ChatProvider:
 
     def chat_completion(self, *, messages, **_: Any):
         self.calls.append(list(messages))
-        if "Answer with exactly one name" in str(messages[-1].content):
+        prompt = str(messages[-1].content)
+        # The reaction, opener and first-speaker directors, and the thread director (6.4).
+        if "Answer with exactly one name" in prompt or "answer with the name of whoever" in prompt:
             yield SimpleNamespace(content=self.director, model="m", usage=None)
             return
         for piece in self.reply:
@@ -820,7 +822,13 @@ def test_a_further_line_is_open_while_the_thread_is_under_its_max() -> None:
     opening = scene.line_opening(_SCENE, [person, reply, line], max_lines=4)
 
     assert opening is not None and (opening.anchor_id, opening.root_id, opening.depth) == ("msg:l1", "msg:p1", 2)
-    assert [member.character_id for member in opening.candidates] == ["mara", "bea"]
+    # Two members have answered the person (C2): only they go on, so Bea follows Theo and Mara waits.
+    assert [member.character_id for member in opening.candidates] == ["bea"]
+    opener = _message("assistant", "Bea, remember the fox?", speaker="mara", message_id="msg:o1",
+                      initiative_reason="scene_talk:mara", scene_talk_started=True)
+    talk = scene.line_opening(_SCENE, [opener, reply, line], max_lines=4)
+    # In talk the members started, anyone but the last speaker may go on.
+    assert talk is not None and [member.character_id for member in talk.candidates] == ["mara", "bea"]
     # What the person said comes first: whether they spoke to everyone decides who else may answer them.
     assert opening.recent == (("The person", "Tell me a story."), ("Bea Hart", "Once there was a fox."),
                               ("Theo Lark", "A clever fox."))
@@ -893,6 +901,23 @@ def test_a_start_is_offered_to_the_members_who_did_not_speak_last() -> None:
     assert scene.talk_opening(_SCENE, []).anchor_id == "-"  # type: ignore[union-attr]
     alone = Scene(host=MARA, guests=(), speaker_id="mara")
     assert scene.talk_opening(alone, [reply]) is None
+
+
+def test_the_talk_director_reads_who_they_are_and_the_last_lines() -> None:
+    # Without them Haiku explained instead of naming anyone, so a quiet call never started talk (B1, 2026-11-23).
+    cast = Scene(host=SceneMember("mara", "Mara Vale", summary="A botanist."),
+                 guests=(SceneMember("bea", "Bea Hart", summary="A chef."),), speaker_id="mara")
+    messages = [_message("user", 'What is the "best" meal?', message_id="msg:p1"),
+                _message("assistant", "Risotto.", speaker="bea", message_id="msg:r1"),
+                _message("assistant", "late", speaker="mara", transient=True, message_id="msg:late")]
+
+    opening = scene.talk_opening(cast, messages)
+    assert opening is not None and opening.recent == (("The person", "What is the 'best' meal?"),
+                                                      ("Bea Hart", "Risotto."))
+    prompt = scene.thread_director_prompt(cast, opening)
+    assert "the call has gone quiet" in prompt and 'Who they are:\nMara Vale: "A botanist."' in prompt
+    assert prompt.endswith('The person: "What is the \'best\' meal?"\nBea Hart: "Risotto."')
+    assert "late" not in prompt  # a line that landed late is not a line
 
 
 # Characters talk to each other through the gateway (companion 6.9) ---------------------------------------------
@@ -996,17 +1021,55 @@ def test_a_line_answering_the_person_does_not_use_up_the_hourly_cap(gateway) -> 
     assert _detail(gateway, _LINE) == "scene_line_not_due"
 
 
-def test_a_line_the_model_skips_closes_its_anchor(gateway) -> None:
+def test_a_skipped_line_is_asked_once_more_without_that_member_then_closes(gateway) -> None:
+    # C1 (2026-11-23): Bea's line says SKIP, so the call asks again without her; Theo is the one left.
+    gateway.client.post(f"{gateway.base}/scene/guests", json={"character_id": "theo"})
     _talking(gateway)
+    gateway.provider.director = "Bea"
     gateway.provider.reply = ["SKIP"]
     response, complete = _ask(gateway, _LINE)
     assert response.status_code == 200 and complete["metadata"]["generation_status"] == "skipped"
+    assert response.headers["X-Omnix-Scene-Speaker"] == "bea"
 
+    retry, again = _ask(gateway, {**_LINE, "scene_skipped_speaker": "bea"})
+    assert retry.status_code == 200 and retry.headers["X-Omnix-Scene-Speaker"] == "theo"
+    assert again["metadata"]["generation_status"] == "skipped"
+
+    # A second SKIP on the same anchor ends it, whoever is asked.
     gateway.provider.reply = ["I'm here. ", "Go on."]
     assert _detail(gateway, _LINE) == "scene_talk_closed"
     # A skipped attempt recorded no text: a client that delivers some anyway is refused.
     forged = _deliver(gateway, {**complete, "content": "Something after all."})
     assert forged.status_code == 409 and forged.json()["detail"] == "initiative_lease_inactive"
+
+
+def test_a_retry_without_the_only_other_member_is_not_due(gateway) -> None:
+    _talking(gateway)
+    gateway.provider.reply = ["SKIP"]
+    response, _ = _ask(gateway, _LINE)
+    assert response.status_code == 200 and response.headers["X-Omnix-Scene-Speaker"] == "bea"
+    # Only Bea could follow Mara's reply: without her there is nobody, and the anchor is not spent.
+    assert _detail(gateway, {**_LINE, "scene_skipped_speaker": "bea"}) == "scene_line_not_due"
+    # The name only narrows: someone who is not a candidate changes nothing.
+    gateway.provider.reply = ["I'm here. ", "Go on."]
+    response, complete = _ask(gateway, {**_LINE, "scene_skipped_speaker": "nobody"})
+    assert response.status_code == 200 and complete["content"]
+
+
+def test_a_question_to_everyone_gets_at_most_two_answers(gateway) -> None:
+    # C2 (2026-11-23): in the person's thread, once two members have spoken only they go on.
+    gateway.client.post(f"{gateway.base}/scene/guests", json={"character_id": "theo"})
+    _talking(gateway)
+    gateway.provider.director = "Bea"
+    speakers = []
+    for _ in range(3):
+        response, complete = _ask(gateway, _LINE)
+        assert response.status_code == 200, response.text
+        speakers.append(response.headers["X-Omnix-Scene-Speaker"])
+        assert _deliver(gateway, complete).status_code == 200
+        # After Bea's line the director is not asked (one candidate is left: Mara); "Theo" would not be accepted.
+        gateway.provider.director = "Theo"
+    assert speakers == ["bea", "mara", "bea"]
 
 
 def test_the_person_taking_the_floor_ends_a_line_in_flight(gateway, monkeypatch) -> None:

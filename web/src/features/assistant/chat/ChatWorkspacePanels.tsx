@@ -164,6 +164,7 @@ export function ChatInlineStatus({ ws }: { ws: ChatWorkspaceModel }) {
         {audioStatus ? <span role="status">{audioStatus}</span> : null}
         {pcmStream.status ? <span role="status">{pcmStream.status}</span> : null}
         {livePresentation.streamStatus ? <span role="status" data-omnix-live-voice-stream-status="true">{livePresentation.streamStatus}</span> : null}
+        {livePresentation.callHealth ? <span role="status" data-omnix-live-call-health="true">{livePresentation.callHealth}</span> : null}
         {settingsStatus && activeView === 'settings' ? <span role="status">{settingsStatus}</span> : null}
         {sendMutation.data ? <span role="status">{chatJobQuery.data?.status === 'completed' ? 'Response ready' : chatJobQuery.data?.status === 'failed' ? 'Response failed' : chatJobQuery.data?.status === 'canceled' ? 'Response canceled' : 'Response job accepted'}: {sendMutation.data.job.id}</span> : null}
       </div>

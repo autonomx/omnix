@@ -7,8 +7,10 @@ export class ApiError extends Error {
   readonly requestId: string | undefined;
   /** The gateway's `detail` (or `error`), or the body text when it is not JSON. */
   readonly detail: string;
+  /** The response's Retry-After, in milliseconds, when it had one in seconds. */
+  readonly retryAfterMs: number | undefined;
 
-  constructor(status: number, body: string, requestId?: string) {
+  constructor(status: number, body: string, requestId?: string, retryAfter?: string | null) {
     let detail = '';
     try {
       const parsed = JSON.parse(body) as { detail?: unknown; error?: unknown };
@@ -28,6 +30,8 @@ export class ApiError extends Error {
     this.body = body;
     this.requestId = requestId;
     this.detail = detail;
+    const seconds = retryAfter ? Number(retryAfter) : Number.NaN;
+    this.retryAfterMs = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
   }
 }
 

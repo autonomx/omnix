@@ -542,8 +542,9 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     from app.providers.tts_priority import generation_class
 
     from .assembly import AudioSpan, PausePolicy, assemble_chapter
+    from .bookends import add_bookends
     from .effects import effect_ids, master_take, to_mono_pcm16
-    from .output_settings import NEUTRAL
+    from .output_settings import NEUTRAL, audio_adjustments
 
     payload = job.input_payload or {}
     restitch = job.type == "voice.restitch"
@@ -583,6 +584,11 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     # Studio renders are not live speech: they yield the GPU to calls (previews ask a little sooner).
     priority: Literal["preview", "offline"] = "preview" if (job.priority or 0) >= 1 else "offline"
 
+    raw_settings = payload.get("output_settings")
+    output_settings: dict[str, Any] = raw_settings if isinstance(raw_settings, dict) else {}
+    # A faster speed setting shortens the voiced time a line needs (see ``speech_presence``).
+    speed = audio_adjustments(output_settings).get("speed", 1.0)
+
     spans: list[AudioSpan] = []
     segment_outputs: list[dict[str, Any]] = []
     # One step per line, then one for assembling and saving the take.
@@ -609,9 +615,9 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
             delivery_supported = provider_supports(resolved["engine"], DELIVERY_INSTRUCTION, "tts")
             sent_instruction = instruction if delivery_supported else ""
             with generation_class(priority):
-                wav_bytes, metadata = _generate_audio_bytes(
+                wav_bytes, metadata = _render_with_speech(
                     _text(segment.get("text")), speaker=generated_speaker, payload=payload,
-                    provider=provider, instruct=sent_instruction or None,
+                    provider=provider, instruct=sent_instruction or None, speed=speed,
                 )
             if script_id and line_id:
                 _store_take(job, job_store, script_id=script_id, line_id=line_id, engine=resolved["engine"],
@@ -643,6 +649,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
                 "voice_controls": metadata.get("voice_controls"),
                 "line_id": line_id,
                 "reused_take_id": metadata.get("reused_take_id", ""),
+                **({"speech_retries": metadata["speech_retries"]} if metadata.get("speech_retries") else {}),
             }
         )
 
@@ -651,11 +658,13 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     _report_tts_progress(job_store, job, len(segments), steps, "Assembling the take")
     # Pauses and per-speaker loudness, the same assembly audiobook chapters use.
     assembled = assemble_chapter(spans, policy=PausePolicy())
-    raw_settings = payload.get("output_settings")
-    output_settings: dict[str, Any] = raw_settings if isinstance(raw_settings, dict) else {}
+    # An opening and closing sting and room tone, when asked for; mastered with the voices.
+    bookended = add_bookends(assembled.wav_bytes, stings=payload.get("bookends") is True,
+                             tone=payload.get("room_tone") is True)
+    lead = bookended.lead_seconds
     volume_db = _volume_db(output_settings, NEUTRAL["volume"])
     requested_effects = effect_ids(payload.get("audio_effects"))
-    wav_bytes, applied_effects = master_take(assembled.wav_bytes, requested_effects, volume_db=volume_db)
+    wav_bytes, applied_effects = master_take(bookended.wav_bytes, requested_effects, volume_db=volume_db)
     from .watermarking import mark
 
     # After the effects chain, before anything is written (opt-in; see ``watermarking``).
@@ -686,9 +695,11 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
         "audio_effects": applied_effects,
         "volume_db": volume_db,
         "assembly_key": assembled.assembly_key,
+        **({"bookends": True} if lead else {}),
+        **({"room_tone": True} if payload.get("room_tone") is True else {}),
         **({"watermark": watermark} if watermark else {}),
         "timeline": [
-            {"segment": index, "start": entry.start_seconds, "end": entry.end_seconds,
+            {"segment": index, "start": entry.start_seconds + lead, "end": entry.end_seconds + lead,
              "pause_before": entry.pause_before_seconds}
             for index, entry in enumerate(assembled.timeline)
         ],
@@ -715,6 +726,8 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
             "audio_url": asset_audio_url(asset.id),
             "duration": combined_metadata.get("duration"),
             "segments": segment_outputs,
+            # Where each line starts and ends in the file, so a player can follow the script along.
+            "timeline": metadata["timeline"],
         }
     )
     return {
@@ -739,6 +752,35 @@ def _volume_db(output_settings: dict[str, Any], neutral: float) -> float:
     from .output_settings import audio_adjustments
 
     return float(audio_adjustments(output_settings).get("volume", neutral) or 0.0)
+
+
+# Renders of a line that came back near-silent before the best take is kept (engines sample, so a retry differs).
+SPEECH_RETRIES = 2
+
+
+def _render_with_speech(
+    text: str, *, speaker: str, payload: dict[str, Any], provider: Any, instruct: str | None, speed: float,
+) -> tuple[bytes, dict[str, Any]]:
+    """One line, rendered again (up to ``SPEECH_RETRIES`` times) while the take lacks its words; the take with
+    the most voiced time is kept, and ``speech_retries`` says how many renders it took past the first."""
+    from .speech_presence import lacks_speech, voiced_seconds
+
+    best: tuple[float, bytes, dict[str, Any]] | None = None
+    for attempt in range(SPEECH_RETRIES + 1):
+        wav_bytes, metadata = _generate_audio_bytes(text, speaker=speaker, payload=payload, provider=provider,
+                                                    instruct=instruct)
+        if not lacks_speech(wav_bytes, text, speed=speed):
+            return wav_bytes, {**metadata, **({"speech_retries": attempt} if attempt else {})}
+        try:
+            voiced = voiced_seconds(wav_bytes)
+        except (wave.Error, EOFError, ValueError):
+            voiced = 0.0
+        if best is None or voiced > best[0]:
+            best = (voiced, wav_bytes, metadata)
+        logger.warning("voice: line rendered near-silent (attempt %d of %d, %.2f s voiced for %d characters)",
+                       attempt + 1, SPEECH_RETRIES + 1, voiced, len(text))
+    assert best is not None
+    return best[1], {**best[2], "speech_retries": SPEECH_RETRIES, "speech_check": "kept_loudest_take"}
 
 
 def _generate_audio_bytes(

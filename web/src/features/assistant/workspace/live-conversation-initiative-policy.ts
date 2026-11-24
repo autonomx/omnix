@@ -29,6 +29,8 @@ export type InitiativePolicyInput = {
   cooldownMs: number;
   promptCount: number;
   maxPrompts: number;
+  /** Until when the server turned a remark down for its spacing (its 409's Retry-After), if it did. */
+  serverHoldUntilMs?: number | null;
 };
 
 export type InitiativePolicyDecision = {
@@ -59,6 +61,8 @@ export function decideInitiative(input: InitiativePolicyInput): InitiativePolicy
     const cooldownRemaining = Math.max(0, input.cooldownMs - (input.nowMs - input.lastPromptAtMs));
     if (cooldownRemaining > 0) return wait('initiative_cooldown', cooldownRemaining);
   }
+  const serverHold = Math.max(0, (input.serverHoldUntilMs ?? input.nowMs) - input.nowMs);
+  if (serverHold > 0) return wait('server_spacing', serverHold);
   return { action: 'speak', reason: 'social_obligation_available', eligibleInMs: 0 };
 }
 

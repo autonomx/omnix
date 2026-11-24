@@ -3577,6 +3577,50 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** PodcastResearchRequest */
+        PodcastResearchRequest: {
+            /**
+             * Brief
+             * @default
+             */
+            brief?: string;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** PodcastResearchResponse */
+        PodcastResearchResponse: {
+            /** Message */
+            message: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Provider */
+            provider: string | null;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /** Sources */
+            sources: components["schemas"]["PodcastResearchSource"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "empty" | "unavailable" | "failed";
+        };
+        /** PodcastResearchSource */
+        PodcastResearchSource: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+        };
         /** PromptRenderRequest */
         PromptRenderRequest: {
             template: components["schemas"]["PromptTemplate"];
@@ -4252,6 +4296,11 @@ export interface components {
             provider_id?: string | null;
             /** Research Mode */
             research_mode?: ("disabled" | "quick" | "deep") | null;
+            /**
+             * Screen Shared
+             * @default false
+             */
+            screen_shared?: boolean;
             /** Speech Segment Id */
             speech_segment_id?: string | null;
             text_attachment?: components["schemas"]["ChatTextAttachment"] | null;

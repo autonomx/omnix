@@ -175,9 +175,20 @@ export function AssistantContextControls() {
   );
 }
 
-/** The composer's desktop sharing toggle. */
-export function DesktopShareButton() {
+/**
+ * The desktop sharing toggle: in the composer, and in a call's controls (D2), where the shared screen is glanced at
+ * as the person speaks instead of sent with each message.
+ */
+export function DesktopShareButton({ variant = 'composer' }: { variant?: 'composer' | 'call' }) {
   const sharing = useAssistantContext().desktopShare !== null;
+  if (variant === 'call') {
+    const label = sharing ? 'Stop sharing the screen' : 'Share the screen';
+    return (
+      <button type="button" className={`live-mute-button live-screen-button${sharing ? ' on' : ''}`} data-omnix-desktop-action="true" aria-label={label} aria-pressed={sharing} title={label} onClick={() => void toggleDesktopShare()}>
+        {sharing ? 'Screen on' : 'Screen'}
+      </button>
+    );
+  }
   return (
     <button type="button" className={`assistant-context-desktop-inline assistant-context-desktop${sharing ? ' active' : ''}`} data-omnix-desktop-action="true" aria-label={sharing ? 'Stop desktop sharing' : 'Start desktop sharing'} onClick={() => void toggleDesktopShare()}>
       <span>Desktop</span><strong>{sharing ? 'Sharing' : 'Off'}</strong>

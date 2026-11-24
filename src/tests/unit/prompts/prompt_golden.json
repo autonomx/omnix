@@ -211,6 +211,14 @@
     "sha256": "936e8acb869e3a2f63d9d0b1103bf13a625d6cee48b0c164a88e5b7d9547d67a",
     "version": "1"
   },
+  "chat.live_call_recap.recap": {
+    "sha256": "d4e0d8805f65b4b796b1677d405ebaa8754890bd52e4e32d95d5e8239026c9ec",
+    "version": "1"
+  },
+  "chat.live_call_resume.cut_off_reply": {
+    "sha256": "92c8ae14b4011b6062ff25fa5ae6e49e4be98c7179ae256bf655769673b11f80",
+    "version": "1"
+  },
   "chat.live_conversation_proactive.open_loop": {
     "sha256": "7930bd1ccaae859d2bb8b98b23dc1ab831a3c7b184726051f18b6fbd6a794b41",
     "version": "1"
@@ -268,8 +276,8 @@
     "version": "1"
   },
   "chat.scene.talk_director": {
-    "sha256": "067ad911ef632e5ebd9e3f8bce9e0b35d288dc6741eb3f8cca6d344a0cece3a1",
-    "version": "1"
+    "sha256": "a3248503aa59f95ed18fc34b261051b26e8310a6ab6185bdd6a5005928df5cc1",
+    "version": "2"
   },
   "chat.scene.talk_line": {
     "sha256": "d275c79e58c4642911b50ff39acbe82044fef765bfd146063d9b3c8e5062450a",
@@ -282,6 +290,10 @@
   "chat.scene.thread_director": {
     "sha256": "fb814190f95ef8f9a9229764d3e27e5878f09d25d15008c2261c82fb5f99b472",
     "version": "3"
+  },
+  "chat.screen_share.glance": {
+    "sha256": "0a4900a4c1c1b503f6f285152f22bc98d7763425b87d32da699e68f71fcbb211",
+    "version": "1"
   },
   "chat.session_defaults.legacy_default_prompt": {
     "sha256": "2b989968611695b3eddbd4dbb13e3a0bb882b1da749e66e823dedc9a64f3e1f5",
@@ -623,9 +635,17 @@
     "sha256": "4d204eda126b59095205d6d9a34fa07808c57f80028303b7ca7fc74286bff593",
     "version": "1"
   },
-  "story.jobs.render_job": {
-    "sha256": "6dc6e0aabc0069a082391d394a7003667fe98c55b16c488de7e72e795da3b38b",
+  "story.jobs.podcast_edit": {
+    "sha256": "a520eca1d3c9428f523832960f6018fda88220b550886b0c49521b690583a06d",
     "version": "1"
+  },
+  "story.jobs.podcast_outline": {
+    "sha256": "60e2d1c602a0941493b704d0308b68c0b81943ef5e2c6e4429fb59050e6b3165",
+    "version": "2"
+  },
+  "story.jobs.render_job": {
+    "sha256": "2d5f9fc356d3063d9d335db17c6483a8474cab6b9dc7882072e1002ff930da61",
+    "version": "4"
   },
   "trading.research.market_brief.generate_trading_market_brief": {
     "sha256": "1a2964cf6555a14e5a79b59d8376c40bdcb0ea50a94a309f431fa1ca78795cf3",

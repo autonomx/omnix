@@ -61,7 +61,9 @@ NODES = [
     node("web_media", "Media studios", "client",
          "Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces. "
          "Job progress is polled (Audiobook: react-query refetchInterval 3-5 s; Image Generation: 1.5 s while a job is active). "
-         "Only Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries.",
+         "Only Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries. "
+         "Podcast's live avatars speak the preview through the Chat workspace's TTS socket and portrait link "
+         "(assistant workspace/character-speech-player.ts, portrait/CharacterStage.tsx; avatar socket ?character_id=).",
          ["web/src/features/storyteller/", "web/src/features/audiobook/", "web/src/features/podcast/", "web/src/features/voice/",
           "web/src/features/voice-cloning/", "web/src/features/stt/", "web/src/features/image-generation/", "web/src/features/dubbing/"]),
     node("web_platform", "Platform views", "client",
@@ -104,7 +106,7 @@ NODES = [
          invariants=["Secrets live in credential/env stores, never browser state or committed defaults."], tests=["src/tests/security/"]),
     # ---- platform
     node("chat", "Chat", "platform",
-         "Sessions/messages, admission, durable generation jobs, compaction, context budget, generative UI, assist modes, live-call actions/greeting/tasks/proactive lines, overlap judge.",
+         "Sessions/messages, admission, durable generation jobs, compaction, context budget, generative UI, assist modes, live-call actions/greeting/tasks/proactive lines, the post-call recap job, camera and screen glances, overlap judge.",
          [A + "platform/chat/"], feature="chat",
          key_files=[A + "platform/chat/admission.py", A + "platform/chat/generation_jobs.py", A + "platform/chat/live_overlap_judge.py", A + "platform/chat/generative_ui/", A + "composition/gateway/kernel_routes/core_chat_routes.py"],
          invariants=["Recovery finalizes an abandoned chat generation once.", "Chat asks the agent runtime about a typed turn only through turn_routing.route_typed_turn, which owns the turn deadline, the routing context and the routing metadata kept on the user message."], tests=["src/tests/chat/"],
@@ -201,8 +203,14 @@ NODES = [
          [A + "apps/audiobook/"], feature="audiobook",
          key_files=[A + "apps/audiobook/render_planner.py", A + "apps/audiobook/render_service.py", A + "apps/audiobook/assembly_service.py"],
          tests=["src/tests/audiobook/"], docs=["docs/architecture/OMNIX_AUDIOBOOK_V1_OPERATIONS.md"]),
-    node("story", "Storyteller", "apps", "Story jobs (outline -> draft -> store story asset).",
-         [A + "apps/story/"], feature="story", tests=["src/tests/story/"]),
+    node("story", "Storyteller", "apps",
+         "Story jobs (outline -> draft -> store story asset), and the podcast script job (podcast.generate: plan with "
+         "beats -> parts that carry the points already made -> a checking pass that rewrites flagged repeats -> pacing "
+         "and a quality report). Podcast research (/api/podcast/research, research:run) is one quick web search on "
+         "the episode's topic, returned as source notes the producer edits before the script is written.",
+         [A + "apps/story/"], feature="story",
+         key_files=[A + "apps/story/podcast_script.py", A + "apps/story/podcast_research.py"],
+         tests=["src/tests/story/", "src/tests/unit/test_podcast_script.py", "src/tests/unit/test_podcast_research.py"]),
     node("dubbing", "Dubbing", "apps", "Translate, fit and mix dubbing steps as jobs.",
          [A + "apps/dubbing/"], feature="dubbing", tests=["src/tests/dubbing/"]),
     # ---- kernel
@@ -298,6 +306,7 @@ EDGE_ROWS = [
     ("web_rpg", "web_api", "calls", "feature gateway.ts"),
     ("web_trading", "web_api", "calls", "feature gateway.ts"),
     ("web_media", "web_api", "calls", "feature gateway.ts"),
+    ("web_media", "web_chat", "calls", "Podcast live avatars: speakAsCharacters, CharacterStage"),
     ("web_platform", "web_api", "calls", "kernel client"),
     ("web_events", "web_chat", "calls", "invalidates queries"),
     ("web_events", "web_platform", "calls", "jobs view"),
@@ -334,7 +343,7 @@ EDGE_ROWS = [
 
 EDGE_ROWS += [
     ("chat", "providers", "calls", "LLM generation"),
-    ("chat", "prompts", "calls", "a few templates (greeting, proactive, camera); turns use chat's prompt_assembly"),
+    ("chat", "prompts", "calls", "a few templates (greeting, proactive, camera, screen); turns use chat's prompt_assembly"),
     ("chat", "jobs", "calls", "durable generation job"),
     ("chat", "persistence", "sql", "sessions, messages"),
     ("chat", "events", "calls", "chat.turn.completed to the outbox"),
@@ -386,8 +395,7 @@ EDGE_ROWS += [
     ("audiobook", "providers", "calls", "TTS provider (offline class)"),
     ("audiobook", "assets", "calls", "rendered audio"),
     ("story", "jobs", "calls", "story jobs"),
-    ("story", "assets", "calls", "story asset"),
-    ("dubbing", "jobs", "calls", "dubbing jobs"),
+    ("story", "assets", "calls", "story asset"),    ("dubbing", "jobs", "calls", "dubbing jobs"),
     ("jobs", "persistence", "sql", "job rows"),
     ("jobs", "events", "calls", "job events (omnix_job_events + pg_notify)"),
     ("events", "persistence", "sql", "outbox rows"),

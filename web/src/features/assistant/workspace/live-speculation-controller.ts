@@ -1,6 +1,8 @@
  
 import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../../api/fetchPipeline';
 import { cameraShared } from './camera-share';
+import { screenShared } from './live-call-screen-share';
+import { reportLiveCallFailure } from './live-call-health';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 import { livePortrait } from '../chat/portrait/livePortrait';
@@ -86,6 +88,7 @@ type ChatStreamRequestBody = Record<string, unknown> & {
   live_voice_turn_id?: string;
   camera_image?: string;
   camera_shared?: boolean;
+  screen_shared?: boolean;
 };
 
 type ActiveSpeculation = {
@@ -102,6 +105,10 @@ type ActiveSpeculation = {
   // With the camera shared: whether the reply was written while the picture was still being described (null until
   // the gateway says). Such a reply is not reused; the final turn may see what it could not.
   cameraLooking: boolean | null;
+  // The same for a screen shared in the call (D2): written with the screen glance's description, or still looking.
+  screenShared: boolean;
+  screenLooking: boolean | null;
+  // Settles once the gateway has said how it saw every shared picture.
   cameraSettled: Promise<void>;
   resolveCamera: () => void;
   generationId: string | null;
@@ -186,11 +193,16 @@ export function shouldStartExtendedHypothesis(
   return nextWords - previousWords >= MIN_EXTENSION_WORDS || endpointProbability >= 0.85;
 }
 
+function picturesSettled(active: ActiveSpeculation): boolean {
+  return (!active.cameraShared || active.cameraLooking !== null) && (!active.screenShared || active.screenLooking !== null);
+}
+
 export function speculationRequestCanReuse(
   body: ChatStreamRequestBody | null,
   speculativeProviderId: string | null,
   speculativeModelId: string | null,
   speculativeCameraShared = false,
+  speculativeScreenShared = false,
 ): boolean {
   if (!body) return false;
   // A turn with a camera picture (companion 4.1) is answered about the picture, never by a speculative reply.
@@ -200,6 +212,7 @@ export function speculationRequestCanReuse(
   // A shared camera's reply takes the glance's description; a speculation is reused only if it was written the same
   // way, with the camera shared or without it.
   if ((body.camera_shared === true) !== speculativeCameraShared) return false;
+  if ((body.screen_shared === true) !== speculativeScreenShared) return false;
   const providerId = typeof body.provider_id === 'string' ? body.provider_id : null;
   const modelId = typeof body.model_id === 'string' ? body.model_id : null;
   if (providerId && providerId !== speculativeProviderId) return false;
@@ -416,7 +429,7 @@ async function interceptChatStream(input: RequestInfo | URL, init: RequestInit |
       && transcriptsCanReuseSpeculation(candidate.candidateText, finalText)
     ))
     .sort((left, right) => right.createdAtMs - left.createdAtMs)[0];
-  if (active?.cameraShared && active.cameraLooking === null) {
+  if (active && !picturesSettled(active)) {
     // No longer than the gateway's own look waits; the final turn would wait on the same picture.
     await Promise.race([active.cameraSettled, delay(SPECULATION_CAMERA_SETTLE_MS)]);
   }
@@ -424,7 +437,8 @@ async function interceptChatStream(input: RequestInfo | URL, init: RequestInit |
     !active
     || active.error
     || active.cameraLooking !== false
-    || !speculationRequestCanReuse(body, active.providerId, active.modelId, active.cameraShared)
+    || active.screenLooking !== false
+    || !speculationRequestCanReuse(body, active.providerId, active.modelId, active.cameraShared, active.screenShared)
   ) {
     activeSpeculations
       .filter((candidate) => candidate.sessionId === sessionId && candidate.finalText)
@@ -559,7 +573,8 @@ function createSpeculation(
   const generationPromise = new Promise<void>((resolve) => { resolveGeneration = resolve; });
   const cameraSettled = new Promise<void>((resolve) => { resolveCamera = resolve; });
   const shared = cameraShared();
-  if (!shared) resolveCamera();
+  const screen = screenShared();
+  if (!shared && !screen) resolveCamera();
   return {
     sessionId,
     segmentId,
@@ -571,6 +586,8 @@ function createSpeculation(
     modelId: null,
     cameraShared: shared,
     cameraLooking: shared ? null : false,
+    screenShared: screen,
+    screenLooking: screen ? null : false,
     cameraSettled,
     resolveCamera,
     generationId: null,
@@ -624,11 +641,15 @@ async function consumeSpeculation(active: ActiveSpeculation, probability?: numbe
         segment_id: active.segmentId,
         source_sequence: active.sourceSequence,
         ...(active.cameraShared ? { camera_shared: true } : {}),
+        ...(active.screenShared ? { screen_shared: true } : {}),
       }),
       signal: active.abortController.signal,
     },
   );
-  if (!response.ok || !response.body) throw new Error(`Speculation stream failed with status ${response.status}.`);
+  if (!response.ok || !response.body) {
+    reportLiveCallFailure('speculation_start', { status: response.status });
+    throw new Error(`Speculation stream failed with status ${response.status}.`);
+  }
   active.handshakeResponseReady = true;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -664,9 +685,10 @@ function applySpeculationEvent(active: ActiveSpeculation, event: SpeculationEven
     if (active.prefetchedClause) startSpeculativeTtsPrefetch(active, active.prefetchedClause);
     return;
   }
-  if (event.type === 'camera') {
-    active.cameraLooking = event.looking === true;
-    active.resolveCamera();
+  if (event.type === 'camera' || event.type === 'screen') {
+    if (event.type === 'camera') active.cameraLooking = event.looking === true;
+    else active.screenLooking = event.looking === true;
+    if (picturesSettled(active)) active.resolveCamera();
     return;
   }
   if (event.type === 'text_chunk' && typeof event.text === 'string') {
@@ -919,7 +941,10 @@ function createAcceptedSpeculationResponse(
             }),
           },
         );
-        if (!acceptedResponse.ok) throw new Error(`Speculation accept failed with status ${acceptedResponse.status}.`);
+        if (!acceptedResponse.ok) {
+          reportLiveCallFailure('speculation_accept', { status: acceptedResponse.status });
+          throw new Error(`Speculation accept failed with status ${acceptedResponse.status}.`);
+        }
         const accepted = await acceptedResponse.json() as AcceptedSpeculation;
         emit({ type: 'user_message', user_message: accepted.user_message });
         emit({ type: 'session', session: accepted.session });

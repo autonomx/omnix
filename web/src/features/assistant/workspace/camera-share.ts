@@ -4,6 +4,7 @@ import { unwrap } from '../../../api/http';
 import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT } from '../../../events/bus';
 import { api } from '../api/gateway';
 import { cameraFrameFrom } from './live-call-camera';
+import { failureStatus, reportLiveCallFailure } from './live-call-health';
 import { liveConversationStore } from './live-conversation-store';
 
 /**
@@ -153,8 +154,9 @@ export async function glanceCameraShare(sessionId: string): Promise<boolean> {
       body: { image },
     }));
     status = data.status as GlanceStatus;
-  } catch {
+  } catch (error) {
     lastGlance = null;
+    reportLiveCallFailure('camera_glance', { status: failureStatus(error) });
     return false;
   }
   const unavailable = UNAVAILABLE[status];

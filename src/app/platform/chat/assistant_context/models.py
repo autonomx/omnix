@@ -71,6 +71,8 @@ class AssistantContextChatRequest(BaseModel):
     ui_action: ChatUiAction | None = None
     # The person shares their front camera (camera share): the turn takes the newest glance's description.
     camera_shared: bool = False
+    # The person shares their screen in a live call (D2): the turn takes the newest screen glance's description.
+    screen_shared: bool = False
 
     @model_validator(mode="before")
     @classmethod

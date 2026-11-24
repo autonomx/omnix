@@ -20,7 +20,7 @@ export type CreateChatSessionRequest = components['schemas']['CreateChatSessionR
 export type CreateJobRequest = components['schemas']['CreateJobRequest'];
 export type DiagnosticsPayload = components['schemas']['DiagnosticsPayload'];
 export type JobListResponse = components['schemas']['JobListResponse'];
-export type ListJobsOptions = { limit?: number; full?: boolean; cursor?: string | null };
+export type ListJobsOptions = { limit?: number; full?: boolean; cursor?: string | null; status?: string; type?: string; module?: string };
 type AssetListQuery = NonNullable<paths['/api/assets']['get']['parameters']['query']>;
 export type ListAssetsOptions = { type?: AssetListQuery['type']; module?: string; limit?: number; cursor?: string | null };
 export type JobRecord = components['schemas']['JobRecord'];
@@ -168,10 +168,13 @@ export class OmnixApiClient {
   }
 
   async listJobs(options: ListJobsOptions = {}): Promise<JobListResponse> {
-    const query: { limit?: number; full?: boolean; cursor?: string } = {};
+    const query: { limit?: number; full?: boolean; cursor?: string; status?: string; type?: string; module?: string } = {};
     if (options.limit !== undefined) query.limit = options.limit;
     if (options.full !== undefined) query.full = options.full;
     if (options.cursor) query.cursor = options.cursor;
+    if (options.status) query.status = options.status;
+    if (options.type) query.type = options.type;
+    if (options.module) query.module = options.module;
     return this.call(() => this.api.GET('/api/jobs', { params: { query } }));
   }
 

@@ -48,6 +48,20 @@ def _admit(chat_store, job_store, session_id: str, request: SendChatMessageReque
     )
 
 
+def _shared_picture_context(chat_store, session_id: str, user_message, request: SendChatMessageRequest) -> list[dict[str, Any]]:
+    """The context a turn takes from a shared camera and a shared screen: their newest glances' descriptions."""
+    items: list[dict[str, Any]] = []
+    if request.camera_shared:
+        from app.platform.chat.camera_glance import camera_share_context
+
+        items.extend(camera_share_context(chat_store, session_id, user_message))
+    if request.screen_shared:
+        from app.platform.chat.screen_glance import screen_share_context
+
+        items.extend(screen_share_context(chat_store, session_id, user_message))
+    return items
+
+
 def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_store):
     @router.get(
         "/api/chat/sessions", response_model=ChatSessionListResponse, tags=["chat"]
@@ -138,18 +152,16 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
         if admission.existing:
             return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
-        def camera_context() -> tuple[list[dict[str, Any]], dict[str, Any]]:
-            # A shared camera (camera share): the glance sent as the person began, described meanwhile.
-            from app.platform.chat.camera_glance import camera_share_context
-
-            return camera_share_context(chat_store, session.id, user_message), {}
+        def shared_context() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+            # A shared camera or screen (camera share; D2): the glance sent as the person began, described meanwhile.
+            return _shared_picture_context(chat_store, session.id, user_message, request), {}
 
         job = start_chat_generation_job(
             chat_store=chat_store,
             job_store=job_store,
             job=job,
             request=request,
-            context_builder=camera_context if request.camera_shared else None,
+            context_builder=shared_context if request.camera_shared or request.screen_shared else None,
         )
         return SendChatMessageResponse(
             session=session, user_message=user_message, job=job
@@ -217,11 +229,11 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
                     for event in looking:
                         yield event_line(event)
                     turn_options = looking.options
-                elif request.camera_shared:
-                    # A shared camera (camera share): the glance sent as the person began, described meanwhile.
-                    from app.platform.chat.camera_glance import camera_share_context
-
-                    turn_options = {"context_items": camera_share_context(chat_store, admission.session.id, user_message)}
+                elif request.camera_shared or request.screen_shared:
+                    # A shared camera or screen (camera share; D2): the glance sent as the person began.
+                    turn_options = {"context_items": _shared_picture_context(
+                        chat_store, admission.session.id, user_message, request,
+                    )}
                 if scene is not None:
                     turn_options = {**turn_options, "scene": scene}
                 for event in stream_chat_turn(chat_store, job_store, admission, request, **turn_options):

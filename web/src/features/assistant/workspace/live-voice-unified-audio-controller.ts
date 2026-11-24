@@ -46,6 +46,7 @@ import {
 import { openStream, statusError } from '../../../api/transport';
 import { chatStreamEventSchema, parseJson } from '../../../api/schemas/streams';
 import { cameraShared } from './camera-share';
+import { failureStatus, reportLiveCallFailure } from './live-call-health';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { takeHeardProposalTurnId } from './live-call-proposal-question';
 import { sceneSpeakerFrom, sceneSpeakerVoiceId } from './live-call-scene';
@@ -366,7 +367,10 @@ function maybeStartGeneratedGreeting(): void {
   // A shared camera was glanced at as the call started: the greeting may take what it shows.
   const camera = cameraShared() ? '?camera_shared=true' : '';
   const path = `/api/chat/sessions/${encodeURIComponent(startup.sessionId)}/live-call/greeting/stream${camera}` as const;
-  void openStream(path, { body: {}, signal: abortController.signal }).catch(statusError('Live-call greeting')).then(async (response) => {
+  void openStream(path, { body: {}, signal: abortController.signal }).catch((error: unknown) => {
+    if (!abortController.signal.aborted) reportLiveCallFailure('greeting', { status: failureStatus(error) });
+    return statusError('Live-call greeting')(error);
+  }).then(async (response) => {
     await response.text();
   }).catch((error: unknown) => {
     if (abortController.signal.aborted) return;

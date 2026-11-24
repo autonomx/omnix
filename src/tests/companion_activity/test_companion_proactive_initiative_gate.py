@@ -74,6 +74,8 @@ def test_proactive_generation_is_serialized_and_critical_can_preempt(monkeypatch
     )
     assert blocked.status_code == 409
     assert blocked.json()["detail"] == "initiative_active"
+    # When initiative is free again (the active lease's time left), so the browser waits rather than asking again.
+    assert 1 <= int(blocked.headers["retry-after"]) <= 90
 
     critical = http.post(
         "/api/chat/sessions/chat:1/live-call/greeting/stream",

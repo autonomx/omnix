@@ -4,7 +4,9 @@
 avatar token from the TTS websocket's ``hello``. The token is accepted only from the principal it was issued to, while
 its TTS connection is open on this gateway. The gateway then resolves the session's character and avatar pack (on a
 group call, ``speaker_id`` names the member whose turns the audio session speaks: the host, or a guest code finds
-seated on the call; anyone else is ``speaker_not_on_call``),
+seated on the call; anyone else is ``speaker_not_on_call``). Outside a chat, ``?token=...&character_id=...`` names
+the character itself (a podcast's live avatars, D4): one this workspace can read, or ``character_not_found``; its
+``run`` (the podcast run) is the lease label all the run's speakers share. The gateway then
 reads the portrait image itself (never from the browser), prepares it on the portrait service, opens the
 call's portrait link and attaches it to the TTS connection, which starts copying the call's audio.
 
@@ -38,8 +40,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.conversation.portrait_stream_contract import PORTRAIT_START_RULES, PortraitMessageError, unpack
 
 from app.platform.characters.contracts import (
+    CharacterNotFoundError,
     default_character_avatar_service,
     portrait_emotion_label,
+    resolve_character_portrait,
     resolve_live_call_runtime,
 )
 from app.platform.live_voice.portrait.calls import PortraitCalls, principal_id
@@ -150,6 +154,42 @@ def _is_speech_frame(message: bytes) -> bool:
     return header.get("output_id") not in ("idle", "blink", "transition")
 
 
+class _Refused(Exception):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _session_portrait(chat_store_factory: Callable[[], Any], session_id: str, speaker_id: str) -> tuple[Any, str]:
+    """The pack and speech emotion of a call's session (of its member ``speaker_id`` on a group call)."""
+    try:
+        session = load_session(chat_store_factory, session_id)
+        if session is not None and speaker_id:
+            session = speaker_session(session, speaker_id)
+            if session is None:
+                raise _Refused("speaker_not_on_call", "That character is not on this call")
+        runtime = resolve_live_call_runtime(session) if session is not None else None
+    except _Refused:
+        raise
+    except Exception:  # noqa: BLE001 - the call goes on without a portrait
+        logger.warning("Live portrait could not resolve session %s", session_id, exc_info=True)
+        runtime = None
+    if runtime is None:
+        raise _Refused("session_unavailable", "The call's session could not be read")
+    return runtime.avatar_pack, runtime.speech_style.emotion
+
+
+def _character_portrait(character_id: str) -> tuple[Any, str]:
+    """The pack and speech emotion of a character outside any chat (a podcast's live avatars)."""
+    try:
+        return resolve_character_portrait(character_id)
+    except CharacterNotFoundError:
+        raise _Refused("character_not_found", "That character could not be found") from None
+    except Exception:  # noqa: BLE001 - the podcast goes on without a portrait
+        logger.warning("Live portrait could not resolve character %s", character_id, exc_info=True)
+        raise _Refused("character_not_found", "That character could not be read") from None
+
+
 def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls, *,
                                         chat_store_factory: Callable[[], Any]) -> None:
     @router.websocket(AVATAR_WEBSOCKET_PATH)
@@ -159,30 +199,31 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
         session_id = websocket.query_params.get("session_id", "")
         # A guest speaking on a group call shows its own face (companion 5.5); none named is the chat's character.
         speaker_id = websocket.query_params.get("speaker_id", "")[:200]
+        # No chat: the character itself (a podcast's live avatars, D4).
+        character_id = websocket.query_params.get("character_id", "")[:160] if not session_id else ""
+        # The podcast run the character speaks in: its speakers share one lease label, as a group call's do.
+        run_key = websocket.query_params.get("run", "")[:120] if character_id else ""
         principal = principal_id(websocket.scope)
         call = calls.claim(token, principal) if token else None
-        if call is None or not session_id:
+        if call is None or not (session_id or character_id):
             await websocket.close(code=1008, reason="invalid_avatar_token")
             return
         base_url = portrait_url()
         if not base_url:
             await _unavailable(websocket, "portrait_not_configured", "The portrait service is not set up")
             return
+        # The portrait service's lease label. A run's next speaker replaces the last one's stream, as a group call's
+        # does (owner report 2026-11-23: under a label each, the next face was refused while the last one's stream
+        # was still closing: "another live call is using it").
+        subject = session_id or (f"character-run:{run_key}" if run_key else f"character:{character_id}")
         try:
-            session = await asyncio.to_thread(load_session, chat_store_factory, session_id)
-            if session is not None and speaker_id:
-                session = await asyncio.to_thread(speaker_session, session, speaker_id)
-                if session is None:
-                    await _unavailable(websocket, "speaker_not_on_call", "That character is not on this call")
-                    return
-            runtime = await asyncio.to_thread(resolve_live_call_runtime, session) if session is not None else None
-        except Exception:  # noqa: BLE001 - the call goes on without a portrait
-            logger.warning("Live portrait could not resolve session %s", session_id, exc_info=True)
-            runtime = None
-        if runtime is None:
-            await _unavailable(websocket, "session_unavailable", "The call's session could not be read")
+            if session_id:
+                pack, emotion = await asyncio.to_thread(_session_portrait, chat_store_factory, session_id, speaker_id)
+            else:
+                pack, emotion = await asyncio.to_thread(_character_portrait, character_id)
+        except _Refused as exc:
+            await _unavailable(websocket, exc.code, str(exc))
             return
-        pack = runtime.avatar_pack
         if pack is None or pack.renderer != "portrait":
             await _unavailable(websocket, "not_a_portrait", "This character's avatar is not a portrait")
             return
@@ -208,16 +249,16 @@ def register_live_call_avatar_websocket(router: APIRouter, calls: PortraitCalls,
                     quality.relayed()
                 await websocket.send_bytes(message)
 
-            link = await PortraitLink.open(base_url, call_key=call.call_key, principal=principal, session=session_id,
+            link = await PortraitLink.open(base_url, call_key=call.call_key, principal=principal, session=subject,
                                            latent_key=latent_key,
-                                           emotion=portrait_emotion_label(pack, runtime.speech_style.emotion),
+                                           emotion=portrait_emotion_label(pack, emotion),
                                            on_frame=relay,
                                            level=quality.level)
         except PortraitUnavailable as exc:
             await _unavailable(websocket, exc.code, str(exc) or "The portrait is not available")
             return
         except Exception:  # noqa: BLE001 - the call goes on without a portrait
-            logger.warning("Live portrait could not start for session %s", session_id, exc_info=True)
+            logger.warning("Live portrait could not start for %s", subject, exc_info=True)
             await _unavailable(websocket, "portrait_failed", "The portrait could not start")
             return
         if not calls.open(call):

@@ -1,6 +1,7 @@
 /** Asks the call's model whether a short remark over the assistant's speech should stop it. */
 import { pipelineFetch } from '../../../api/fetchPipeline';
 import { createApi } from '../api/gateway';
+import { reportLiveCallFailure } from './live-call-health';
 
 export type OverlapVerdict = {
   decision: 'stop' | 'continue';
@@ -26,7 +27,7 @@ export async function judgeOverlap(
   const abort = new AbortController();
   const deadline = setTimeout(() => abort.abort(), REQUEST_DEADLINE_MS);
   try {
-    const { data } = await createApi({ fetchImpl }).POST('/api/live-call/sessions/{session_id}/overlap-judgement', {
+    const { data, response } = await createApi({ fetchImpl }).POST('/api/live-call/sessions/{session_id}/overlap-judgement', {
       params: { path: { session_id: sessionId } },
       body: {
         transcript: transcript.trim().slice(0, MAX_TRANSCRIPT_CHARS),
@@ -37,9 +38,13 @@ export async function judgeOverlap(
       headers: { [CALL_ID_HEADER]: encodeURIComponent(sessionId) },
       signal: abort.signal,
     });
-    if (!data) return fallback('request_refused');
+    if (!data) {
+      reportLiveCallFailure('overlap_judgement', { status: response.status });
+      return fallback('request_refused');
+    }
     return { decision: data.decision, source: data.source, reason: data.reason ?? null };
   } catch (error) {
+    reportLiveCallFailure('overlap_judgement');
     return fallback(abort.signal.aborted ? 'request_deadline' : error instanceof Error ? error.name : 'request_failed');
   } finally {
     clearTimeout(deadline);

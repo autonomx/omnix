@@ -10,6 +10,7 @@ import {
 } from './assistant-context-store';
 import { cameraShared, cameraShareTurnFields } from './camera-share';
 import type { DesktopTemporalCapture } from './desktop-temporal-capture';
+import { screenShared, screenShareTurnFields } from './live-call-screen-share';
 
 /** The route a chat message goes to: the chat route, or the context route with the tools' fields. */
 export type AssistantChatRoute = 'chat' | 'context';
@@ -31,7 +32,10 @@ type DesktopFrames = Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>>
  * with a camera picture (companion 4.1) always goes to the chat route, the
  * only one that describes it; agent mode and the other tools sit out that
  * one turn. A shared camera only marks the turn `camera_shared` (after a
- * glance, when the chat has no recent one); both routes take it.
+ * glance, when the chat has no recent one); both routes take it. A shared
+ * screen in a call does the same (`screen_shared`, D2): a spoken turn takes
+ * the newest glance's description instead of sending the screen's frames
+ * through the context route, whose vision would hold the reply.
  */
 export async function sendChatWithAssistantContext<T>(
   sessionId: string,
@@ -43,12 +47,14 @@ export async function sendChatWithAssistantContext<T>(
   // A shared camera's turn takes the glance's description; a Show picture already speaks for the camera.
   // Only a shared camera waits here: other turns go out in the same tick.
   if (typeof body.camera_image !== 'string' && cameraShared()) body = { ...body, ...await cameraShareTurnFields(sessionId) };
+  if (liveCallTurn && screenShared()) body = { ...body, ...await screenShareTurnFields(sessionId) };
   const context = assistantContextStore.getState();
   const { agentMode, researchMode, desktopShare, localWorkspace } = context;
   if (localWorkspace) storeLocalWorkspace(sessionId, localWorkspace);
   const researching = researchMode !== 'disabled' && !liveCallTurn;
   const camera = typeof body.camera_image === 'string';
-  const enhanced = !camera && (agentMode || researching || desktopShare !== null || localWorkspace !== null);
+  const desktopFrames = desktopShare !== null && !liveCallTurn;
+  const enhanced = !camera && (agentMode || researching || desktopFrames || localWorkspace !== null);
   const request = enhanced ? sendThroughContext(sessionId, body, context, send) : send('chat', body);
   if (!enhanced) {
     dispatchPerformance('assistant_context_chat_request_dispatched', { sessionId, agentMode, researchMode, enhanced, persistenceDeferred: true });
@@ -64,7 +70,8 @@ async function sendThroughContext<T>(
   send: (route: AssistantChatRoute, body: Record<string, unknown>) => Promise<T>,
 ): Promise<T> {
   const { agentMode, researchMode, deepResearchMaxPages, localWorkspace } = context;
-  const desktop = await captureDesktop(context);
+  // A call's turn takes the shared screen as a glance (`screen_shared`), never as frames.
+  const desktop = typeof body.screen_shared === 'boolean' ? undefined : await captureDesktop(context);
   dispatchPerformance('assistant_context_chat_request_dispatched', { sessionId, agentMode, researchMode, enhanced: true, persistenceDeferred: true });
   try {
     return await send('context', {

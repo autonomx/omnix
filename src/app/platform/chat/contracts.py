@@ -256,6 +256,9 @@ _LAZY_EXPORTS = {
     # A live call's tasks: the report a reason names, and how later live prompts see a task's result.
     "live_history_session": "live_call_tasks",
     "call_tasks_prompt": "live_call_tasks",
+    # A reply the person cut into, offered once to the next spoken turn to pick up (D1).
+    "cut_off_reply": "live_call_resume",
+    "cut_off_reply_prompt": "live_call_resume",
     "reported_task_id": "live_call_tasks",
     "task_report_material": "live_call_tasks",
     # A write a call proposed: its report claims the start once, so the next turn can confirm it.
@@ -290,6 +293,8 @@ _LAZY_EXPORTS = {
     "seconds_since_last_message": "scene",
     "direct_scene_talk": "scene_director",
     "scene_talk_opening": "scene_director",
+    # An opening without the member whose turn said SKIP (C1): asked once more without them.
+    "without_member": "scene",
     "ChatSessionStore": "character_store",
     "default_chat_store": "character_store",
     # Whether a call may offer the camera (companion 4.3).

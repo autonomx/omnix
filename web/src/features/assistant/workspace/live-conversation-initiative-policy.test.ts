@@ -68,6 +68,14 @@ describe('decideInitiative', () => {
     expect(decideInitiative({ ...base, maxInitiativesPerHour: 0 }).reason).toBe('hourly_cap');
     expect(decideInitiative({ ...base, initiativesThisHour: 3 }).action).toBe('speak');
   });
+
+  it("waits out the server's spacing when it turned a remark down", () => {
+    expect(decideInitiative({ ...base, serverHoldUntilMs: base.nowMs + 4_000 })).toEqual({
+      action: 'wait', reason: 'server_spacing', eligibleInMs: 4_000,
+    });
+    expect(decideInitiative({ ...base, serverHoldUntilMs: base.nowMs }).action).toBe('speak');
+    expect(decideInitiative({ ...base, serverHoldUntilMs: null }).action).toBe('speak');
+  });
 });
 
 describe('insideQuietHours', () => {

@@ -1,5 +1,6 @@
 import type { components } from '../api/generated';
 import { createApi } from '../api/gateway';
+import { reportLiveCallFailure } from './live-call-health';
 import { liveConversationStore } from './live-conversation-store';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_PERF_EVENT, CHARACTER_AVATAR_RUNTIME_EVENT, emitOmnixEvent } from '../../../events/bus';
@@ -101,6 +102,7 @@ async function runPrewarm(
     // The prewarm route answers with an untyped status object, on failure too.
     const payload = asRecord(data ?? error);
     if (!response.ok) {
+      reportLiveCallFailure('prewarm', { status: response.status });
       throw new Error(
         typeof payload?.status === 'string'
           ? payload.status

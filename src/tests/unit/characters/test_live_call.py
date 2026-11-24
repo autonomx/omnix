@@ -416,3 +416,30 @@ def test_system_live_call_runtime_carries_the_assistants_live_portrait(tmp_path:
 
     assert runtime.interaction_mode == "system"
     assert runtime.avatar_pack is not None and runtime.avatar_pack.renderer == "portrait"
+
+
+def test_a_characters_portrait_outside_a_chat_is_its_pack_and_speech_emotion() -> None:
+    # D4: a podcast names the character; its stored snapshot (workspace-scoped, raising when unreadable) decides.
+    from types import SimpleNamespace
+
+    import pytest
+
+    from app.platform.characters.live_call import resolve_character_portrait
+    from app.platform.characters.repository import CharacterNotFoundError
+
+    snapshots = {"maya": SimpleNamespace(id="maya", speech_style={"emotion": "happy"})}
+
+    def resolve_snapshot(character_id: str):
+        if character_id not in snapshots:
+            raise CharacterNotFoundError(character_id)
+        return snapshots[character_id]
+
+    characters = SimpleNamespace(resolve_snapshot=resolve_snapshot)
+    avatars = SimpleNamespace(resolve=lambda character_id: f"pack:{character_id}")
+
+    pack, emotion = resolve_character_portrait("maya", character_service_factory=lambda: characters,
+                                               avatar_service_factory=lambda: avatars)
+    assert (pack, emotion) == ("pack:maya", normalize_speech_style({"emotion": "happy"}).emotion)
+    with pytest.raises(CharacterNotFoundError):
+        resolve_character_portrait("stranger", character_service_factory=lambda: characters,
+                                   avatar_service_factory=lambda: avatars)

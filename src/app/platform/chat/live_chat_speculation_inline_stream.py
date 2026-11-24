@@ -138,6 +138,7 @@ def register_live_chat_speculation_inline_stream_routes(router: APIRouter,
             execution_lane=execution_lane,
             scene_possible=scene_possible,
             camera_shared=request.camera_shared,
+            screen_shared=request.screen_shared,
         )
         generation = handshake_runtime._HandshakeGeneration(
             store=store,

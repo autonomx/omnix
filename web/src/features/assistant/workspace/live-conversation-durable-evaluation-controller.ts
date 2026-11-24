@@ -1,4 +1,5 @@
 import { readLiveConversationEvaluationSnapshot } from './live-conversation-evaluation-controller';
+import { failureStatus, liveCallFailureMetrics, reportLiveCallFailure } from './live-call-health';
 import { liveConversationStore } from './live-conversation-store';
 import {
   liveChatEvaluationClient,
@@ -150,6 +151,7 @@ export function buildDurableEvaluationPayload(
       unanswered_obligation_rate: report.unansweredObligationRate,
       perceived_listening_score: report.perceivedListeningScore,
       perceived_pressure_score: report.perceivedPressureScore,
+      ...liveCallFailureMetrics(),
     },
     eos_termination_counts: { ...call.eosTerminationCounts },
     scenario_labels: currentScenarioLabels(),
@@ -210,6 +212,7 @@ async function persistCallEvaluation(call: ActiveCall): Promise<void> {
     const gate = await liveChatEvaluationClient.releaseGate({ persistStatus: true });
     emitOmnixEvent(LIVE_CONVERSATION_DURABLE_EVALUATION_SAVED_EVENT, { record: { ...record, release_gate_status: gate.status }, gate });
   } catch (error) {
+    reportLiveCallFailure('evaluation_save', { status: failureStatus(error) });
     emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
         stage: 'durable_evaluation_save_failed',
         error_name: error instanceof Error ? error.name : 'unknown',

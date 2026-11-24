@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { dismissCameraShareError, toggleCameraShare, useCameraShare } from '../workspace';
+import { DesktopShareButton, dismissCameraShareError, toggleCameraShare, useCameraShare } from '../workspace';
 import { LiveShowButton } from './LiveShowButton';
 import './CameraShare.css';
 
@@ -48,12 +48,16 @@ export function CameraShareButton({ variant = 'composer' }: { variant?: 'compose
   );
 }
 
-/** The call's camera buttons: Show for one picture, Camera to share it (Show steps aside while it is shared). */
+/**
+ * The call's picture buttons: Show for one picture, Camera to share it (Show steps aside while it is shared), and
+ * Screen to share the screen (D2).
+ */
 export function LiveCallCameraButtons() {
   return (
     <>
       <LiveShowButton />
       <CameraShareButton variant="call" />
+      <DesktopShareButton variant="call" />
     </>
   );
 }

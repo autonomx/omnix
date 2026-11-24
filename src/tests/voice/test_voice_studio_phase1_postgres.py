@@ -451,7 +451,7 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
         def fail_job(self, job_id: str, request: Any) -> None:
             pytest.fail(request.message)
 
-    def run(job_type: str, payload: dict[str, Any], job_id: str) -> None:
+    def run(job_type: str, payload: dict[str, Any], job_id: str) -> Any:
         store = _JobStore()
         job = JobRecord.model_validate({
             "id": job_id, "module": "voice", "type": job_type, "status": "running", "resource_class": "gpu:tts",
@@ -459,6 +459,7 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
         })
         execute_voice_studio_job(store, job)
         assert job_id in store.completed
+        return store.completed[job_id]
 
     script = scripts.save_script(title="Takes", text="dave: one\nbob: two")
     segments = [{"index": line["position"], "speaker": line["speaker"], "text": line["text"], "line_id": line["id"]}
@@ -483,6 +484,22 @@ def test_one_line_renders_again_and_restitch_rebuilds_from_selected_takes(worksp
     render = asset_store.assets["audio:voice-studio-job-restitch"]
     assert [entry["reused_take_id"] for entry in render.metadata["segment_outputs"]][1] == first_bob
     assert sum(1 for asset in asset_store.assets.values() if asset.type == AssetType.VOICE_TAKE) == 3
+
+    # The podcast's pattern: each preview speaks one line of a saved script and keeps it as a take; the final
+    # render (no line asked again) reuses every take and speaks only a line the preview never made.
+    podcast = scripts.save_script(title="Podcast", text="ann: three\ncat: four", settings={"source": "podcast"})
+    ann, cat = [{"index": line["position"], "speaker": line["speaker"], "text": line["text"], "line_id": line["id"]}
+                for line in podcast["lines"]]
+    run("tts.synthesize", {"text": "three", "script_id": podcast["id"], "script_segments": [ann]}, "job:preview-ann")
+    assert rendered[-1] == "three"
+    final = run("tts.multi_speaker_synthesize", {"text": "ann: three\ncat: four", "script_id": podcast["id"],
+                                                 "script_segments": [ann, cat], "render_line_ids": []}, "job:final")
+    assert rendered[-2:] == ["three", "four"]
+    output_ref = final.output_refs[0]
+    assert [entry["reused_take_id"] != "" for entry in output_ref["segments"]] == [True, False]
+    # The output names where each line plays, for the transcript to follow.
+    assert [entry["segment"] for entry in output_ref["timeline"]] == [0, 1]
+    assert output_ref["timeline"][1]["start"] > output_ref["timeline"][0]["start"]
 
 
 def test_a_design_session_stays_loaded_between_previews_unless_another_engine_waits(workspace) -> None:

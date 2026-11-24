@@ -272,6 +272,15 @@ def test_every_metric_key_the_browser_sends_passes_the_content_filter() -> None:
     }
     assert len(keys.get("latency_summary", [])) >= 15
     assert len(keys.get("quality_metrics", [])) >= 15
+    # The call's failure counts (live-call-health.ts) are spread into quality_metrics, one key per kind.
+    health = (
+        Path(__file__).resolve().parents[3] / "web/src/features/assistant/workspace/live-call-health.ts"
+    ).read_text(encoding="utf-8")
+    kinds_block = re.search(r"LIVE_CALL_FAILURE_KINDS = \[(.*?)\] as const", health, re.S)
+    assert kinds_block is not None
+    kinds = re.findall(r"'([a-z0-9_]+)'", kinds_block.group(1))
+    assert len(kinds) >= 8
+    keys["quality_metrics"] = [*keys["quality_metrics"], *(f"failure_{kind}_count" for kind in kinds), "failure_count"]
     VoiceSessionEvaluationCreate(
         **_create().model_dump(exclude={"latency_summary", "quality_metrics"}),
         **{name: dict.fromkeys(names, 1.0) for name, names in keys.items()},

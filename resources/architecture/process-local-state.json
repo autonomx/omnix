@@ -1849,6 +1849,18 @@
       "reason": "This set deduplicates inline call-action threads only when PostgreSQL is not the runtime; durable job status stays in the job store, and each thread removes its ID in finally."
     },
     {
+      "path": "src/app/platform/chat/live_call_recap.py",
+      "symbol": "_THREADS_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex guards only the inline call-recap threads; PostgreSQL job leases remain the production authority."
+    },
+    {
+      "path": "src/app/platform/chat/live_call_recap.py",
+      "symbol": "_THREAD_JOB_IDS",
+      "category": "coordination",
+      "reason": "This set deduplicates inline call-recap threads only when PostgreSQL is not the runtime; durable job status stays in the job store, and each thread removes its ID in finally."
+    },
+    {
       "path": "src/app/platform/chat/live_call_camera.py",
       "symbol": "_executor",
       "category": "coordination",
@@ -1861,30 +1873,6 @@
       "reason": "Two worker threads describe a shared camera's glance off the turn, so a turn waits only as long as it chooses; capping the pool keeps slow vision calls from piling up threads. It holds no records: the description is committed with the turn that uses it."
     },
     {
-      "path": "src/app/platform/chat/camera_glance.py",
-      "symbol": "_lock",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
-    },
-    {
-      "path": "src/app/platform/chat/camera_glance.py",
-      "symbol": "_glances",
-      "category": "cache",
-      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; a chat's glance in progress is a cache of a vision call, not a cross-process authority: a turn on another replica sees the camera as unseen.",
-      "max_entries_symbol": "_MAX_CHATS",
-      "ttl_symbol": "GLANCE_FRESH_SECONDS",
-      "invalidation": "reset_camera_glances_for_tests"
-    },
-    {
-      "path": "src/app/platform/chat/camera_glance.py",
-      "symbol": "_seen",
-      "category": "cache",
-      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; a chat's newest description is a cache, and the description a turn used is committed on its message.",
-      "max_entries_symbol": "_MAX_CHATS",
-      "ttl_symbol": "GLANCE_FRESH_SECONDS",
-      "invalidation": "reset_camera_glances_for_tests"
-    },
-    {
       "path": "src/app/platform/live_voice/llm/call_tools.py",
       "symbol": "_research_availability",
       "category": "cache",
@@ -1893,5 +1881,5 @@
       "ttl_symbol": "_AVAILABILITY_SECONDS",
       "invalidation": "reset_research_availability"
     }
-]
+  ]
 }

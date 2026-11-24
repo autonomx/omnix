@@ -30,6 +30,8 @@ from typing import Any
 import numpy as np
 
 from .effects import write_mono
+# A take with less voiced time than this per character of its line lost words (the live speech check's line).
+from .speech_presence import FASTEST_VOICED_CHARS_PER_SECOND
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +47,6 @@ WHOLE_SAMPLE_MAX_SECONDS = 20.0
 EDGE_SECONDS = 0.06
 CANDIDATES_TRIED = 3
 TAKES_PER_LINE = 2
-# A take with less voiced time than this per character of its line lost words: the live speech check's line
-# (phrase_speech_check, 29 characters per voiced second, calibrated on real takes 2026-11-04).
-FASTEST_VOICED_CHARS_PER_SECOND = 29.0
 # Short and medium lines like a live reply's, including the openers that fail most.
 TEST_LINES = (
     "Yeah, well,",

@@ -39,6 +39,7 @@ let socialCandidate: string | null = null;
 let reportCandidate: string | null = null;
 let tasks: LiveCallTask[] = [];
 let skip = false;
+let spacingFor: number | null = null;
 let disposers: Array<() => void> = [];
 
 function json(body: unknown): Response {
@@ -75,6 +76,7 @@ beforeEach(() => {
   reportCandidate = null;
   tasks = [];
   skip = false;
+  spacingFor = null;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : null;
     const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
@@ -92,6 +94,11 @@ beforeEach(() => {
       const turnId = reason.startsWith('open_loop:')
         ? `open-loop:${reason.slice('open_loop:'.length)}:n${n}`
         : reason.startsWith('task_report:') ? `task-report:${reason.slice('task_report:'.length)}` : `proactive:n${n}`;
+      if (spacingFor !== null) {
+        return new Response(JSON.stringify({ detail: 'initiative_spacing' }), {
+          status: 409, headers: { 'Content-Type': 'application/json', 'Retry-After': String(spacingFor) },
+        });
+      }
       if (skip && !reason.startsWith('task_report:')) {
         return sse([
           { type: 'initiative', turn_id: turnId, initiative_reason: reason },
@@ -212,6 +219,22 @@ describe('social initiative reasons in a quiet call', () => {
       initiative_reason: LOOP,
       delivery_status: 'completed',
     });
+  });
+
+  it("waits as long as the server's spacing says instead of asking again at once", async () => {
+    spacingFor = 10;
+    startCall();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(callsTo(STREAM_PATH)).toHaveLength(1);
+    expect(stages('initiative_server_held')[0]).toMatchObject({ detail: 'initiative_spacing', retry_after_ms: 10_000 });
+    expect(stages('initiative_generation_failed')).toEqual([]);
+    // The 2026-11-22 call asked again every 0.7 s; now nothing goes out until the server's time is up.
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(callsTo(STREAM_PATH)).toHaveLength(1);
+    spacingFor = null;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(callsTo(STREAM_PATH)).toHaveLength(2);
   });
 
   it("keeps today's reason when the server has no open loop", async () => {

@@ -72,7 +72,7 @@ Still open (follow-ups, not blockers):
 | `correction-overlap`, `sustained-overlap`, `tts-failure`, `provider-reconnect`, `browser-reload`, `rapid-interruption-soak` | Not implemented in the benchmark driver: a run under their names plays an ordinary conversation. Each needs its behaviour in the driver (a TTS fault, a provider drop, a reload mid-call, talk over the reply) before its paired run. The paths are unit-tested; `hard-stop` ran live with the portrait on. |
 | STT finalize with the portrait on | +21-32 ms in two of three runs, under the +20 ms allowance in the third; within run-to-run noise but not yet shown to pass reliably |
 | Remote clients over throttled links | Needs a second machine |
-| Blinks while speaking | The idle face blinks; speech frames do not yet |
+| Blinks while speaking | Done 2026-11-23 for FLOAT (speech frames blink every 3.5-8 s, `speech_blink_closures`); FlashHead speech blinks by itself. Not yet seen in a call (owner check with B6) |
 
 The earlier status, kept for its measurements:
 

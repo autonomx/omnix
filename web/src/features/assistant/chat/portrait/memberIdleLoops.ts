@@ -70,10 +70,13 @@ export function rememberMemberLoop(chatSessionId: string, characterId: string, l
 
 /**
  * Ask the gateway for a member's loop, once (again only after a busy refusal, or with `again` when the loop has just
- * been rendered); `speakerId` is null for the chat's own character. A refusal leaves the member's picture in its tile.
+ * been rendered); `speakerId` is null for the chat's own character. With `outsideChat` (a podcast's cast, D4),
+ * `chatSessionId` is the stage's run key and the gateway reads the character itself. A refusal leaves the member's
+ * picture in its tile.
  */
 export async function loadMemberLoop(
-  chatSessionId: string, characterId: string, speakerId: string | null, revision = '', { again = false } = {},
+  chatSessionId: string, characterId: string, speakerId: string | null, revision = '',
+  { again = false, outsideChat = false } = {},
 ): Promise<void> {
   forChat(chatSessionId);
   const key = askKey(characterId, revision);
@@ -82,7 +85,11 @@ export async function loadMemberLoop(
   asked.add(key);
   try {
     const { data } = await api.GET('/api/tts/live-call/portrait-idle', {
-      params: { query: { session_id: chatSessionId, ...(speakerId ? { speaker_id: speakerId } : {}) } },
+      params: {
+        query: outsideChat
+          ? { character_id: characterId }
+          : { session_id: chatSessionId, ...(speakerId ? { speaker_id: speakerId } : {}) },
+      },
       cache: 'no-store',
     });
     if (sessionId !== chatSessionId) return;
@@ -142,6 +149,12 @@ export function resetMemberLoops(): void {
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** How many of `members` (a character and its pack revision each) have their loop known. */
+export function useKnownMemberLoops(members: readonly { id: string; revision: string }[]): number {
+  useSyncExternalStore(subscribe, () => version, () => version);
+  return members.filter((member) => memberLoop(member.id, member.revision) !== null).length;
 }
 
 /** A member's idle loop, once one is known; null until then. */

@@ -9181,6 +9181,12 @@ export interface components {
         PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
+        /** PodcastResearchRequest */
+        PodcastResearchRequest: core["schemas"]["PodcastResearchRequest"];
+        /** PodcastResearchResponse */
+        PodcastResearchResponse: core["schemas"]["PodcastResearchResponse"];
+        /** PodcastResearchSource */
+        PodcastResearchSource: core["schemas"]["PodcastResearchSource"];
         /** PortfolioEPerformance */
         PortfolioEPerformance: {
             /** Cash */

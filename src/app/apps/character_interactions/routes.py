@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import logging
+import math
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -49,6 +50,7 @@ from app.platform.chat.contracts import (
     seconds_since_last_message,
     stream_proactive_turn_chunks,
     task_report_material,
+    without_member,
 )
 from app.runtime.tenant_context import LOCAL_USER_ID, current_tenant
 from app.platform.characters.contracts import CharacterLiveCallRuntime, LiveCallSceneGuest, resolve_live_call_runtime
@@ -298,10 +300,13 @@ class _SceneAsk:
 
     _DETAIL = {"reaction": "scene_reaction", "line": "scene_line", "start": "scene_talk"}
 
-    def __init__(self, kind: str, profile: Any, *, switched_off: bool) -> None:
+    def __init__(self, kind: str, profile: Any, *, switched_off: bool, skipped_speaker: str | None = None) -> None:
         self.kind = kind
         self.profile = profile
         self.switched_off = switched_off
+        # The member whose turn on this anchor just said SKIP (C1): asked once more without them. It only narrows
+        # the candidates; the authority closes the anchor on a second skip.
+        self.skipped_speaker = (skipped_speaker or "").strip() or None
         self.detail = self._DETAIL[kind]
 
     def refuse(self, reason: str) -> HTTPException:
@@ -324,13 +329,19 @@ class _SceneAsk:
     def opening(self, session: Any, now: datetime) -> tuple[Any, Any] | None:
         """The scene and the opening this turn would follow now, or None when it is not due."""
         if self.kind == "reaction":
-            return scene_reaction_opening(session)
-        if self.kind == "line":
-            return scene_talk_opening(session, "line", max_lines=int(self.profile.scene_talk_max_lines))
-        quiet = seconds_since_last_message(session.messages, now)
-        if quiet is None or quiet < self.profile.scene_talk_silence_seconds():
+            found = scene_reaction_opening(session)
+        elif self.kind == "line":
+            found = scene_talk_opening(session, "line", max_lines=int(self.profile.scene_talk_max_lines))
+        else:
+            quiet = seconds_since_last_message(session.messages, now)
+            if quiet is None or quiet < self.profile.scene_talk_silence_seconds():
+                return None
+            found = scene_talk_opening(session, "talk", max_lines=int(self.profile.scene_talk_max_lines))
+        if found is None:
             return None
-        return scene_talk_opening(session, "talk", max_lines=int(self.profile.scene_talk_max_lines))
+        scene, opening = found
+        narrowed = without_member(opening, self.skipped_speaker)
+        return (scene, narrowed) if narrowed is not None else None
 
     def attempt(self, opening: Any) -> SceneTalkAttemptRequest:
         """The attempt the lease records. A line answering the person (a thread they started) is not counted
@@ -780,6 +791,7 @@ def register_character_integration_routes(
         initiative_reason: str = Query(default="quiet_follow_up", max_length=120),
         state_summary: str | None = Query(default=None, max_length=500),
         scene_talk_switched_off: bool = Query(default=False),
+        scene_skipped_speaker: str | None = Query(default=None, max_length=120),
         camera_shared: bool = Query(default=False),
     ) -> StreamingResponse:
         store = chat_store_factory()
@@ -793,7 +805,7 @@ def register_character_integration_routes(
         if scene_kind is not None:
             # Another call member may react to a reply (5.4), add a line to a thread or open talk (6).
             scene_ask = _SceneAsk(scene_kind, live_conversation_profile_store_factory().get(session_id).effective,
-                                  switched_off=scene_talk_switched_off)
+                                  switched_off=scene_talk_switched_off, skipped_speaker=scene_skipped_speaker)
             if purpose != "proactive_reengagement":
                 raise scene_ask.refuse("unavailable")
             scene_ask.check_setting()
@@ -824,7 +836,10 @@ def register_character_integration_routes(
                 )
             )
             if not decision.accepted or decision.lease is None:
-                raise HTTPException(status_code=409, detail=decision.reason)
+                # When initiative is free again, so the browser waits instead of asking again at once.
+                retry = ({"Retry-After": str(math.ceil(decision.eligible_in_ms / 1000))}
+                         if decision.eligible_in_ms > 0 else None)
+                raise HTTPException(status_code=409, detail=decision.reason, headers=retry)
             lease = decision.lease
         reaction = None
         speaker_session = session

@@ -29,6 +29,8 @@ export type LiveCallPresentationState = {
   taskInstruction: string;
   /** The unified audio path's latest status line. */
   streamStatus: string | null;
+  /** What failed in the current or last call (live-call-health), or null when nothing did. */
+  callHealth: string | null;
   /** The person muted their microphone: the call hears silence until they unmute. A new call starts unmuted. */
   micMuted: boolean;
   /**
@@ -72,6 +74,7 @@ function initialState(): LiveCallPresentationState {
     autoSpeak: false,
     taskInstruction: typeof window === 'undefined' ? '' : storedTaskInstruction(),
     streamStatus: null,
+    callHealth: null,
     micMuted: false,
     companionQuiet: false,
     sceneTalkOn: true,

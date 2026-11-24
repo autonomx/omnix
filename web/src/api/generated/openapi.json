@@ -2719,6 +2719,11 @@
             ],
             "title": "Provider Id"
           },
+          "screen_shared": {
+            "default": false,
+            "title": "Screen Shared",
+            "type": "boolean"
+          },
           "text_attachment": {
             "anyOf": [
               {
@@ -28834,6 +28839,51 @@
         "title": "LiveCallPrewarmRequest",
         "type": "object"
       },
+      "LiveCallRecapRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "call_started_at": {
+            "format": "date-time",
+            "title": "Call Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_started_at"
+        ],
+        "title": "LiveCallRecapRequest",
+        "type": "object"
+      },
+      "LiveCallRecapStart": {
+        "description": "Whether a recap is being written; ``too_short`` when the call had too few of the person's spoken turns.",
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "status": {
+            "enum": [
+              "started",
+              "too_short"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "job_id"
+        ],
+        "title": "LiveCallRecapStart",
+        "type": "object"
+      },
       "LiveCallSceneGuest": {
         "additionalProperties": false,
         "description": "A guest on the call (companion 5.5): the voice and face a turn uses when it names them as its speaker.",
@@ -30785,6 +30835,11 @@
               }
             ],
             "title": "Provider Id"
+          },
+          "screen_shared": {
+            "default": false,
+            "title": "Screen Shared",
+            "type": "boolean"
           },
           "segment_id": {
             "maxLength": 180,
@@ -41324,6 +41379,105 @@
           "budgets"
         ],
         "title": "PlaySectionsDraft",
+        "type": "object"
+      },
+      "PodcastResearchRequest": {
+        "properties": {
+          "brief": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Brief",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "PodcastResearchRequest",
+        "type": "object"
+      },
+      "PodcastResearchResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/PodcastResearchSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "empty",
+              "unavailable",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "query",
+          "notes",
+          "sources",
+          "provider"
+        ],
+        "title": "PodcastResearchResponse",
+        "type": "object"
+      },
+      "PodcastResearchSource": {
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "PodcastResearchSource",
         "type": "object"
       },
       "PortfolioEPerformance": {
@@ -61670,6 +61824,11 @@
               }
             ],
             "title": "Research Mode"
+          },
+          "screen_shared": {
+            "default": false,
+            "title": "Screen Shared",
+            "type": "boolean"
           },
           "speech_segment_id": {
             "anyOf": [
@@ -87200,6 +87359,23 @@
           },
           {
             "in": "query",
+            "name": "scene_skipped_speaker",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scene Skipped Speaker"
+            }
+          },
+          {
+            "in": "query",
             "name": "camera_shared",
             "required": false,
             "schema": {
@@ -87288,6 +87464,56 @@
           }
         },
         "summary": "Get Live Call Initiative Candidate"
+      }
+    },
+    "/api/chat/sessions/{session_id}/live-call/recap": {
+      "post": {
+        "description": "After a call stops: its recap is written in the background, once per call (D3).",
+        "operationId": "start_live_call_recap_api_chat_sessions__session_id__live_call_recap_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveCallRecapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveCallRecapStart"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Live Call Recap"
       }
     },
     "/api/chat/sessions/{session_id}/live-call/runtime": {
@@ -88649,6 +88875,56 @@
           }
         },
         "summary": "Remove Chat Scene Guest"
+      }
+    },
+    "/api/chat/sessions/{session_id}/screen/glance": {
+      "post": {
+        "description": "A frame from the screen the person shares in a call (D2), described in the background for their next turn.",
+        "operationId": "post_screen_glance_api_chat_sessions__session_id__screen_glance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraGlanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraGlanceResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Screen Glance"
       }
     },
     "/api/client-errors": {
@@ -93389,6 +93665,46 @@
         "tags": [
           "providers"
         ]
+      }
+    },
+    "/api/podcast/research": {
+      "post": {
+        "description": "Source notes for an episode from one web search; the producer edits them before the script is written.",
+        "operationId": "podcast_research_endpoint_api_podcast_research_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PodcastResearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PodcastResearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Podcast Research Endpoint",
+        "x-omnix-permission": "research:run"
       }
     },
     "/api/prompts/render": {
@@ -112065,10 +112381,10 @@
           {
             "in": "query",
             "name": "session_id",
-            "required": true,
+            "required": false,
             "schema": {
+              "default": "",
               "maxLength": 200,
-              "minLength": 1,
               "title": "Session Id",
               "type": "string"
             }
@@ -112081,6 +112397,17 @@
               "default": "",
               "maxLength": 200,
               "title": "Speaker Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "character_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 160,
+              "title": "Character Id",
               "type": "string"
             }
           }

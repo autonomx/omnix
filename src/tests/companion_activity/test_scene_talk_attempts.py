@@ -81,6 +81,27 @@ def test_a_declined_line_closes_its_anchor(authority) -> None:
     assert authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:b")).accepted
 
 
+def test_a_skipped_line_may_be_asked_once_more_and_a_second_skip_closes_the_anchor(authority) -> None:
+    # C1 (2026-11-23): the call asks once more without the member who said SKIP; a second SKIP ends it.
+    session_id, user_id = _ids()
+    for attempt in range(2):
+        decision = authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:a", kind="line"))
+        assert decision.accepted, attempt
+        authority.record_scene_attempt(attempt_id=decision.lease.lease_id, outcome="skipped", finished_at=NOW)
+        authority.finish(session_id=session_id, lease_id=decision.lease.lease_id, finished_at=NOW, delivered=False)
+
+    again = authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:a", kind="reaction"))
+    assert (again.accepted, again.reason) == (False, "scene_talk_closed")
+    # A failed attempt does not count as a skip.
+    other = authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:b"))
+    authority.record_scene_attempt(attempt_id=other.lease.lease_id, outcome="failed", finished_at=NOW)
+    authority.finish(session_id=session_id, lease_id=other.lease.lease_id, finished_at=NOW, delivered=False)
+    skipped = authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:b"))
+    authority.record_scene_attempt(attempt_id=skipped.lease.lease_id, outcome="skipped", finished_at=NOW)
+    authority.finish(session_id=session_id, lease_id=skipped.lease.lease_id, finished_at=NOW, delivered=False)
+    assert authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:b")).accepted
+
+
 def test_a_declined_start_backs_off_until_it_expires(authority) -> None:
     session_id, user_id = _ids()
     lease = authority.acquire(_ask(session_id, user_id=user_id, anchor="msg:a", kind="start")).lease

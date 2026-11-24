@@ -33,6 +33,7 @@ export async function activateAssistantRuntime({ queryClient }: ModuleRuntimeCon
   add((await import('./workspace/live-speculation-early-trigger')).initializeLiveSpeculationEarlyTrigger());
   add((await import('./workspace/live-speculation-runtime')).initializeLiveSpeculationRuntime());
   add((await import('./workspace/live-call-prewarm-controller')).initializeLiveCallPrewarmController());
+  add((await import('./workspace/live-call-screen-share')).initializeLiveCallScreenShare());
   if (!store.isDisposed) (await import('./workspace/live-runtime-provenance')).emitLiveRuntimeProvenance();
   add((await import('./workspace/live-voice-controller')).initializeLiveVoiceController());
   add((await import('./workspace/live-output-coordinator')).initializeLiveOutputCoordinator());
@@ -49,6 +50,8 @@ export async function activateAssistantRuntime({ queryClient }: ModuleRuntimeCon
   add((await import('./workspace/live-conversation-initiative-controller')).initializeLiveConversationInitiativeController());
   add((await import('./workspace/live-conversation-repair-controller')).initializeLiveConversationRepairController());
   add((await import('./workspace/live-conversation-evaluation-controller')).initializeLiveConversationEvaluationController());
+  add((await import('./workspace/live-call-health')).initializeLiveCallHealth());
+  add((await import('./workspace/live-call-recap')).initializeLiveCallRecap(queryClient));
   add((await import('./workspace/live-conversation-durable-evaluation-controller')).initializeLiveConversationDurableEvaluationController());
 
   add((await import('./workspace/assistant-context-controller')).initializeAssistantContextController());
