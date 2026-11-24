@@ -108,10 +108,30 @@ def test_what_a_live_call_holds_per_process_follows_its_replica():
                  # An early reply reads the glance too, and its accept finds the reply in the process that wrote it
                  # (review 2026-11-22: on the worker, it never saw a camera the call's replica described).
                  '/api/live/speculation/sessions/chat%3Aabc/stream',
-                 '/api/live/speculation/sessions/chat%3Aabc/gen/accept'):
+                 '/api/live/speculation/sessions/chat%3Aabc/gen/accept',
+                 # Every speculation route shares one process's speculations: a reply started on the worker was
+                 # accepted on the call's replica, which never had it (404, live call 2026-11-23).
+                 '/api/live/speculation/sessions/chat%3Aabc/start',
+                 '/api/live/speculation/sessions/chat%3Aabc/start-stream',
+                 '/api/live/speculation/sessions/chat%3Aabc/gen/stream',
+                 '/api/live/speculation/sessions/chat%3Aabc/gen/cancel'):
         assert bound.fullmatch(path)
     for path in ('/api/live/speculation/sessions/s', '/api/live/speculation/sessions/s/gen/other',
                  '/api/tts/live-call/other', '/api/settings', '/api/chat/sessions/chat%3Aabc/live-call/camera'):
         assert not bound.fullmatch(path)
     rendered = _renderer().render(POLICY, speech_on_api=True)
     assert f"~^1:.+:{POLICY['live_call_bound_pattern'][1:-1]}$ omnix_live_api;" in rendered
+
+
+def test_every_speculation_session_route_is_call_bound():
+    # The speculation routes read and write one process-local table, so a route left off the bound pattern
+    # splits a speculation across processes.
+    sources = (ROOT / 'src/app/platform/chat').glob('live_chat_speculation*.py')
+    paths = {
+        re.sub(r'\{[^}]+\}', 'x', match)
+        for source in sources
+        for match in re.findall(r'"(/api/live/speculation/sessions/[^"]+)"', source.read_text(encoding='utf-8'))
+    }
+    assert len(paths) >= 6
+    bound = re.compile(POLICY['live_call_bound_pattern'])
+    assert sorted(path for path in paths if not bound.fullmatch(path)) == []

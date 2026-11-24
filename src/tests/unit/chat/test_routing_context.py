@@ -24,6 +24,12 @@ from app.platform.chat.repository import InMemoryChatRepository
 from app.platform.chat.routing_context import ChatRoutingContext, build_chat_routing_context
 import pytest
 
+
+@pytest.fixture
+def in_memory_segments(monkeypatch):
+    """A JSON chat store's sessions keep their conversation segments in memory, so these tests need no database."""
+    monkeypatch.setattr("app.persistence.runtime.uses_postgresql_runtime", lambda: False)
+
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
 pytestmark = pytest.mark.postgres
 
@@ -222,7 +228,7 @@ def test_stale_summary_boundary_keeps_all_unsummarized_turns() -> None:
     assert limit == 32
 
 
-def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, tmp_path) -> None:
+def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, tmp_path, in_memory_segments) -> None:
     class _CountingStore(ChatSessionStore):
         def __init__(self, path):
             super().__init__(path)
@@ -252,7 +258,7 @@ def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, 
     assert store.context_builds == 1
 
 
-def test_a_non_streamed_turn_routes_on_chat_context_and_builds_its_prompt_once(monkeypatch, tmp_path) -> None:
+def test_a_non_streamed_turn_routes_on_chat_context_and_builds_its_prompt_once(monkeypatch, tmp_path, in_memory_segments) -> None:
     """Owner decision 2026-11-23: the generation job's router reads memory, history and summary like a streamed
     turn's, and the reply reuses the prompt that routing built."""
 
@@ -296,7 +302,7 @@ def test_a_non_streamed_turn_routes_on_chat_context_and_builds_its_prompt_once(m
     assert not store._prompt_context_cache
 
 
-def test_a_non_streamed_reply_that_skips_the_routed_prompt_leaves_nothing_cached(monkeypatch, tmp_path) -> None:
+def test_a_non_streamed_reply_that_skips_the_routed_prompt_leaves_nothing_cached(monkeypatch, tmp_path, in_memory_segments) -> None:
     def router(session, user_message, **options):
         options["routing_context_factory"]()
         return None
@@ -314,6 +320,32 @@ def test_a_non_streamed_reply_that_skips_the_routed_prompt_leaves_nothing_cached
     updated, _ = store.append_user_message(session.id, SendChatMessageRequest(content="plan it", agent_mode=True))
 
     assert updated.messages[-1].content == "Planned."
+    assert not store._prompt_context_cache
+
+
+def test_a_spoken_turn_drops_the_routed_prompt_it_does_not_use(monkeypatch, tmp_path, in_memory_segments) -> None:
+    """A live-voice turn builds its own prompt, so the routed one cached for the message must not outlive it."""
+
+    class _Port:
+        def build_live_voice_prompt(self, store, session, user_message, context_items):
+            return "live assembly", "live prompt"
+
+        def record_rendered_prompt(self, assembly, rendered):
+            pass
+
+    monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_COMPACTION_ENABLED", "0")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
+    store = ChatSessionStore(tmp_path / "chat.json")
+    store.live_voice_chat_port = _Port()
+    session = store.create_session(CreateChatSessionRequest(title="Call"))
+    spoken = ChatMessage(id="spoken", role="user", content="hello", created_at="2026-08-29T00:00:00+00:00",
+                         metadata={"speech_segment_id": "voice-segment:1"})
+
+    store.build_routing_context(session, spoken, [])
+    assert store._prompt_context_cache
+    assert store.build_provider_prompt(session, spoken, []) == ("live assembly", "live prompt")
     assert not store._prompt_context_cache
 
 

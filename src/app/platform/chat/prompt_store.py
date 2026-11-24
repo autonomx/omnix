@@ -400,6 +400,9 @@ class ChatSessionStore(JsonChatSessionStore):
     ) -> tuple[PromptAssembly, RenderedPrompt]:
         live_voice = getattr(self, "live_voice_chat_port", None)
         if live_voice is not None and is_live_voice_message(user_message):
+            # A spoken turn builds its own prompt; the routed one cached for this message is never read, so drop it
+            # rather than leave it for a later build of the same message to reuse.
+            self.discard_prompt_context(session, user_message)
             prompt = live_voice.build_live_voice_prompt(
                 self,
                 session,

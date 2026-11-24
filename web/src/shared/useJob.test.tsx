@@ -29,6 +29,16 @@ describe('useJob', () => {
     expect(client.getQueryData(jobKeys.detail('job-1'))).toMatchObject({ status: 'completed' });
   });
 
+  it('stops polling when the job cannot be read', async () => {
+    const getJob = vi.spyOn(omnixApiClient, 'getJob').mockRejectedValue(new Error('404'));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useJob('job-1', { intervalMs: 10 }), { wrapper: wrapper(client) });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const calls = getJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(getJob.mock.calls.length).toBe(calls);
+  });
+
   it('does not fetch without a job id', () => {
     const getJob = vi.spyOn(omnixApiClient, 'getJob');
     const client = new QueryClient();

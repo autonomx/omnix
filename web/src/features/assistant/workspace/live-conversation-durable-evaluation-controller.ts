@@ -125,7 +125,8 @@ export function buildDurableEvaluationPayload(
       first_token_to_first_audio_p95_ms: latencyP95(call, 'first_token_to_first_audio_ms'),
       final_to_first_audio_p95_ms: latencyP95(call, 'final_to_first_audio_ms'),
       stt_request_to_first_audio_p95_ms: latencyP95(call, 'stt_request_to_first_audio_ms'),
-      first_pcm_to_first_playback_p95_ms: latencyP95(call, 'first_pcm_to_first_playback_ms'),
+      // "pcm" in a key reads as raw audio to the server's content filter; this is a timing.
+      first_audio_frame_to_first_playback_p95_ms: latencyP95(call, 'first_pcm_to_first_playback_ms'),
       first_token_to_first_playback_p95_ms: latencyP95(call, 'first_token_to_first_playback_ms'),
       final_to_first_playback_p95_ms: latencyP95(call, 'final_to_first_playback_ms'),
       stt_request_to_first_playback_p95_ms: latencyP95(call, 'stt_request_to_first_playback_ms'),

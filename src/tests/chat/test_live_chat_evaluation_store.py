@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -251,3 +252,27 @@ def test_phase12_route_rejects_raw_conversation_content(
         json={**_create().model_dump(mode="json"), "prompt": "private system prompt"},
     )
     assert response.status_code == 422
+
+
+def test_every_metric_key_the_browser_sends_passes_the_content_filter() -> None:
+    # Every call's record was refused from 2026-07 to 2026-11-23: the browser sent the timing
+    # first_pcm_to_first_playback_p95_ms, and "pcm" reads as raw audio to the filter.
+    source = (
+        Path(__file__).resolve().parents[3]
+        / "web/src/features/assistant/workspace/live-conversation-durable-evaluation-controller.ts"
+    ).read_text(encoding="utf-8")
+    sections = {
+        name: re.search(rf"{name}: \{{(.*?)\n    \}},", source, re.S)
+        for name in ("latency_summary", "quality_metrics")
+    }
+    keys = {
+        name: re.findall(r"^\s+([a-z0-9_]+):", match.group(1), re.M)
+        for name, match in sections.items()
+        if match is not None
+    }
+    assert len(keys.get("latency_summary", [])) >= 15
+    assert len(keys.get("quality_metrics", [])) >= 15
+    VoiceSessionEvaluationCreate(
+        **_create().model_dump(exclude={"latency_summary", "quality_metrics"}),
+        **{name: dict.fromkeys(names, 1.0) for name, names in keys.items()},
+    )
