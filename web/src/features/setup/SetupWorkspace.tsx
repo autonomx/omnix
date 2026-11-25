@@ -30,7 +30,8 @@ export function SetupWorkspace({ module }: { module: OmnixModuleDefinition }) {
       <AvatarPacksPanel />
       <div className="setup-footer">
         <span />
-        <Button variant="subtle" onClick={() => { void navigate({ to: '/chatbot' }); }}>Continue to Omnix</Button>
+        {/* Another feature's route: an app built without chat (MarketPulse) has none in its route tree. */}
+        <Button variant="subtle" onClick={() => { void navigate({ to: '/chatbot' as never }); }}>Continue to Omnix</Button>
       </div>
     </main>
   );

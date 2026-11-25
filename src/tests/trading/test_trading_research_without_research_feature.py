@@ -30,6 +30,12 @@ print(json.dumps(report))
 
 
 def _probe(**settings: str) -> dict:
+    if "OMNIX_FEATURES" not in settings:
+        # The probe then loads every feature. A run narrowed by OMNIX_FEATURES (MarketPulse runs these tests
+        # trading-only) lacks other features' code, so it cannot.
+        narrowed = {part.strip() for part in os.environ.get("OMNIX_FEATURES", "all").split(",")}
+        if "all" not in narrowed:
+            pytest.skip(f"needs every feature's code; this run enables only {sorted(narrowed)}")
     source_root = Path(__file__).resolve().parents[2]
     env = {key: value for key, value in os.environ.items() if key not in {"OMNIX_FEATURES", "OMNIX_FEATURES_DISABLED"}}
     env.update(settings, PYTHONPATH=os.pathsep.join([str(source_root), os.environ.get("PYTHONPATH", "")]))
