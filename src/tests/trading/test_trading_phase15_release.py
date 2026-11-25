@@ -215,7 +215,10 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
     assert 'role="tab"' in side_panel
     assert 'aria-selected=' in side_panel
     assert "onClick={() => setActiveTab" in side_panel
-    assert "TradingResearchPanel" in side_panel
+    # The Research tab holds Copilot, Filings and the market research report.
+    assert "TradingAiResearchTabs" in side_panel
+    research_tabs = Path("web/src/features/trading/TradingAiResearchTabs.tsx").read_text(encoding="utf-8")
+    assert "TradingResearchPanel" in research_tabs
 
     workspace = Path(
         "web/src/features/trading/TradingWorkspace.tsx"

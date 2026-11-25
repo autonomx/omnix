@@ -24,6 +24,15 @@ function isChartClick(pan: ChartPan, event: PointerEvent): boolean {
     && Math.abs(event.clientX - pan.startX) < CLICK_SLOP_PX && Math.abs(event.clientY - pan.startY) < CLICK_SLOP_PX;
 }
 
+/**
+ * Whether a press keeps the selected drawing selected: on a drawing, the drawing manager, the context menu, or a panel
+ * that belongs to the selected drawing (AI Range's). Any other press deselects it, so such a panel, which shows only
+ * while its drawing is selected, would close before its button's click.
+ */
+export function keepsDrawingSelection(element: Element | null): boolean {
+  return Boolean(element?.closest('[data-drawing-id], .trading-drawing-manager, .trading-chart-context-menu, .trading-ai-range-panel'));
+}
+
 /** The chart adapter: creation, streaming, appearance and viewport. */
 export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData>) {
   const {
@@ -92,7 +101,7 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
       const element = target instanceof Element ? target : null;
       if (!element?.closest('.trading-chart-context-menu')) setContextMenu(null);
       if (!element?.closest('.trading-indicator-object-toolbar')) setSelectedIndicator(null);
-      if (!element?.closest('[data-drawing-id], .trading-drawing-manager, .trading-chart-context-menu')) drawings.select(null);
+      if (!keepsDrawingSelection(element)) drawings.select(null);
       if (!insideHost(event)) return;
       const isPrimaryPan = event.button === 0 && drawingTool === 'cursor';
       const isMiddlePan = event.button === 1;

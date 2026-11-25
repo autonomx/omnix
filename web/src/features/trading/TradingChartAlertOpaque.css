@@ -8,7 +8,8 @@
   .trading-chart-alert-editor .trading-alert-condition-row input,
   .trading-chart-alert-editor .trading-alert-value-row input,
   .trading-chart-alert-editor .trading-alert-dialog-settings input,
-  .trading-chart-alert-editor .trading-alert-dialog-settings select {
+  .trading-chart-alert-editor .trading-alert-dialog-settings select,
+  .trading-chart-alert-editor .trading-alert-dialog-settings textarea {
     opacity: 1;
   }
 }
@@ -30,7 +31,8 @@
   .trading-chart-alert-editor .trading-alert-condition-row input,
   .trading-chart-alert-editor .trading-alert-value-row input,
   .trading-chart-alert-editor .trading-alert-dialog-settings input,
-  .trading-chart-alert-editor .trading-alert-dialog-settings select {
+  .trading-chart-alert-editor .trading-alert-dialog-settings select,
+  .trading-chart-alert-editor .trading-alert-dialog-settings textarea {
     background: var(--bg-slate-170-2);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 24%, transparent);
     color: var(--fg-slate-930);
@@ -49,7 +51,8 @@
   :root[data-omnix-appearance='light'] .trading-chart-alert-editor .trading-alert-condition-row input,
   :root[data-omnix-appearance='light'] .trading-chart-alert-editor .trading-alert-value-row input,
   :root[data-omnix-appearance='light'] .trading-chart-alert-editor .trading-alert-dialog-settings input,
-  :root[data-omnix-appearance='light'] .trading-chart-alert-editor .trading-alert-dialog-settings select {
+  :root[data-omnix-appearance='light'] .trading-chart-alert-editor .trading-alert-dialog-settings select,
+  :root[data-omnix-appearance='light'] .trading-chart-alert-editor .trading-alert-dialog-settings textarea {
     background: var(--trading-light-surface-muted);
     border-color: var(--trading-light-line);
     color: var(--trading-light-text);

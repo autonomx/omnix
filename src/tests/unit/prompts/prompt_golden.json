@@ -647,13 +647,29 @@
     "sha256": "2d5f9fc356d3063d9d335db17c6483a8474cab6b9dc7882072e1002ff930da61",
     "version": "4"
   },
+  "trading.research.chart_copilot": {
+    "sha256": "2010e83b19eb8e482fde11f3a9a2b7eeace376c0e9ccc639c3fd3a33c986f8b2",
+    "version": "2"
+  },
+  "trading.research.filing_summary": {
+    "sha256": "f8c97879849f5f50db380448ef637a5f18c92b294f9649a38504843bf6b4173a",
+    "version": "1"
+  },
   "trading.research.market_brief.generate_trading_market_brief": {
     "sha256": "1a2964cf6555a14e5a79b59d8376c40bdcb0ea50a94a309f431fa1ca78795cf3",
     "version": "1"
   },
   "trading.research.market_research.generate_market_research": {
-    "sha256": "55c5c304c36384203edc2b03e20dba3d1e974a4dd3f62ae062e22362f9c508f0",
+    "sha256": "eb4a1b0b334e7c8df3b216bcdaee8aab9b772a8be42837fa37e8200ab9f63901",
+    "version": "2"
+  },
+  "trading.research.news_digest": {
+    "sha256": "2e831e5f66f9fbc01516237a6e1a63776e205843be44ef598fe68318d781549b",
     "version": "1"
+  },
+  "trading.research.range_research": {
+    "sha256": "8ee4ddcc03ead6202c082ce9a7ec26d4bac0288cc01568ecf6ca17c9094d1004",
+    "version": "2"
   },
   "trading.screener_from_words": {
     "sha256": "fdff6211b860d9d67a443ae1607910b44542bec866ee4d2b94139787623f5d6e",

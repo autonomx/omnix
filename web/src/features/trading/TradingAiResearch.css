@@ -1,0 +1,84 @@
+@layer features {
+  /* Copilot, Filings and the news digest: the Research and News side tabs' AI parts (they share AI Range's violet). */
+  .trading-ai-research{display:grid;gap:8px;min-width:0}
+  .trading-ai-research-tabs{display:flex;gap:4px;padding:2px;border:1px solid color-mix(in srgb, var(--c-slate-630) 25%, transparent);border-radius:7px}
+  .trading-ai-research-tabs>button{flex:1;padding:4px 6px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--c-slate-630);font-size:12px}
+  .trading-ai-research-tabs>button.active{border-color:color-mix(in srgb, var(--accent-violet-570) 45%, transparent);background:color-mix(in srgb, var(--accent-violet-570) 16%, transparent);color:var(--fg-slate-910)}
+
+  .trading-ai-copilot,.trading-ai-filings,.trading-ai-digest{display:grid;gap:8px;min-width:0;color:var(--fg-slate-910);font-size:12px}
+  .trading-ai-digest{padding:10px;border:1px solid color-mix(in srgb, var(--accent-violet-570) 35%, transparent);border-radius:8px}
+  .trading-ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .trading-ai-header>div{display:grid;gap:2px;min-width:0}
+  .trading-ai-header strong{font-size:13px}
+  .trading-ai-header strong>span{color:var(--accent-violet-570)}
+  .trading-ai-header small{color:var(--c-slate-630);font-size:11px}
+  .trading-ai-header>button{padding:3px 8px;border-radius:6px;font-size:11px}
+  .trading-ai-status,.trading-ai-meta,.trading-ai-disclaimer{margin:0;color:var(--c-slate-630)}
+  .trading-ai-meta,.trading-ai-disclaimer{font-size:10px}
+  .trading-ai-error{margin:0;color:var(--c-red-560)}
+  .trading-ai-copilot p,.trading-ai-filings p,.trading-ai-digest p{margin:0;line-height:1.45}
+  .trading-ai-copilot ul,.trading-ai-filings ul,.trading-ai-digest ul{display:grid;gap:3px;margin:0;padding-left:16px;line-height:1.4}
+
+  .trading-ai-copilot-log{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+  .trading-ai-copilot-log>li{max-width:92%;padding:7px 9px;border-radius:8px}
+  .trading-ai-copilot-log>li.is-user{justify-self:end;background:color-mix(in srgb, var(--accent-violet-570) 18%, transparent)}
+  .trading-ai-copilot-log>li.is-assistant{justify-self:start;border:1px solid color-mix(in srgb, var(--c-slate-630) 25%, transparent)}
+  .trading-ai-copilot-log>li.trading-ai-copilot-suggestions{display:grid;gap:4px;max-width:none;padding:0}
+  .trading-ai-copilot-log article{display:grid;gap:6px}
+  .trading-ai-copilot-suggestions>button,.trading-ai-copilot-actions>button{justify-content:flex-start;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:color-mix(in srgb, var(--accent-violet-570) 10%, transparent);color:inherit;font-size:12px;text-align:left}
+  .trading-ai-copilot-suggestions>button:hover,.trading-ai-copilot-actions>button:hover:not(:disabled){border-color:color-mix(in srgb, var(--accent-violet-570) 55%, transparent);background:color-mix(in srgb, var(--accent-violet-570) 20%, transparent)}
+  .trading-ai-copilot-actions{display:flex;flex-wrap:wrap;gap:4px}
+  .trading-ai-copilot-actions>button:disabled{opacity:.65}
+  .trading-ai-copilot-form,.trading-ai-digest-controls{display:flex;gap:4px}
+  .trading-ai-copilot-form input,.trading-ai-digest-controls select{flex:1;min-width:0;padding:6px 8px;border:1px solid color-mix(in srgb, var(--c-slate-630) 40%, transparent);border-radius:6px;background:transparent;color:inherit;font-size:12px}
+  .trading-ai-copilot-form input::placeholder{color:var(--c-slate-630)}
+  .trading-ai-copilot-form button,.trading-ai-digest-controls button{padding:0 10px;border-radius:6px;background:var(--accent-violet-570);color:var(--c-neutral-1000);font-weight:600}
+
+  ul.trading-ai-sources{gap:5px;padding-left:0;list-style:none}
+  .trading-ai-sources li{display:grid;gap:1px}
+  .trading-ai-sources a,.trading-ai-filing-actions a{color:var(--c-blue-630);text-decoration:none}
+  .trading-ai-sources a:hover,.trading-ai-filing-actions a:hover{text-decoration:underline}
+  .trading-ai-sources small{color:var(--c-slate-630);font-size:10px}
+
+  ul.trading-ai-filing-list{gap:0;padding-left:0;list-style:none}
+  .trading-ai-filing-list>li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--c-slate-630) 20%, transparent)}
+  .trading-ai-filing-list>li>div:first-child{display:grid;gap:1px;min-width:0}
+  .trading-ai-filing-list>li>div:first-child>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trading-ai-filing-list small{color:var(--c-slate-630);font-size:10px}
+  .trading-ai-filing-actions{display:flex;flex:none;align-items:center;gap:6px}
+  .trading-ai-filing-actions>button{padding:3px 8px;border-radius:6px;background:color-mix(in srgb, var(--accent-violet-570) 14%, transparent);color:inherit;font-size:11px}
+  .trading-ai-filing-summary,.trading-ai-digest article{display:grid;gap:6px;padding-top:8px;border-top:1px solid color-mix(in srgb, var(--c-slate-630) 25%, transparent)}
+  .trading-ai-filing-summary{padding:10px;border:1px solid color-mix(in srgb, var(--accent-violet-570) 40%, transparent);border-radius:8px}
+  .trading-ai-filing-summary>header,.trading-ai-digest article>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .trading-ai-filing-summary>header button{width:24px;height:24px;padding:0;border-color:transparent;background:transparent;color:inherit;font-size:16px;line-height:1}
+  .trading-ai-filing-summary>small{color:var(--c-slate-630);font-size:10px}
+  .trading-ai-filing-summary section,.trading-ai-theme{display:grid;gap:3px}
+  .trading-ai-filing-summary section>strong{color:var(--c-slate-630);font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .trading-ai-figures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 8px;margin:0}
+  .trading-ai-figures dt{color:var(--c-slate-630);font-size:10px}
+  .trading-ai-figures dd{margin:0;font-variant-numeric:tabular-nums}
+  .trading-ai-tone{flex:none;padding:1px 7px;border-radius:999px;background:color-mix(in srgb, var(--c-slate-630) 18%, transparent);font-size:10px;text-transform:capitalize}
+  .trading-ai-tone[data-tone=positive]{background:color-mix(in srgb, var(--c-green-560) 20%, transparent);color:var(--c-green-560)}
+  .trading-ai-tone[data-tone=negative]{background:color-mix(in srgb, var(--c-red-560) 18%, transparent);color:var(--c-red-560)}
+  .trading-ai-tone[data-tone=mixed]{background:color-mix(in srgb, var(--c-amber-620) 20%, transparent);color:var(--c-amber-620)}
+
+  :root[data-omnix-appearance='light'] .trading-ai-copilot,
+  :root[data-omnix-appearance='light'] .trading-ai-filings,
+  :root[data-omnix-appearance='light'] .trading-ai-digest,
+  :root[data-omnix-appearance='light'] .trading-ai-research-tabs>button.active{color:var(--trading-light-text)}
+  :root[data-omnix-appearance='light'] .trading-ai-research-tabs,
+  :root[data-omnix-appearance='light'] .trading-ai-copilot-log>li.is-assistant,
+  :root[data-omnix-appearance='light'] .trading-ai-filing-list>li{border-color:var(--trading-light-line)}
+  :root[data-omnix-appearance='light'] .trading-ai-copilot-form input,
+  :root[data-omnix-appearance='light'] .trading-ai-digest-controls select{border-color:var(--trading-light-line);background:var(--trading-light-surface-muted)}
+  :root[data-omnix-appearance='light'] .trading-ai-research-tabs>button,
+  :root[data-omnix-appearance='light'] .trading-ai-header small,
+  :root[data-omnix-appearance='light'] .trading-ai-status,
+  :root[data-omnix-appearance='light'] .trading-ai-meta,
+  :root[data-omnix-appearance='light'] .trading-ai-disclaimer,
+  :root[data-omnix-appearance='light'] .trading-ai-sources small,
+  :root[data-omnix-appearance='light'] .trading-ai-filing-list small,
+  :root[data-omnix-appearance='light'] .trading-ai-filing-summary>small,
+  :root[data-omnix-appearance='light'] .trading-ai-filing-summary section>strong,
+  :root[data-omnix-appearance='light'] .trading-ai-figures dt{color:var(--trading-light-muted)}
+}

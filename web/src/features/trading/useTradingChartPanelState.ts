@@ -15,6 +15,9 @@ import { readTradingTimezoneId } from './tradingTime';
 import { SelectedVisibleRange, TradingChartPanelProps, TradingContextMenuState, readTradingRightOffset } from './tradingChartPanelModel';
 
 /** The panel's refs, store selections and UI state. */
+/** The indicator legend starts minimized to its count so it doesn't cover the chart (owner 2026-11-24). */
+export const INDICATOR_LEGEND_STARTS_COLLAPSED = true;
+
 export function useChartPanelState(ws: TradingChartPanelProps) {
   const { chartId, indicators, instrumentId, interval, onActivate, sessionId } = ws;
 
@@ -121,7 +124,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   const [indicatorOutputs, setIndicatorOutputs] = useState<IndicatorOutput[]>([]);
 
-  const [indicatorLegendCollapsed, setIndicatorLegendCollapsed] = useState(false);
+  const [indicatorLegendCollapsed, setIndicatorLegendCollapsed] = useState(INDICATOR_LEGEND_STARTS_COLLAPSED);
 
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
 

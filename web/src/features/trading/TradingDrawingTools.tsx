@@ -172,6 +172,7 @@ export const drawingToolGroups: DrawingToolGroup[] = [
       { label: 'Price range', glyph: '↕', tool: 'measurement' },
       { label: 'Date range', glyph: '↔', available: false },
       { label: 'Date and price range', glyph: '□', available: false },
+      { label: 'AI range', glyph: '✧' },
     ],
   },
   {
@@ -282,6 +283,25 @@ function favoriteTools(favorites: ReadonlySet<string>): FavoriteTool[] {
     const id = `${group.id}:${item.label}`;
     return tool && favorites.has(id) ? [{ id, label: item.label, glyph: item.glyph, tool }] : [];
   }));
+}
+
+/** TradingView's AI Range has its own button: drag a span, then ask about it (`TradingAiRangePanel`). */
+function AiRangeToolButton({ selectedTool, onSelect }: { selectedTool: DrawingTool; onSelect: (tool: DrawingTool) => void }) {
+  const active = selectedTool === 'ai-range';
+  return (
+    <div className="trading-drawing-tool-group">
+      <button
+        type="button"
+        className={`trading-drawing-tool-ai-range${active ? ' active' : ''}`}
+        aria-label="AI range"
+        aria-pressed={active}
+        title="AI range: drag across the chart, then ask about that span"
+        onClick={() => onSelect(active ? 'cursor' : 'ai-range')}
+      >
+        <span aria-hidden="true">✧</span>
+      </button>
+    </div>
+  );
 }
 
 export function TradingDrawingTools({
@@ -476,6 +496,7 @@ export function TradingDrawingTools({
           </div>
         );
       })}
+      <AiRangeToolButton selectedTool={selectedTool} onSelect={onSelect} />
       <TradingDrawingToolToggles />
       <TradingDrawingFavoritesBar tools={favoriteTools(favorites)} selectedTool={selectedTool} onSelect={onSelect} />
     </aside>

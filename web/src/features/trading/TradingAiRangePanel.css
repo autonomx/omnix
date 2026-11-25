@@ -1,0 +1,41 @@
+@layer features {
+  /* Above the chart controls (12); under the indicator toolbar (15), the alert editor (16) and menus (20+). */
+  .trading-ai-range-panel{position:absolute;z-index:14;display:grid;gap:8px;max-height:calc(100% - 48px);padding:10px;overflow:auto;border:1px solid color-mix(in srgb, var(--accent-violet-570) 45%, transparent);border-radius:8px;background:var(--bg-slate-170-2);box-shadow:0 12px 32px color-mix(in srgb, var(--c-neutral-0) 34%, transparent);color:var(--fg-slate-910);font-size:12px;pointer-events:auto}
+  .trading-ai-range-panel>header{display:flex;align-items:center;gap:8px}
+  .trading-ai-range-panel>header strong{font-size:13px}
+  .trading-ai-range-panel>header strong>span{color:var(--accent-violet-570)}
+  .trading-ai-range-span{flex:1;min-width:0;overflow:hidden;color:var(--c-slate-630);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+  .trading-ai-range-panel>header button{width:24px;height:24px;padding:0;border-color:transparent;background:transparent;color:inherit;font-size:16px;line-height:1}
+  .trading-ai-range-actions{display:grid;gap:4px}
+  .trading-ai-range-actions>button{justify-content:flex-start;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:color-mix(in srgb, var(--accent-violet-570) 10%, transparent);color:inherit;font-size:12px;text-align:left}
+  .trading-ai-range-actions>button:hover:not(:disabled),.trading-ai-range-actions>button[aria-pressed=true]{border-color:color-mix(in srgb, var(--accent-violet-570) 55%, transparent);background:color-mix(in srgb, var(--accent-violet-570) 20%, transparent)}
+  .trading-ai-range-actions form{display:flex;gap:4px}
+  .trading-ai-range-actions input{flex:1;min-width:0;padding:6px 8px;border:1px solid color-mix(in srgb, var(--c-slate-630) 40%, transparent);border-radius:6px;background:transparent;color:inherit;font-size:12px}
+  .trading-ai-range-actions input::placeholder{color:var(--c-slate-630)}
+  .trading-ai-range-actions form button{width:30px;padding:0;border-radius:6px;background:var(--accent-violet-570);color:var(--c-neutral-1000);font-weight:700}
+  .trading-ai-range-status,.trading-ai-range-note{margin:0;color:var(--c-slate-630)}
+  .trading-ai-range-error{margin:0;color:var(--c-red-560)}
+  .trading-ai-range-answer{display:grid;gap:6px;padding-top:8px;border-top:1px solid color-mix(in srgb, var(--c-slate-630) 25%, transparent)}
+  .trading-ai-range-answer h3{margin:0;font-size:13px}
+  .trading-ai-range-answer h4{margin:2px 0;color:var(--c-slate-630);font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .trading-ai-range-answer p{margin:0;line-height:1.45}
+  .trading-ai-range-answer ul{display:grid;gap:3px;margin:0;padding-left:16px;line-height:1.4}
+  .trading-ai-range-answer ul.trading-ai-range-sources{gap:5px;padding-left:0;list-style:none}
+  .trading-ai-range-sources li{display:grid;gap:1px}
+  .trading-ai-range-sources a{color:var(--c-blue-630);text-decoration:none}
+  .trading-ai-range-sources a:hover{text-decoration:underline}
+  .trading-ai-range-sources small,.trading-ai-range-disclaimer{color:var(--c-slate-630);font-size:10px}
+  .trading-ai-range-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;margin:0}
+  .trading-ai-range-facts dt{color:var(--c-slate-630);font-size:10px}
+  .trading-ai-range-facts dd{margin:0;font-variant-numeric:tabular-nums}
+
+  :root[data-omnix-appearance='light'] .trading-ai-range-panel{background:var(--trading-light-surface);color:var(--trading-light-text);box-shadow:0 12px 32px color-mix(in srgb, var(--trading-light-text) 16%, transparent)}
+  :root[data-omnix-appearance='light'] .trading-ai-range-actions input{border-color:var(--trading-light-line);background:var(--trading-light-surface-muted)}
+  :root[data-omnix-appearance='light'] .trading-ai-range-span,
+  :root[data-omnix-appearance='light'] .trading-ai-range-status,
+  :root[data-omnix-appearance='light'] .trading-ai-range-note,
+  :root[data-omnix-appearance='light'] .trading-ai-range-answer h4,
+  :root[data-omnix-appearance='light'] .trading-ai-range-sources small,
+  :root[data-omnix-appearance='light'] .trading-ai-range-disclaimer,
+  :root[data-omnix-appearance='light'] .trading-ai-range-facts dt{color:var(--trading-light-muted)}
+}

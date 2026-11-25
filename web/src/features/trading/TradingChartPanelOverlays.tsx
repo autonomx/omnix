@@ -1,4 +1,6 @@
 import { DrawingAlertSync } from './DrawingAlertSync';
+import { TradingAiRangePanel } from './TradingAiRangePanel';
+import { AI_RANGE_TOOL_ID } from './drawings/tools/definitions/aiRange';
 import { useMemo } from 'react';
 import { alertIndicatorChoices } from './alertIndicatorSources';
 import { useAlertIndicatorIds } from './useTradingAlerts';
@@ -18,7 +20,7 @@ import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 /** Drawings, alerts, positions, the data table, object tree and settings. */
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
+    active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartSettings, chartType, clearAlertPlacement, historyLimit, selectedDrawing,
     drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicatorOutputs, indicatorPaneGeometry, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
     onActivate, onChangeChartType, onToggleIndicator, contextMenuActions, paperAccountId, priceScaleMultiplier,
     provenance, replayMode, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
@@ -76,6 +78,19 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         onPlacementConsumed={clearAlertPlacement}
         indicatorChoices={indicatorChoices}
       />
+      {active && selectedDrawing?.toolType === AI_RANGE_TOOL_ID && selectedDrawing.points.length >= 2 ? (
+        <TradingAiRangePanel
+          key={selectedDrawing.drawingId}
+          adapter={adapter}
+          drawing={selectedDrawing}
+          chart={{
+            instrumentId, interval, bindingId: bindingId ?? null, historyLimit,
+            extendedHours: chartSettings?.extendedHours !== false,
+            symbol: chartQuery.data?.instrument.display_symbol ?? instrumentId,
+          }}
+          onClose={() => drawings.select(null)}
+        />
+      ) : null}
       <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} active={active} replayMode={replayMode} />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
       <ScriptTablesOverlay outputs={indicatorOutputs} adapter={adapter} panes={indicatorPaneGeometry} />

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
@@ -41,6 +42,30 @@ describe('TradingAlertDialog webhook, name and placeholders (TVP-1.5)', () => {
     expect(onChange).toHaveBeenCalledWith({ name: 'Breakout' });
     expect(screen.getByText(/\{\{ticker\}\}/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Webhook URL')).toBeNull();
+  });
+
+  it('stacks the message box above its placeholder list, styled like the other fields', () => {
+    // The settings row is a flex row; the box and its long list side by side squeezed the box to a sliver.
+    renderDialog(editor);
+    const field = screen.getByLabelText('Alert message').parentElement as HTMLElement;
+    expect(field.className).toBe('trading-alert-message-field');
+    expect(field.lastElementChild?.className).toBe('trading-alert-placeholders');
+    const overlay = readFileSync('src/features/trading/TradingChartAlertOverlay.css', 'utf8');
+    expect(overlay).toContain('.trading-alert-dialog-settings dd.trading-alert-message-field{flex-direction:column;align-items:stretch;');
+    expect(overlay).toContain('.trading-alert-dialog-settings select,.trading-alert-dialog-settings textarea{min-width:0;width:100%;');
+    const opaque = readFileSync('src/features/trading/TradingChartAlertOpaque.css', 'utf8');
+    expect(opaque.match(/\.trading-alert-dialog-settings textarea/g)).toHaveLength(3);  // both layers, light theme
+  });
+
+  it('opens above the chart controls, so the y-axis currency never shows through its close button', () => {
+    const zIndex = (file: string, selector: string) => {
+      const css = readFileSync(`src/features/trading/${file}`, 'utf8');
+      const rule = css.slice(css.indexOf(`${selector}{`));
+      return Number(/z-index:(\d+)/.exec(rule.slice(0, rule.indexOf('}')))?.[1]);
+    };
+    const dialog = zIndex('TradingChartAlertOverlay.css', '.trading-chart-alert-editor-positioner');
+    expect(dialog).toBeGreaterThan(zIndex('TradingYAxisControls.css', '.trading-y-axis-controls'));
+    expect(dialog).toBeGreaterThan(zIndex('TradingChartEnhancements.css', '.trading-indicator-object-toolbar'));
   });
 });
 

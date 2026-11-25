@@ -18,6 +18,7 @@ from .market_research import (
     build_research_context,
     default_research_provider,
     generate_market_research,
+    interactive_research_provider,
 )
 
 from .contracts import (  # noqa: E402
@@ -40,6 +41,7 @@ __all__ = [
     "ProviderFactory",
     "MarketServiceFactory",
     "default_research_provider",
+    "interactive_research_provider",
     "build_research_context",
     "generate_market_research",
     "IssuerIdentity",

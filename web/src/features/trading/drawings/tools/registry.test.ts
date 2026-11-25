@@ -28,6 +28,8 @@ const DRAWING_TOOLS = [
   'xabcd-pattern', 'cypher-pattern', 'abcd-pattern', 'triangle-pattern', 'three-drives-pattern', 'head-and-shoulders',
   'elliott-impulse-wave', 'elliott-correction-wave', 'elliott-triangle-wave', 'elliott-double-combo-wave', 'elliott-triple-combo-wave',
   'cyclic-lines', 'time-cycles', 'sine-line',
+  // AI range (2026-11)
+  'ai-range',
 ] as const satisfies readonly Exclude<DrawingTool, 'cursor' | 'alert' | 'eraser'>[];
 
 describe('drawing tool registry', () => {

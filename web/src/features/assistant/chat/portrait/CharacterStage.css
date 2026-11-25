@@ -41,7 +41,7 @@
 
   .character-stage-tile figcaption {
     align-items: center;
-    background: color-mix(in srgb, var(--c-neutral-0) 60%, transparent);
+    background: color-mix(in srgb, var(--bg-neutral-0) 60%, transparent);
     bottom: 0;
     display: flex;
     font-size: 0.75rem;

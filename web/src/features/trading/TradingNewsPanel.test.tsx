@@ -7,6 +7,8 @@ const hermesApi = vi.hoisted(() => ({
 }));
 
 vi.mock('./tradingHermesResearchApi', () => ({ tradingHermesResearchApi: hermesApi }));
+// The digest has its own test (TradingNewsDigest.test.tsx).
+vi.mock('./TradingNewsDigest', () => ({ TradingNewsDigest: () => null }));
 
 import { TradingNewsPanel } from './TradingNewsPanel';
 

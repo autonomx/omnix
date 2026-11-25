@@ -4,6 +4,7 @@ import {
   anchoredNoteTool, arrowMarkDownTool, arrowMarkerTool, arrowMarkLeftTool, arrowMarkRightTool, arrowMarkUpTool, calloutTool, commentTool,
   emojiTool, flagMarkTool, iconTool, noteTool, priceLabelTool, priceNoteTool, signpostTool,
 } from './definitions/annotations';
+import { aiRangeTool } from './definitions/aiRange';
 import { arrowTool } from './definitions/arrow';
 import { anchoredVwapTool, regressionTrendTool } from './definitions/barTools';
 import { circleTool, ellipseTool, rectangleTool } from './definitions/boxShapes';
@@ -60,6 +61,8 @@ export const DRAWING_TOOL_DEFINITIONS = [
   measurementTool,
   dateRangeTool,
   datePriceRangeTool,
+  // AI range (2026-11): a span to ask the research model about
+  aiRangeTool,
   longPositionTool,
   shortPositionTool,
   positionForecastTool,

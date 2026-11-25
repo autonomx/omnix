@@ -1771,6 +1771,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/research/copilot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chart Copilot Turn
+         * @description Chart Copilot: answer a question about the chart and propose chart changes the person may apply.
+         */
+        post: operations["chart_copilot_turn_api_trading_research_copilot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/research/filings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Filings
+         * @description A US company's recent SEC reports, for AI filing summaries.
+         */
+        get: operations["list_filings_api_trading_research_filings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/research/filings/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Summarize Filing
+         * @description AI filing summary: one of the company's recent SEC reports, summarized from its own text.
+         */
+        post: operations["summarize_filing_api_trading_research_filings_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/research/news-digest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Summarize News
+         * @description AI news digest: the symbol's recent headlines, summarized by theme.
+         */
+        post: operations["summarize_news_api_trading_research_news_digest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/research/range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Research Chart Range
+         * @description AI Range: explain, find the events behind or analyze a span selected on the chart, or answer a question about it.
+         */
+        post: operations["research_chart_range_api_trading_research_range_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/scanners": {
         parameters: {
             query?: never;
@@ -4130,6 +4230,119 @@ export interface components {
             /** Terminal Count */
             terminal_count: number;
         };
+        /**
+         * CopilotAction
+         * @description A chart change the copilot proposes, checked and labelled by Omnix; applied only when the person does.
+         */
+        CopilotAction: {
+            /** End */
+            end: string | null;
+            /** Id */
+            id: string;
+            /** Indicator */
+            indicator: string | null;
+            /** Interval */
+            interval: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "set_interval" | "add_indicator" | "remove_indicator" | "draw_level" | "mark_range";
+            /** Label */
+            label: string;
+            /** Note */
+            note: string | null;
+            /** Period */
+            period: number | null;
+            /** Price */
+            price: string | null;
+            /** Start */
+            start: string | null;
+            /** Time */
+            time: string | null;
+        };
+        /** CopilotChartIndicator */
+        CopilotChartIndicator: {
+            /** Id */
+            id: string;
+            /** Period */
+            period?: number | null;
+        };
+        /** CopilotMessage */
+        CopilotMessage: {
+            /** Content */
+            content: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+        };
+        /** CopilotRequest */
+        CopilotRequest: {
+            /** Binding Id */
+            binding_id?: string | null;
+            /**
+             * Extended Hours
+             * @default true
+             */
+            extended_hours?: boolean;
+            /**
+             * History Limit
+             * @default 300
+             */
+            history_limit?: number;
+            /** Indicators */
+            indicators?: components["schemas"]["CopilotChartIndicator"][];
+            /** Instrument Id */
+            instrument_id: string;
+            /** Interval */
+            interval: string;
+            /** Messages */
+            messages: components["schemas"]["CopilotMessage"][];
+            /** Model */
+            model?: string | null;
+            /** Supported Intervals */
+            supported_intervals?: string[];
+        };
+        /** CopilotResult */
+        CopilotResult: {
+            /** Actions */
+            actions: components["schemas"]["CopilotAction"][];
+            /**
+             * Actions Dropped
+             * @default 0
+             */
+            actions_dropped: number;
+            /**
+             * Disclaimer
+             * @default Research only. Not financial advice. No order was created or executed.
+             * @constant
+             */
+            disclaimer: "Research only. Not financial advice. No order was created or executed.";
+            facts: components["schemas"]["RangeFacts"];
+            /** Headlines */
+            headlines: components["schemas"]["RangeHeadline"][];
+            /** Model */
+            model: string;
+            /**
+             * News Status
+             * @enum {string}
+             */
+            news_status: "ok" | "none" | "unavailable" | "not_used";
+            /** Points */
+            points: string[];
+            /** Provider */
+            provider: string;
+            /**
+             * Read Only
+             * @default true
+             * @constant
+             */
+            read_only: true;
+            /** Reply */
+            reply: string;
+        };
         /** CorporateCalendarEvent */
         CorporateCalendarEvent: {
             /** Amount */
@@ -4658,6 +4871,107 @@ export interface components {
          * @enum {string}
          */
         FeedType: "rest" | "websocket" | "websocket_and_rest" | "socket" | "historical_polling" | "historical_daily";
+        /** FilingEntry */
+        FilingEntry: {
+            /** Accession */
+            accession: string;
+            /** Description */
+            description: string | null;
+            /** Document */
+            document: string;
+            /**
+             * Filed
+             * Format: date
+             */
+            filed: string;
+            /** Form */
+            form: string;
+            /** Items */
+            items: string[];
+            /** Report Date */
+            report_date: string | null;
+            /** Url */
+            url: string;
+        };
+        /** FilingFigure */
+        FilingFigure: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** FilingList */
+        FilingList: {
+            /** Cik */
+            cik: string;
+            /** Company */
+            company: string;
+            /** Filings */
+            filings: components["schemas"]["FilingEntry"][];
+            /** Instrument Id */
+            instrument_id: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** FilingSource */
+        FilingSource: {
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /** FilingSummaryRequest */
+        FilingSummaryRequest: {
+            /** Accession */
+            accession: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Model */
+            model?: string | null;
+        };
+        /** FilingSummaryResult */
+        FilingSummaryResult: {
+            /** Characters Read */
+            characters_read: number;
+            /** Characters Total */
+            characters_total: number;
+            /** Company */
+            company: string;
+            /**
+             * Disclaimer
+             * @default Research only. Not financial advice. No order was created or executed.
+             * @constant
+             */
+            disclaimer: "Research only. Not financial advice. No order was created or executed.";
+            /** Documents */
+            documents: components["schemas"]["FilingSource"][];
+            /** Figures */
+            figures: components["schemas"]["FilingFigure"][];
+            /**
+             * Figures Dropped
+             * @default 0
+             */
+            figures_dropped: number;
+            filing: components["schemas"]["FilingEntry"];
+            /** Highlights */
+            highlights: string[];
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+            /**
+             * Read Only
+             * @default true
+             * @constant
+             */
+            read_only: true;
+            /** Risks */
+            risks: string[];
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
         /** Financials */
         Financials: {
             /** Annual */
@@ -7139,6 +7453,82 @@ export interface components {
              * @constant
              */
             strategy_id?: "sma_cross";
+        };
+        /** NewsDigestRequest */
+        NewsDigestRequest: {
+            /** Instrument Id */
+            instrument_id: string;
+            /** Model */
+            model?: string | null;
+            /**
+             * Window
+             * @default 3d
+             * @enum {string}
+             */
+            window?: "24h" | "3d" | "7d";
+        };
+        /** NewsDigestResult */
+        NewsDigestResult: {
+            /**
+             * Disclaimer
+             * @default Research only. Not financial advice. No order was created or executed.
+             * @constant
+             */
+            disclaimer: "Research only. Not financial advice. No order was created or executed.";
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /**
+             * Headlines Considered
+             * @default 0
+             */
+            headlines_considered: number;
+            /** Model */
+            model: string | null;
+            /**
+             * News Status
+             * @enum {string}
+             */
+            news_status: "ok" | "none" | "unavailable";
+            /** Provider */
+            provider: string | null;
+            /**
+             * Read Only
+             * @default true
+             * @constant
+             */
+            read_only: true;
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** Summary */
+            summary: string;
+            /** Symbol */
+            symbol: string;
+            /** Themes */
+            themes: components["schemas"]["NewsDigestTheme"][];
+            /** Title */
+            title: string;
+            /** Tone */
+            tone: ("positive" | "negative" | "mixed" | "neutral") | null;
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "24h" | "3d" | "7d";
+        };
+        /** NewsDigestTheme */
+        NewsDigestTheme: {
+            /** Headlines */
+            headlines: components["schemas"]["RangeHeadline"][];
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /**
          * NotificationDelivery
@@ -10295,6 +10685,197 @@ export interface components {
             received_at: string;
         } & {
             [key: string]: unknown;
+        };
+        /** RangeBarMark */
+        RangeBarMark: {
+            /** Change Percent */
+            change_percent: string;
+            /**
+             * Time
+             * Format: date-time
+             */
+            time: string;
+        };
+        /** RangeEvent */
+        RangeEvent: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Fiscal Period */
+            fiscal_period: string | null;
+            /** Kind */
+            kind: string;
+            /** Link */
+            link: string | null;
+            /** Timing */
+            timing: string | null;
+        };
+        /**
+         * RangeFacts
+         * @description The span as Omnix measured it; the model only phrases these.
+         */
+        RangeFacts: {
+            /** Bars */
+            bars: number;
+            /** Change */
+            change: string;
+            /** Change Percent */
+            change_percent: string;
+            /** Close */
+            close: string;
+            /** Ema 20 End */
+            ema_20_end: string | null;
+            /**
+             * First Bar
+             * Format: date-time
+             */
+            first_bar: string;
+            /** High */
+            high: string;
+            /**
+             * High Time
+             * Format: date-time
+             */
+            high_time: string;
+            largest_down_bar: components["schemas"]["RangeBarMark"] | null;
+            largest_up_bar: components["schemas"]["RangeBarMark"] | null;
+            /**
+             * Last Bar
+             * Format: date-time
+             */
+            last_bar: string;
+            /** Low */
+            low: string;
+            /**
+             * Low Time
+             * Format: date-time
+             */
+            low_time: string;
+            /** Open */
+            open: string;
+            /** Prior Change Percent */
+            prior_change_percent: string | null;
+            /** Rsi 14 End */
+            rsi_14_end: string | null;
+            /** Rsi 14 Start */
+            rsi_14_start: string | null;
+            /** Sma 20 End */
+            sma_20_end: string | null;
+            /** Sma 20 Start */
+            sma_20_start: string | null;
+            /** Sma 50 End */
+            sma_50_end: string | null;
+            /** Volume */
+            volume: string;
+            /** Volume Vs Prior */
+            volume_vs_prior: string | null;
+        };
+        /** RangeHeadline */
+        RangeHeadline: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Headline */
+            headline: string;
+            /** Id */
+            id: string;
+            /** Source */
+            source: string | null;
+            /** Url */
+            url: string | null;
+        };
+        /** RangeResearchRequest */
+        RangeResearchRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "explain" | "events" | "technicals" | "ask";
+            /**
+             * Alignment
+             * @default clock
+             * @enum {string}
+             */
+            alignment?: "count" | "clock";
+            /** Binding Id */
+            binding_id?: string | null;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /**
+             * Extended Hours
+             * @default true
+             */
+            extended_hours?: boolean;
+            /**
+             * History Limit
+             * @default 1000
+             */
+            history_limit?: number;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Interval */
+            interval: string;
+            /** Model */
+            model?: string | null;
+            /** Question */
+            question?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+        };
+        /** RangeResearchResult */
+        RangeResearchResult: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "explain" | "events" | "technicals" | "ask";
+            /**
+             * Disclaimer
+             * @default Research only. Not financial advice. No order was created or executed.
+             * @constant
+             */
+            disclaimer: "Research only. Not financial advice. No order was created or executed.";
+            /** Events */
+            events: components["schemas"]["RangeEvent"][];
+            facts: components["schemas"]["RangeFacts"];
+            /** Headlines */
+            headlines: components["schemas"]["RangeHeadline"][];
+            /**
+             * Headlines Considered
+             * @default 0
+             */
+            headlines_considered: number;
+            /** Model */
+            model: string;
+            /**
+             * News Status
+             * @enum {string}
+             */
+            news_status: "ok" | "none" | "unavailable" | "not_used";
+            /** Points */
+            points: string[];
+            /** Provider */
+            provider: string;
+            /**
+             * Read Only
+             * @default true
+             * @constant
+             */
+            read_only: true;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
@@ -18077,6 +18658,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarketResearchResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chart_copilot_turn_api_trading_research_copilot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopilotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopilotResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_filings_api_trading_research_filings_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilingList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_filing_api_trading_research_filings_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilingSummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilingSummaryResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_news_api_trading_research_news_digest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsDigestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDigestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_chart_range_api_trading_research_range_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RangeResearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RangeResearchResult"];
                 };
             };
             /** @description Validation Error */

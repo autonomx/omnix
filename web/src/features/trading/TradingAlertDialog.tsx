@@ -307,7 +307,7 @@ export function TradingAlertDialog({
           </div>
           <div>
             <dt>Message</dt>
-            <dd>
+            <dd className="trading-alert-message-field">
               <textarea aria-label="Alert message" rows={2} value={editor.message} placeholder={isTrendline ? `${symbol} crossing trendline` : `${symbol} crossing ${editor.threshold || 'value'}`} maxLength={500} onChange={(event) => onChange({ message: event.target.value })} />
               <small className="trading-alert-placeholders" title="Filled in when the alert triggers; unknown ones stay as written">Placeholders: {MESSAGE_PLACEHOLDERS.join(' ')}</small>
             </dd>

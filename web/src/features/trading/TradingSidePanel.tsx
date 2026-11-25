@@ -12,7 +12,7 @@ const TradingAlertsPanel = lazy(() => import('./TradingAlertsPanel').then((modul
 const TradingNewsPanel = lazy(() => import('./TradingNewsPanel').then((module) => ({ default: module.TradingNewsPanel })));
 const TradingPaperPanel = lazy(() => import('./TradingPaperPanel').then((module) => ({ default: module.TradingPaperPanel })));
 const TradingProspectiveEconomicPanel = lazy(() => import('./TradingProspectiveEconomicPanel').then((module) => ({ default: module.TradingProspectiveEconomicPanel })));
-const TradingResearchPanel = lazy(() => import('./TradingResearchPanel').then((module) => ({ default: module.TradingResearchPanel })));
+const TradingAiResearchTabs = lazy(() => import('./TradingAiResearchTabs').then((module) => ({ default: module.TradingAiResearchTabs })));
 const TradingSymbolIntelligence = lazy(() => import('./TradingSymbolIntelligence').then((module) => ({ default: module.TradingSymbolIntelligence })));
 const TradingTradeJournal = lazy(() => import('./TradingTradeJournal').then((module) => ({ default: module.TradingTradeJournal })));
 const TradingObjectPanel = lazy(() => import('./TradingObjectPanel').then((module) => ({ default: module.TradingObjectPanel })));
@@ -207,10 +207,14 @@ export function TradingSidePanel({
         ) : null}
         {activeTab === 'news' ? <TradingNewsPanel key={activeInstrumentId} instrumentId={activeInstrumentId} /> : null}
         {activeTab === 'research' ? (
-          <TradingResearchPanel
+          <TradingAiResearchTabs
+            sessionId={sessionId}
             instrumentId={activeInstrumentId}
             bindingId={bindingId}
             interval={interval}
+            providerBindings={providerBindings}
+            indicators={indicators}
+            onSetIndicators={onSetIndicators}
           />
         ) : null}
         {activeTab === 'layout' ? (

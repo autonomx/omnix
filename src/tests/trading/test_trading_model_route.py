@@ -83,6 +83,21 @@ def test_the_setting_names_the_provider_and_model_of_every_research_entry_point(
     assert len(built) == 1  # the dedicated lane builds its own instance, away from foreground traffic
 
 
+def test_research_a_person_asks_for_uses_the_default_provider_whatever_the_setting(monkeypatch, providers) -> None:
+    import inspect
+
+    from app.apps.trading.research import interactive_research_provider
+    from app.apps.trading.research_api import create_trading_research_router
+
+    _setting(monkeypatch, {"providerId": "llm:lmstudio", "modelId": "qwen/qwen3.8-27b"})
+
+    assert interactive_research_provider().provider_name == "claude_cli"
+    assert providers == [("default", None)]
+    # The Trading page's research endpoints (range, copilot, digest, filings, report) are built on it.
+    factory = inspect.signature(create_trading_research_router).parameters["provider_factory"].default
+    assert factory is interactive_research_provider
+
+
 def test_lm_studio_without_a_model_follows_what_is_loaded(monkeypatch, providers) -> None:
     _setting(monkeypatch, {"providerId": "lmstudio", "modelId": ""})
     from app.providers import service as provider_service

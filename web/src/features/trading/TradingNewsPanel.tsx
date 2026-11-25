@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';
 import type { HermesMarketBrief, HermesResearchAudit, HermesResearchEvidence } from './tradingHermesResearchApi';
+import { TradingNewsDigest } from './TradingNewsDigest';
 import './TradingNews.css';
 
 type NewsResearchStatus = 'idle' | 'running' | 'ready' | 'empty' | 'error';
@@ -135,6 +136,8 @@ export function TradingNewsPanel({ instrumentId }: { instrumentId: string }) {
         </div>
         <span className="trading-news-status" data-status={status}>{statusLabel}</span>
       </header>
+
+      <TradingNewsDigest instrumentId={instrumentId} />
 
       <div className="trading-news-empty trading-news-hermes-intro">
         <span aria-hidden="true">H</span>

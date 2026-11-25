@@ -11866,6 +11866,364 @@
         "title": "ConfirmationRunResult",
         "type": "object"
       },
+      "CopilotAction": {
+        "additionalProperties": false,
+        "description": "A chart change the copilot proposes, checked and labelled by Omnix; applied only when the person does.",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "indicator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
+          "kind": {
+            "enum": [
+              "set_interval",
+              "add_indicator",
+              "remove_indicator",
+              "draw_level",
+              "mark_range"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "interval",
+          "indicator",
+          "period",
+          "price",
+          "time",
+          "start",
+          "end",
+          "note"
+        ],
+        "title": "CopilotAction",
+        "type": "object"
+      },
+      "CopilotChartIndicator": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "maximum": 5000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CopilotChartIndicator",
+        "type": "object"
+      },
+      "CopilotMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "CopilotMessage",
+        "type": "object"
+      },
+      "CopilotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "extended_hours": {
+            "default": true,
+            "title": "Extended Hours",
+            "type": "boolean"
+          },
+          "history_limit": {
+            "default": 300,
+            "maximum": 1000,
+            "minimum": 30,
+            "title": "History Limit",
+            "type": "integer"
+          },
+          "indicators": {
+            "items": {
+              "$ref": "#/components/schemas/CopilotChartIndicator"
+            },
+            "maxItems": 60,
+            "title": "Indicators",
+            "type": "array"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/CopilotMessage"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "supported_intervals": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 60,
+            "title": "Supported Intervals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "messages"
+        ],
+        "title": "CopilotRequest",
+        "type": "object"
+      },
+      "CopilotResult": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/CopilotAction"
+            },
+            "maxItems": 4,
+            "title": "Actions",
+            "type": "array"
+          },
+          "actions_dropped": {
+            "default": 0,
+            "title": "Actions Dropped",
+            "type": "integer"
+          },
+          "disclaimer": {
+            "const": "Research only. Not financial advice. No order was created or executed.",
+            "default": "Research only. Not financial advice. No order was created or executed.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "facts": {
+            "$ref": "#/components/schemas/RangeFacts"
+          },
+          "headlines": {
+            "items": {
+              "$ref": "#/components/schemas/RangeHeadline"
+            },
+            "title": "Headlines",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "news_status": {
+            "enum": [
+              "ok",
+              "none",
+              "unavailable",
+              "not_used"
+            ],
+            "title": "News Status",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Points",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "reply": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reply",
+          "facts",
+          "news_status",
+          "provider",
+          "model",
+          "points",
+          "actions",
+          "actions_dropped",
+          "headlines",
+          "read_only",
+          "disclaimer"
+        ],
+        "title": "CopilotResult",
+        "type": "object"
+      },
       "CorporateCalendarEvent": {
         "properties": {
           "amount": {
@@ -18390,6 +18748,288 @@
         ],
         "title": "FeedType",
         "type": "string"
+      },
+      "FilingEntry": {
+        "properties": {
+          "accession": {
+            "title": "Accession",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "filed": {
+            "format": "date",
+            "title": "Filed",
+            "type": "string"
+          },
+          "form": {
+            "title": "Form",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "report_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Date"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accession",
+          "form",
+          "filed",
+          "url",
+          "document",
+          "report_date",
+          "description",
+          "items"
+        ],
+        "title": "FilingEntry",
+        "type": "object"
+      },
+      "FilingFigure": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "FilingFigure",
+        "type": "object"
+      },
+      "FilingList": {
+        "additionalProperties": false,
+        "properties": {
+          "cik": {
+            "title": "Cik",
+            "type": "string"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "filings": {
+            "items": {
+              "$ref": "#/components/schemas/FilingEntry"
+            },
+            "maxItems": 40,
+            "title": "Filings",
+            "type": "array"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "ticker",
+          "company",
+          "cik",
+          "filings"
+        ],
+        "title": "FilingList",
+        "type": "object"
+      },
+      "FilingSource": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "FilingSource",
+        "type": "object"
+      },
+      "FilingSummaryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accession": {
+            "pattern": "^\\d{10}-\\d{2}-\\d{6}$",
+            "title": "Accession",
+            "type": "string"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "accession"
+        ],
+        "title": "FilingSummaryRequest",
+        "type": "object"
+      },
+      "FilingSummaryResult": {
+        "additionalProperties": false,
+        "properties": {
+          "characters_read": {
+            "title": "Characters Read",
+            "type": "integer"
+          },
+          "characters_total": {
+            "title": "Characters Total",
+            "type": "integer"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "disclaimer": {
+            "const": "Research only. Not financial advice. No order was created or executed.",
+            "default": "Research only. Not financial advice. No order was created or executed.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/FilingSource"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/FilingFigure"
+            },
+            "maxItems": 8,
+            "title": "Figures",
+            "type": "array"
+          },
+          "figures_dropped": {
+            "default": 0,
+            "title": "Figures Dropped",
+            "type": "integer"
+          },
+          "filing": {
+            "$ref": "#/components/schemas/FilingEntry"
+          },
+          "highlights": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Highlights",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Risks",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 2400,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filing",
+          "company",
+          "title",
+          "summary",
+          "characters_read",
+          "characters_total",
+          "provider",
+          "model",
+          "highlights",
+          "risks",
+          "figures",
+          "figures_dropped",
+          "documents",
+          "read_only",
+          "disclaimer"
+        ],
+        "title": "FilingSummaryResult",
+        "type": "object"
       },
       "Financials": {
         "properties": {
@@ -33787,6 +34427,197 @@
         "title": "NeedsChanged",
         "type": "object"
       },
+      "NewsDigestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "window": {
+            "default": "3d",
+            "enum": [
+              "24h",
+              "3d",
+              "7d"
+            ],
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id"
+        ],
+        "title": "NewsDigestRequest",
+        "type": "object"
+      },
+      "NewsDigestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "disclaimer": {
+            "const": "Research only. Not financial advice. No order was created or executed.",
+            "default": "Research only. Not financial advice. No order was created or executed.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "headlines_considered": {
+            "default": 0,
+            "title": "Headlines Considered",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "news_status": {
+            "enum": [
+              "ok",
+              "none",
+              "unavailable"
+            ],
+            "title": "News Status",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "$ref": "#/components/schemas/NewsDigestTheme"
+            },
+            "maxItems": 5,
+            "title": "Themes",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "anyOf": [
+              {
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          },
+          "window": {
+            "enum": [
+              "24h",
+              "3d",
+              "7d"
+            ],
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "window",
+          "start",
+          "end",
+          "news_status",
+          "title",
+          "summary",
+          "tone",
+          "themes",
+          "headlines_considered",
+          "provider",
+          "model",
+          "read_only",
+          "disclaimer"
+        ],
+        "title": "NewsDigestResult",
+        "type": "object"
+      },
+      "NewsDigestTheme": {
+        "properties": {
+          "headlines": {
+            "items": {
+              "$ref": "#/components/schemas/RangeHeadline"
+            },
+            "title": "Headlines",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "summary",
+          "headlines"
+        ],
+        "title": "NewsDigestTheme",
+        "type": "object"
+      },
       "NonverbalEligibility": {
         "additionalProperties": false,
         "properties": {
@@ -46077,6 +46908,542 @@
           "freshness_mode"
         ],
         "title": "QuoteResponse",
+        "type": "object"
+      },
+      "RangeBarMark": {
+        "properties": {
+          "change_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Change Percent",
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "change_percent"
+        ],
+        "title": "RangeBarMark",
+        "type": "object"
+      },
+      "RangeEvent": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "fiscal_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Period"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing"
+          }
+        },
+        "required": [
+          "kind",
+          "date",
+          "timing",
+          "fiscal_period",
+          "link"
+        ],
+        "title": "RangeEvent",
+        "type": "object"
+      },
+      "RangeFacts": {
+        "description": "The span as Omnix measured it; the model only phrases these.",
+        "properties": {
+          "bars": {
+            "title": "Bars",
+            "type": "integer"
+          },
+          "change": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Change",
+            "type": "string"
+          },
+          "change_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Change Percent",
+            "type": "string"
+          },
+          "close": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Close",
+            "type": "string"
+          },
+          "ema_20_end": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema 20 End"
+          },
+          "first_bar": {
+            "format": "date-time",
+            "title": "First Bar",
+            "type": "string"
+          },
+          "high": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "High",
+            "type": "string"
+          },
+          "high_time": {
+            "format": "date-time",
+            "title": "High Time",
+            "type": "string"
+          },
+          "largest_down_bar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RangeBarMark"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "largest_up_bar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RangeBarMark"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_bar": {
+            "format": "date-time",
+            "title": "Last Bar",
+            "type": "string"
+          },
+          "low": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Low",
+            "type": "string"
+          },
+          "low_time": {
+            "format": "date-time",
+            "title": "Low Time",
+            "type": "string"
+          },
+          "open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open",
+            "type": "string"
+          },
+          "prior_change_percent": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Change Percent"
+          },
+          "rsi_14_end": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi 14 End"
+          },
+          "rsi_14_start": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi 14 Start"
+          },
+          "sma_20_end": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sma 20 End"
+          },
+          "sma_20_start": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sma 20 Start"
+          },
+          "sma_50_end": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sma 50 End"
+          },
+          "volume": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Volume",
+            "type": "string"
+          },
+          "volume_vs_prior": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Vs Prior"
+          }
+        },
+        "required": [
+          "first_bar",
+          "last_bar",
+          "bars",
+          "open",
+          "close",
+          "change",
+          "change_percent",
+          "high",
+          "high_time",
+          "low",
+          "low_time",
+          "volume",
+          "volume_vs_prior",
+          "prior_change_percent",
+          "largest_up_bar",
+          "largest_down_bar",
+          "sma_20_start",
+          "sma_20_end",
+          "sma_50_end",
+          "ema_20_end",
+          "rsi_14_start",
+          "rsi_14_end"
+        ],
+        "title": "RangeFacts",
+        "type": "object"
+      },
+      "RangeHeadline": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "headline",
+          "created_at",
+          "source",
+          "url"
+        ],
+        "title": "RangeHeadline",
+        "type": "object"
+      },
+      "RangeResearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "explain",
+              "events",
+              "technicals",
+              "ask"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "alignment": {
+            "default": "clock",
+            "enum": [
+              "count",
+              "clock"
+            ],
+            "title": "Alignment",
+            "type": "string"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "extended_hours": {
+            "default": true,
+            "title": "Extended Hours",
+            "type": "boolean"
+          },
+          "history_limit": {
+            "default": 1000,
+            "maximum": 5000,
+            "minimum": 30,
+            "title": "History Limit",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "start",
+          "end",
+          "action"
+        ],
+        "title": "RangeResearchRequest",
+        "type": "object"
+      },
+      "RangeResearchResult": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "explain",
+              "events",
+              "technicals",
+              "ask"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "disclaimer": {
+            "const": "Research only. Not financial advice. No order was created or executed.",
+            "default": "Research only. Not financial advice. No order was created or executed.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/RangeEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "facts": {
+            "$ref": "#/components/schemas/RangeFacts"
+          },
+          "headlines": {
+            "items": {
+              "$ref": "#/components/schemas/RangeHeadline"
+            },
+            "title": "Headlines",
+            "type": "array"
+          },
+          "headlines_considered": {
+            "default": 0,
+            "title": "Headlines Considered",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "news_status": {
+            "enum": [
+              "ok",
+              "none",
+              "unavailable",
+              "not_used"
+            ],
+            "title": "News Status",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Points",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "title",
+          "summary",
+          "facts",
+          "news_status",
+          "provider",
+          "model",
+          "points",
+          "headlines",
+          "events",
+          "headlines_considered",
+          "read_only",
+          "disclaimer"
+        ],
+        "title": "RangeResearchResult",
         "type": "object"
       },
       "RecentAutomaticMemoryResponse": {
@@ -108569,6 +109936,219 @@
           }
         },
         "summary": "Create Research",
+        "tags": [
+          "trading-research"
+        ]
+      }
+    },
+    "/api/trading/research/copilot": {
+      "post": {
+        "description": "Chart Copilot: answer a question about the chart and propose chart changes the person may apply.",
+        "operationId": "chart_copilot_turn_api_trading_research_copilot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopilotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopilotResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chart Copilot Turn",
+        "tags": [
+          "trading-research"
+        ]
+      }
+    },
+    "/api/trading/research/filings": {
+      "get": {
+        "description": "A US company's recent SEC reports, for AI filing summaries.",
+        "operationId": "list_filings_api_trading_research_filings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilingList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Filings",
+        "tags": [
+          "trading-research"
+        ]
+      }
+    },
+    "/api/trading/research/filings/summary": {
+      "post": {
+        "description": "AI filing summary: one of the company's recent SEC reports, summarized from its own text.",
+        "operationId": "summarize_filing_api_trading_research_filings_summary_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FilingSummaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilingSummaryResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Summarize Filing",
+        "tags": [
+          "trading-research"
+        ]
+      }
+    },
+    "/api/trading/research/news-digest": {
+      "post": {
+        "description": "AI news digest: the symbol's recent headlines, summarized by theme.",
+        "operationId": "summarize_news_api_trading_research_news_digest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsDigestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsDigestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Summarize News",
+        "tags": [
+          "trading-research"
+        ]
+      }
+    },
+    "/api/trading/research/range": {
+      "post": {
+        "description": "AI Range: explain, find the events behind or analyze a span selected on the chart, or answer a question about it.",
+        "operationId": "research_chart_range_api_trading_research_range_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RangeResearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RangeResearchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Research Chart Range",
         "tags": [
           "trading-research"
         ]
