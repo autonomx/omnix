@@ -63,6 +63,8 @@ def _binary_response(*media_types: str) -> dict[int, dict[str, Any]]:
 
 class ClassificationRequest(BaseModel):
     custom_rules: str = Field(default="", max_length=4000)
+    # Speaker classification only: answer every call without reasoning (False: the provider's own level).
+    no_reasoning: bool = True
 
 
 class ExcludeSpanText(BaseModel):
@@ -897,7 +899,19 @@ def reclassify_audiobook(
         return service.reclassify_source(
             context, project_id=project_id,
             custom_rules=body.custom_rules if body else None,
+            no_reasoning=body.no_reasoning if body else True,
         )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/steps/{step}/approve", tags=["audiobook"])
+def approve_audiobook_step(project_id: str, step: Literal["speakers", "cast", "audio"]) -> dict[str, bool]:
+    service, context = _service_and_context()
+    try:
+        return service.approve_step(context, project_id=project_id, step=step)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="audiobook project not found") from exc
     except ValueError as exc:

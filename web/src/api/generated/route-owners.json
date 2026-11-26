@@ -138,6 +138,7 @@
     "POST /api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting": "audiobook",
     "POST /api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject": "audiobook",
     "DELETE /api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}": "audiobook",
+    "POST /api/audiobook/projects/{project_id}/steps/{step}/approve": "audiobook",
     "GET /api/audiobook/source-library": "audiobook",
     "GET /api/audiobook/voices": "audiobook",
     "POST /api/auth/email": "kernel",

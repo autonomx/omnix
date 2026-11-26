@@ -1,6 +1,6 @@
 """Direct performance: an LLM writes a short delivery direction for each dialogue line.
 
-The directions become the spans' delivery notes (reviewable in Span review), and
+The directions become the spans' delivery notes (reviewable on the Quotes page), and
 Fish S2 Pro speaks each line with its note as an inline tag (``[angry] ...``).
 A chapter is sent in windows of the story with every target dialogue span
 marked; the model returns one direction per span, or "" for a plain line.

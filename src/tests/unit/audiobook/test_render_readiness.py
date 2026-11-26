@@ -11,7 +11,7 @@ from app.persistence.tenant import local_tenant_context
 @pytest.mark.parametrize("condition,ready,message", [
     ("ready", True, None),
     ("active", False, "Wait for"),
-    ("issues", False, 'Go to "Span review" and resolve 2'),
+    ("issues", False, 'Go to "Human review" and resolve 2'),
     ("unassigned", False, "Assign a speaker"),
     ("no_voice", False, "Assign a voice"),
     ("skipped", False, "skip all"),
@@ -55,7 +55,7 @@ def test_readiness_checks_current_render_inputs(monkeypatch, condition, ready, m
 
 
 @pytest.mark.parametrize("job_type,message", [
-    ("audiobook.ingest", 'go to "Span review"'),
+    ("audiobook.ingest", 'go to "Quotes"'),
     ("audiobook.analyze", 'use "Resume" or "Cancel"'),
     ("audiobook.render-chapter", 'Go to "Render & Export"'),
     ("audiobook.assemble-chapter", 'Go to "Render & Export"'),

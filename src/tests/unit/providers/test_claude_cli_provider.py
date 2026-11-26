@@ -289,6 +289,25 @@ def test_a_spoken_turn_answers_without_thinking_and_no_other_call_does(provider)
     assert spoken["command"][spoken["command"].index("--effort") + 1] == "high"
 
 
+def test_effort_off_answers_every_call_without_thinking(monkeypatch) -> None:
+    _FakePopen.calls = []
+    monkeypatch.setattr(module, "resolve_claude_executable", lambda _path: "claude")
+    monkeypatch.setattr(module.subprocess, "Popen", _FakePopen)
+    monkeypatch.setattr(module, "_WARM_POOL", module._WarmPool())
+    provider = module.ClaudeCliProvider(
+        ProviderConfig(provider_type="claude_cli", model="haiku", extra_params={"effort": " OFF "}),
+    )
+    assert provider.effort == "off"
+    _FakePopen.stdout_text = _events("ok")
+    provider.chat_completion([ChatMessage("user", "typed")])
+
+    typed = next(call for call in _FakePopen.calls if call.get("prompt") == "typed")
+    assert typed["env"]["MAX_THINKING_TOKENS"] == "0"
+    assert "--effort" not in typed["command"]  # off is not a CLI effort level
+    with pytest.raises(ValueError, match="effort must be one of"):
+        module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli", extra_params={"effort": "none"}))
+
+
 def test_a_call_that_asks_for_no_thinking_answers_without_it(pooled) -> None:
     provider, pool = pooled
     messages = [ChatMessage("system", "Classify."), ChatMessage("user", "weather?")]

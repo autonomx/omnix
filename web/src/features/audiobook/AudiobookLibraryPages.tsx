@@ -108,7 +108,7 @@ export function AudiobookCreatePage({ ws }: { ws: AudiobookWorkspaceModel }) {
             <label className="audiobook-classification-rules">Quote extraction and classification rules (optional)
               <textarea value={createClassificationRules} onChange={(event) => setCreateClassificationRules(event.target.value)} maxLength={4000} rows={3}
                 placeholder="Character quotes can also be in speaker: quote format." />
-              <small>Saved with the book and used to extract quotes. Review the quote spans before starting speaker classification.</small>
+              <small>Saved with the book and used to find its quotes. You review the quotes before speakers are found.</small>
             </label>
           </details>
           <div className="audiobook-create-details-actions"><span>Local-first processing · source files stay in Omnix storage.</span><button type="submit" disabled={busy || !title.trim()}>✦ Create project&nbsp; →</button></div>

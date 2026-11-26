@@ -193,6 +193,23 @@ class PostgresAudiobookProjectRepository:
         ).fetchone()
         return row is not None
 
+    def save_step_approval(self, context: TenantContext, project_id: str,
+                           step: str, basis: str) -> bool:
+        """Store the fingerprint ``step`` was approved at under ``settings.step_approvals``."""
+        row = self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(
+                          settings, '{step_approvals}',
+                          COALESCE(settings->'step_approvals', '{}'::jsonb) || jsonb_build_object(%s::text, %s::text),
+                          true),
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                RETURNING id""",
+            (step, basis, context.workspace_id, project_id),
+        ).fetchone()
+        return row is not None
+
     def update_metadata(self, context: TenantContext, project_id: str, *,
                         title: str, author: str) -> Any:
         """``(id, title, author, language, state, current_source_revision_id)`` or ``None``."""

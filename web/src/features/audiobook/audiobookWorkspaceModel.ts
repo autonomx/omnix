@@ -193,8 +193,9 @@ export async function deleteAudiobookAsset(projectId: string, assetId: string): 
   }));
 }
 
-export async function reclassifyAudiobook(projectId: string, customRules: string): Promise<void> {
-  await audiobookApi.reclassify(projectId, customRules.trim());
+/** Start Find speakers; `noReasoning` answers every call without reasoning, false uses the model's own level. */
+export async function reclassifyAudiobook(projectId: string, customRules: string, noReasoning: boolean): Promise<void> {
+  await audiobookApi.reclassify(projectId, customRules.trim(), noReasoning);
 }
 
 export async function extractQuotes(projectId: string, customRules: string): Promise<void> {

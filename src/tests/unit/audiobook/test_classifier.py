@@ -155,10 +155,45 @@ def test_the_structured_gateway_sends_the_request_unchanged(monkeypatch) -> None
     assert details["model"] == "local-model"
 
 
+def test_no_reasoning_turns_thinking_off_or_sends_reasoning_none(monkeypatch) -> None:
+    """Find speakers' No reasoning box: LM Studio (and the Claude CLI) get ``thinking=False``; Codex gets "none"."""
+    provider, calls = _provider_returning('{"spans":[]}', '{"styles":[]}')
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: provider)
+    classify, details = local_classifier()
+    details["thinking"] = False
+
+    classify({"task": "analyze_story_dialogue_full_context"})
+    classify({"task": "discover_dialogue_style"})
+    assert [call.get("thinking") for call in calls] == [False, False]
+    assert all("reasoning_effort" not in call for call in calls)
+
+    codex_calls = []
+
+    class Codex:
+        provider_name = "chatgpt_codex"
+        reasoning_effort = "xhigh"
+        config = SimpleNamespace(model="gpt-5.6-luna", extra_params={"reasoning_effort": "xhigh"})
+
+        def chat_completion(self, **kwargs):
+            codex_calls.append(kwargs)
+            return SimpleNamespace(model="gpt-5.6-luna", content='{"spans":[]}')
+
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: Codex())
+    classify, details = local_classifier()
+    details["thinking"] = False
+    classify({"task": "discover_dialogue_style"})
+    classify({"task": "analyze_story_dialogue_full_context"})
+    assert [call["reasoning_effort"] for call in codex_calls] == ["none", "none"]
+    assert all("thinking" not in call for call in codex_calls)
+
+
 def test_unusable_classifier_output_is_a_parse_failure(monkeypatch) -> None:
     import pytest
 
-    for content in ('```json\n{"spans":[]}\n```', '["not", "an", "object"]', "   "):
+    for content in (
+        'Here it is:\n```json\n{"spans":[]}\n```', '```json\n{"spans":[]}\n```\nDone.',
+        '```json\n{"spans":[]}\n```\n```json\n{"spans":[]}\n```', '["not", "an", "object"]', "   ",
+    ):
         provider, _calls = _provider_returning(content)
         monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda provider=provider: provider)
         classify, _details = local_classifier()
@@ -170,6 +205,15 @@ def test_unusable_classifier_output_is_a_parse_failure(monkeypatch) -> None:
     classify, _details = local_classifier()
     with pytest.raises(ValueError, match="unusable"):
         classify({"task": "analyze_story_dialogue_full_context"})
+
+
+def test_one_code_fence_around_the_whole_reply_is_taken_off(monkeypatch) -> None:
+    # Haiku 4.5 through the Claude CLI fenced every story batch despite the prompt (2026-11-25).
+    for content in ('```json\n{"spans":[]}\n```', '```\r\n{"spans":[]}\r\n```\n', '  ```JSON\n{"spans":[]}\n  ```'):
+        provider, _calls = _provider_returning(content)
+        monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda provider=provider: provider)
+        classify, _details = local_classifier()
+        assert classify({"task": "analyze_story_dialogue_full_context"}) == {"spans": []}
 
 
 def test_the_document_structure_classifier_sends_its_request_unchanged(monkeypatch) -> None:

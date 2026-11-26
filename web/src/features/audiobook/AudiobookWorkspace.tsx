@@ -1,6 +1,7 @@
 import './AudiobookWorkspace.css';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { useAudiobookWorkspace } from './useAudiobookWorkspace';
+import { useLandOnCurrentStep } from './audiobookProductionPhases';
 import { AudiobookLibraryRail, AudiobookInspectorRail } from './AudiobookRails';
 import { AudiobookEbookLibraryPage, AudiobookCreatePage } from './AudiobookLibraryPages';
 import { AudiobookProjectHeader } from './AudiobookProjectHeader';
@@ -11,6 +12,7 @@ import { AudiobookReviewQueue } from './AudiobookReviewQueue';
 
 export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const ws = useAudiobookWorkspace(module);
+  useLandOnCurrentStep(ws);
   const { ebookLibraryOpen, error, mobileRail, notice, project, projectId, projectQuery, setMobileRail } = ws;
   return (
     <main className="audiobook-workspace" aria-label={`${module.label} workspace`}>

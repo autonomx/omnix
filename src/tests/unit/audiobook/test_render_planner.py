@@ -79,7 +79,7 @@ def test_preview_and_render_units_respect_local_text_removal() -> None:
 
 
 @pytest.mark.parametrize("missing_index,message", [
-    (4, 'Go to "Cast and direct" and click "Classify text"'), (6, "Assign a speaker"), (8, "Assign a voice"),
+    (4, 'Go to "Quotes" and click "Find speakers"'), (6, "Assign a speaker"), (8, "Assign a voice"),
 ])
 def test_preview_and_render_explain_missing_speaker_setup(missing_index, message):
     class Connection(_Connection):

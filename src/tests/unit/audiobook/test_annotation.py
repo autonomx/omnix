@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.apps.audiobook.annotation import (
-    Speaker, SpeakerAlias, annotate_span_batches, annotate_spans, narrator_id,
+    SpanAnnotation, Speaker, SpeakerAlias, annotate_span_batches, annotate_spans, narrator_id,
     normalize_speaker_name, proposed_speaker_id, resolve_speaker,
 )
 from app.apps.audiobook.extraction import extract_source
@@ -527,6 +527,43 @@ def test_verification_failure_never_silently_marks_dialogue_confident() -> None:
         "verify_story_dialogue_full_context",
         "retry_verify_story_dialogue_full_context",
     ]
+
+
+def test_a_failed_call_logs_its_error_and_reply_and_its_reading_is_kept_for_review(monkeypatch) -> None:
+    from app.apps.audiobook.structured_call import UnusableReply
+    from app.apps.audiobook.worker import unclassified_dialogue
+
+    revision = extract_source(
+        project_id="book:verify-unusable", content=b'"Hello," said Nita.\n', source_format="txt",
+    )
+    events = []
+    monkeypatch.setattr(
+        "app.apps.audiobook.annotation.classification_log",
+        lambda event, **fields: events.append((event, fields)),
+    )
+
+    def classifier(context):
+        if context["task"].endswith("verify_story_dialogue_full_context"):
+            raise UnusableReply("unusable response: not one JSON object", "Sure! {\"spans\": []}")
+        return {
+            "characters": [{"name": "Nita", "aliases": []}],
+            "spans": [{"span_id": context["span_ids"][0], "speaker": "Nita", "role": "dialogue",
+                       "delivery": "", "confidence": 0.99}],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:verify-unusable", spans=revision.chapters[0].spans, speakers=[], classifier=classifier,
+    )
+    failures = [fields for event, fields in events if event == "classification_batch_call_failed"]
+    assert [fields["attempt"] for fields in failures] == ["verification", "retry"]
+    assert failures[0]["error_type"] == "UnusableReply"
+    assert failures[0]["raw_reply"] == "Sure! {\"spans\": []}"
+    # The first reading stands and goes to review; a text reclassification no longer fails the chapter for it.
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.review_reason == "AI_VERIFICATION_UNAVAILABLE"
+    assert unclassified_dialogue(result.annotations) == []
+    fallback = SpanAnnotation(dialogue.span_id, "dialogue", "narrator", None, "", "FALLBACK_NARRATOR", {})
+    assert unclassified_dialogue([*result.annotations, fallback]) == [fallback]
 
 
 def test_full_story_analysis_does_not_call_model_for_narration_only() -> None:

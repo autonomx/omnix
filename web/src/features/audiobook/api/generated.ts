@@ -783,6 +783,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/steps/{step}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Audiobook Step */
+        post: operations["approve_audiobook_step_api_audiobook_projects__project_id__steps__step__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/source-library": {
         parameters: {
             query?: never;
@@ -986,6 +1003,11 @@ export interface components {
              * @default
              */
             custom_rules?: string;
+            /**
+             * No Reasoning
+             * @default true
+             */
+            no_reasoning?: boolean;
         };
         /** ClientErrorAccepted */
         ClientErrorAccepted: core["schemas"]["ClientErrorAccepted"];
@@ -3257,6 +3279,40 @@ export interface operations {
             path: {
                 project_id: string;
                 exclusion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_audiobook_step_api_audiobook_projects__project_id__steps__step__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                step: "speakers" | "cast" | "audio";
             };
             cookie?: never;
         };

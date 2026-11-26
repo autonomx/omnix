@@ -279,13 +279,13 @@ export function useAudiobookLibraryData(ws: { module: OmnixModuleDefinition } & 
   );
 
   const classificationBlockedReason = extractionRunning
-    ? 'Wait for quote extraction to finish, then open Span review and review the quotes before classifying.'
+    ? 'Wait for the quotes to be extracted, then review them on the Quotes page before finding speakers.'
     : reclassificationRunning
-      ? 'Classification is already in progress. Check its progress controls; resume it if paused or cancel it before starting again.'
+      ? 'Already finding speakers. Use the progress controls above to pause, resume or cancel.'
       : !project?.current_source_revision_id
-        ? 'Open Book source and add a book, then review the extracted quote spans before classifying.'
+        ? 'Add a book first (step 1), then review its quotes before finding speakers.'
         : rulesNeedExtraction
-          ? 'Rules changed. Open Book source, click Extract quotes, and review the new spans before classifying.'
+          ? 'The rules changed. Extract the quotes again and review them on the Quotes page before finding speakers.'
           : null;
 
   const reclassificationProgress = pipelineJobProgress(reclassificationJob);

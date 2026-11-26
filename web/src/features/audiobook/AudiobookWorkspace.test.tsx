@@ -16,6 +16,13 @@ function renderWorkspace(client = createTestQueryClient()) {
   return render(<QueryClientProvider client={client}><AudiobookWorkspace module={module} /></QueryClientProvider>);
 }
 
+/** Open the book's Quotes page; a book past quote review opens on its current step's page. */
+async function openBookQuotes() {
+  fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+  const tabs = await screen.findByRole('navigation', { name: 'Audiobook project sections' });
+  fireEvent.click(within(tabs).getByRole('button', { name: 'Quotes' }));
+}
+
 describe('AudiobookWorkspace', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -100,8 +107,8 @@ describe('AudiobookWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace(client);
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    const spans = await screen.findByRole('region', { name: 'Characterization spans' });
+    await openBookQuotes();
+    const spans = await screen.findByRole('region', { name: 'Quotes and passages' });
     expect(within(spans).getByText('dialogue · Unassigned')).toBeInTheDocument();
     const requestsBeforeCompletion = chapterRequests;
     completed = true;
@@ -201,20 +208,26 @@ describe('AudiobookWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const firstVisit = renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
-    const sourcePanel = screen.getByRole('region', { name: 'Source text' });
-    const spanPanel = screen.getByRole('region', { name: 'Characterization spans' });
-    expect(sourcePanel).toContainElement(screen.getByLabelText('Canonical chapter text'));
+    await openBookQuotes();
+    expect(await screen.findByLabelText('Chapter text')).toHaveTextContent('The exact book text.');
+    const sourcePanel = screen.getByRole('region', { name: 'Book text' });
+    const spanPanel = screen.getByRole('region', { name: 'Quotes and passages' });
+    expect(sourcePanel).toContainElement(screen.getByLabelText('Chapter text'));
     expect(sourcePanel).not.toContainElement(spanPanel);
     expect(sourcePanel.parentElement).toBe(spanPanel.parentElement);
-    expect(within(spanPanel).getByRole('heading', { name: 'Span review' })).toBeInTheDocument();
-    const classifyPanel = screen.getByRole('region', { name: 'Text classification' });
-    expect(classifyPanel.parentElement?.firstElementChild).toBe(classifyPanel);
-    expect(within(classifyPanel).getByRole('button', { name: 'Classify text' })).toBeInTheDocument();
-    expect(within(spanPanel).queryByRole('button', { name: 'Classify text' })).not.toBeInTheDocument();
+    expect(within(spanPanel).getByRole('heading', { name: 'Quotes and passages' })).toBeInTheDocument();
+    // Finding speakers is the handoff at the end of quote review, below the quotes.
+    const classifyPanel = screen.getByRole('region', { name: 'Find speakers' });
+    expect(classifyPanel.parentElement?.lastElementChild).toBe(classifyPanel);
+    expect(spanPanel.compareDocumentPosition(classifyPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(classifyPanel).getByRole('button', { name: 'Find speakers again' })).toBeInTheDocument();
+    expect(within(spanPanel).queryByRole('button', { name: /Find speakers/ })).not.toBeInTheDocument();
+    const banner = screen.getByRole('group', { name: 'Where you are' });
+    expect(banner).toHaveTextContent('Step 2 of 6 · Review quotes');
+    expect(within(banner).getByRole('button', { name: 'Next: step 3 · Find speakers →' })).toBeInTheDocument();
+    expect(within(screen.getByRole('navigation', { name: 'Audiobook project sections' })).getByRole('button', { name: 'Quotes' })).toHaveAttribute('aria-current', 'page');
     expect(within(spanPanel).getByRole('button', { name: 'Preview' })).toBeDisabled();
-    expect(within(spanPanel).getByText('Choose a speaker and save interpretation, or classify text, before previewing audio.')).toBeInTheDocument();
+    expect(within(spanPanel).getByText('Choose a speaker and save interpretation, or find speakers, before previewing audio.')).toBeInTheDocument();
     expect(screen.queryByText(/ingest failed/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Edit project' }));
     expect(screen.getByLabelText('Upload from computer')).toHaveAttribute(
@@ -223,8 +236,8 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Choose from local library' }));
     fireEvent.change(await screen.findByLabelText('Local audiobook source'), { target: { value: 'joy.pdf' } });
     fireEvent.change(screen.getByLabelText('Exclude PDF pages'), { target: { value: '1-3, 42-45' } });
-    expect(screen.getByLabelText('Custom rules for classification (optional)')).toHaveValue('Saved speaker instructions.');
-    fireEvent.change(screen.getByLabelText('Custom rules for classification (optional)'), {
+    expect(screen.getByLabelText('Quote and speaker rules (optional)')).toHaveValue('Saved speaker instructions.');
+    fireEvent.change(screen.getByLabelText('Quote and speaker rules (optional)'), {
       target: { value: 'Character quotes can also be in speaker: quote format.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Use selected book' }));
@@ -245,7 +258,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Books/ }).at(-1)!);
     expect(screen.getByRole('heading', { name: 'Books & chapters' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
-    expect(screen.getByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Choose a voice for each speaker' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Pronunciations/ }).at(-1)!);
     expect(screen.getAllByRole('heading', { name: 'Pronunciations' }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('button', { name: /Chapters/ }).at(-1)!);
@@ -260,8 +273,8 @@ describe('AudiobookWorkspace', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one', expect.anything()));
     firstVisit.unmount();
     renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
+    await openBookQuotes();
+    expect(await screen.findByLabelText('Chapter text')).toHaveTextContent('The exact book text.');
   });
 
 
@@ -392,7 +405,7 @@ describe('AudiobookWorkspace', () => {
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
-    expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Choose a voice for each speaker' })).toBeInTheDocument();
     const confirmAlias = await screen.findByRole('button', {
       name: 'Confirm alias The Traveller for Time Traveller',
     });
@@ -791,7 +804,7 @@ describe('AudiobookWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    await openBookQuotes();
     expect((await screen.findAllByText('# Contents')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
 
@@ -1170,8 +1183,8 @@ describe('AudiobookWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('A line.');
+    await openBookQuotes();
+    expect(await screen.findByLabelText('Chapter text')).toHaveTextContent('A line.');
     fireEvent.click(screen.getByRole('button', { name: /^Expand span / }));
     fireEvent.change(screen.getByLabelText('Selected span delivery'), { target: { value: 'softly' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save interpretation' }));
@@ -1179,7 +1192,7 @@ describe('AudiobookWorkspace', () => {
       '/api/audiobook/projects/book-one/spans/span-one/annotation',
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"delivery":"softly"') }),
     ));
-    expect(screen.getByLabelText('Canonical chapter text')).toHaveTextContent('A line.');
+    expect(screen.getByLabelText('Chapter text')).toHaveTextContent('A line.');
   });
 
   it('shows the audiobook production path and opens its tools', async () => {
@@ -1192,6 +1205,7 @@ describe('AudiobookWorkspace', () => {
       else if (url.endsWith('/projects/book-one')) body = {
         ...project, chapters: [], review_issues: [], speakers: [], render_jobs: [],
         preview_jobs: [], export_jobs: [], pronunciations: [], render_progress: { completed: 0, total: 0 },
+        step_approvals: { speakers: true, cast: false, audio: false },
       };
       else throw new Error(`unexpected API request ${url}`);
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -1201,20 +1215,32 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     const steps = await screen.findByRole('list', { name: 'Audiobook production steps' });
     expect(within(steps).getAllByRole('listitem')).toHaveLength(6);
-    expect(within(steps).getByText('Source attached')).toBeInTheDocument();
-    fireEvent.click(within(steps).getByRole('button', { name: 'Open source' }));
+    expect(within(steps).getByText('Book added')).toBeInTheDocument();
+    expect(within(steps).getAllByRole('listitem')[3]).toHaveAttribute('aria-current', 'step');
+    fireEvent.click(within(steps).getByRole('button', { name: 'Open book source' }));
     expect(screen.getByRole('heading', { name: 'Book source' })).toBeInTheDocument();
-    fireEvent.click(within(steps).getByRole('button', { name: 'Manage cast' }));
-    expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Classify text' })).toBeEnabled();
-    expect(screen.getByText('Review the quote spans first, then classify text to assign each passage to a speaker. Your voice selections remain saved.')).toBeInTheDocument();
+    const next = screen.getByRole('group', { name: 'Next step' });
+    expect(next).toHaveTextContent('Next step · 4 of 6');
+    expect(within(next).getByRole('heading', { name: 'Cast voices' })).toBeInTheDocument();
+    expect(next).toHaveTextContent('No speakers were found.');
+    fireEvent.click(within(next).getByRole('button', { name: 'Open cast' }));
+    expect(await screen.findByRole('heading', { name: 'Choose a voice for each speaker' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Where you are' })).toHaveTextContent('Step 4 of 6 · Cast voicesYou are here');
+    // With no one to cast, the cast cannot be approved yet, and the banner says why.
+    expect(screen.getByRole('button', { name: 'Approve cast →' })).toBeDisabled();
+    expect(screen.getByRole('group', { name: 'Where you are' })).toHaveTextContent('There are no speakers to cast yet.');
+    expect(screen.getByRole('button', { name: 'Find speakers again' })).toBeEnabled();
+    expect(screen.getByText('Wrong speakers? Find speakers again. Your voice choices stay saved.')).toBeInTheDocument();
+    // No voice is chosen yet, so playing a sample is not the step to take.
+    expect(screen.getByRole('button', { name: 'Play sample' })).not.toHaveClass('audiobook-primary-action');
   });
 
   it.each([
-    ['extracted', [], ['Add book']],
-    ['review_required', [{ id: 'issue-one', reason: 'LOW_CONFIDENCE_SPEAKER', source_text: '"Hi."', chapter_id: 'chapter-one', chapter_title: 'Opening', speaker_id: null }], ['Add book', 'Extract quotes']],
-    ['ready_to_render', [], ['Add book', 'Extract quotes', 'Classify text']],
-  ])('marks the production steps finished for a %s book', async (state, reviewIssues, finished) => {
+    ['extracted', [], false, ['Add book']],
+    ['review_required', [{ id: 'issue-one', reason: 'LOW_CONFIDENCE_SPEAKER', source_text: '"Hi."', chapter_id: 'chapter-one', chapter_title: 'Opening', speaker_id: null }], true, ['Add book', 'Review quotes']],
+    ['ready_to_render', [], false, ['Add book', 'Review quotes']],
+    ['ready_to_render', [], true, ['Add book', 'Review quotes', 'Find speakers']],
+  ])('marks the production steps finished for a %s book (speakers approved: %s)', async (state, reviewIssues, speakersApproved, finished) => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       let body: unknown;
@@ -1224,6 +1250,7 @@ describe('AudiobookWorkspace', () => {
       else if (url.endsWith('/projects/book-one')) body = {
         ...project, state, chapters: [], review_issues: reviewIssues, speakers: [], render_jobs: [],
         preview_jobs: [], export_jobs: [], pronunciations: [], pipeline_jobs: [], render_progress: { completed: 0, total: 0 },
+        step_approvals: { speakers: speakersApproved, cast: false, audio: false },
       };
       else throw new Error(`unexpected API request ${url}`);
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -1238,7 +1265,7 @@ describe('AudiobookWorkspace', () => {
     expect(complete).toEqual(finished);
   });
 
-  it('lists every production phase in the book source editor with what is left and a way to it', async () => {
+  it('names the next step, marks where the book is, and leads each page to the current step', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       let body: unknown;
@@ -1261,24 +1288,151 @@ describe('AudiobookWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
-    const phases = screen.getByRole('list', { name: 'Production phases' });
-    const rows = within(phases).getAllByRole('listitem').filter((item) => item.parentElement === phases);
-    expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
-      'Phase 2: Extract quotes', 'Phase 3: Classify text', 'Phase 4: Cast and direct', 'Phase 5: Preview and render', 'Phase 6: Export',
-    ]);
-    expect(rows.filter((row) => row.classList.contains('complete')).map((row) => row.querySelector('strong')?.textContent)).toEqual(['Phase 2: Extract quotes']);
-    expect(within(rows[0]).getByText('Complete')).toBeInTheDocument();
-    expect(within(rows[0]).queryByRole('list')).not.toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: 'Phase 5: Preview and render to do' })).getByRole('button', { name: 'Resolve 1 render requirement →' })).toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: 'Phase 6: Export to do' })).getByRole('button', { name: 'Render every chapter first →' })).toBeInTheDocument();
+    const next = await screen.findByRole('group', { name: 'Next step' });
+    expect(next).toHaveTextContent('Next step · 3 of 6');
+    expect(within(next).getByRole('heading', { name: 'Find speakers' })).toBeInTheDocument();
+    expect(next).toHaveTextContent('Omnix was not sure who says 1 line. Confirm the speaker for each one.');
+    const steps = screen.getByRole('list', { name: 'Audiobook production steps' });
+    const items = within(steps).getAllByRole('listitem');
+    expect(items.map((item) => item.className)).toEqual(['complete', 'complete', 'current', 'upcoming', 'upcoming', 'upcoming']);
+    expect(items[2]).toHaveAttribute('aria-current', 'step');
+    expect(items[2]).toHaveTextContent('1 line to confirmYou are here');
+    expect(items[3]).toHaveTextContent('1 / 2 voices chosenFinish step 3 first');
+    expect(within(items[1]).getByRole('button', { name: 'Open quotes' })).toBeInTheDocument();
+    expect(within(items[4]).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Steps done' })).toHaveValue(33);
+    expect(screen.getByText('2 of 6 steps done')).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByRole('list', { name: 'Phase 4: Cast and direct to do' })).getByRole('button', { name: 'Assign voices to 1 speaker →' }));
-    expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
-    fireEvent.click(within(screen.getByRole('list', { name: 'Phase 3: Classify text to do' })).getByRole('button', { name: 'Resolve 1 speaker review issue →' }));
+    fireEvent.click(within(next).getByRole('button', { name: 'Review 1 line' }));
     expect(await screen.findByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
+    const reviewBanner = screen.getByRole('group', { name: 'Where you are' });
+    expect(reviewBanner).toHaveTextContent('Step 3 of 6 · Find speakersYou are here');
+    // The step cannot be approved while a line still needs its speaker, and the banner says so.
+    expect(within(reviewBanner).getByRole('button', { name: 'Approve speakers →' })).toBeDisabled();
+    expect(reviewBanner).toHaveTextContent('Confirm the speaker for 1 line first.');
+
+    // A later step's page says which step comes first and leads back to it.
+    const tabs = screen.getByRole('navigation', { name: 'Audiobook project sections' });
+    fireEvent.click(within(tabs).getByRole('button', { name: 'Cast & Voice Tools' }));
+    const castBanner = await screen.findByRole('group', { name: 'Where you are' });
+    expect(castBanner).toHaveTextContent('Step 4 of 6 · Cast voicesFinish step 3 first');
+    expect(within(castBanner).queryByRole('button', { name: 'Approve cast →' })).not.toBeInTheDocument();
+    fireEvent.click(within(castBanner).getByRole('button', { name: 'Back to step 3 · Find speakers →' }));
+    expect(await screen.findByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
+
+    // Library pages sit outside the path.
+    fireEvent.click(within(tabs).getByRole('button', { name: 'Books' }));
+    expect(screen.queryByRole('group', { name: 'Where you are' })).not.toBeInTheDocument();
+  });
+
+  it('moves the book on when the listener approves each step', async () => {
+    let approvals = { speakers: false, cast: false, audio: false };
+    let state = 'extracted';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const approval = url.match(/\/projects\/book-one\/steps\/(speakers|cast|audio)\/approve$/);
+      if (approval && init?.method === 'POST') {
+        approvals = { ...approvals, [approval[1]]: true };
+        return new Response(JSON.stringify(approvals), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.endsWith('/projects/book-one/reclassify') && init?.method === 'POST') {
+        state = 'ready_to_render';
+        return new Response(JSON.stringify({ job_id: 'reclassify-one' }), { status: 202, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state, chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [], render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [], pipeline_jobs: [],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: { id: 'casting-one', voice_profile_id: 'voice-cloning:saved', revision: 1 }, aliases: [] }],
+        render_progress: { completed: 0, total: 0 }, step_approvals: approvals,
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    const tabs = await screen.findByRole('navigation', { name: 'Audiobook project sections' });
+
+    // Step 2: approving the quotes finds the speakers and opens their review.
+    fireEvent.click(within(tabs).getByRole('button', { name: 'Quotes' }));
+    const quotesBanner = await screen.findByRole('group', { name: 'Where you are' });
+    expect(quotesBanner).toHaveTextContent('Step 2 of 6 · Review quotesYou are here');
+    expect(quotesBanner).toHaveTextContent('Fix any that are wrong, remove text that should not be read aloud, then approve the quotes.');
+    fireEvent.click(within(quotesBanner).getByRole('button', { name: 'Approve quotes →' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/reclassify', expect.objectContaining({ method: 'POST' }),
+    ));
+    expect(await screen.findByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
+
+    // Step 3: the speakers are found, so the listener approves them and moves on to casting.
+    const speakersBanner = await screen.findByRole('group', { name: 'Where you are' });
+    await waitFor(() => expect(speakersBanner).toHaveTextContent('Step 3 of 6 · Find speakersYou are here'));
+    expect(screen.getByRole('group', { name: 'Next step' })).toHaveTextContent('Omnix found 1 speaker. Check who says what, then approve the speakers');
+    fireEvent.click(within(speakersBanner).getByRole('button', { name: 'Approve speakers →' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/steps/speakers/approve', expect.objectContaining({ method: 'POST' }),
+    ));
+    expect(await screen.findByRole('heading', { name: 'Choose a voice for each speaker' })).toBeInTheDocument();
+
+    // Step 4: every speaker has a voice, so the cast can be approved; that opens rendering.
+    const castBanner = screen.getByRole('group', { name: 'Where you are' });
+    await waitFor(() => expect(castBanner).toHaveTextContent('Step 4 of 6 · Cast voicesYou are here'));
+    const steps = screen.getByRole('list', { name: 'Audiobook production steps' });
+    expect(within(steps).getAllByRole('listitem')[2]).toHaveTextContent('1 speaker found');
+    expect(within(steps).getAllByRole('listitem')[3]).toHaveTextContent('Ready to approve');
+    fireEvent.click(within(castBanner).getByRole('button', { name: 'Approve cast →' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/steps/cast/approve', expect.objectContaining({ method: 'POST' }),
+    ));
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Where you are' })).toHaveTextContent('Step 5 of 6 · Render audioYou are here'));
+    expect(screen.getByRole('button', { name: 'Approve audio →' })).toBeDisabled();
+    expect(screen.getByRole('group', { name: 'Where you are' })).toHaveTextContent('Render every chapter first.');
+  });
+
+  function stubBookAt(stepApprovals: Record<string, boolean>) {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'ready_to_render', chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [], render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [], pipeline_jobs: [],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: { id: 'casting-one', voice_profile_id: 'voice-cloning:saved', revision: 1 }, aliases: [] }],
+        render_progress: { completed: 0, total: 0 }, step_approvals: stepApprovals,
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+  }
+
+  it('opens a book on the page of the step it is at', async () => {
+    // Quotes are approved and speakers found, so the book is at step 3, not on the Quotes page.
+    stubBookAt({ speakers: false, cast: false, audio: false });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    expect(await screen.findByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Where you are' })).toHaveTextContent('Step 3 of 6 · Find speakersYou are here');
+    const tabs = screen.getByRole('navigation', { name: 'Audiobook project sections' });
+    expect(within(tabs).getByRole('button', { name: 'Human review' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('reopens a book from the address on the page of the step it is at', async () => {
+    stubBookAt({ speakers: true, cast: false, audio: false });
+    window.history.replaceState(window.history.state, '', '?project=book-one');
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Where you are' })).toHaveTextContent('Step 4 of 6 · Cast voicesYou are here'));
+    const tabs = screen.getByRole('navigation', { name: 'Audiobook project sections' });
+    expect(within(tabs).getByRole('button', { name: 'Cast & Voice Tools' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('filters spans by character and saves a selected word for the whole book', async () => {
@@ -1326,8 +1480,8 @@ describe('AudiobookWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    const section = await screen.findByLabelText('Characterization spans');
+    await openBookQuotes();
+    const section = await screen.findByLabelText('Quotes and passages');
     expect(section).toHaveTextContent('Ehsan smiled.');
     expect(section).toHaveTextContent('Hello.');
     expect(within(section).getAllByRole('button', { name: 'Preview' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
@@ -1336,7 +1490,7 @@ describe('AudiobookWorkspace', () => {
     expect(section).toHaveTextContent('Hello.');
     expect(section).not.toHaveTextContent('Ehsan smiled.');
     fireEvent.change(screen.getByLabelText('Filter spans by character'), { target: { value: 'all' } });
-    const canonical = screen.getByLabelText('Canonical chapter text');
+    const canonical = screen.getByLabelText('Chapter text');
     const passage = canonical.querySelector('.audiobook-source-span');
     expect(passage?.firstChild).toBeTruthy();
     const range = document.createRange();
@@ -1401,7 +1555,7 @@ describe('AudiobookWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    await openBookQuotes();
     fireEvent.click(await screen.findByRole('button', { name: 'Remove chapter from audio' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/chapters/contents/speech-exclusion', expect.objectContaining({ method: 'POST' }),
@@ -1564,7 +1718,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     const find = await screen.findByRole('button', { name: 'Find span for Ada' });
     fireEvent.click(find);
-    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('Hello.');
+    expect(await screen.findByLabelText('Chapter text')).toHaveTextContent('Hello.');
     const audition = screen.getByRole('button', { name: 'Audition voice for Ada' });
     await waitFor(() => expect(audition).toBeEnabled());
     fireEvent.click(audition);
@@ -1675,6 +1829,7 @@ describe('AudiobookWorkspace', () => {
         classification_rules: 'Character quotes can also be in speaker: quote format.',
         quote_extraction_rules: 'Character quotes can also be in speaker: quote format.',
         render_progress: { completed: 0, total: 0 },
+        step_approvals: { speakers: true, cast: false, audio: false },
         pipeline_jobs: reclassifyQueued ? [{
           id: 'reclassify-one', type: 'audiobook.analyze', status: reclassificationStatus,
           progress: { current: 3, total: 17, message: 'analyzing chapters' },
@@ -1690,24 +1845,32 @@ describe('AudiobookWorkspace', () => {
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
-    expect(screen.getByRole('button', { name: 'Classify text' })).toBeEnabled();
-    fireEvent.change(screen.getByLabelText('Custom rules for classification (optional)'), {
+    fireEvent.change(screen.getByLabelText('Quote and speaker rules (optional)'), {
       target: { value: 'New dialogue syntax.' },
     });
-    expect(screen.getByRole('button', { name: 'Classify text' })).toBeDisabled();
-    expect(screen.getByText('Rules changed. Extract quotes again and review the new spans before classifying.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Custom rules for classification (optional)'), {
+    // Changed rules send the book back to step 2: extract and review the quotes again.
+    expect(screen.getByText('Rules changed. Extract the quotes again, then review them before finding speakers.')).toBeInTheDocument();
+    const next = screen.getByRole('group', { name: 'Next step' });
+    expect(next).toHaveTextContent('Next step · 2 of 6');
+    expect(within(next).getByRole('button', { name: 'Extract quotes' })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Quote and speaker rules (optional)'), {
       target: { value: 'Character quotes can also be in speaker: quote format.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Classify text' }));
+    expect(screen.getByRole('group', { name: 'Next step' })).toHaveTextContent('Next step · 4 of 6');
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Audiobook project sections' })).getByRole('button', { name: 'Cast & Voice Tools' }));
+    // No reasoning is on by default; unticked, Find speakers uses the model's own reasoning level.
+    const noReasoning = screen.getByRole('checkbox', { name: 'No reasoning (faster)' });
+    expect(noReasoning).toBeChecked();
+    fireEvent.click(noReasoning);
+    fireEvent.click(await screen.findByRole('button', { name: 'Find speakers again' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/reclassify', expect.objectContaining({
-        method: 'POST', body: JSON.stringify({ custom_rules: 'Character quotes can also be in speaker: quote format.' }),
+        method: 'POST', body: JSON.stringify({ custom_rules: 'Character quotes can also be in speaker: quote format.', no_reasoning: false }),
       }),
     ));
-    expect(await screen.findByLabelText('Text classification progress')).toHaveValue(18);
+    expect(await screen.findByLabelText('Find speakers progress')).toHaveValue(18);
     expect(screen.getByText('3 / 17 spans · analyzing chapters')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Classifying…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Finding speakers…' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/jobs/reclassify-one/pause', expect.objectContaining({ method: 'POST' }),
@@ -1727,7 +1890,7 @@ describe('AudiobookWorkspace', () => {
     await waitFor(() => expect(cancelRequests).toBe(2));
   });
 
-  it('keeps quote extraction separate from text classification', async () => {
+  it('keeps quote extraction separate from finding speakers', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       let body: unknown;
@@ -1770,9 +1933,12 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
 
     expect(await screen.findByRole('button', { name: 'Extracting quotes…' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Classify text' })).toBeDisabled();
-    expect(screen.getByText('Review the extracted quote spans first, including unwanted text, then classify text to assign speakers.')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Text classification progress')).not.toBeInTheDocument();
+    // While the quotes are extracted, step 2 waits: nothing to press, and no way yet to find speakers.
+    const next = screen.getByRole('group', { name: 'Next step' });
+    expect(next).toHaveTextContent('Finding the quotes in your book.');
+    expect(within(next).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Find speakers/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Find speakers progress')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
   });
 

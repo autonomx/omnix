@@ -184,11 +184,11 @@ def load_chapter_units(
         if not has_speakable_text(plan.tts_input_text):
             continue
         if row[4] is None:
-            raise ValueError('This span has no saved speaker assignment. Go to "Cast and direct" and click "Classify text" before previewing or rendering audio.')
+            raise ValueError('This span has no saved speaker assignment. Go to "Quotes" and click "Find speakers" at the bottom of the page before previewing or rendering audio.')
         if row[6] is None:
-            raise ValueError('Assign a speaker to this span: go to "Span review", choose a speaker, and click "Save interpretation" before previewing or rendering audio.')
+            raise ValueError('Assign a speaker to this span: go to "Quotes", choose a speaker, and click "Save interpretation" before previewing or rendering audio.')
         if row[8] is None and voice_profile_id is None:
-            raise ValueError('Assign a voice to this span\'s speaker: go to "Cast and direct" and choose an "Assigned voice" before previewing or rendering audio.')
+            raise ValueError('Assign a voice to this span\'s speaker: go to "Cast & Voice Tools" and choose an "Assigned voice" before previewing or rendering audio.')
         segments = split_speech_plan(plan)
         for segment_index, (start, end, segment_plan) in enumerate(segments):
             if not has_speakable_text(segment_plan.tts_input_text):

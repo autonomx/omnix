@@ -69,7 +69,7 @@ def test_classification_uses_reviewed_spans_and_changed_rules_require_extraction
     service = AudiobookService(None, None)
     context = SimpleNamespace(workspace_id="workspace")
     if not extraction_only and rules == "changed rules":
-        with pytest.raises(ValueError, match="review the quote spans"):
+        with pytest.raises(ValueError, match="Extract the quotes again with the current rules"):
             service.reclassify_source(context, project_id="book", custom_rules=rules)
         assert not queued
     else:
@@ -78,3 +78,7 @@ def test_classification_uses_reviewed_spans_and_changed_rules_require_extraction
         assert queued[0]["input_payload"]["custom_rules"] == rules
         if not extraction_only:
             assert queued[0]["input_payload"]["source_revision_id"] == "source"
+            # Find speakers answers without reasoning unless the listener unticks the box.
+            assert queued[0]["input_payload"]["no_reasoning"] is True
+            service.reclassify_source(context, project_id="book", custom_rules=rules, no_reasoning=False)
+            assert queued[1]["input_payload"]["no_reasoning"] is False

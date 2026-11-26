@@ -10523,6 +10523,11 @@
             "maxLength": 4000,
             "title": "Custom Rules",
             "type": "string"
+          },
+          "no_reasoning": {
+            "default": true,
+            "title": "No Reasoning",
+            "type": "boolean"
           }
         },
         "title": "ClassificationRequest",
@@ -85988,6 +85993,66 @@
           }
         },
         "summary": "Restore Span Text",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/steps/{step}/approve": {
+      "post": {
+        "operationId": "approve_audiobook_step_api_audiobook_projects__project_id__steps__step__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "enum": [
+                "speakers",
+                "cast",
+                "audio"
+              ],
+              "title": "Step",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Approve Audiobook Step Api Audiobook Projects  Project Id  Steps  Step  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Audiobook Step",
         "tags": [
           "audiobook"
         ]

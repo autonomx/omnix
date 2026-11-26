@@ -1267,7 +1267,24 @@ def annotate_span_batches(
                 expected_span_ids=expected,
                 request=context_payload,
             )
-            result = classifier(context_payload)
+            try:
+                result = classifier(context_payload)
+            except Exception as exc:
+                # Without this a call that fails before parsing (an unusable reply, a provider
+                # error) leaves only its exception type in the annotations' evidence.
+                _log_classification_event(
+                    "classification_batch_call_failed",
+                    log_context,
+                    project_id=project_id,
+                    chapter_id=entries[0][1].chapter_id if entries else None,
+                    mode="batch",
+                    batch_number=batch_number,
+                    attempt=attempt,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                    raw_reply=getattr(exc, "reply", None),
+                )
+                raise
             if attempt == "retry":
                 retry_result = result
             else:

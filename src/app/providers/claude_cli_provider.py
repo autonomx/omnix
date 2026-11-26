@@ -13,7 +13,8 @@ CLI's own ``--json-schema`` validation as well as to the prompt.
 
 A spoken turn (``live_turn=True``) answers without thinking first, whatever the
 model and effort, as does a call made with ``thinking=False`` (a quick structured
-classification, say: ``catalog.THINKING_OFF``). A spoken turn's call keeps a process ready: ``warm_live_turn`` starts
+classification, say: ``catalog.THINKING_OFF``). Effort ``off`` makes every call
+answer that way, on any model. A spoken turn's call keeps a process ready: ``warm_live_turn`` starts
 the first one, and a system message that changes between turns (``per_turn``)
 goes with the turn, so every turn of a call can take the waiting process.
 """
@@ -53,6 +54,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_CLAUDE_MODEL = "sonnet"
 DEFAULT_CLAUDE_PATH = "claude"
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+# Not a CLI effort level: no ``--effort``, and every call starts with thinking off.
+NO_THINKING_EFFORT = "off"
 MODEL_ALIASES = ("sonnet", "opus", "haiku", "fable")
 # The models the Claude Code CLI offers in its picker (its own catalog, newest first), as (id, name, description).
 CLAUDE_CLI_MODELS = (
@@ -338,8 +341,8 @@ class ClaudeCliProvider(BaseProvider):
         effort = str(extra.get("effort") or "").strip().lower()
         if not claude_path:
             raise ValueError("Claude CLI requires an executable path")
-        if effort and effort not in EFFORT_LEVELS:
-            raise ValueError(f"Claude CLI effort must be one of {', '.join(EFFORT_LEVELS)}")
+        if effort and effort not in (*EFFORT_LEVELS, NO_THINKING_EFFORT):
+            raise ValueError(f"Claude CLI effort must be one of {', '.join((*EFFORT_LEVELS, NO_THINKING_EFFORT))}")
         self.config.model = str(self.config.model or DEFAULT_CLAUDE_MODEL).strip() or DEFAULT_CLAUDE_MODEL
         extra["claude_path"] = claude_path
         extra["effort"] = effort
@@ -365,8 +368,9 @@ class ClaudeCliProvider(BaseProvider):
                  "description": "A model alias (sonnet, opus, haiku, fable) or a full model name."},
                 {"name": "claude_path", "type": "string", "default": DEFAULT_CLAUDE_PATH,
                  "description": "The Claude CLI executable; found automatically when left as 'claude'."},
-                {"name": "effort", "type": "string", "default": "", "enum": ["", *EFFORT_LEVELS],
-                 "description": "Effort level; empty uses the CLI default."},
+                {"name": "effort", "type": "string", "default": "",
+                 "enum": ["", NO_THINKING_EFFORT, *EFFORT_LEVELS],
+                 "description": "Effort level; empty uses the CLI default, off answers without thinking."},
             ],
         }
 
@@ -488,7 +492,7 @@ class ClaudeCliProvider(BaseProvider):
             "--no-session-persistence",
             "--disable-slash-commands",
         ]
-        if self.effort:
+        if self.effort in EFFORT_LEVELS:
             command += ["--effort", self.effort]
         if schema is not None:
             encoded = json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
@@ -530,6 +534,7 @@ class ClaudeCliProvider(BaseProvider):
         executable = resolve_claude_executable(self.claude_path)
         if not executable:
             raise ConnectionError(f"Claude CLI executable not found: {self.claude_path}")
+        thinking = thinking and self.effort != NO_THINKING_EFFORT
         key = owner or f"call:{id(threading.current_thread())}:{time.monotonic_ns()}"
         kind = _call_kind(executable, model, self.effort, system, schema, live_turn, thinking)
         spawn = lambda: self._spawn(executable, model, system, schema, live_turn=live_turn, thinking=thinking)  # noqa: E731

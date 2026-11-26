@@ -34,6 +34,7 @@ from .repository import PostgresAudiobookRepository, cancel_render_run_jobs
 from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
 from .render_readiness import check_book_render_readiness
+from .step_approvals import APPROVAL_STEPS, approval_basis, approval_blocker, approval_status
 from .speech_exclusions import load_removed_chapters
 from .export_service import start_export as create_export_job
 from .report import audit_export
@@ -98,6 +99,19 @@ _MIME = {
 
 if set(_MIME) != set(SUPPORTED_SOURCE_FORMATS):  # pragma: no cover - developer contract
     raise RuntimeError("audiobook source format MIME mappings are incomplete")
+
+
+def _latest_analysis_job_id(work: Any, context: TenantContext, project_id: str,
+                            source_revision_id: Any) -> str | None:
+    """The last Find speakers run that finished on the current source, which a speaker approval is bound to."""
+    if not source_revision_id:
+        return None
+    rows = work.jobs.query_jobs(
+        context, module="audiobook", job_type="audiobook.analyze",
+        input_fields=(("project_id", project_id), ("source_revision_id", str(source_revision_id))),
+        statuses=("completed",), order_by="completed_desc", limit=1,
+    )
+    return str(rows[0]["id"]) if rows else None
 
 
 def _projects(work: Any) -> PostgresAudiobookProjectRepository:
@@ -378,8 +392,37 @@ class AudiobookService:
                 work.connection, context, project_id=project_id,
                 source_revision_id=project["current_source_revision_id"],
             ).public()
+            project["step_approvals"] = approval_status(
+                project_settings, project, render_run_id=render_run_id,
+                analysis_job_id=_latest_analysis_job_id(
+                    work, context, project_id, project["current_source_revision_id"],
+                ),
+            )
             work.rollback()
         return {**project, "chapters": chapters}
+
+    def approve_step(self, context: TenantContext, *, project_id: str, step: str) -> dict[str, bool]:
+        """Sign off a production step at its current result; the approval lapses when that result changes."""
+        if step not in APPROVAL_STEPS:
+            raise ValueError(f"unknown step: {step}")
+        project = self.get_project(context, project_id, include_text=False)
+        blocker = approval_blocker(step, project)  # type: ignore[arg-type]
+        if blocker:
+            raise ValueError(blocker)
+        with unit_of_work(self.database) as work:
+            projects = _projects(work)
+            settings_row = projects.cover_summary(context, project_id)
+            settings = dict(settings_row[1] or {}) if settings_row else {}
+            basis = approval_basis(
+                step, project, render_run_id=str(settings.get("current_render_run_id") or "") or None,  # type: ignore[arg-type]
+                analysis_job_id=_latest_analysis_job_id(
+                    work, context, project_id, project["current_source_revision_id"],
+                ),
+            )
+            if not projects.save_step_approval(context, project_id, step, basis):
+                raise KeyError(project_id)
+            work.commit()
+        return self.get_project(context, project_id, include_text=False)["step_approvals"]  # type: ignore[return-value]
 
     def get_chapter(self, context: TenantContext, *, project_id: str,
                     chapter_id: str) -> dict[str, object]:
@@ -1280,8 +1323,12 @@ class AudiobookService:
         self, context: TenantContext, *, project_id: str,
         custom_rules: str | None = None,
         extraction_only: bool = False,
+        no_reasoning: bool = True,
     ) -> dict[str, str]:
-        """Queue either quote extraction for review or explicit speaker classification."""
+        """Queue either quote extraction for review or explicit speaker classification.
+
+        ``no_reasoning`` makes every speaker call answer without reasoning; False uses the provider's own level.
+        """
         if custom_rules is not None:
             custom_rules = self._normalize_classification_rules(custom_rules)
         with unit_of_work(self.database) as work:
@@ -1327,7 +1374,7 @@ class AudiobookService:
                 str(project[4]) != EXTRACTOR_VERSION or stale_detector
                 or custom_rules != str(project[7] or "")
             ):
-                raise ValueError("Extract quotes using the current rules, review the quote spans, then classify text.")
+                raise ValueError("Extract the quotes again with the current rules and review them, then find speakers.")
             needs_reextract = extraction_only
 
             if requested_rules is not None:
@@ -1382,6 +1429,7 @@ class AudiobookService:
                         "source_revision_id": str(source_revision_id),
                         "force_reclassify": True,
                         "custom_rules": custom_rules,
+                        "no_reasoning": no_reasoning,
                     },
                     "metadata": {"reason": "user_requested_reclassification"},
                     "max_attempts": 3,

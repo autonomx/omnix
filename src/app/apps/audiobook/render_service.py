@@ -243,7 +243,7 @@ def _synthesize(
                      budget, unit.span_id, parameters.get("parity_mode"))
     raise RenderFailure(
         f"The speech model did not finish “{text[:60]}” within {budget / rate:.0f} s, "
-        "even after a retry in parity mode. Edit or remove this passage in Span review, then render again.",
+        "even after a retry in parity mode. Edit or remove this passage in Quotes, then render again.",
     )
 
 

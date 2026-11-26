@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
 
@@ -43,6 +44,20 @@ class _AnalysisPaused(Exception):
 
 class _AnalysisCanceled(Exception):
     """Internal signal used after an analysis cancellation is acknowledged."""
+
+
+def unclassified_dialogue(annotations: Iterable[SpanAnnotation]) -> list[SpanAnnotation]:
+    """Dialogue spans the model gave no reading for; a text reclassification keeps a chapter's old ones over these.
+
+    A span whose verification call failed (``AI_VERIFICATION_UNAVAILABLE``) still has the model's first reading and
+    goes to human review with it. Failing the chapter for it threw away the whole chapter and retried it from the
+    start: with Haiku 4.5 one or two verification calls in a 177-span chapter failed on every pass, so a
+    reclassification never got past that chapter (2026-11-25).
+    """
+    return [
+        annotation for annotation in annotations
+        if annotation.role == "dialogue" and annotation.review_reason == "FALLBACK_NARRATOR"
+    ]
 
 
 def _pause_analysis_if_requested(
@@ -348,6 +363,10 @@ def _analyze_claimed(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
+        if classifier is not None and payload.get("no_reasoning", True) is not False:
+            # Step 3's "No reasoning" box, on unless the person unticks it (a job from before it, too).
+            classifier[1]["thinking"] = False
+            classifier[1]["reasoning_effort"] = "none"  # what the annotations' provenance records
         if classifier is not None and payload.get("custom_rules"):
             classifier[1]["custom_rules"] = payload["custom_rules"]
             classifier = (
@@ -605,17 +624,7 @@ def _analyze_claimed(
                         )
                     ),
                 )
-                failed_dialogue = [
-                    annotation
-                    for annotation in batch_analysis.annotations
-                    if (
-                        annotation.role == "dialogue"
-                        and annotation.review_reason in {
-                            "FALLBACK_NARRATOR",
-                            "AI_VERIFICATION_UNAVAILABLE",
-                        }
-                    )
-                ]
+                failed_dialogue = unclassified_dialogue(batch_analysis.annotations)
                 if force_reclassify and failed_dialogue:
                     raise RuntimeError(
                         "text reclassification could not classify "

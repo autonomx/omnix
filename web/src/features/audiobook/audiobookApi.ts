@@ -1,6 +1,6 @@
 import type { components } from './api/generated';
 import { unwrap } from '../../api/http';
-import type { Chapter, ExportRecord, ProjectDetail, ProjectSummary, SourceLibrary, VoiceRecord } from './audiobookTypes';
+import type { ApprovalStep, Chapter, ExportRecord, ProjectDetail, ProjectSummary, SourceLibrary, VoiceRecord } from './audiobookTypes';
 import { api } from './api/gateway';
 
 /**
@@ -44,10 +44,14 @@ export const audiobookApi = {
       params: { path: project(projectId) },
       body: { custom_rules: customRules },
     })),
-  reclassify: (projectId: string, customRules: string) =>
+  reclassify: (projectId: string, customRules: string, noReasoning: boolean) =>
     view<{ job_id: string }>(api.POST('/api/audiobook/projects/{project_id}/reclassify', {
       params: { path: project(projectId) },
-      body: { custom_rules: customRules },
+      body: { custom_rules: customRules, no_reasoning: noReasoning },
+    })),
+  approveStep: (projectId: string, step: ApprovalStep) =>
+    view<Record<ApprovalStep, boolean>>(api.POST('/api/audiobook/projects/{project_id}/steps/{step}/approve', {
+      params: { path: { project_id: projectId, step } },
     })),
   extractQuotes: (projectId: string, customRules: string) =>
     view<{ job_id: string }>(api.POST('/api/audiobook/projects/{project_id}/extract-quotes', {

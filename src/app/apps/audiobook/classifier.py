@@ -9,6 +9,7 @@ from typing import Any
 
 from app.providers import ChatMessage
 from app.providers.base import configured_reasoning_effort
+from app.providers.catalog import THINKING_OFF, provider_supports
 from app.providers.service import get_provider
 from app.settings.access import load_settings
 
@@ -140,8 +141,14 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], dict[str, Any]], dict
         messages = [ChatMessage(role="system", content=system_prompt),
                     ChatMessage(role="user", content=json.dumps(
                         context, ensure_ascii=False, sort_keys=True))]
+        thinking = details.get("thinking") is not False
         options: dict[str, Any] = {}
-        if context.get("task") == "discover_dialogue_style":
+        if not thinking:
+            # The job asked for no reasoning. A provider that can switch thinking off gets
+            # ``thinking=False`` from the contract; one with a reasoning level of its own gets "none".
+            if reasoning_effort and not provider_supports(provider, THINKING_OFF):
+                options["reasoning_effort"] = "none"
+        elif context.get("task") == "discover_dialogue_style":
             # Punctuation/style discovery is a bounded structural task. Keep it
             # cheap and independent from the xhigh semantic speaker pass.
             options["reasoning_effort"] = "low"
@@ -153,6 +160,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], dict[str, Any]], dict
             contract_id="audiobook.story_classification",
             request_timeout_seconds=_CLASSIFIER_REQUEST_TIMEOUT_SECONDS,
             options=options,
+            thinking=thinking,
         )
         if served_model:
             details["model"] = served_model

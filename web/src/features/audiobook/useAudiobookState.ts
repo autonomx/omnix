@@ -6,6 +6,9 @@ import { useSearchParam } from '../../shared/useSearchParam';
 export function useAudiobookState() {
   // The open project is in the URL (?project=), so it can be linked to (WP-9.6).
   const [projectId, setProjectId] = useSearchParam('project');
+  // A project opened without a page to show (or loaded from the URL) opens on its current step's page once its
+  // detail arrives; choosing a page first cancels that.
+  const [landingProjectId, setLandingProjectId] = useState<string | null>(projectId);
   const [ebookLibraryOpen, setEbookLibraryOpen] = useState(false);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
@@ -28,6 +31,8 @@ export function useAudiobookState() {
   const [speakerName, setSpeakerName] = useState('');
   const [classificationRules, setClassificationRules] = useState<Record<string, string>>({});
   const [createClassificationRules, setCreateClassificationRules] = useState('');
+  // Find speakers answers without reasoning unless the listener unticks the box.
+  const [noReasoning, setNoReasoning] = useState(true);
   const [sourceTerm, setSourceTerm] = useState('');
   const [spokenTerm, setSpokenTerm] = useState('');
   const [excludePageRanges, setExcludePageRanges] = useState('');
@@ -67,14 +72,15 @@ export function useAudiobookState() {
   const [notice, setNotice] = useState<string | null>(null);
 
   return {
-    projectId, setProjectId, ebookLibraryOpen, setEbookLibraryOpen, chapterId, setChapterId, selectedSpanId,
+    projectId, setProjectId, landingProjectId, setLandingProjectId, ebookLibraryOpen, setEbookLibraryOpen, chapterId, setChapterId, selectedSpanId,
     setSelectedSpanId, expandedSpanId, setExpandedSpanId, speakerFilter, setSpeakerFilter, selectedPronunciation,
     setSelectedPronunciation, selectedRemoval, setSelectedRemoval, workspaceMode, setWorkspaceMode, librarySection,
     setLibrarySection, projectSettingsOpen, setProjectSettingsOpen, sourceUploadProjectId, setSourceUploadProjectId,
     deleteConfirmationOpen, setDeleteConfirmationOpen, assetDeleteConfirmation, setAssetDeleteConfirmation,
     mobileRail, setMobileRail, title, setTitle, author, setAuthor, language, setLanguage, projectTitle,
     setProjectTitle, projectAuthor, setProjectAuthor, speakerName, setSpeakerName, classificationRules,
-    setClassificationRules, createClassificationRules, setCreateClassificationRules, sourceTerm, setSourceTerm,
+    setClassificationRules, createClassificationRules, setCreateClassificationRules, noReasoning, setNoReasoning,
+    sourceTerm, setSourceTerm,
     spokenTerm, setSpokenTerm, excludePageRanges, setExcludePageRanges, createExcludePageRanges,
     setCreateExcludePageRanges, pendingSource, setPendingSource, sourceText, setSourceText, sourceIntent,
     setSourceIntent, sourceLibraryFilename, setSourceLibraryFilename, sourceLibraryOpen, setSourceLibraryOpen,

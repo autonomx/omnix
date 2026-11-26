@@ -213,9 +213,14 @@ def test_classification_rules_are_forwarded_and_bounded(monkeypatch) -> None:
     client = TestClient(gateway)
     rules = "Character quotes can also be in speaker: quote format."
     assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": rules}).status_code == 202
-    assert calls == [{"project_id": "book", "custom_rules": rules}]
+    assert calls == [{"project_id": "book", "custom_rules": rules, "no_reasoning": True}]
     assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": "x" * 4001}).status_code == 422
     assert len(calls) == 1
+    # Unticking No reasoning uses the provider's own reasoning level.
+    assert client.post(
+        "/api/audiobook/projects/book/reclassify", json={"custom_rules": rules, "no_reasoning": False},
+    ).status_code == 202
+    assert calls[-1]["no_reasoning"] is False
 
 
 def test_saved_classification_rules_endpoint_and_default_reclassification(monkeypatch) -> None:
@@ -237,7 +242,7 @@ def test_saved_classification_rules_endpoint_and_default_reclassification(monkey
     assert client.post(path, json={"custom_rules": ""}).status_code == 200
     assert client.post(path, json={"custom_rules": "x" * 4001}).status_code == 422
     assert client.post("/api/audiobook/projects/book/reclassify").status_code == 202
-    assert calls[-1] == {"project_id": "book", "custom_rules": None}
+    assert calls[-1] == {"project_id": "book", "custom_rules": None, "no_reasoning": True}
 
 
 def test_span_speech_removal_and_restore_routes(monkeypatch) -> None:

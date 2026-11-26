@@ -47,7 +47,7 @@ export function AudiobookInspectorRail({ ws }: { ws: AudiobookWorkspaceModel }) 
   const {
     action, activeChapterId, aliasNames, busy, completedRenderChapters, documentDetailTab, ebookLibraryOpen,
     exportFormat, findSpeakerSpan, getInstalledModelRevision, libraryProjects, librarySection, mobileRail,
-    navigateLibrary, openDocument, openProject, openSourceUpload, project, queueChapterPreview,
+    navigateLibrary, openDocument, openManuscriptReview, openProject, openSourceUpload, project, queueChapterPreview,
     renderChapterCount, selectedAssetId, selectedChapter, selectedDocumentId, selectedLibraryProject,
     selectedVoice, setAliasNames, setAssetDeleteConfirmation, setChapterId, setDocumentDetailTab,
     setEbookLibraryOpen, setExportFormat, setLibrarySection, setMobileRail, setProjectSettingsOpen,
@@ -82,8 +82,8 @@ export function AudiobookInspectorRail({ ws }: { ws: AudiobookWorkspaceModel }) 
             </div> : null}
             <div className="audiobook-library-selected-actions">
               <button type="button" className="audiobook-primary-action" onClick={() => openProject(selectedLibraryProject)}>Open Project</button>
-              <button type="button" onClick={() => { openProject(selectedLibraryProject); setLibrarySection('exports'); setWorkspaceMode('production'); }}>Generate Audiobook</button>
-              <div><button type="button" onClick={() => { openProject(selectedLibraryProject); setLibrarySection('exports'); setWorkspaceMode('production'); }}>Export</button><button type="button" onClick={() => { openProject(selectedLibraryProject); setProjectSettingsOpen(true); }}>Project Settings</button></div>
+              <button type="button" onClick={() => openProject(selectedLibraryProject, 'exports')}>Generate Audiobook</button>
+              <div><button type="button" onClick={() => openProject(selectedLibraryProject, 'exports')}>Export</button><button type="button" onClick={() => { openProject(selectedLibraryProject); setProjectSettingsOpen(true); }}>Project Settings</button></div>
             </div>
             <section className="audiobook-library-activity" aria-label="Recent project activity">
               <div className="audiobook-library-activity-heading"><p className="eyebrow">Recent Activity</p></div>
@@ -131,7 +131,7 @@ export function AudiobookInspectorRail({ ws }: { ws: AudiobookWorkspaceModel }) 
             </select>
             <div className="audiobook-cast-actions"><button type="button" aria-label={`Find span for ${speaker.canonical_name}`} disabled={busy} onClick={() => void action(async () => {
               const location = await findSpeakerSpan(speaker.id);
-              setChapterId(location.chapterId); setSelectedSpanId(location.spanId); setWorkspaceMode('review');
+              setChapterId(location.chapterId); setSelectedSpanId(location.spanId); openManuscriptReview();
             }, `Located ${speaker.canonical_name}.`)}>Find span</button>
               <button type="button" aria-label={`Audition voice for ${speaker.canonical_name}`} disabled={busy} onClick={() => void action(async () => {
                 const modelRevision = await getInstalledModelRevision();

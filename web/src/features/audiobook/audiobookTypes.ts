@@ -132,11 +132,16 @@ export interface AudiobookJobView {
 /** Stability and Style Exaggeration (0–1) for the book, and characters' own levels. */
 export type BookPerformance = components['schemas']['BookPerformance'];
 
+/** The production steps the listener signs off: Find speakers, Cast voices, Render audio. */
+export type ApprovalStep = 'speakers' | 'cast' | 'audio';
+
 export interface ProjectDetail extends ProjectSummary {
   performance?: BookPerformance;
   /** After classifying: direct the dialogue always, only while Fish S2 Pro is the TTS engine, or never. */
   auto_direct_performance?: 'always' | 'fish' | 'never';
   render_readiness?: { ready: boolean; blockers: string[] };
+  /** Whether the listener has approved steps 3 to 5 at their current result; a change since then clears it. */
+  step_approvals?: Record<ApprovalStep, boolean>;
   classification_rules?: string;
   quote_extraction_rules?: string | null;
   cover_asset_id: string | null;

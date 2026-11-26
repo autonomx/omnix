@@ -16,7 +16,7 @@ export function useAudiobookProjectActions(ws: { module: OmnixModuleDefinition }
     language, openSourceUpload, pendingSource, project, selectedChapter, selectedEdit, selectedSpan,
     setAssetDeleteConfirmation, setAuthor, setBusy, setChapterId, setClassificationRules,
     setCreateClassificationRules, setCreateExcludePageRanges, setDeleteConfirmationOpen, setEbookLibraryOpen,
-    setError, setExcludePageRanges, setLanguage, setLibrarySection, setMobileRail, setNotice, setPendingSource,
+    setError, setExcludePageRanges, setLandingProjectId, setLanguage, setLibrarySection, setMobileRail, setNotice, setPendingSource,
     setProjectAuthor, setProjectId, setProjectSettingsOpen, setProjectTitle, setSelectedAssetId,
     setSelectedPronunciation, setSelectedRemoval, setSelectedSpanId, setSourceIntent, setSourceTerm, setSourceText,
     setSourceUploadProjectId, setSpanEdits, setSpokenTerm, setTitle, setWorkspaceMode, sourceText, title,
@@ -145,6 +145,7 @@ export function useAudiobookProjectActions(ws: { module: OmnixModuleDefinition }
   }
 
   function navigateLibrary(section: LibrarySection): void {
+    setLandingProjectId(null);
     setEbookLibraryOpen(false);
     setLibrarySection(section);
     setProjectSettingsOpen(false);
@@ -194,7 +195,8 @@ export function useAudiobookProjectActions(ws: { module: OmnixModuleDefinition }
     }, 0);
   }
 
-  function openProject(item: ProjectSummary): void {
+  /** Open a project on `section`, or, without one, on the page of the step the book is at. */
+  function openProject(item: ProjectSummary, section?: LibrarySection): void {
     setEbookLibraryOpen(false);
     setProjectId(item.id);
     setChapterId(null);
@@ -204,8 +206,9 @@ export function useAudiobookProjectActions(ws: { module: OmnixModuleDefinition }
     setError(null);
     setProjectSettingsOpen(false);
     setSourceUploadProjectId(null);
-    setLibrarySection('projects');
-    setWorkspaceMode('review');
+    setLandingProjectId(section ? null : item.id);
+    setLibrarySection(section ?? 'projects');
+    setWorkspaceMode(section === 'exports' ? 'production' : 'review');
     setMobileRail(null);
   }
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { audiobookApi } from './audiobookApi';
 import { AudiobookRenderQueueTable } from './AudiobookRenderQueue';
+import { currentPhaseIndex, phaseIndexForSection, productionPhases } from './audiobookProductionPhases';
 import { LibrarySection, renderJobLabel } from './audiobookWorkspaceModel';
 import type { AudiobookJobView } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
@@ -35,26 +36,68 @@ export function AudiobookProjectDialogs({ ws }: { ws: AudiobookWorkspaceModel })
   );
 }
 
-/** Project tabs and the pipeline and classification progress. */
+/** Which production step the open page belongs to, and the way on to the current step. */
+function AudiobookStepBanner({ ws }: { ws: AudiobookWorkspaceModel }) {
+  const phases = productionPhases(ws);
+  const index = phases.length ? phaseIndexForSection(ws.librarySection, phases) : null;
+  if (index === null) return null;
+  const phase = phases[index];
+  const current = currentPhaseIndex(phases);
+  const ahead = current >= 0 && current !== index ? phases[current] : null;
+  const approval = index === current ? phase.approve : undefined;
+  return (
+    <div className="audiobook-step-banner" role="group" aria-label="Where you are">
+      <div className="audiobook-step-banner-copy">
+        <p><strong>{`Step ${index + 1} of ${phases.length} · ${phase.title}`}</strong>
+          <span>{phase.complete ? (phase.approve ? 'Approved' : 'Done') : index === current ? 'You are here' : `Finish step ${current + 1} first`}</span></p>
+        <small className="audiobook-step-banner-detail">{phase.detail}</small>
+      </div>
+      {approval && <div className="audiobook-step-banner-approve">
+        {approval.blocked && <span id="audiobook-step-approve-blocked">{approval.blocked}</span>}
+        <button type="button" className="audiobook-primary-action" disabled={ws.busy || Boolean(approval.blocked)}
+          aria-describedby={approval.blocked ? 'audiobook-step-approve-blocked' : undefined} onClick={approval.run}>
+          {`${approval.label} →`}
+        </button>
+      </div>}
+      {ahead && <button type="button" onClick={ahead.open}>{`${current < index ? 'Back to' : 'Next:'} step ${current + 1} · ${ahead.title} →`}</button>}
+    </div>
+  );
+}
+
+/** Project tabs: the production path's pages in step order, then the library pages. */
+const PATH_TABS: [LibrarySection, string, string][] = [
+  ['projects', 'Quotes', '2'], ['review', 'Human review', '3'], ['characters', 'Cast & Voice Tools', '4'], ['exports', 'Render & Export', '5–6'],
+];
+const LIBRARY_TABS: [LibrarySection, string][] = [['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents']];
+
+/** Project tabs, the step banner, and the pipeline and classification progress. */
 export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
   const {
     action, busy, cancelReclassification, failedPipelineJob, latestPipelineJob, latestPipelineProgress,
-    librarySection, navigateLibrary, pauseReclassification, project, reclassificationJob, reclassificationProgress,
-    reclassificationRunning, resumeReclassification,
+    librarySection, navigateLibrary, openManuscriptReview, pauseReclassification, project, reclassificationJob, reclassificationProgress,
+    reclassificationRunning, resumeReclassification, workspaceMode,
   } = ws;
   if (!project) return null;
+  const tab = (section: LibrarySection, label: string, step?: string) => {
+    const selected = librarySection === section && (section !== 'projects' || workspaceMode === 'review');
+    return <button key={section} type="button" className={selected ? 'selected' : ''} aria-current={selected ? 'page' : undefined}
+      onClick={() => (section === 'projects' ? openManuscriptReview() : navigateLibrary(section))}>
+      {step && <span className="audiobook-tab-step" aria-hidden="true">{step}</span>}
+      {section === 'review' && project.review_issues.length ? `${label} (${project.review_issues.length})` : label}
+    </button>;
+  };
   return (
     <>
        <nav className="audiobook-project-tabs" aria-label="Audiobook project sections">
-        {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['review', project.review_issues.length ? `Human review (${project.review_issues.length})` : 'Human review'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
-          <button key={section} type="button" className={librarySection === section ? 'selected' : ''} aria-current={librarySection === section ? 'page' : undefined}
-            onClick={() => navigateLibrary(section)}>{label}</button>
-        ))}
+        {PATH_TABS.map(([section, label, step]) => tab(section, label, step))}
+        <span className="audiobook-tab-divider" aria-hidden="true" />
+        {LIBRARY_TABS.map(([section, label]) => tab(section, label))}
       </nav>
+      <AudiobookStepBanner ws={ws} />
       {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
         !(reclassificationRunning && latestPipelineJob.id === reclassificationJob?.id) &&
         <div className="audiobook-message audiobook-pipeline-status" role="status" aria-live="polite">
-          <p>{latestPipelineJob.type === 'audiobook.ingest' ? 'Phase 2: Extract quotes' : latestPipelineJob.type === 'audiobook.analyze' ? 'Phase 3: Classify text' : latestPipelineJob.type?.replace('audiobook.', '')} · {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>
+          <p>{latestPipelineJob.type === 'audiobook.ingest' ? 'Step 2: Extracting quotes' : latestPipelineJob.type === 'audiobook.analyze' ? 'Step 3: Finding speakers' : latestPipelineJob.type?.replace('audiobook.', '')} · {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>
           <div className="audiobook-pipeline-progress">
             <progress aria-label={`${latestPipelineJob.type?.replace('audiobook.', '') || 'Book processing'} progress`} max={100}
               {...(latestPipelineProgress === null ? {} : { value: latestPipelineProgress })} />
@@ -62,7 +105,7 @@ export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
           </div>
         </div>}
       {reclassificationJob && reclassificationRunning && <div className="audiobook-progress audiobook-reclassification-progress" role="status" aria-live="polite">
-        <div className="audiobook-reclassification-header"><strong>Phase 3: Classifying text</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text classification controls">
+        <div className="audiobook-reclassification-header"><strong>Step 3: Finding speakers</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Find speakers controls">
           {(reclassificationJob.status === 'paused'
             ? <button type="button" disabled={busy} onClick={resumeReclassification}>Resume</button>
             : reclassificationJob.status === 'cancel_requested'
@@ -72,7 +115,7 @@ export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
               : <button type="button" disabled={busy} onClick={pauseReclassification}>Pause</button>) }
           {reclassificationJob.status !== 'cancel_requested' && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={cancelReclassification}>Cancel</button>}
         </div></div>
-        <progress aria-label="Text classification progress" max={100} value={reclassificationProgress} />
+        <progress aria-label="Find speakers progress" max={100} value={reclassificationProgress} />
         <small>{`${reclassificationJob.progress?.current ?? 0} / ${reclassificationJob.progress?.total ?? '—'} spans · ${reclassificationJob.progress?.message || reclassificationJob.status}`}</small>
       </div>}
       {failedPipelineJob && <div className="audiobook-message error" role="alert">

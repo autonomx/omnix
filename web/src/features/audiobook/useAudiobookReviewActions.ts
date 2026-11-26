@@ -84,7 +84,7 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
     if (!project || !reclassificationJob) return;
     void action(
       () => audiobookApi.job(project!.id, reclassificationJob.id, 'pause'),
-      'Text classification pause requested.',
+      'Pausing Find speakers.',
     );
   }
 
@@ -92,7 +92,7 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
     if (!project || !reclassificationJob) return;
     void action(
       () => audiobookApi.job(project!.id, reclassificationJob.id, 'resume'),
-      'Text classification resumed.',
+      'Finding speakers again.',
     );
   }
 
@@ -100,7 +100,7 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
     if (!project || !reclassificationJob) return;
     void action(
       () => audiobookApi.job(project!.id, reclassificationJob.id, 'cancel'),
-      'Text classification canceled.',
+      'Find speakers canceled.',
     );
   }
 
@@ -154,7 +154,7 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
       () => audiobookApi.createSpeaker(projectId, {
         canonical_name: speaker.canonical_name,
       }),
-      `${speaker.canonical_name} added to the cast. Review spans are now assigned to this speaker.`,
+      `${speaker.canonical_name} added to the cast. Their lines are now assigned to this speaker.`,
     );
   }
 
@@ -165,7 +165,7 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
       for (const speaker of speakers) {
         await audiobookApi.createSpeaker(projectId, { canonical_name: speaker.canonical_name });
       }
-    }, `${speakers.length} detected speaker${speakers.length === 1 ? '' : 's'} added to the cast. Review spans are now assigned to them.`);
+    }, `${speakers.length} detected speaker${speakers.length === 1 ? '' : 's'} added to the cast. Their lines are now assigned to them.`);
   }
 
   function rejectProposedSpeaker(speaker: Speaker): void {

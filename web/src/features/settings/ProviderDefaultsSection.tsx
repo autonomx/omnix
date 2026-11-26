@@ -6,6 +6,7 @@ import { useSettingsProfileContext } from './SettingsProfileContext';
 
 const CLAUDE_EFFORT_OPTIONS = [
   { id: '', label: 'CLI default' },
+  { id: 'off', label: 'Off (no thinking)' },
   ...['low', 'medium', 'high', 'xhigh', 'max'].map((id) => ({ id, label: id })),
 ];
 

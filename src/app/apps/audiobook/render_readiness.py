@@ -22,7 +22,7 @@ class BookRenderReadiness:
 def check_book_render_readiness(connection, context, *, project_id, source_revision_id):
     result = BookRenderReadiness()
     if not source_revision_id:
-        result.blockers.append('Add a book: open "Book source", upload a file or choose one from the local library, then wait for quote extraction and review the spans.')
+        result.blockers.append('Add a book: open "Book source", upload a file or choose one from the local library, then wait for the quotes to be extracted and review them.')
         return result
     active = PostgresJobRepository(connection).query_jobs(
         context,
@@ -41,9 +41,9 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
     if active:
         job_types = {job["job_type"] for job in active}
         if "audiobook.ingest" in job_types:
-            result.blockers.append('Wait for quote extraction to finish, then go to "Span review" to review the quotes before clicking "Classify text".')
+            result.blockers.append('Wait for the quotes to be extracted, then go to "Quotes" to review them and click "Find speakers" at the bottom of the page.')
         elif "audiobook.analyze" in job_types:
-            result.blockers.append('Wait for text classification to finish, then go to "Span review" and resolve any review issues. If classification is paused, use "Resume" or "Cancel" in its progress controls.')
+            result.blockers.append('Wait for "Find speakers" to finish, then go to "Human review" and confirm any lines it was unsure about. If it is paused, use "Resume" or "Cancel" in its progress controls.')
         elif "audiobook.direct-performance" in job_types:
             result.blockers.append('Wait for "Direct performance" to finish writing the dialogue delivery directions, or cancel it.')
         else:
@@ -59,10 +59,10 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
         (context.workspace_id, str(source_revision_id), str(project_id)),
     ).fetchone()[0]
     if issues:
-        result.blockers.append(f'Go to "Span review" and resolve {issues} open review issue(s): confirm the speaker and role for each flagged passage and click "Save interpretation" before rendering.')
+        result.blockers.append(f'Go to "Human review" and resolve {issues} open review issue(s): confirm the speaker and role for each flagged passage and click "Save interpretation" before rendering.')
     chapters = PostgresAudiobookRepository(connection).list_chapters(context, str(source_revision_id))
     if not chapters:
-        result.blockers.append('No chapters are available. Open "Book source" and add or replace the source book, then wait for quote extraction and review the spans.')
+        result.blockers.append('No chapters are available. Open "Book source" and add or replace the source book, then wait for the quotes to be extracted and review them.')
     for chapter in chapters:
         try:
             units = load_chapter_units(connection, context, project_id=project_id, chapter_id=chapter["id"])
@@ -74,5 +74,5 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
         else:
             result.skipped_chapter_ids.append(str(chapter["id"]))
     if chapters and not result.chapters and not result.blockers:
-        result.blockers.append('The reading mode or text removals skip all source content. Review the reading mode in "Book source" and removed text in "Span review", then restore the content you want to read.')
+        result.blockers.append('The reading mode or text removals skip all source content. Review the reading mode in "Book source" and removed text in "Quotes", then restore the content you want to read.')
     return result
