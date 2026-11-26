@@ -107,6 +107,17 @@ def with_classification_rules(
     return classify
 
 
+def answer_without_reasoning(details: dict[str, Any]) -> None:
+    """Step 3's "No reasoning" box: the classifier's calls skip thinking, and its details say at what level.
+
+    A provider that can switch thinking off, or one with a reasoning level of its own, answers at "none";
+    any other keeps its own default, so the configured level stays on record.
+    """
+    details["thinking"] = False
+    if provider_supports(details.get("provider_id"), THINKING_OFF) or details.get("reasoning_effort"):
+        details["reasoning_effort"] = "none"
+
+
 def local_classifier() -> tuple[Callable[[dict[str, Any]], dict[str, Any]], dict[str, Any]] | None:
     """Build a classifier from the configured Omnix chat provider.
 

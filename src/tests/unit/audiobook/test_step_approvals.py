@@ -70,3 +70,48 @@ def test_projects_from_before_approvals_count_as_approved_once_past_the_step():
         "speakers": True, "cast": True, "audio": True}
     # Once one step is approved, a stored approval decides that step only.
     assert approval_status(_approved("cast", _project(), **INPUTS), _project(), **INPUTS)["speakers"] is True
+    # Finding speakers again, or new lines to confirm, withdraws an implied approval too.
+    running = _project(pipeline_jobs=[{"type": "audiobook.analyze", "status": "running"}])
+    assert approval_status({}, running, analysis_job_id="a", render_run_id="run-one")["speakers"] is False
+    assert approval_status({}, _project(review_issues=[{"id": "i"}]), analysis_job_id="a",
+                           render_run_id="run-one")["speakers"] is False
+
+
+def test_approving_checks_and_fingerprints_one_read_of_the_project(monkeypatch):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from app.apps.audiobook.service import AudiobookService, _latest_analysis_job_id
+
+    saved, views = [], []
+    project = _project()
+
+    def view(_self, _work, _context, _project_id, *, include_text):
+        views.append(include_text)
+        return project, [], "run-one", "analyze-one"
+
+    @contextmanager
+    def work(_database):
+        yield SimpleNamespace(connection=None, commit=lambda: saved.append("commit"))
+
+    monkeypatch.setattr(AudiobookService, "_project_view", view)
+    monkeypatch.setattr(AudiobookService, "get_project", lambda *_a, **_k: {"step_approvals": {"speakers": True}})
+    monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.service.PostgresAudiobookProjectRepository.save_step_approval",
+                        lambda _self, _context, _project_id, step, basis: saved.append((step, basis)) or True)
+    service = AudiobookService(None, None)
+    assert service.approve_step(SimpleNamespace(workspace_id="w"), project_id="book", step="speakers") == {"speakers": True}
+    assert views == [False]
+    assert saved == [("speakers", approval_basis("speakers", project, **INPUTS)), "commit"]
+
+    project = _project(review_issues=[{"id": "i"}])
+    saved.clear()
+    with pytest.raises(ValueError, match="Confirm the speaker"):
+        service.approve_step(SimpleNamespace(workspace_id="w"), project_id="book", step="speakers")
+    assert saved == []
+
+    # The latest Find speakers run of any status: a new run, even a failed one, withdraws the approval.
+    queries = []
+    jobs = SimpleNamespace(query_jobs=lambda *_a, **kwargs: queries.append(kwargs) or [{"id": "analyze-two"}])
+    assert _latest_analysis_job_id(SimpleNamespace(jobs=jobs), None, "book", "source") == "analyze-two"
+    assert "statuses" not in queries[0] and queries[0]["order_by"] == "created_desc"

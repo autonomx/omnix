@@ -41,7 +41,7 @@ function SourceProgress({ uploadingName, extraction, failed }: { uploadingName: 
 }
 
 /** The one thing to do next, then the six steps at a glance: done, current, or waiting on an earlier step. */
-function ProductionPath({ phases, onOpenAssets, reasoningOption }: { phases: ProductionPhase[]; onOpenAssets: () => void; reasoningOption: ReactNode }) {
+function ProductionPath({ phases, busy, onOpenAssets, reasoningOption }: { phases: ProductionPhase[]; busy: boolean; onOpenAssets: () => void; reasoningOption: ReactNode }) {
   const current = currentPhaseIndex(phases);
   const step = current >= 0 ? phases[current] : null;
   return (
@@ -54,8 +54,8 @@ function ProductionPath({ phases, onOpenAssets, reasoningOption }: { phases: Pro
         </div>
         {step
           ? step.next.label && step.next.run && (step.next.reasoningChoice
-            ? <div className="audiobook-next-step-actions"><button type="button" className="audiobook-primary-action" onClick={step.next.run}>{step.next.label}</button>{reasoningOption}</div>
-            : <button type="button" className="audiobook-primary-action" onClick={step.next.run}>{step.next.label}</button>)
+            ? <div className="audiobook-next-step-actions"><button type="button" className="audiobook-primary-action" disabled={busy} onClick={step.next.run}>{step.next.label}</button>{reasoningOption}</div>
+            : <button type="button" className="audiobook-primary-action" disabled={busy} onClick={step.next.run}>{step.next.label}</button>)
           : <button type="button" className="audiobook-primary-action" onClick={onOpenAssets}>Open Assets</button>}
       </div>
       <ol className="audiobook-production-flow-steps" aria-label="Audiobook production steps">
@@ -112,7 +112,7 @@ export function AudiobookProjectHeader({ ws }: { ws: AudiobookWorkspaceModel }) 
             ? <button type="button" className="audiobook-status-issues" onClick={() => navigateLibrary('review')}>{project.review_issues.length} issues to resolve</button>
             : <span>{current < 0 ? 'Audiobook exported' : current === 4 ? `${completedRenderChapters} / ${renderChapterCount} chapters rendered` : `Now: ${phases[current].title}`}</span>}</div><b>{stepsPercent}%</b><progress aria-label="Steps done" max={100} value={stepsPercent} /></div>
         </div>
-        <ProductionPath phases={phases} onOpenAssets={() => navigateLibrary('assets')} reasoningOption={<NoReasoningOption ws={ws} />} />
+        <ProductionPath phases={phases} busy={busy} onOpenAssets={() => navigateLibrary('assets')} reasoningOption={<NoReasoningOption ws={ws} />} />
         {projectSettingsOpen && <div className="audiobook-project-actions">
           <section className="audiobook-settings-card audiobook-source-settings" aria-labelledby="audiobook-source-settings-title">
             <div className="audiobook-settings-heading"><div><p className="eyebrow">Step 1: Add book</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${sourceBusy ? 'working' : project.current_source_revision_id ? 'attached' : 'needed'}`}>{sourceState}</span></div>

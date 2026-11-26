@@ -15,7 +15,7 @@ const PAST_QUOTE_REVIEW_STATES = new Set(['analyzing', ...CLASSIFIED_STATES]);
 export type PhaseNextAction = { prompt: string; label?: string; run?: () => void; reasoningChoice?: boolean };
 
 /** The listener's sign-off that ends a step and moves the book on; `blocked` says what must happen first. */
-export type PhaseApproval = { label: string; run: () => void; blocked?: string };
+export type PhaseApproval = { label: string; run: () => void; blocked?: string; reasoningChoice?: boolean };
 
 export type ProductionPhase = {
   title: string;
@@ -132,7 +132,7 @@ export function productionPhases(ws: AudiobookWorkspaceModel): ProductionPhase[]
     { title: 'Review quotes', detail: 'Read each chapter and check the quotes Omnix found. Fix any that are wrong, remove text that should not be read aloud, then approve the quotes.',
       status: extractionRunning ? 'Extracting quotes' : rulesNeedExtraction ? 'Rules changed' : quotesReviewed ? 'Reviewed' : hasSource ? 'Ready to review' : 'Waiting for a book',
       complete: quotesReviewed, action: 'Open quotes', open: openManuscriptReview, next: quotesNext,
-      approve: { label: 'Approve quotes', run: approveQuotes,
+      approve: { label: 'Approve quotes', run: approveQuotes, reasoningChoice: true,
         blocked: !hasSource ? 'Add a book first.' : extractionRunning ? 'Wait for the quotes to be extracted.'
           : rulesNeedExtraction ? 'Your rules changed. Extract the quotes again first.' : undefined } },
     { title: 'Find speakers', detail: 'Omnix works out who says each line. Confirm the lines it was unsure about, check the speakers, then approve them.',

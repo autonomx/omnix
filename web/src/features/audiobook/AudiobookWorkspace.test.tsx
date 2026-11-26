@@ -1364,10 +1364,14 @@ describe('AudiobookWorkspace', () => {
     const quotesBanner = await screen.findByRole('group', { name: 'Where you are' });
     expect(quotesBanner).toHaveTextContent('Step 2 of 6 · Review quotesYou are here');
     expect(quotesBanner).toHaveTextContent('Fix any that are wrong, remove text that should not be read aloud, then approve the quotes.');
+    // Approving the quotes starts Find speakers, so its No reasoning box sits beside the button.
+    fireEvent.click(within(quotesBanner).getByRole('checkbox', { name: 'No reasoning (faster)' }));
     fireEvent.click(within(quotesBanner).getByRole('button', { name: 'Approve quotes →' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/reclassify', expect.objectContaining({ method: 'POST' }),
     ));
+    const reclassify = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/reclassify'));
+    expect(JSON.parse(String((reclassify?.[1] as RequestInit).body))).toMatchObject({ no_reasoning: false });
     expect(await screen.findByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
 
     // Step 3: the speakers are found, so the listener approves them and moves on to casting.

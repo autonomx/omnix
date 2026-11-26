@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.apps.audiobook.classifier import local_classifier, with_classification_rules
+from app.apps.audiobook.classifier import answer_without_reasoning, local_classifier, with_classification_rules
 
 
 def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
@@ -160,12 +160,13 @@ def test_no_reasoning_turns_thinking_off_or_sends_reasoning_none(monkeypatch) ->
     provider, calls = _provider_returning('{"spans":[]}', '{"styles":[]}')
     monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: provider)
     classify, details = local_classifier()
-    details["thinking"] = False
+    answer_without_reasoning(details)
 
     classify({"task": "analyze_story_dialogue_full_context"})
     classify({"task": "discover_dialogue_style"})
     assert [call.get("thinking") for call in calls] == [False, False]
     assert all("reasoning_effort" not in call for call in calls)
+    assert details["reasoning_effort"] == "none"  # what the annotations' provenance records
 
     codex_calls = []
 
@@ -180,11 +181,30 @@ def test_no_reasoning_turns_thinking_off_or_sends_reasoning_none(monkeypatch) ->
 
     monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: Codex())
     classify, details = local_classifier()
-    details["thinking"] = False
+    answer_without_reasoning(details)
     classify({"task": "discover_dialogue_style"})
     classify({"task": "analyze_story_dialogue_full_context"})
     assert [call["reasoning_effort"] for call in codex_calls] == ["none", "none"]
     assert all("thinking" not in call for call in codex_calls)
+    assert details["reasoning_effort"] == "none"
+
+    # A provider with neither switch keeps its own default, and the record does not claim "none".
+    generic_calls = []
+
+    class Generic:
+        provider_name = "openai_compatible"
+        config = SimpleNamespace(model="some-model")
+
+        def chat_completion(self, **kwargs):
+            generic_calls.append(kwargs)
+            return SimpleNamespace(model="some-model", content='{"spans":[]}')
+
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: Generic())
+    classify, details = local_classifier()
+    answer_without_reasoning(details)
+    classify({"task": "analyze_story_dialogue_full_context"})
+    assert "reasoning_effort" not in generic_calls[0] and "thinking" not in generic_calls[0]
+    assert details["reasoning_effort"] is None
 
 
 def test_unusable_classifier_output_is_a_parse_failure(monkeypatch) -> None:

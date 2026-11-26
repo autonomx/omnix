@@ -96,10 +96,12 @@ def approval_status(settings: Mapping[str, Any], project: Mapping[str, Any], *,
     }
     status: dict[str, bool] = {}
     for step in APPROVAL_STEPS:
-        if step not in stored:
+        if approval_blocker(step, project) is not None:
+            status[step] = False
+        elif step not in stored:
             status[step] = implied[step]
-            continue
-        status[step] = approval_blocker(step, project) is None and stored[step] == approval_basis(
-            step, project, analysis_job_id=analysis_job_id, render_run_id=render_run_id,
-        )
+        else:
+            status[step] = stored[step] == approval_basis(
+                step, project, analysis_job_id=analysis_job_id, render_run_id=render_run_id,
+            )
     return status

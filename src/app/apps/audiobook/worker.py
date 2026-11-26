@@ -30,7 +30,7 @@ from .export_service import run_export_once
 from .annotation import (
     Speaker, SpeakerAlias, SpanAnnotation, annotate_span_batches, narrator_id,
 )
-from .classifier import local_classifier, with_classification_rules
+from .classifier import answer_without_reasoning, local_classifier, with_classification_rules
 from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
 from .leases import JOB_LEASE_SECONDS, claimed_job
@@ -365,8 +365,7 @@ def _analyze_claimed(
         classifier = local_classifier()
         if classifier is not None and payload.get("no_reasoning", True) is not False:
             # Step 3's "No reasoning" box, on unless the person unticks it (a job from before it, too).
-            classifier[1]["thinking"] = False
-            classifier[1]["reasoning_effort"] = "none"  # what the annotations' provenance records
+            answer_without_reasoning(classifier[1])
         if classifier is not None and payload.get("custom_rules"):
             classifier[1]["custom_rules"] = payload["custom_rules"]
             classifier = (

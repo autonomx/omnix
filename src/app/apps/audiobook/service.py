@@ -103,13 +103,16 @@ if set(_MIME) != set(SUPPORTED_SOURCE_FORMATS):  # pragma: no cover - developer 
 
 def _latest_analysis_job_id(work: Any, context: TenantContext, project_id: str,
                             source_revision_id: Any) -> str | None:
-    """The last Find speakers run that finished on the current source, which a speaker approval is bound to."""
+    """The latest Find speakers run on the current source, which a speaker approval is bound to.
+
+    Any status counts: starting the step again, even a run that then fails, withdraws the approval.
+    """
     if not source_revision_id:
         return None
     rows = work.jobs.query_jobs(
         context, module="audiobook", job_type="audiobook.analyze",
         input_fields=(("project_id", project_id), ("source_revision_id", str(source_revision_id))),
-        statuses=("completed",), order_by="completed_desc", limit=1,
+        order_by="created_desc", limit=1,
     )
     return str(rows[0]["id"]) if rows else None
 
@@ -237,189 +240,192 @@ class AudiobookService:
     def get_project(self, context: TenantContext, project_id: str, *,
                     include_text: bool = True) -> dict[str, object]:
         with unit_of_work(self.database) as work:
-            repository = PostgresAudiobookRepository(work.connection)
-            projects = _projects(work)
-            project = repository.get_project(context, project_id)
-            if project is None:
-                raise KeyError(project_id)
-            cover_row = projects.cover_summary(context, project_id)
-            project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
-            project["cover_created_at"] = cover_row[2].isoformat() if cover_row and cover_row[2] else None
-            project_settings = dict(cover_row[1] or {}) if cover_row else {}
-            project["classification_rules"] = str(project_settings.get("classification_rules") or "")
-            project["quote_extraction_rules"] = project_settings.get("quote_extraction_rules")
-            project["audiobook_mode"] = str(
-                project_settings.get("audiobook_mode") or "standard"
-            )
-            project["performance"] = normalize_performance(project_settings.get("performance"))
-            project["auto_direct_performance"] = auto_direct_policy(project_settings.get(AUTO_DIRECT_SETTING))
-            project["document_structure_version"] = DOCUMENT_STRUCTURE_VERSION
-            project["render_policy_version"] = RENDER_POLICY_VERSION
-            project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
-            source_row = projects.source_summary(context, project_id)
-            project["source_format"] = str(source_row[0]) if source_row else None
-            project["source_filename"] = str(source_row[1]) if source_row and source_row[1] else None
-            project["source_size_bytes"] = int(source_row[2]) if source_row and source_row[2] is not None else 0
-            project["source_created_at"] = source_row[3].isoformat() if source_row and source_row[3] else None
-            if project["current_source_revision_id"] and include_text:
-                chapters = repository.list_chapters(context, project["current_source_revision_id"])
-                for chapter in chapters:
-                    chapter["spans"] = repository.list_spans(context, chapter["id"])
-                    chapter["span_count"] = len(chapter["spans"])
-            elif project["current_source_revision_id"]:
-                chapter_rows = projects.chapter_summaries(
-                    context, project["current_source_revision_id"],
-                )
-                chapters = [{"id": str(row[0]), "ordinal": int(row[1]),
-                             "title": str(row[2]), "canonical_hash": str(row[3]),
-                             "character_count": int(row[4]), "span_count": int(row[5])}
-                            for row in chapter_rows]
-            else:
-                chapters = []
-            removed_chapters = load_removed_chapters(work.connection, context, project_id)
-            for chapter in chapters:
-                chapter["audio_removal_id"] = removed_chapters.get(chapter["id"])
-            project["review_issues"] = (
-                PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(
-                    context, project_id,
-                ) if project["state"] not in {"extracted", "ingesting"} else []
-            )
-            project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
-            pronunciation_rows = projects.current_pronunciations(context, project_id)
-            project["pronunciations"] = [
-                {"source_term": row[0], "spoken_term": row[1], "revision": row[2]}
-                for row in pronunciation_rows
-            ]
-            pipeline_rows = work.jobs.query_jobs(
-                context,
-                module="audiobook",
-                job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter",
-                           "audiobook.direct-performance"),
-                input_fields=(("project_id", project_id),),
-                order_by="created_desc",
-                limit=30,
-            )
-            project["pipeline_jobs"] = [
-                {"id": str(job["id"]), "type": str(job["job_type"]), "status": str(job["status"]),
-                 "progress": dict(job["progress"] or {}),
-                 "error": dict(job["error"]) if job["error"] else None,
-                 "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
-                 "chapter_id": str((job["input_payload"] or {}).get("chapter_id") or "") or None,
-                 "can_retry": (str(job["status"]) in {"failed", "canceled", "stale"}
-                               and not dict(job["metadata"] or {}).get("superseded_by")),
-                 "superseded_by": dict(job["metadata"] or {}).get("superseded_by"),
-                 "reason": dict(job["metadata"] or {}).get("reason"),
-                 "migration": dict(job["metadata"] or {}).get("migration"),
-                 "pause_requested": bool(dict(job["metadata"] or {}).get("pause_requested")),
-                 "paused": bool(dict(job["metadata"] or {}).get("paused"))}
-                for job in pipeline_rows
-            ]
-            render_run_id = str(project_settings.get("current_render_run_id") or "") or None
-            if render_run_id:
-                job_rows = work.jobs.query_jobs(
-                    context,
-                    module="audiobook",
-                    job_type="audiobook.render-chapter",
-                    input_fields=(("render_run_id", render_run_id),),
-                    order_by="created_asc",
-                    limit=500,
-                )
-                queue_positions = {str(job["id"]): index + 1 for index, job in enumerate(_render_queue(job_rows))}
-                assembly_by_chapter = _completed_chapter_assemblies(work, context, render_run_id)
-                assemblies = projects.chapter_assemblies(context, list(assembly_by_chapter.values()))
-                project["render_jobs"] = []
-                for job in job_rows:
-                    chapter_id = str((job["input_payload"] or {}).get("chapter_id") or "")
-                    assembly = assemblies.get(assembly_by_chapter.get(chapter_id, ""))
-                    project["render_jobs"].append({
-                        "id": str(job["id"]), "status": str(job["status"]),
-                        "progress": dict(job["progress"] or {}),
-                        "error": dict(job["error"]) if job["error"] else None,
-                        "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
-                        "chapter_id": chapter_id,
-                        "can_retry": bool((dict(job["error"] or {}).get("retryable", True))
-                                          and int(job["attempt_count"]) < int(job["max_attempts"])),
-                        "queue_position": queue_positions.get(str(job["id"])),
-                        "audio": {"duration_seconds": assembly[2]} if assembly else None,
-                    })
-                total, completed = projects.render_key_counts(
-                    context, [str(job["id"]) for job in job_rows],
-                )
-                project["render_progress"] = {"total": total, "completed": completed}
-            else:
-                project["render_jobs"] = []
-                project["render_progress"] = {"total": 0, "completed": 0}
-            export_rows = projects.recent_export_manifests(context, project_id)
-            project["export_jobs"] = [
-                {"id": job["id"], "status": job["status"], "progress": job["progress"],
-                 "error": job["error"], "format": str(row[1]), "manifest_id": str(row[2]),
-                "manifest_hash": str(row[3])}
-                for row in export_rows
-                if (job := work.jobs.get_job(context, str(row[0]))) is not None
-            ]
-            preview_rows = work.jobs.query_jobs(
-                context,
-                module="audiobook",
-                job_type="audiobook.preview-span",
-                input_fields=(("project_id", project_id),),
-                order_by="created_desc",
-                limit=40,
-            )
-            project["preview_jobs"] = [
-                {"id": job["id"], "status": job["status"], "progress": job["progress"],
-                 "error": job["error"], "span_id": (job["input_payload"] or {}).get("span_id"),
-                 "output_refs": job["output_refs"]}
-                for job in preview_rows
-            ]
-            if project["current_source_revision_id"]:
-                text_rows = projects.chapter_texts(
-                    context, project["current_source_revision_id"],
-                )
-                for chapter, row in zip(chapters, text_rows):
-                    chapter["word_count"] = len(str(row[0]).split())
-                    chapter["estimated_runtime_seconds"] = (chapter["word_count"] / WORDS_PER_MINUTE) * 60.0
-                word_count = sum(chapter["word_count"] for chapter in chapters)
-                project["word_count"] = word_count
-                project["estimated_runtime_seconds"] = (word_count / WORDS_PER_MINUTE) * 60.0
-                project["actual_runtime_seconds"] = projects.assembled_runtime_seconds(
-                    context, project["current_source_revision_id"],
-                )
-            else:
-                project["word_count"] = 0
-                project["estimated_runtime_seconds"] = 0.0
-                project["actual_runtime_seconds"] = 0.0
-            project["render_readiness"] = check_book_render_readiness(
-                work.connection, context, project_id=project_id,
-                source_revision_id=project["current_source_revision_id"],
-            ).public()
-            project["step_approvals"] = approval_status(
-                project_settings, project, render_run_id=render_run_id,
-                analysis_job_id=_latest_analysis_job_id(
-                    work, context, project_id, project["current_source_revision_id"],
-                ),
-            )
+            project, chapters, _render_run_id, _analysis_job_id = self._project_view(
+                work, context, project_id, include_text=include_text)
             work.rollback()
         return {**project, "chapters": chapters}
+
+    def _project_view(self, work: Any, context: TenantContext, project_id: str, *,
+                      include_text: bool) -> tuple[dict[str, Any], list[dict[str, Any]], str | None, str | None]:
+        """The project, its chapters, and the render run and Find speakers run its approvals are bound to."""
+        repository = PostgresAudiobookRepository(work.connection)
+        projects = _projects(work)
+        project = repository.get_project(context, project_id)
+        if project is None:
+            raise KeyError(project_id)
+        cover_row = projects.cover_summary(context, project_id)
+        project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
+        project["cover_created_at"] = cover_row[2].isoformat() if cover_row and cover_row[2] else None
+        project_settings = dict(cover_row[1] or {}) if cover_row else {}
+        project["classification_rules"] = str(project_settings.get("classification_rules") or "")
+        project["quote_extraction_rules"] = project_settings.get("quote_extraction_rules")
+        project["audiobook_mode"] = str(
+            project_settings.get("audiobook_mode") or "standard"
+        )
+        project["performance"] = normalize_performance(project_settings.get("performance"))
+        project["auto_direct_performance"] = auto_direct_policy(project_settings.get(AUTO_DIRECT_SETTING))
+        project["document_structure_version"] = DOCUMENT_STRUCTURE_VERSION
+        project["render_policy_version"] = RENDER_POLICY_VERSION
+        project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
+        source_row = projects.source_summary(context, project_id)
+        project["source_format"] = str(source_row[0]) if source_row else None
+        project["source_filename"] = str(source_row[1]) if source_row and source_row[1] else None
+        project["source_size_bytes"] = int(source_row[2]) if source_row and source_row[2] is not None else 0
+        project["source_created_at"] = source_row[3].isoformat() if source_row and source_row[3] else None
+        if project["current_source_revision_id"] and include_text:
+            chapters = repository.list_chapters(context, project["current_source_revision_id"])
+            for chapter in chapters:
+                chapter["spans"] = repository.list_spans(context, chapter["id"])
+                chapter["span_count"] = len(chapter["spans"])
+        elif project["current_source_revision_id"]:
+            chapter_rows = projects.chapter_summaries(
+                context, project["current_source_revision_id"],
+            )
+            chapters = [{"id": str(row[0]), "ordinal": int(row[1]),
+                         "title": str(row[2]), "canonical_hash": str(row[3]),
+                         "character_count": int(row[4]), "span_count": int(row[5])}
+                        for row in chapter_rows]
+        else:
+            chapters = []
+        removed_chapters = load_removed_chapters(work.connection, context, project_id)
+        for chapter in chapters:
+            chapter["audio_removal_id"] = removed_chapters.get(chapter["id"])
+        project["review_issues"] = (
+            PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(
+                context, project_id,
+            ) if project["state"] not in {"extracted", "ingesting"} else []
+        )
+        project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
+        pronunciation_rows = projects.current_pronunciations(context, project_id)
+        project["pronunciations"] = [
+            {"source_term": row[0], "spoken_term": row[1], "revision": row[2]}
+            for row in pronunciation_rows
+        ]
+        # Read before the pipeline jobs: a Find speakers run queued after this read shows
+        # there as running (which blocks approving speakers), never as an approved new result.
+        analysis_job_id = _latest_analysis_job_id(work, context, project_id, project["current_source_revision_id"])
+        pipeline_rows = work.jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter",
+                       "audiobook.direct-performance"),
+            input_fields=(("project_id", project_id),),
+            order_by="created_desc",
+            limit=30,
+        )
+        project["pipeline_jobs"] = [
+            {"id": str(job["id"]), "type": str(job["job_type"]), "status": str(job["status"]),
+             "progress": dict(job["progress"] or {}),
+             "error": dict(job["error"]) if job["error"] else None,
+             "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
+             "chapter_id": str((job["input_payload"] or {}).get("chapter_id") or "") or None,
+             "can_retry": (str(job["status"]) in {"failed", "canceled", "stale"}
+                           and not dict(job["metadata"] or {}).get("superseded_by")),
+             "superseded_by": dict(job["metadata"] or {}).get("superseded_by"),
+             "reason": dict(job["metadata"] or {}).get("reason"),
+             "migration": dict(job["metadata"] or {}).get("migration"),
+             "pause_requested": bool(dict(job["metadata"] or {}).get("pause_requested")),
+             "paused": bool(dict(job["metadata"] or {}).get("paused"))}
+            for job in pipeline_rows
+        ]
+        render_run_id = str(project_settings.get("current_render_run_id") or "") or None
+        if render_run_id:
+            job_rows = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.render-chapter",
+                input_fields=(("render_run_id", render_run_id),),
+                order_by="created_asc",
+                limit=500,
+            )
+            queue_positions = {str(job["id"]): index + 1 for index, job in enumerate(_render_queue(job_rows))}
+            assembly_by_chapter = _completed_chapter_assemblies(work, context, render_run_id)
+            assemblies = projects.chapter_assemblies(context, list(assembly_by_chapter.values()))
+            project["render_jobs"] = []
+            for job in job_rows:
+                chapter_id = str((job["input_payload"] or {}).get("chapter_id") or "")
+                assembly = assemblies.get(assembly_by_chapter.get(chapter_id, ""))
+                project["render_jobs"].append({
+                    "id": str(job["id"]), "status": str(job["status"]),
+                    "progress": dict(job["progress"] or {}),
+                    "error": dict(job["error"]) if job["error"] else None,
+                    "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
+                    "chapter_id": chapter_id,
+                    "can_retry": bool((dict(job["error"] or {}).get("retryable", True))
+                                      and int(job["attempt_count"]) < int(job["max_attempts"])),
+                    "queue_position": queue_positions.get(str(job["id"])),
+                    "audio": {"duration_seconds": assembly[2]} if assembly else None,
+                })
+            total, completed = projects.render_key_counts(
+                context, [str(job["id"]) for job in job_rows],
+            )
+            project["render_progress"] = {"total": total, "completed": completed}
+        else:
+            project["render_jobs"] = []
+            project["render_progress"] = {"total": 0, "completed": 0}
+        export_rows = projects.recent_export_manifests(context, project_id)
+        project["export_jobs"] = [
+            {"id": job["id"], "status": job["status"], "progress": job["progress"],
+             "error": job["error"], "format": str(row[1]), "manifest_id": str(row[2]),
+            "manifest_hash": str(row[3])}
+            for row in export_rows
+            if (job := work.jobs.get_job(context, str(row[0]))) is not None
+        ]
+        preview_rows = work.jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_type="audiobook.preview-span",
+            input_fields=(("project_id", project_id),),
+            order_by="created_desc",
+            limit=40,
+        )
+        project["preview_jobs"] = [
+            {"id": job["id"], "status": job["status"], "progress": job["progress"],
+             "error": job["error"], "span_id": (job["input_payload"] or {}).get("span_id"),
+             "output_refs": job["output_refs"]}
+            for job in preview_rows
+        ]
+        if project["current_source_revision_id"]:
+            text_rows = projects.chapter_texts(
+                context, project["current_source_revision_id"],
+            )
+            for chapter, row in zip(chapters, text_rows):
+                chapter["word_count"] = len(str(row[0]).split())
+                chapter["estimated_runtime_seconds"] = (chapter["word_count"] / WORDS_PER_MINUTE) * 60.0
+            word_count = sum(chapter["word_count"] for chapter in chapters)
+            project["word_count"] = word_count
+            project["estimated_runtime_seconds"] = (word_count / WORDS_PER_MINUTE) * 60.0
+            project["actual_runtime_seconds"] = projects.assembled_runtime_seconds(
+                context, project["current_source_revision_id"],
+            )
+        else:
+            project["word_count"] = 0
+            project["estimated_runtime_seconds"] = 0.0
+            project["actual_runtime_seconds"] = 0.0
+        project["render_readiness"] = check_book_render_readiness(
+            work.connection, context, project_id=project_id,
+            source_revision_id=project["current_source_revision_id"],
+        ).public()
+        project["step_approvals"] = approval_status(
+            project_settings, project, render_run_id=render_run_id, analysis_job_id=analysis_job_id,
+        )
+        return project, chapters, render_run_id, analysis_job_id
 
     def approve_step(self, context: TenantContext, *, project_id: str, step: str) -> dict[str, bool]:
         """Sign off a production step at its current result; the approval lapses when that result changes."""
         if step not in APPROVAL_STEPS:
             raise ValueError(f"unknown step: {step}")
-        project = self.get_project(context, project_id, include_text=False)
-        blocker = approval_blocker(step, project)  # type: ignore[arg-type]
-        if blocker:
-            raise ValueError(blocker)
         with unit_of_work(self.database) as work:
-            projects = _projects(work)
-            settings_row = projects.cover_summary(context, project_id)
-            settings = dict(settings_row[1] or {}) if settings_row else {}
-            basis = approval_basis(
-                step, project, render_run_id=str(settings.get("current_render_run_id") or "") or None,  # type: ignore[arg-type]
-                analysis_job_id=_latest_analysis_job_id(
-                    work, context, project_id, project["current_source_revision_id"],
-                ),
-            )
-            if not projects.save_step_approval(context, project_id, step, basis):
+            # The check and the fingerprint come from one read, so a result that changes
+            # meanwhile is never approved unseen: it no longer matches the stored fingerprint.
+            project, _chapters, render_run_id, analysis_job_id = self._project_view(
+                work, context, project_id, include_text=False)
+            blocker = approval_blocker(step, project)
+            if blocker:
+                raise ValueError(blocker)
+            basis = approval_basis(step, project, render_run_id=render_run_id,
+                                   analysis_job_id=analysis_job_id)
+            if not _projects(work).save_step_approval(context, project_id, step, basis):
                 raise KeyError(project_id)
             work.commit()
         return self.get_project(context, project_id, include_text=False)["step_approvals"]  # type: ignore[return-value]

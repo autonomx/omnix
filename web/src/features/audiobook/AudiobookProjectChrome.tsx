@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { audiobookApi } from './audiobookApi';
+import { NoReasoningOption } from './AudiobookReasoningOption';
 import { AudiobookRenderQueueTable } from './AudiobookRenderQueue';
 import { currentPhaseIndex, phaseIndexForSection, productionPhases } from './audiobookProductionPhases';
 import { LibrarySection, renderJobLabel } from './audiobookWorkspaceModel';
@@ -58,6 +59,7 @@ function AudiobookStepBanner({ ws }: { ws: AudiobookWorkspaceModel }) {
           aria-describedby={approval.blocked ? 'audiobook-step-approve-blocked' : undefined} onClick={approval.run}>
           {`${approval.label} →`}
         </button>
+        {approval.reasoningChoice && <NoReasoningOption ws={ws} />}
       </div>}
       {ahead && <button type="button" onClick={ahead.open}>{`${current < index ? 'Back to' : 'Next:'} step ${current + 1} · ${ahead.title} →`}</button>}
     </div>
