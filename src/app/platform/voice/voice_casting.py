@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from app.assets.canonical_voice_clones import canonical_voice_clone_root
+from app.assets.canonical_voice_clones import canonical_voice_clone_root
+
 
 from app.caching.bounded_cache import bounded_lru_cache
 
 DEFAULT_VOICE = "default"
+_WORDS = re.compile(r"[a-z]{3,}")
 
 
 def _casting(root: Path) -> dict[str, dict[str, Any]]:
@@ -64,11 +68,42 @@ def castable_voices(root: Path | None = None) -> list[dict[str, Any]]:
     return [dict(row) for row in _catalog(str(root or canonical_voice_clone_root())) if row["castable"]]
 
 
+def match_voices(people: Iterable[Mapping[str, str]], voices: list[dict[str, Any]],
+                 cast: Mapping[str, Mapping[str, str]],
+                 tie_break: Callable[[str], Callable[[], float]]) -> dict[str, dict[str, str]]:
+    """The voices for the people not in ``cast`` yet (ST-4.0, from the RPG's EV-13 casting).
+
+    Each person (``speaker_id``, ``lore``, and the author's ``voice``) keeps the author's voice when it is castable;
+    otherwise they get the castable voice whose description shares most words with their lore, among the voices no
+    one has yet when any are left. ``tie_break(speaker_id)`` gives that person's tie-break draws, one per candidate
+    voice in id order, so the caller owns the randomness and a cast repeats exactly.
+    """
+    castable = {row["voice_id"]: row for row in voices}
+    if not castable:
+        return {}
+    taken = {row["voice_id"] for row in cast.values()}
+    made: dict[str, dict[str, str]] = {}
+    for person in people:
+        speaker = person["speaker_id"]
+        if speaker in cast:
+            continue
+        if person.get("voice") in castable:
+            choice, chosen_by = person["voice"], "author"
+        else:
+            words = set(_WORDS.findall(person.get("lore", "").casefold()))
+            free = [voice for voice in castable if voice not in taken] or list(castable)
+            draw = tie_break(speaker)
+            choice = max(sorted(free), key=lambda voice: (
+                len(words & set(_WORDS.findall(castable[voice]["description"].casefold()))), draw()))
+            chosen_by = "auto"
+        made[speaker] = {"voice_id": choice, "voice_revision": castable[choice]["revision"], "chosen_by": chosen_by}
+        taken.add(choice)
+    return made
+
+
 def split_sentences(text: str, *, max_chars: int = 240) -> list[str]:
     """``text`` by sentence (its closing quote kept), so a long block is heard from its first sentence; a sentence
     running past ``max_chars`` is cut at the word that passes it."""
-    import re
-
     ends = re.compile(r"[.!?…][\"”’')\]]*$")
     sentences: list[str] = []
     words: list[str] = []
@@ -117,4 +152,4 @@ def pcm_of(audio: bytes) -> tuple[bytes, int]:
         return source.readframes(source.getnframes()), source.getframerate()
 
 
-__all__ = ["DEFAULT_VOICE", "as_wav", "castable_voices", "pcm_of", "render_key", "split_sentences"]
+__all__ = ["DEFAULT_VOICE", "as_wav", "castable_voices", "match_voices", "pcm_of", "render_key", "split_sentences"]

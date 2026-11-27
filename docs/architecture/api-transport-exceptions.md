@@ -21,7 +21,6 @@ WebSocket routes are absent from OpenAPI by protocol definition. The gateway and
 
 | Source | Route path |
 |---|---|
-| `src/app/apps/audiobook/streaming.py` | `/ws/audiobook` |
 | `src/app/platform/voice/stt_proxy_routes.py` | `/api/stt/ws/transcribe` |
 | `src/app/platform/voice/tts_pcm_websocket.py` | `/api/tts/stream/websocket` |
 | `src/app/platform/voice/tts_live_call_websocket.py` | `/api/tts/live-call/websocket` |
@@ -34,6 +33,8 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 |---|---|---|---|
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py` | GET | `/api/rpg/sessions/{session_id}/export` | A campaign package, downloaded as a JSON file (its shape documented) |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_voice_routes.py` | POST | `/api/rpg/sessions/{session_id}/speech-audio` | A sentence's PCM16 audio, streamed as it is synthesized |
+| `src/app/apps/story/routes.py` | POST | `/api/story/projects/{project_id}/speech-audio` | A story sentence's PCM16 audio, streamed as it is synthesized (the shared platform speech service) |
+| `src/app/apps/story/routes.py` | GET | `/api/story/projects/{project_id}/export/{export_format}` | The story as an EPUB, DOCX or PDF book, downloaded as a named file |
 | `src/app/apps/audiobook/routes.py` | DELETE | `/api/audiobook/projects/{project_id}` | 204 No Content |
 | `src/app/apps/character_interactions/routes.py` | DELETE | `/api/memory-owners/{owner_id}/records/{memory_id}` | 204 No Content |
 | `src/app/apps/character_interactions/routes.py` | POST | `/api/memory-owners/{owner_id}/suggestions/{candidate_id}/reject` | 204 No Content |
@@ -96,7 +97,6 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/assistant/workspace/desktop-temporal-capture.ts` | `TemporalDesktopPayload` | A browser capture result, later mapped into `AssistantContextChatRequest` and `DesktopCompanionObserveRequest` fields |
 | `web/src/features/assistant/workspace/live-voice-cue-asset-bridge.ts` | `*Payload` | Window event details between the voice cue modules |
 | `web/src/features/assistant/workspace/live-voice-unified-audio-controller.ts` | `LiveVoiceRequestPayload` | The browser correlation id (`live_voice_turn_id`) the chat request carries for fetch middleware; the gateway ignores it |
-| `web/src/features/storyteller/StoryAudioPanel.tsx` | `StoryAudioWebSocketPayload` | The start message on the `/ws/audiobook` WebSocket |
 | `web/src/features/storyteller/storyModel.ts` | `StoryGenerationRequest` | Mutation variables; the wire body is `CreateJobRequest` |
 | `web/src/features/trading/indicators/indicatorWorkerProtocol.ts` | `IndicatorWorker*` | Messages to and from the indicator Web Worker |
 | `web/src/features/trading/indicators/indicatorScheduler.ts` | `PendingRequest` | The scheduler's record of a worker request |
@@ -112,4 +112,4 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/rpg/RpgWorldGenerationDashboard.tsx` | `RetryRequest` | Mutation variables; the wire body is the generation review retry request |
 | `web/src/features/rpg/rpgTurnUiStore.ts` | `CachedResponse` | A turn response the fetch middleware keeps per session to replay into the turn UI |
 
-Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `web/src/features/assistant/workspace/live-voice-messages.ts`; story audio control messages in `web/src/features/storyteller/storyAudioMessages.ts`.
+Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `web/src/features/assistant/workspace/live-voice-messages.ts`.

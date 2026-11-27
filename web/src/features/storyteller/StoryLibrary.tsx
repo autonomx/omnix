@@ -1,32 +1,33 @@
-/** The library sidebar: drafts, stories and trash. */
-import { StoryLibraryItem, StoryLibrarySection, TrashedStoryLibraryItem, librarySectionLabel, librarySections } from './storyModel';
+/** The library sidebar: writing projects, interactive ones, and the server's trash (ST-1.2). */
+import { StoryLibrarySection, librarySectionLabel, librarySections } from './storyModel';
+import type { StoryLibraryEntry } from './storyProjectModel';
 
 export function StoryLibrary({
-  items,
-  activeItemId,
+  entries,
+  activeId,
   activeSection,
-  trashItems,
+  trashEntries,
   onNewDraft,
   onSectionChange,
   onSelect,
-  onTrashActiveItem,
+  onShowTrash,
+  onRestore,
+  onPurge,
 }: {
-  items: StoryLibraryItem[];
-  activeItemId: string | null;
+  entries: StoryLibraryEntry[];
+  activeId: string | null;
   activeSection: StoryLibrarySection;
-  trashItems: TrashedStoryLibraryItem[];
+  trashEntries: StoryLibraryEntry[];
   onNewDraft: () => void;
   onSectionChange: (section: StoryLibrarySection) => void;
-  onSelect: (itemId: string) => void;
-  onTrashActiveItem: () => void;
+  onSelect: (projectId: string) => void;
+  onShowTrash: () => void;
+  onRestore: (entry: StoryLibraryEntry) => void;
+  onPurge: (entry: StoryLibraryEntry) => void;
 }) {
-  const sectionItems = activeSection === 'drafts'
-    ? items.filter((item) => item.source === 'draft')
-    : activeSection === 'stories'
-      ? items.filter((item) => item.source !== 'draft')
-      : activeSection === 'trash'
-        ? trashItems
-        : [];
+  const sectionEntries = activeSection === 'interactive'
+    ? entries.filter((entry) => entry.mode === 'interactive')
+    : entries.filter((entry) => entry.mode !== 'interactive');
   return (
     <aside className="storyteller-library" aria-label="Story library">
       <div className="storyteller-panel-heading compact">
@@ -48,10 +49,25 @@ export function StoryLibrary({
       </nav>
       <section className="storyteller-library-section" aria-label={`${librarySectionLabel(activeSection)} library pane`}>
         <p className="eyebrow">{librarySectionLabel(activeSection)}</p>
-        {sectionItems.length ? (
+        {activeSection === 'trash' ? (
+          trashEntries.length ? (
+            <div className="storyteller-recent-list">
+              {trashEntries.map((entry) => (
+                <article className="storyteller-trash-entry" key={entry.id}>
+                  <span className="storyteller-thumb muted" />
+                  <div><strong>{entry.title}</strong><small>{entry.subtitle}</small></div>
+                  <div className="storyteller-trash-actions">
+                    <button aria-label={`Restore ${entry.title}`} type="button" onClick={() => onRestore(entry)}>Restore</button>
+                    <button aria-label={`Delete ${entry.title} forever`} type="button" onClick={() => onPurge(entry)}>Delete forever</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : <LibrarySectionEmpty section="trash" onNewDraft={onNewDraft} />
+        ) : sectionEntries.length ? (
           <div className="storyteller-recent-list">
-            {sectionItems.map((item) => (
-              <LibraryItemButton activeItemId={activeItemId} item={item} key={item.id} onSelect={onSelect} />
+            {sectionEntries.map((entry) => (
+              <LibraryEntryButton activeId={activeId} entry={entry} key={entry.id} onSelect={onSelect} />
             ))}
           </div>
         ) : (
@@ -61,14 +77,14 @@ export function StoryLibrary({
       <section>
         <p className="eyebrow">Recent stories</p>
         <div className="storyteller-recent-list">
-          {items.length ? (
-            items.slice(0, 6).map((item) => (
-              <LibraryItemButton activeItemId={activeItemId} item={item} key={item.id} onSelect={onSelect} />
+          {entries.length ? (
+            entries.slice(0, 6).map((entry) => (
+              <LibraryEntryButton activeId={activeId} entry={entry} key={entry.id} onSelect={onSelect} />
             ))
           ) : (
             <article>
               <span className="storyteller-thumb muted" />
-              <div><strong>No stories yet</strong><small>Generate or save a story</small></div>
+              <div><strong>No stories yet</strong><small>Generate a story to begin</small></div>
             </article>
           )}
         </div>
@@ -77,8 +93,8 @@ export function StoryLibrary({
         aria-pressed={activeSection === 'trash'}
         className={`storyteller-trash ${activeSection === 'trash' ? 'active' : ''}`}
         type="button"
-        title={activeSection === 'trash' ? 'Trash' : 'Move selected story to Trash'}
-        onClick={onTrashActiveItem}
+        title="Stories in Trash"
+        onClick={onShowTrash}
       >
         Trash
       </button>
@@ -86,38 +102,35 @@ export function StoryLibrary({
   );
 }
 
-export function LibraryItemButton({ item, activeItemId, onSelect }: {
-  item: StoryLibraryItem;
-  activeItemId: string | null;
-  onSelect: (itemId: string) => void;
+export function LibraryEntryButton({ entry, activeId, onSelect }: {
+  entry: StoryLibraryEntry;
+  activeId: string | null;
+  onSelect: (projectId: string) => void;
 }) {
   return (
     <button
-      aria-pressed={item.id === activeItemId}
-      className={item.id === activeItemId ? 'active' : ''}
+      aria-pressed={entry.id === activeId}
+      className={entry.id === activeId ? 'active' : ''}
       type="button"
-      onClick={() => onSelect(item.id)}
+      onClick={() => onSelect(entry.id)}
     >
-      <span className={`storyteller-thumb ${item.source === 'asset' ? 'muted' : ''}`} />
-      <div><strong>{item.title}</strong><small>{item.subtitle}</small></div>
+      <span className="storyteller-thumb" />
+      <div><strong>{entry.title}</strong><small>{entry.subtitle}</small></div>
     </button>
   );
 }
 
 export function LibrarySectionEmpty({ section, onNewDraft }: { section: StoryLibrarySection; onNewDraft: () => void }) {
   const copy: Record<StoryLibrarySection, { title: string; body: string }> = {
-    drafts: { title: 'No saved drafts', body: 'Start a blank draft or save the active manuscript.' },
-    stories: { title: 'No story assets yet', body: 'Generated and saved stories will appear here.' },
-    characters: { title: 'Characters not created yet', body: 'Character cards will attach cast details to future generations.' },
-    'world-notes': { title: 'World notes not created yet', body: 'World notes will collect lore, places, factions, and rules.' },
-    prompts: { title: 'Prompt presets not created yet', body: 'Prompt presets will save reusable Storyteller instructions.' },
-    trash: { title: 'Trash is empty', body: 'Stories moved to Trash will be hidden from recent stories.' },
+    stories: { title: 'No stories yet', body: 'Stories you write appear here.' },
+    interactive: { title: 'No interactive stories yet', body: 'Stories you play in Interactive mode appear here.' },
+    trash: { title: 'Trash is empty', body: 'Stories moved to Trash can be restored from here.' },
   };
   return (
     <article className="storyteller-library-empty" role="status">
       <strong>{copy[section].title}</strong>
       <small>{copy[section].body}</small>
-      {section === 'drafts' ? <button type="button" onClick={onNewDraft}>Start blank draft</button> : null}
+      {section === 'stories' ? <button type="button" onClick={onNewDraft}>Start blank draft</button> : null}
     </article>
   );
 }

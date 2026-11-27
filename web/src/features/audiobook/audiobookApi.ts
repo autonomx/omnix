@@ -26,6 +26,11 @@ export const audiobookApi = {
     view<{ projects: ProjectSummary[] }>(api.GET('/api/audiobook/projects', { params: { query: offset ? { offset } : {} } })),
   createProject: (body: Schemas['CreateAudiobookProject']) =>
     view<ProjectSummary>(api.POST('/api/audiobook/projects', { body })),
+  /** A story from Storyteller becomes a book, its cast the speakers and its spoken lines already attributed (ST-4.4). */
+  importStory: (body: Schemas['StoryImport']) =>
+    view<ProjectSummary & { job_id: string; source_asset_id: string }>(
+      api.POST('/api/audiobook/projects/import-story', { body }),
+    ),
   project: (projectId: string) =>
     view<ProjectDetail>(api.GET('/api/audiobook/projects/{project_id}', { params: { path: project(projectId) } })),
   chapter: (projectId: string, chapterId: string) =>

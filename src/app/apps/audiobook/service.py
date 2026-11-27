@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from uuid import uuid4
 from pathlib import Path
 from io import BytesIO
@@ -28,6 +29,7 @@ from .extraction import (
     normalize_extraction_settings,
 )
 from .spans import DETECTOR_VERSION
+from .story_import import StoryImport, story_markdown, story_speaker_lines
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .project_repository import PostgresAudiobookProjectRepository
 from .repository import PostgresAudiobookRepository, cancel_render_run_jobs
@@ -50,6 +52,7 @@ from .document_structure import (
 from .models import SourceSpan
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 
+_LOG = logging.getLogger(__name__)
 
 WORDS_PER_MINUTE = 150.0
 # Chapter render order is job priority: the first chapter gets the base, each
@@ -163,6 +166,47 @@ class AudiobookService:
             result["classification_rules"] = custom_rules
             work.commit()
         return result
+
+    def import_story(self, context: TenantContext, *, story: StoryImport) -> dict[str, object]:
+        """A new project from a story handed over from Storyteller (ST-4.4).
+
+        Its cast becomes the project's speakers, with their aliases confirmed, and its text the source; its
+        spoken lines are kept with the source, so analysis starts from the speakers the story gives. A
+        project whose cast or source could not be set up is hidden rather than left half made.
+        """
+        project = self.create_project(context, title=story.title, author=story.author)
+        project_id = str(project["id"])
+        try:
+            with unit_of_work(self.database) as work:
+                reviews = PostgresAudiobookReviewRepository(work.connection)
+                # Every member's name first, so a name another member also goes by stays its own speaker's.
+                speakers = [reviews.add_speaker(context, project_id=project_id, canonical_name=member.name)
+                            for member in story.cast if member.name.strip()]
+                skipped_aliases: list[str] = []
+                for member, speaker in zip([member for member in story.cast if member.name.strip()], speakers):
+                    for alias in member.aliases:
+                        try:
+                            reviews.confirm_alias(context, project_id=project_id, speaker_id=str(speaker["id"]),
+                                                  alias=alias, mode="story_handoff")
+                        except ValueError:
+                            # Another member's name or alias, or the member's own name: not this member's.
+                            skipped_aliases.append(alias)
+                work.commit()
+            if skipped_aliases:
+                _LOG.info("story import %s left out aliases that name someone else: %d",
+                          story.story_project_id, len(skipped_aliases))
+            source = self.submit_source(
+                context, project_id=project_id, source_format="md",
+                content=story_markdown(story).encode("utf-8"), filename=f"{story.title}.md",
+                story_lines={"story_project_id": story.story_project_id,
+                             "story_version_id": story.story_version_id,
+                             "lines": story_speaker_lines(story)},
+            )
+        except Exception:
+            self.delete_project(context, project_id=project_id)
+            raise
+        return {**project, "job_id": source["job_id"], "source_asset_id": source["source_asset_id"],
+                "skipped_aliases": skipped_aliases}
 
     @staticmethod
     def _normalize_classification_rules(rules: str) -> str:
@@ -1727,11 +1771,15 @@ class AudiobookService:
         self, context: TenantContext, *, project_id: str,
         source_format: str, content: bytes | BinaryIO, filename: str,
         extraction_settings: dict[str, object] | None = None,
+        story_lines: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """Store a source and queue its ingestion.
 
         ``content`` is bytes or a seekable binary stream; a stream is hashed
         and stored in bounded chunks, never read into memory whole.
+        ``story_lines`` (a story handed over from Storyteller: its project,
+        version and spoken lines) is kept with the source in the same
+        transaction, for speaker analysis.
         """
         if source_format not in _MIME:
             raise UnsupportedSource(f"unsupported source format: {source_format}")
@@ -1764,6 +1812,10 @@ class AudiobookService:
                     "metadata": {"filename": filename, "source_format": source_format,
                                  "extraction_settings": extraction_settings},
                 })
+                if story_lines is not None:
+                    _projects(work).save_story_lines(
+                        context, project_id, source_asset_id=asset_id, **story_lines,
+                    )
                 work.jobs.create_job(context, {
                     "id": job_id, "module": "audiobook", "job_type": "audiobook.ingest",
                     "resource_class": "cpu", "priority": 0,

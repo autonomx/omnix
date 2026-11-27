@@ -1,0 +1,122 @@
+@layer features {
+  .storyteller-plan-body {
+    display: grid;
+    gap: 0.8rem;
+    padding: 0 0.85rem 0.85rem;
+  }
+
+  .storyteller-plan-start,
+  .storyteller-plan-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .storyteller-plan-start label {
+    align-items: center;
+    display: flex;
+    font-size: 0.86rem;
+    gap: 0.4rem;
+  }
+
+  .storyteller-plan-start input {
+    width: 4.5rem;
+  }
+
+  .storyteller-plan-chapters,
+  .storyteller-plan-chapters ol {
+    display: grid;
+    gap: 0.55rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .storyteller-plan-chapters > li {
+    background: color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
+    border-radius: 0.625rem;
+    display: grid;
+    gap: 0.55rem;
+    justify-items: start;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .storyteller-plan-chapters header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .storyteller-plan-chapters header span {
+    color: var(--fg-violet-920);
+    font-size: 0.8rem;
+  }
+
+  .storyteller-plan-chapters header input {
+    flex: 1 1 12rem;
+  }
+
+  .storyteller-plan-chapters ol {
+    width: 100%;
+  }
+
+  .storyteller-plan-chapters ol li {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .storyteller-plan-chapters ol li > div {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .storyteller-plan-chapters small,
+  .storyteller-plan-body > p {
+    color: var(--fg-slate-730);
+    font-size: 0.82rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .storyteller-plan input,
+  .storyteller-plan textarea {
+    background: color-mix(in srgb, var(--bg-slate-130) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    font: inherit;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.65rem;
+  }
+
+  .storyteller-plan textarea {
+    resize: vertical;
+    width: 100%;
+  }
+
+  .storyteller-plan button {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    font-size: 0.82rem;
+    min-height: 2.1rem;
+    padding: 0 0.7rem;
+  }
+
+  .storyteller-plan button[type='submit'] {
+    background: linear-gradient(135deg, var(--c-cyan-720), var(--accent-violet-540));
+  }
+
+  .storyteller-plan button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}

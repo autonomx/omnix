@@ -12,7 +12,13 @@
   }
 
   .storyteller-mode-switch button,
-  .story-mode-suggestions button {
+  .story-mode-suggestions button,
+  .story-mode-run-actions button,
+  .story-mode-jump button,
+  .story-mode-branches button,
+  .story-mode-read-aloud > button,
+  .story-mode-read-page,
+  .story-mode-continue-from {
     background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
     border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
     border-radius: 0.55rem;
@@ -59,8 +65,11 @@
       radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--c-sky-800) 8%, transparent), transparent 15rem),
       radial-gradient(circle at 80% 8%, color-mix(in srgb, var(--accent-violet-540) 12%, transparent), transparent 12rem),
       linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-170-2) 94%, transparent), color-mix(in srgb, var(--bg-slate-130) 92%, transparent));
+    max-height: 78vh;
     min-height: 34rem;
+    overflow-y: auto;
     padding: clamp(1.25rem, 3vw, 3rem);
+    position: relative;
   }
 
   .story-mode-reader h2 {
@@ -83,6 +92,97 @@
 
   .story-mode-page p {
     margin: 0 0 1.35rem;
+  }
+
+  .story-mode-page + .story-mode-page {
+    border-top: 1px solid color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+  }
+
+  .story-mode-move {
+    color: var(--fg-violet-830);
+    font-family: inherit;
+    font-style: italic;
+  }
+
+  .story-mode-move span {
+    font-size: 0.78rem;
+    font-style: normal;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .story-mode-read-page,
+  .story-mode-continue-from {
+    font-family: system-ui, sans-serif;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.7rem;
+  }
+
+  .story-mode-read-page {
+    margin-bottom: 0.6rem;
+  }
+
+  /* The line being read aloud. */
+  .story-mode-page .storyteller-line-speaking {
+    background: color-mix(in srgb, var(--c-sky-800) 9%, transparent);
+    border-radius: 0.35rem;
+    box-shadow: -0.6rem 0 0 color-mix(in srgb, var(--c-sky-800) 9%, transparent), 0.6rem 0 0 color-mix(in srgb, var(--c-sky-800) 9%, transparent);
+  }
+
+  .story-mode-read-aloud {
+    color: var(--fg-violet-830);
+    display: grid;
+    font-size: 0.86rem;
+    gap: 0.5rem;
+  }
+
+  .story-mode-controls .story-mode-autoplay {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .story-mode-run-actions {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .story-mode-run-actions button:disabled,
+  .story-mode-suggestions button:disabled,
+  .story-mode-branches button:disabled,
+  .story-mode-read-aloud > button:disabled,
+  .story-mode-continue-from:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .story-mode-jump,
+  .story-mode-branches {
+    color: var(--fg-violet-830);
+    display: grid;
+    font-size: 0.86rem;
+    gap: 0.4rem;
+  }
+
+  .story-mode-jump button {
+    overflow: hidden;
+    padding: 0.45rem 0.65rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .story-mode-branches div {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+
+  .story-mode-branches button {
+    padding: 0.35rem 0.7rem;
   }
 
   .story-mode-controls {
@@ -118,6 +218,18 @@
 
   .story-mode-suggestions button:hover,
   .story-mode-suggestions button:focus-visible,
+  .story-mode-run-actions button:hover,
+  .story-mode-run-actions button:focus-visible,
+  .story-mode-jump button:hover,
+  .story-mode-jump button:focus-visible,
+  .story-mode-branches button:hover,
+  .story-mode-branches button:focus-visible,
+  .story-mode-continue-from:hover,
+  .story-mode-continue-from:focus-visible,
+  .story-mode-read-aloud > button:hover,
+  .story-mode-read-aloud > button:focus-visible,
+  .story-mode-read-page:hover,
+  .story-mode-read-page:focus-visible,
   .storyteller-mode-switch button:hover,
   .storyteller-mode-switch button:focus-visible {
     border-color: color-mix(in srgb, var(--c-sky-800) 48%, transparent);

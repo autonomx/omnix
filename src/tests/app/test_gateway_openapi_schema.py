@@ -18,6 +18,8 @@ _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
 _INTERNAL_JOB_LIST_PARAMETERS = {"limit", "full"}
 _DOCUMENTED_NON_JSON_RESPONSES = {
     ("POST", "/api/rpg/sessions/{session_id}/speech-audio"),  # PCM16, streamed as it is synthesized
+    ("POST", "/api/story/projects/{project_id}/speech-audio"),  # PCM16, streamed as it is synthesized (ST-4.2)
+    ("GET", "/api/story/projects/{project_id}/export/{export_format}"),  # an EPUB, DOCX or PDF book, a named file (ST-6.5)
     ("GET", "/api/rpg/sessions/{session_id}/export"),  # a campaign package, downloaded as a named JSON file
     ("DELETE", "/api/trading/notifications/email"),
     ("DELETE", "/api/trading/notifications/push/subscriptions/{subscription_id}"),

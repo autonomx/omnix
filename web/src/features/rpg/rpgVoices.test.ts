@@ -8,10 +8,12 @@ const sink = vi.hoisted(() => ({
   heard: null as (() => void) | null,
 }));
 
-vi.mock('./rpgSpeechSink', () => ({
+vi.mock('../assistant', () => ({
   openPcmSink: async () => ({
     push: (samples: Int16Array) => { sink.pushed.push(Array.from(samples)); },
     end: () => new Promise<void>((resolve) => { sink.ended += 1; sink.heard = resolve; }),
+    pause: () => undefined,
+    resume: () => undefined,
     stop: () => { sink.stopped += 1; sink.heard?.(); },
   }),
 }));

@@ -123,12 +123,10 @@ const mutationObserverAllowList = [
   'src/features/assistant/chat/researchProgressController.ts',
   'src/features/assistant/chat/voice-session-evaluation-workspace.tsx',
   'src/features/rpg/RpgWorkspaceHeader.tsx',
-  'src/features/storyteller/story-audio-enhancer.ts',
 ];
 
 const bodyInsertionAllowList = [
   'src/features/rpg/RpgWorldBundleTransfer.tsx',
-  'src/features/storyteller/StoryAudioPanel.tsx',
   'src/features/storyteller/StorytellerWorkspace.tsx',
 ];
 

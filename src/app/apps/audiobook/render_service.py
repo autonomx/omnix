@@ -21,6 +21,7 @@ from app.assets.voice_clone_identity import voice_reference_revision
 from app.persistence.database import PostgresDatabase
 from app.persistence.job_repository import PostgresJobRepository
 from app.persistence.tenant import TenantContext
+from app.persistence.tenant_scope import system_scope
 from app.persistence.unit_of_work import unit_of_work
 from app.providers.catalog import LOCAL_DEVICE, provider_supports
 from app.providers.service import get_tts_provider
@@ -254,6 +255,17 @@ def higher_priority_tts_pending(connection: Any, context: TenantContext) -> bool
     )
 
 
+def higher_priority_tts_pending_anywhere(database: PostgresDatabase) -> bool:
+    """The render loop serves every account, so a chapter render also yields to another account's previews
+    and realtime speech (``voice.swap``: the GPU's TTS jobs of every workspace)."""
+    with system_scope("voice.swap"), unit_of_work(database) as work:
+        pending = PostgresJobRepository(work.connection).has_pending_higher_priority_tts(
+            None, resource_classes=tuple(_HIGHER_PRIORITY),
+        )
+        work.rollback()
+    return pending
+
+
 def _checkpoint(
     work: Any, context: TenantContext, *, job_id: str, worker_id: str,
     lease_token: str, batch_id: str, render_key: str, completed: int, total: int,
@@ -424,6 +436,7 @@ def run_render_once(
     with claimed_job(database, context, worker_id=worker_id, job_type="audiobook.render-chapter",
                      resource_class="gpu:tts:offline",
                      wait=lambda connection: bool(higher_priority_tts_pending(connection, context)
+                                                  or higher_priority_tts_pending_anywhere(database)
                                                   or other_process_priority_pending() or _tts_swap_pending())) as job:
         if job is None:
             return False
@@ -525,6 +538,7 @@ def _render_claimed(
                         work.commit()
                         return True
                     busy = (higher_priority_tts_pending(work.connection, context)
+                            or higher_priority_tts_pending_anywhere(database)
                             or other_process_priority_pending())
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,

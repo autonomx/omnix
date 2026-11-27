@@ -2,8 +2,8 @@ import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { omnixEventClient, RESYNC_EVENT, type OmnixEventConnectionStatus } from './eventClient';
 
-/** Job lifecycle events on `/events`; a resync means events were missed. */
-export const JOB_EVENT_NAMES = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled', RESYNC_EVENT] as const;
+/** Job lifecycle events on `/events` (the server emits these; `job.running` when a worker starts one); a resync means events were missed. */
+export const JOB_EVENT_NAMES = ['job.created', 'job.running', 'job.completed', 'job.failed', 'job.canceled', RESYNC_EVENT] as const;
 
 /** The `/events` connection state. */
 export function useEventConnectionStatus(): OmnixEventConnectionStatus {

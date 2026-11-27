@@ -71,6 +71,36 @@
     padding: 0.55rem 0.65rem;
     text-align: left;
   }
+
+  /* A trashed story: its title, then Restore and Delete forever under it. */
+  .storyteller-library-section .storyteller-trash-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    grid-column: 1 / -1;
+  }
+
+  .storyteller-trash-actions button {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    display: inline-flex;
+    padding: 0.4rem 0.6rem;
+    width: auto;
+  }
+
+  .storyteller-trash-actions button:hover,
+  .storyteller-trash-actions button:focus-visible {
+    background: color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--c-sky-800) 48%, transparent);
+    outline: none;
+  }
+
+  .storyteller-trash-actions button:last-child {
+    color: var(--fg-red-810);
+  }
 }
 
 /* Declarations that must win over every other layer. */

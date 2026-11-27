@@ -6,14 +6,14 @@ import { type JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { jobProgressPercent } from '../../api/jobProgress';
-import { fullJobOutputText } from './storyLibraryModel';
-import { StoryGenerationRequest, StorytellerFormValues, styleOptions, toneOptions, truncate } from './storyModel';
+import { jobOutputText, premiseMaxChars, StoryGenerationRequest, StoryGenerationResult, StorytellerFormValues, styleOptions, toneOptions, truncate } from './storyModel';
 
 export interface StoryControlsProps {
   providers: Array<{ id: string; label: string }>;
   register: UseFormRegister<StorytellerFormValues>;
   errors: FieldErrors<StorytellerFormValues>;
-  createJobMutation: UseMutationResult<JobRecord, Error, StoryGenerationRequest>;
+  premiseLength: number;
+  createJobMutation: UseMutationResult<StoryGenerationResult, Error, StoryGenerationRequest>;
   submitStatus: string;
   selectedTone: string;
   setSelectedTone: (tone: string) => void;
@@ -31,6 +31,7 @@ export function StoryControls({
   providers,
   register,
   errors,
+  premiseLength,
   createJobMutation,
   submitStatus,
   selectedTone,
@@ -60,18 +61,20 @@ export function StoryControls({
         </label>
         <label>Title<input {...register('title')} placeholder="Untitled story" /></label>
         <label>
-          Premise <span>0/500</span>
+          Premise <span aria-live="polite">{premiseLength}/{premiseMaxChars}</span>
           <textarea
             aria-invalid={Boolean(errors.premise)}
             placeholder="A young herbalist discovers a small secret that could change her quiet valley."
+            maxLength={premiseMaxChars}
             rows={4}
-            {...register('premise', { required: true })}
+            {...register('premise', { required: true, maxLength: premiseMaxChars })}
           />
         </label>
         <div className="storyteller-control-block">
           <span>Tone & mood</span>
           <div className="storyteller-chip-row">
-            {toneOptions.map((tone) => (
+            {/* A preset's own tone or style is offered alongside the usual ones (ST-5.2). */}
+            {[...new Set([...toneOptions, selectedTone])].map((tone) => (
               <button className={tone === selectedTone ? 'active' : ''} key={tone} type="button" onClick={() => setSelectedTone(tone)}>{tone}</button>
             ))}
           </div>
@@ -79,7 +82,7 @@ export function StoryControls({
         <label>
           Writing style
           <select value={writingStyle} onChange={(event) => setWritingStyle(event.target.value)}>
-            {styleOptions.map((style) => <option key={style} value={style}>{style}</option>)}
+            {[...new Set([...styleOptions, writingStyle])].map((style) => <option key={style} value={style}>{style}</option>)}
           </select>
         </label>
         <div className="storyteller-chapter-controls">
@@ -87,7 +90,7 @@ export function StoryControls({
           <button type="button" onClick={() => setSelectedChapter(Math.max(1, selectedChapter - 1))}>‹</button>
           <strong>{selectedChapter}</strong>
           <button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>›</button>
-          <button type="button" onClick={onAddChapter}>New chapter</button>
+          <button type="button" disabled={createJobMutation.isPending} onClick={onAddChapter}>New chapter</button>
         </div>
         <Button
           aria-label={createJobMutation.isPending ? 'Queueing story' : 'Queue story'}
@@ -105,18 +108,18 @@ export function StoryControls({
         errorPrefix="Story request"
         isError={createJobMutation.isError}
         isPending={createJobMutation.isPending}
-        jobId={createJobMutation.data?.id}
+        jobId={createJobMutation.data?.job.id}
         pendingMessage="Generating story…"
-        successPrefix={createJobMutation.data?.status === 'completed' ? 'Story generated' : 'Story job queued'}
+        successPrefix={latestJob?.status === 'completed' ? 'Story generated' : 'Story job queued'}
       />
       <div className="storyteller-output-status">
-        <div className="storyteller-panel-heading compact"><p className="eyebrow">Output status</p><button type="button">Clear</button></div>
+        <div className="storyteller-panel-heading compact"><p className="eyebrow">Output status</p></div>
         {latestJob ? (
           <article className="storyteller-output-card">
             <div><strong>{latestJob.type}</strong><OmnixStatusPill>{latestJob.status}</OmnixStatusPill></div>
             <Progress value={jobProgressPercent(latestJob.progress)} aria-label={`${latestJob.type} progress`} />
             <small>{latestJob.resource_class}</small>
-            {fullJobOutputText(latestJob) ? <p>{truncate(fullJobOutputText(latestJob) ?? '', 180)}</p> : null}
+            {jobOutputText(latestJob) ? <p>{truncate(jobOutputText(latestJob) ?? '', 180)}</p> : null}
           </article>
         ) : <div className="storyteller-empty-small">No generation yet.</div>}
       </div>

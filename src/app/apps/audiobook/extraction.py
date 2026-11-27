@@ -185,7 +185,7 @@ def _decode_utf8(content: bytes) -> str:
         raise UnsupportedSource("source must be valid UTF-8") from exc
 
 
-def _is_chapter_heading(line: str) -> bool:
+def is_chapter_heading(line: str) -> bool:
     # TOC entries often begin with "Chapter ..." but are not real narrative
     # boundaries. Keep them inside the surrounding source region so the
     # document-structure stage can classify and skip them coherently.
@@ -232,7 +232,7 @@ def _heading_title(lines: list[str], index: int) -> str:
         return heading
     following = next((line for line in lines[index + 1:index + 4] if line.strip()), "")
     subtitle = " ".join(following.split())
-    if not subtitle or len(subtitle) > _SUBTITLE_MAX_CHARS or _is_chapter_heading(subtitle):
+    if not subtitle or len(subtitle) > _SUBTITLE_MAX_CHARS or is_chapter_heading(subtitle):
         return heading
     # With a colon or dash the next line is the title; without one, a full
     # sentence is more likely the chapter's first line of prose.
@@ -245,7 +245,7 @@ def _heading_title(lines: list[str], index: int) -> str:
 
 def _text_chapters(content: str) -> list[tuple[str, str]]:
     lines = content.splitlines(keepends=True)
-    headings = [index for index, line in enumerate(lines) if _is_chapter_heading(line.strip())]
+    headings = [index for index, line in enumerate(lines) if is_chapter_heading(line.strip())]
     # Table-of-contents entries stay inside the surrounding region, where the
     # document-structure stage classifies and skips them.
     starts = set(headings) - _table_of_contents_headings(lines, headings)

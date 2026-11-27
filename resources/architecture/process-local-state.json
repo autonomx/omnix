@@ -353,7 +353,7 @@
     },
     {
       "path": "src/app/apps/audiobook/routes.py",
-      "symbol": "_SERVICE_CONTEXT_LOCK",
+      "symbol": "_SERVICE_LOCK",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },

@@ -2,156 +2,116 @@ import './StorytellerWorkspace.css';
 import './StorytellerSidebar.css';
 import './StoryMode.css';
 import './StoryThemeThumbnails.css';
-import './StoryAudioEnhancer.css';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient, type JobRecord } from '../../api/client';
+import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
-import { StoryExtraPanels } from './StoryExtraPanels';
-import { StorytellerToolbox } from './StorytellerToolbox';
-import { publishStorySnapshot } from './storySnapshotStore';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
+import type { StoryProject } from './api/storyClient';
+import { StoryCharactersPanel, StoryWorldPanel } from './StoryBible';
 import { StoryControls } from './StoryControls';
 import { StoryLibrary } from './StoryLibrary';
-import { StoryActionBar, StoryEmptyState, StoryModePanel, StoryModeSwitch, StoryOutline, StoryProjectHeader, StoryText, StoryVersions } from './StoryPanels';
-import { fullJobOutputText, libraryJobId, readSavedStoryDraft, readTrashedStoryLibraryItems } from './storyLibraryModel';
-import { SaveFeedback, SavedStoryDraft, StoryGenerationRequest, StoryLibrarySection, StoryWorkspaceMode, StorytellerFormValues, TrashedStoryLibraryItem, countWords, latestStoryTitleOverride, llmCapableProviders, providerDisplayName, storyDisplayTitle, styleOptions, jobInputString } from './storyModel';
-import { buildStorySceneAddition, deriveStoryOutline, isSceneAppendRequest, lastStoryPage, storyParagraphs, storyTextBlocks, suggestedStoryMoves } from './storyTextModel';
-import { useStorySceneAdditions } from './useStorySceneAdditions';
-import { useStoryLibrary } from './useStoryLibrary';
-import { useStoryPersistence } from './useStoryPersistence';
+import { StoryCompare } from './StoryCompare';
+import { StoryManuscript } from './StoryManuscript';
+import { ManuscriptHeading, StoryActionBar, StoryEmptyState, StoryModeSwitch, StoryOutline, StoryVersions } from './StoryPanels';
+import {
+  SaveFeedback, StoryLibrarySection, StoryWorkspaceMode,
+  StorytellerFormValues, countWords, llmCapableProviders, providerDisplayName, storyDisplayTitle, styleOptions,
+} from './storyModel';
+import { manuscriptItems, manuscriptText, projectWordCount, visiblePages } from './storyProjectModel';
+import { StoryReadPanel } from './StoryReadPanel';
+import { StoryModePanel } from './StoryRunReader';
+import { StoryPlanPanel } from './StoryPlanPanel';
+import { type StorySideTab, StorySidePanel } from './StorySidePanel';
+import { StoryTopBar } from './StoryTopBar';
+import { deriveStoryOutline } from './storyTextModel';
+import { StoryVoicesPanel } from './StoryVoicesPanel';
+import { useStoryExport } from './useStoryExport';
+import { useStoryJob } from './useStoryJob';
+import { useStoryLibraryActions } from './useStoryLibraryActions';
+import { useStoryProjects } from './useStoryProjects';
 import { useStoryRequests } from './useStoryRequests';
-import { storyJobRequest } from './storyModel';
-import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
-import { jobKeys } from '../../api/jobs';
+import { useNarrateInAudiobook } from './useNarrateInAudiobook';
 
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
-  const queryClient = useQueryClient();
+  const projects = useStoryProjects();
+  const project = projects.project;
   const [workspaceMode, setWorkspaceMode] = useState<StoryWorkspaceMode>('writing');
-  const [activeLibrarySection, setActiveLibrarySection] = useState<StoryLibrarySection>('drafts');
+  const [activeLibrarySection, setActiveLibrarySection] = useState<StoryLibrarySection>('stories');
   const [selectedTone, setSelectedTone] = useState('Cozy');
   const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
-  const [selectedLibraryItemId, setSelectedLibraryItemId] = useState<string | null>(null);
-  const [isNewDraft, setIsNewDraft] = useState(false);
-  const [savedDraft, setSavedDraft] = useState<SavedStoryDraft | null>(() => readSavedStoryDraft());
-  const [trashedLibraryItems, setTrashedLibraryItems] = useState<TrashedStoryLibraryItem[]>(() => readTrashedStoryLibraryItems());
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
-  const { storySceneAdditions, addStorySceneAddition } = useStorySceneAdditions();
   const [storyModeResponse, setStoryModeResponse] = useState('');
+  const [sideTab, setSideTab] = useState<StorySideTab>('write');
+  const [comparingId, setComparingId] = useState<string | null>(null);
 
-  const providersQuery = useQuery({
-    queryKey: ['platform', 'providers'],
-    queryFn: () => omnixApiClient.listProviders(),
-  });
+  const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<StorytellerFormValues>({
     defaultValues: { providerId: '', title: '', premise: '' },
   });
 
-  const createJobMutation = useMutation<JobRecord, Error, StoryGenerationRequest>({
-    mutationFn: (request) => omnixApiClient.createJob(storyJobRequest(request, { tone: selectedTone, writingStyle, chapter: selectedChapter })),
-    onSuccess: async (job, request) => {
-      reset({ providerId: request.values.providerId, title: request.values.title, premise: request.values.premise });
-      setIsNewDraft(false);
-      const completedText = fullJobOutputText(job);
-      if (job.status === 'completed' && completedText && isSceneAppendRequest(request)) {
-        const addition = buildStorySceneAddition(job, request);
-        if (addition) {
-          addStorySceneAddition(addition);
-          setSelectedLibraryItemId(addition.sourceItemId);
-          setSelectedChapter(addition.chapterNumber);
-          setActiveLibrarySection(addition.sourceItemId.startsWith('draft:') ? 'drafts' : 'stories');
-          setSaveFeedback({ kind: 'saved', message: `Added ${addition.title} to ${addition.storyTitle ?? request.sourceStoryTitle ?? 'the story'}.` });
-        }
-      } else if (job.status === 'completed' && completedText) {
-        setSelectedLibraryItemId(libraryJobId(job.id));
-        setActiveLibrarySection('stories');
-      }
+  const { createJobMutation, trackedJob } = useStoryJob({
+    projectId: projects.activeId,
+    settings: { tone: selectedTone, writingStyle, chapter: selectedChapter },
+    onStarted: (request, projectId) => {
+      if (request.action === 'draft') reset(request.values);
+      projects.adopt(projectId);
       if (request.interactionMode === 'story') {
         setStoryModeResponse('');
         setWorkspaceMode('story');
+        setActiveLibrarySection('interactive');
+      } else if (!request.projectId) {
+        setActiveLibrarySection('stories');
       }
-      await queryClient.invalidateQueries({ queryKey: jobKeys.all });
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
     },
+    onFeedback: setSaveFeedback,
   });
 
-  const watchedTitle = watch('title');
-  const watchedPremise = watch('premise');
-  const watchedProvider = watch('providerId');
+  const [watchedTitle, watchedPremise, watchedProvider] = watch(['title', 'premise', 'providerId']);
   const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
-  const {
-    libraryError, storyJobs, libraryStoryJobs, libraryItems, trashItems,
-    activeLibraryItem, activeJob, activeAsset, assetContentQuery, activeItemSceneAdditions, activeStoryText,
-  } = useStoryLibrary({
-    createdJob: createJobMutation.data ?? null,
-    savedDraft,
-    trashedLibraryItems,
-    storySceneAdditions,
-    isNewDraft,
-    selectedLibraryItemId,
-    setSelectedLibraryItemId,
-  });
-  const storyTitle = storyDisplayTitle(
-    latestStoryTitleOverride(activeItemSceneAdditions) || activeLibraryItem?.title || watchedTitle,
-    activeStoryText,
-  );
-  const premise = activeLibraryItem?.source === 'draft'
-    ? savedDraft?.premise ?? watchedPremise
-    : watchedPremise || jobInputString(activeJob, 'premise') || '';
-  const providerLabel = providerDisplayName(
-    storyProviders,
-    watchedProvider || jobInputString(activeJob, 'provider_id') || '',
-    activeLibraryItem?.source === 'draft' ? savedDraft?.providerLabel ?? null : null,
-  );
-  const sourceJobId = activeJob?.id ?? activeLibraryItem?.jobId ?? null;
-  const outline = useMemo(() => deriveStoryOutline(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
-  // The tool panels (audio, cast, chapters, document) read the story as it is shown.
-  const renderedStoryText = useMemo(() => {
-    if (!activeStoryText) return '';
-    if (workspaceMode === 'story') {
-      const page = lastStoryPage(activeStoryText);
-      return page ? storyParagraphs(page).join('\n') : '';
-    }
-    return storyTextBlocks(activeStoryText, outline).map((block) => block.text).join('\n');
-  }, [activeStoryText, outline, workspaceMode]);
-  useEffect(() => {
-    publishStorySnapshot(storyTitle, renderedStoryText);
-  }, [storyTitle, renderedStoryText]);
+  const items = useMemo(() => manuscriptItems(project), [project]);
+  const manuscript = useMemo(() => manuscriptText(items), [items]);
+  const storyTitle = storyDisplayTitle(project ? project.title : watchedTitle, manuscript);
+  const premise = project?.premise ?? watchedPremise ?? '';
+  const providerLabel = providerDisplayName(storyProviders, watchedProvider);
+  const outline = useMemo(() => deriveStoryOutline(manuscript, storyTitle), [manuscript, storyTitle]);
   const activeChapter = outline.find((chapter) => chapter.number === selectedChapter) ?? outline[0] ?? null;
-  const chapterCount = outline.length || Math.max(1, Math.min(12, libraryStoryJobs.length || selectedChapter));
-  const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
+  const chapterCount = outline.length || 1;
+  const wordCount = project ? projectWordCount(project) : countWords(watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
   const submitStatus = createJobMutation.isPending
     ? 'queueing'
     : createJobMutation.isError
       ? 'error'
-      : createJobMutation.data?.status ?? 'ready';
-  const canPersistStory = Boolean(activeStoryText?.trim());
-  const storyModeChoices = useMemo(() => suggestedStoryMoves(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
-  const { submitStoryRequest, submitQuickAction, submitStoryModeMove, addChapterToActiveStory } = useStoryRequests({
+      : trackedJob?.status ?? 'ready';
+  const canPersistStory = Boolean(manuscript?.trim());
+  const requests = useStoryRequests({
     createJobMutation,
-    watched: { title: watchedTitle, premise: watchedPremise, providerId: watchedProvider },
-    story: { title: storyTitle, premise, text: activeStoryText, sourceJobId, outline },
-    activeLibraryItem,
+    watched: { premise: watchedPremise, providerId: watchedProvider, title: watchedTitle },
+    project,
+    hasText: canPersistStory,
     setSaveFeedback,
-    addStorySceneAddition,
-    setSelectedChapter,
   });
-  const { trashActiveStory, saveStoryDraft, exportStoryMarkdown } = useStoryPersistence({
-    story: { title: storyTitle, premise, providerLabel, wordCount, chapterCount, sourceJobId, text: activeStoryText },
-    activeLibraryItem,
-    activeLibrarySection,
-    setActiveLibrarySection,
-    setSelectedLibraryItemId,
-    setIsNewDraft,
-    setSaveFeedback,
-    trashedLibraryItems,
-    trashItems,
-    setTrashedLibraryItems,
-    setSavedDraft,
-  });
+  const library = useStoryLibraryActions({ projects, storyTitle, setSaveFeedback, setActiveLibrarySection });
+  /** The tone and style a preset gave the story (ST-5.2). */
+  const applyStyle = (changed: StoryProject) => {
+    if (changed.tone) setSelectedTone(changed.tone);
+    if (changed.writing_style) setWritingStyle(changed.writing_style);
+  };
+
+  // A story opens in the mode it was written in, with its own tone and style. Only when another project
+  // opens: a refetch of the same one keeps the writer's choices.
+  const openedProjectId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!project || openedProjectId.current === project.id) return;
+    openedProjectId.current = project.id;
+    setWorkspaceMode(project.mode === 'interactive' ? 'story' : 'writing');
+    if (project.tone) setSelectedTone(project.tone);
+    if (project.writing_style) setWritingStyle(project.writing_style);
+  }, [project]);
 
   useEffect(() => {
     if (outline.length && !outline.some((chapter) => chapter.number === selectedChapter)) {
@@ -159,26 +119,30 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     }
   }, [outline, selectedChapter]);
 
-  const selectLibraryItem = (itemId: string) => {
-    const item = libraryItems.find((entry) => entry.id === itemId);
-    setIsNewDraft(false);
-    setSelectedLibraryItemId(itemId);
+  const narrate = useNarrateInAudiobook();
+  const selectEntry = (projectId: string) => {
+    const entry = projects.entries.find((candidate) => candidate.id === projectId);
+    projects.select(projectId);
     setSelectedChapter(1);
     setSaveFeedback(null);
-    if (item?.source === 'draft') setActiveLibrarySection('drafts');
-    if (item?.source === 'job' || item?.source === 'asset') setActiveLibrarySection('stories');
+    if (entry) setActiveLibrarySection(library.sectionFor(entry));
   };
 
   const startNewDraft = () => {
     reset({ providerId: watchedProvider, title: '', premise: '' });
-    setActiveLibrarySection('drafts');
-    setIsNewDraft(true);
-    setSelectedLibraryItemId(null);
+    projects.select(null);
+    openedProjectId.current = null;
+    setActiveLibrarySection('stories');
     setSelectedChapter(1);
     setWorkspaceMode('writing');
     setSaveFeedback({ kind: 'saved', message: 'New draft ready. Add a premise to begin.' });
   };
 
+  const exportStory = useStoryExport({
+    project, items, title: storyTitle, premise, providerLabel, wordCount, chapterCount, setSaveFeedback,
+  });
+
+  const comparing = project?.versions.find((version) => version.id === comparingId) ?? null;
   const selectOutlineTarget = (chapterNumber: number, targetId: string) => {
     setSelectedChapter(chapterNumber);
     scrollToOutlineTarget(chapterNumber, targetId);
@@ -189,98 +153,143 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <div className="storyteller-workspace" aria-labelledby="module-title">
         <StoryLibrary
-          activeItemId={activeLibraryItem?.id ?? null}
+          activeId={projects.activeId}
           activeSection={activeLibrarySection}
-          items={libraryItems}
+          entries={projects.entries}
           onNewDraft={startNewDraft}
+          onPurge={library.purgeEntry}
+          onRestore={library.restoreEntry}
           onSectionChange={setActiveLibrarySection}
-          onSelect={selectLibraryItem}
-          onTrashActiveItem={trashActiveStory}
-          trashItems={trashItems}
+          onSelect={selectEntry}
+          onShowTrash={() => setActiveLibrarySection('trash')}
+          trashEntries={projects.trashEntries}
         />
         <main className="storyteller-stage">
-          <h2 className="storyteller-module-title">{module.label}</h2>
-          <GatewayErrorNotice label="Stories and providers" errors={[libraryError, providersQuery.error]} />
-          <StoryProjectHeader
+          <GatewayErrorNotice label="Stories and providers" errors={[projects.error, providersQuery.error]} />
+          <StoryTopBar
             canPersistStory={canPersistStory}
+            canTrash={Boolean(project)}
             chapterCount={chapterCount}
-            moduleRoute={module.route}
-            onExport={exportStoryMarkdown}
-            onSave={saveStoryDraft}
+            onExport={(format) => void exportStory(format)}
+            onNarrate={() => project && library.run(() => narrate(project, visiblePages(project), { title: storyTitle }))}
+            onSave={library.saveVersion}
+            onTrash={library.trashActiveStory}
             premise={premise}
             providerLabel={providerLabel}
             saveFeedback={saveFeedback}
             title={storyTitle}
             wordCount={wordCount}
           />
-          <StorytellerToolbox />
-          <StoryExtraPanels />
           <StoryModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
           {workspaceMode === 'story' ? (
             <StoryModePanel
-              activeAsset={activeAsset}
               activeChapterLabel={activeChapter?.label ?? `Chapter ${selectedChapter}`}
-              activeStoryText={activeStoryText}
-              assetError={assetContentQuery.error}
-              isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
+              isLoading={projects.isLoading}
+              job={trackedJob}
+              library={projects}
               module={module}
-              onMove={submitStoryModeMove}
+              onMove={requests.submitStoryModeMove}
               pending={createJobMutation.isPending}
+              project={project}
+              narrate={narrate}
+              report={library.run}
               response={storyModeResponse}
               setResponse={setStoryModeResponse}
               storyTitle={storyTitle}
-              suggestedMoves={storyModeChoices}
+            />
+          ) : project && comparing ? (
+            <StoryCompare
+              disabled={createJobMutation.isPending}
+              onClose={() => setComparingId(null)}
+              onRestore={(version) => { setComparingId(null); library.restoreVersion(version); }}
+              project={project}
+              version={comparing}
             />
           ) : (
-            <>
-              <div className="storyteller-compose-grid">
-                <section className="storyteller-manuscript" aria-label="Story manuscript">
-                  <div className="storyteller-manuscript-meta">
-                    <span>{activeChapter?.label ?? `Chapter ${selectedChapter}`}</span>
-                    <span>{readingMinutes} min read</span>
-                  </div>
-                  <h2>{activeChapter?.title ?? storyTitle}</h2>
-                  <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
-                  {activeStoryText ? (
-                    <StoryText outline={outline} text={activeStoryText} />
-                  ) : (
-                    <StoryEmptyState
-                      activeAsset={activeAsset}
-                      assetError={assetContentQuery.error}
-                      isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
-                      module={module}
-                      storyTitle={storyTitle}
-                    />
-                  )}
-                </section>
-                <StoryControls
-                  createJobMutation={createJobMutation}
-                  errors={errors}
-                  handleSubmit={handleSubmit}
-                  latestJob={storyJobs[0] ?? null}
-                  onAddChapter={addChapterToActiveStory}
-                  onGenerate={(values) => submitStoryRequest(values, 'draft')}
-                  providers={storyProviders}
-                  register={register}
-                  selectedChapter={selectedChapter}
-                  selectedTone={selectedTone}
-                  setSelectedChapter={setSelectedChapter}
-                  setSelectedTone={setSelectedTone}
-                  setWritingStyle={setWritingStyle}
-                  submitStatus={submitStatus}
-                  writingStyle={writingStyle}
-                />
-              </div>
-              <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
-              <StoryVersions
-                activeJobId={activeJob?.id ?? null}
-                jobs={libraryStoryJobs}
-                onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))}
-              />
-            </>
+            <section className="storyteller-manuscript" aria-label="Story manuscript">
+              {project && manuscript ? (
+                <StoryManuscript
+                  disabled={createJobMutation.isPending}
+                  items={items}
+                  key={project.id}
+                  onAccept={library.acceptSelection}
+                  onReject={library.rejectSelection}
+                  onRework={requests.reworkSelection}
+                  onSavePage={library.savePage}
+                  project={project}
+                >
+                  <ManuscriptHeading chapter={activeChapter?.label ?? `Chapter ${selectedChapter}`} minutes={readingMinutes} title={activeChapter?.title ?? storyTitle} />
+                </StoryManuscript>
+              ) : (
+                <>
+                  <ManuscriptHeading chapter={activeChapter?.label ?? `Chapter ${selectedChapter}`} minutes={readingMinutes} title={activeChapter?.title ?? storyTitle} />
+                  <StoryEmptyState isLoading={projects.isLoading} module={module} />
+                </>
+              )}
+            </section>
           )}
         </main>
-        <StoryOutline chapters={outline} selectedChapter={selectedChapter} onAddChapter={addChapterToActiveStory} onSelect={selectOutlineTarget} />
+        <StorySidePanel
+          active={sideTab}
+          badges={{ characters: project?.characters.filter((character) => character.suggested).length }}
+          onChange={setSideTab}
+          panels={{
+            write: (
+              <>
+                {workspaceMode === 'writing' ? (
+                  <>
+                    <StoryControls
+                      createJobMutation={createJobMutation}
+                      errors={errors}
+                      handleSubmit={handleSubmit}
+                      latestJob={trackedJob}
+                      onAddChapter={requests.addChapterToActiveStory}
+                      onGenerate={requests.submitDraft}
+                      premiseLength={(watchedPremise ?? '').length}
+                      providers={storyProviders}
+                      register={register}
+                      selectedChapter={selectedChapter}
+                      selectedTone={selectedTone}
+                      setSelectedChapter={setSelectedChapter}
+                      setSelectedTone={setSelectedTone}
+                      setWritingStyle={setWritingStyle}
+                      submitStatus={submitStatus}
+                      writingStyle={writingStyle}
+                    />
+                    <StoryActionBar disabled={createJobMutation.isPending} onAction={requests.submitQuickAction} />
+                  </>
+                ) : null}
+                <StoryOutline chapters={outline} disabled={createJobMutation.isPending} selectedChapter={selectedChapter} onAddChapter={requests.addChapterToActiveStory} onSelect={selectOutlineTarget} />
+                {workspaceMode === 'writing' ? (
+                  <StoryPlanPanel
+                    onDraftBeat={requests.draftBeat}
+                    onFeedback={setSaveFeedback}
+                    onPlan={requests.planStory}
+                    pending={createJobMutation.isPending}
+                    project={project}
+                    saveOutline={projects.replaceOutline}
+                  />
+                ) : null}
+                <StoryVersions disabled={createJobMutation.isPending} onCompare={(version) => setComparingId(version.id)} onRestore={library.restoreVersion} versions={project?.versions ?? []} />
+              </>
+            ),
+            characters: <StoryCharactersPanel onFeedback={setSaveFeedback} project={project} replaceCharacters={projects.replaceCharacters} />,
+            world: (
+              <StoryWorldPanel
+                choosePreset={async (projectId, presetId) => applyStyle(await library.choosePreset(projectId, presetId))}
+                onFeedback={setSaveFeedback}
+                project={project}
+                replaceNotes={projects.replaceNotes}
+              />
+            ),
+            audio: (
+              <>
+                <StoryVoicesPanel project={project} />
+                <StoryReadPanel project={project} onChange={library.updateReadSettings} />
+              </>
+            ),
+          }}
+        />
       </div>
     </WorkspacePanel>
   );

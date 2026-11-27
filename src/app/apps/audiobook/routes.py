@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.persistence.blob_store import default_blob_store
 from app.persistence.database import default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import current_tenant, pop_tenant, push_tenant
 from app.runtime.paths import resources_data_root
 from app.runtime.background import (
     BackgroundOwnershipUnavailable, BackgroundWorker,
@@ -34,6 +34,7 @@ from .extraction import (
     normalize_extraction_settings,
     parse_page_ranges,
 )
+from .story_import import StoryImport
 from app.errors import error_code
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,8 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 _SOURCE_FORMAT_PATTERN = "^(" + "|".join(sorted(SUPPORTED_SOURCE_FORMATS)) + ")$"
 _SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
-_SERVICE_CONTEXT_LOCK = threading.Lock()
-_SERVICE_CONTEXT: tuple[Any, Any] | None = None
+_SERVICE_LOCK = threading.Lock()
+_SERVICE: Any = None
 _BINARY_SCHEMA = {"schema": {"type": "string", "format": "binary"}}
 _SPOOL_IN_MEMORY_BYTES = 1024 * 1024
 _MAX_COVER_BYTES = 10 * 1024 * 1024
@@ -270,18 +271,32 @@ async def _spool_body(request: Request, *, limit: int, what: str) -> BinaryIO:
         raise
 
 
-def _service_and_context() -> tuple["AudiobookService", Any]:
-    global _SERVICE_CONTEXT
-    if _SERVICE_CONTEXT is None:
-        with _SERVICE_CONTEXT_LOCK:
-            if _SERVICE_CONTEXT is None:
+def _audiobook_service() -> "AudiobookService":
+    """The process's one service; it holds no tenant."""
+    global _SERVICE
+    if _SERVICE is None:
+        with _SERVICE_LOCK:
+            if _SERVICE is None:
                 from .service import AudiobookService
 
-                database = default_database()
-                context = current_tenant()
-                _SERVICE_CONTEXT = (AudiobookService(database, default_blob_store()), context)
-    assert _SERVICE_CONTEXT is not None
-    return _SERVICE_CONTEXT
+                _SERVICE = AudiobookService(default_database(), default_blob_store())
+    return _SERVICE
+
+
+def _service_and_context() -> tuple["AudiobookService", Any]:
+    """The service and the tenant of the request (or job) in progress.
+
+    The tenant is read on every call. Caching it would run every later
+    request as the first request's account.
+    """
+    return _audiobook_service(), current_tenant()
+
+
+def _ready_workspace_contexts(database: Any, resource_classes: tuple[str, ...]) -> list[Any]:
+    """Tenants of the workspaces with an Audiobook-class job ready to claim, oldest waiting first."""
+    from app.persistence.identity_service import list_workspace_contexts_with_ready_jobs
+
+    return list_workspace_contexts_with_ready_jobs(database, resource_classes)
 
 
 router = APIRouter()
@@ -321,6 +336,18 @@ def create_project(request: CreateAudiobookProject) -> dict[str, object]:
     try:
         return service.create_project(context, **request.model_dump())
     except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/import-story", tags=["audiobook"], status_code=202)
+def import_story(story: StoryImport) -> dict[str, object]:
+    """A new project from a story, its speakers already given (Storyteller roadmap ST-4.4)."""
+    from .extraction import UnsupportedSource
+
+    service, context = _service_and_context()
+    try:
+        return service.import_story(context, story=story)
+    except (UnsupportedSource, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
@@ -1069,32 +1096,31 @@ class _AudiobookWorkers:
                 or run_export_once(database, blobs, context, worker_id=worker_id)
             )
 
-        self._poll("ingest", step, failure="ingest_poll_failed")
+        self._poll("ingest", step, resource_classes=("cpu",), failure="ingest_poll_failed")
 
     def _render_loop(self) -> None:
         from .render_service import run_render_once
 
         self._poll("render", lambda database, blobs, context, worker_id: run_render_once(
             database, blobs, context, worker_id=worker_id,
-        ), failure="render_poll_failed")
+        ), resource_classes=("gpu:tts:offline",), failure="render_poll_failed")
 
     def _preview_loop(self) -> None:
         from .render_service import run_preview_once
 
         self._poll("preview", lambda database, blobs, context, worker_id: run_preview_once(
             database, blobs, context, worker_id=worker_id,
-        ), failure="preview_poll_failed")
+        ), resource_classes=("gpu:tts:preview",), failure="preview_poll_failed")
 
-    def _poll(self, kind: str, step: Any, *, failure: str) -> None:
-        runtime = self._runtime()
-        if runtime is None:
+    def _poll(self, kind: str, step: Any, *, resource_classes: tuple[str, ...], failure: str) -> None:
+        service = self._runtime()
+        if service is None:
             return
-        service, context = runtime
         worker_id = f"audiobook:{kind}:{uuid4().hex}"
         while not self._stop.is_set():
             try:
                 require_background_owner()
-                if not step(service.database, service.blobs, context, worker_id):
+                if not self._step_any_workspace(service, step, worker_id, resource_classes):
                     self._stop.wait(1.0)
             except BackgroundOwnershipUnavailable:
                 return
@@ -1102,11 +1128,37 @@ class _AudiobookWorkers:
                 self._error(failure, exc)
                 self._stop.wait(5.0)
 
-    def _runtime(self) -> tuple[Any, Any] | None:
+    @staticmethod
+    def _step_any_workspace(service: Any, step: Any, worker_id: str, resource_classes: tuple[str, ...]) -> bool:
+        """Run one step in the first workspace that has work, under that workspace's tenant.
+
+        Jobs are claimed per workspace, so a loop bound to one tenant would never
+        run another account's jobs. A step that fails in one workspace doesn't hold up
+        the others; the first failure is raised once no other workspace had work, and every other one is logged.
+        """
+        failures: list[tuple[str, Exception]] = []
+        for context in _ready_workspace_contexts(service.database, resource_classes):
+            token = push_tenant(context)
+            try:
+                if step(service.database, service.blobs, context, worker_id):
+                    _log_workspace_failures(failures)
+                    return True
+            except BackgroundOwnershipUnavailable:
+                raise
+            except Exception as exc:
+                failures.append((context.workspace_id, exc))
+            finally:
+                pop_tenant(token)
+        if failures:
+            _log_workspace_failures(failures[1:])
+            raise failures[0][1]
+        return False
+
+    def _runtime(self) -> Any:
         while not self._stop.is_set():
             try:
                 require_background_owner()
-                return _service_and_context()
+                return _audiobook_service()
             except BackgroundOwnershipUnavailable:
                 return None
             except Exception as exc:
@@ -1118,6 +1170,11 @@ class _AudiobookWorkers:
     def _error(transition: str, error: Exception) -> None:
         runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
                            transition=transition, error=error, level="warning")
+
+
+def _log_workspace_failures(failures: list[tuple[str, Exception]]) -> None:
+    for workspace_id, error in failures:
+        _LOG.warning("audiobook step failed in workspace %s", workspace_id, exc_info=error)
 
 
 def create_audiobook_router() -> APIRouter:

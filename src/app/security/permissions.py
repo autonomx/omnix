@@ -276,7 +276,6 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
 # and every other socket needs its feature's write permission.
 WEBSOCKET_PERMISSIONS: dict[str, str] = {
     "/api/trading/stream": "trading:read",
-    "/ws/audiobook": "audiobook:read",
 }
 
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

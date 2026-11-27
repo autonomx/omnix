@@ -23,7 +23,7 @@ export const chatStreamEventSchema = z.looseObject({
 export type ChatStreamEvent = z.infer<typeof chatStreamEventSchema>;
 
 /**
- * A job lifecycle event on GET /events (`job.created`, `job.updated`, ...). The
+ * A job lifecycle event on GET /events (`job.created`, `job.running`, `job.completed`, ...). The
  * gateway sends the event row (id, job_id, event_type, payload, created_at);
  * subscribers rely on the job id.
  */

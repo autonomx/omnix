@@ -2,16 +2,11 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import Iterable
 from typing import Any
-from uuid import uuid4
 
-from app.persistence.blob_store import default_blob_store
 from app.persistence.contracts import BlobStore
-from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
-from app.persistence.runtime import ensure_postgresql_runtime_ready
+from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
@@ -25,14 +20,14 @@ from .document_structure_repository import PostgresAudiobookDocumentStructureRep
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .repository import PostgresAudiobookRepository
 from .review_repository import PostgresAudiobookReviewRepository
-from .assembly_service import run_assemble_once
-from .export_service import run_export_once
 from .annotation import (
     Speaker, SpeakerAlias, SpanAnnotation, annotate_span_batches, narrator_id,
 )
 from .classifier import answer_without_reasoning, local_classifier, with_classification_rules
 from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
+from .project_repository import PostgresAudiobookProjectRepository
+from .story_import import StoryLineMatcher, story_annotations
 from .leases import JOB_LEASE_SECONDS, claimed_job
 
 
@@ -347,6 +342,9 @@ def _analyze_claimed(
                       AND status IN ('confirmed', 'proposed')""",
                 (context.workspace_id, payload["project_id"]),
             ).fetchall()
+            story_lines = PostgresAudiobookProjectRepository(work.connection).story_lines_for_revision(
+                context, payload["source_revision_id"],
+            )
             structure_overrides = PostgresAudiobookDocumentStructureRepository(
                 work.connection
             ).list_overrides(
@@ -362,6 +360,8 @@ def _analyze_claimed(
         if not any(item.id == narrator_id(payload["project_id"]) for item in speakers):
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
+        # A story's spoken lines, walked in reading order across the chapters (ST-4.4).
+        story_matcher = StoryLineMatcher(story_lines) if story_lines is not None else None
         classifier = local_classifier()
         if classifier is not None and payload.get("no_reasoning", True) is not False:
             # Step 3's "No reasoning" box, on unless the person unticks it (a job from before it, too).
@@ -377,7 +377,8 @@ def _analyze_claimed(
             # Keep the provider-owned dict live so its resolved model identity can
             # still update after the first response.
             classifier_details["analysis_job_id"] = job_id
-        if force_reclassify and classifier is None:
+        if force_reclassify and classifier is None and story_matcher is None:
+            # A story's own speakers need no model; its unmatched lines go to review (ST-4.4).
             raise ValueError(
                 "text reclassification requires a configured chat provider; "
                 "no classifier was available, so the existing review state was preserved"
@@ -499,6 +500,35 @@ def _analyze_claimed(
                 )
             return result
 
+        def chapter_inputs(
+            work: Any, chapter_id: str,
+        ) -> tuple[list[SourceSpan], Any, list[SourceSpan], set[str] | None]:
+            """A chapter's spans, its structure, the spans as speaker attribution reads them, and its
+            dialogue targets (``None`` when the chapter has no structure)."""
+            rows = work.connection.execute(
+                """SELECT id, chapter_id, ordinal, start_offset, end_offset,
+                          source_text, source_hash, structural_kind, detector_version
+                     FROM omnix_audiobook_spans
+                    WHERE workspace_id = %s AND chapter_id = %s
+                    ORDER BY ordinal""",
+                (context.workspace_id, chapter_id),
+            ).fetchall()
+            blocks = PostgresAudiobookDocumentStructureRepository(work.connection).list_blocks(
+                context, source_revision_id=payload["source_revision_id"], chapter_id=chapter_id,
+            )
+            spans = [
+                SourceSpan(str(row[0]), str(row[1]), int(row[2]), int(row[3]),
+                           int(row[4]), str(row[5]), str(row[6]), str(row[7]), str(row[8]))
+                for row in rows
+            ]
+            if not blocks:
+                return spans, blocks, spans, None
+            read = [mask_span_for_analysis(span, blocks, consumer="speaker_attribution",
+                                           overrides=structure_overrides) for span in spans]
+            targets = dialogue_targets_for_analysis(spans, blocks, consumer="speaker_attribution",
+                                                    overrides=structure_overrides)
+            return spans, blocks, read, targets
+
         for chapter_id, span_count in chapters:
             chapter_classified_spans.clear()
             with unit_of_work(database) as work:
@@ -549,6 +579,12 @@ def _analyze_claimed(
                         (context.workspace_id, chapter_id, job_id),
                     ).fetchone()[0]
                 if int(existing) == int(span_count):
+                    if story_matcher is not None:
+                        # The story's lines this chapter holds are passed over as a fresh run reads them,
+                        # so the next chapter's match.
+                        _, _, replayed, replayed_targets = chapter_inputs(work, str(chapter_id))
+                        story_annotations(replayed, story_matcher, speakers=speakers, aliases=aliases,
+                                          dialogue_target_ids=replayed_targets)
                     completed_spans += int(span_count)
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
@@ -561,35 +597,9 @@ def _analyze_claimed(
                     )
                     work.commit()
                     continue
-                rows = work.connection.execute(
-                    """SELECT id, chapter_id, ordinal, start_offset, end_offset,
-                              source_text, source_hash, structural_kind, detector_version
-                         FROM omnix_audiobook_spans
-                        WHERE workspace_id = %s AND chapter_id = %s
-                        ORDER BY ordinal""",
-                    (context.workspace_id, chapter_id),
-                ).fetchall()
-                structure_blocks = PostgresAudiobookDocumentStructureRepository(
-                    work.connection
-                ).list_blocks(
-                    context,
-                    source_revision_id=payload["source_revision_id"],
-                    chapter_id=str(chapter_id),
-                )
+                chapter_spans, structure_blocks, analysis_spans, dialogue_target_ids = chapter_inputs(
+                    work, str(chapter_id))
                 work.rollback()
-            chapter_spans = [
-                SourceSpan(str(row[0]), str(row[1]), int(row[2]), int(row[3]),
-                           int(row[4]), str(row[5]), str(row[6]), str(row[7]), str(row[8]))
-                for row in rows
-            ]
-            analysis_spans = [
-                mask_span_for_analysis(
-                    span, structure_blocks,
-                    consumer="speaker_attribution",
-                    overrides=structure_overrides,
-                )
-                for span in chapter_spans
-            ] if structure_blocks else chapter_spans
             coverage_spans = [
                 mask_span_for_analysis(
                     span, structure_blocks,
@@ -598,22 +608,26 @@ def _analyze_claimed(
                 )
                 for span in chapter_spans
             ] if structure_blocks else chapter_spans
-            dialogue_target_ids = (
-                dialogue_targets_for_analysis(
-                    chapter_spans, structure_blocks,
-                    consumer="speaker_attribution",
-                    overrides=structure_overrides,
-                )
-                if structure_blocks else None
-            )
             annotations: dict[str, SpanAnnotation] = {}
             discoveries = ()
-            if classifier is not None:
+            given = story_annotations(
+                analysis_spans, story_matcher, speakers=speakers, aliases=aliases,
+                dialogue_target_ids=dialogue_target_ids,
+            ) if story_matcher is not None else {}
+            # Only the dialogue the story leaves open goes to the classifier.
+            classifier_targets = dialogue_target_ids
+            if given:
+                classifier_targets = {
+                    span.id for span in analysis_spans
+                    if span.structural_kind == "dialogue" and span.id not in given
+                    and (dialogue_target_ids is None or span.id in dialogue_target_ids)
+                }
+            if classifier is not None and (classifier_targets is None or classifier_targets):
                 batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=analysis_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
                     classifier_details=classifier_details,
-                    dialogue_target_ids=dialogue_target_ids,
+                    dialogue_target_ids=classifier_targets,
                     on_batch_complete=lambda span_ids, batch_number, batch_count: (
                         checkpoint_classification_progress(
                             span_ids,
@@ -633,6 +647,7 @@ def _analyze_claimed(
                 discoveries = batch_analysis.discovered_speakers
                 for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation
+            annotations.update(given)
 
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
@@ -663,6 +678,8 @@ def _analyze_claimed(
                     force_reclassify=force_reclassify,
                     coverage_spans=coverage_spans,
                     dialogue_target_ids=dialogue_target_ids,
+                    # With no classifier, a rerun decides only the story's own lines; the rest keep theirs.
+                    reclassify_only=set(given) if force_reclassify and classifier is None else None,
                 )
                 refreshed_speaker_rows = work.connection.execute(
                     """SELECT id, canonical_name, kind, status
@@ -766,26 +783,3 @@ def _analyze_claimed(
             )
             work.commit()
     return True
-
-
-def main() -> None:
-    logging.basicConfig(level=logging.INFO)
-    database = default_database()
-    ensure_postgresql_runtime_ready(database)
-    context = current_tenant()
-    blobs = default_blob_store()
-    worker_id = f"audiobook:ingest:{uuid4().hex}"
-    while True:
-        try:
-            if (not run_ingest_once(database, blobs, context, worker_id=worker_id)
-                    and not run_analyze_once(database, context, worker_id=worker_id)
-                    and not run_assemble_once(database, blobs, context, worker_id=worker_id)
-                    and not run_export_once(database, blobs, context, worker_id=worker_id)):
-                time.sleep(1.0)
-        except Exception:
-            _LOG.exception("Audiobook ingest worker error")
-            time.sleep(5.0)
-
-
-if __name__ == "__main__":
-    main()

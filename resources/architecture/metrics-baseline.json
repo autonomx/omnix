@@ -45,7 +45,6 @@
       "app.apps.audiobook.speech_budget",
       "app.apps.audiobook.speech_exclusions",
       "app.apps.audiobook.speech_plan",
-      "app.apps.audiobook.streaming",
       "app.apps.audiobook.structured_call",
       "app.apps.audiobook.style_discovery",
       "app.apps.audiobook.worker",
@@ -620,7 +619,7 @@
         "line": 48,
         "path": "src/app/apps/audiobook/routes.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_SERVICE_CONTEXT_LOCK"
+        "symbol": "_SERVICE_LOCK"
       },
       {
         "approved": true,
@@ -2919,7 +2918,7 @@
       {
         "approved": true,
         "path": "src/app/apps/audiobook/routes.py",
-        "symbol": "_SERVICE_CONTEXT_LOCK"
+        "symbol": "_SERVICE_LOCK"
       },
       {
         "approved": true,

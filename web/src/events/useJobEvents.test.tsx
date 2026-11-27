@@ -44,6 +44,14 @@ describe('useJobEventRefresh', () => {
     expect(invalidate).toHaveBeenCalledTimes(1);
   });
 
+  it('follows a job from running to completed', () => {
+    const emit = captureSubscriptions();
+    const invalidate = renderWithClient(() => useJobEventRefresh([['job', 'job:1']], { jobId: 'job:1' }));
+    emit('job.running', { job_id: 'job:1' });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(omnixEventClient.subscribe).not.toHaveBeenCalledWith('job.updated', expect.anything());
+  });
+
   it('does not subscribe while disabled', () => {
     captureSubscriptions();
     renderWithClient(() => useJobEventRefresh([['platform', 'jobs']], { enabled: false }));

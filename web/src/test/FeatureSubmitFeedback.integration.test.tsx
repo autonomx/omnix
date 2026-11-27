@@ -108,6 +108,23 @@ function installFailingJobApiMock() {
       });
     }
 
+    if (path === '/api/settings/profile') {
+      return Response.json({ settings: {} });
+    }
+
+    if (path === '/api/story/projects' && init?.method === 'POST') {
+      return Response.json({
+        id: 'story-project-1', title: '', premise: 'A memory orchard.', mode: 'writing', tone: '', writing_style: '',
+        read_settings: {}, origin_kind: 'new', origin_ref: 'story-project-1', created_at: '2026-06-14T00:00:00Z',
+        updated_at: '2026-06-14T00:00:00Z', deleted_at: null, page_count: 0, word_count: 0,
+        pages: [], versions: [], characters: [], notes: [], moves: [],
+      });
+    }
+
+    if (path === '/api/story/projects') {
+      return Response.json({ projects: [] });
+    }
+
     if (path === '/api/jobs' && init?.method === 'POST') {
       return new Response('gateway unavailable', { status: 500 });
     }

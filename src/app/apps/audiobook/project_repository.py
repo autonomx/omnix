@@ -178,6 +178,31 @@ class PostgresAudiobookProjectRepository:
             (context.workspace_id, project_id),
         ).fetchone()
 
+    # -- a story's spoken lines (Storyteller roadmap ST-4.4) ---------------
+
+    def save_story_lines(self, context: TenantContext, project_id: str, *, source_asset_id: str,
+                         story_project_id: str, story_version_id: str | None,
+                         lines: Sequence[dict[str, Any]]) -> None:
+        self.connection.execute(
+            """INSERT INTO omnix_audiobook_story_sources
+                   (workspace_id, project_id, source_asset_id, story_project_id, story_version_id, speaker_lines)
+               VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+            (context.workspace_id, project_id, source_asset_id, story_project_id, story_version_id,
+             canonical_json(list(lines))),
+        )
+
+    def story_lines_for_revision(self, context: TenantContext, source_revision_id: str) -> list[dict[str, Any]] | None:
+        """The spoken lines of the story a source revision was read from; ``None`` for any other source."""
+        row = self.connection.execute(
+            """SELECT s.speaker_lines
+                 FROM omnix_audiobook_source_revisions AS r
+                 JOIN omnix_audiobook_story_sources AS s
+                   ON s.workspace_id = r.workspace_id AND s.source_asset_id = r.original_asset_id
+                WHERE r.workspace_id = %s AND r.id = %s""",
+            (context.workspace_id, source_revision_id),
+        ).fetchone()
+        return None if row is None else list(row[0])
+
     # -- project row: writes ----------------------------------------------
 
     def save_classification_rules(self, context: TenantContext, project_id: str,

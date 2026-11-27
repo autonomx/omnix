@@ -34,7 +34,10 @@ if TYPE_CHECKING:
     from .jobs import clone_voice, wait_for_engine
     from .loudness import integrated_loudness, normalize_loudness
     from .output_settings import NEUTRAL, sampling_overrides, time_stretch
-    from .voice_casting import DEFAULT_VOICE, as_wav, castable_voices, pcm_of, render_key, split_sentences
+    from .voice_casting import (
+        DEFAULT_VOICE, as_wav, castable_voices, match_voices, pcm_of, render_key, split_sentences,
+    )
+    from .speech_service import SpeechCache, neutral_voice, sentence_key, speak_sentence, speech_plan
     from .transcription import transcribe_timed_audio
     from .transcripts import TranscriptDocument, export_transcript, speaker_sample_spans
     from .watermarking import mark as watermark_render
@@ -138,11 +141,20 @@ _ASSEMBLY = frozenset({
     "ASSEMBLY_VERSION", "AssembledChapter", "AudioSpan", "PausePolicy", "TimelineEntry",
     "active_energy", "assemble_chapter", "normalization_gains",
 })
-# Who may be cast and how a sentence is identified and spoken (the RPG's voices).
-_CASTING = frozenset({"DEFAULT_VOICE", "as_wav", "castable_voices", "pcm_of", "render_key", "split_sentences"})
+# Who may be cast, who gets which voice, and how a sentence is identified and spoken (the RPG's and Storyteller's voices).
+_CASTING = frozenset({
+    "DEFAULT_VOICE", "as_wav", "castable_voices", "match_voices", "pcm_of", "render_key", "split_sentences",
+})
+
+# Speaking tagged lines with a cast, sentence by sentence (ST-4.1: the RPG's and Storyteller's speech routes).
+_SPEECH = frozenset({"SpeechCache", "neutral_voice", "sentence_key", "speak_sentence", "speech_plan"})
 
 
 def __getattr__(name: str) -> Any:
+    if name in _SPEECH:
+        from . import speech_service
+
+        return getattr(speech_service, name)
     if name in _CASTING:
         from . import voice_casting
 
@@ -167,9 +179,15 @@ __all__ = [
     "DEFAULT_VOICE",
     "as_wav",
     "castable_voices",
+    "match_voices",
+    "neutral_voice",
     "pcm_of",
     "render_key",
     "split_sentences",
+    "SpeechCache",
+    "sentence_key",
+    "speak_sentence",
+    "speech_plan",
     "ASSEMBLY_VERSION",
     "NEUTRAL",
     "AssembledChapter",

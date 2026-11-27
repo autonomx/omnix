@@ -24,7 +24,7 @@ x-omnix-env: &omnix-env
   OMNIX_ALLOW_LAN: "true"
   OMNIX_ALLOWED_HOSTS: nginx,nginx:8080,localhost,localhost:8080,127.0.0.1,gateway-worker,gateway-worker:8000,api-1,api-1:8000,api-2,api-2:8000
   OMNIX_ALLOWED_ORIGINS: http://nginx:8080,http://localhost:8080
-  OMNIX_FEATURES: chat,voice,story
+  OMNIX_FEATURES: chat,voice,story,audiobook
   OMNIX_TTS_URL: http://fake-models:8020
   OMNIX_GATEWAY_TTS_HTTP: "1"
   OMNIX_TTS_STARTUP_WARMUP: "0"

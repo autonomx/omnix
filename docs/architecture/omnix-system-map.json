@@ -94,8 +94,8 @@
     ],
     "counts": {
       "nodes": 58,
-      "edges": 163,
-      "flows": 11
+      "edges": 169,
+      "flows": 13
     }
   },
   "nodes": [
@@ -181,7 +181,7 @@
       "id": "web_media",
       "label": "Media studios",
       "layer": "client",
-      "summary": "Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces. Job progress is polled (Audiobook: react-query refetchInterval 3-5 s; Image Generation: 1.5 s while a job is active). Only Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries. Podcast's live avatars speak the preview through the Chat workspace's TTS socket and portrait link (assistant workspace/character-speech-player.ts, portrait/CharacterStage.tsx; avatar socket ?character_id=).",
+      "summary": "Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces. Job progress is polled (Audiobook: react-query refetchInterval 3-5 s; Image Generation: 1.5 s while a job is active). Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries. Storyteller follows its story job on the shared /events stream (useJobEventRefresh: job.running shows writing..., job.completed shows the page) and polls once a second only while that stream is closed (useStoryJob.ts). Podcast's live avatars speak the preview through the Chat workspace's TTS socket and portrait link (assistant workspace/character-speech-player.ts, portrait/CharacterStage.tsx; avatar socket ?character_id=).",
       "paths": [
         "web/src/features/storyteller/",
         "web/src/features/audiobook/",
@@ -271,7 +271,8 @@
         "Ingress allowlist is shared with the Vite proxy."
       ],
       "tests": [
-        "src/tests/gateway/"
+        "src/tests/api/gateway/",
+        "src/tests/unit/gateway/"
       ],
       "docs": [
         "docs/architecture/OMNIX_PRODUCTION_INGRESS.md",
@@ -406,7 +407,7 @@
       "id": "voice",
       "label": "Voice",
       "layer": "platform",
-      "summary": "TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names, and writes a heard call name back as the name).",
+      "summary": "TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names, and writes a heard call name back as the name). The shared cast speech the RPG and Storyteller call (Storyteller roadmap ST-4.0/4.1): voice_casting.match_voices casts speakers by description words with a caller's seeded tie-break; speech_service plans tagged lines into sentences (240 characters) and speaks one sentence per POST as streamed PCM16, retrying the first piece once when the TTS is saturated, caching whole sentences only through the caller's cache port (rpg_speech_audio, story_speech_audio) and never a runaway take.",
       "paths": [
         "src/app/platform/voice/"
       ],
@@ -415,7 +416,9 @@
         "src/app/platform/voice/stt_proxy_routes.py",
         "src/app/platform/voice/tts_engines.py",
         "src/app/platform/voice/swap_controller.py",
-        "src/app/platform/voice/tts_pcm_websocket.py"
+        "src/app/platform/voice/tts_pcm_websocket.py",
+        "src/app/platform/voice/speech_service.py",
+        "src/app/platform/voice/voice_casting.py"
       ],
       "invariants": [
         "Sidecar credentials stay server-side; a browser-sent speaker_profile is dropped."
@@ -697,7 +700,7 @@
       "id": "audiobook",
       "label": "Audiobook",
       "layer": "apps",
-      "summary": "Document structure and classification, speech plan, performance direction, render planner/cache, render, assembly and export. Its ingest, render and preview loops are a BackgroundWorker that runs only in the job-worker process; one leased job per chapter, checkpointed per span.",
+      "summary": "Document structure and classification, speech plan, performance direction, render planner/cache, render, assembly and export. Its ingest, render and preview loops are a BackgroundWorker that runs only in the job-worker process; one leased job per chapter, checkpointed per span. A story handed over from Storyteller (POST /api/audiobook/projects/import-story, story_import.py) becomes a project whose source is the story's Markdown and whose spoken lines are stored by its source asset (omnix_audiobook_story_sources); Find speakers gives a line to a cast speaker the story named without a model, and sends the rest to the classifier when one is configured, to review otherwise.",
       "paths": [
         "src/app/apps/audiobook/"
       ],
@@ -718,12 +721,19 @@
       "id": "story",
       "label": "Storyteller",
       "layer": "apps",
-      "summary": "Story jobs (outline -> draft -> store story asset), and the podcast script job (podcast.generate: plan with beats -> parts that carry the points already made -> a checking pass that rewrites flagged repeats -> pacing and a quality report). Podcast research (/api/podcast/research, research:run) is one quick web search on the episode's topic, returned as source notes the producer edits before the script is written.",
+      "summary": "Story projects (/api/story/projects: a project's pages, versions, cast, notes and moves in omnix_story_* tables, workspace-scoped with RLS; trash kept 30 days by a retention declaration) and story jobs (story.generate on a project: one page per LLM call through the structured gateway (story/page_contract.py: narration and dialogue blocks, proposed characters, suggested moves; a cut-off reply is asked for again), with a per-action prompt from story/prompts.py carrying the story so far and the bible (cast and notes) as quoted data; each spoken line's speaker is checked against the cast and flagged when unknown, and proposed characters are stored as suggestions; it appends a page, or for rewrite/expand/dialogue/summarize a version, keyed by job id so a retry adds nothing). An interactive page is written from the run's latest rolling summary, its last two pages and the bible (prompts.interactive_context), so the prompt stays the same size; the visible run is one chain of parent_page_id, so undo and Continue from here hide pages and never delete them, and Keep this run saves a kept_run version. A project can carry a plan (story/outline.py: chapters of beats kept in the project's outline; an outline job plans it, the writer edits it, and a beat is drafted into its chapter as a page tied to the beat) and presets (preset notes with a tone and writing style; the one in use gives the story its tone and style, and its instructions go with every page). A page is read aloud in cast voices through platform voice (story/voices.py: the writer's or an automatic cast in omnix_story_voice_cast, sentences cached in omnix_story_speech_audio). The writer edits a page's blocks in place, keeping each spoken line's speaker; a rewrite, expansion or dialogue polish of a selected block range on one page is kept as a version with a pending selection (the range, its original and proposed blocks), which the writer accepts into that range only while the range is unchanged (the manuscript before it kept as a version) or rejects. A story exports as an EPUB, Word or PDF book (story/export.py). Also the podcast script job (podcast.generate: plan with beats -> parts that carry the points already made -> a checking pass that rewrites flagged repeats -> pacing and a quality report). Podcast research (/api/podcast/research, research:run) is one quick web search on the episode's topic, returned as source notes the producer edits before the script is written.",
       "paths": [
         "src/app/apps/story/"
       ],
       "feature_id": "story",
       "key_files": [
+        "src/app/apps/story/service.py",
+        "src/app/apps/story/repository.py",
+        "src/app/apps/story/jobs.py",
+        "src/app/apps/story/prompts.py",
+        "src/app/apps/story/outline.py",
+        "src/app/apps/story/page_contract.py",
+        "src/app/apps/story/export.py",
         "src/app/apps/story/podcast_script.py",
         "src/app/apps/story/podcast_research.py"
       ],
@@ -1278,7 +1288,7 @@
       "from": "web_events",
       "to": "web_media",
       "kind": "calls",
-      "label": "Image Generation invalidates its job queries"
+      "label": "Image Generation invalidates its job queries; Storyteller follows its story job"
     },
     {
       "id": "launcher->postgres:sql",
@@ -1426,6 +1436,13 @@
       "to": "image",
       "kind": "calls",
       "label": "runs job handlers"
+    },
+    {
+      "id": "worker->story:calls",
+      "from": "worker",
+      "to": "story",
+      "kind": "calls",
+      "label": "runs story and podcast jobs (llm pool)"
     },
     {
       "id": "gateway->chat:calls",
@@ -1799,6 +1816,13 @@
       "label": "rendered audio"
     },
     {
+      "id": "audiobook->persistence:sql",
+      "from": "audiobook",
+      "to": "persistence",
+      "kind": "sql",
+      "label": "projects, sources, story lines, analysis"
+    },
+    {
       "id": "story->jobs:calls",
       "from": "story",
       "to": "jobs",
@@ -1806,11 +1830,32 @@
       "label": "story jobs"
     },
     {
-      "id": "story->assets:calls",
+      "id": "story->persistence:sql",
       "from": "story",
-      "to": "assets",
+      "to": "persistence",
+      "kind": "sql",
+      "label": "story projects, pages, versions"
+    },
+    {
+      "id": "story->providers:calls",
+      "from": "story",
+      "to": "providers",
       "kind": "calls",
-      "label": "story asset"
+      "label": "one story page per call (structured gateway)"
+    },
+    {
+      "id": "story->voice:calls",
+      "from": "story",
+      "to": "voice",
+      "kind": "calls",
+      "label": "cast matcher and shared speech service (story pages read aloud)"
+    },
+    {
+      "id": "rpg->voice:calls",
+      "from": "rpg",
+      "to": "voice",
+      "kind": "calls",
+      "label": "cast matcher and shared speech service (rpg_voice_routes)"
     },
     {
       "id": "dubbing->jobs:calls",
@@ -2208,6 +2253,13 @@
       "id": "story->research:uses",
       "from": "story",
       "to": "research",
+      "kind": "uses",
+      "label": "uses in src/app/apps/story/feature.py"
+    },
+    {
+      "id": "story->voice:uses",
+      "from": "story",
+      "to": "voice",
       "kind": "uses",
       "label": "uses in src/app/apps/story/feature.py"
     },
@@ -2928,7 +2980,7 @@
           "action": "Voice-cast speech audio",
           "n": 15,
           "from": "rpg",
-          "edge": "rpg->voice:uses"
+          "edge": "rpg->voice:calls"
         }
       ]
     },
@@ -3178,6 +3230,216 @@
           "n": 13,
           "from": "web_events",
           "edge": "web_events->web_media:calls"
+        }
+      ]
+    },
+    {
+      "id": "interactive_story",
+      "name": "Interactive story move",
+      "trigger": "Player makes a move in Storyteller's story mode",
+      "summary": "A move is a generic story.generate job on the project. The worker writes one page from the run's latest summary, its last two pages and the bible, checks it, and commits the page (its parent is the run's tip), the move and the new summary before the job completes. The reader follows the job on /events and polls only while that stream is closed.",
+      "steps": [
+        {
+          "node": "web_media",
+          "action": "Story mode reader: a typed or suggested move",
+          "files": [
+            "web/src/features/storyteller/StoryRunReader.tsx",
+            "web/src/features/storyteller/useStoryRequests.ts"
+          ],
+          "n": 1
+        },
+        {
+          "node": "web_api",
+          "action": "POST /api/jobs with type story.generate, the project id and the move (createJob)",
+          "files": [
+            "web/src/features/storyteller/useStoryJob.ts"
+          ],
+          "n": 2,
+          "from": "web_media",
+          "edge": "web_media->web_api:calls"
+        },
+        {
+          "node": "gateway",
+          "action": "Generic kernel jobs route",
+          "files": [
+            "src/app/composition/gateway/kernel_routes/core_jobs_routes.py"
+          ],
+          "n": 3,
+          "from": "web_api",
+          "edge": "web_api->gateway:http"
+        },
+        {
+          "node": "story",
+          "action": "_story_submission caps the premise; the job's resource class is gpu:llm",
+          "files": [
+            "src/app/apps/story/feature.py"
+          ],
+          "n": 4,
+          "from": "gateway",
+          "edge": "gateway->story:mounts"
+        },
+        {
+          "node": "jobs",
+          "action": "Story job row",
+          "n": 5,
+          "from": "story",
+          "edge": "story->jobs:calls"
+        },
+        {
+          "node": "persistence",
+          "action": "Job row committed",
+          "n": 6,
+          "from": "jobs",
+          "edge": "jobs->persistence:sql"
+        },
+        {
+          "node": "worker",
+          "action": "The llm pool claims the job",
+          "files": [
+            "src/app/composition/worker_runtime/pools.py"
+          ],
+          "n": 7,
+          "from": "jobs",
+          "edge": "worker->jobs:calls"
+        },
+        {
+          "node": "story",
+          "action": "run_story_job loads the project; interactive_context picks the newest summary and the last two pages",
+          "files": [
+            "src/app/apps/story/jobs.py",
+            "src/app/apps/story/prompts.py"
+          ],
+          "n": 8,
+          "from": "worker",
+          "edge": "worker->story:calls"
+        },
+        {
+          "node": "providers",
+          "action": "StructuredOutputGateway writes one page per call; a cut-off reply is asked for again",
+          "files": [
+            "src/app/providers/structured/gateway.py",
+            "src/app/apps/story/page_contract.py"
+          ],
+          "n": 9,
+          "from": "story",
+          "edge": "story->providers:calls"
+        },
+        {
+          "node": "persistence",
+          "action": "check_page checks speakers against the cast; record_job_result commits the page, its move and summary, then the job completes",
+          "files": [
+            "src/app/apps/story/page_contract.py",
+            "src/app/apps/story/service.py",
+            "src/app/apps/story/repository.py"
+          ],
+          "n": 10,
+          "from": "story",
+          "edge": "story->persistence:sql"
+        },
+        {
+          "node": "events",
+          "action": "job.running, then job.completed on /events",
+          "n": 11,
+          "from": "jobs",
+          "edge": "jobs->events:calls"
+        },
+        {
+          "node": "web_events",
+          "action": "useJobEventRefresh refetches the tracked job; the project refetches when it settles",
+          "files": [
+            "web/src/events/useJobEvents.ts",
+            "web/src/features/storyteller/useStoryJob.ts"
+          ],
+          "n": 12,
+          "from": "events",
+          "edge": "events->web_events:sse"
+        },
+        {
+          "node": "web_media",
+          "action": "The reader shows the run with the new page after the move, scrolled to it",
+          "files": [
+            "web/src/features/storyteller/storyRunModel.ts"
+          ],
+          "n": 13,
+          "from": "web_events",
+          "edge": "web_events->web_media:calls"
+        }
+      ]
+    },
+    {
+      "id": "story_to_audiobook",
+      "name": "Narrate a story in Audiobook",
+      "trigger": "Writer presses Narrate in Audiobook (writing mode or a kept run)",
+      "summary": "Apps do not import each other, so the web client relays: Storyteller builds the import from the story's pages and cast, Audiobook creates a project from it and runs its normal steps; Find speakers trusts a line's speaker when the story named a cast member and sends the rest to review.",
+      "steps": [
+        {
+          "node": "web_media",
+          "action": "Narrate in Audiobook: a kept run is saved as a kept_run version first; storyAudiobookImport builds chapters of narration and spoken lines and the non-suggested cast",
+          "files": [
+            "web/src/features/storyteller/useNarrateInAudiobook.ts",
+            "web/src/features/storyteller/storyAudiobook.ts"
+          ],
+          "n": 1
+        },
+        {
+          "node": "web_api",
+          "action": "POST /api/audiobook/projects/import-story through the audiobook feature's public importStoryToAudiobook",
+          "files": [
+            "web/src/features/audiobook/index.ts"
+          ],
+          "n": 2,
+          "from": "web_media",
+          "edge": "web_media->web_api:calls"
+        },
+        {
+          "node": "gateway",
+          "action": "Audiobook routes",
+          "files": [
+            "src/app/apps/audiobook/routes.py"
+          ],
+          "n": 3,
+          "from": "web_api",
+          "edge": "web_api->gateway:http"
+        },
+        {
+          "node": "audiobook",
+          "action": "import_story writes the story's Markdown as the source and saves its spoken lines keyed by the source asset",
+          "files": [
+            "src/app/apps/audiobook/service.py",
+            "src/app/apps/audiobook/story_import.py",
+            "src/app/apps/audiobook/project_repository.py"
+          ],
+          "n": 4,
+          "from": "gateway",
+          "edge": "gateway->audiobook:mounts"
+        },
+        {
+          "node": "persistence",
+          "action": "Project, source and story lines committed (workspace-scoped)",
+          "n": 5,
+          "from": "audiobook",
+          "edge": "audiobook->persistence:sql"
+        },
+        {
+          "node": "web_media",
+          "action": "The browser opens /audiobook?project=<id>",
+          "files": [
+            "web/src/features/storyteller/useNarrateInAudiobook.ts"
+          ],
+          "n": 6,
+          "from": "web_api",
+          "edge": "web_media->web_api:calls"
+        },
+        {
+          "node": "audiobook",
+          "action": "Later, in the job worker, Find speakers: StoryLineMatcher gives each matched span its story speaker; unmatched or unverified lines go to the classifier when one is configured, to review otherwise",
+          "files": [
+            "src/app/apps/audiobook/worker.py",
+            "src/app/apps/audiobook/story_import.py"
+          ],
+          "n": 7,
+          "from": "worker",
+          "edge": "worker->audiobook:calls"
         }
       ]
     },

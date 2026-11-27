@@ -39,6 +39,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/import-story": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Story
+         * @description A new project from a story, its speakers already given (Storyteller roadmap ST-4.4).
+         */
+        post: operations["import_story_api_audiobook_projects_import_story_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}": {
         parameters: {
             query?: never;
@@ -1519,6 +1539,59 @@ export interface components {
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
+        /** StoryImport */
+        StoryImport: {
+            /**
+             * Author
+             * @default
+             */
+            author?: string;
+            /** Cast */
+            cast?: components["schemas"]["StoryImportSpeaker"][];
+            /** Chapters */
+            chapters: components["schemas"]["StoryImportChapter"][];
+            /** Story Project Id */
+            story_project_id: string;
+            /** Story Version Id */
+            story_version_id?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** StoryImportBlock */
+        StoryImportBlock: {
+            /**
+             * Kind
+             * @default narration
+             * @enum {string}
+             */
+            kind?: "narration" | "dialogue";
+            /** Speaker */
+            speaker?: string | null;
+            /** Text */
+            text: string;
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified?: boolean;
+        };
+        /** StoryImportChapter */
+        StoryImportChapter: {
+            /** Blocks */
+            blocks: components["schemas"]["StoryImportBlock"][];
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** StoryImportSpeaker */
+        StoryImportSpeaker: {
+            /** Aliases */
+            aliases?: string[];
+            /** Name */
+            name: string;
+        };
         /** UpdateAudiobookProject */
         UpdateAudiobookProject: {
             /**
@@ -1620,6 +1693,41 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_story_api_audiobook_projects_import_story_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

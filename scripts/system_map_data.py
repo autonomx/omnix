@@ -61,7 +61,9 @@ NODES = [
     node("web_media", "Media studios", "client",
          "Storyteller, Audiobook, Podcast, Voice, Voice Cloning, STT, Image Generation, Dubbing workspaces. "
          "Job progress is polled (Audiobook: react-query refetchInterval 3-5 s; Image Generation: 1.5 s while a job is active). "
-         "Only Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries. "
+         "Image Generation also listens to /events, through its own EventSource, to invalidate its job and asset queries. "
+         "Storyteller follows its story job on the shared /events stream (useJobEventRefresh: job.running shows writing..., "
+         "job.completed shows the page) and polls once a second only while that stream is closed (useStoryJob.ts). "
          "Podcast's live avatars speak the preview through the Chat workspace's TTS socket and portrait link "
          "(assistant workspace/character-speech-player.ts, portrait/CharacterStage.tsx; avatar socket ?character_id=).",
          ["web/src/features/storyteller/", "web/src/features/audiobook/", "web/src/features/podcast/", "web/src/features/voice/",
@@ -87,7 +89,7 @@ NODES = [
          [A + "composition/gateway/"], port="8000",
          key_files=[A + "composition/gateway/app_factory.py", A + "composition/gateway/feature_registry.py", A + "composition/gateway/kernel_routes/", A + "composition/gateway/event_loop_lag_monitor.py"],
          invariants=["Never block the gateway event loop (trading jobs run on their own loop thread).", "Ingress allowlist is shared with the Vite proxy."],
-         tests=["src/tests/gateway/"], docs=["docs/architecture/OMNIX_PRODUCTION_INGRESS.md", "docs/architecture/ADR-0011-worker-api-gateway-split.md"]),
+         tests=["src/tests/api/gateway/", "src/tests/unit/gateway/"], docs=["docs/architecture/OMNIX_PRODUCTION_INGRESS.md", "docs/architecture/ADR-0011-worker-api-gateway-split.md"]),
     node("worker", "Job worker pools", "edge",
          "Standalone durable job workers (python -m app.composition.worker), started as a child by scripts/run_omnix_gateway.py. Feature BackgroundWorkers that require run_job_workers (audiobook, RPG, agent runtime, voice automation and engine swaps) run only here. Claim registered job types with SKIP LOCKED + per-attempt lease tokens; bounded resource pools. "
          "Runs job pools only: schedulers, the outbox relay and recovery belong to the gateway's background role (OMNIX_GATEWAY_BACKGROUND_ROLE, default worker).",
@@ -120,9 +122,13 @@ NODES = [
          invariants=["The voice is never held up by the portrait (bounded queue; drop and mark degraded).", "Do not restart services during a live call."],
          tests=["src/tests/live_voice/"], docs=["docs/roadmap/LIVE_COMPANION_ROADMAP_2026-11-15.md", "docs/architecture/OMNIX_LIVE_PORTRAIT_ROADMAP.md"]),
     node("voice", "Voice", "platform",
-         "TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names, and writes a heard call name back as the name).",
+         "TTS engines and swap controller, model packs/installs, voice design/clone, transcription, export, TTS PCM websocket, STT proxy (browser speech through the gateway; injects the account voiceprint and call names, and writes a heard call name back as the name). "
+         "The shared cast speech the RPG and Storyteller call (Storyteller roadmap ST-4.0/4.1): voice_casting.match_voices casts speakers by description words with a caller's seeded tie-break; "
+         "speech_service plans tagged lines into sentences (240 characters) and speaks one sentence per POST as streamed PCM16, retrying the first piece once when the TTS is saturated, "
+         "caching whole sentences only through the caller's cache port (rpg_speech_audio, story_speech_audio) and never a runaway take.",
          [A + "platform/voice/"], feature="voice",
-         key_files=[A + "platform/voice/stt_proxy_routes.py", A + "platform/voice/tts_engines.py", A + "platform/voice/swap_controller.py", A + "platform/voice/tts_pcm_websocket.py"],
+         key_files=[A + "platform/voice/stt_proxy_routes.py", A + "platform/voice/tts_engines.py", A + "platform/voice/swap_controller.py", A + "platform/voice/tts_pcm_websocket.py",
+                    A + "platform/voice/speech_service.py", A + "platform/voice/voice_casting.py"],
          invariants=["Sidecar credentials stay server-side; a browser-sent speaker_profile is dropped."], tests=["src/tests/voice/"],
          docs=["docs/architecture/OMNIX_VOICE_STUDIO_PARITY_ROADMAP.md"]),
     node("characters", "Characters", "platform",
@@ -199,17 +205,38 @@ NODES = [
          tests=["src/tests/trading/"], docs=["docs/architecture/OMNIX_TRADING_OPERATIONS.md", "docs/architecture/ADR-0004-omnix-trading-terminal.md"]),
     node("audiobook", "Audiobook", "apps",
          "Document structure and classification, speech plan, performance direction, render planner/cache, render, assembly and export. "
-         "Its ingest, render and preview loops are a BackgroundWorker that runs only in the job-worker process; one leased job per chapter, checkpointed per span.",
+         "Its ingest, render and preview loops are a BackgroundWorker that runs only in the job-worker process; one leased job per chapter, checkpointed per span. "
+         "A story handed over from Storyteller (POST /api/audiobook/projects/import-story, story_import.py) becomes a project whose source is the story's Markdown and whose "
+         "spoken lines are stored by its source asset (omnix_audiobook_story_sources); Find speakers gives a line to a cast speaker the story named without a model, and sends the rest to the classifier when one is configured, to review otherwise.",
          [A + "apps/audiobook/"], feature="audiobook",
          key_files=[A + "apps/audiobook/render_planner.py", A + "apps/audiobook/render_service.py", A + "apps/audiobook/assembly_service.py"],
          tests=["src/tests/audiobook/"], docs=["docs/architecture/OMNIX_AUDIOBOOK_V1_OPERATIONS.md"]),
     node("story", "Storyteller", "apps",
-         "Story jobs (outline -> draft -> store story asset), and the podcast script job (podcast.generate: plan with "
+         "Story projects (/api/story/projects: a project's pages, versions, cast, notes and moves in omnix_story_* "
+         "tables, workspace-scoped with RLS; trash kept 30 days by a retention declaration) and story jobs "
+         "(story.generate on a project: one page per LLM call through the structured gateway (story/page_contract.py: "
+         "narration and dialogue blocks, proposed characters, suggested moves; a cut-off reply is asked for again), with "
+         "a per-action prompt from story/prompts.py carrying the story so far and the bible (cast and notes) as quoted "
+         "data; each spoken line's speaker is checked against the cast and flagged when unknown, and proposed "
+         "characters are stored as suggestions; it appends a page, or for rewrite/expand/dialogue/summarize a version, "
+         "keyed by job id so a retry adds nothing). An interactive page is written from the run's latest rolling "
+         "summary, its last two pages and the bible (prompts.interactive_context), so the prompt stays the same size; "
+         "the visible run is one chain of parent_page_id, so undo and Continue from here hide pages and never delete "
+         "them, and Keep this run saves a kept_run version. A project can carry a plan (story/outline.py: chapters "
+         "of beats kept in the project's outline; an outline job plans it, the writer edits it, and a beat is drafted "
+         "into its chapter as a page tied to the beat) and presets (preset notes with a tone and writing style; the one "
+         "in use gives the story its tone and style, and its instructions go with every page). A page is read aloud in cast voices through platform voice "
+         "(story/voices.py: the writer's or an automatic cast in omnix_story_voice_cast, sentences cached in "
+         "omnix_story_speech_audio). The writer edits a page's blocks in place, keeping each spoken line's speaker; "
+         "a rewrite, expansion or dialogue polish of a selected block range on one page is kept as a version with a "
+         "pending selection (the range, its original and proposed blocks), which the writer accepts into that range "
+         "only while the range is unchanged (the manuscript before it kept as a version) or rejects. A story exports "
+         "as an EPUB, Word or PDF book (story/export.py). Also the podcast script job (podcast.generate: plan with "
          "beats -> parts that carry the points already made -> a checking pass that rewrites flagged repeats -> pacing "
          "and a quality report). Podcast research (/api/podcast/research, research:run) is one quick web search on "
          "the episode's topic, returned as source notes the producer edits before the script is written.",
          [A + "apps/story/"], feature="story",
-         key_files=[A + "apps/story/podcast_script.py", A + "apps/story/podcast_research.py"],
+         key_files=[A + "apps/story/service.py", A + "apps/story/repository.py", A + "apps/story/jobs.py", A + "apps/story/prompts.py", A + "apps/story/outline.py", A + "apps/story/page_contract.py", A + "apps/story/export.py", A + "apps/story/podcast_script.py", A + "apps/story/podcast_research.py"],
          tests=["src/tests/story/", "src/tests/unit/test_podcast_script.py", "src/tests/unit/test_podcast_research.py"]),
     node("dubbing", "Dubbing", "apps", "Translate, fit and mix dubbing steps as jobs.",
          [A + "apps/dubbing/"], feature="dubbing", tests=["src/tests/dubbing/"]),
@@ -316,7 +343,7 @@ EDGE_ROWS = [
     ("gateway", "web_chat", "sse", "chat turn reply stream"),
     ("gateway", "web_rpg", "sse", "turn stream"),
     ("events", "web_events", "sse", "/events stream"),
-    ("web_events", "web_media", "calls", "Image Generation invalidates its job queries"),
+    ("web_events", "web_media", "calls", "Image Generation invalidates its job queries; Storyteller follows its story job"),
     ("launcher", "postgres", "sql", "release migrations before any service starts"),
     ("launcher", "gateway", "spawns", "start/supervise"),
     ("gateway", "worker", "spawns", "run_omnix_gateway.py starts the local job worker"),
@@ -338,6 +365,7 @@ EDGE_ROWS = [
     ("worker", "audiobook", "calls", "runs its ingest/render/preview loops"),
     ("gateway", "trading", "calls", "scheduler runs the handoff/climatology import (thread executor)"),
     ("worker", "image", "calls", "runs job handlers"),
+    ("worker", "story", "calls", "runs story and podcast jobs (llm pool)"),
     ("gateway", "chat", "calls", "in-process generation dispatcher; scheduled recovery of abandoned jobs"),
 ]
 
@@ -394,8 +422,13 @@ EDGE_ROWS += [
     ("audiobook", "jobs", "calls", "render jobs"),
     ("audiobook", "providers", "calls", "TTS provider (offline class)"),
     ("audiobook", "assets", "calls", "rendered audio"),
+    ("audiobook", "persistence", "sql", "projects, sources, story lines, analysis"),
     ("story", "jobs", "calls", "story jobs"),
-    ("story", "assets", "calls", "story asset"),    ("dubbing", "jobs", "calls", "dubbing jobs"),
+    ("story", "persistence", "sql", "story projects, pages, versions"),
+    ("story", "providers", "calls", "one story page per call (structured gateway)"),
+    ("story", "voice", "calls", "cast matcher and shared speech service (story pages read aloud)"),
+    ("rpg", "voice", "calls", "cast matcher and shared speech service (rpg_voice_routes)"),
+    ("dubbing", "jobs", "calls", "dubbing jobs"),
     ("jobs", "persistence", "sql", "job rows"),
     ("jobs", "events", "calls", "job events (omnix_job_events + pg_notify)"),
     ("events", "persistence", "sql", "outbox rows"),
@@ -585,6 +618,40 @@ FLOWS = [
          S("web_api", "The page polls its jobs every 1.5 s while one is active", frm="web_media"),
          S("web_events", "Its own EventSource('/events') invalidates the job queries and refetches assets on completion", frm="events"),
          S("web_media", "The image renders"),
+     ]},
+    {"id": "interactive_story", "name": "Interactive story move", "trigger": "Player makes a move in Storyteller's story mode",
+     "summary": "A move is a generic story.generate job on the project. The worker writes one page from the run's latest summary, its last two pages and the bible, checks it, and commits the page (its parent is the run's tip), the move and the new summary before the job completes. The reader follows the job on /events and polls only while that stream is closed.",
+     "steps": [
+         S("web_media", "Story mode reader: a typed or suggested move", files=["web/src/features/storyteller/StoryRunReader.tsx", "web/src/features/storyteller/useStoryRequests.ts"]),
+         S("web_api", "POST /api/jobs with type story.generate, the project id and the move (createJob)", files=["web/src/features/storyteller/useStoryJob.ts"]),
+         S("gateway", "Generic kernel jobs route", files=[A + "composition/gateway/kernel_routes/core_jobs_routes.py"]),
+         S("story", "_story_submission caps the premise; the job's resource class is gpu:llm", files=[A + "apps/story/feature.py"]),
+         S("jobs", "Story job row"),
+         S("persistence", "Job row committed"),
+         S("worker", "The llm pool claims the job", frm="jobs", files=[A + "composition/worker_runtime/pools.py"]),
+         S("story", "run_story_job loads the project; interactive_context picks the newest summary and the last two pages", frm="worker",
+           files=[A + "apps/story/jobs.py", A + "apps/story/prompts.py"]),
+         S("providers", "StructuredOutputGateway writes one page per call; a cut-off reply is asked for again", files=[A + "providers/structured/gateway.py", A + "apps/story/page_contract.py"]),
+         S("persistence", "check_page checks speakers against the cast; record_job_result commits the page, its move and summary, then the job completes",
+           frm="story", files=[A + "apps/story/page_contract.py", A + "apps/story/service.py", A + "apps/story/repository.py"]),
+         S("events", "job.running, then job.completed on /events", frm="jobs"),
+         S("web_events", "useJobEventRefresh refetches the tracked job; the project refetches when it settles", frm="events",
+           files=["web/src/events/useJobEvents.ts", "web/src/features/storyteller/useStoryJob.ts"]),
+         S("web_media", "The reader shows the run with the new page after the move, scrolled to it", files=["web/src/features/storyteller/storyRunModel.ts"]),
+     ]},
+    {"id": "story_to_audiobook", "name": "Narrate a story in Audiobook", "trigger": "Writer presses Narrate in Audiobook (writing mode or a kept run)",
+     "summary": "Apps do not import each other, so the web client relays: Storyteller builds the import from the story's pages and cast, Audiobook creates a project from it and runs its normal steps; Find speakers trusts a line's speaker when the story named a cast member and sends the rest to review.",
+     "steps": [
+         S("web_media", "Narrate in Audiobook: a kept run is saved as a kept_run version first; storyAudiobookImport builds chapters of narration and spoken lines and the non-suggested cast",
+           files=["web/src/features/storyteller/useNarrateInAudiobook.ts", "web/src/features/storyteller/storyAudiobook.ts"]),
+         S("web_api", "POST /api/audiobook/projects/import-story through the audiobook feature's public importStoryToAudiobook", files=["web/src/features/audiobook/index.ts"]),
+         S("gateway", "Audiobook routes", files=[A + "apps/audiobook/routes.py"]),
+         S("audiobook", "import_story writes the story's Markdown as the source and saves its spoken lines keyed by the source asset",
+           files=[A + "apps/audiobook/service.py", A + "apps/audiobook/story_import.py", A + "apps/audiobook/project_repository.py"]),
+         S("persistence", "Project, source and story lines committed (workspace-scoped)"),
+         S("web_media", "The browser opens /audiobook?project=<id>", frm="web_api", files=["web/src/features/storyteller/useNarrateInAudiobook.ts"]),
+         S("audiobook", "Later, in the job worker, Find speakers: StoryLineMatcher gives each matched span its story speaker; unmatched or unverified lines go to the classifier when one is configured, to review otherwise", frm="worker",
+           files=[A + "apps/audiobook/worker.py", A + "apps/audiobook/story_import.py"]),
      ]},
     {"id": "agent_run", "name": "Agent run", "trigger": "User asks for a task that needs an agent",
      "summary": "The chat turn routes to AGENT (or compiles a TaskGraph); the gateway issues the run spec under profile and grant ceilings and enqueues jobs; the job worker prepares an isolated workspace and launches Pi; Pi calls back to the gateway for the model and for every capability (brokered); the supervisor validates the candidate before finish.",

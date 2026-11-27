@@ -3,14 +3,13 @@
 The cast is presentation, kept outside the campaign document (``omnix_rpg_voice_cast``), so it changes no turn and
 no replay. Who is cast: the narrator, and each person the hero has heard (anyone with an exchange in the dialogue's
 record) or meets now. How (``auto_cast``): deterministically, seeded by the campaign and the person, among the
-castable voices only (``platform/voice/voice_casting.py``), the voice whose description shares most words with the
+castable voices only (``platform/voice/voice_casting.py``, ``match_voices``), the voice whose description shares most words with the
 person's lore (their role, their description), and where the castable list has enough, never one already given to
 someone in the same scene. The world's author may name voices for its people (a person's ``voice``); a castable one
 is kept. The player may choose any castable voice for anyone (``choose``), and their choice wins.
 """
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -18,7 +17,6 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l
 from app.apps.rpg.foundation.state import access as _sections
 
 NARRATOR = "narrator"
-_WORDS = re.compile(r"[a-z]{3,}")
 
 
 def speakers(document: Mapping[str, Any]) -> list[dict[str, str]]:
@@ -41,29 +39,11 @@ def auto_cast(campaign_id: str, people: Iterable[Mapping[str, str]], voices: lis
     """The voices for the people not cast yet: the author's where castable, else the best fitting castable voice not
     already heard in the scene, ties broken by a roll seeded by the campaign and the person."""
     from app.apps.rpg.foundation.core.determinism import rng_for, rng_seed_from_session_id, stable_sub_index
+    from app.platform.voice.contracts import match_voices
 
-    castable = {row["voice_id"]: row for row in voices}
-    if not castable:
-        return {}
-    taken = {row["voice_id"] for row in cast.values()}
-    made: dict[str, dict[str, str]] = {}
     seed = rng_seed_from_session_id(campaign_id)
-    for person in people:
-        speaker = person["speaker_id"]
-        if speaker in cast:
-            continue
-        if person.get("voice") in castable:
-            choice, chosen_by = person["voice"], "author"
-        else:
-            words = set(_WORDS.findall(person.get("lore", "").casefold()))
-            free = [voice for voice in castable if voice not in taken] or list(castable)
-            rng = rng_for(seed, 0, "voice_cast", stable_sub_index(speaker))
-            choice = max(sorted(free), key=lambda voice: (
-                len(words & set(_WORDS.findall(castable[voice]["description"].casefold()))), rng.random()))
-            chosen_by = "auto"
-        made[speaker] = {"voice_id": choice, "voice_revision": castable[choice]["revision"], "chosen_by": chosen_by}
-        taken.add(choice)
-    return made
+    return match_voices(people, voices, cast,
+                        lambda speaker: rng_for(seed, 0, "voice_cast", stable_sub_index(speaker)).random)
 
 
 def cast_for(work: Any, context: Any, campaign_id: str, document: Mapping[str, Any]) -> list[dict[str, Any]]:

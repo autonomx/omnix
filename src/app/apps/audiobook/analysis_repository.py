@@ -242,7 +242,11 @@ class PostgresAudiobookAnalysisRepository:
         force_reclassify: bool = False,
         coverage_spans: Sequence[SourceSpan] | None = None,
         dialogue_target_ids: set[str] | None = None,
+        reclassify_only: set[str] | None = None,
     ) -> dict[str, int]:
+        """``reclassify_only``, with ``force_reclassify``: the spans the rerun decided; every other span keeps
+        the annotation it has, if any (a story-matched rerun with no classifier leaves unmatched lines as they
+        were)."""
         project = self.connection.execute(
             """
             SELECT current_source_revision_id FROM omnix_audiobook_projects
@@ -302,6 +306,9 @@ class PostgresAudiobookAnalysisRepository:
                 # An explicit user decision is authoritative across classifier
                 # reruns. The latest annotation remains the effective one.
                 if previous is not None and str(previous[2]) == "user_resolved":
+                    continue
+                # A span the rerun did not decide keeps the annotation it has (one with none still gets one).
+                if previous is not None and reclassify_only is not None and str(span_id) not in reclassify_only:
                     continue
             revision = int(previous[1]) + 1 if previous is not None else 1
             annotation_id = (

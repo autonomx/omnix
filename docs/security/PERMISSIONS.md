@@ -191,7 +191,6 @@ role to permission list; `owner` cannot be changed).
 | Route | Permission |
 |---|---|
 | `/api/trading/stream` | `trading:read` |
-| `/ws/audiobook` | `audiobook:read` |
 
 Agent and task-graph `approve`/`reject` commands also require
 `agent:approve`, and `steer` requires `agent:steer` (checked from the

@@ -781,14 +781,16 @@ class PostgresJobRepository(_BaseJobRepository):
 
     def has_pending_higher_priority_tts(
         self,
-        context: TenantContext,
+        context: TenantContext | None,
         *,
         resource_classes: tuple[str, ...],
     ) -> bool:
+        """Whether a TTS job of a higher class waits or runs: in this workspace, or with no
+        context in any workspace (the caller holds a system scope)."""
         row = self.connection.execute(
             """SELECT EXISTS (
                    SELECT 1 FROM omnix_jobs
-                    WHERE workspace_id = %s AND resource_class = ANY(%s)
+                    WHERE (%s::text IS NULL OR workspace_id = %s) AND resource_class = ANY(%s)
                       AND (
                           (status IN ('queued', 'waiting', 'retrying')
                            AND available_at <= CURRENT_TIMESTAMP
@@ -797,7 +799,7 @@ class PostgresJobRepository(_BaseJobRepository):
                               AND lease_expires_at > CURRENT_TIMESTAMP)
                       )
                )""",
-            (context.workspace_id, list(resource_classes)),
+            (*(2 * [context.workspace_id if context is not None else None]), list(resource_classes)),
         ).fetchone()
         return bool(row[0])
 

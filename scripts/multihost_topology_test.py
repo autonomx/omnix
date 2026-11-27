@@ -221,19 +221,24 @@ def events_report_job(base: str) -> dict[str, Any]:
 
 
 def asset_across_hosts(upload_host: str, download_host: str) -> dict[str, Any]:
-    """Save a manuscript on one host and read it back on another (shared S3)."""
+    """Upload a manuscript on one host and download it from another (shared S3).
+
+    The manuscript is an Audiobook text source, the one route that stores a text upload as an asset."""
     text = "Multi-host manuscript " + uuid.uuid4().hex
     with httpx.Client(timeout=60, headers=HEADERS) as client:
-        saved = _check(client.post(f"{upload_host}/api/assets/story", json={
-            "title": "Multihost story",
-            "content": text,
-            "word_count": 3,
-        }))
-        asset_id = saved["asset"]["id"]
-        downloaded = _check(client.get(f"{download_host}/api/assets/{asset_id}/content"))
-    if text not in str(downloaded.get("content")):
-        raise AssertionError("downloaded manuscript differs from the saved one")
-    return {"asset_id": asset_id, "size_bytes": downloaded.get("size_bytes")}
+        project = _check(client.post(f"{upload_host}/api/audiobook/projects", json={"title": "Multihost book"}))
+        saved = _check(client.post(
+            f"{upload_host}/api/audiobook/projects/{project['id']}/source",
+            params={"source_format": "txt", "filename": "multihost.txt"},
+            content=text.encode("utf-8"),
+            headers={"Content-Type": "application/octet-stream"},
+        ))
+        asset_id = saved["source_asset_id"]
+        downloaded = client.get(f"{download_host}/api/assets/{asset_id}/download")
+        downloaded.raise_for_status()
+    if downloaded.content != text.encode("utf-8"):
+        raise AssertionError("downloaded manuscript differs from the uploaded one")
+    return {"asset_id": asset_id, "size_bytes": len(downloaded.content)}
 
 
 def live_call_audio(base: str) -> dict[str, Any]:

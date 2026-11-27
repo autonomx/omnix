@@ -1,11 +1,9 @@
-/** Presentational parts of the story stage: mode switch, story mode, project header, actions, versions, outline and text. */
-import { Button } from '@mantine/core';
-import { useMemo, useState } from 'react';
-import { type JobRecord } from '../../api/client';
+/** Presentational parts of the story stage: mode switch, versions, actions, outline and text. */
+import { useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixStatusPill } from '../../design/primitives';
-import { SaveFeedback, StoryAssetSummary, StoryOutlineChapter, StoryQuickActionMode, StoryWorkspaceMode, quickActions, storyVersionTitle } from './storyModel';
-import { lastStoryPage, storyParagraphs, storyTextBlocks } from './storyTextModel';
+import type { StoryVersionSummary } from './api/storyClient';
+import { ManuscriptOutlineChapter, StoryQuickActionMode, StoryWorkspaceMode, quickActions } from './storyModel';
+import { type ManuscriptItem, shortDate, versionLabel } from './storyProjectModel';
 
 export function StoryModeSwitch({ mode, onChange }: { mode: StoryWorkspaceMode; onChange: (mode: StoryWorkspaceMode) => void }) {
   return (
@@ -22,106 +20,12 @@ export function StoryModeSwitch({ mode, onChange }: { mode: StoryWorkspaceMode; 
   );
 }
 
-export function StoryModePanel({
-  activeAsset,
-  activeChapterLabel,
-  activeStoryText,
-  assetError,
-  isAssetLoading,
-  module,
-  onMove,
-  pending,
-  response,
-  setResponse,
-  storyTitle,
-  suggestedMoves,
-}: {
-  activeAsset: StoryAssetSummary | null;
-  activeChapterLabel: string;
-  activeStoryText: string | null;
-  assetError: Error | null;
-  isAssetLoading: boolean;
-  module: OmnixModuleDefinition;
-  onMove: (moveText: string, suggestedChoice?: string | null) => void;
-  pending: boolean;
-  response: string;
-  setResponse: (value: string) => void;
-  storyTitle: string;
-  suggestedMoves: string[];
-}) {
-  const latestPage = activeStoryText ? lastStoryPage(activeStoryText) : null;
-  return (
-    <section className="story-mode-panel" aria-label="Interactive story mode">
-      <div className="story-mode-reader">
-        <div className="storyteller-manuscript-meta">
-          <span>{activeChapterLabel}</span>
-          <span>Interactive page</span>
-        </div>
-        <h2>{storyTitle}</h2>
-        <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
-        {latestPage ? (
-          <div className="story-mode-page">
-            {storyParagraphs(latestPage).map((paragraph, index) => (
-              <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>
-            ))}
-          </div>
-        ) : (
-          <StoryEmptyState
-            activeAsset={activeAsset}
-            assetError={assetError}
-            isAssetLoading={isAssetLoading}
-            module={module}
-            storyTitle={storyTitle}
-          />
-        )}
-      </div>
-      <aside className="story-mode-controls" aria-label="Interactive story mode controls">
-        <div className="storyteller-panel-heading">
-          <div><p className="eyebrow">Interactive story mode</p><h3>Your next move</h3></div>
-          <OmnixStatusPill>{pending ? 'continuing' : 'ready'}</OmnixStatusPill>
-        </div>
-        <label>
-          Write your response
-          <textarea
-            aria-label="Interactive story mode response"
-            onChange={(event) => setResponse(event.target.value)}
-            placeholder="I examine the glowing door, but keep one hand on the charm."
-            rows={5}
-            value={response}
-          />
-        </label>
-        <Button disabled={pending || !response.trim()} loading={pending} onClick={() => onMove(response)} type="button">
-          Continue with my response
-        </Button>
-        <div className="story-mode-suggestions">
-          <p className="eyebrow">Suggested next moves</p>
-          {suggestedMoves.map((move) => (
-            <button disabled={pending} key={move} type="button" onClick={() => onMove(move, move)}>{move}</button>
-          ))}
-        </div>
-      </aside>
-    </section>
-  );
-}
-
-export function StoryEmptyState({ activeAsset, assetError, isAssetLoading, module, storyTitle }: {
-  activeAsset: StoryAssetSummary | null;
-  assetError: Error | null;
-  isAssetLoading: boolean;
-  module: OmnixModuleDefinition;
-  storyTitle: string;
-}) {
-  if (activeAsset) {
-    const message = assetError
-      ? 'This story asset could not be loaded as readable text.'
-      : isAssetLoading
-        ? 'Loading story asset content…'
-        : 'This story asset is selected but has no readable manuscript text.';
+export function StoryEmptyState({ isLoading, module }: { isLoading: boolean; module: OmnixModuleDefinition }) {
+  if (isLoading) {
     return (
       <div className="storyteller-empty-manuscript" role="status">
-        <p className="eyebrow">Story asset</p>
-        <h3>{storyTitle}</h3>
-        <p>{message}</p>
+        <p className="eyebrow">Story</p>
+        <p>Loading the story…</p>
       </div>
     );
   }
@@ -135,38 +39,41 @@ export function StoryEmptyState({ activeAsset, assetError, isAssetLoading, modul
   );
 }
 
-export function StoryProjectHeader({ title, premise, providerLabel, wordCount, chapterCount, moduleRoute, canPersistStory, saveFeedback, onSave, onExport }: {
-  title: string;
-  premise: string;
-  providerLabel: string;
-  wordCount: number;
-  chapterCount: number;
-  moduleRoute: string;
-  canPersistStory: boolean;
-  saveFeedback: SaveFeedback | null;
-  onSave: () => void;
-  onExport: () => void;
+/** The project's versions, newest first, each one restorable (ST-1.6). */
+export function StoryVersions({ versions, disabled, onRestore, onCompare }: {
+  versions: StoryVersionSummary[];
+  disabled: boolean;
+  onRestore: (version: StoryVersionSummary) => void;
+  /** Reads the version against the manuscript before restoring it (ST-6.3). */
+  onCompare?: (version: StoryVersionSummary) => void;
 }) {
+  if (!versions.length) return null;
+  const newestFirst = versions.slice().sort((left, right) => right.version_number - left.version_number);
   return (
-    <header className="storyteller-project-header">
-      <div className="storyteller-cover" aria-hidden="true" />
-      <div className="storyteller-project-copy">
-        <p className="eyebrow">{moduleRoute}</p>
-        <h1>{title}</h1>
-        <p>{premise || 'A new local-first story draft.'}</p>
-        <div className="storyteller-tags"><span>Fantasy</span><span>Cozy</span><span>Mystery</span><span>Slice of Life</span></div>
-        {saveFeedback ? <p className={`storyteller-persist-feedback ${saveFeedback.kind}`} role="status">{saveFeedback.message}</p> : null}
-      </div>
-      <div className="storyteller-project-stats">
-        <div><strong>{wordCount.toLocaleString()}</strong><span>Words</span></div>
-        <div><strong>{chapterCount}</strong><span>Chapters</span></div>
-        <div><strong>{providerLabel}</strong><span>Default provider</span></div>
-      </div>
-      <div className="storyteller-project-actions">
-        <button disabled={!canPersistStory} type="button" onClick={onSave}>Save story</button>
-        <button disabled={!canPersistStory} type="button" onClick={onExport}>Export Markdown</button>
-      </div>
-    </header>
+    <section className="storyteller-versions" aria-label="Story versions">
+      <p className="eyebrow">Versions</p>
+      <ol>
+        {newestFirst.map((version) => (
+          <li key={version.id}>
+            <span><strong>v{version.version_number}</strong> {versionLabel(version)}</span>
+            <small>{shortDate(version.created_at)}</small>
+            {onCompare ? (
+              <button aria-label={`Compare version ${version.version_number}`} type="button" onClick={() => onCompare(version)}>
+                Compare
+              </button>
+            ) : null}
+            <button
+              aria-label={`Restore version ${version.version_number}`}
+              disabled={disabled}
+              type="button"
+              onClick={() => onRestore(version)}
+            >
+              Restore
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -183,29 +90,10 @@ export function StoryActionBar({ disabled, onAction }: { disabled: boolean; onAc
   );
 }
 
-export function StoryVersions({ activeJobId, jobs, onSelect }: { activeJobId: string | null; jobs: JobRecord[]; onSelect: (jobId: string) => void }) {
-  const visibleJobs = jobs.slice(0, 5);
-  return (
-    <section className="storyteller-versions" aria-label="Recent versions">
-      <div><p className="eyebrow">Recent versions</p></div>
-      {visibleJobs.length ? visibleJobs.map((job, index) => (
-        <button
-          aria-pressed={job.id === activeJobId}
-          className={job.id === activeJobId ? 'active' : ''}
-          key={job.id}
-          type="button"
-          onClick={() => onSelect(job.id)}
-        >
-          <strong>{index === 0 ? 'v7' : `v${Math.max(1, 7 - index)}`}</strong>
-          <span>{storyVersionTitle(job, index)}</span>
-        </button>
-      )) : <span>No versions yet</span>}
-    </section>
-  );
-}
-
-export function StoryOutline({ chapters, selectedChapter, onAddChapter, onSelect }: {
-  chapters: StoryOutlineChapter[];
+export function StoryOutline({ chapters, selectedChapter, disabled, onAddChapter, onSelect }: {
+  chapters: ManuscriptOutlineChapter[];
+  /** Holds Add chapter while a job is being queued. */
+  disabled: boolean;
   selectedChapter: number;
   onAddChapter: () => void;
   onSelect: (chapterNumber: number, targetId: string) => void;
@@ -242,21 +130,52 @@ export function StoryOutline({ chapters, selectedChapter, onAddChapter, onSelect
           </ol> : null}
         </article>
       ))}
-      <button className="storyteller-add-chapter" type="button" onClick={onAddChapter}>Add chapter</button>
+      <button className="storyteller-add-chapter" disabled={disabled} type="button" onClick={onAddChapter}>Add chapter</button>
     </aside>
   );
 }
 
-export function StoryText({ text, outline }: { text: string; outline: StoryOutlineChapter[] }) {
-  const blocks = useMemo(() => storyTextBlocks(text, outline), [text, outline]);
+/** The manuscript's chapter line, reading time and title (ST-6.4). */
+export function ManuscriptHeading({ chapter, minutes, title }: { chapter: string; minutes: number; title: string }) {
   return (
-    <div className="storyteller-prose">
-      {blocks.map((block, index) => {
-        const key = `${block.kind}-${block.id ?? block.text.slice(0, 18)}-${index}`;
-        if (block.kind === 'chapter') return <h3 id={block.id} key={key} tabIndex={-1}>{block.text}</h3>;
-        if (block.kind === 'scene') return <h4 id={block.id} key={key} tabIndex={-1}>{block.text}</h4>;
-        return <p key={key}>{block.text}</p>;
-      })}
-    </div>
+    <>
+      <div className="storyteller-manuscript-meta">
+        <span>{chapter}</span>
+        <span>{minutes} min read</span>
+      </div>
+      <h2>{title}</h2>
+      <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
+    </>
   );
+}
+
+/**
+ * Headings, narration, and spoken lines with the speaker in the margin; a speaker not in the cast is flagged.
+ * `speaking` marks the line being read aloud, counted among the narration and spoken lines.
+ */
+export function ManuscriptLines({ items, speaking = null }: { items: ManuscriptItem[]; speaking?: number | null }) {
+  let line = -1;
+  return items.map((item, index) => {
+    const key = `${item.kind}-${index}`;
+    if (item.kind === 'chapter') return <h3 id={item.id} key={key} tabIndex={-1}>{item.text}</h3>;
+    if (item.kind === 'scene') return <h4 id={item.id} key={key} tabIndex={-1}>{item.text}</h4>;
+    line += 1;
+    const heard = line === speaking;
+    const current = heard ? { 'aria-current': true as const } : {};
+    const source = { 'data-page-id': item.pageId, 'data-block-index': item.block };
+    if (item.kind === 'narration') {
+      return <p className={heard ? 'storyteller-line-speaking' : undefined} key={key} {...current} {...source}>{item.text}</p>;
+    }
+    const classes = ['storyteller-line', item.unverified ? 'storyteller-line-unverified' : '', heard ? 'storyteller-line-speaking' : '']
+      .filter(Boolean).join(' ');
+    return (
+      <p className={classes} key={key} {...current} {...source}>
+        <span className="storyteller-line-speaker">
+          {item.speakerName}
+          {item.unverified ? <small title="This speaker is not in the story's cast">not in cast</small> : null}
+        </span>
+        <span className="storyteller-line-text">{item.text}</span>
+      </p>
+    );
+  });
 }

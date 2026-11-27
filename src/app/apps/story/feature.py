@@ -10,27 +10,13 @@ from app.runtime.features import FeatureContext, FeatureModule
 from app.security.permissions import requires
 
 from .jobs import PodcastGenerateInput, StoryGenerateInput, run_story_job
+from .prompts import PREMISE_MAX_CHARS
+from .routes import router as _project_router
 from .podcast_research import PodcastResearchRequest, PodcastResearchResponse, research_podcast_topic
-from .asset_save import (
-    SaveStoryAssetRequest,
-    SavedStoryAssetResponse,
-    save_story_asset,
-)
 
 
-def _story_asset_router(context: FeatureContext) -> APIRouter:
-    router = APIRouter()
-    assets = context.services.assets
-    if assets is None:
-        raise RuntimeError("story feature requires the asset service")
-
-    @router.post("/api/assets/story", response_model=SavedStoryAssetResponse)
-    def save_story_asset_endpoint(
-        request: SaveStoryAssetRequest,
-    ) -> SavedStoryAssetResponse:
-        return save_story_asset(assets, request)
-
-    return router
+def _story_project_router(_context: FeatureContext) -> APIRouter:
+    return _project_router
 
 
 def _podcast_research_router(_context: FeatureContext) -> APIRouter:
@@ -51,13 +37,29 @@ def _submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
     )
 
 
+def _story_submission(request: CreateJobRequest) -> CreateJobRequest:
+    """A new draft keeps its premise short. A follow-up on an older story (continue, a rewrite, a move)
+    trims a longer premise instead of failing, so stories written before the cap can still go on."""
+    payload = dict(request.input_payload or {})
+    premise = str(payload.get("premise") or "").strip()
+    if len(premise) > PREMISE_MAX_CHARS:
+        drafting = (str(payload.get("action") or "draft") == "draft" and str(payload.get("interaction_mode") or
+                    "writing") != "story" and not payload.get("project_id") and not payload.get("source_text"))
+        if drafting:
+            raise ValueError(f"The premise is longer than {PREMISE_MAX_CHARS} characters; shorten it and try again.")
+        payload["premise"] = premise[:PREMISE_MAX_CHARS].rstrip()
+        request = request.model_copy(update={"input_payload": payload})
+    return _submission_defaults(request)
+
+
 FEATURE = FeatureModule(
     id="story",
     title="Storyteller and Podcast",
     tier="app",
     # Podcast research reads research's contracts; with research off it answers "unavailable" (podcast_research.py).
-    uses=("research",),
-    routers=(_story_asset_router, _podcast_research_router),
+    # A story's voices are cast and spoken through voice's contracts (voices.py); with voice off, speech is a 503.
+    uses=("research", "voice"),
+    routers=(_story_project_router, _podcast_research_router),
     job_handlers=(
         JobHandlerSpec(
             type="story.generate",
@@ -66,7 +68,7 @@ FEATURE = FeatureModule(
             input_model=StoryGenerateInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=900,
-            submission_policy=_submission_defaults,
+            submission_policy=_story_submission,
         ),
         JobHandlerSpec(
             type="podcast.generate",

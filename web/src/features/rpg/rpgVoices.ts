@@ -6,7 +6,7 @@
  * speech service down the text stands, silent, and the play button says so.
  */
 import { api } from './api/gateway';
-import { openPcmSink, type RpgPcmSink } from './rpgSpeechSink';
+import { openPcmSink, type PcmSink } from '../assistant';
 
 const AUTOPLAY_KEY = 'omnix:rpg:voice-autoplay';
 
@@ -60,7 +60,7 @@ let playing = 0;
 let stopCurrent: (() => void) | null = null;  // the response being heard, let go when another starts or it stops
 
 /** One sentence's audio, pushed into ``sink`` as it arrives; false when the service could not speak it. */
-async function streamSentence(sessionId: string, sentence: { speakerId: string; text: string }, sink: RpgPcmSink,
+async function streamSentence(sessionId: string, sentence: { speakerId: string; text: string }, sink: PcmSink,
   signal: AbortSignal): Promise<boolean> {
   const { data, response } = await api.POST('/api/rpg/sessions/{session_id}/speech-audio', {
     params: { path: { session_id: sessionId } },
@@ -93,7 +93,7 @@ export async function speakResponse(sessionId: string, blocks: RpgSpokenBlock[])
   const run = ++playing;
   stopCurrent?.();
   const requests = new AbortController();
-  let sink: RpgPcmSink | null = null;
+  let sink: PcmSink | null = null;
   stopCurrent = () => {
     requests.abort();
     sink?.stop();

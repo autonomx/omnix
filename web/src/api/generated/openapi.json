@@ -61907,81 +61907,6 @@
         "title": "STTProxyResponse",
         "type": "object"
       },
-      "SaveStoryAssetRequest": {
-        "description": "Request body for saving the active Storyteller manuscript.",
-        "properties": {
-          "chapter_count": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Chapter Count",
-            "type": "integer"
-          },
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "premise": {
-            "default": "",
-            "title": "Premise",
-            "type": "string"
-          },
-          "provider_label": {
-            "default": "",
-            "title": "Provider Label",
-            "type": "string"
-          },
-          "source_job_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Job Id"
-          },
-          "title": {
-            "default": "Untitled story",
-            "title": "Title",
-            "type": "string"
-          },
-          "word_count": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Word Count",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "content"
-        ],
-        "title": "SaveStoryAssetRequest",
-        "type": "object"
-      },
-      "SavedStoryAssetResponse": {
-        "description": "Saved Storyteller shared asset plus the stored text.",
-        "properties": {
-          "asset": {
-            "$ref": "#/components/schemas/PublicAssetRecord"
-          },
-          "content": {
-            "title": "Content",
-            "type": "string"
-          }
-        },
-        "required": [
-          "asset",
-          "content"
-        ],
-        "title": "SavedStoryAssetResponse",
-        "type": "object"
-      },
       "ScannerDefinitionListResponse": {
         "properties": {
           "scanners": {
@@ -66467,6 +66392,1805 @@
           "day"
         ],
         "title": "StockTaken",
+        "type": "object"
+      },
+      "StoryBlock": {
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "kind": {
+            "default": "narration",
+            "enum": [
+              "narration",
+              "dialogue"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "text": {
+            "maxLength": 400000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "kind",
+          "speaker_id",
+          "attribution"
+        ],
+        "title": "StoryBlock",
+        "type": "object"
+      },
+      "StoryBlock-Input": {
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "kind": {
+            "default": "narration",
+            "enum": [
+              "narration",
+              "dialogue"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "text": {
+            "maxLength": 400000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StoryBlock",
+        "type": "object"
+      },
+      "StoryCastVoice": {
+        "description": "Who speaks in a story and in which voice: the narrator, then each character.",
+        "properties": {
+          "chosen_by": {
+            "default": "",
+            "title": "Chosen By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "voice_id": {
+            "default": "",
+            "title": "Voice Id",
+            "type": "string"
+          },
+          "voice_revision": {
+            "default": "",
+            "title": "Voice Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "name",
+          "voice_id",
+          "voice_revision",
+          "chosen_by"
+        ],
+        "title": "StoryCastVoice",
+        "type": "object"
+      },
+      "StoryCharacter": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Role",
+            "type": "string"
+          },
+          "suggested": {
+            "default": false,
+            "title": "Suggested",
+            "type": "boolean"
+          },
+          "traits": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Traits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "aliases",
+          "description",
+          "traits",
+          "role",
+          "suggested"
+        ],
+        "title": "StoryCharacter",
+        "type": "object"
+      },
+      "StoryCharacter-Input": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Role",
+            "type": "string"
+          },
+          "suggested": {
+            "default": false,
+            "title": "Suggested",
+            "type": "boolean"
+          },
+          "traits": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Traits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "StoryCharacter",
+        "type": "object"
+      },
+      "StoryCharactersReplace": {
+        "properties": {
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCharacter-Input"
+            },
+            "maxItems": 60,
+            "title": "Characters",
+            "type": "array"
+          }
+        },
+        "title": "StoryCharactersReplace",
+        "type": "object"
+      },
+      "StoryDeleted": {
+        "properties": {
+          "deleted": {
+            "default": true,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "title": "StoryDeleted",
+        "type": "object"
+      },
+      "StoryImport": {
+        "properties": {
+          "author": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Author",
+            "type": "string"
+          },
+          "cast": {
+            "items": {
+              "$ref": "#/components/schemas/StoryImportSpeaker"
+            },
+            "maxItems": 60,
+            "title": "Cast",
+            "type": "array"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/StoryImportChapter"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Chapters",
+            "type": "array"
+          },
+          "story_project_id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Story Project Id",
+            "type": "string"
+          },
+          "story_version_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Story Version Id"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "story_project_id",
+          "chapters"
+        ],
+        "title": "StoryImport",
+        "type": "object"
+      },
+      "StoryImportBlock": {
+        "properties": {
+          "kind": {
+            "default": "narration",
+            "enum": [
+              "narration",
+              "dialogue"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "maxLength": 100000,
+            "title": "Text",
+            "type": "string"
+          },
+          "unverified": {
+            "default": false,
+            "title": "Unverified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StoryImportBlock",
+        "type": "object"
+      },
+      "StoryImportChapter": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/StoryImportBlock"
+            },
+            "maxItems": 5000,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "StoryImportChapter",
+        "type": "object"
+      },
+      "StoryImportItem": {
+        "description": "One story the browser knows about: a saved asset, an old job's output or its local draft (ST-1.4).",
+        "properties": {
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCharacter-Input"
+            },
+            "maxItems": 60,
+            "title": "Characters",
+            "type": "array"
+          },
+          "mode": {
+            "default": "writing",
+            "enum": [
+              "writing",
+              "interactive"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "origin_kind": {
+            "enum": [
+              "asset",
+              "job",
+              "local"
+            ],
+            "title": "Origin Kind",
+            "type": "string"
+          },
+          "origin_ref": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Origin Ref",
+            "type": "string"
+          },
+          "premise": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Premise",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 400000,
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          },
+          "trashed": {
+            "default": false,
+            "title": "Trashed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "origin_kind",
+          "origin_ref"
+        ],
+        "title": "StoryImportItem",
+        "type": "object"
+      },
+      "StoryImportRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StoryImportItem"
+            },
+            "maxItems": 200,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "StoryImportRequest",
+        "type": "object"
+      },
+      "StoryImportResult": {
+        "properties": {
+          "created": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Created",
+            "type": "array"
+          },
+          "existing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Existing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "existing"
+        ],
+        "title": "StoryImportResult",
+        "type": "object"
+      },
+      "StoryImportSpeaker": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "StoryImportSpeaker",
+        "type": "object"
+      },
+      "StoryMove": {
+        "properties": {
+          "chosen_suggestion": {
+            "default": "",
+            "title": "Chosen Suggestion",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "parent_move_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Move Id"
+          },
+          "player_text": {
+            "title": "Player Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "player_text",
+          "created_at",
+          "page_id",
+          "chosen_suggestion",
+          "parent_move_id"
+        ],
+        "title": "StoryMove",
+        "type": "object"
+      },
+      "StoryNote": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "world",
+              "preset"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "default": "",
+            "title": "Tone",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "writing_style": {
+            "default": "",
+            "title": "Writing Style",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "created_at",
+          "updated_at",
+          "tone",
+          "writing_style"
+        ],
+        "title": "StoryNote",
+        "type": "object"
+      },
+      "StoryNoteInput": {
+        "properties": {
+          "body": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Body",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "default": "world",
+            "enum": [
+              "world",
+              "preset"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Tone",
+            "type": "string"
+          },
+          "writing_style": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Writing Style",
+            "type": "string"
+          }
+        },
+        "title": "StoryNoteInput",
+        "type": "object"
+      },
+      "StoryNotesReplace": {
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/StoryNoteInput"
+            },
+            "maxItems": 100,
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "title": "StoryNotesReplace",
+        "type": "object"
+      },
+      "StoryOutlineBeat": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "page_id"
+        ],
+        "title": "StoryOutlineBeat",
+        "type": "object"
+      },
+      "StoryOutlineBeatInput": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "text": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StoryOutlineBeatInput",
+        "type": "object"
+      },
+      "StoryOutlineChapter": {
+        "properties": {
+          "beats": {
+            "items": {
+              "$ref": "#/components/schemas/StoryOutlineBeat"
+            },
+            "title": "Beats",
+            "type": "array"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chapter",
+          "title",
+          "beats"
+        ],
+        "title": "StoryOutlineChapter",
+        "type": "object"
+      },
+      "StoryOutlineChapterInput": {
+        "properties": {
+          "beats": {
+            "items": {
+              "$ref": "#/components/schemas/StoryOutlineBeatInput"
+            },
+            "maxItems": 12,
+            "title": "Beats",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "StoryOutlineChapterInput",
+        "type": "object"
+      },
+      "StoryOutlineReplace": {
+        "description": "The writer's plan, chapter by chapter in order: a chapter's number is its place in the list.",
+        "properties": {
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/StoryOutlineChapterInput"
+            },
+            "maxItems": 40,
+            "title": "Chapters",
+            "type": "array"
+          }
+        },
+        "title": "StoryOutlineReplace",
+        "type": "object"
+      },
+      "StoryPage": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/StoryBlock"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "hidden": {
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "parent_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Page Id"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "source_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Job Id"
+          },
+          "suggested_moves": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Moves",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "chapter",
+          "position",
+          "title",
+          "blocks",
+          "hidden",
+          "created_at",
+          "suggested_moves",
+          "source_job_id",
+          "parent_page_id"
+        ],
+        "title": "StoryPage",
+        "type": "object"
+      },
+      "StoryPageCreate": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/StoryBlock-Input"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "maximum": 10000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "StoryPageCreate",
+        "type": "object"
+      },
+      "StoryPageUpdate": {
+        "properties": {
+          "base_blocks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StoryBlock-Input"
+                },
+                "maxItems": 2000,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Blocks"
+          },
+          "blocks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StoryBlock-Input"
+                },
+                "maxItems": 2000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocks"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "StoryPageUpdate",
+        "type": "object"
+      },
+      "StoryProject": {
+        "properties": {
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCharacter"
+            },
+            "title": "Characters",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "writing",
+              "interactive"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/StoryMove"
+            },
+            "title": "Moves",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/StoryNote"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "origin_kind": {
+            "enum": [
+              "new",
+              "asset",
+              "job",
+              "local"
+            ],
+            "title": "Origin Kind",
+            "type": "string"
+          },
+          "origin_ref": {
+            "title": "Origin Ref",
+            "type": "string"
+          },
+          "outline": {
+            "items": {
+              "$ref": "#/components/schemas/StoryOutlineChapter"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "page_count": {
+            "default": 0,
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/StoryPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "premise": {
+            "title": "Premise",
+            "type": "string"
+          },
+          "preset_id": {
+            "default": "",
+            "title": "Preset Id",
+            "type": "string"
+          },
+          "read_settings": {
+            "additionalProperties": true,
+            "title": "Read Settings",
+            "type": "object"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "title": "Tone",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/StoryVersionSummary"
+            },
+            "title": "Versions",
+            "type": "array"
+          },
+          "word_count": {
+            "default": 0,
+            "title": "Word Count",
+            "type": "integer"
+          },
+          "writing_style": {
+            "title": "Writing Style",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "premise",
+          "mode",
+          "tone",
+          "writing_style",
+          "origin_kind",
+          "origin_ref",
+          "created_at",
+          "updated_at",
+          "page_count",
+          "word_count",
+          "deleted_at",
+          "read_settings",
+          "outline",
+          "preset_id",
+          "pages",
+          "moves",
+          "versions",
+          "characters",
+          "notes"
+        ],
+        "title": "StoryProject",
+        "type": "object"
+      },
+      "StoryProjectCreate": {
+        "properties": {
+          "mode": {
+            "default": "writing",
+            "enum": [
+              "writing",
+              "interactive"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "premise": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Premise",
+            "type": "string"
+          },
+          "read_settings": {
+            "additionalProperties": true,
+            "title": "Read Settings",
+            "type": "object"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Tone",
+            "type": "string"
+          },
+          "writing_style": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Writing Style",
+            "type": "string"
+          }
+        },
+        "title": "StoryProjectCreate",
+        "type": "object"
+      },
+      "StoryProjectList": {
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/StoryProjectSummary"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "title": "StoryProjectList",
+        "type": "object"
+      },
+      "StoryProjectSummary": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "writing",
+              "interactive"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "origin_kind": {
+            "enum": [
+              "new",
+              "asset",
+              "job",
+              "local"
+            ],
+            "title": "Origin Kind",
+            "type": "string"
+          },
+          "origin_ref": {
+            "title": "Origin Ref",
+            "type": "string"
+          },
+          "page_count": {
+            "default": 0,
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "premise": {
+            "title": "Premise",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "title": "Tone",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "word_count": {
+            "default": 0,
+            "title": "Word Count",
+            "type": "integer"
+          },
+          "writing_style": {
+            "title": "Writing Style",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "premise",
+          "mode",
+          "tone",
+          "writing_style",
+          "origin_kind",
+          "origin_ref",
+          "created_at",
+          "updated_at",
+          "page_count",
+          "word_count",
+          "deleted_at"
+        ],
+        "title": "StoryProjectSummary",
+        "type": "object"
+      },
+      "StoryProjectUpdate": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "writing",
+                  "interactive"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "premise": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premise"
+          },
+          "preset_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Id"
+          },
+          "read_settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read Settings"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "tone": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          },
+          "writing_style": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Writing Style"
+          }
+        },
+        "title": "StoryProjectUpdate",
+        "type": "object"
+      },
+      "StorySelection": {
+        "description": "A change a job proposes to blocks ``[start, end)`` of one page, for the writer to accept or reject (ST-6.2).",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "original": {
+            "items": {
+              "$ref": "#/components/schemas/StoryBlock"
+            },
+            "title": "Original",
+            "type": "array"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "proposed": {
+            "items": {
+              "$ref": "#/components/schemas/StoryBlock"
+            },
+            "title": "Proposed",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "start",
+          "end",
+          "original",
+          "proposed",
+          "status"
+        ],
+        "title": "StorySelection",
+        "type": "object"
+      },
+      "StorySpeechPlan": {
+        "properties": {
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/StorySpeechSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "page_id",
+          "segments"
+        ],
+        "title": "StorySpeechPlan",
+        "type": "object"
+      },
+      "StorySpeechPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Page Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id"
+        ],
+        "title": "StorySpeechPlanRequest",
+        "type": "object"
+      },
+      "StorySpeechSegment": {
+        "description": "One block of a page as it is spoken: its voice, and its text sentence by sentence.",
+        "properties": {
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "sentences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sentences",
+            "type": "array"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "unknown_speaker": {
+            "default": false,
+            "title": "Unknown Speaker",
+            "type": "boolean"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_index",
+          "speaker_id",
+          "voice_id",
+          "sentences",
+          "unknown_speaker"
+        ],
+        "title": "StorySpeechSegment",
+        "type": "object"
+      },
+      "StorySpeechSentence": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Page Id",
+            "type": "string"
+          },
+          "speaker_id": {
+            "default": "narrator",
+            "maxLength": 80,
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "text"
+        ],
+        "title": "StorySpeechSentence",
+        "type": "object"
+      },
+      "StoryVersion": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "rewrite",
+              "expand",
+              "dialogue",
+              "summarize",
+              "kept_run",
+              "manual"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/StoryVersionPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorySelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Job Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version_number",
+          "kind",
+          "title",
+          "created_at",
+          "pages",
+          "source_job_id",
+          "selection"
+        ],
+        "title": "StoryVersion",
+        "type": "object"
+      },
+      "StoryVersionCreate": {
+        "properties": {
+          "kind": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "kept_run"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "StoryVersionCreate",
+        "type": "object"
+      },
+      "StoryVersionPage": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/StoryBlock"
+            },
+            "maxItems": 2000,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "chapter": {
+            "default": 1,
+            "title": "Chapter",
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chapter",
+          "title",
+          "blocks"
+        ],
+        "title": "StoryVersionPage",
+        "type": "object"
+      },
+      "StoryVersionSummary": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "rewrite",
+              "expand",
+              "dialogue",
+              "summarize",
+              "kept_run",
+              "manual"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorySelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Job Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version_number",
+          "kind",
+          "title",
+          "created_at",
+          "source_job_id",
+          "selection"
+        ],
+        "title": "StoryVersionSummary",
+        "type": "object"
+      },
+      "StoryVoiceCast": {
+        "properties": {
+          "cast": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCastVoice"
+            },
+            "title": "Cast",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/StoryVoiceOption"
+            },
+            "title": "Voices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "cast",
+          "voices"
+        ],
+        "title": "StoryVoiceCast",
+        "type": "object"
+      },
+      "StoryVoiceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "voice_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id"
+        ],
+        "title": "StoryVoiceChoice",
+        "type": "object"
+      },
+      "StoryVoiceOption": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id",
+          "name",
+          "description"
+        ],
+        "title": "StoryVoiceOption",
         "type": "object"
       },
       "StrategyCatalystCaptureRequest": {
@@ -80822,44 +82546,6 @@
         ]
       }
     },
-    "/api/assets/story": {
-      "post": {
-        "operationId": "save_story_asset_endpoint_api_assets_story_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SaveStoryAssetRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedStoryAssetResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Save Story Asset Endpoint"
-      }
-    },
     "/api/assets/{asset_id}/audio": {
       "get": {
         "description": "Stream a stored audio asset (with Range support) from any blob backend.",
@@ -83355,6 +85041,50 @@
           }
         },
         "summary": "Create Project",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/import-story": {
+      "post": {
+        "description": "A new project from a story, its speakers already given (Storyteller roadmap ST-4.4).",
+        "operationId": "import_story_api_audiobook_projects_import_story_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Import Story Api Audiobook Projects Import Story Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Story",
         "tags": [
           "audiobook"
         ]
@@ -103960,6 +105690,1150 @@
         "tags": [
           "settings"
         ]
+      }
+    },
+    "/api/story/projects": {
+      "get": {
+        "description": "The account's stories, newest first; with trashed, the ones in the trash.",
+        "operationId": "list_story_projects_api_story_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "trashed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Trashed",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProjectList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Story Projects"
+      },
+      "post": {
+        "operationId": "create_story_project_api_story_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Story Project"
+      }
+    },
+    "/api/story/projects/import": {
+      "post": {
+        "description": "Make projects of the stories the browser still holds (ST-1.4); importing again makes nothing new.",
+        "operationId": "import_story_projects_api_story_projects_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Story Projects"
+      }
+    },
+    "/api/story/projects/{project_id}": {
+      "delete": {
+        "description": "Delete a story in the trash for good.",
+        "operationId": "purge_story_project_api_story_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryDeleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Story Project"
+      },
+      "get": {
+        "operationId": "get_story_project_api_story_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Story Project"
+      },
+      "patch": {
+        "operationId": "update_story_project_api_story_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Story Project"
+      }
+    },
+    "/api/story/projects/{project_id}/characters": {
+      "put": {
+        "operationId": "replace_story_characters_api_story_projects__project_id__characters_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryCharactersReplace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Story Characters"
+      }
+    },
+    "/api/story/projects/{project_id}/export/{export_format}": {
+      "get": {
+        "description": "The story as a book file (ST-6.5): EPUB, DOCX or PDF of its visible pages, as an attachment.",
+        "operationId": "export_story_api_story_projects__project_id__export__export_format__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_format",
+            "required": true,
+            "schema": {
+              "enum": [
+                "epub",
+                "docx",
+                "pdf"
+              ],
+              "title": "Export Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Story"
+      }
+    },
+    "/api/story/projects/{project_id}/notes": {
+      "put": {
+        "operationId": "replace_story_notes_api_story_projects__project_id__notes_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryNotesReplace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Story Notes"
+      }
+    },
+    "/api/story/projects/{project_id}/outline": {
+      "put": {
+        "description": "The writer's plan, chapter by chapter; a beat already drafted keeps its page.",
+        "operationId": "replace_story_outline_api_story_projects__project_id__outline_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryOutlineReplace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Story Outline"
+      }
+    },
+    "/api/story/projects/{project_id}/pages": {
+      "post": {
+        "operationId": "append_story_page_api_story_projects__project_id__pages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryPageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append Story Page"
+      }
+    },
+    "/api/story/projects/{project_id}/pages/{page_id}": {
+      "patch": {
+        "operationId": "update_story_page_api_story_projects__project_id__pages__page_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryPageUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Story Page"
+      }
+    },
+    "/api/story/projects/{project_id}/pages/{page_id}/open": {
+      "post": {
+        "description": "Make the run that ends at this page the story (go back to a move, or open a branch).",
+        "operationId": "open_story_page_api_story_projects__project_id__pages__page_id__open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Story Page"
+      }
+    },
+    "/api/story/projects/{project_id}/restore": {
+      "post": {
+        "operationId": "restore_story_project_api_story_projects__project_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Story Project"
+      }
+    },
+    "/api/story/projects/{project_id}/speech-audio": {
+      "post": {
+        "description": "A sentence of a page in its speaker's voice, as PCM16 (``application/x-omnix-pcm16`` at\n``X-Omnix-Sample-Rate``): from the project's audio, else streamed as it is synthesized. 503 when the speech\nservice is down.",
+        "operationId": "speak_story_sentence_api_story_projects__project_id__speech_audio_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorySpeechSentence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Speak Story Sentence"
+      }
+    },
+    "/api/story/projects/{project_id}/speech-plan": {
+      "post": {
+        "description": "How a page is spoken: block by block in its speakers' voices, sentence by sentence.",
+        "operationId": "plan_story_speech_api_story_projects__project_id__speech_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorySpeechPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorySpeechPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Story Speech"
+      }
+    },
+    "/api/story/projects/{project_id}/trash": {
+      "post": {
+        "operationId": "trash_story_project_api_story_projects__project_id__trash_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trash Story Project"
+      }
+    },
+    "/api/story/projects/{project_id}/undo": {
+      "post": {
+        "description": "Take back the player's last move; its page stays as a branch.",
+        "operationId": "undo_story_move_api_story_projects__project_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Story Move"
+      }
+    },
+    "/api/story/projects/{project_id}/versions": {
+      "post": {
+        "operationId": "save_story_version_api_story_projects__project_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryVersionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Story Version"
+      }
+    },
+    "/api/story/projects/{project_id}/versions/{version_id}": {
+      "get": {
+        "operationId": "get_story_version_api_story_projects__project_id__versions__version_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryVersion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Story Version"
+      }
+    },
+    "/api/story/projects/{project_id}/versions/{version_id}/accept": {
+      "post": {
+        "description": "Make the change a selection version proposes (ST-6.2); 409 when the page changed since.",
+        "operationId": "accept_story_selection_api_story_projects__project_id__versions__version_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Story Selection"
+      }
+    },
+    "/api/story/projects/{project_id}/versions/{version_id}/reject": {
+      "post": {
+        "operationId": "reject_story_selection_api_story_projects__project_id__versions__version_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Story Selection"
+      }
+    },
+    "/api/story/projects/{project_id}/versions/{version_id}/restore": {
+      "post": {
+        "description": "Make a version the manuscript; the one it replaces is kept as a version.",
+        "operationId": "restore_story_version_api_story_projects__project_id__versions__version_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Story Version"
+      }
+    },
+    "/api/story/projects/{project_id}/voices": {
+      "get": {
+        "description": "Who speaks in the story and in which voice; anyone not cast yet is cast now.",
+        "operationId": "get_story_voices_api_story_projects__project_id__voices_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryVoiceCast"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Story Voices"
+      }
+    },
+    "/api/story/projects/{project_id}/voices/{speaker_id}": {
+      "put": {
+        "description": "The writer's choice of a castable voice for the narrator or a character.",
+        "operationId": "choose_story_voice_api_story_projects__project_id__voices__speaker_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryVoiceChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryVoiceCast"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Choose Story Voice"
       }
     },
     "/api/stt/authorityz": {

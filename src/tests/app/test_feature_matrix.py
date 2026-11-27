@@ -3,10 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from app.platform.chat import ChatSessionStore
 from app.composition.gateway.main import create_gateway_app
@@ -65,7 +63,7 @@ def test_audiobook_feature_is_in_lazy_catalog() -> None:
     assert FEATURE_CATALOG["audiobook"] == "app.apps.audiobook.feature:FEATURE"
     feature = load_feature("audiobook")
     assert feature.id == "audiobook"
-    assert len(feature.routers) == 2
+    assert len(feature.routers) == 1  # HTTP only: the /ws/audiobook socket went with Storyteller's old audio panel (ST-4.5)
     assert len(feature.background_workers) == 1
 
 
@@ -75,16 +73,6 @@ def test_audiobook_feature_is_enabled_by_default() -> None:
     app = create_gateway_app(runtime_config=config)
     assert "/api/audiobook/projects" in _paths(app)
     assert "audiobook" in app.state.feature_modules
-    client = TestClient(
-        app,
-        base_url="http://localhost",
-        headers={"X-Omnix-Client": "test"},
-    )
-    with client.websocket_connect(
-        "/ws/audiobook", headers={"Host": "localhost"}
-    ) as websocket:
-        websocket.send_json({"type": "stop"})
-        assert websocket.receive_json() == {"type": "stopped"}
 
 
 def test_audiobook_feature_can_be_disabled_without_affecting_kernel_routes() -> None:
@@ -95,16 +83,6 @@ def test_audiobook_feature_can_be_disabled_without_affecting_kernel_routes() -> 
     assert "/api/runtime/status" in paths
     assert all(not path.startswith("/api/audiobook") for path in paths)
     assert "audiobook" not in app.state.feature_modules
-    client = TestClient(
-        app,
-        base_url="http://localhost",
-        headers={"X-Omnix-Client": "test"},
-    )
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect(
-            "/ws/audiobook", headers={"Host": "localhost"}
-        ):
-            pass
 
 
 def test_image_feature_is_mounted_from_its_routers_and_can_be_disabled() -> None:

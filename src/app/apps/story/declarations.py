@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.declarations import SettingsSection
+from app.persistence.declarations import RetentionDeclaration, SettingsSection
 
 
 class StorytellerSettingsProfile(BaseModel):
@@ -42,3 +42,13 @@ SETTINGS = (
     SettingsSection("storyteller", StorytellerSettingsProfile, order=20),
     SettingsSection("podcast", PodcastSettingsProfile, order=30),
 )
+
+
+def _delete_trashed_projects(connection, retention_days: int, batch_size: int) -> int:
+    from .repository import delete_trashed_projects
+
+    return delete_trashed_projects(connection, retention_days, batch_size)
+
+
+# ST-1.5: a story in the trash is purged, with everything of its own, after the policy's days (0203 seeds 30).
+RETENTION = (RetentionDeclaration("story_trashed_projects", delete=_delete_trashed_projects),)

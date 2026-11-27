@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens  # noqa: E402
 from tests.rehearsal.rpg import worlds  # noqa: E402
 
-START_BUFFER_S = 0.4  # the page's player starts once this much is buffered (``rpgSpeechSink.ts``)
+START_BUFFER_S = 0.4  # the page's player starts once this much is buffered (``assistant/workspace/pcm-stream-sink.ts``)
 REBUFFER_S = 0.75  # and, having run dry, resumes once this much is
 BYTES_PER_SECOND = 24_000 * 2  # mono PCM16 at the service's rate
 CODEC_STEPS_PER_SECOND = 12.5  # as the voice route counts a runaway

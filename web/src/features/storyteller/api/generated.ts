@@ -4,23 +4,6 @@
 import type { components as core } from '../../../api/generated/core';
 
 export interface paths {
-    "/api/assets/story": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Save Story Asset Endpoint */
-        post: operations["save_story_asset_endpoint_api_assets_story_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/podcast/research": {
         parameters: {
             query?: never;
@@ -35,6 +18,424 @@ export interface paths {
          * @description Source notes for an episode from one web search; the producer edits them before the script is written.
          */
         post: operations["podcast_research_endpoint_api_podcast_research_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Story Projects
+         * @description The account's stories, newest first; with trashed, the ones in the trash.
+         */
+        get: operations["list_story_projects_api_story_projects_get"];
+        put?: never;
+        /** Create Story Project */
+        post: operations["create_story_project_api_story_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Story Projects
+         * @description Make projects of the stories the browser still holds (ST-1.4); importing again makes nothing new.
+         */
+        post: operations["import_story_projects_api_story_projects_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Story Project */
+        get: operations["get_story_project_api_story_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Purge Story Project
+         * @description Delete a story in the trash for good.
+         */
+        delete: operations["purge_story_project_api_story_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Story Project */
+        patch: operations["update_story_project_api_story_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/characters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Story Characters */
+        put: operations["replace_story_characters_api_story_projects__project_id__characters_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/export/{export_format}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Story
+         * @description The story as a book file (ST-6.5): EPUB, DOCX or PDF of its visible pages, as an attachment.
+         */
+        get: operations["export_story_api_story_projects__project_id__export__export_format__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Story Notes */
+        put: operations["replace_story_notes_api_story_projects__project_id__notes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/outline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace Story Outline
+         * @description The writer's plan, chapter by chapter; a beat already drafted keeps its page.
+         */
+        put: operations["replace_story_outline_api_story_projects__project_id__outline_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append Story Page */
+        post: operations["append_story_page_api_story_projects__project_id__pages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/pages/{page_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Story Page */
+        patch: operations["update_story_page_api_story_projects__project_id__pages__page_id__patch"];
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/pages/{page_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Story Page
+         * @description Make the run that ends at this page the story (go back to a move, or open a branch).
+         */
+        post: operations["open_story_page_api_story_projects__project_id__pages__page_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Story Project */
+        post: operations["restore_story_project_api_story_projects__project_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/speech-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Speak Story Sentence
+         * @description A sentence of a page in its speaker's voice, as PCM16 (``application/x-omnix-pcm16`` at
+         *     ``X-Omnix-Sample-Rate``): from the project's audio, else streamed as it is synthesized. 503 when the speech
+         *     service is down.
+         */
+        post: operations["speak_story_sentence_api_story_projects__project_id__speech_audio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/speech-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan Story Speech
+         * @description How a page is spoken: block by block in its speakers' voices, sentence by sentence.
+         */
+        post: operations["plan_story_speech_api_story_projects__project_id__speech_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trash Story Project */
+        post: operations["trash_story_project_api_story_projects__project_id__trash_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Story Move
+         * @description Take back the player's last move; its page stays as a branch.
+         */
+        post: operations["undo_story_move_api_story_projects__project_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Story Version */
+        post: operations["save_story_version_api_story_projects__project_id__versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/versions/{version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Story Version */
+        get: operations["get_story_version_api_story_projects__project_id__versions__version_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/versions/{version_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Story Selection
+         * @description Make the change a selection version proposes (ST-6.2); 409 when the page changed since.
+         */
+        post: operations["accept_story_selection_api_story_projects__project_id__versions__version_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/versions/{version_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Story Selection */
+        post: operations["reject_story_selection_api_story_projects__project_id__versions__version_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/versions/{version_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Story Version
+         * @description Make a version the manuscript; the one it replaces is kept as a version.
+         */
+        post: operations["restore_story_version_api_story_projects__project_id__versions__version_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Story Voices
+         * @description Who speaks in the story and in which voice; anyone not cast yet is cast now.
+         */
+        get: operations["get_story_voices_api_story_projects__project_id__voices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/story/projects/{project_id}/voices/{speaker_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose Story Voice
+         * @description The writer's choice of a castable voice for the narrator or a character.
+         */
+        put: operations["choose_story_voice_api_story_projects__project_id__voices__speaker_id__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -446,54 +847,6 @@ export interface components {
         RuntimeDiagnostics: core["schemas"]["RuntimeDiagnostics"];
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: core["schemas"]["RuntimeStatusPayload"];
-        /**
-         * SaveStoryAssetRequest
-         * @description Request body for saving the active Storyteller manuscript.
-         */
-        SaveStoryAssetRequest: {
-            /**
-             * Chapter Count
-             * @default 0
-             */
-            chapter_count?: number;
-            /** Content */
-            content: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Premise
-             * @default
-             */
-            premise?: string;
-            /**
-             * Provider Label
-             * @default
-             */
-            provider_label?: string;
-            /** Source Job Id */
-            source_job_id?: string | null;
-            /**
-             * Title
-             * @default Untitled story
-             */
-            title?: string;
-            /**
-             * Word Count
-             * @default 0
-             */
-            word_count?: number;
-        };
-        /**
-         * SavedStoryAssetResponse
-         * @description Saved Storyteller shared asset plus the stored text.
-         */
-        SavedStoryAssetResponse: {
-            asset: components["schemas"]["PublicAssetRecord"];
-            /** Content */
-            content: string;
-        };
         /** SelectionRequest */
         SelectionRequest: core["schemas"]["SelectionRequest"];
         /** SelectionSize */
@@ -528,6 +881,674 @@ export interface components {
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
+        /** StoryBlock */
+        StoryBlock: {
+            /** Attribution */
+            attribution: string | null;
+            /**
+             * Kind
+             * @default narration
+             * @enum {string}
+             */
+            kind: "narration" | "dialogue";
+            /** Speaker Id */
+            speaker_id: string | null;
+            /** Text */
+            text: string;
+        };
+        /** StoryBlock */
+        "StoryBlock-Input": {
+            /** Attribution */
+            attribution?: string | null;
+            /**
+             * Kind
+             * @default narration
+             * @enum {string}
+             */
+            kind?: "narration" | "dialogue";
+            /** Speaker Id */
+            speaker_id?: string | null;
+            /** Text */
+            text: string;
+        };
+        /**
+         * StoryCastVoice
+         * @description Who speaks in a story and in which voice: the narrator, then each character.
+         */
+        StoryCastVoice: {
+            /**
+             * Chosen By
+             * @default
+             */
+            chosen_by: string;
+            /** Name */
+            name: string;
+            /** Speaker Id */
+            speaker_id: string;
+            /**
+             * Voice Id
+             * @default
+             */
+            voice_id: string;
+            /**
+             * Voice Revision
+             * @default
+             */
+            voice_revision: string;
+        };
+        /** StoryCharacter */
+        StoryCharacter: {
+            /** Aliases */
+            aliases: string[];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @default
+             */
+            role: string;
+            /**
+             * Suggested
+             * @default false
+             */
+            suggested: boolean;
+            /** Traits */
+            traits: string[];
+        };
+        /** StoryCharacter */
+        "StoryCharacter-Input": {
+            /** Aliases */
+            aliases?: string[];
+            /**
+             * Description
+             * @default
+             */
+            description?: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @default
+             */
+            role?: string;
+            /**
+             * Suggested
+             * @default false
+             */
+            suggested?: boolean;
+            /** Traits */
+            traits?: string[];
+        };
+        /** StoryCharactersReplace */
+        StoryCharactersReplace: {
+            /** Characters */
+            characters?: components["schemas"]["StoryCharacter-Input"][];
+        };
+        /** StoryDeleted */
+        StoryDeleted: {
+            /**
+             * Deleted
+             * @default true
+             */
+            deleted: boolean;
+            /** Id */
+            id: string;
+        };
+        /**
+         * StoryImportItem
+         * @description One story the browser knows about: a saved asset, an old job's output or its local draft (ST-1.4).
+         */
+        StoryImportItem: {
+            /** Characters */
+            characters?: components["schemas"]["StoryCharacter-Input"][];
+            /**
+             * Mode
+             * @default writing
+             * @enum {string}
+             */
+            mode?: "writing" | "interactive";
+            /**
+             * Origin Kind
+             * @enum {string}
+             */
+            origin_kind: "asset" | "job" | "local";
+            /** Origin Ref */
+            origin_ref: string;
+            /**
+             * Premise
+             * @default
+             */
+            premise?: string;
+            /**
+             * Text
+             * @default
+             */
+            text?: string;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+            /**
+             * Trashed
+             * @default false
+             */
+            trashed?: boolean;
+        };
+        /** StoryImportRequest */
+        StoryImportRequest: {
+            /** Items */
+            items?: components["schemas"]["StoryImportItem"][];
+        };
+        /** StoryImportResult */
+        StoryImportResult: {
+            /** Created */
+            created: string[];
+            /** Existing */
+            existing: string[];
+        };
+        /** StoryMove */
+        StoryMove: {
+            /**
+             * Chosen Suggestion
+             * @default
+             */
+            chosen_suggestion: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Page Id */
+            page_id: string | null;
+            /** Parent Move Id */
+            parent_move_id: string | null;
+            /** Player Text */
+            player_text: string;
+        };
+        /** StoryNote */
+        StoryNote: {
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "world" | "preset";
+            /** Title */
+            title: string;
+            /**
+             * Tone
+             * @default
+             */
+            tone: string;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Writing Style
+             * @default
+             */
+            writing_style: string;
+        };
+        /** StoryNoteInput */
+        StoryNoteInput: {
+            /**
+             * Body
+             * @default
+             */
+            body?: string;
+            /** Id */
+            id?: string | null;
+            /**
+             * Kind
+             * @default world
+             * @enum {string}
+             */
+            kind?: "world" | "preset";
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+            /**
+             * Tone
+             * @default
+             */
+            tone?: string;
+            /**
+             * Writing Style
+             * @default
+             */
+            writing_style?: string;
+        };
+        /** StoryNotesReplace */
+        StoryNotesReplace: {
+            /** Notes */
+            notes?: components["schemas"]["StoryNoteInput"][];
+        };
+        /** StoryOutlineBeat */
+        StoryOutlineBeat: {
+            /** Id */
+            id: string;
+            /** Page Id */
+            page_id: string | null;
+            /** Text */
+            text: string;
+        };
+        /** StoryOutlineBeatInput */
+        StoryOutlineBeatInput: {
+            /** Id */
+            id?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** StoryOutlineChapter */
+        StoryOutlineChapter: {
+            /** Beats */
+            beats: components["schemas"]["StoryOutlineBeat"][];
+            /** Chapter */
+            chapter: number;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** StoryOutlineChapterInput */
+        StoryOutlineChapterInput: {
+            /** Beats */
+            beats?: components["schemas"]["StoryOutlineBeatInput"][];
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /**
+         * StoryOutlineReplace
+         * @description The writer's plan, chapter by chapter in order: a chapter's number is its place in the list.
+         */
+        StoryOutlineReplace: {
+            /** Chapters */
+            chapters?: components["schemas"]["StoryOutlineChapterInput"][];
+        };
+        /** StoryPage */
+        StoryPage: {
+            /** Blocks */
+            blocks: components["schemas"]["StoryBlock"][];
+            /** Chapter */
+            chapter: number;
+            /** Created At */
+            created_at: string;
+            /** Hidden */
+            hidden: boolean;
+            /** Id */
+            id: string;
+            /** Parent Page Id */
+            parent_page_id: string | null;
+            /** Position */
+            position: number;
+            /** Source Job Id */
+            source_job_id: string | null;
+            /** Suggested Moves */
+            suggested_moves: string[];
+            /** Title */
+            title: string;
+        };
+        /** StoryPageCreate */
+        StoryPageCreate: {
+            /** Blocks */
+            blocks: components["schemas"]["StoryBlock-Input"][];
+            /** Chapter */
+            chapter?: number | null;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** StoryPageUpdate */
+        StoryPageUpdate: {
+            /** Base Blocks */
+            base_blocks?: components["schemas"]["StoryBlock-Input"][] | null;
+            /** Blocks */
+            blocks?: components["schemas"]["StoryBlock-Input"][] | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** StoryProject */
+        StoryProject: {
+            /** Characters */
+            characters: components["schemas"]["StoryCharacter"][];
+            /** Created At */
+            created_at: string;
+            /** Deleted At */
+            deleted_at: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "writing" | "interactive";
+            /** Moves */
+            moves: components["schemas"]["StoryMove"][];
+            /** Notes */
+            notes: components["schemas"]["StoryNote"][];
+            /**
+             * Origin Kind
+             * @enum {string}
+             */
+            origin_kind: "new" | "asset" | "job" | "local";
+            /** Origin Ref */
+            origin_ref: string;
+            /** Outline */
+            outline: components["schemas"]["StoryOutlineChapter"][];
+            /**
+             * Page Count
+             * @default 0
+             */
+            page_count: number;
+            /** Pages */
+            pages: components["schemas"]["StoryPage"][];
+            /** Premise */
+            premise: string;
+            /**
+             * Preset Id
+             * @default
+             */
+            preset_id: string;
+            /** Read Settings */
+            read_settings: {
+                [key: string]: unknown;
+            };
+            /** Title */
+            title: string;
+            /** Tone */
+            tone: string;
+            /** Updated At */
+            updated_at: string;
+            /** Versions */
+            versions: components["schemas"]["StoryVersionSummary"][];
+            /**
+             * Word Count
+             * @default 0
+             */
+            word_count: number;
+            /** Writing Style */
+            writing_style: string;
+        };
+        /** StoryProjectCreate */
+        StoryProjectCreate: {
+            /**
+             * Mode
+             * @default writing
+             * @enum {string}
+             */
+            mode?: "writing" | "interactive";
+            /**
+             * Premise
+             * @default
+             */
+            premise?: string;
+            /** Read Settings */
+            read_settings?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+            /**
+             * Tone
+             * @default
+             */
+            tone?: string;
+            /**
+             * Writing Style
+             * @default
+             */
+            writing_style?: string;
+        };
+        /** StoryProjectList */
+        StoryProjectList: {
+            /** Projects */
+            projects: components["schemas"]["StoryProjectSummary"][];
+        };
+        /** StoryProjectSummary */
+        StoryProjectSummary: {
+            /** Created At */
+            created_at: string;
+            /** Deleted At */
+            deleted_at: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "writing" | "interactive";
+            /**
+             * Origin Kind
+             * @enum {string}
+             */
+            origin_kind: "new" | "asset" | "job" | "local";
+            /** Origin Ref */
+            origin_ref: string;
+            /**
+             * Page Count
+             * @default 0
+             */
+            page_count: number;
+            /** Premise */
+            premise: string;
+            /** Title */
+            title: string;
+            /** Tone */
+            tone: string;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Word Count
+             * @default 0
+             */
+            word_count: number;
+            /** Writing Style */
+            writing_style: string;
+        };
+        /** StoryProjectUpdate */
+        StoryProjectUpdate: {
+            /** Mode */
+            mode?: ("writing" | "interactive") | null;
+            /** Premise */
+            premise?: string | null;
+            /** Preset Id */
+            preset_id?: string | null;
+            /** Read Settings */
+            read_settings?: {
+                [key: string]: unknown;
+            } | null;
+            /** Title */
+            title?: string | null;
+            /** Tone */
+            tone?: string | null;
+            /** Writing Style */
+            writing_style?: string | null;
+        };
+        /**
+         * StorySelection
+         * @description A change a job proposes to blocks ``[start, end)`` of one page, for the writer to accept or reject (ST-6.2).
+         */
+        StorySelection: {
+            /** End */
+            end: number;
+            /** Original */
+            original: components["schemas"]["StoryBlock"][];
+            /** Page Id */
+            page_id: string;
+            /** Proposed */
+            proposed: components["schemas"]["StoryBlock"][];
+            /** Start */
+            start: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** StorySpeechPlan */
+        StorySpeechPlan: {
+            /** Page Id */
+            page_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Segments */
+            segments: components["schemas"]["StorySpeechSegment"][];
+        };
+        /** StorySpeechPlanRequest */
+        StorySpeechPlanRequest: {
+            /** Page Id */
+            page_id: string;
+        };
+        /**
+         * StorySpeechSegment
+         * @description One block of a page as it is spoken: its voice, and its text sentence by sentence.
+         */
+        StorySpeechSegment: {
+            /** Block Index */
+            block_index: number;
+            /** Sentences */
+            sentences: string[];
+            /** Speaker Id */
+            speaker_id: string;
+            /**
+             * Unknown Speaker
+             * @default false
+             */
+            unknown_speaker: boolean;
+            /** Voice Id */
+            voice_id: string;
+        };
+        /** StorySpeechSentence */
+        StorySpeechSentence: {
+            /** Page Id */
+            page_id: string;
+            /**
+             * Speaker Id
+             * @default narrator
+             */
+            speaker_id?: string;
+            /** Text */
+            text: string;
+        };
+        /** StoryVersion */
+        StoryVersion: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "rewrite" | "expand" | "dialogue" | "summarize" | "kept_run" | "manual";
+            /** Pages */
+            pages: components["schemas"]["StoryVersionPage"][];
+            selection: components["schemas"]["StorySelection"] | null;
+            /** Source Job Id */
+            source_job_id: string | null;
+            /** Title */
+            title: string;
+            /** Version Number */
+            version_number: number;
+        };
+        /** StoryVersionCreate */
+        StoryVersionCreate: {
+            /**
+             * Kind
+             * @default manual
+             * @enum {string}
+             */
+            kind?: "manual" | "kept_run";
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** StoryVersionPage */
+        StoryVersionPage: {
+            /** Blocks */
+            blocks: components["schemas"]["StoryBlock"][];
+            /**
+             * Chapter
+             * @default 1
+             */
+            chapter: number;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** StoryVersionSummary */
+        StoryVersionSummary: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "rewrite" | "expand" | "dialogue" | "summarize" | "kept_run" | "manual";
+            selection: components["schemas"]["StorySelection"] | null;
+            /** Source Job Id */
+            source_job_id: string | null;
+            /** Title */
+            title: string;
+            /** Version Number */
+            version_number: number;
+        };
+        /** StoryVoiceCast */
+        StoryVoiceCast: {
+            /** Cast */
+            cast: components["schemas"]["StoryCastVoice"][];
+            /** Project Id */
+            project_id: string;
+            /** Voices */
+            voices: components["schemas"]["StoryVoiceOption"][];
+        };
+        /** StoryVoiceChoice */
+        StoryVoiceChoice: {
+            /** Voice Id */
+            voice_id: string;
+        };
+        /** StoryVoiceOption */
+        StoryVoiceOption: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /** Voice Id */
+            voice_id: string;
+        };
         /** ValidationError */
         ValidationError: core["schemas"]["ValidationError"];
         /** VersionDiagnostics */
@@ -549,39 +1570,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    save_story_asset_endpoint_api_assets_story_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveStoryAssetRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SavedStoryAssetResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     podcast_research_endpoint_api_podcast_research_post: {
         parameters: {
             query?: never;
@@ -602,6 +1590,829 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PodcastResearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_story_projects_api_story_projects_get: {
+        parameters: {
+            query?: {
+                trashed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProjectList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_story_project_api_story_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_story_projects_api_story_projects_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_story_project_api_story_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_story_project_api_story_projects__project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryDeleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_story_project_api_story_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_story_characters_api_story_projects__project_id__characters_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryCharactersReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_story_api_story_projects__project_id__export__export_format__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                export_format: "epub" | "docx" | "pdf";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_story_notes_api_story_projects__project_id__notes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryNotesReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_story_outline_api_story_projects__project_id__outline_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryOutlineReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    append_story_page_api_story_projects__project_id__pages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryPageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_story_page_api_story_projects__project_id__pages__page_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryPageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_story_page_api_story_projects__project_id__pages__page_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_story_project_api_story_projects__project_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    speak_story_sentence_api_story_projects__project_id__speech_audio_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorySpeechSentence"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_story_speech_api_story_projects__project_id__speech_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorySpeechPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorySpeechPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trash_story_project_api_story_projects__project_id__trash_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_story_move_api_story_projects__project_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_story_version_api_story_projects__project_id__versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryVersionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_story_version_api_story_projects__project_id__versions__version_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryVersion"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_story_selection_api_story_projects__project_id__versions__version_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_story_selection_api_story_projects__project_id__versions__version_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_story_version_api_story_projects__project_id__versions__version_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProject"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_story_voices_api_story_projects__project_id__voices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryVoiceCast"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    choose_story_voice_api_story_projects__project_id__voices__speaker_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryVoiceChoice"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryVoiceCast"];
                 };
             };
             /** @description Validation Error */

@@ -83,6 +83,24 @@ class InterruptibleProvider(BlockingProvider):
         return True
 
 
+class StoryPageProvider(FakeProvider):
+    """Replies with one story page as the structured gateway asks (Storyteller ST-2.1)."""
+
+    def chat_completion(self, messages, *, model, stream=False, **options):
+        self.calls.append({"messages": messages, "model": model, "stream": stream,
+                           "prompt": messages[-1].content, **options})
+        from app.providers.base import ChatResponse
+
+        return ChatResponse(content=self.content, model=model or "default-model", finish_reason="stop")
+
+
+def _story_page(text: str, title: str | None = None) -> str:
+    import json
+
+    return json.dumps({**({"title": title} if title else {}), "blocks": [{"kind": "narration", "text": text}],
+                       "new_characters": [], "suggested_moves": []})
+
+
 class FailingProvider:
     def chat_completion(self, messages, *, model, stream=False):
         raise RuntimeError("Chat provider is not available")
@@ -289,8 +307,9 @@ def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
     assert store._repository is repository
 
 
-def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider."):
-    provider = FakeProvider(provider_content)
+def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider.",
+                    provider_type=FakeProvider):
+    provider = provider_type(provider_content)
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
@@ -324,7 +343,8 @@ def _run_feature_job(client, store, job_id: str, *, background: bool = False):
 
 
 def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
-    client, provider, _store = _gateway_client(tmp_path, monkeypatch)
+    client, provider, _store = _gateway_client(tmp_path, monkeypatch, provider_type=StoryPageProvider,
+                                               provider_content=_story_page("Hello from the provider."))
 
     response = client.post(
         "/api/jobs",
@@ -346,19 +366,21 @@ def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
     assert payload["status"] == "queued"
     completed = _run_feature_job(client, _store, payload["id"])
     assert completed is not None
-    assert completed.status == JobStatus.COMPLETED
+    assert completed.status == JobStatus.COMPLETED, completed.error
     assert completed.output_refs[0]["type"] == "story"
     assert completed.output_refs[0]["title"] == "Lantern Road"
     assert completed.output_refs[0]["content"] == "Hello from the provider."
     assert provider.calls[0]["model"] == "test-model"
-    assert "long-form story draft" in provider.calls[0]["prompt"]
+    assert "Write the opening page of the story" in provider.calls[0]["prompt"]
+    assert 'Leave "title" out.' in provider.calls[0]["prompt"]
 
 
 def test_story_jobs_with_empty_title_generate_title(monkeypatch, tmp_path):
     client, provider, _store = _gateway_client(
         tmp_path,
         monkeypatch,
-        provider_content="# Lantern Road\n\nA courier follows a road lit by patient stars.",
+        provider_content=_story_page("A courier follows a road lit by patient stars.", title="Lantern Road"),
+        provider_type=StoryPageProvider,
     )
 
     response = client.post(
@@ -387,9 +409,12 @@ def test_story_jobs_with_empty_title_generate_title(monkeypatch, tmp_path):
     assert completed.status == JobStatus.COMPLETED
     assert completed.output_refs[0]["title"] == "Lantern Road"
     assert completed.output_refs[0]["content"].startswith("# Lantern Road")
-    assert "Generate an evocative, concise title" in provider.calls[0]["prompt"]
-    assert "Story context:" in provider.calls[0]["prompt"]
-    assert "Player response: I follow the road." in provider.calls[0]["prompt"]
+    assert "evocative, concise title" in provider.calls[0]["prompt"]
+    assert "<story>\nPlayer response: I follow the road.\n</story>" in provider.calls[0]["prompt"]
+    assert "interactive story" in provider.calls[0]["prompt"]
+    # A job queued before projects gets one of its own, and its page (ST-1.3).
+    assert completed.output_refs[0]["project_id"]
+    assert completed.output_refs[0]["page_id"]
 
 
 def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):

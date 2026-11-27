@@ -291,12 +291,6 @@
     min-width: 0;
   }
 
-  .storyteller-module-title {
-    color: var(--omnix-text);
-    font-size: 1rem;
-    font-weight: 800;
-    margin: 0 0 0.75rem;
-  }
 
   .provider-settings-form {
     display: grid;

@@ -72,8 +72,8 @@ class _Connection:
 def test_offline_priority_check_includes_realtime_and_preview() -> None:
     connection = _Connection(True)
     assert higher_priority_tts_pending(connection, local_tenant_context())
-    assert "gpu:tts:realtime" in connection.params[1]
-    assert "gpu:tts:preview" in connection.params[1]
+    assert "gpu:tts:realtime" in connection.params[2]
+    assert "gpu:tts:preview" in connection.params[2]
     assert "available_at <= CURRENT_TIMESTAMP" in connection.sql
     assert "lease_expires_at > CURRENT_TIMESTAMP" in connection.sql
 

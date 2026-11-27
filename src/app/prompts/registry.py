@@ -79,6 +79,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.apps.rpg.genesis.worlds.world_images",
     "app.apps.audiobook.performance_direction",
     "app.apps.story.podcast_script",
+    "app.apps.story.prompts",
     "app.apps.trading.research.chart_copilot",
     "app.apps.trading.research.filing_summaries",
     "app.apps.trading.research.market_brief",

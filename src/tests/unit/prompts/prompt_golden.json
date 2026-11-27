@@ -647,6 +647,14 @@
     "sha256": "2d5f9fc356d3063d9d335db17c6483a8474cab6b9dc7882072e1002ff930da61",
     "version": "4"
   },
+  "story.prompts.outline": {
+    "sha256": "c3e8aef11fdf5a1ae6ba5531e884bc1e6147a7aad8db7c595eea133a0c471c93",
+    "version": "1"
+  },
+  "story.prompts.system": {
+    "sha256": "c5b5a086112311febc11617cd0d6a96867a02f93197255192e26e1bb4e9e56c7",
+    "version": "3"
+  },
   "trading.research.chart_copilot": {
     "sha256": "2010e83b19eb8e482fde11f3a9a2b7eeace376c0e9ccc639c3fd3a33c986f8b2",
     "version": "2"

@@ -1,110 +1,99 @@
 import type { UseMutationResult } from '@tanstack/react-query';
-import type { StoryLibraryItem, StoryOutlineChapter } from './storyModel';
-import { type JobRecord } from '../../api/client';
-import { SaveFeedback, StoryActionMode, StoryGenerationRequest, StoryQuickActionMode, StorySceneAddition, StorytellerFormValues, nextChapterNumber, shouldGenerateStoryTitle, storyModeContext } from './storyModel';
+import type { StoryProject } from './api/storyClient';
+import {
+  SaveFeedback, StoryActionMode, StoryGenerationRequest, StoryGenerationResult, StoryQuickActionMode, StorySelectionAction,
+  StorySelectionRange, StorytellerFormValues, premiseMaxChars,
+} from './storyModel';
 
 type StoryRequestsOptions = {
-  createJobMutation: UseMutationResult<JobRecord, Error, StoryGenerationRequest>;
-  watched: { title: string; premise: string; providerId: string };
-  story: {
-    title: string;
-    premise: string;
-    text: string | null;
-    sourceJobId: string | null;
-    outline: StoryOutlineChapter[];
-  };
-  activeLibraryItem: StoryLibraryItem | null;
+  createJobMutation: UseMutationResult<StoryGenerationResult, Error, StoryGenerationRequest>;
+  watched: { premise: string; providerId: string; title?: string };
+  project: StoryProject | null;
+  hasText: boolean;
   setSaveFeedback: (feedback: SaveFeedback | null) => void;
-  addStorySceneAddition: (addition: StorySceneAddition) => void;
-  setSelectedChapter: (chapter: number) => void;
 };
 
-/** What the writer asks for: a draft, a quick action, a story-mode move, or a new chapter. */
+/**
+ * What the writer asks for: a draft (a new project), a quick action on the project, a player's move,
+ * or a new chapter. The job reads the story from its project, so a request names the project, not the text.
+ */
 export function useStoryRequests({
   createJobMutation,
-  watched: { title: watchedTitle, premise: watchedPremise, providerId: watchedProvider },
-  story: { title: storyTitle, premise, text: activeStoryText, sourceJobId, outline },
-  activeLibraryItem,
+  watched: { premise: watchedPremise, providerId: watchedProvider, title: watchedTitle = '' },
+  project,
+  hasText,
   setSaveFeedback,
-  addStorySceneAddition,
-  setSelectedChapter,
 }: StoryRequestsOptions) {
-  const requestValues = ({ allowGeneratedTitle = false }: { allowGeneratedTitle?: boolean } = {}): StorytellerFormValues => {
-    const shouldGenerateTitle = allowGeneratedTitle && shouldGenerateStoryTitle(watchedTitle, storyTitle);
-    return {
-      providerId: watchedProvider,
-      title: shouldGenerateTitle ? '' : watchedTitle || storyTitle,
-      premise: watchedPremise || premise || 'Continue this interactive story.',
-    };
+  const followUpValues = (): StorytellerFormValues => ({
+    providerId: watchedProvider,
+    // The job keeps the project's title; a follow-up never renames it.
+    title: '',
+    // A story written before the cap can hold a longer premise; the request carries the capped part.
+    premise: (project?.premise || watchedPremise || 'Continue this story.').slice(0, premiseMaxChars),
+  });
+
+  const submitDraft = (values: StorytellerFormValues) => {
+    setSaveFeedback(null);
+    createJobMutation.mutate({ values, action: 'draft', projectId: null, interactionMode: 'writing' });
   };
 
-  const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
-    const appendToActiveStory = action === 'continue' && Boolean(activeLibraryItem?.id && activeStoryText?.trim());
-    const generateTitle = appendToActiveStory && shouldGenerateStoryTitle(watchedTitle, storyTitle);
+  const submitFollowUp = (action: Exclude<StoryActionMode, 'draft'>, extra: Partial<StoryGenerationRequest> = {}) => {
     setSaveFeedback(null);
-    createJobMutation.mutate({
-      values: appendToActiveStory ? requestValues({ allowGeneratedTitle: true }) : values,
-      action,
-      sourceText: activeStoryText,
-      sourceJobId,
-      sourceLibraryItemId: appendToActiveStory ? activeLibraryItem?.id ?? null : null,
-      sourceStoryTitle: appendToActiveStory ? storyTitle : null,
-      generateTitle,
-      interactionMode: 'writing',
-    });
+    createJobMutation.mutate({ values: followUpValues(), action, projectId: project?.id ?? null, interactionMode: 'writing', ...extra });
   };
 
   const submitQuickAction = (action: StoryQuickActionMode) => {
-    if (!activeStoryText?.trim()) {
+    if (!project || !hasText) {
       setSaveFeedback({ kind: 'error', message: 'Select or generate a story before using quick actions.' });
       return;
     }
-    submitStoryRequest(requestValues({ allowGeneratedTitle: action === 'continue' }), action);
+    submitFollowUp(action);
   };
 
-  const submitStoryModeMove = (moveText: string, suggestedChoice: string | null = null) => {
+  /** Reworks a selection of one page, or a whole page; the result waits as a proposal (ST-6.2). */
+  const reworkSelection = (action: StorySelectionAction, selection: StorySelectionRange) => {
+    if (!project) return;
+    submitFollowUp(action, { selection });
+  };
+
+  /** A player's move; with no story selected it begins a new interactive one. */
+  const submitStoryModeMove = (moveText: string, { suggested = false }: { suggested?: boolean } = {}) => {
     const response = moveText.trim();
     if (!response) return;
-    const generateTitle = shouldGenerateStoryTitle(watchedTitle, storyTitle);
-    setSaveFeedback(null);
-    createJobMutation.mutate({
-      values: requestValues({ allowGeneratedTitle: true }),
-      action: 'continue',
-      sourceText: storyModeContext(activeStoryText, response),
-      sourceJobId,
-      sourceLibraryItemId: activeLibraryItem?.id ?? null,
-      sourceStoryTitle: storyTitle,
-      generateTitle,
+    submitFollowUp('continue', {
       interactionMode: 'story',
       userResponse: response,
-      suggestedChoice,
+      chosenSuggestion: suggested ? response : null,
     });
   };
 
   const addChapterToActiveStory = () => {
-    if (!activeLibraryItem?.id || !activeStoryText?.trim()) {
+    if (!project || !hasText) {
       setSaveFeedback({ kind: 'error', message: 'Select or generate a story before adding a chapter.' });
       return;
     }
-    const chapterNumber = nextChapterNumber(outline);
-    const createdAt = new Date().toISOString();
-    const addition: StorySceneAddition = {
-      id: `chapter:${activeLibraryItem.id}:${createdAt}`,
-      sourceItemId: activeLibraryItem.id,
-      sourceJobId: `local:${createdAt}`,
-      chapterNumber,
-      sceneNumber: 1,
-      title: 'Opening',
-      chapterTitle: 'New chapter',
-      startsNewChapter: true,
-      content: '',
-      storyTitle,
-      createdAt,
-    };
-    addStorySceneAddition(addition);
-    setSelectedChapter(chapterNumber);
-    setSaveFeedback({ kind: 'saved', message: `Added Chapter ${chapterNumber} to ${storyTitle}.` });
+    submitFollowUp('continue', { newChapter: true });
   };
 
-  return { submitStoryRequest, submitQuickAction, submitStoryModeMove, addChapterToActiveStory };
+  /** Plans the story as chapters of beats (ST-5.1); with no story selected it plans a new one from the premise. */
+  const planStory = (chapters: number) => {
+    const premise = (project?.premise || watchedPremise || '').trim();
+    if (!premise) {
+      setSaveFeedback({ kind: 'error', message: 'Write a premise before planning the story.' });
+      return;
+    }
+    setSaveFeedback(null);
+    createJobMutation.mutate({
+      values: { providerId: watchedProvider, title: project ? '' : watchedTitle, premise: premise.slice(0, premiseMaxChars) },
+      action: 'outline', projectId: project?.id ?? null, interactionMode: 'writing', outlineChapters: chapters,
+    });
+  };
+
+  /** Drafts one beat of the plan into its chapter; the first beat drafted opens the story. */
+  const draftBeat = (beatId: string) => {
+    if (!project) return;
+    submitFollowUp('continue', { beatId });
+  };
+
+  return { submitDraft, submitQuickAction, submitStoryModeMove, addChapterToActiveStory, planStory, draftBeat, reworkSelection };
 }

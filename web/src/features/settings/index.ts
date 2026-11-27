@@ -2,7 +2,5 @@
 export { loadSettingsProfile } from './settingsApi';
 export { saveAssistantSettings } from './assistantSettingsUpdate';
 export { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
-export { imageGenerationDefaults, podcastDefaults, rpgCampaignDefaults, speechInputDefaults, voiceStudioDefaults } from './moduleDefaults';
+export { imageGenerationDefaults, podcastDefaults, rpgCampaignDefaults, speechInputDefaults, storytellerDefaults, voiceStudioDefaults } from './moduleDefaults';
 export type { AssistantSettings, DesktopCompanionRolloutStage, LivePortraitEngine, SettingsDocument } from './settingsDocumentTypes';
-export { defaultStoryReadSettings, loadStoryReadSettings, saveStoryReadSettings } from './storyReadSettings';
-export type { StoryReadSettings } from './storyReadSettings';
