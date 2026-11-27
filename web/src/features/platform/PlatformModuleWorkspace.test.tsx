@@ -387,7 +387,7 @@ describe('PlatformModuleWorkspace', () => {
     expect(await screen.findByText('Synthesizing')).toBeInTheDocument();
     expect(MockEventSource.instances).toHaveLength(1);
 
-    MockEventSource.instances[0].emitMessage('job.updated', '{"job_id":"job-1"}');
+    MockEventSource.instances[0].emitMessage('job.running', '{"job_id":"job-1"}');
 
     expect(await screen.findByText('Finished')).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/jobs'))).toHaveLength(2);
@@ -472,7 +472,7 @@ describe('PlatformModuleWorkspace', () => {
     expect(await screen.findByText(/before-event/)).toBeInTheDocument();
     expect(MockEventSource.instances).toHaveLength(1);
 
-    MockEventSource.instances[0].emitMessage('job.updated', '{"job_id":"job-1"}');
+    MockEventSource.instances[0].emitMessage('job.running', '{"job_id":"job-1"}');
 
     expect(await screen.findByText(/after-event/)).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/diagnostics'))).toHaveLength(2);

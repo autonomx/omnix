@@ -363,7 +363,7 @@ def create_provider_model_refresh_job_request(request: ProviderModelRefreshReque
         input_payload={"scope": request.scope, "reason": request.reason},
         compat={
             "contract": "provider_model_refresh_v1",
-            "event_families": ["job.created", "job.updated", "job.completed", "job.failed", "job.canceled"],
+            "event_families": ["job.created", "job.running", "job.completed", "job.failed", "job.canceled"],
         },
     )
 
