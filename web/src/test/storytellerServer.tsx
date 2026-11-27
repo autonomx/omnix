@@ -295,13 +295,18 @@ export function storyServer({ projects = [project('project-1')], legacyJobs = []
           target.versions.push({ id: `${target.id}-v${target.versions.length + 1}`, kind: action, title: '', version_number: target.versions.length + 1, source_job_id: id, created_at: now, pages: [page(`${id}-page`, text)] });
           return;
         }
-        const last = visibleOf(target).at(-1);
-        const chapter = payload.new_chapter ? (last?.chapter ?? 0) + 1 : last?.chapter ?? 1;
         const interactive = payload.interaction_mode === 'story';
-        target.pages = [...target.pages, page(`${id}-page`, text, {
-          chapter, position: target.pages.length + 1, title: payload.new_chapter ? 'The Lantern Road' : '', parent: last?.id ?? null,
-          moves: interactive ? ['Follow the lantern', 'Call out'] : [],
-        })];
+        // A Generate of several chapters writes one page each; every page after the first opens the next chapter.
+        const count = !interactive && typeof payload.chapters === 'number' ? payload.chapters : 1;
+        for (let index = 0; index < count; index += 1) {
+          const last = visibleOf(target).at(-1);
+          const opens = index > 0 || Boolean(payload.new_chapter);
+          const chapter = opens ? (last?.chapter ?? 0) + 1 : last?.chapter ?? 1;
+          target.pages = [...target.pages, page(index ? `${id}-page-${index + 1}` : `${id}-page`, text, {
+            chapter, position: target.pages.length + 1, title: opens ? 'The Lantern Road' : '', parent: last?.id ?? null,
+            moves: interactive ? ['Follow the lantern', 'Call out'] : [],
+          })];
+        }
         if (interactive && payload.user_response) {
           target.moves.push({ ...move(`${id}-move`, `${id}-page`, String(payload.user_response)), chosen_suggestion: String(payload.chosen_suggestion ?? '') });
         }

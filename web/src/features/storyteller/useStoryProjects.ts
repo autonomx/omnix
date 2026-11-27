@@ -13,6 +13,7 @@ export const storyProjectKeys = {
   list: (trashed: boolean) => ['story', 'projects', 'list', trashed ? 'trash' : 'live'] as const,
   detail: (projectId: string) => ['story', 'projects', 'detail', projectId] as const,
 };
+const noSummaries: StoryProjectSummary[] = [];
 
 /**
  * The account's story projects (ST-1.2): the library, the trash, the project being read, and the one-time
@@ -52,6 +53,8 @@ export function useStoryProjects() {
 
   return {
     entries,
+    /** The live stories as listed, for the library view. */
+    summaries: listQuery.data ?? noSummaries,
     trashEntries,
     project,
     activeId,

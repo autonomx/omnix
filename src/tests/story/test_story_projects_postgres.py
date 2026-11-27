@@ -487,6 +487,87 @@ def test_a_retry_reports_its_page_after_the_story_went_to_the_trash(two_accounts
     assert [entry[0] for entry in model.prompts] == ["page"]
 
 
+def test_a_page_is_written_at_the_length_the_writer_asked_for(two_accounts, monkeypatch):
+    """A job's page_lines sizes its page; a value the prompt can't ask for leaves the usual length."""
+    import app.persistence.database as persistence_database
+    from app.apps.story import jobs, service
+    from app.apps.story.contracts import StoryProjectCreate
+
+    database, account, _ = two_accounts
+    model = _FakeModel()
+    monkeypatch.setattr(persistence_database, "default_database", lambda: database)
+    monkeypatch.setattr(jobs, "_generate", model)
+    with _as(account):
+        project = service.create_project(database, account, StoryProjectCreate(premise="A river crossing."))
+        _run_job("job-sized", project_id=project.id, page_lines=30)
+        _run_job("job-sized-next", project_id=project.id, action="continue", new_chapter=True, page_lines=30)
+        _run_job("job-unsized", project_id=project.id, action="continue", page_lines="many")
+    sized, sized_next, unsized = [text for what, text in model.prompts if what == "page"]
+    assert "Write the opening page of the story from the premise, about 30 lines long" in sized
+    assert "Write the next page, about 30 lines long" in sized_next and "Begin chapter 2 here" in sized_next
+    assert "Write the next page, about 400 to 800 words" in unsized
+
+
+def test_a_new_story_opens_at_chapter_one(two_accounts, monkeypatch):
+    """A story's first page is chapter 1 whatever chapter the request names; the next chapter opens after it."""
+    import app.persistence.database as persistence_database
+    from app.apps.story import jobs, service
+    from app.apps.story.contracts import StoryProjectCreate
+
+    database, account, _ = two_accounts
+    monkeypatch.setattr(persistence_database, "default_database", lambda: database)
+    monkeypatch.setattr(jobs, "_generate", _FakeModel())
+    with _as(account):
+        project = service.create_project(database, account, StoryProjectCreate(premise="A river crossing."))
+        _run_job("job-first", project_id=project.id, chapter=3)
+        _run_job("job-next", project_id=project.id, action="continue", new_chapter=True)
+        stored = service.get_project(database, account, project.id)
+    assert [page.chapter for page in stored.pages] == [1, 2]
+
+
+def test_one_generate_writes_several_chapters_into_one_story(two_accounts, monkeypatch):
+    """A job's chapters count writes that many pages into one story, each opening the next chapter from the one
+    before; a retry keeps the chapters already written and writes the rest."""
+    import app.persistence.database as persistence_database
+    from app.apps.story import jobs, service
+
+    class _FailsOnce(_FakeModel):
+        def __call__(self, prompt, contract, budget, **kwargs):
+            reply = super().__call__(prompt, contract, budget, **kwargs)
+            if len(self.prompts) == 3 and not getattr(self, "failed", False):
+                self.failed = True
+                raise RuntimeError("model went away")
+            return reply
+
+    database, account, _ = two_accounts
+    model = _FailsOnce()
+    monkeypatch.setattr(persistence_database, "default_database", lambda: database)
+    monkeypatch.setattr(jobs, "_generate", model)
+    with _as(account):
+        with pytest.raises(RuntimeError, match="model went away"):
+            _run_job("job-three", chapters=3, page_lines=20)
+        wrote = _run_job("job-three", chapters=3, page_lines=20)
+        project_id = wrote["story_ref"]["project_id"]
+        more = _run_job("job-more", project_id=project_id, action="continue", chapters=2)
+        stored = service.get_project(database, account, project_id)
+    # Chapters 1 to 3 in one story (chapter 3 written by the retry alone), then chapter 3 goes on and 4 opens.
+    assert [(page.chapter, page.blocks[0].text) for page in stored.pages] == [
+        (1, "Page 0."), (2, "Page 1."), (3, "Page 3."), (3, "Page 4."), (4, "Page 5.")]
+    assert len(model.prompts) == 6 and len(wrote["story_ref"]["page_ids"]) == 3
+    assert wrote["story_ref"]["page_id"] == stored.pages[0].id and wrote["content"].count("Page") == 3
+    assert more["story_ref"]["page_ids"] == [stored.pages[3].id, stored.pages[4].id]
+    prompts = [text for _, text in model.prompts]
+    assert "opening page of the story from the premise, about 20 lines long" in prompts[0]
+    assert "Begin chapter 2 here" in prompts[1] and "about 20 lines long" in prompts[1] and "Page 0." in prompts[1]
+    assert "Begin chapter" not in prompts[4] and "Begin chapter 4 here" in prompts[5]
+    # Only a writing draft or continue writes several chapters; an unusable count writes one.
+    assert [jobs._chapter_count(payload) for payload in (
+        {"chapters": 3, "action": "rewrite"}, {"chapters": 3, "interaction_mode": "story"},
+        {"chapters": 3, "beat_id": "beat-1"}, {"chapters": True}, {"chapters": 21}, {"chapters": "3"},
+        {"chapters": 20, "action": "continue"},
+    )] == [1, 1, 1, 1, 1, 1, 20]
+
+
 def test_presets_round_trip_and_steer_the_story(two_accounts, monkeypatch):
     """ST-5.2: a preset note keeps its tone, style and instructions; choosing it sets the story's tone and style."""
     from fastapi import HTTPException

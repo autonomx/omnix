@@ -10,7 +10,9 @@ export const storytellerModule = defineModule({
   backendModules: ['story'],
   apiPrefixes: [
     '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent',
-    '/api/prompts',
+    '/api/prompts', '/api/story',
+    // Narrate in Audiobook hands the story over; the rest of the audiobook API stays with its own workspace.
+    '/api/audiobook/projects/import-story',
   ],
   modeLabel: 'Storyteller',
   loadWorkspace: () => import('./StorytellerWorkspace').then((module) => module.StorytellerWorkspace),

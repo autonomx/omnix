@@ -1439,6 +1439,50 @@ describe('AudiobookWorkspace', () => {
     expect(within(tabs).getByRole('button', { name: 'Cast & Voice Tools' })).toHaveAttribute('aria-current', 'page');
   });
 
+  it('shows the character the listener picks on the Cast page and carries it to the voices', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 50 }],
+        review_issues: [], speakers: [
+          { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'ehsan', canonical_name: 'Ehsan', kind: 'character', status: 'active', casting: null, aliases: ['Eh'] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [],
+        render_progress: { completed: 0, total: 1 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'Hello.', spans: [],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    const tabs = await screen.findByRole('navigation', { name: 'Audiobook project sections' });
+    fireEvent.click(within(tabs).getByRole('button', { name: 'Cast & Voice Tools' }));
+    // Until the listener picks, the details show the first character.
+    expect(await screen.findByRole('heading', { level: 2, name: 'Narrator' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Narrator' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ehsan' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Ehsan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ehsan' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Narrator' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Ehsan' }).closest('article')).toHaveClass('selected');
+
+    // A click anywhere on a card picks it too, and the voices page opens on the picked character.
+    fireEvent.click(screen.getByRole('button', { name: 'Narrator' }).closest('article')!);
+    expect(screen.getByRole('heading', { level: 2, name: 'Narrator' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ehsan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Manage voice assignment' }));
+    expect(await screen.findByLabelText('Voice assignment target')).toHaveValue('ehsan');
+  });
+
   it('filters spans by character and saves a selected word for the whole book', async () => {
     let removed = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -32,14 +32,27 @@ STORY_SYSTEM_PROMPT = STORY_SYSTEM.text
 
 #: About how long one page is; a page is one scene, never the whole story.
 PAGE_WORDS = "about 400 to 800 words"
+#: A page the writer sizes in lines: a line of prose is about this many words, as on a printed page.
+LINE_WORDS = 12
+PAGE_LINES_MIN = 5
+#: The most a page reply's token budget (page_contract) holds with room to spare.
+PAGE_LINES_MAX = 150
+
+
+def page_length(page_lines: int | None) -> str:
+    """How long a page is asked to be: the writer's lines, or the usual length."""
+    if page_lines is None:
+        return PAGE_WORDS
+    return f"about {page_lines} lines long (a line is about {LINE_WORDS} words, so roughly {page_lines * LINE_WORDS} words)"
+
 
 _ACTION_INSTRUCTIONS: dict[str, str] = {
     "draft": (
-        f"Write the opening page of the story from the premise, {PAGE_WORDS}: bring in the main characters and "
+        "Write the opening page of the story from the premise, {length}: bring in the main characters and "
         "the setting, raise the central question, and stop at a natural break that leads on."
     ),
     "continue": (
-        f"Write the next page, {PAGE_WORDS}, continuing from exactly where the story stops. Keep its characters, "
+        "Write the next page, {length}, continuing from exactly where the story stops. Keep its characters, "
         "voice, tense and point of view. Do not repeat or summarise what is already written; write only the new "
         "page."
     ),
@@ -271,6 +284,7 @@ def build_story_prompt(
     writing_style: str | None = None,
     chapter: int | None = None,
     new_chapter: bool = False,
+    page_lines: int | None = None,
     cast: Sequence[Mapping[str, Any]] = (),
     notes: Sequence[Mapping[str, Any]] = (),
     style_notes: str | None = None,
@@ -279,6 +293,9 @@ def build_story_prompt(
     following_text: str | None = None,
 ) -> StoryPrompt:
     """The prompt for one page of a story job; ``new_chapter`` opens ``chapter`` rather than adding to it.
+
+    ``page_lines`` sizes a new page (a draft, a continue or an interactive page) in lines of prose; a
+    rework keeps the length of the page it reworks.
 
     A page action (``PAGE_ACTIONS``) reworks ``page_text``; ``source_text`` is then the story before it.
     With ``passage`` (ST-6.2), ``page_text`` is a selection from a page, and ``following_text`` what
@@ -295,7 +312,16 @@ def build_story_prompt(
     if reworks_page and not page_text:
         # A story with no pages yet (an old job's text): the whole text is the page.
         page_text, source_text = source_text, None
-    lines = [_INTERACTIVE_INSTRUCTION if interactive else _ACTION_INSTRUCTIONS[action]]
+    if page_lines is not None and not PAGE_LINES_MIN <= page_lines <= PAGE_LINES_MAX:
+        page_lines = None
+    if interactive:
+        lines = [_INTERACTIVE_INSTRUCTION]
+        if page_lines is not None:
+            lines.append(f"Make the page {page_length(page_lines)}.")
+    else:
+        instruction = _ACTION_INSTRUCTIONS[action]
+        lines = [instruction.format(length=page_length(page_lines)) if action in {"draft", "continue"}
+                 else instruction]
     craft = [f"Tone: {tone}." if tone else "", f"Writing style: {writing_style}." if writing_style else ""]
     if any(craft):
         lines.append(" ".join(part for part in craft if part))

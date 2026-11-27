@@ -68170,7 +68170,13 @@
         "type": "object"
       },
       "StoryVoiceOption": {
+        "description": "A voice the writer may choose: any in the library. Only a castable one is ever given to a part automatically.",
         "properties": {
+          "castable": {
+            "default": false,
+            "title": "Castable",
+            "type": "boolean"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -68188,7 +68194,8 @@
         "required": [
           "voice_id",
           "name",
-          "description"
+          "description",
+          "castable"
         ],
         "title": "StoryVoiceOption",
         "type": "object"
@@ -106779,7 +106786,7 @@
     },
     "/api/story/projects/{project_id}/voices/{speaker_id}": {
       "put": {
-        "description": "The writer's choice of a castable voice for the narrator or a character.",
+        "description": "The writer's choice of any library voice for the narrator or a character.",
         "operationId": "choose_story_voice_api_story_projects__project_id__voices__speaker_id__put",
         "parameters": [
           {

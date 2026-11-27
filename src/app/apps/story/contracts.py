@@ -311,9 +311,12 @@ class StoryCastVoice(BaseModel):
 
 
 class StoryVoiceOption(BaseModel):
+    """A voice the writer may choose: any in the library. Only a castable one is ever given to a part automatically."""
+
     voice_id: str
     name: str
     description: str = ""
+    castable: bool = False
 
 
 class StoryVoiceCast(BaseModel):

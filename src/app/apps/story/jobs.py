@@ -26,6 +26,8 @@ from .podcast_script import script_json, write_podcast_script
 from .prompts import (
     MANUSCRIPT_MAX_CHARS,
     PAGE_ACTIONS,
+    PAGE_LINES_MAX,
+    PAGE_LINES_MIN,
     RECENT_MAX_CHARS,
     StoryPrompt,
     build_outline_prompt,
@@ -51,12 +53,13 @@ class StoryGenerateInput(BaseModel):
     interaction_mode: str = "writing"
     tone: str | None = None
     writing_style: str | None = None
-    chapter: int | None = None
     # The project the page or version is written into; a job queued before projects has none (ST-1.3).
     project_id: str | None = None
     chosen_suggestion: str | None = None
     # A continue that opens the next chapter instead of adding to the last one.
     new_chapter: bool = False
+    # How long a new page is, in lines of prose (PAGE_LINES_MIN..PAGE_LINES_MAX); none for the usual length.
+    page_lines: int | None = None
     # action "outline" plans the story as this many chapters of beats (ST-5.1).
     outline_chapters: int | None = None
     # A page drafted from this beat of the project's outline (ST-5.1).
@@ -135,10 +138,53 @@ def _render_job(job: JobRecord, run: JobRun[Any] | None = None) -> dict[str, Any
 
 def _render_story(job: JobRecord, payload: dict[str, Any], *, provider_id: str | None,
                   model_id: str | None, run: JobRun[Any] | None = None) -> dict[str, Any]:
+    """Write a page or a version of the job's project (ST-1.3), or several chapters one after another.
+
+    A Generate of ``chapters`` writes that many pages into the same story: the first where the request says, each
+    after it opening the next chapter from the story as the one before left it. Each chapter is stored under its own
+    key (the job's id, then ``<job id>:<n>``), so a retried job keeps the chapters it wrote and writes the rest.
+    """
+    count = _chapter_count(payload)
+    if count == 1:
+        return _render_page(job.id, payload, provider_id=provider_id, model_id=model_id, run=run)
+    written: list[dict[str, Any]] = []
+    for index in range(count):
+        _stop_if_cancelled(run)
+        _report(run, index + 1, count, f"Writing chapter {index + 1} of {count}")
+        step = payload if not written else {
+            **payload, "action": "continue", "new_chapter": True, "project_id": written[0]["story_ref"]["project_id"],
+            "title": None, "generate_title": False,
+        }
+        written.append(_render_page(job.id if not written else f"{job.id}:{index + 1}", step,
+                                    provider_id=provider_id, model_id=model_id, run=run))
+    first = written[0]
+    return {
+        **first,
+        "content": "\n\n".join(result["content"] for result in written),
+        "resolved_model": next((result["resolved_model"] for result in reversed(written) if result["resolved_model"]),
+                               None),
+        "story_ref": {**first["story_ref"], "page_ids": [result["story_ref"].get("page_id") for result in written]},
+    }
+
+
+def _chapter_count(payload: dict[str, Any]) -> int:
+    """How many chapters a Generate writes: 1 to PLANNED_CHAPTERS_MAX for a writing draft or continue, else 1."""
+    count = payload.get("chapters")
+    if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= PLANNED_CHAPTERS_MAX:
+        return 1
+    if (_text(payload.get("action")) or "draft") not in {"draft", "continue"} \
+            or (_text(payload.get("interaction_mode")) or "writing") == "story" \
+            or _text(payload.get("beat_id")) or payload.get("selection") is not None:
+        return 1
+    return count
+
+
+def _render_page(job_id: str, payload: dict[str, Any], *, provider_id: str | None,
+                 model_id: str | None, run: JobRun[Any] | None = None) -> dict[str, Any]:
     """Write a page or a version of the job's project (ST-1.3), one page per model call (ST-2.1).
 
     The project supplies the story so far and its bible. A retried job whose page or version is
-    already stored returns it without calling the model again.
+    already stored under ``job_id`` returns it without calling the model again.
     """
     from app.persistence.database import default_database
     from app.runtime.tenant_context import current_tenant
@@ -151,7 +197,7 @@ def _render_story(job: JobRecord, payload: dict[str, Any], *, provider_id: str |
     action = _text(payload.get("action")) or "draft"
     interaction_mode = _text(payload.get("interaction_mode")) or "writing"
     project = service.job_project(
-        database, context, project_id=_text(payload.get("project_id")), job_id=job.id, premise=premise,
+        database, context, project_id=_text(payload.get("project_id")), job_id=job_id, premise=premise,
         mode="interactive" if interaction_mode == "story" else "writing",
         tone=_text(payload.get("tone")), writing_style=_text(payload.get("writing_style")),
     )
@@ -159,20 +205,19 @@ def _render_story(job: JobRecord, payload: dict[str, Any], *, provider_id: str |
     if project["written"] is not None:
         # A retry of a job that already wrote its page reports it before anything that depends on the story
         # as it now is (a beat removed since, a preset changed), which could fail a job whose page exists.
-        written = service.written_by_job(database, context, project_id, job.id)
+        written = service.written_by_job(database, context, project_id, job_id)
         return _story_result(written["title"] or requested_title or "Untitled story", written["content"],
                              written["ref"], provider_id=provider_id, model_id=model_id, resolved_model=None)
     style_notes = _preset_instructions(project)
     if action == "outline":
-        return _plan_story(job, payload, project, premise=premise, title=requested_title, style_notes=style_notes,
+        return _plan_story(job_id, payload, project, premise=premise, title=requested_title, style_notes=style_notes,
                            provider_id=provider_id, model_id=model_id)
     planned = _planned_beat(project, payload, interaction_mode)
     if planned is not None:
         action = "continue" if project["page_count"] else "draft"
-    # The chapter being written: a draft's named chapter, otherwise the chapter the story ends in, never the
-    # one the writer happens to be viewing.
-    chapter = payload.get("chapter") if action == "draft" and not project["last_chapter"] else None
-    chapter = chapter if isinstance(chapter, int) and not isinstance(chapter, bool) and chapter >= 1 else None
+    # The chapter being written: a new story opens at chapter 1, otherwise the chapter the story ends in (or the
+    # next one), never the one the writer happens to be viewing. A request's own chapter number is ignored.
+    chapter = 1 if action == "draft" and not project["last_chapter"] else None
     new_chapter = action == "continue" and payload.get("new_chapter") is True and interaction_mode != "story"
     if new_chapter:
         chapter = project["last_chapter"] + 1
@@ -191,7 +236,7 @@ def _render_story(job: JobRecord, payload: dict[str, Any], *, provider_id: str |
             requested_title is None and not project["project"]["title"]),
         user_response=_text(payload.get("user_response")), tone=_text(payload.get("tone")),
         writing_style=_text(payload.get("writing_style")), chapter=chapter, new_chapter=new_chapter,
-        notes=project["notes"], style_notes=style_notes,
+        page_lines=_page_lines(payload.get("page_lines")), notes=project["notes"], style_notes=style_notes,
         beat=_beat_text(*planned) if planned is not None else None,
     )
     # The project's own pages are the story so far; a job queued before projects carried its text.
@@ -260,7 +305,7 @@ def _render_story(job: JobRecord, payload: dict[str, Any], *, provider_id: str |
     # names the result only.
     title = requested_title or (None if is_version else pages[0].get("title")) or project["project"]["title"] or None
     ref = service.record_job_result(
-        database, context, project_id=project_id, job_id=job.id, action=action,
+        database, context, project_id=project_id, job_id=job_id, action=action,
         interaction_mode=interaction_mode, title=title, pages=pages,
         player_text=_text(payload.get("user_response")) if interaction_mode == "story" else None,
         chosen_suggestion=_text(payload.get("chosen_suggestion")), chapter=chapter, new_characters=proposed,
@@ -333,7 +378,7 @@ def _beat_text(chapter: dict[str, Any], beat: dict[str, Any]) -> str:
     return f"{heading}\n{beat['text']}"
 
 
-def _plan_story(job: JobRecord, payload: dict[str, Any], project: dict[str, Any], *, premise: str,
+def _plan_story(job_id: str, payload: dict[str, Any], project: dict[str, Any], *, premise: str,
                 title: str | None, style_notes: str | None, provider_id: str | None,
                 model_id: str | None) -> dict[str, Any]:
     """Plan the story as chapters of beats and store the plan on the project, once (ST-5.1)."""
@@ -346,8 +391,8 @@ def _plan_story(job: JobRecord, payload: dict[str, Any], project: dict[str, Any]
     row = project["project"]
     given_title = title or row["title"] or None
     title = given_title or "Untitled story"
-    if row.get("outline_source_job_id") == job.id:
-        ref = {"project_id": row["id"], "outline_job_id": job.id}
+    if row.get("outline_source_job_id") == job_id:
+        ref = {"project_id": row["id"], "outline_job_id": job_id}
         return {**_story_result(title, outline_text(row.get("outline") or []), ref, provider_id=provider_id,
                                 model_id=model_id, resolved_model=None), "artifact_type": "story_outline"}
     count = payload.get("outline_chapters")
@@ -366,7 +411,7 @@ def _plan_story(job: JobRecord, payload: dict[str, Any], project: dict[str, Any]
     chapters = check_outline(reply)
     if not chapters:
         raise RuntimeError("The story outline could not be written: it planned no beats")
-    ref = service.record_outline(database, context, project_id=row["id"], job_id=job.id, chapters=chapters)
+    ref = service.record_outline(database, context, project_id=row["id"], job_id=job_id, chapters=chapters)
     return {**_story_result(title, outline_text(chapters), ref, provider_id=provider_id, model_id=model_id,
                             resolved_model=resolved_model), "artifact_type": "story_outline"}
 
@@ -480,6 +525,13 @@ def _require_text(value: object, message: str) -> str:
     if not text:
         raise ValueError(message)
     return text
+
+
+def _page_lines(value: object) -> int | None:
+    """A page length in lines the prompt can ask for; anything else asks for the usual length."""
+    if isinstance(value, int) and not isinstance(value, bool) and PAGE_LINES_MIN <= value <= PAGE_LINES_MAX:
+        return value
+    return None
 
 
 def _text(value: object) -> str | None:

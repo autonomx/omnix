@@ -2,8 +2,9 @@
 
 The narrator and each character get a castable voice, matched to the character's role, description and traits by
 the shared matcher (``match_voices``), ties broken by a draw seeded by the project and the speaker, so a project
-casts the same every time. The writer may choose any castable voice for anyone, and their choice wins. A cast voice
-that is no longer castable, or whose recording changed, is cast again.
+casts the same every time. The writer may choose any voice in the library for anyone, castable or not, and their
+choice wins while its recording is unchanged. A voice given automatically that is no longer castable, or any voice
+whose recording changed, is cast again.
 
 A page is spoken block by block in its speakers' voices through the shared speech service. A line whose speaker is
 not in the cast is spoken in a neutral voice (a castable voice other than the narrator's) and flagged in the plan.
@@ -21,7 +22,7 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 from app.platform.voice.contracts import (
     DEFAULT_VOICE,
-    castable_voices,
+    library_voices,
     match_voices,
     neutral_voice,
     sentence_key,
@@ -54,14 +55,23 @@ def _speakers(repository: PostgresStoryRepository, context: TenantContext, proje
     return found
 
 
+def _castable(voices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The library's voices that may be given to a part automatically."""
+    return [row for row in voices if row["castable"]]
+
+
 def _cast(repository: PostgresStoryRepository, context: TenantContext, project_id: str,
           voices: list[dict[str, Any]]) -> tuple[list[dict[str, str]], dict[str, dict[str, str]]]:
-    """The project's speakers and their voices, casting anyone not cast yet (and anyone whose voice went)."""
+    """The project's speakers and their voices (``voices`` is the library), casting anyone not cast yet, anyone whose
+    voice went or changed, and anyone given a voice automatically that is no longer castable."""
     revisions = {row["voice_id"]: row["revision"] for row in voices}
+    castable = _castable(voices)
     people = _speakers(repository, context, project_id)
     stored = repository.voice_cast(context, project_id)
-    cast = {speaker: row for speaker, row in stored.items() if revisions.get(row["voice_id"]) == row["voice_revision"]}
-    for speaker, row in match_voices(people, voices, cast, _tie_break(project_id)).items():
+    cast = {speaker: row for speaker, row in stored.items()
+            if revisions.get(row["voice_id"]) == row["voice_revision"]
+            and (row["chosen_by"] == "writer" or any(voice["voice_id"] == row["voice_id"] for voice in castable))}
+    for speaker, row in match_voices(people, castable, cast, _tie_break(project_id)).items():
         # Only a stale row is replaced over the writer's choice; a speaker with no row yet takes the match
         # unless the writer chose a voice for them meanwhile.
         repository.put_voice(context, project_id, speaker, **row, replace=speaker in stored)
@@ -78,13 +88,13 @@ def _response(project_id: str, people: list[dict[str, str]], cast: dict[str, dic
         project_id=project_id,
         cast=[StoryCastVoice(speaker_id=person["speaker_id"], name=person["name"], **cast.get(person["speaker_id"], {}))
               for person in people],
-        voices=[StoryVoiceOption(voice_id=row["voice_id"], name=row["name"], description=row["description"])
-                for row in voices],
+        voices=[StoryVoiceOption(voice_id=row["voice_id"], name=row["name"], description=row["description"],
+                                 castable=row["castable"]) for row in voices],
     )
 
 
 def voice_cast(database: Any, context: TenantContext, project_id: str) -> StoryVoiceCast:
-    voices = castable_voices()
+    voices = library_voices()
     with unit_of_work(database) as work:
         repository = PostgresStoryRepository(work.connection)
         _require(repository, context, project_id, live=False)
@@ -99,8 +109,8 @@ class VoiceNotCastable(ValueError):
 
 def choose_voice(database: Any, context: TenantContext, project_id: str, speaker_id: str,
                  voice_id: str) -> StoryVoiceCast:
-    """The writer's choice of a castable voice for the narrator or a character."""
-    voices = castable_voices()
+    """The writer's choice of any library voice for the narrator or a character."""
+    voices = library_voices()
     voice = next((row for row in voices if row["voice_id"] == voice_id), None)
     if voice is None:
         raise VoiceNotCastable("voice_not_castable")
@@ -120,10 +130,10 @@ def choose_voice(database: Any, context: TenantContext, project_id: str, speaker
 def _voices_of(people: list[dict[str, str]], cast: dict[str, dict[str, str]],
                voices: list[dict[str, Any]]) -> tuple[dict[str, str], str]:
     """Each speaker's voice (the service's own while nothing is castable), and the neutral voice for a line whose
-    speaker is not in the cast."""
+    speaker is not in the cast (a castable one: it is given, not chosen)."""
     by_speaker = {person["speaker_id"]: (cast.get(person["speaker_id"]) or {}).get("voice_id") or DEFAULT_VOICE
                   for person in people}
-    return by_speaker, neutral_voice(voices, by_speaker[NARRATOR])
+    return by_speaker, neutral_voice(_castable(voices), by_speaker[NARRATOR])
 
 
 def _block_speaker(block: dict[str, Any]) -> str:
@@ -132,7 +142,7 @@ def _block_speaker(block: dict[str, Any]) -> str:
 
 def speech_plan(database: Any, context: TenantContext, project_id: str, page_id: str) -> StorySpeechPlan:
     """How a page is spoken: only its blocks, each in its speaker's voice, sentence by sentence."""
-    voices = castable_voices()
+    voices = library_voices()
     with unit_of_work(database) as work:
         repository = PostgresStoryRepository(work.connection)
         _require(repository, context, project_id, live=False)
@@ -173,7 +183,7 @@ class _ProjectSpeechCache:
 def speak(database: Any, context: TenantContext, project_id: str, *, page_id: str, speaker_id: str,
           text: str) -> Response:
     """A sentence of a page in its speaker's voice (the neutral voice for a speaker with none), as PCM16."""
-    voices = castable_voices()
+    voices = library_voices()
     with unit_of_work(database) as work:
         repository = PostgresStoryRepository(work.connection)
         _require(repository, context, project_id, live=False)

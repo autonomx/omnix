@@ -1,9 +1,12 @@
-import type { StoryBlock, StoryVersionSummary } from './api/storyClient';
+import type { StoryBlock, StoryProjectSummary, StoryVersionSummary } from './api/storyClient';
 import type { SaveFeedback, StoryLibrarySection } from './storyModel';
 import type { StoryLibraryEntry } from './storyProjectModel';
 import type { useStoryProjects } from './useStoryProjects';
 
 const sectionFor = (entry: { mode: string }): StoryLibrarySection => (entry.mode === 'interactive' ? 'interactive' : 'stories');
+
+/** The writer agrees before a story leaves the library; Trash keeps it restorable for 30 days. */
+const confirmTrash = (title: string) => window.confirm(`Move "${title}" to Trash? You can restore it from Trash for 30 days.`);
 
 /** A failed call in the writer's words; a proposal whose page changed since is a conflict (ST-6.2). */
 const failure = (caught: unknown, fallback: string) => {
@@ -40,12 +43,32 @@ export function useStoryLibraryActions({ projects, storyTitle, setSaveFeedback, 
     run,
     sectionFor,
     trashActiveStory: () => {
-      if (!project) return;
+      if (!project || !confirmTrash(storyTitle)) return;
       run(async () => {
         await projects.trash(project.id);
         setActiveLibrarySection('trash');
         return `Moved "${storyTitle}" to Trash.`;
       });
+    },
+    /** Any story, from the library view; it stays restorable from Trash for 30 days. */
+    trashStory: (story: StoryProjectSummary) => {
+      const title = story.title.trim() || 'Untitled story';
+      if (!confirmTrash(title)) return;
+      run(async () => {
+        await projects.trash(story.id);
+        return `Moved "${title}" to Trash. Restore it from Trash within 30 days.`;
+      });
+    },
+    /** A story's title and premise, edited in the library view; false keeps the form open with the error shown. */
+    saveDetails: async (story: StoryProjectSummary, details: { title: string; premise: string }) => {
+      try {
+        await projects.update(story.id, details);
+      } catch (caught) {
+        setSaveFeedback({ kind: 'error', message: failure(caught, 'The story could not be saved.') });
+        return false;
+      }
+      setSaveFeedback({ kind: 'saved', message: `Saved "${details.title || 'Untitled story'}".` });
+      return true;
     },
     restoreEntry: (entry: StoryLibraryEntry) => run(async () => {
       await projects.restore(entry.id);

@@ -135,10 +135,36 @@ export function StoryOutline({ chapters, selectedChapter, disabled, onAddChapter
   );
 }
 
-/** The manuscript's chapter line, reading time and title (ST-6.4). */
-export function ManuscriptHeading({ chapter, minutes, title }: { chapter: string; minutes: number; title: string }) {
+/**
+ * The manuscript's chapter line, reading time and title (ST-6.4). A story of several chapters gets a link to each,
+ * kept in view while the writer reads, so the next chapter is one click away.
+ */
+export function ManuscriptHeading({ chapter, minutes, title, chapters = [], selected, onSelect }: {
+  chapter: string;
+  minutes: number;
+  title: string;
+  chapters?: ManuscriptOutlineChapter[];
+  selected?: number;
+  onSelect?: (chapterNumber: number, targetId: string) => void;
+}) {
   return (
     <>
+      {chapters.length > 1 && onSelect ? (
+        <nav aria-label="Chapters" className="storyteller-chapter-nav">
+          {chapters.map((entry) => (
+            <button
+              aria-current={entry.number === selected ? 'true' : undefined}
+              className={entry.number === selected ? 'active' : ''}
+              key={entry.id}
+              title={entry.title}
+              type="button"
+              onClick={() => onSelect(entry.number, entry.id)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
       <div className="storyteller-manuscript-meta">
         <span>{chapter}</span>
         <span>{minutes} min read</span>

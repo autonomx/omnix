@@ -1,5 +1,6 @@
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { StoryProject } from './api/storyClient';
+import type { ChapterChoice } from './useChapterChoice';
 import {
   SaveFeedback, StoryActionMode, StoryGenerationRequest, StoryGenerationResult, StoryQuickActionMode, StorySelectionAction,
   StorySelectionRange, StorytellerFormValues, premiseMaxChars,
@@ -11,6 +12,7 @@ type StoryRequestsOptions = {
   project: StoryProject | null;
   hasText: boolean;
   setSaveFeedback: (feedback: SaveFeedback | null) => void;
+  chapterChoice: Pick<ChapterChoice, 'chapter' | 'story' | 'lastChapter' | 'count'>;
 };
 
 /**
@@ -23,6 +25,7 @@ export function useStoryRequests({
   project,
   hasText,
   setSaveFeedback,
+  chapterChoice,
 }: StoryRequestsOptions) {
   const followUpValues = (): StorytellerFormValues => ({
     providerId: watchedProvider,
@@ -35,6 +38,21 @@ export function useStoryRequests({
   const submitDraft = (values: StorytellerFormValues) => {
     setSaveFeedback(null);
     createJobMutation.mutate({ values, action: 'draft', projectId: null, interactionMode: 'writing' });
+  };
+
+  /**
+   * Generate: with a written story open it adds to that story, in its last chapter or the one after it; a story's
+   * chapters stay one story. With none open it starts a new story. It writes `count` chapters, each after the first
+   * opening the next.
+   */
+  const generate = (values: StorytellerFormValues) => {
+    const chapters = chapterChoice.count;
+    if (!chapterChoice.story) {
+      setSaveFeedback(null);
+      createJobMutation.mutate({ values, action: 'draft', projectId: null, interactionMode: 'writing', chapters });
+      return;
+    }
+    submitFollowUp('continue', { chapters, ...(chapterChoice.chapter > chapterChoice.lastChapter ? { newChapter: true } : {}) });
   };
 
   const submitFollowUp = (action: Exclude<StoryActionMode, 'draft'>, extra: Partial<StoryGenerationRequest> = {}) => {
@@ -95,5 +113,5 @@ export function useStoryRequests({
     submitFollowUp('continue', { beatId });
   };
 
-  return { submitDraft, submitQuickAction, submitStoryModeMove, addChapterToActiveStory, planStory, draftBeat, reworkSelection };
+  return { submitDraft, generate, submitQuickAction, submitStoryModeMove, addChapterToActiveStory, planStory, draftBeat, reworkSelection };
 }

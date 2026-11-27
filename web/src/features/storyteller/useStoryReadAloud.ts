@@ -1,6 +1,7 @@
 /**
- * A story page read aloud in the reader (ST-4.3): which page and line is being heard, pause, skip and stop, and
- * "read new pages aloud" (off unless the reader turns it on, as the RPG's). Lines are read with the story's read
+ * A story page read aloud in the reader (ST-4.3) or the writing manuscript: which page and line is being heard,
+ * pause, skip and stop, the pages after it read on in turn when asked, and "read new pages aloud" (off unless the
+ * reader turns it on, as the RPG's). Lines are read with the story's read
  * settings: the paragraph pause between them, the word notes in what is sent.
  */
 import { useQuery } from '@tanstack/react-query';
@@ -19,7 +20,8 @@ export type StoryReadAloud = {
   silent: boolean;
   autoplay: boolean;
   setAutoplay: (on: boolean) => void;
-  play: (pageId: string) => void;
+  /** Reads the page, then each of `following` in turn while each is heard to its end. */
+  play: (pageId: string, following?: string[]) => void;
   pause: () => void;
   resume: () => void;
   skip: () => void;
@@ -45,26 +47,34 @@ export function useStoryReadAloud(project: StoryProject | null): StoryReadAloud 
     setPaused(false);
   }, []);
 
-  const play = useCallback((pageId: string) => {
+  const play = useCallback((pageId: string, following: string[] = []) => {
     if (!projectId) return;
-    reader.current?.stop();
-    setSilent(false);
-    setPaused(false);
-    setSpeaking({ pageId, line: null });
-    const current = readStoryPage(projectId, pageId, {
-      ...read.current,
-      onLine: (line) => {
-        if (reader.current === current && line !== null) setSpeaking({ pageId, line });
-      },
-    });
-    reader.current = current;
-    void current.outcome.then((outcome) => {
-      if (reader.current !== current) return;
-      reader.current = null;
-      setSpeaking(null);
+    const start = (id: string, rest: string[]) => {
+      reader.current?.stop();
+      setSilent(false);
       setPaused(false);
-      setSilent(outcome === 'silent');
-    });
+      setSpeaking({ pageId: id, line: null });
+      const current = readStoryPage(projectId, id, {
+        ...read.current,
+        onLine: (line) => {
+          if (reader.current === current && line !== null) setSpeaking({ pageId: id, line });
+        },
+      });
+      reader.current = current;
+      void current.outcome.then((outcome) => {
+        if (reader.current !== current) return;
+        // A page heard to its end goes on to the next; a stop or a silent page ends the reading there.
+        if (outcome === 'played' && rest.length) {
+          start(rest[0], rest.slice(1));
+          return;
+        }
+        reader.current = null;
+        setSpeaking(null);
+        setPaused(false);
+        setSilent(outcome === 'silent');
+      });
+    };
+    start(pageId, following);
   }, [projectId]);
 
   useEffect(() => stop, [projectId, stop]);  // another story, or the reader gone: the page stops

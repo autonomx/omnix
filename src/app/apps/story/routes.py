@@ -185,7 +185,7 @@ def get_story_voices(project_id: str) -> StoryVoiceCast:
 
 @router.put("/api/story/projects/{project_id}/voices/{speaker_id}", response_model=StoryVoiceCast)
 def choose_story_voice(project_id: str, speaker_id: str, request: StoryVoiceChoice) -> StoryVoiceCast:
-    """The writer's choice of a castable voice for the narrator or a character."""
+    """The writer's choice of any library voice for the narrator or a character."""
     return _call(voices.choose_voice, project_id, speaker_id, request.voice_id)
 
 

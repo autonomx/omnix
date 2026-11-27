@@ -37,36 +37,39 @@ export function StoryReadPanel({ project, onChange }: {
     <section className="storyteller-cast-panel" aria-label="Story read controls">
       <div className="storyteller-cast-heading">
         <div><p className="eyebrow">Read controls</p><h3>Pacing and style</h3></div>
-        <strong>{settings.readStylePreset}</strong>
       </div>
-      <p>
+      <p className="storyteller-voice-intro">
         {project
           ? 'Pacing, chapter titles, speed, style and word notes for this story. Settings holds the defaults.'
           : 'Select a story to change how it is read. Settings holds the defaults.'}
       </p>
       <div className="storyteller-voice-cast-table">
         <article className="storyteller-voice-row">
-          <div><strong>Style preset</strong><span>Global tone</span></div>
+          <div className="storyteller-voice-row-head"><strong>Style preset</strong><span className="storyteller-voice-tag">Overall tone</span></div>
           <select aria-label="Story read style" disabled={disabled} value={settings.readStylePreset} onChange={(event) => update({ readStylePreset: event.currentTarget.value })}>
             {[...new Set([settings.readStylePreset, ...presets])].map((preset) => <option key={preset} value={preset}>{preset}</option>)}
           </select>
-          <label><input type="checkbox" disabled={disabled} checked={settings.readChapterTitles} onChange={(event) => update({ readChapterTitles: event.currentTarget.checked })} /> Read chapter titles</label>
+          <label className="storyteller-voice-check"><input type="checkbox" disabled={disabled} checked={settings.readChapterTitles} onChange={(event) => update({ readChapterTitles: event.currentTarget.checked })} /> Read chapter titles</label>
         </article>
         <article className="storyteller-voice-row">
-          <div><strong>Speed</strong><span>{settings.readSpeed.toFixed(2)}x</span></div>
+          <div className="storyteller-voice-row-head"><strong>Speed</strong><span className="storyteller-voice-tag">{settings.readSpeed.toFixed(2)}x</span></div>
           <input aria-label="Story read speed" disabled={disabled} type="range" min="0.6" max="1.4" step="0.05" value={settings.readSpeed} onChange={(event) => update({ readSpeed: Number(event.currentTarget.value) })} />
-          <span />
+          <div className="storyteller-voice-scale" aria-hidden="true"><span>Slower</span><span>Faster</span></div>
         </article>
         <article className="storyteller-voice-row">
-          <div><strong>Pauses</strong><span>Paragraph / chapter</span></div>
-          <input aria-label="Pause after paragraph" disabled={disabled} type="number" min="0" value={settings.pauseParagraphMs} onChange={(event) => updatePause('pauseParagraphMs', event.currentTarget.value)} />
-          <input aria-label="Pause after chapter" disabled={disabled} type="number" min="0" value={settings.pauseChapterMs} onChange={(event) => updatePause('pauseChapterMs', event.currentTarget.value)} />
+          <div className="storyteller-voice-row-head"><strong>Pauses</strong><span className="storyteller-voice-tag">milliseconds</span></div>
+          <div className="storyteller-voice-pair">
+            <label>After a paragraph<input aria-label="Pause after paragraph" disabled={disabled} type="number" min="0" step="50" value={settings.pauseParagraphMs} onChange={(event) => updatePause('pauseParagraphMs', event.currentTarget.value)} /></label>
+            <label>After a chapter<input aria-label="Pause after chapter" disabled={disabled} type="number" min="0" step="50" value={settings.pauseChapterMs} onChange={(event) => updatePause('pauseChapterMs', event.currentTarget.value)} /></label>
+          </div>
         </article>
-        <article className="storyteller-cast-card">
-          <div><strong>Word notes</strong><span>One per line: word: how to say it</span></div>
+        <article className="storyteller-voice-row">
+          <div className="storyteller-voice-row-head"><strong>Word notes</strong></div>
+          <p className="storyteller-voice-note">One per line, as word: how to say it.</p>
           <textarea
             aria-label="Word notes"
             disabled={disabled}
+            placeholder="Mira: MEER-ah"
             rows={4}
             value={notes}
             onBlur={() => update({ pronunciation: pronunciationFromText(notes) })}

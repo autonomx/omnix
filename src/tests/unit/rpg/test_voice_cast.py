@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 
 from app.apps.rpg.session.voice_cast import NARRATOR, auto_cast, speakers
-from app.platform.voice.voice_casting import castable_voices, split_sentences
+from app.platform.voice.voice_casting import castable_voices, library_voices, split_sentences
 
 VOICES = [{"voice_id": "deep", "name": "Deep", "description": "an old man, gruff and slow", "revision": "r1"},
           {"voice_id": "bright", "name": "Bright", "description": "a young woman, quick and cheerful", "revision": "r2"},
@@ -38,10 +38,15 @@ def test_only_castable_voices_are_cast_and_the_authors_castable_choice_is_kept()
 def test_the_castable_list_offers_only_what_it_marks_castable(tmp_path) -> None:
     (tmp_path / "casting.json").write_text(json.dumps({"voices": {
         "kept": {"castable": True, "description": "calm"}, "held": {"castable": False, "description": "a clone"}}}))
-    for name in ("kept", "held"):
+    for name in ("kept", "held", "unlisted"):
         (tmp_path / f"{name}.json").write_text(json.dumps({"ref_text": name}))
         (tmp_path / f"{name}.wav").write_bytes(b"RIFF" + name.encode())
+    (tmp_path / "unrecorded.json").write_text(json.dumps({"ref_text": "no audio"}))
     assert [row["voice_id"] for row in castable_voices(tmp_path)] == ["kept"]
+    # A person choosing by hand sees the whole library (each profile with a recording), the castable voices first;
+    # a profile casting.json doesn't list is never castable.
+    assert [(row["voice_id"], row["castable"]) for row in library_voices(tmp_path)] == [
+        ("kept", True), ("held", False), ("unlisted", False)]
 
 
 def test_who_is_cast_and_how_text_is_spoken() -> None:

@@ -18,22 +18,29 @@ pytestmark = [
 ]
 
 VOICES = [
-    {"voice_id": "v-warm", "name": "Warm", "description": "warm gentle narrator storyteller", "revision": "r1"},
-    {"voice_id": "v-gravel", "name": "Gravel", "description": "deep gravel old sailor", "revision": "r1"},
-    {"voice_id": "v-bright", "name": "Bright", "description": "bright young child", "revision": "r1"},
+    {"voice_id": "v-warm", "name": "Warm", "description": "warm gentle narrator storyteller", "castable": True,
+     "revision": "r1"},
+    {"voice_id": "v-gravel", "name": "Gravel", "description": "deep gravel old sailor", "castable": True,
+     "revision": "r1"},
+    {"voice_id": "v-bright", "name": "Bright", "description": "bright young child", "castable": True,
+     "revision": "r1"},
+    # In the library but not castable: it would win Pip's match and sorts first by id, so it shows when casting
+    # or the neutral voice ever reach past the castable list.
+    {"voice_id": "v-alpha", "name": "Alpha", "description": "bright young child", "castable": False,
+     "revision": "r1"},
 ]
 
 
 @pytest.fixture
 def castable(monkeypatch):
-    """The castable voices, as the voice library would list them; the list can change mid-test."""
+    """The voice library, castable voices and not; the list can change mid-test."""
     from app.apps.story import voices as story_voices
     from app.platform.voice import speech_service, voice_casting
 
     voices = [dict(row) for row in VOICES]
-    monkeypatch.setattr(voice_casting, "castable_voices", lambda: voices)
-    monkeypatch.setattr(story_voices, "castable_voices", lambda: voices)
-    monkeypatch.setattr(speech_service, "castable_voices", lambda: voices)
+    monkeypatch.setattr(voice_casting, "library_voices", lambda: voices)
+    monkeypatch.setattr(story_voices, "library_voices", lambda: voices)
+    monkeypatch.setattr(speech_service, "library_voices", lambda: voices)
     return voices
 
 
@@ -92,6 +99,26 @@ def test_the_writers_choice_wins_and_a_voice_not_castable_is_refused(story):
             with pytest.raises(HTTPException) as refused:
                 routes.choose_story_voice(project_id, speaker, StoryVoiceChoice(voice_id=voice))
             assert refused.value.status_code == status
+
+
+def test_the_writer_may_choose_any_library_voice_but_only_castable_ones_are_given(story, castable):
+    from app.apps.story import routes
+    from app.apps.story.contracts import StoryVoiceChoice
+
+    _, account, _, project_id, _ = story
+    with _as(account):
+        offered = routes.get_story_voices(project_id)
+        assert {row.voice_id: row.castable for row in offered.voices} == {
+            "v-warm": True, "v-gravel": True, "v-bright": True, "v-alpha": False}
+        assert "v-alpha" not in {row.voice_id for row in offered.cast}
+        chosen = _cast(routes.choose_story_voice(project_id, "mara", StoryVoiceChoice(voice_id="v-alpha")))
+        assert (chosen["mara"].voice_id, chosen["mara"].chosen_by) == ("v-alpha", "writer")
+        assert _cast(routes.get_story_voices(project_id))["mara"].voice_id == "v-alpha"
+        # A voice given automatically that is no longer castable is cast again; the writer's choice stays.
+        next(row for row in castable if row["voice_id"] == "v-bright")["castable"] = False
+        cast = _cast(routes.get_story_voices(project_id))
+    assert cast["mara"].voice_id == "v-alpha"
+    assert (cast["pip"].voice_id, cast["pip"].chosen_by) == ("v-gravel", "auto")
 
 
 def test_a_voice_whose_recording_changed_or_went_is_cast_again(story, castable):

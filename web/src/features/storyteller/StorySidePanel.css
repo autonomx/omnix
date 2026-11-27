@@ -10,13 +10,45 @@
     border-radius: 0.625rem;
     display: grid;
     gap: 0.75rem;
+    /* One column as wide as the panel, so a wide control wraps rather than scrolling the panel sideways. */
+    grid-template-columns: minmax(0, 1fr);
     max-height: calc(100vh - 8rem);
     min-width: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: 0.75rem;
     position: sticky;
     scrollbar-gutter: stable;
     top: 6.5rem;
+  }
+
+  /* The fold button and the tabs: they stay at the top while the panel scrolls. */
+  .storyteller-side-top {
+    align-items: stretch;
+    background: color-mix(in srgb, var(--bg-slate-150-2) 94%, transparent);
+    display: grid;
+    gap: 0.35rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    position: sticky;
+    top: -0.75rem;
+    z-index: 1;
+  }
+
+  .storyteller-side-fold {
+    background: color-mix(in srgb, var(--bg-slate-130) 70%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-830);
+    font-size: 1.05rem;
+    line-height: 1;
+    min-width: 2rem;
+    padding: 0 0.45rem;
+  }
+
+  .storyteller-side-fold:hover,
+  .storyteller-side-fold:focus-visible {
+    border-color: color-mix(in srgb, var(--accent-violet-660) 40%, transparent);
+    color: var(--fg-slate-970-2);
   }
 
   .storyteller-side-tabs {
@@ -26,9 +58,32 @@
     gap: 0.25rem;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: 0.25rem;
-    position: sticky;
-    top: -0.75rem;
-    z-index: 1;
+  }
+
+  /* Folded away: a rail of the tabs beside the manuscript; choosing one opens the panel on it. */
+  .storyteller-side-panel.collapsed {
+    overflow: hidden;
+    padding: 0.4rem;
+  }
+
+  @media (width > 1400px) {
+    .storyteller-side-panel.collapsed .storyteller-side-top {
+      grid-template-columns: minmax(0, 1fr);
+      position: static;
+    }
+
+    .storyteller-side-panel.collapsed .storyteller-side-fold {
+      min-height: 2rem;
+    }
+
+    .storyteller-side-panel.collapsed .storyteller-side-tabs {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .storyteller-side-panel.collapsed .storyteller-side-tabs [role='tab'] {
+      padding: 0.7rem 0;
+      writing-mode: vertical-rl;
+    }
   }
 
   .storyteller-side-tabs [role='tab'] {
@@ -62,7 +117,12 @@
   .storyteller-side-tabpanel {
     display: grid;
     gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
     min-width: 0;
+  }
+
+  .storyteller-side-panel .storyteller-panel-heading {
+    flex-wrap: wrap;
   }
 
   .storyteller-side-tabpanel[hidden] {
@@ -128,5 +188,144 @@
 
   .storyteller-export-choices button {
     text-align: left;
+  }
+
+  /* The Audio tab: who reads each part, and how the story is read (ST-1.7, ST-4.2). Each setting is a row of its
+     own, its name over a control as wide as the panel. */
+  .storyteller-cast-panel {
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .storyteller-cast-panel + .storyteller-cast-panel {
+    border-top: 1px solid color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
+    padding-top: 0.9rem;
+  }
+
+  .storyteller-cast-heading h3 {
+    color: var(--fg-slate-970-2);
+    font-size: 1.02rem;
+    margin: 0;
+  }
+
+  .storyteller-cast-panel > p {
+    color: var(--fg-slate-830);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .storyteller-voice-cast-table {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .storyteller-voice-row {
+    background: color-mix(in srgb, var(--bg-slate-130) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
+    border-radius: 0.5rem;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    padding: 0.65rem 0.7rem;
+  }
+
+  .storyteller-voice-row-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .storyteller-voice-row-head strong {
+    color: var(--fg-slate-970-2);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .storyteller-voice-tag {
+    background: color-mix(in srgb, var(--accent-violet-540) 16%, transparent);
+    border-radius: 999px;
+    color: var(--fg-violet-830);
+    font-size: 0.72rem;
+    padding: 0.12rem 0.5rem;
+    white-space: nowrap;
+  }
+
+  .storyteller-voice-note {
+    color: var(--fg-slate-830);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .storyteller-voice-row select,
+  .storyteller-voice-row textarea,
+  .storyteller-voice-pair input {
+    background: color-mix(in srgb, var(--bg-slate-130) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+    width: 100%;
+  }
+
+  .storyteller-voice-row select:focus,
+  .storyteller-voice-row textarea:focus,
+  .storyteller-voice-pair input:focus {
+    border-color: color-mix(in srgb, var(--c-sky-800) 68%, transparent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--c-cyan-720) 15%, transparent);
+    outline: none;
+  }
+
+  .storyteller-voice-row textarea {
+    resize: vertical;
+  }
+
+  .storyteller-voice-row input[type='range'] {
+    accent-color: var(--accent-violet-540);
+    width: 100%;
+  }
+
+  .storyteller-voice-scale {
+    color: var(--fg-slate-830);
+    display: flex;
+    font-size: 0.72rem;
+    justify-content: space-between;
+  }
+
+  .storyteller-voice-check {
+    align-items: center;
+    color: var(--fg-slate-830);
+    display: flex;
+    font-size: 0.84rem;
+    gap: 0.45rem;
+  }
+
+  .storyteller-voice-pair {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .storyteller-voice-pair label {
+    color: var(--fg-violet-830);
+    display: grid;
+    font-size: 0.78rem;
+    gap: 0.3rem;
+  }
+
+  .storyteller-voice-row select:disabled,
+  .storyteller-voice-row textarea:disabled,
+  .storyteller-voice-row input:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }

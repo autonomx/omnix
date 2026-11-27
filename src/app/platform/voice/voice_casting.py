@@ -4,7 +4,8 @@ The voice library (``resources/voice_clones``) holds clone profiles of every kin
 other works' characters, and nothing in a profile says so. ``casting.json`` beside them is the castable list: a voice
 is cast automatically, or offered to other players, only when it is listed there as castable, with a description to
 cast it by. Each voice's revision is a hash of its reference recording and transcript, so a cast pins the voice it
-was given. ``default`` is the speech service's own voice, always castable.
+was given. ``default`` is the speech service's own voice, always castable. A person may still choose any voice in
+the library by hand for their own work (``library_voices``); the castable list only bounds what is given out.
 """
 from __future__ import annotations
 
@@ -49,23 +50,47 @@ def _revision(root: Path, voice_id: str) -> str:
     return digest.hexdigest()[:16]
 
 
+_AUDIO_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg"}
+
+
+def _profiles(root: Path) -> list[str]:
+    """The library's voices: each profile (``<id>.json``) with a recording of the same name beside it."""
+    recorded = {path.stem for path in root.glob("*.*") if path.suffix.lower() in _AUDIO_SUFFIXES}
+    return sorted(path.stem for path in root.glob("*.json") if path.stem in recorded)
+
+
 @bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _catalog(root: str) -> tuple[dict[str, Any], ...]:
+    """Every voice: those ``casting.json`` lists (castable or not), then the library's unlisted profiles, which are
+    never castable."""
     path = Path(root)
+    listed = _casting(path)
     voices = []
-    for voice_id, row in sorted(_casting(path).items()):
+    for voice_id, row in sorted(listed.items()):
         revision = _revision(path, voice_id)
         if not revision:
             continue  # listed, but no profile is there
         voices.append({"voice_id": voice_id, "name": str(row.get("name") or voice_id),
                        "description": str(row.get("description") or ""), "castable": row.get("castable") is True,
                        "revision": revision})
+    for voice_id in _profiles(path):
+        revision = "" if voice_id in listed else _revision(path, voice_id)
+        if revision:
+            voices.append({"voice_id": voice_id, "name": voice_id, "description": "", "castable": False,
+                           "revision": revision})
     return tuple(voices)
 
 
 def castable_voices(root: Path | None = None) -> list[dict[str, Any]]:
     """The voices that may be cast automatically or offered: each with its description and revision."""
     return [dict(row) for row in _catalog(str(root or canonical_voice_clone_root())) if row["castable"]]
+
+
+def library_voices(root: Path | None = None) -> list[dict[str, Any]]:
+    """Every voice in the library, castable or not, for a person to choose by hand for their own work: the castable
+    ones first. Nothing is cast automatically, or offered to others, from the ones that are not castable."""
+    rows = [dict(row) for row in _catalog(str(root or canonical_voice_clone_root()))]
+    return sorted(rows, key=lambda row: (not row["castable"], row["name"].casefold()))
 
 
 def match_voices(people: Iterable[Mapping[str, str]], voices: list[dict[str, Any]],
@@ -152,4 +177,7 @@ def pcm_of(audio: bytes) -> tuple[bytes, int]:
         return source.readframes(source.getnframes()), source.getframerate()
 
 
-__all__ = ["DEFAULT_VOICE", "as_wav", "castable_voices", "match_voices", "pcm_of", "render_key", "split_sentences"]
+__all__ = [
+    "DEFAULT_VOICE", "as_wav", "castable_voices", "library_voices", "match_voices", "pcm_of", "render_key",
+    "split_sentences",
+]

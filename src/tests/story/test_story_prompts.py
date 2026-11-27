@@ -39,6 +39,22 @@ def test_tone_style_and_chapter_reach_the_prompt():
     assert "This is chapter 3." in prompt.user
 
 
+def test_the_writer_sizes_a_new_page_in_lines():
+    usual = build_story_prompt(premise="p", action="continue", source_text="Old.")
+    assert "about 400 to 800 words" in usual.user and "lines long" not in usual.user
+    for action in ("draft", "continue"):
+        sized = build_story_prompt(premise="p", action=action, source_text="Old.", page_lines=40)
+        assert "about 40 lines long (a line is about 12 words, so roughly 480 words)" in sized.user
+        assert "400 to 800 words" not in sized.user
+    interactive = build_story_prompt(premise="p", interaction_mode="story", page_lines=20)
+    assert "Make the page about 20 lines long" in interactive.user
+    # A rework keeps its page's length, and a length past the reply's budget is not asked for.
+    assert "lines long" not in build_story_prompt(premise="p", action="rewrite", page_text="A.", page_lines=40).user
+    for out_of_range in (4, 151):
+        prompt = build_story_prompt(premise="p", action="continue", source_text="Old.", page_lines=out_of_range)
+        assert "about 400 to 800 words" in prompt.user
+
+
 def test_a_new_chapter_is_begun_not_continued():
     prompt = build_story_prompt(premise="p", action="continue", source_text="Old.", chapter=4, new_chapter=True)
     assert "Begin chapter 4 here" in prompt.user and "This is chapter" not in prompt.user

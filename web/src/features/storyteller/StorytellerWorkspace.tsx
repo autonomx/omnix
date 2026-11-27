@@ -3,22 +3,22 @@ import './StorytellerSidebar.css';
 import './StoryMode.css';
 import './StoryThemeThumbnails.css';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
-import type { StoryProject } from './api/storyClient';
 import { StoryCharactersPanel, StoryWorldPanel } from './StoryBible';
 import { StoryControls } from './StoryControls';
 import { StoryLibrary } from './StoryLibrary';
+import { StoryLibraryView } from './StoryLibraryView';
 import { StoryCompare } from './StoryCompare';
 import { StoryManuscript } from './StoryManuscript';
 import { ManuscriptHeading, StoryActionBar, StoryEmptyState, StoryModeSwitch, StoryOutline, StoryVersions } from './StoryPanels';
 import {
   SaveFeedback, StoryLibrarySection, StoryWorkspaceMode,
-  StorytellerFormValues, countWords, llmCapableProviders, providerDisplayName, storyDisplayTitle, styleOptions,
+  StorytellerFormValues, countWords, llmCapableProviders, providerDisplayName, storyDisplayTitle,
 } from './storyModel';
 import { manuscriptItems, manuscriptText, projectWordCount, visiblePages } from './storyProjectModel';
 import { StoryReadPanel } from './StoryReadPanel';
@@ -28,11 +28,13 @@ import { type StorySideTab, StorySidePanel } from './StorySidePanel';
 import { StoryTopBar } from './StoryTopBar';
 import { deriveStoryOutline } from './storyTextModel';
 import { StoryVoicesPanel } from './StoryVoicesPanel';
+import { useChapterChoice } from './useChapterChoice';
 import { useStoryExport } from './useStoryExport';
 import { useStoryJob } from './useStoryJob';
 import { useStoryLibraryActions } from './useStoryLibraryActions';
 import { useStoryProjects } from './useStoryProjects';
 import { useStoryRequests } from './useStoryRequests';
+import { useStoryStyle } from './useStoryStyle';
 import { useNarrateInAudiobook } from './useNarrateInAudiobook';
 
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -40,13 +42,16 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const project = projects.project;
   const [workspaceMode, setWorkspaceMode] = useState<StoryWorkspaceMode>('writing');
   const [activeLibrarySection, setActiveLibrarySection] = useState<StoryLibrarySection>('stories');
-  const [selectedTone, setSelectedTone] = useState('Cozy');
-  const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
+  const style = useStoryStyle(project, (opened) => setWorkspaceMode(opened.mode === 'interactive' ? 'story' : 'writing'));
+  const { tone: selectedTone, setTone: setSelectedTone, writingStyle, setWritingStyle } = style;
   const [selectedChapter, setSelectedChapter] = useState(1);
+  const chapterChoice = useChapterChoice(project);
+  const [pageLines, setPageLines] = useState<number | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
   const [storyModeResponse, setStoryModeResponse] = useState('');
   const [sideTab, setSideTab] = useState<StorySideTab>('write');
   const [comparingId, setComparingId] = useState<string | null>(null);
+  const [libraryViewOpen, setLibraryViewOpen] = useState(false);
 
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<StorytellerFormValues>({
@@ -55,7 +60,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
   const { createJobMutation, trackedJob } = useStoryJob({
     projectId: projects.activeId,
-    settings: { tone: selectedTone, writingStyle, chapter: selectedChapter },
+    settings: { tone: selectedTone, writingStyle, pageLines },
     onStarted: (request, projectId) => {
       if (request.action === 'draft') reset(request.values);
       projects.adopt(projectId);
@@ -82,11 +87,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const chapterCount = outline.length || 1;
   const wordCount = project ? projectWordCount(project) : countWords(watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
-  const submitStatus = createJobMutation.isPending
-    ? 'queueing'
-    : createJobMutation.isError
-      ? 'error'
-      : trackedJob?.status ?? 'ready';
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : trackedJob?.status ?? 'ready';
   const canPersistStory = Boolean(manuscript?.trim());
   const requests = useStoryRequests({
     createJobMutation,
@@ -94,25 +95,9 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     project,
     hasText: canPersistStory,
     setSaveFeedback,
+    chapterChoice,
   });
   const library = useStoryLibraryActions({ projects, storyTitle, setSaveFeedback, setActiveLibrarySection });
-  /** The tone and style a preset gave the story (ST-5.2). */
-  const applyStyle = (changed: StoryProject) => {
-    if (changed.tone) setSelectedTone(changed.tone);
-    if (changed.writing_style) setWritingStyle(changed.writing_style);
-  };
-
-  // A story opens in the mode it was written in, with its own tone and style. Only when another project
-  // opens: a refetch of the same one keeps the writer's choices.
-  const openedProjectId = useRef<string | null>(null);
-  useEffect(() => {
-    if (!project || openedProjectId.current === project.id) return;
-    openedProjectId.current = project.id;
-    setWorkspaceMode(project.mode === 'interactive' ? 'story' : 'writing');
-    if (project.tone) setSelectedTone(project.tone);
-    if (project.writing_style) setWritingStyle(project.writing_style);
-  }, [project]);
-
   useEffect(() => {
     if (outline.length && !outline.some((chapter) => chapter.number === selectedChapter)) {
       setSelectedChapter(outline[0].number);
@@ -125,16 +110,18 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     projects.select(projectId);
     setSelectedChapter(1);
     setSaveFeedback(null);
+    setLibraryViewOpen(false);
     if (entry) setActiveLibrarySection(library.sectionFor(entry));
   };
 
   const startNewDraft = () => {
     reset({ providerId: watchedProvider, title: '', premise: '' });
     projects.select(null);
-    openedProjectId.current = null;
+    style.forgetOpened();
     setActiveLibrarySection('stories');
     setSelectedChapter(1);
     setWorkspaceMode('writing');
+    setLibraryViewOpen(false);
     setSaveFeedback({ kind: 'saved', message: 'New draft ready. Add a premise to begin.' });
   };
 
@@ -147,6 +134,8 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     setSelectedChapter(chapterNumber);
     scrollToOutlineTarget(chapterNumber, targetId);
   };
+  const heading = <ManuscriptHeading chapter={activeChapter?.label ?? `Chapter ${selectedChapter}`} chapters={outline} minutes={readingMinutes} selected={selectedChapter} title={activeChapter?.title ?? storyTitle} onSelect={selectOutlineTarget} />;
+  const showTrash = () => setActiveLibrarySection('trash');
 
   return (
     <WorkspacePanel labelledBy="module-title">
@@ -156,78 +145,89 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           activeId={projects.activeId}
           activeSection={activeLibrarySection}
           entries={projects.entries}
+          libraryView={{ open: libraryViewOpen, show: () => setLibraryViewOpen(true) }}
           onNewDraft={startNewDraft}
           onPurge={library.purgeEntry}
           onRestore={library.restoreEntry}
           onSectionChange={setActiveLibrarySection}
           onSelect={selectEntry}
-          onShowTrash={() => setActiveLibrarySection('trash')}
+          onShowTrash={showTrash}
           trashEntries={projects.trashEntries}
         />
         <main className="storyteller-stage">
           <GatewayErrorNotice label="Stories and providers" errors={[projects.error, providersQuery.error]} />
-          <StoryTopBar
-            canPersistStory={canPersistStory}
-            canTrash={Boolean(project)}
-            chapterCount={chapterCount}
-            onExport={(format) => void exportStory(format)}
-            onNarrate={() => project && library.run(() => narrate(project, visiblePages(project), { title: storyTitle }))}
-            onSave={library.saveVersion}
-            onTrash={library.trashActiveStory}
-            premise={premise}
-            providerLabel={providerLabel}
-            saveFeedback={saveFeedback}
-            title={storyTitle}
-            wordCount={wordCount}
-          />
-          <StoryModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
-          {workspaceMode === 'story' ? (
-            <StoryModePanel
-              activeChapterLabel={activeChapter?.label ?? `Chapter ${selectedChapter}`}
-              isLoading={projects.isLoading}
-              job={trackedJob}
-              library={projects}
-              module={module}
-              onMove={requests.submitStoryModeMove}
-              pending={createJobMutation.isPending}
-              project={project}
-              narrate={narrate}
-              report={library.run}
-              response={storyModeResponse}
-              setResponse={setStoryModeResponse}
-              storyTitle={storyTitle}
+          {libraryViewOpen ? (
+            <StoryLibraryView
+              activeId={projects.activeId}
+              feedback={saveFeedback}
+              stories={projects.summaries}
+              trashCount={projects.trashEntries.length}
+              onClose={() => setLibraryViewOpen(false)}
+              onNewDraft={startNewDraft}
+              onOpen={selectEntry}
+              onSaveDetails={library.saveDetails}
+              onShowTrash={showTrash}
+              onTrash={library.trashStory}
             />
-          ) : project && comparing ? (
-            <StoryCompare
-              disabled={createJobMutation.isPending}
-              onClose={() => setComparingId(null)}
-              onRestore={(version) => { setComparingId(null); library.restoreVersion(version); }}
-              project={project}
-              version={comparing}
+          ) : <>
+            <StoryTopBar
+              canPersistStory={canPersistStory}
+              canTrash={Boolean(project)}
+              chapterCount={chapterCount}
+              onExport={(format) => void exportStory(format)}
+              onNarrate={() => project && library.run(() => narrate(project, visiblePages(project), { title: storyTitle }))}
+              onSave={library.saveVersion}
+              onTrash={library.trashActiveStory}
+              premise={premise}
+              providerLabel={providerLabel}
+              saveFeedback={saveFeedback}
+              title={storyTitle}
+              wordCount={wordCount}
             />
-          ) : (
-            <section className="storyteller-manuscript" aria-label="Story manuscript">
-              {project && manuscript ? (
-                <StoryManuscript
-                  disabled={createJobMutation.isPending}
-                  items={items}
-                  key={project.id}
-                  onAccept={library.acceptSelection}
-                  onReject={library.rejectSelection}
-                  onRework={requests.reworkSelection}
-                  onSavePage={library.savePage}
-                  project={project}
-                >
-                  <ManuscriptHeading chapter={activeChapter?.label ?? `Chapter ${selectedChapter}`} minutes={readingMinutes} title={activeChapter?.title ?? storyTitle} />
-                </StoryManuscript>
-              ) : (
-                <>
-                  <ManuscriptHeading chapter={activeChapter?.label ?? `Chapter ${selectedChapter}`} minutes={readingMinutes} title={activeChapter?.title ?? storyTitle} />
-                  <StoryEmptyState isLoading={projects.isLoading} module={module} />
-                </>
-              )}
-            </section>
-          )}
+            <StoryModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
+            {workspaceMode === 'story' ? (
+              <StoryModePanel
+                activeChapterLabel={activeChapter?.label ?? `Chapter ${selectedChapter}`}
+                isLoading={projects.isLoading}
+                job={trackedJob}
+                library={projects}
+                module={module}
+                onMove={requests.submitStoryModeMove}
+                pending={createJobMutation.isPending}
+                project={project}
+                narrate={narrate}
+                report={library.run}
+                response={storyModeResponse}
+                setResponse={setStoryModeResponse}
+                storyTitle={storyTitle}
+              />
+            ) : project && comparing ? (
+              <StoryCompare
+                disabled={createJobMutation.isPending}
+                onClose={() => setComparingId(null)}
+                onRestore={(version) => { setComparingId(null); library.restoreVersion(version); }}
+                project={project}
+                version={comparing}
+              />
+            ) : (
+              <section className="storyteller-manuscript" aria-label="Story manuscript">
+                {project && manuscript ? (
+                  <StoryManuscript
+                    disabled={createJobMutation.isPending}
+                    items={items}
+                    key={project.id}
+                    onAccept={library.acceptSelection}
+                    onReject={library.rejectSelection}
+                    onRework={requests.reworkSelection}
+                    onSavePage={library.savePage}
+                    project={project}
+                  >
+                    {heading}
+                  </StoryManuscript>
+                ) : <>{heading}<StoryEmptyState isLoading={projects.isLoading} module={module} /></>}
+              </section>
+            )}
+          </>}
         </main>
         <StorySidePanel
           active={sideTab}
@@ -244,13 +244,13 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
                       handleSubmit={handleSubmit}
                       latestJob={trackedJob}
                       onAddChapter={requests.addChapterToActiveStory}
-                      onGenerate={requests.submitDraft}
+                      onGenerate={requests.generate}
                       premiseLength={(watchedPremise ?? '').length}
                       providers={storyProviders}
                       register={register}
-                      selectedChapter={selectedChapter}
+                      chapterChoice={chapterChoice}
+                      pageLength={[pageLines, setPageLines]}
                       selectedTone={selectedTone}
-                      setSelectedChapter={setSelectedChapter}
                       setSelectedTone={setSelectedTone}
                       setWritingStyle={setWritingStyle}
                       submitStatus={submitStatus}
@@ -276,7 +276,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
             characters: <StoryCharactersPanel onFeedback={setSaveFeedback} project={project} replaceCharacters={projects.replaceCharacters} />,
             world: (
               <StoryWorldPanel
-                choosePreset={async (projectId, presetId) => applyStyle(await library.choosePreset(projectId, presetId))}
+                choosePreset={async (projectId, presetId) => style.apply(await library.choosePreset(projectId, presetId))}
                 onFeedback={setSaveFeedback}
                 project={project}
                 replaceNotes={projects.replaceNotes}

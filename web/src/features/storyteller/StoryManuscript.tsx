@@ -1,11 +1,12 @@
 import './StoryManuscript.css';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { StoryBlock, StoryProject, StoryVersionSummary } from './api/storyClient';
 import { StoryPageEditor } from './StoryPageEditor';
 import { ManuscriptLines } from './StoryPanels';
 import { StoryProposals } from './StoryProposals';
 import type { StorySelectionAction, StorySelectionRange } from './storyModel';
 import { type ManuscriptItem, visiblePages } from './storyProjectModel';
+import { type StoryReadAloud, useStoryReadAloud } from './useStoryReadAloud';
 
 const reworkActions: Array<{ action: StorySelectionAction; label: string }> = [
   { action: 'rewrite', label: 'Rewrite' },
@@ -56,6 +57,9 @@ function pageGroups(items: ManuscriptItem[]): Array<{ pageId: string; items: Man
 /**
  * The writing manuscript (ST-6.1, ST-6.2): each page with its own edit and rework actions, a toolbar that
  * reworks the paragraphs the writer selects, and the proposals waiting for an answer above the text.
+ *
+ * The shown pages may be read aloud as in the interactive reader: from a page on, or the whole chapter, each
+ * page read on into the next, the line being heard marked. Opening a page to edit, or leaving the chapter, stops it.
  */
 export function StoryManuscript({ project, items, disabled, onRework, onSavePage, onAccept, onReject, children }: {
   project: StoryProject;
@@ -88,11 +92,36 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
   const selectedLabel = selected
     ? `${selected.end - selected.start === 1 ? '1 paragraph' : `${selected.end - selected.start} paragraphs`} of page ${pageNumber(selected.pageId)} selected`
     : '';
+  const groups = pageGroups(items).filter((group) => pages.some((page) => page.id === group.pageId));
+  const shownIds = groups.map((group) => group.pageId);
+  const aloud = useStoryReadAloud(project);
+  const { stop: stopReading } = aloud;
+  const readingPage = aloud.speaking?.pageId ?? null;
+  const shownKey = shownIds.join(' ');
+  useEffect(() => {
+    if (readingPage && !shownKey.split(' ').includes(readingPage)) stopReading();
+  }, [readingPage, shownKey, stopReading]);
+  const readFrom = (pageId: string) => {
+    const at = shownIds.indexOf(pageId);
+    if (at >= 0) aloud.play(pageId, shownIds.slice(at + 1));
+  };
+  const edit = (pageId: string) => {
+    aloud.stop();
+    setEditing(pageId);
+  };
 
   return (
     <>
       <StoryProposals disabled={disabled} onAccept={onAccept} onReject={onReject} project={project} />
       {children}
+      {aloud.speaking ? null : (
+        <section aria-label="Read aloud" className="storyteller-read-aloud">
+          <button disabled={!shownIds.length || editing !== null} onClick={() => readFrom(shownIds[0])} type="button">
+            Read this chapter aloud
+          </button>
+          {aloud.silent ? <p role="status">The speech service is not available; the page stands as text.</p> : null}
+        </section>
+      )}
       {selected ? (
         <div aria-label="Selection" className="storyteller-selection-toolbar" role="toolbar">
           <span>{selectedLabel}</span>
@@ -103,7 +132,7 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
         </div>
       ) : null}
       <div className="storyteller-prose" onKeyUp={readSelection} onMouseUp={readSelection} ref={prose}>
-        {pageGroups(items).map((group) => {
+        {groups.map((group) => {
           const page = pages.find((candidate) => candidate.id === group.pageId);
           if (!page) return null;
           const number = pageNumber(page.id);
@@ -122,7 +151,10 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
           return (
             <section aria-label={`Page ${number}`} className="storyteller-page" data-page-id={page.id} key={page.id}>
               <div className="storyteller-page-tools">
-                <button aria-label={`Edit page ${number}`} disabled={editing !== null} type="button" onClick={() => setEditing(page.id)}>Edit</button>
+                <button aria-label={`Read page ${number} aloud`} disabled={editing !== null} type="button" onClick={() => readFrom(page.id)}>
+                  Read aloud
+                </button>
+                <button aria-label={`Edit page ${number}`} disabled={editing !== null} type="button" onClick={() => edit(page.id)}>Edit</button>
                 {reworkActions.map(({ action, label }) => (
                   <button
                     aria-label={`${label} page ${number}`}
@@ -135,11 +167,26 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
                   </button>
                 ))}
               </div>
-              <ManuscriptLines items={group.items} />
+              <ManuscriptLines items={group.items} speaking={readingPage === page.id ? aloud.speaking?.line ?? null : null} />
             </section>
           );
         })}
       </div>
+      {aloud.speaking ? <ReadingBar aloud={aloud} pageNumber={readingPage ? pageNumber(readingPage) : 0} /> : null}
     </>
+  );
+}
+
+/** While a page is heard: a bar held to the foot of the view with the page being read, pause or resume, skip and stop. */
+function ReadingBar({ aloud, pageNumber }: { aloud: StoryReadAloud; pageNumber: number }) {
+  return (
+    <section aria-label="Read aloud" className="storyteller-read-aloud reading">
+      <span role="status">{pageNumber ? `Reading page ${pageNumber}` : 'Reading'}{aloud.paused ? ', paused' : ''}</span>
+      {aloud.paused
+        ? <button onClick={aloud.resume} type="button">Resume</button>
+        : <button onClick={aloud.pause} type="button">Pause</button>}
+      <button onClick={aloud.skip} type="button">Skip line</button>
+      <button onClick={aloud.stop} type="button">Stop</button>
+    </section>
   );
 }

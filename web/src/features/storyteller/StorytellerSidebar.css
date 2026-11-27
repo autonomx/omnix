@@ -13,9 +13,24 @@
     width: 100%;
   }
 
+  .storyteller-library-view-toggle {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    padding: 0.65rem 0.7rem;
+    text-align: left;
+    width: 100%;
+  }
+
   .storyteller-library nav button.active,
   .storyteller-library nav button:hover,
   .storyteller-library nav button:focus-visible,
+  .storyteller-library-view-toggle.active,
+  .storyteller-library-view-toggle:hover,
+  .storyteller-library-view-toggle:focus-visible,
   .storyteller-trash.active {
     background: color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
     border-color: color-mix(in srgb, var(--accent-violet-660) 34%, transparent);

@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from app.conversation.tts_stream_contract import CHAT_STREAM_MIN_REPETITION_PENALTY
 
-from .voice_casting import DEFAULT_VOICE, as_wav, castable_voices, pcm_of, render_key, split_sentences
+from .voice_casting import DEFAULT_VOICE, as_wav, library_voices, pcm_of, render_key, split_sentences
 
 logger = logging.getLogger(__name__)
 # A sentence is streamed as live speech streams it: the CUDA-graph decode (the parity decode runs slower than real
@@ -66,7 +66,8 @@ def sentence_key(text: str, voice: str) -> str:
     from app.providers.service import selected_tts_provider_id
     from app.runtime.config import get_runtime_config
 
-    revision = next((item["revision"] for item in castable_voices() if item["voice_id"] == voice), "")
+    # Any voice in the library: one chosen by hand need not be castable, and its recording changing still counts.
+    revision = next((item["revision"] for item in library_voices() if item["voice_id"] == voice), "")
     runtime = get_runtime_config()
     return render_key(text, voice_id=voice, revision=revision, provider=selected_tts_provider_id(),
                       model=runtime.tts.url if runtime.tts else "", parameters=SPEECH_GENERATION)

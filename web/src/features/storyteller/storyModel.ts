@@ -33,6 +33,8 @@ export interface StoryGenerationRequest {
   beatId?: string | null;
   /** How many chapters an `outline` job plans. */
   outlineChapters?: number | null;
+  /** How many chapters a Generate writes into the story, one page each, every one after the first opening the next. */
+  chapters?: number | null;
   /** The blocks of one page a rewrite, expand or dialogue job reworks, rather than the whole story (ST-6.2). */
   selection?: StorySelectionRange | null;
 }
@@ -74,6 +76,13 @@ export interface SaveFeedback {
 export const premiseMaxChars = 500;
 
 export const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
+
+/** A story keeps at most this much tone text (the gateway's StoryProject limit). */
+export const toneMaxChars = 80;
+/** A page sized in lines of prose, as the job asks for it (prompts.PAGE_LINES_MIN..MAX, LINE_WORDS). */
+export const pageLinesMin = 5;
+export const pageLinesMax = 150;
+export const lineWords = 12;
 
 export const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
 
@@ -143,15 +152,19 @@ const writeStageLabels: Record<StoryActionMode, string> = {
   outline: 'Plan story',
 };
 
-/** The settings a story job carries besides the request: tone, writing style and chapter. */
-export type StoryJobSettings = { tone: string; writingStyle: string; chapter: number };
+/**
+ * The settings a story job carries besides the request: tone, writing style and page length. `pageLines` sizes
+ * each new page in lines; null asks for the usual length. No chapter: the server opens a new story at chapter 1
+ * and continues one in its last chapter, or the next with `new_chapter`.
+ */
+export type StoryJobSettings = { tone: string; writingStyle: string; pageLines: number | null };
 
 /**
  * The `story.generate` job for one request: a Write stage on the LLM and a Store stage. The job reads the
  * story so far from its project and writes its page or version there (ST-1.3), so it carries no story text.
  */
 export function storyJobRequest(
-  { values, action, projectId, interactionMode, userResponse, chosenSuggestion, newChapter, beatId, outlineChapters, selection }: StoryGenerationRequest,
+  { values, action, projectId, interactionMode, userResponse, chosenSuggestion, newChapter, beatId, outlineChapters, chapters, selection }: StoryGenerationRequest,
   settings: StoryJobSettings,
 ): Parameters<typeof omnixApiClient.createJob>[0] {
   return {
@@ -171,10 +184,11 @@ export function storyJobRequest(
       new_chapter: Boolean(newChapter),
       beat_id: beatId ?? null,
       outline_chapters: outlineChapters ?? null,
+      chapters: chapters ?? null,
       selection: selection ? { page_id: selection.pageId, start: selection.start, end: selection.end, texts: selection.texts } : null,
       tone: settings.tone,
       writing_style: settings.writingStyle,
-      chapter: settings.chapter,
+      page_lines: settings.pageLines,
     },
     stages: [
       { id: 'write', label: writeStageLabels[action], resource_class: 'gpu:llm', status: 'queued' },

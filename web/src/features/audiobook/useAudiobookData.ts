@@ -10,7 +10,7 @@ import type { useAudiobookState } from './useAudiobookState';
 export function useAudiobookProjectData(ws: { module: OmnixModuleDefinition } & ReturnType<typeof useAudiobookState>) {
   const queryClient = useQueryClient();
   const {
-    busy, ebookLibraryOpen, projectId, projectSettingsOpen, selectedVoiceId, setProjectSettingsOpen,
+    busy, ebookLibraryOpen, projectId, projectSettingsOpen, selectedVoiceId, setProjectSettingsOpen, voiceTargetSpeakerId,
     setSelectedVoiceId, setSourceLibraryOpen, setSourceUploadProjectId, sourceUploadProjectId,
   } = ws;
 
@@ -145,6 +145,8 @@ export function useAudiobookProjectData(ws: { module: OmnixModuleDefinition } & 
             : 'Waiting';
 
   const selectedVoice = voicesQuery.data?.voices.find((voice) => voice.id === selectedVoiceId) ?? voicesQuery.data?.voices[0];
+  /** The character picked on the Cast page (or for a voice), the first one until the writer picks. */
+  const selectedSpeaker = castableSpeakers.find((speaker) => speaker.id === voiceTargetSpeakerId) ?? castableSpeakers[0];
   const modelRevision = modelQuery.data?.model_revision ?? '';
 
   async function getInstalledModelRevision(): Promise<string> {
@@ -163,7 +165,7 @@ export function useAudiobookProjectData(ws: { module: OmnixModuleDefinition } & 
     openSourceLibrary, project, openSourceUpload, renderJobs, renderChapterIds, renderChapterCount,
     skippedRenderChapterCount, completedRenderChapters, renderProgressPercent, isPolicySkippedChapter,
     queuedRenderJobs, runningRenderJobs, pausedRenderJobs, failedRenderJobs, retryableRenderJobs, cacheHits,
-    proposedSpeakers, castableSpeakers, assignedVoiceCount, castLabel, renderStateLabel, selectedVoice,
+    proposedSpeakers, castableSpeakers, assignedVoiceCount, castLabel, renderStateLabel, selectedVoice, selectedSpeaker,
     modelRevision, getInstalledModelRevision, libraryProjects,
   };
 }

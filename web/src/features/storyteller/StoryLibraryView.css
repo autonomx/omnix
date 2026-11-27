@@ -1,0 +1,195 @@
+@layer features {
+  .storyteller-library-view {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .storyteller-library-view-heading {
+    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+
+  .storyteller-library-view-heading h3 {
+    margin: 0;
+  }
+
+  .storyteller-library-view-heading h3 span {
+    color: var(--fg-slate-730);
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-left: 0.35rem;
+  }
+
+  .storyteller-library-view-tools {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .storyteller-library-view-tools input,
+  .storyteller-library-view-tools select,
+  .storyteller-library-details input,
+  .storyteller-library-details textarea {
+    background: color-mix(in srgb, var(--bg-slate-130) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    font: inherit;
+    min-width: 0;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .storyteller-library-view-tools input {
+    flex: 1 1 14rem;
+  }
+
+  .storyteller-library-view-tools input:focus,
+  .storyteller-library-view-tools select:focus,
+  .storyteller-library-details input:focus,
+  .storyteller-library-details textarea:focus {
+    border-color: color-mix(in srgb, var(--c-sky-800) 68%, transparent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--c-cyan-720) 15%, transparent);
+    outline: none;
+  }
+
+  .storyteller-library-view-tools label {
+    align-items: center;
+    color: var(--fg-violet-830);
+    display: flex;
+    font-size: 0.86rem;
+    gap: 0.45rem;
+  }
+
+  .storyteller-library-grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  }
+
+  .storyteller-library-card {
+    background: color-mix(in srgb, var(--bg-slate-130) 52%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
+    border-radius: 0.75rem;
+    color: var(--fg-slate-970-2);
+    display: grid;
+    gap: 0.5rem;
+    grid-template-rows: auto auto 1fr auto auto;
+    min-width: 0;
+    padding: 0.9rem;
+  }
+
+  .storyteller-library-card.active {
+    border-color: color-mix(in srgb, var(--c-sky-800) 56%, transparent);
+  }
+
+  .storyteller-library-card header {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+
+  .storyteller-library-kind,
+  .storyteller-library-open-now {
+    border-radius: 999px;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .storyteller-library-kind {
+    background: color-mix(in srgb, var(--accent-violet-540) 16%, transparent);
+    color: var(--fg-violet-830);
+  }
+
+  .storyteller-library-open-now {
+    background: color-mix(in srgb, var(--c-cyan-720) 18%, transparent);
+    color: var(--fg-slate-970-2);
+  }
+
+  .storyteller-library-card h4 {
+    font-size: 1rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .storyteller-library-card p {
+    color: var(--fg-slate-730);
+    font-size: 0.85rem;
+    line-height: 1.45;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .storyteller-library-card small {
+    color: var(--fg-slate-730);
+    font-size: 0.76rem;
+  }
+
+  .storyteller-library-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .storyteller-library-card-actions button {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    padding: 0.4rem 0.65rem;
+  }
+
+  .storyteller-library-card-actions button:hover,
+  .storyteller-library-card-actions button:focus-visible {
+    background: color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--c-sky-800) 48%, transparent);
+    outline: none;
+  }
+
+  .storyteller-library-card-actions button.danger:hover,
+  .storyteller-library-card-actions button.danger:focus-visible {
+    background: color-mix(in srgb, var(--c-red-640) 16%, transparent);
+    border-color: color-mix(in srgb, var(--c-red-640) 55%, transparent);
+  }
+
+  .storyteller-library-card-actions button:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .storyteller-library-details {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .storyteller-library-details label {
+    color: var(--fg-violet-830);
+    display: grid;
+    font-size: 0.82rem;
+    gap: 0.3rem;
+  }
+
+  .storyteller-library-details textarea {
+    resize: vertical;
+  }
+
+  .storyteller-library-view > .storyteller-library-empty {
+    border: 1px dashed color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
+    border-radius: 0.75rem;
+    color: var(--fg-slate-970-2);
+    display: grid;
+    gap: 0.3rem;
+    padding: 1.25rem;
+  }
+
+  .storyteller-library-view > .storyteller-library-empty small {
+    color: var(--fg-slate-730);
+  }
+}

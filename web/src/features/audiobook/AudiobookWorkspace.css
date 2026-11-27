@@ -352,7 +352,9 @@
   .audiobook-voice-controls label { display: grid; grid-template-columns: 5rem 1fr auto; gap: 8px; align-items: center; color: var(--ab-text-muted); font-size: 0.75rem; }
   .audiobook-voice-controls input { width: 100%; accent-color: var(--c-sky-800); }
   .audiobook-voice-controls output { color: var(--fg-slate-970-2); font-size: 0.72rem; }
-  .audiobook-voice-card.selected { border-color: var(--c-sky-750); box-shadow: 0 0 18px color-mix(in srgb, var(--c-sky-750) 12%, transparent); }
+  .audiobook-cast-card { cursor: pointer; }
+  .audiobook-workspace .audiobook-cast-name, .audiobook-workspace .audiobook-cast-name:hover:not(:disabled) { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .audiobook-voice-card.selected, .audiobook-cast-card.selected { border-color: var(--c-sky-750); box-shadow: 0 0 18px color-mix(in srgb, var(--c-sky-750) 12%, transparent); }
   .audiobook-production .audiobook-action-row button:last-child { background: linear-gradient(100deg, var(--accent-indigo-490-2), var(--c-sky-750)); color: var(--c-neutral-1000); }
   .audiobook-progress progress { height: 8px; }
   .audiobook-production-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 8px 0 14px; }

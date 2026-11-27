@@ -291,6 +291,9 @@
     .storyteller-action-bar button,
     .storyteller-versions button,
     .storyteller-trash,
+    .storyteller-chapter-nav button,
+    .storyteller-library-view-toggle,
+    .storyteller-library-card-actions button,
     .storyteller-outline button,
     .storyteller-chip-row button,
     .storyteller-chapter-controls button,
@@ -778,6 +781,9 @@
     .storyteller-action-bar button,
     .storyteller-versions button,
     .storyteller-trash,
+    .storyteller-chapter-nav button,
+    .storyteller-library-view-toggle,
+    .storyteller-library-card-actions button,
     .storyteller-outline button,
     .storyteller-chip-row button,
     .storyteller-chapter-controls button,
@@ -798,6 +804,9 @@
     .omnix-mode-tabs button.active,
     .assistant-side-panel-toggle button.active,
     .chat-identity-mode-toggle button.active,
+    .storyteller-chip-row button.active,
+    .storyteller-chapter-nav button.active,
+    .storyteller-library-view-toggle.active,
     .assistant-chat-integrated-actions .assistant-header-pill,
     .assistant-send-button,
     .assistant-mic-button,
@@ -1424,6 +1433,15 @@
       linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 62%, transparent), color-mix(in srgb, var(--c-slate-910) 31%, transparent));
     border-color: color-mix(in srgb, var(--c-blue-560) 18%, transparent);
     color: var(--c-blue-390);
+  }
+
+  /* The chosen tone keeps the theme's accent; the sheet above would otherwise paint it like the rest. */
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-chip-row button.active,
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-chapter-nav button.active,
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-library-view-toggle.active {
+    background: var(--omnix-theme-gradient);
+    border-color: var(--omnix-theme-line);
+    color: var(--omnix-theme-on-accent);
   }
 
   :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-card,

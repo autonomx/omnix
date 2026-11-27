@@ -113,6 +113,144 @@ describe('StorytellerWorkspace', () => {
     expect(await within(manuscript).findByText(/Written by job-1/)).toBeInTheDocument();
   });
 
+  it('starts a new story at chapter 1, and offers the next chapter once it is written', async () => {
+    const server = storyServer({ projects: [] });
+    renderStoryteller();
+    expect(await screen.findByText('LM Studio')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
+    // A new story has no chapter to choose: its first page is chapter 1.
+    expect(screen.queryByRole('button', { name: 'Next chapter' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    expect(await screen.findByText('Story generated: job-1')).toBeInTheDocument();
+    expect(server.jobPayload()?.input_payload).toMatchObject({ action: 'draft' });
+    expect(server.jobPayload()?.input_payload).not.toHaveProperty('chapter');
+
+    const controls = screen.getByRole('complementary', { name: 'Story controls' });
+    expect(await within(controls).findByText('1', { selector: '.storyteller-chapter-controls strong' })).toBeInTheDocument();
+    expect(within(controls).getByText('Write into chapter')).toBeInTheDocument();
+    expect(within(controls).getByRole('button', { name: 'Next chapter' })).toBeEnabled();
+  });
+
+  it('writes the next chapter into the open story rather than starting another', async () => {
+    // A story with several chapters stays one story: Generate adds to the open one (owner, 2026-11-26).
+    const server = storyServer({ projects: [project('project-1', { title: 'Foresight', pages: [page('p1', 'The orchard woke at dawn.')] })] });
+    renderStoryteller();
+    expect(await within(screen.getByRole('region', { name: 'Story manuscript' })).findByText(/orchard woke at dawn/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    expect(screen.getByText(/Adds to/)).toHaveTextContent('Adds to Foresight: chapter 1 goes on, chapter 2 starts a new one.');
+    expect(screen.queryByLabelText(/Premise/)).not.toBeInTheDocument();
+    // The open story's last chapter goes on, or the one after it starts; the job writes nowhere else.
+    expect(screen.getByRole('button', { name: 'Previous chapter' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Next chapter' }));
+    expect(await screen.findByText('2', { selector: '.storyteller-chapter-controls strong' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next chapter' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    await waitFor(() => expect(server.jobPayload()?.input_payload).toMatchObject({ action: 'continue', new_chapter: true, project_id: 'project-1' }));
+    expect(server.calls('POST', /^\/api\/story\/projects$/)).toHaveLength(0);
+  });
+
+  it('goes on in the open story\'s last chapter when that is the one chosen', async () => {
+    const server = storyServer({ projects: [project('project-1', { pages: [page('p1', 'The orchard woke at dawn.')] })] });
+    renderStoryteller();
+    expect(await within(screen.getByRole('region', { name: 'Story manuscript' })).findByText(/orchard woke at dawn/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    await waitFor(() => expect(server.jobPayload()?.input_payload).toMatchObject({ action: 'continue', new_chapter: false, project_id: 'project-1' }));
+    expect(server.calls('POST', /^\/api\/story\/projects$/)).toHaveLength(0);
+  });
+
+  it('writes several chapters into one story with one Generate', async () => {
+    // A chapters count writes that many chapters into the same story (owner, 2026-11-26).
+    const server = storyServer({ projects: [] });
+    renderStoryteller();
+    expect(await screen.findByText('LM Studio')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
+    const count = screen.getByLabelText('Chapters to write');
+    expect(count).toHaveValue(1);
+    expect(screen.getByText('Writes chapter 1.')).toBeInTheDocument();
+    fireEvent.change(count, { target: { value: '25' } });
+    expect(count).toHaveValue(20);
+    fireEvent.change(count, { target: { value: '3' } });
+    expect(screen.getByText('Writes chapters 1 to 3.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    expect(await screen.findByText('Story generated: job-1')).toBeInTheDocument();
+    expect(server.jobPayload()?.input_payload).toMatchObject({ action: 'draft', chapters: 3 });
+    expect(server.calls('POST', /^\/api\/story\/projects$/)).toHaveLength(1);
+
+    // The open story now ends in chapter 3: two more go on in it, then open chapter 4.
+    expect(await screen.findByText('3', { selector: '.storyteller-chapter-controls strong' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Chapters to write'), { target: { value: '2' } });
+    expect(screen.getByText('Chapter 3 goes on, then chapter 4 opens.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next chapter' }));
+    expect(screen.getByText('Writes chapters 4 to 5.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    await waitFor(() => expect(server.calls('POST', /^\/api\/jobs$/)).toHaveLength(2));
+    const next = JSON.parse(String(server.calls('POST', /^\/api\/jobs$/)[1]?.[1]?.body)) as { input_payload: Record<string, unknown> };
+    expect(next.input_payload).toMatchObject({ action: 'continue', chapters: 2, new_chapter: true, project_id: 'project-new-1' });
+    expect(server.calls('POST', /^\/api\/story\/projects$/)).toHaveLength(1);
+  });
+
+  it('shows which tone is chosen and tells the story in it', async () => {
+    const server = storyServer({ projects: [] });
+    renderStoryteller();
+    expect(await screen.findByText('LM Studio')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A lighthouse keeper hears the sea count.' } });
+    expect(screen.getByRole('button', { name: 'Cozy' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Mystery' }));
+    expect(screen.getByRole('button', { name: 'Mystery' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Cozy' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    expect(await screen.findByText('Story generated: job-1')).toBeInTheDocument();
+    // With no length chosen the page is the usual length.
+    expect(server.jobPayload()?.input_payload).toMatchObject({ tone: 'Mystery', page_lines: null });
+  });
+
+  it('writes each page at the number of lines chosen', async () => {
+    const server = storyServer({ projects: [] });
+    renderStoryteller();
+    expect(await screen.findByText('LM Studio')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A lighthouse keeper hears the sea count.' } });
+    const lines = screen.getByLabelText('Lines per page');
+    expect(screen.getByText('Empty for the usual 400 to 800 words.')).toBeInTheDocument();
+    // A number past the range is flagged, and leaving the field settles it into the range.
+    fireEvent.change(lines, { target: { value: '3' } });
+    expect(lines).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Choose 5 to 150 lines.')).toBeInTheDocument();
+    fireEvent.blur(lines);
+    expect(lines).toHaveValue(5);
+    fireEvent.change(lines, { target: { value: '40' } });
+    expect(lines).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.getByText('About 480 words a page.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    expect(await screen.findByText('Story generated: job-1')).toBeInTheDocument();
+    expect(server.jobPayload()?.input_payload).toMatchObject({ action: 'draft', page_lines: 40 });
+  });
+
+  it('takes a tone and mood the writer describes', async () => {
+    const server = storyServer({ projects: [] });
+    renderStoryteller();
+    expect(await screen.findByText('LM Studio')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'lmstudio' } });
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A lighthouse keeper hears the sea count.' } });
+    const custom = screen.getByLabelText('Your own tone and mood');
+    fireEvent.change(custom, { target: { value: '  bittersweet,   eerie calm ' } });
+    // Enter uses the tone; it doesn't send the story.
+    fireEvent.keyDown(custom, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'bittersweet, eerie calm' })).toHaveAttribute('aria-pressed', 'true');
+    expect(custom).toHaveValue('');
+    expect(server.jobPayload()).toBeNull();
+    // Choosing a usual tone keeps the writer's own one on offer.
+    fireEvent.click(screen.getByRole('button', { name: 'Gentle' }));
+    fireEvent.click(screen.getByRole('button', { name: 'bittersweet, eerie calm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    expect(await screen.findByText('Story generated: job-1')).toBeInTheDocument();
+    expect(server.jobPayload()?.input_payload).toMatchObject({ tone: 'bittersweet, eerie calm' });
+  });
+
   it('moves the project to Trash, restores it, and deletes forever', async () => {
     const server = storyServer({ projects: [project('project-1', { title: 'Flying Cat' }), project('project-2', { title: 'Moon Bakery' })] });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -135,6 +273,75 @@ describe('StorytellerWorkspace', () => {
     expect(await screen.findByText('Deleted "Flying Cat" forever.')).toBeInTheDocument();
     expect(server.calls('DELETE', /^\/api\/story\/projects\/project-1$/)).toHaveLength(1);
     expect(server.store.has('project-1')).toBe(false);
+  });
+
+  it('shows every story in the library view, found by search and kind', async () => {
+    storyServer({ projects: [
+      project('project-1', { title: 'Flying Cat', premise: 'A cat learns to fly over the harbour.' }),
+      project('project-2', { title: 'Moon Bakery', premise: 'Bread that rises only by moonlight.' }),
+      project('project-3', { title: 'The Brass Door', mode: 'interactive' }),
+    ] });
+    renderStoryteller();
+    fireEvent.click(await within(library()).findByRole('button', { name: 'All stories' }));
+    const view = await screen.findByRole('region', { name: 'Story library view' });
+    for (const name of ['Flying Cat', 'Moon Bakery', 'The Brass Door']) expect(await within(view).findByRole('article', { name })).toBeInTheDocument();
+    expect(within(view).getByRole('article', { name: 'Flying Cat' })).toHaveTextContent('Open now');
+    expect(screen.queryByRole('region', { name: 'Story manuscript' })).not.toBeInTheDocument();
+
+    fireEvent.change(within(view).getByRole('searchbox', { name: 'Search stories' }), { target: { value: 'moonlight' } });
+    expect(within(view).getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Moon Bakery']);
+    fireEvent.change(within(view).getByRole('searchbox', { name: 'Search stories' }), { target: { value: '' } });
+    fireEvent.click(within(within(view).getByRole('group', { name: 'Show' })).getByRole('button', { name: 'Interactive' }));
+    expect(within(view).getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['The Brass Door']);
+    fireEvent.change(within(view).getByRole('searchbox', { name: 'Search stories' }), { target: { value: 'nothing like this' } });
+    expect(within(view).getByText('No stories match')).toBeInTheDocument();
+
+    fireEvent.click(within(view).getByRole('button', { name: 'Back to story' }));
+    expect(await screen.findByRole('region', { name: 'Story manuscript' })).toBeInTheDocument();
+  });
+
+  it('edits a story\'s title and premise from the library view', async () => {
+    const server = storyServer({ projects: [project('project-1', { title: 'Flying Cat' }), project('project-2', { title: 'Moon Bakery' })] });
+    renderStoryteller();
+    fireEvent.click(await within(library()).findByRole('button', { name: 'All stories' }));
+    const view = await screen.findByRole('region', { name: 'Story library view' });
+    fireEvent.click(await within(view).findByRole('button', { name: 'Edit details of Moon Bakery' }));
+    const card = within(view).getByRole('article', { name: 'Moon Bakery' });
+    fireEvent.change(within(card).getByRole('textbox', { name: 'Title' }), { target: { value: '  Midnight Bakery ' } });
+    fireEvent.change(within(card).getByRole('textbox', { name: 'Premise' }), { target: { value: 'Loaves that glow after dark.' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }));
+
+    expect(await within(view).findByText('Saved "Midnight Bakery".')).toBeInTheDocument();
+    const saved = await within(view).findByRole('article', { name: 'Midnight Bakery' });
+    expect(saved).toHaveTextContent('Loaves that glow after dark.');
+    const [, init] = server.calls('PATCH', /^\/api\/story\/projects\/project-2$/)[0];
+    expect(JSON.parse(String(init?.body))).toEqual({ title: 'Midnight Bakery', premise: 'Loaves that glow after dark.' });
+    expect(server.store.get('project-2')).toMatchObject({ title: 'Midnight Bakery', premise: 'Loaves that glow after dark.' });
+  });
+
+  it('moves a story to Trash from the library view once confirmed, and opens another', async () => {
+    const server = storyServer({ projects: [project('project-1', { title: 'Flying Cat' }), project('project-2', { title: 'Moon Bakery' })] });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    renderStoryteller();
+    fireEvent.click(await within(library()).findByRole('button', { name: 'All stories' }));
+    const view = await screen.findByRole('region', { name: 'Story library view' });
+    expect(await within(view).findByRole('button', { name: 'Trash (0)' })).toBeInTheDocument();
+    // Cancelling the confirmation keeps the story.
+    fireEvent.click(await within(view).findByRole('button', { name: 'Delete Moon Bakery' }));
+    expect(confirm).toHaveBeenLastCalledWith('Move "Moon Bakery" to Trash? You can restore it from Trash for 30 days.');
+    expect(server.calls('POST', /^\/api\/story\/projects\/project-2\/trash$/)).toHaveLength(0);
+    expect(within(view).getByRole('article', { name: 'Moon Bakery' })).toBeInTheDocument();
+
+    fireEvent.click(within(view).getByRole('button', { name: 'Delete Moon Bakery' }));
+
+    expect(await within(view).findByText('Moved "Moon Bakery" to Trash. Restore it from Trash within 30 days.')).toBeInTheDocument();
+    await waitFor(() => expect(within(view).queryByRole('article', { name: 'Moon Bakery' })).not.toBeInTheDocument());
+    expect(await within(view).findByRole('button', { name: 'Trash (1)' })).toBeInTheDocument();
+    expect(server.store.get('project-2')?.deleted_at).toBeTruthy();
+
+    fireEvent.click(within(view).getByRole('button', { name: 'Open Flying Cat' }));
+    expect(screen.queryByRole('region', { name: 'Story library view' })).not.toBeInTheDocument();
+    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
   });
 
   it('keeps one panel beside the manuscript, with a tab for writing, the cast, the world and audio', async () => {
@@ -388,6 +595,31 @@ describe('StorytellerWorkspace', () => {
     expect((await within(manuscript).findAllByRole('heading', { name: 'The Memory Market' })).length).toBeGreaterThan(0);
   });
 
+  it('links each chapter from the top of the manuscript', async () => {
+    storyServer({
+      projects: [project('project-1', {
+        pages: [
+          page('p1', 'The orchard rang like crystal at sunset.', { title: 'The Glass Orchard' }),
+          page('p2', 'Mira traded a silver thread for a forgotten lullaby.', { chapter: 2, position: 2, title: 'The Memory Market' }),
+        ],
+      })],
+    });
+    renderStoryteller();
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    const chapters = await within(manuscript).findByRole('navigation', { name: 'Chapters' });
+    expect(within(chapters).getByRole('button', { name: 'Chapter 1' })).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(within(chapters).getByRole('button', { name: 'Chapter 2' }));
+    expect(within(chapters).getByRole('button', { name: 'Chapter 2' })).toHaveAttribute('aria-current', 'true');
+    expect(within(manuscript).getByText('Chapter 2', { selector: '.storyteller-manuscript-meta span' })).toBeInTheDocument();
+  });
+
+  it('shows no chapter links for a story of one chapter', async () => {
+    storyServer();
+    renderStoryteller();
+    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Chapters' })).not.toBeInTheDocument();
+  });
+
   it('asks the job for a new chapter and shows the chapter it wrote', async () => {
     const server = storyServer();
     renderStoryteller();
@@ -599,6 +831,38 @@ describe('StorytellerWorkspace', () => {
     await waitFor(() => expect(within(reader).getByText('Gulls cried.')).toHaveAttribute('aria-current', 'true'));
     fireEvent.click(within(aloud).getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(within(reader).getByText('Gulls cried.')).not.toHaveAttribute('aria-current'));
+  });
+
+  it('reads the writing manuscript aloud from a page on into the next, and stops for Stop or an edit', async () => {
+    const server = storyServer({
+      projects: [project('project-1', { pages: [page('p1', 'The tide went out.'), page('p2', 'Gulls cried.', { position: 2 })] })],
+    });
+    renderStoryteller();
+    const first = await screen.findByText('The tide went out.');
+    fireEvent.click(screen.getByRole('button', { name: 'Read page 1 aloud' }));
+    await waitFor(() => expect(first).toHaveAttribute('aria-current', 'true'));
+    const bar = screen.getByRole('region', { name: 'Read aloud' });
+    expect(within(bar).getByRole('status')).toHaveTextContent('Reading page 1');
+    await waitFor(() => expect(sinks[0].samples).toBe(3));
+    sinks[0].heard();
+    await waitFor(() => expect(screen.getByText('Gulls cried.')).toHaveAttribute('aria-current', 'true'));
+    expect(first).not.toHaveAttribute('aria-current');
+    expect(within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('status')).toHaveTextContent('Reading page 2');
+    const plans = server.calls('POST', /\/speech-plan$/).map((call) => JSON.parse(String(call[1]?.body)));
+    expect(plans).toEqual([{ page_id: 'p1' }, { page_id: 'p2' }]);
+
+    fireEvent.click(within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(screen.getByText('Gulls cried.')).not.toHaveAttribute('aria-current'));
+    const start = within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('button', { name: 'Read this chapter aloud' });
+
+    const opened = sinks.length;
+    fireEvent.click(start);
+    await waitFor(() => expect(screen.getByText('The tide went out.')).toHaveAttribute('aria-current', 'true'));
+    await waitFor(() => expect(sinks[opened]?.samples).toBe(3));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit page 2' }));
+    await waitFor(() => expect(sinks[opened].stopped).toBe(true));
+    expect(screen.getByText('The tide went out.')).not.toHaveAttribute('aria-current');
+    expect(within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('button', { name: 'Read this chapter aloud' })).toBeDisabled();
   });
 
   it('keeps the run as a finished story version', async () => {

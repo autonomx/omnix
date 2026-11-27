@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .loudness import integrated_loudness, normalize_loudness
     from .output_settings import NEUTRAL, sampling_overrides, time_stretch
     from .voice_casting import (
-        DEFAULT_VOICE, as_wav, castable_voices, match_voices, pcm_of, render_key, split_sentences,
+        DEFAULT_VOICE, as_wav, castable_voices, library_voices, match_voices, pcm_of, render_key, split_sentences,
     )
     from .speech_service import SpeechCache, neutral_voice, sentence_key, speak_sentence, speech_plan
     from .transcription import transcribe_timed_audio
@@ -143,7 +143,8 @@ _ASSEMBLY = frozenset({
 })
 # Who may be cast, who gets which voice, and how a sentence is identified and spoken (the RPG's and Storyteller's voices).
 _CASTING = frozenset({
-    "DEFAULT_VOICE", "as_wav", "castable_voices", "match_voices", "pcm_of", "render_key", "split_sentences",
+    "DEFAULT_VOICE", "as_wav", "castable_voices", "library_voices", "match_voices", "pcm_of", "render_key",
+    "split_sentences",
 })
 
 # Speaking tagged lines with a cast, sentence by sentence (ST-4.1: the RPG's and Storyteller's speech routes).
@@ -179,6 +180,7 @@ __all__ = [
     "DEFAULT_VOICE",
     "as_wav",
     "castable_voices",
+    "library_voices",
     "match_voices",
     "neutral_voice",
     "pcm_of",

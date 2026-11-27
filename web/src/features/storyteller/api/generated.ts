@@ -432,7 +432,7 @@ export interface paths {
         get?: never;
         /**
          * Choose Story Voice
-         * @description The writer's choice of a castable voice for the narrator or a character.
+         * @description The writer's choice of any library voice for the narrator or a character.
          */
         put: operations["choose_story_voice_api_story_projects__project_id__voices__speaker_id__put"];
         post?: never;
@@ -1537,8 +1537,16 @@ export interface components {
             /** Voice Id */
             voice_id: string;
         };
-        /** StoryVoiceOption */
+        /**
+         * StoryVoiceOption
+         * @description A voice the writer may choose: any in the library. Only a castable one is ever given to a part automatically.
+         */
         StoryVoiceOption: {
+            /**
+             * Castable
+             * @default false
+             */
+            castable: boolean;
             /**
              * Description
              * @default

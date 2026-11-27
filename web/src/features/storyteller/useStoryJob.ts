@@ -9,7 +9,7 @@ import { isJobSettled, jobKeys } from '../../api/jobs';
 import { useJobEventRefresh, useJobEventsOpen } from '../../events/useJobEvents';
 import { POLL_INTERVALS_MS } from '../../shared/timers';
 import { storyApiClient } from './api/storyClient';
-import { SaveFeedback, StoryActionMode, StoryGenerationRequest, StoryGenerationResult, storyJobRequest } from './storyModel';
+import { SaveFeedback, StoryActionMode, StoryGenerationRequest, StoryGenerationResult, StoryJobSettings, storyJobRequest } from './storyModel';
 import { storyProjectKeys } from './useStoryProjects';
 
 /** A job being watched: the project it writes into and what it was asked to do, so its result can be described. */
@@ -56,7 +56,7 @@ export function settledJobFeedback(action: StoryActionMode, newChapter: boolean,
 export function useStoryJob({ projectId, settings, onStarted, onFeedback }: {
   /** The story open in the workspace. */
   projectId: string | null;
-  settings: { tone: string; writingStyle: string; chapter: number };
+  settings: StoryJobSettings;
   /** Called once the job exists, with the project it writes into, unless another story was opened meanwhile. */
   onStarted: (request: StoryGenerationRequest, projectId: string) => void;
   onFeedback: (feedback: SaveFeedback) => void;

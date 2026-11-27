@@ -237,6 +237,48 @@
     padding: 0.32rem 0.55rem;
   }
 
+  .storyteller-generate-target {
+    color: var(--fg-slate-730);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .storyteller-custom-tone {
+    display: grid;
+    gap: 0.4rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-top: 0.45rem;
+  }
+
+  .storyteller-custom-tone input {
+    font-size: 0.82rem;
+    padding: 0.45rem 0.6rem;
+  }
+
+  .storyteller-custom-tone button {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.5rem;
+    color: var(--fg-slate-970-2);
+    cursor: pointer;
+    padding: 0.45rem 0.7rem;
+  }
+
+  .storyteller-page-length small {
+    color: var(--fg-slate-730);
+    font-size: 0.78rem;
+  }
+
+  .storyteller-page-length input[aria-invalid='true'] {
+    border-color: color-mix(in srgb, var(--c-red-640) 60%, transparent);
+  }
+
+  .storyteller-custom-tone button:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
   .storyteller-chip-row button.active {
     background: linear-gradient(135deg, color-mix(in srgb, var(--c-cyan-720) 82%, transparent), color-mix(in srgb, var(--accent-violet-540) 42%, transparent));
     border-color: color-mix(in srgb, var(--c-sky-800) 64%, transparent);
@@ -319,6 +361,46 @@
       linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-170-2) 94%, transparent), color-mix(in srgb, var(--bg-slate-130) 92%, transparent));
     min-height: 34rem;
     padding: clamp(1.25rem, 3vw, 3rem);
+  }
+
+  /* A link to each chapter, kept at the top of the manuscript while the writer reads. */
+  .storyteller-chapter-nav {
+    background: color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    border-radius: 0.625rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+    margin-bottom: 1rem;
+    padding: 0.35rem;
+    position: sticky;
+    top: 6.5rem;
+    z-index: 2;
+  }
+
+  .storyteller-chapter-nav button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.4rem;
+    color: var(--fg-slate-830);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.7rem;
+  }
+
+  .storyteller-chapter-nav button.active,
+  .storyteller-chapter-nav button:hover,
+  .storyteller-chapter-nav button:focus-visible {
+    background: color-mix(in srgb, var(--accent-violet-540) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 34%, transparent);
+    color: var(--fg-slate-970-2);
+    outline: none;
+  }
+
+  /* A chapter or scene jumped to lands below the chapter links rather than under them. */
+  .storyteller-manuscript :is(h3, h4)[id] {
+    scroll-margin-top: 10rem;
   }
 
   .storyteller-manuscript-meta {
@@ -461,9 +543,18 @@
     resize: vertical;
   }
 
+  /* The label on its own line keeps the row narrow enough for the side panel. */
   .storyteller-chapter-controls {
     align-items: center;
-    grid-template-columns: 1fr auto auto auto auto;
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+  }
+
+  .storyteller-chapter-controls > span {
+    grid-column: 1 / -1;
+  }
+
+  .storyteller-chapter-controls > button:last-child {
+    justify-self: end;
   }
 
   .storyteller-chapter-controls button {
@@ -579,6 +670,13 @@
 
   .storyteller-add-chapter {
     padding: 0.7rem;
+  }
+
+  /* The story panel folded into a rail of its tabs gives the manuscript its width. */
+  @media (width > 1400px) {
+    .storyteller-workspace:has(> .storyteller-side-panel.collapsed) {
+      grid-template-columns: 14.5rem minmax(0, 1fr) 3rem;
+    }
   }
 
   @media (max-width: 1400px) {

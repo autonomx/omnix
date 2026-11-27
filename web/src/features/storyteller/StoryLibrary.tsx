@@ -13,7 +13,10 @@ export function StoryLibrary({
   onShowTrash,
   onRestore,
   onPurge,
+  libraryView,
 }: {
+  /** Whether the library view is open, and how to open it. */
+  libraryView: { open: boolean; show: () => void };
   entries: StoryLibraryEntry[];
   activeId: string | null;
   activeSection: StoryLibrarySection;
@@ -34,6 +37,14 @@ export function StoryLibrary({
         <p className="eyebrow">Library</p>
         <button aria-label="New story draft" type="button" onClick={onNewDraft}>+</button>
       </div>
+      <button
+        aria-pressed={libraryView.open}
+        className={`storyteller-library-view-toggle${libraryView.open ? ' active' : ''}`}
+        type="button"
+        onClick={libraryView.show}
+      >
+        All stories
+      </button>
       <nav aria-label="Story library sections">
         {librarySections.map((section) => (
           <button
