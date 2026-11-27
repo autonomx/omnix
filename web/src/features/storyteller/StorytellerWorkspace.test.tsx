@@ -833,36 +833,61 @@ describe('StorytellerWorkspace', () => {
     await waitFor(() => expect(within(reader).getByText('Gulls cried.')).not.toHaveAttribute('aria-current'));
   });
 
-  it('reads the writing manuscript aloud from a page on into the next, and stops for Stop or an edit', async () => {
+  it('reads the writing manuscript aloud from a page on to the end of its chapter, and stops for Stop or an edit', async () => {
     const server = storyServer({
-      projects: [project('project-1', { pages: [page('p1', 'The tide went out.'), page('p2', 'Gulls cried.', { position: 2 })] })],
+      projects: [project('project-1', {
+        pages: [page('p1', 'The tide went out.'), page('p2', 'Gulls cried.', { position: 2 }), page('p3', 'Lanterns lit the quay.', { chapter: 2 })],
+      })],
     });
+    const planned = () => server.calls('POST', /\/speech-plan$/).map((call) => JSON.parse(String(call[1]?.body)).page_id);
+    const readAloud = () => screen.getByRole('region', { name: 'Read aloud' });
     renderStoryteller();
     const first = await screen.findByText('The tide went out.');
     fireEvent.click(screen.getByRole('button', { name: 'Read page 1 aloud' }));
     await waitFor(() => expect(first).toHaveAttribute('aria-current', 'true'));
-    const bar = screen.getByRole('region', { name: 'Read aloud' });
-    expect(within(bar).getByRole('status')).toHaveTextContent('Reading page 1');
-    await waitFor(() => expect(sinks[0].samples).toBe(3));
+    expect(within(readAloud()).getByRole('status')).toHaveTextContent('Reading page 1');
+    await waitFor(() => expect(sinks[0]?.samples).toBe(3));
     sinks[0].heard();
     await waitFor(() => expect(screen.getByText('Gulls cried.')).toHaveAttribute('aria-current', 'true'));
     expect(first).not.toHaveAttribute('aria-current');
-    expect(within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('status')).toHaveTextContent('Reading page 2');
-    const plans = server.calls('POST', /\/speech-plan$/).map((call) => JSON.parse(String(call[1]?.body)));
-    expect(plans).toEqual([{ page_id: 'p1' }, { page_id: 'p2' }]);
+    expect(within(readAloud()).getByRole('status')).toHaveTextContent('Reading page 2');
 
-    fireEvent.click(within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('button', { name: 'Stop' }));
-    await waitFor(() => expect(screen.getByText('Gulls cried.')).not.toHaveAttribute('aria-current'));
-    const start = within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('button', { name: 'Read this chapter aloud' });
+    // Chapter 1 ends with page 2: the reading stops there rather than running on into chapter 2.
+    await waitFor(() => expect(sinks[1]?.samples).toBe(3));
+    sinks[1].heard();
+    // The bar shown while reading gives way to the start section, so the region is looked up afresh.
+    await waitFor(() => expect(within(readAloud()).getByRole('button', { name: 'Read this chapter aloud' })).toBeEnabled());
+    expect(planned()).toEqual(['p1', 'p2']);
+
+    // The chapter chosen in the links is the one read.
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Chapters' })).getByRole('button', { name: 'Chapter 2' }));
+    fireEvent.click(within(readAloud()).getByRole('button', { name: 'Read this chapter aloud' }));
+    await waitFor(() => expect(screen.getByText('Lanterns lit the quay.')).toHaveAttribute('aria-current', 'true'));
+    expect(planned()).toEqual(['p1', 'p2', 'p3']);
+    fireEvent.click(within(readAloud()).getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(screen.getByText('Lanterns lit the quay.')).not.toHaveAttribute('aria-current'));
 
     const opened = sinks.length;
-    fireEvent.click(start);
-    await waitFor(() => expect(screen.getByText('The tide went out.')).toHaveAttribute('aria-current', 'true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Read page 1 aloud' }));
     await waitFor(() => expect(sinks[opened]?.samples).toBe(3));
     fireEvent.click(screen.getByRole('button', { name: 'Edit page 2' }));
     await waitFor(() => expect(sinks[opened].stopped).toBe(true));
     expect(screen.getByText('The tide went out.')).not.toHaveAttribute('aria-current');
-    expect(within(screen.getByRole('region', { name: 'Read aloud' })).getByRole('button', { name: 'Read this chapter aloud' })).toBeDisabled();
+    expect(within(readAloud()).getByRole('button', { name: 'Read this chapter aloud' })).toBeDisabled();
+  });
+
+  it('keeps the count of chapters to write while the field is cleared and retyped', async () => {
+    storyServer();
+    renderStoryteller();
+    const count = await screen.findByLabelText('Chapters to write');
+    fireEvent.change(count, { target: { value: '3' } });
+    fireEvent.change(count, { target: { value: '' } });
+    expect(count).toHaveValue(null);
+    fireEvent.change(count, { target: { value: '5' } });
+    expect(count).toHaveValue(5);
+    fireEvent.change(count, { target: { value: '' } });
+    fireEvent.blur(count);
+    expect(count).toHaveValue(5);
   });
 
   it('keeps the run as a finished story version', async () => {

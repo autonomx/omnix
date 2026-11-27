@@ -33,26 +33,33 @@ export function StoryVoicesPanel({ project }: { project: StoryProject | null }) 
       {cast && !cast.voices.length ? <p>No cloned voices yet: add one in Voice to give the cast their own voices.</p> : null}
       {cast?.voices.length ? (
         <div className="storyteller-voice-cast-table">
-          {cast.cast.map((row) => (
-            <article className="storyteller-voice-row" key={row.speaker_id}>
-              <div className="storyteller-voice-row-head">
-                <strong>{row.name}</strong>
-                <span className="storyteller-voice-tag">{row.chosen_by === 'writer' ? 'Your choice' : 'Matched to the part'}</span>
-              </div>
-              <select
-                aria-label={`${row.name}'s voice`}
-                disabled={choose.isPending}
-                onChange={(event) => project && choose.mutate({ target: project, speakerId: row.speaker_id, voiceId: event.currentTarget.value })}
-                value={row.voice_id}
-              >
-                <VoiceOptions voices={cast.voices} />
-              </select>
-              {describe(cast, row.voice_id) ? <p className="storyteller-voice-note">{describe(cast, row.voice_id)}</p> : null}
-            </article>
-          ))}
+          {cast.cast.map((row) => {
+            // A part no castable voice suits is read in the default voice, which is not in the library: it is
+            // shown as such, so the select does not seem to hold the first voice and that voice can still be picked.
+            const known = cast.voices.some((voice) => voice.voice_id === row.voice_id);
+            const tag = !known ? 'Not cast' : row.chosen_by === 'writer' ? 'Your choice' : 'Matched to the part';
+            return (
+              <article className="storyteller-voice-row" key={row.speaker_id}>
+                <div className="storyteller-voice-row-head">
+                  <strong>{row.name}</strong>
+                  <span className="storyteller-voice-tag">{tag}</span>
+                </div>
+                <select
+                  aria-label={`${row.name}'s voice`}
+                  disabled={choose.isPending}
+                  onChange={(event) => project && choose.mutate({ target: project, speakerId: row.speaker_id, voiceId: event.currentTarget.value })}
+                  value={row.voice_id}
+                >
+                  {known ? null : <option disabled value={row.voice_id}>The default voice (not cast)</option>}
+                  <VoiceOptions voices={cast.voices} />
+                </select>
+                {describe(cast, row.voice_id) ? <p className="storyteller-voice-note">{describe(cast, row.voice_id)}</p> : null}
+              </article>
+            );
+          })}
         </div>
       ) : null}
-      {choose.isError ? <p role="status">That voice could not be chosen.</p> : null}
+      {choose.isError && choose.variables?.target.id === project?.id ? <p role="status">That voice could not be chosen.</p> : null}
     </section>
   );
 }

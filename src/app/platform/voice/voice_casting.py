@@ -45,12 +45,27 @@ def _revision(root: Path, voice_id: str) -> str:
         return ""
     digest = hashlib.sha256(str(data.get("ref_text") or "").encode("utf-8"))
     for audio in sorted(root.glob(f"{voice_id}.*")):
-        if audio.suffix.lower() in {".wav", ".mp3", ".flac", ".ogg"}:
+        if audio.suffix.lower() in _AUDIO_SUFFIXES:
             digest.update(audio.read_bytes())
     return digest.hexdigest()[:16]
 
 
-_AUDIO_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg"}
+# The recordings the voice library takes (``app.assets.canonical_voice_clones``).
+_AUDIO_SUFFIXES = {".aac", ".flac", ".m4a", ".mp3", ".mp4", ".ogg", ".opus", ".wav", ".webm"}
+
+
+def _library_state(root: Path) -> tuple[tuple[str, int, int], ...]:
+    """Each profile, recording and ``casting.json`` in the library with its size and change time, so the catalog is
+    read again when a voice is added, removed or recorded again rather than when its cache entry expires."""
+    entries = []
+    try:
+        for path in root.iterdir():
+            if path.suffix.lower() in _AUDIO_SUFFIXES or path.suffix.lower() == ".json":
+                stat = path.stat()
+                entries.append((path.name, stat.st_mtime_ns, stat.st_size))
+    except OSError:
+        return ()
+    return tuple(sorted(entries))
 
 
 def _profiles(root: Path) -> list[str]:
@@ -59,10 +74,15 @@ def _profiles(root: Path) -> list[str]:
     return sorted(path.stem for path in root.glob("*.json") if path.stem in recorded)
 
 
-@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _catalog(root: str) -> tuple[dict[str, Any], ...]:
+    return _catalog_at(root, _library_state(Path(root)))
+
+
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
+def _catalog_at(root: str, state: tuple[tuple[str, int, int], ...]) -> tuple[dict[str, Any], ...]:
     """Every voice: those ``casting.json`` lists (castable or not), then the library's unlisted profiles, which are
-    never castable."""
+    never castable. ``state`` is the library as it stands (``_library_state``); it keys the cache."""
+    del state
     path = Path(root)
     listed = _casting(path)
     voices = []

@@ -1,6 +1,6 @@
 /**
  * A story page read aloud in the reader (ST-4.3) or the writing manuscript: which page and line is being heard,
- * pause, skip and stop, the pages after it read on in turn when asked, and "read new pages aloud" (off unless the
+ * pause, skip and stop, the pages after it read on in turn when asked for, and "read new pages aloud" (off unless the
  * reader turns it on, as the RPG's). Lines are read with the story's read
  * settings: the paragraph pause between them, the word notes in what is sent.
  */
@@ -20,8 +20,8 @@ export type StoryReadAloud = {
   silent: boolean;
   autoplay: boolean;
   setAutoplay: (on: boolean) => void;
-  /** Reads the page, then each of `following` in turn while each is heard to its end. */
-  play: (pageId: string, following?: string[]) => void;
+  /** Reads the page; once it is heard to its end, the page `next` names after it, if any, and so on. */
+  play: (pageId: string, next?: (pageId: string) => string | null) => void;
   pause: () => void;
   resume: () => void;
   skip: () => void;
@@ -47,9 +47,9 @@ export function useStoryReadAloud(project: StoryProject | null): StoryReadAloud 
     setPaused(false);
   }, []);
 
-  const play = useCallback((pageId: string, following: string[] = []) => {
+  const play = useCallback((pageId: string, next?: (pageId: string) => string | null) => {
     if (!projectId) return;
-    const start = (id: string, rest: string[]) => {
+    const start = (id: string) => {
       reader.current?.stop();
       setSilent(false);
       setPaused(false);
@@ -63,9 +63,11 @@ export function useStoryReadAloud(project: StoryProject | null): StoryReadAloud 
       reader.current = current;
       void current.outcome.then((outcome) => {
         if (reader.current !== current) return;
-        // A page heard to its end goes on to the next; a stop or a silent page ends the reading there.
-        if (outcome === 'played' && rest.length) {
-          start(rest[0], rest.slice(1));
+        // A page heard to its end goes on to the one after it as the story stands now (a page restored or
+        // replaced meanwhile is read as it is); a stop or a silent page ends the reading there.
+        const following = outcome === 'played' ? next?.(id) ?? null : null;
+        if (following) {
+          start(following);
           return;
         }
         reader.current = null;
@@ -74,7 +76,7 @@ export function useStoryReadAloud(project: StoryProject | null): StoryReadAloud 
         setSilent(outcome === 'silent');
       });
     };
-    start(pageId, following);
+    start(pageId);
   }, [projectId]);
 
   useEffect(() => stop, [projectId, stop]);  // another story, or the reader gone: the page stops

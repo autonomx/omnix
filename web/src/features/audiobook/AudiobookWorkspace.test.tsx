@@ -1465,15 +1465,20 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     const tabs = await screen.findByRole('navigation', { name: 'Audiobook project sections' });
     fireEvent.click(within(tabs).getByRole('button', { name: 'Cast & Voice Tools' }));
-    // Until the listener picks, the details show the first character.
+    // Until the listener picks, the details show the first character, but no card is the voice target.
     expect(await screen.findByRole('heading', { level: 2, name: 'Narrator' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Narrator' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Narrator' })).toHaveAttribute('aria-pressed', 'false');
 
     fireEvent.click(screen.getByRole('button', { name: 'Ehsan' }));
     expect(screen.getByRole('heading', { level: 2, name: 'Ehsan' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ehsan' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Narrator' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'Ehsan' }).closest('article')).toHaveClass('selected');
+
+    // A control on another card acts on that speaker without taking the voice target from the picked one.
+    fireEvent.click(screen.getByLabelText('Main alias for Narrator'));
+    expect(screen.getByRole('button', { name: 'Ehsan' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Narrator' }).closest('article')).not.toHaveClass('selected');
 
     // A click anywhere on a card picks it too, and the voices page opens on the picked character.
     fireEvent.click(screen.getByRole('button', { name: 'Narrator' }).closest('article')!);

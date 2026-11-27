@@ -213,6 +213,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
               <section className="storyteller-manuscript" aria-label="Story manuscript">
                 {project && manuscript ? (
                   <StoryManuscript
+                    chapter={activeChapter?.number ?? selectedChapter}
                     disabled={createJobMutation.isPending}
                     items={items}
                     key={project.id}

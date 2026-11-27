@@ -60,6 +60,9 @@ class StoryGenerateInput(BaseModel):
     new_chapter: bool = False
     # How long a new page is, in lines of prose (PAGE_LINES_MIN..PAGE_LINES_MAX); none for the usual length.
     page_lines: int | None = None
+    # A writing draft or continue writes this many chapters, one page each (1 to PLANNED_CHAPTERS_MAX); any other
+    # value, or another action, writes one (``_chapter_count``).
+    chapters: int | None = None
     # action "outline" plans the story as this many chapters of beats (ST-5.1).
     outline_chapters: int | None = None
     # A page drafted from this beat of the project's outline (ST-5.1).

@@ -16,7 +16,7 @@ const tabs: Array<{ id: StorySideTab; label: string }> = [
  * stays mounted, so a half-typed form survives a look at another tab, or the panel being folded away.
  *
  * The writer may fold the panel into a rail of its tabs to give the manuscript the room; a tab chosen there opens
- * it again. The choice lasts between visits.
+ * it again, whether by a click or the arrow keys. The choice lasts between visits.
  */
 export function StorySidePanel({ active, onChange, panels, badges = {} }: {
   active: StorySideTab;
@@ -39,12 +39,15 @@ export function StorySidePanel({ active, onChange, panels, badges = {} }: {
     if (target === null) return;
     event.preventDefault();
     onChange(tabs[target].id);
+    // A tab chosen in the rail opens the panel, by key as by a click, so the selected tab's panel is never hidden.
+    if (collapsed) fold(false);
     buttons.current.get(tabs[target].id)?.focus();
   };
   return (
-    <section className={`storyteller-side-panel${collapsed ? ' collapsed' : ''}`} aria-label="Story panel">
+    <section className={`storyteller-side-panel${collapsed ? ' collapsed' : ''}`} aria-label="Story side panel">
       <div className="storyteller-side-top">
         <button
+          aria-controls={tabs.map((tab) => `${base}-${tab.id}-panel`).join(' ')}
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Show the story panel' : 'Hide the story panel'}
           className="storyteller-side-fold"

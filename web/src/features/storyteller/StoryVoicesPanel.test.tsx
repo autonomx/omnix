@@ -47,4 +47,18 @@ describe('StoryVoicesPanel', () => {
     expect(await screen.findByText('Your choice')).toBeInTheDocument();
     expect(screen.getByLabelText("Mara's voice")).toHaveValue('rudeous');
   });
+
+  it('shows a part no castable voice suits as not cast, so the first library voice can still be picked', async () => {
+    vi.spyOn(storyApiClient, 'voiceCast').mockResolvedValue(castWith('', ''));
+    const choose = vi.spyOn(storyApiClient, 'chooseVoice').mockResolvedValue(castWith('default', 'writer'));
+    renderPanel();
+
+    const select = await screen.findByLabelText("Mara's voice");
+    expect(select).toHaveValue('');
+    expect(within(select).getByRole('option', { name: 'The default voice (not cast)' })).toBeDisabled();
+    expect(screen.getByText('Not cast')).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: 'default' } });
+    await waitFor(() => expect(choose).toHaveBeenCalledWith('story-1', 'mara', 'default'));
+  });
 });

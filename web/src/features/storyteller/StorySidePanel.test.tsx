@@ -35,4 +35,18 @@ describe('StorySidePanel', () => {
     expect(screen.getByText('Voices here')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Hide the story panel' })).toHaveAttribute('aria-expanded', 'true');
   });
+
+  it('opens from the rail on an arrow key too, and names the panels its fold button shows and hides', () => {
+    render(<Panel />);
+    const foldButton = screen.getByRole('button', { name: 'Hide the story panel' });
+    const panelIds = screen.getAllByRole('tabpanel', { hidden: true }).map((panel) => panel.id);
+    expect(foldButton.getAttribute('aria-controls')?.split(' ')).toEqual(panelIds);
+    expect(screen.getByRole('region', { name: 'Story side panel' })).toBeInTheDocument();
+
+    fireEvent.click(foldButton);
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Write' }), { key: 'ArrowDown' });
+    expect(screen.getByRole('tab', { name: 'Characters' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Characters' })).toHaveFocus();
+    expect(screen.getByText('Cast here')).toBeVisible();
+  });
 });

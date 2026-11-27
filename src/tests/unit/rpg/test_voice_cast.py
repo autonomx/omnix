@@ -49,6 +49,21 @@ def test_the_castable_list_offers_only_what_it_marks_castable(tmp_path) -> None:
         ("kept", True), ("held", False), ("unlisted", False)]
 
 
+def test_the_library_is_read_again_when_a_voice_is_added_removed_or_recorded_again(tmp_path) -> None:
+    (tmp_path / "first.json").write_text(json.dumps({"ref_text": "first"}))
+    (tmp_path / "first.wav").write_bytes(b"RIFF one")
+    revision = library_voices(tmp_path)[0]["revision"]
+    # A clone recorded in a format the library takes appears at once, not when the cache expires.
+    (tmp_path / "second.json").write_text(json.dumps({"ref_text": "second"}))
+    (tmp_path / "second.m4a").write_bytes(b"m4a audio")
+    assert [row["voice_id"] for row in library_voices(tmp_path)] == ["first", "second"]
+    # A recording made again gets a new revision, so a cast pinned to the old one is seen to differ.
+    (tmp_path / "first.wav").write_bytes(b"RIFF one, recorded again")
+    assert library_voices(tmp_path)[0]["revision"] != revision
+    (tmp_path / "second.m4a").unlink()
+    assert [row["voice_id"] for row in library_voices(tmp_path)] == ["first"]
+
+
 def test_who_is_cast_and_how_text_is_spoken() -> None:
     document = {"simulation_state": {"world_model": {"npcs": {"npc:orik": {"name": "Orik", "role": "innkeeper"}}},
                                      "dialogue": {"exchanges": {"npc:orik": [{"player": "hi", "npc": "hello"}]}}}}

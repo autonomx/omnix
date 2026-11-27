@@ -58,12 +58,14 @@ function pageGroups(items: ManuscriptItem[]): Array<{ pageId: string; items: Man
  * The writing manuscript (ST-6.1, ST-6.2): each page with its own edit and rework actions, a toolbar that
  * reworks the paragraphs the writer selects, and the proposals waiting for an answer above the text.
  *
- * The shown pages may be read aloud as in the interactive reader: from a page on, or the whole chapter, each
- * page read on into the next, the line being heard marked. Opening a page to edit, or leaving the chapter, stops it.
+ * The pages may be read aloud as in the interactive reader: the chosen chapter, or from a page on to the end of its
+ * chapter, each page read on into the next, the line being heard marked. Stop, or opening a page to edit, ends it.
  */
-export function StoryManuscript({ project, items, disabled, onRework, onSavePage, onAccept, onReject, children }: {
+export function StoryManuscript({ project, items, chapter, disabled, onRework, onSavePage, onAccept, onReject, children }: {
   project: StoryProject;
   items: ManuscriptItem[];
+  /** The chapter chosen in the chapter links, the one "Read this chapter aloud" reads. */
+  chapter: number;
   disabled: boolean;
   onRework: (action: StorySelectionAction, range: StorySelectionRange) => void;
   onSavePage: (pageId: string, pageNumber: number, blocks: StoryBlock[], baseBlocks: StoryBlock[]) => Promise<unknown>;
@@ -94,6 +96,7 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
     : '';
   const groups = pageGroups(items).filter((group) => pages.some((page) => page.id === group.pageId));
   const shownIds = groups.map((group) => group.pageId);
+  const chapterOf = new Map(pages.map((page) => [page.id, page.chapter]));
   const aloud = useStoryReadAloud(project);
   const { stop: stopReading } = aloud;
   const readingPage = aloud.speaking?.pageId ?? null;
@@ -101,10 +104,16 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
   useEffect(() => {
     if (readingPage && !shownKey.split(' ').includes(readingPage)) stopReading();
   }, [readingPage, shownKey, stopReading]);
-  const readFrom = (pageId: string) => {
+  // The page read after one heard to its end: the next page of the same chapter as the manuscript stands then, so
+  // a page restored or replaced meanwhile is read as it now is, and the reading ends with the chapter.
+  const nextInChapter = useRef<(pageId: string) => string | null>(() => null);
+  nextInChapter.current = (pageId) => {
     const at = shownIds.indexOf(pageId);
-    if (at >= 0) aloud.play(pageId, shownIds.slice(at + 1));
+    const following = at >= 0 ? shownIds[at + 1] : undefined;
+    return following && chapterOf.get(following) === chapterOf.get(pageId) ? following : null;
   };
+  const readFrom = (pageId: string) => aloud.play(pageId, (id) => nextInChapter.current(id));
+  const chapterStart = shownIds.find((pageId) => chapterOf.get(pageId) === chapter);
   const edit = (pageId: string) => {
     aloud.stop();
     setEditing(pageId);
@@ -116,7 +125,7 @@ export function StoryManuscript({ project, items, disabled, onRework, onSavePage
       {children}
       {aloud.speaking ? null : (
         <section aria-label="Read aloud" className="storyteller-read-aloud">
-          <button disabled={!shownIds.length || editing !== null} onClick={() => readFrom(shownIds[0])} type="button">
+          <button disabled={!chapterStart || editing !== null} onClick={() => chapterStart && readFrom(chapterStart)} type="button">
             Read this chapter aloud
           </button>
           {aloud.silent ? <p role="status">The speech service is not available; the page stands as text.</p> : null}

@@ -117,6 +117,8 @@ function PageLengthField({ pageLength: [pageLines, setPageLines] }: { pageLength
  * chapter chosen above (a new story's chapter 1); each after it opens the next chapter.
  */
 function ChapterCountField({ chapterChoice: { chapter, count, setCount, story, lastChapter } }: { chapterChoice: ChapterChoice }) {
+  // A field the writer has cleared stays empty until the next digit; leaving it shows the count kept.
+  const [draft, setDraft] = useState<string | null>(null);
   const last = chapter + count - 1;
   const continues = Boolean(story) && chapter === lastChapter;
   const hint = count === 1 ? (continues ? `Writes more of chapter ${chapter}.` : `Writes chapter ${chapter}.`)
@@ -133,8 +135,16 @@ function ChapterCountField({ chapterChoice: { chapter, count, setCount, story, l
           min={1}
           step={1}
           type="number"
-          value={count}
-          onChange={(event) => setCount(Number(event.currentTarget.value))}
+          value={draft ?? count}
+          onBlur={() => setDraft(null)}
+          onChange={(event) => {
+            const text = event.currentTarget.value;
+            // A number is kept as the count (settled into range, as shown); anything else stays as typed for now.
+            if (text.trim() && Number.isFinite(Number(text))) {
+              setCount(Number(text));
+              setDraft(null);
+            } else setDraft(text);
+          }}
         />
       </label>
       <small id="storyteller-chapter-count-hint">{hint}</small>

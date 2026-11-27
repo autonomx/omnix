@@ -145,8 +145,11 @@ export function useAudiobookProjectData(ws: { module: OmnixModuleDefinition } & 
             : 'Waiting';
 
   const selectedVoice = voicesQuery.data?.voices.find((voice) => voice.id === selectedVoiceId) ?? voicesQuery.data?.voices[0];
+  // The speaker voices go to, only while it is one of the open book's: a dismissed speaker, or one of the book
+  // open before, is no target, so nothing is assigned to a speaker that is gone.
+  const voiceTarget = castableSpeakers.some((speaker) => speaker.id === voiceTargetSpeakerId) ? voiceTargetSpeakerId : '';
   /** The character picked on the Cast page (or for a voice), the first one until the writer picks. */
-  const selectedSpeaker = castableSpeakers.find((speaker) => speaker.id === voiceTargetSpeakerId) ?? castableSpeakers[0];
+  const selectedSpeaker = castableSpeakers.find((speaker) => speaker.id === voiceTarget) ?? castableSpeakers[0];
   const modelRevision = modelQuery.data?.model_revision ?? '';
 
   async function getInstalledModelRevision(): Promise<string> {
@@ -166,7 +169,7 @@ export function useAudiobookProjectData(ws: { module: OmnixModuleDefinition } & 
     skippedRenderChapterCount, completedRenderChapters, renderProgressPercent, isPolicySkippedChapter,
     queuedRenderJobs, runningRenderJobs, pausedRenderJobs, failedRenderJobs, retryableRenderJobs, cacheHits,
     proposedSpeakers, castableSpeakers, assignedVoiceCount, castLabel, renderStateLabel, selectedVoice, selectedSpeaker,
-    modelRevision, getInstalledModelRevision, libraryProjects,
+    modelRevision, getInstalledModelRevision, libraryProjects, voiceTargetSpeakerId: voiceTarget,
   };
 }
 
