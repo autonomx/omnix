@@ -16,7 +16,7 @@ jobs:
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
       - name: Check out exact workflow head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 

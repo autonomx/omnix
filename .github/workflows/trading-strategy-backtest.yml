@@ -62,7 +62,7 @@ jobs:
       RECONSTRUCTION_MAX_AGE_DAYS: ${{ github.event.inputs.reconstruction_max_age_days || '30' }}
     steps:
       - name: Check out exact workflow head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 
