@@ -207,34 +207,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/characters/{character_id}/live2d-models": {
+    "/api/assistant-defaults": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Live2D Model Catalog */
-        get: operations["live2d_model_catalog_api_characters__character_id__live2d_models_get"];
+        /** Assistant Defaults */
+        get: operations["assistant_defaults_api_assistant_defaults_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/characters/{character_id}/live2d-avatar": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Activate Live2D Avatar */
-        post: operations["activate_live2d_avatar_api_characters__character_id__live2d_avatar_post"];
+        /** Apply Assistant Defaults */
+        post: operations["apply_assistant_defaults_api_assistant_defaults_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -247,8 +231,6 @@ export interface components {
     schemas: {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
-        /** ActivateLive2DAvatarRequest */
-        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: core["schemas"]["AlpacaIexCredentialStatus"];
         /** AlpacaIexCredentialUpdate */
@@ -262,6 +244,13 @@ export interface components {
          * @enum {string}
          */
         AssetType: core["schemas"]["AssetType"];
+        /**
+         * AssistantDefaults
+         * @description What setup can offer the assistant, and whether it already has an avatar of its own.
+         */
+        AssistantDefaults: core["schemas"]["AssistantDefaults"];
+        /** AssistantDefaultsApplied */
+        AssistantDefaultsApplied: core["schemas"]["AssistantDefaultsApplied"];
         /**
          * AssistantToolAction
          * @description Backend-owned action definition for an assistant tool.
@@ -488,8 +477,6 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
-        /** Live2DAvatarActionResponse */
-        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */
@@ -1045,13 +1032,11 @@ export interface operations {
             };
         };
     };
-    live2d_model_catalog_api_characters__character_id__live2d_models_get: {
+    assistant_defaults_api_assistant_defaults_get: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                character_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -1062,34 +1047,19 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["AssistantDefaults"];
                 };
             };
         };
     };
-    activate_live2d_avatar_api_characters__character_id__live2d_avatar_post: {
+    apply_assistant_defaults_api_assistant_defaults_post: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                character_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ActivateLive2DAvatarRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1097,16 +1067,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Live2DAvatarActionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["AssistantDefaultsApplied"];
                 };
             };
         };

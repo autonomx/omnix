@@ -5,9 +5,9 @@ import type { JobRecord } from '../../api/client';
 import { ApiError } from '../../api/errors';
 import { desktopBridge } from '../../shared/desktopBridge';
 import {
-  ASSISTANT_AVATAR_QUERY_KEY, AVATARS_QUERY_KEY, avatarsClient, CAPABILITIES_QUERY_KEY, FIRST_RUN_ASSISTANT_AVATAR,
+  ASSISTANT_DEFAULTS_QUERY_KEY, ASSISTANT_PORTRAIT_URL, assistantDefaultsClient, CAPABILITIES_QUERY_KEY,
   formatGigabytes, MODEL_PACKS_QUERY_KEY, modelPacksClient,
-  type AvatarModel, type ModelPacksStatus, type PackModelStatus, type PackOption, type PackRuntimeStatus, type PackVerdict,
+  type AssistantDefaults, type ModelPacksStatus, type PackModelStatus, type PackOption, type PackRuntimeStatus, type PackVerdict,
 } from './api/modelPacksClient';
 import './setup.css';
 import { isJobActive } from '../../api/jobs';
@@ -204,20 +204,17 @@ function BundleRow({ verdict, models, runtimes, selected, onToggle, job, busy, o
   );
 }
 
-function LicenceReview({ opened, onClose, models, runtimes, avatar = null, onConfirm, submitting }: {
+function LicenceReview({ opened, onClose, models, runtimes, onConfirm, submitting }: {
   opened: boolean;
   onClose: () => void;
   models: PackModelStatus[];
   runtimes: PackRuntimeStatus[];
-  /** A Live2D avatar downloaded with the models (the first-run assistant avatar). */
-  avatar?: AvatarModel | null;
   onConfirm: () => void;
   submitting: boolean;
 }) {
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   useEffect(() => { if (opened) setAccepted({}); }, [opened]);
-  const avatarKey = avatar ? `avatar:${avatar.id}` : '';
-  const allAccepted = models.every((model) => accepted[model.id]) && (!avatar || Boolean(accepted[avatarKey]));
+  const allAccepted = models.every((model) => accepted[model.id]);
   return (
     <Modal opened={opened} onClose={onClose} title="Review the licences" size="lg" centered>
       <Text size="sm">Each model comes with its own licence. Omnix downloads it from Hugging Face at the exact version listed, and records that you accepted it.</Text>
@@ -237,19 +234,6 @@ function LicenceReview({ opened, onClose, models, runtimes, avatar = null, onCon
             {model.licence.gated ? <Text size="xs" className="setup-reason">Gated: accept it on its Hugging Face page and add your Hugging Face token in Voice Studio, Models.</Text> : null}
           </li>
         ))}
-        {avatar ? (
-          <li>
-            <Checkbox
-              checked={Boolean(accepted[avatarKey])}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
-                setAccepted((current) => ({ ...current, [avatarKey]: checked }));
-              }}
-              label={<span><b>{avatar.name}</b> (Live2D avatar) · <a href={avatar.runtime_license_url} target="_blank" rel="noreferrer">Live2D Proprietary Software License</a> · <a href={avatar.model_license_url} target="_blank" rel="noreferrer">model terms</a></span>}
-            />
-            <Text size="xs" className="setup-muted">{avatar.license_summary}</Text>
-          </li>
-        ) : null}
       </ul>
       {runtimes.length ? (
         <Text size="xs" className="setup-muted">
@@ -258,48 +242,50 @@ function LicenceReview({ opened, onClose, models, runtimes, avatar = null, onCon
       ) : null}
       <div className="setup-footer">
         <Button variant="subtle" onClick={onClose}>Back</Button>
-        <Button disabled={!allAccepted} loading={submitting} onClick={onConfirm}>{models.length || avatar ? 'Accept and download' : 'Download'}</Button>
+        <Button disabled={!allAccepted} loading={submitting} onClick={onConfirm}>{models.length ? 'Accept and download' : 'Download'}</Button>
       </div>
     </Modal>
   );
 }
 
 /**
- * The first-run setup's offer of a Live2D avatar for the System Assistant, ticked by default, while the assistant has
- * none (it is changed later in Chat, Characters).
+ * The first-run setup's offer of the installer's assistant defaults, a live portrait and the Maya voice, ticked by
+ * default while the assistant has no avatar (both are changed later in Chat, Characters and Settings).
  */
-function useAssistantAvatarChoice(mode: 'setup' | 'settings') {
-  const avatarsQuery = useQuery({
-    queryKey: ASSISTANT_AVATAR_QUERY_KEY,
-    queryFn: () => avatarsClient.assistantAvatars(),
+function useAssistantDefaultsChoice(mode: 'setup' | 'settings') {
+  const defaultsQuery = useQuery({
+    queryKey: ASSISTANT_DEFAULTS_QUERY_KEY,
+    queryFn: () => assistantDefaultsClient.status(),
     enabled: mode === 'setup',
     retry: false,
   });
   const [chosen, setChosen] = useState(true);
-  const models = avatarsQuery.data?.models ?? [];
-  const offer = mode === 'setup' && !models.some((model) => model.selected)
-    ? models.find((model) => model.id === FIRST_RUN_ASSISTANT_AVATAR) ?? null
-    : null;
+  const defaults = defaultsQuery.data;
+  const offer = mode === 'setup' && defaults?.portrait_available && !defaults.has_avatar ? defaults : null;
   return { offer, chosen: Boolean(offer) && chosen, setChosen };
 }
 
-function AssistantAvatarChoice({ avatar, chosen, onChange, manage }: {
-  avatar: AvatarModel;
+function AssistantDefaultsChoice({ defaults, chosen, onChange, manage }: {
+  defaults: AssistantDefaults;
   chosen: boolean;
   onChange: (chosen: boolean) => void;
   manage: boolean;
 }) {
+  const voice = defaults.voice_id;
   return (
     <section className="setup-bundle setup-assistant-avatar" aria-label="Assistant avatar">
-      <img className="setup-assistant-avatar-preview" src={avatar.preview_path} alt="" />
+      <img className="setup-assistant-avatar-preview" src={ASSISTANT_PORTRAIT_URL} alt="" />
       <div className="setup-bundle-details">
         <Checkbox
           checked={chosen}
           disabled={!manage}
           onChange={(event) => onChange(event.currentTarget.checked)}
-          label={<span><b>Assistant avatar: {avatar.name}</b></span>}
+          label={<span><b>Assistant avatar: a live portrait{voice ? ` with the ${voice} voice` : ''}</b></span>}
         />
-        <Text size="sm">A Live2D avatar for the assistant in Live Voice, with idle motion and lip sync. Change it or turn it off in Chat, Characters.</Text>
+        <Text size="sm">
+          The assistant appears as a talking face in Live Voice{voice ? ` and speaks in ${voice}'s voice, a designed voice that comes with Omnix` : ''}.
+          {' '}The face moves once the Live portrait models are downloaded (they need an NVIDIA graphics card); until then the picture stays still. Change either later in Chat, Characters and Settings.
+        </Text>
       </div>
     </section>
   );
@@ -440,7 +426,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
   const status = statusQuery.data;
   const bundles = useMemo(() => status?.bundles ?? [], [status]);
   const packsFolder = usePacksFolder(status);
-  const assistantAvatar = useAssistantAvatarChoice(mode);
+  const assistantDefaults = useAssistantDefaultsChoice(mode);
   const queryClient = useQueryClient();
   const [preset, setPreset] = useState<Preset>('recommended');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -479,27 +465,26 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
         const job = await modelPacksClient.install({ bundle_id: bundle, accept_terms: true, options: chosenOptions[bundle] ?? [] });
         started[bundle] = job.id;
       }
-      // The assistant's avatar is small: it downloads now, after the model jobs are queued.
-      let avatarError = '';
-      if (assistantAvatar.chosen && assistantAvatar.offer) {
+      // The assistant's portrait and voice come with the installer: set up now, after the model jobs are queued.
+      let assistantError = '';
+      if (assistantDefaults.chosen) {
         try {
-          await avatarsClient.useForAssistant(assistantAvatar.offer.id);
+          await assistantDefaultsClient.apply();
         } catch (error) {
-          avatarError = errorText(error);
+          assistantError = errorText(error);
         }
       }
-      return { started, avatarError };
+      return { started, assistantError };
     },
-    onSuccess: ({ started, avatarError }) => {
+    onSuccess: ({ started, assistantError }) => {
       track(started);
       setSelected(new Set());
       setReviewing(false);
-      void queryClient.invalidateQueries({ queryKey: ASSISTANT_AVATAR_QUERY_KEY });
-      void queryClient.invalidateQueries({ queryKey: AVATARS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ASSISTANT_DEFAULTS_QUERY_KEY });
       setMessage([
         Object.keys(started).length ? 'Downloading in the background: you can keep using Omnix, and this keeps going when you close it.' : '',
-        avatarError ? `The assistant's avatar could not be downloaded: ${avatarError}` : '',
-      ].filter(Boolean).join(' ') || 'The assistant has its avatar.');
+        assistantError ? `The assistant's portrait and voice could not be set up: ${assistantError}` : '',
+      ].filter(Boolean).join(' ') || 'The assistant has its portrait and voice.');
     },
     onError: (error) => { setReviewing(false); setMessage(errorText(error)); },
   });
@@ -591,18 +576,22 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
           />
         ))}
       </ul>
-      {assistantAvatar.offer ? (
-        <AssistantAvatarChoice avatar={assistantAvatar.offer} chosen={assistantAvatar.chosen} onChange={assistantAvatar.setChosen}
-          manage={status.can_manage} />
+      {assistantDefaults.offer ? (
+        <AssistantDefaultsChoice defaults={assistantDefaults.offer} chosen={assistantDefaults.chosen}
+          onChange={assistantDefaults.setChosen} manage={status.can_manage} />
       ) : null}
       <DefaultModelsPanel status={status} />
       <Text size="sm" className="setup-chat-note">Chat works without any of these: add an API key in Settings, AI providers, or use a local LM Studio or llama.cpp server.</Text>
       <div className="setup-footer">
         <Text size="sm" role="status">
-          {selection.length ? `Download: ${formatGigabytes(total)}` : assistantAvatar.chosen ? 'Download: the assistant avatar' : 'Nothing selected'}
+          {selection.length ? `Download: ${formatGigabytes(total)}` : assistantDefaults.chosen ? "Set up: the assistant's portrait and voice" : 'Nothing selected'}
           {sizeQuery.data?.runtime_bytes ? ` (${formatGigabytes(sizeQuery.data.runtime_bytes)} of it runtimes, shared by every model)` : ''}
         </Text>
-        {status.can_manage ? <Button disabled={(!selection.length && !assistantAvatar.chosen) || installMutation.isPending} onClick={() => setReviewing(true)}>Review licences and download</Button> : null}
+        {status.can_manage ? <Button disabled={(!selection.length && !assistantDefaults.chosen) || installMutation.isPending}
+          loading={!reviewing && installMutation.isPending}
+          onClick={() => { if (selection.length) setReviewing(true); else installMutation.mutate([]); }}>
+          {selection.length ? 'Review licences and download' : 'Set up the assistant'}
+        </Button> : null}
       </div>
       {packsFolder.folder ? (
         <div className="setup-download-folder">
@@ -625,7 +614,6 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
         onClose={() => setReviewing(false)}
         models={reviewModels}
         runtimes={reviewRuntimes}
-        avatar={assistantAvatar.chosen ? assistantAvatar.offer : null}
         submitting={installMutation.isPending}
         onConfirm={() => installMutation.mutate(selection)}
       />

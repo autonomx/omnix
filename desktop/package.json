@@ -1,7 +1,7 @@
 {
   "name": "omnix-desktop",
   "productName": "Omnix",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Omnix as a desktop app: chat, voice, transcription, image generation and more, with the AI models you choose downloaded on first run.",
   "author": "Autonomx",
   "license": "MIT",

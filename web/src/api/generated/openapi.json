@@ -2806,6 +2806,52 @@
         "title": "AssistantContextChatRequest",
         "type": "object"
       },
+      "AssistantDefaults": {
+        "description": "What setup can offer the assistant, and whether it already has an avatar of its own.",
+        "properties": {
+          "has_avatar": {
+            "title": "Has Avatar",
+            "type": "boolean"
+          },
+          "portrait_available": {
+            "title": "Portrait Available",
+            "type": "boolean"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portrait_available",
+          "voice_id",
+          "has_avatar"
+        ],
+        "title": "AssistantDefaults",
+        "type": "object"
+      },
+      "AssistantDefaultsApplied": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "avatar_pack": {
+            "$ref": "#/components/schemas/CharacterAvatarPack"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "avatar_pack",
+          "voice_id"
+        ],
+        "title": "AssistantDefaultsApplied",
+        "type": "object"
+      },
       "AssistantMemoryRuntimeSettings": {
         "additionalProperties": false,
         "properties": {
@@ -82757,6 +82803,60 @@
         "summary": "Image Asset File",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/api/assistant-defaults": {
+      "get": {
+        "operationId": "assistant_defaults_api_assistant_defaults_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantDefaults"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Assistant Defaults",
+        "tags": [
+          "characters"
+        ]
+      },
+      "post": {
+        "operationId": "apply_assistant_defaults_api_assistant_defaults_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantDefaultsApplied"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Apply Assistant Defaults",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
+    "/api/assistant-defaults/portrait": {
+      "get": {
+        "operationId": "assistant_default_portrait_api_assistant_defaults_portrait_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Assistant Default Portrait",
+        "tags": [
+          "characters"
         ]
       }
     },

@@ -40,7 +40,8 @@ A = "src/app/"
 NODES = [
     # ---- client
     node("desktop", "Desktop app", "client",
-         "Electron shell that hosts the web app and boots/supervises the Python services. Installers publish as GitHub releases (unsigned).",
+         "Electron shell that hosts the web app and boots/supervises the Python services. Installers publish as GitHub releases (unsigned). "
+         "Staging (desktop/staging/stage.py) ships git-tracked files only; the voice library holds default_ref plus SHIPPED_VOICES (resources/assistant).",
          ["desktop/", A + "desktop/"], key_files=[A + "desktop/service_boot.py", A + "desktop/supervise.py"],
          docs=["docs/DESKTOP_APP_ROADMAP_2026-10-21.md"]),
     node("web_shell", "Web app shell", "client",
@@ -132,7 +133,8 @@ NODES = [
          invariants=["Sidecar credentials stay server-side; a browser-sent speaker_profile is dropped."], tests=["src/tests/voice/"],
          docs=["docs/architecture/OMNIX_VOICE_STUDIO_PARITY_ROADMAP.md"]),
     node("characters", "Characters", "platform",
-         "Character profiles, avatars (Live2D, visemes, avatar generation), voice consent, live-call profile and rendering.",
+         "Character profiles, avatars (Live2D, visemes, avatar generation), voice consent, live-call profile and rendering. "
+         "First-run assistant defaults (assistant_defaults.py): setup gives the System Assistant the shipped portrait and Maya voice where it has none.",
          [A + "platform/characters/"], feature="characters",
          key_files=[A + "platform/characters/service.py", A + "platform/characters/live_call.py", A + "platform/characters/avatar_service.py"],
          tests=["src/tests/characters/"]),

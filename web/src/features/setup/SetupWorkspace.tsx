@@ -1,13 +1,13 @@
 import { Button, Text } from '@mantine/core';
 import { useNavigate } from '@tanstack/react-router';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { AvatarPacksPanel } from './AvatarPacksPanel';
 import { ModelPacksPanel } from './ModelPacksPanel';
 import './setup.css';
 
 /**
  * The setup screen the desktop app opens on its first start (desktop roadmap §4.5). On the very first run the owner
- * secures their account first (email and password, in Settings); then picks the AI models this computer can run.
+ * secures their account first (email and password, in Settings); then picks the AI models this computer can run
+ * and takes the assistant's portrait and voice that come with Omnix. Live2D avatars are in Settings, Models.
  * Nothing large downloads without that choice, and everything stays available later from Settings, Models.
  */
 export function SetupWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -27,7 +27,6 @@ export function SetupWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </section>
       ) : null}
       <ModelPacksPanel mode="setup" />
-      <AvatarPacksPanel />
       <div className="setup-footer">
         <span />
         {/* Another feature's route: an app built without chat (MarketPulse) has none in its route tree. */}

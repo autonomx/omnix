@@ -103,7 +103,7 @@
       "id": "desktop",
       "label": "Desktop app",
       "layer": "client",
-      "summary": "Electron shell that hosts the web app and boots/supervises the Python services. Installers publish as GitHub releases (unsigned).",
+      "summary": "Electron shell that hosts the web app and boots/supervises the Python services. Installers publish as GitHub releases (unsigned). Staging (desktop/staging/stage.py) ships git-tracked files only; the voice library holds default_ref plus SHIPPED_VOICES (resources/assistant).",
       "paths": [
         "desktop/",
         "src/app/desktop/"
@@ -434,7 +434,7 @@
       "id": "characters",
       "label": "Characters",
       "layer": "platform",
-      "summary": "Character profiles, avatars (Live2D, visemes, avatar generation), voice consent, live-call profile and rendering.",
+      "summary": "Character profiles, avatars (Live2D, visemes, avatar generation), voice consent, live-call profile and rendering. First-run assistant defaults (assistant_defaults.py): setup gives the System Assistant the shipped portrait and Maya voice where it has none.",
       "paths": [
         "src/app/platform/characters/"
       ],

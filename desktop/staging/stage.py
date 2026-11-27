@@ -299,10 +299,37 @@ def _not_distributed(relative: str) -> bool:
 
     The voice-clone reference samples in resources/voice_clones include recordings of real people and of game
     characters, with no record of consent or licence; an installer ships only the default reference voice, its
-    transcript (OmniVoice clones from it offline) and its index entry, written by ``stage_app``."""
+    transcript (OmniVoice clones from it offline) and its index entry, plus the designed voices of
+    ``SHIPPED_VOICES``, all written by ``stage_voice_library``."""
     if relative.startswith("resources/voice_clones/"):
         return relative not in {"resources/voice_clones/default_ref.wav", "resources/voice_clones/default_ref.json"}
     return False
+
+
+# Voices an installer adds to its library: name -> (folder under ROOT holding <name>.wav and <name>.json, index entry).
+# Maya is the System Assistant's designed voice (resources/assistant/README.md); it replaces the checkout's own
+# resources/voice_clones/Maya.wav, which _not_distributed keeps out.
+SHIPPED_VOICES = {
+    "Maya": ("resources/assistant", {"speaker": "default", "language": "en", "voice_clone_id": "Maya",
+                                     "has_audio": True, "is_preloaded": True, "gender": "female"}),
+}
+
+
+def stage_voice_library(app_dir: Path, root: Path = ROOT) -> None:
+    """Write the installer's voice library: the default reference voice's index entry and each shipped voice."""
+    target = app_dir / "resources" / "voice_clones"
+    target.mkdir(parents=True, exist_ok=True)
+    index = root / "resources" / "voice_clones" / "voice_clones.json"
+    voices = json.loads(index.read_text(encoding="utf-8")) if index.is_file() else {}
+    kept = {name: entry for name, entry in voices.items() if name == "default_ref"}
+    for name, (folder, entry) in SHIPPED_VOICES.items():
+        for suffix in (".wav", ".json"):
+            source = root / folder / f"{name}{suffix}"
+            if not source.is_file():
+                raise StageError(f"shipped voice {name} is missing {source.relative_to(root).as_posix()}")
+            shutil.copy2(source, target / f"{name}{suffix}")
+        kept[name] = entry
+    (target / "voice_clones.json").write_text(json.dumps(kept, indent=2) + "\n", encoding="utf-8")
 
 
 def tracked_app_files() -> list[str]:
@@ -325,13 +352,7 @@ def stage_app(target_platform: str) -> None:
         (app_dir / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, app_dir / relative)
     compile_bytecode(target_platform, app_dir / "src")
-    index = ROOT / "resources" / "voice_clones" / "voice_clones.json"
-    if index.is_file():
-        voices = json.loads(index.read_text(encoding="utf-8"))
-        kept = {name: entry for name, entry in voices.items() if name == "default_ref"}
-        target = app_dir / "resources" / "voice_clones" / "voice_clones.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(kept, indent=2) + "\n", encoding="utf-8")
+    stage_voice_library(app_dir)
     licenses = STAGE / "licenses"
     licenses.mkdir(parents=True, exist_ok=True)
     for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):

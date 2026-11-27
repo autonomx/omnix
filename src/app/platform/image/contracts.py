@@ -149,6 +149,7 @@ _ENTRY_POINTS = {
     "ImageReferenceError": "reference_assets",
     "close_image_references": "reference_assets",
     "load_image_reference_assets": "reference_assets",
+    "save_image_reference_upload": "reference_assets",
 }
 
 if TYPE_CHECKING:
@@ -158,6 +159,7 @@ if TYPE_CHECKING:
         ImageReferenceError as ImageReferenceError,
         close_image_references as close_image_references,
         load_image_reference_assets as load_image_reference_assets,
+        save_image_reference_upload as save_image_reference_upload,
     )
 
 

@@ -16,10 +16,12 @@ export type DefaultModels = components['schemas']['DefaultModels'];
 
 export type AvatarLibrary = components['schemas']['Live2DModelCatalogResponse'];
 export type AvatarModel = components['schemas']['Live2DModelCatalogItem'];
+export type AssistantDefaults = components['schemas']['AssistantDefaults'];
+export type AssistantDefaultsApplied = components['schemas']['AssistantDefaultsApplied'];
 
 export const MODEL_PACKS_QUERY_KEY = ['setup', 'model-packs'] as const;
 export const AVATARS_QUERY_KEY = ['setup', 'avatars'] as const;
-export const ASSISTANT_AVATAR_QUERY_KEY = ['setup', 'assistant-avatar'] as const;
+export const ASSISTANT_DEFAULTS_QUERY_KEY = ['setup', 'assistant-defaults'] as const;
 export const CAPABILITIES_QUERY_KEY = ['setup', 'capabilities'] as const;
 
 /** The Live2D avatars Omnix can download (any character can then use one). */
@@ -38,27 +40,24 @@ export const avatarsClient = {
   async remove(modelId: string): Promise<AvatarLibrary> {
     return sendGatewayCall(() => api.DELETE('/api/character-live2d/models/{model_id}', { params: { path: { model_id: modelId } } }));
   },
+};
 
-  /** The avatars as the System Assistant sees them: which one, if any, it uses. */
-  async assistantAvatars(): Promise<AvatarLibrary> {
-    return sendGatewayCall(() => api.GET('/api/characters/{character_id}/live2d-models', {
-      params: { path: { character_id: SYSTEM_ASSISTANT_ID } },
-    }));
+/**
+ * The System Assistant's first-run defaults the installer ships: a live portrait and the Maya voice. Applying them
+ * never replaces an avatar or a voice the owner chose.
+ */
+export const assistantDefaultsClient = {
+  async status(): Promise<AssistantDefaults> {
+    return sendGatewayCall(() => api.GET('/api/assistant-defaults'));
   },
 
-  /** Downloads the avatar if needed and makes it the System Assistant's (its licences accepted in the review). */
-  async useForAssistant(modelId: string): Promise<void> {
-    await sendGatewayCall(() => api.POST('/api/characters/{character_id}/live2d-avatar', {
-      params: { path: { character_id: SYSTEM_ASSISTANT_ID } },
-      body: { model_id: modelId, accept_live2d_runtime_terms: true, accept_model_terms: true },
-    }));
+  async apply(): Promise<AssistantDefaultsApplied> {
+    return sendGatewayCall(() => api.POST('/api/assistant-defaults'));
   },
 };
 
-/** The System Assistant keeps its avatar under this id (the assistant feature's SYSTEM_ASSISTANT_AVATAR_ID). */
-const SYSTEM_ASSISTANT_ID = 'system-assistant';
-/** The avatar a first-run setup offers the assistant: an expressive, full-featured sample. */
-export const FIRST_RUN_ASSISTANT_AVATAR = 'open-llm-vtuber-shizuku';
+/** The shipped portrait, for setup's preview. */
+export const ASSISTANT_PORTRAIT_URL = '/api/assistant-defaults/portrait';
 
 /** The setup screen's gateway calls (desktop roadmap §4.5). */
 export const modelPacksClient = {

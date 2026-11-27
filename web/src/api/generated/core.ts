@@ -1415,21 +1415,6 @@ export interface components {
              */
             kind: "standard" | "guest";
         };
-        /** ActivateLive2DAvatarRequest */
-        ActivateLive2DAvatarRequest: {
-            /**
-             * Accept Live2D Runtime Terms
-             * @default false
-             */
-            accept_live2d_runtime_terms?: boolean;
-            /**
-             * Accept Model Terms
-             * @default false
-             */
-            accept_model_terms?: boolean;
-            /** Model Id */
-            model_id: string;
-        };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
             /** Api Key Editable */
@@ -1513,6 +1498,26 @@ export interface components {
          * @enum {string}
          */
         AssetType: "audio" | "voice_sample" | "voice_profile" | "image" | "transcript" | "story" | "podcast_script" | "report" | "rpg_checkpoint" | "run_log" | "export" | "settings_artifact" | "source" | "cover" | "render" | "chapter-audio" | "voice_take" | "other";
+        /**
+         * AssistantDefaults
+         * @description What setup can offer the assistant, and whether it already has an avatar of its own.
+         */
+        AssistantDefaults: {
+            /** Has Avatar */
+            has_avatar: boolean;
+            /** Portrait Available */
+            portrait_available: boolean;
+            /** Voice Id */
+            voice_id: string;
+        };
+        /** AssistantDefaultsApplied */
+        AssistantDefaultsApplied: {
+            /** Applied */
+            applied: boolean;
+            avatar_pack: components["schemas"]["CharacterAvatarPack"];
+            /** Voice Id */
+            voice_id: string;
+        };
         /**
          * AssistantToolAction
          * @description Backend-owned action definition for an assistant tool.
@@ -3104,22 +3109,6 @@ export interface components {
              * @default true
              */
             success: boolean;
-        };
-        /** Live2DAvatarActionResponse */
-        Live2DAvatarActionResponse: {
-            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
-            /** Character Id */
-            character_id: string;
-            /**
-             * Downloaded
-             * @default false
-             */
-            downloaded: boolean;
-            /**
-             * Ok
-             * @default true
-             */
-            ok: boolean;
         };
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: {

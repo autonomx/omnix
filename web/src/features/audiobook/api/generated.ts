@@ -860,8 +860,6 @@ export interface components {
     schemas: {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
-        /** ActivateLive2DAvatarRequest */
-        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: core["schemas"]["AlpacaIexCredentialStatus"];
         /** AlpacaIexCredentialUpdate */
@@ -880,6 +878,13 @@ export interface components {
             /** Voice Profile Id */
             voice_profile_id: string;
         };
+        /**
+         * AssistantDefaults
+         * @description What setup can offer the assistant, and whether it already has an avatar of its own.
+         */
+        AssistantDefaults: core["schemas"]["AssistantDefaults"];
+        /** AssistantDefaultsApplied */
+        AssistantDefaultsApplied: core["schemas"]["AssistantDefaultsApplied"];
         /**
          * AssistantToolAction
          * @description Backend-owned action definition for an assistant tool.
@@ -1226,8 +1231,6 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
-        /** Live2DAvatarActionResponse */
-        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */

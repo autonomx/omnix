@@ -13,6 +13,7 @@ from app.runtime.ports import ContributionSpec
 from app.platform.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
 from .api import register_character_routes
+from .assistant_defaults import register_assistant_defaults_routes
 from .avatar_api import register_character_avatar_routes
 from .avatar_generation_api import register_character_avatar_generation_routes
 from .avatar_viseme_api import register_character_avatar_viseme_routes
@@ -32,6 +33,7 @@ def _router(context: FeatureContext) -> APIRouter:
     register_character_avatar_generation_routes(router)
     register_character_avatar_viseme_routes(router)
     register_character_live2d_avatar_routes(router)
+    register_assistant_defaults_routes(router)
     register_live_conversation_rendering_routes(router, **chat_kwargs)
     return router
 

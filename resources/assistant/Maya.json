@@ -1,0 +1,19 @@
+{
+  "audio_path": "Maya.wav",
+  "design": {
+    "description": "A warm, friendly woman in her late twenties with a soft, clear voice and a natural American accent. She sounds calm, kind and emotionally aware, speaks at a relaxed conversational pace, with a gentle smile in her voice.",
+    "engine": "qwen3-tts-voicedesign",
+    "language": "en",
+    "parameters": {"repetition_penalty": 1.05, "temperature": 0.9, "top_k": 50, "top_p": 1.0},
+    "reference_seconds": 19.1,
+    "seed": 47
+  },
+  "language": "en",
+  "profile_name": "Maya",
+  "ref_text": "The old lighthouse keeper climbed the stairs every evening at six. He checked the lamp, wiped the salt from the glass, and wrote a short note in his journal. Some nights the sea was calm and quiet; other nights, waves crashed against the rocks until morning. He never once missed his watch.",
+  "schema_version": 1,
+  "source_kind": "designed",
+  "stt_provider": "",
+  "transcript_source": "manual",
+  "voice_id": "Maya"
+}

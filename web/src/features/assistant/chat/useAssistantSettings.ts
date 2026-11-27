@@ -8,18 +8,21 @@ import {
   type AssistantView,
 } from './chatbotWorkspaceModel';
 
-/** The assistant's personality, voice and approval settings, saved per browser and refreshed from the server on Settings. */
+/**
+ * The assistant's personality, voice and approval settings, saved per browser. A browser with none takes them from the
+ * server's profile on its first visit (so the voice setup gave the assistant reaches it) and again on Settings.
+ */
 export function useAssistantSettings(runtimeConfig: AssistantWorkspaceRuntimeConfig, activeView: AssistantView) {
   const [assistantSettings, setAssistantSettings] = useState<AssistantSettings>(() => loadAssistantSettings(runtimeConfig));
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
 
+  const onSettings = activeView === 'settings';
   useEffect(() => {
-    if (activeView !== 'settings') return;
     void import('./assistantSettingsBootstrap')
       .then(({ bootstrapCentralAssistantSettings }) => bootstrapCentralAssistantSettings())
       .then(() => setAssistantSettings(loadAssistantSettings(runtimeConfig)))
       .catch(() => undefined);
-  }, [activeView, runtimeConfig]);
+  }, [onSettings, runtimeConfig]);
 
   function updateAssistantSettings(next: AssistantSettings): void {
     setAssistantSettings(next);

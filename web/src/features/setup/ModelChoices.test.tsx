@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobRecord } from '../../api/client';
 import { renderWithProviders } from '../../test/renderWithProviders';
-import { avatarsClient, modelPacksClient, type AvatarLibrary, type ModelPacksStatus, type PackOption, type PackVerdict } from './api/modelPacksClient';
+import { assistantDefaultsClient, modelPacksClient, type AssistantDefaultsApplied, type ModelPacksStatus, type PackOption, type PackVerdict } from './api/modelPacksClient';
 import { ModelPacksPanel } from './ModelPacksPanel';
 
 const GB = 1e9;
@@ -90,37 +90,43 @@ describe('choosing models within a feature', () => {
     await waitFor(() => expect(install).toHaveBeenCalledWith({ model_id: 'z-image-turbo', accept_terms: true }));
   });
 
-  it('offers the assistant a Live2D avatar on first run, under its own licences, and applies it after the download', async () => {
+  it('offers the assistant its portrait and the Maya voice on first run, ticked, and sets them up without a download', async () => {
     vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status());
-    vi.spyOn(modelPacksClient, 'install').mockResolvedValue({ id: 'job-1', status: 'queued' } as unknown as JobRecord);
-    vi.spyOn(modelPacksClient, 'job').mockResolvedValue({ id: 'job-1', status: 'queued' } as unknown as JobRecord);
-    const shizuku = { id: 'open-llm-vtuber-shizuku', name: 'Shizuku (PRO)', description: 'Classic sample.', installed: false,
-      selected: false, preview_path: '/api/character-live2d/models/open-llm-vtuber-shizuku/preview', license_summary: 'Live2D sample data.',
-      runtime_license_url: 'https://example.com/runtime', model_license_url: 'https://example.com/model' };
-    vi.spyOn(avatarsClient, 'assistantAvatars').mockResolvedValue({ models: [shizuku], runtime_installed: false } as unknown as AvatarLibrary);
-    const useForAssistant = vi.spyOn(avatarsClient, 'useForAssistant').mockResolvedValue();
+    const install = vi.spyOn(modelPacksClient, 'install');
+    vi.spyOn(assistantDefaultsClient, 'status').mockResolvedValue({ portrait_available: true, voice_id: 'Maya', has_avatar: false });
+    const apply = vi.spyOn(assistantDefaultsClient, 'apply').mockResolvedValue(
+      { applied: true, voice_id: 'Maya' } as unknown as AssistantDefaultsApplied);
     renderWithProviders(<ModelPacksPanel mode="setup" />);
 
     const choice = await screen.findByRole('region', { name: 'Assistant avatar' });
-    expect(within(choice).getByRole('checkbox', { name: /Assistant avatar: Shizuku/ })).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Review licences and download' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByRole('link', { name: 'Live2D Proprietary Software License' })).toHaveAttribute('href', 'https://example.com/runtime');
-    const accept = within(dialog).getByRole('button', { name: 'Accept and download' });
-    for (const box of within(dialog).getAllByRole('checkbox')) fireEvent.click(box);
-    expect(accept).not.toBeDisabled();
-    fireEvent.click(accept);
-    await waitFor(() => expect(useForAssistant).toHaveBeenCalledWith('open-llm-vtuber-shizuku'));
+    const box = within(choice).getByRole('checkbox', { name: /Assistant avatar: a live portrait with the Maya voice/ });
+    expect(box).toBeChecked();
+    // No Live2D avatar is offered here: those are downloaded from Settings.
+    expect(screen.queryByText(/Live2D/)).toBeNull();
+    // Leave only the assistant chosen: it needs no licence review.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Image generation' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up the assistant' }));
+
+    await waitFor(() => expect(apply).toHaveBeenCalled());
+    expect(install).not.toHaveBeenCalled();
+    expect(await screen.findByText('The assistant has its portrait and voice.')).toBeInTheDocument();
   });
 
-  it('does not offer an avatar once the assistant has one', async () => {
+  it('does not offer the portrait once the assistant has an avatar, nor when this install has none', async () => {
     vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status());
-    vi.spyOn(avatarsClient, 'assistantAvatars').mockResolvedValue({ models: [{ id: 'open-llm-vtuber-shizuku', name: 'Shizuku (PRO)',
-      selected: true }], runtime_installed: true } as unknown as AvatarLibrary);
-    renderWithProviders(<ModelPacksPanel mode="setup" />);
+    const defaults = vi.spyOn(assistantDefaultsClient, 'status')
+      .mockResolvedValue({ portrait_available: true, voice_id: 'Maya', has_avatar: true });
+    const first = renderWithProviders(<ModelPacksPanel mode="setup" />);
 
     await screen.findByRole('button', { name: 'Review licences and download' });
-    await waitFor(() => expect(avatarsClient.assistantAvatars).toHaveBeenCalled());
+    await waitFor(() => expect(defaults).toHaveBeenCalled());
+    expect(screen.queryByRole('region', { name: 'Assistant avatar' })).toBeNull();
+    first.unmount();
+
+    defaults.mockResolvedValue({ portrait_available: false, voice_id: '', has_avatar: false });
+    renderWithProviders(<ModelPacksPanel mode="setup" />);
+    await screen.findByRole('button', { name: 'Review licences and download' });
+    await waitFor(() => expect(defaults).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole('region', { name: 'Assistant avatar' })).toBeNull();
   });
 

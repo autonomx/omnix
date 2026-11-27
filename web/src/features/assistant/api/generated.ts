@@ -533,6 +533,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assistant-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assistant Defaults */
+        get: operations["assistant_defaults_api_assistant_defaults_get"];
+        put?: never;
+        /** Apply Assistant Defaults */
+        post: operations["apply_assistant_defaults_api_assistant_defaults_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant-defaults/portrait": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assistant Default Portrait */
+        get: operations["assistant_default_portrait_api_assistant_defaults_portrait_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assistant-routing/decide": {
         parameters: {
             query?: never;
@@ -3227,7 +3262,20 @@ export interface components {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
         /** ActivateLive2DAvatarRequest */
-        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
+        ActivateLive2DAvatarRequest: {
+            /**
+             * Accept Live2D Runtime Terms
+             * @default false
+             */
+            accept_live2d_runtime_terms?: boolean;
+            /**
+             * Accept Model Terms
+             * @default false
+             */
+            accept_model_terms?: boolean;
+            /** Model Id */
+            model_id: string;
+        };
         /** ActivityField */
         ActivityField: {
             /**
@@ -3923,6 +3971,13 @@ export interface components {
             /** Workspace Root */
             workspace_root?: string | null;
         };
+        /**
+         * AssistantDefaults
+         * @description What setup can offer the assistant, and whether it already has an avatar of its own.
+         */
+        AssistantDefaults: core["schemas"]["AssistantDefaults"];
+        /** AssistantDefaultsApplied */
+        AssistantDefaultsApplied: core["schemas"]["AssistantDefaultsApplied"];
         /** AssistantMemoryRuntimeSettings */
         AssistantMemoryRuntimeSettings: {
             /**
@@ -6994,7 +7049,21 @@ export interface components {
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
         /** Live2DAvatarActionResponse */
-        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
+        Live2DAvatarActionResponse: {
+            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
+            /** Character Id */
+            character_id: string;
+            /**
+             * Downloaded
+             * @default false
+             */
+            downloaded: boolean;
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+        };
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */
@@ -12076,6 +12145,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    assistant_defaults_api_assistant_defaults_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantDefaults"];
+                };
+            };
+        };
+    };
+    apply_assistant_defaults_api_assistant_defaults_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantDefaultsApplied"];
+                };
+            };
+        };
+    };
+    assistant_default_portrait_api_assistant_defaults_portrait_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
